@@ -134,6 +134,11 @@ everything-claude-code/
 |   |-- go-review.md        # /go-review - Go code review (NEW)
 |   |-- go-test.md          # /go-test - Go TDD workflow (NEW)
 |   |-- go-build.md         # /go-build - Fix Go build errors (NEW)
+|   |-- skill-create.md     # /skill-create - Generate skills from git history (NEW)
+|   |-- instinct-status.md  # /instinct-status - View learned instincts (NEW)
+|   |-- instinct-import.md  # /instinct-import - Import instincts (NEW)
+|   |-- instinct-export.md  # /instinct-export - Export instincts (NEW)
+|   |-- evolve.md           # /evolve - Cluster instincts into skills (NEW)
 |
 |-- rules/            # Always-follow guidelines (copy to ~/.claude/rules/)
 |   |-- security.md         # Mandatory security checks
@@ -184,23 +189,51 @@ everything-claude-code/
 
 ## Ecosystem Tools
 
-### ecc.tools - Skill Creator
+### Skill Creator
 
-Automatically generate Claude Code skills from your repository.
+Two ways to generate Claude Code skills from your repository:
+
+#### Option A: Local Analysis (Built-in)
+
+Use the `/skill-create` command for local analysis without external services:
+
+```bash
+/skill-create                    # Analyze current repo
+/skill-create --instincts        # Also generate instincts for continuous-learning
+```
+
+This analyzes your git history locally and generates SKILL.md files.
+
+#### Option B: GitHub App (Advanced)
+
+For advanced features (10k+ commits, auto-PRs, team sharing):
 
 [Install GitHub App](https://github.com/apps/skill-creator) | [ecc.tools](https://ecc.tools)
 
-Analyzes your repository and creates:
+```bash
+# Comment on any issue:
+/skill-creator analyze
+
+# Or auto-triggers on push to default branch
+```
+
+Both options create:
 - **SKILL.md files** - Ready-to-use skills for Claude Code
 - **Instinct collections** - For continuous-learning-v2
 - **Pattern extraction** - Learns from your commit history
 
+### Continuous Learning v2
+
+The instinct-based learning system automatically learns your patterns:
+
 ```bash
-# After installing the GitHub App, skills appear in:
-~/.claude/skills/generated/
+/instinct-status        # Show learned instincts with confidence
+/instinct-import <file> # Import instincts from others
+/instinct-export        # Export your instincts for sharing
+/evolve                 # Cluster related instincts into skills
 ```
 
-Works seamlessly with the `continuous-learning-v2` skill for inherited instincts.
+See `skills/continuous-learning-v2/` for full documentation.
 
 ---
 
