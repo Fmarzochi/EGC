@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Shell](https://img.shields.io/badge/-Shell-4EAA25?logo=gnu-bash&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?logo=typescript&logoColor=white)
+![Go](https://img.shields.io/badge/-Go-00ADD8?logo=go&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
 **The complete collection of Claude Code configs from an Anthropic hackathon winner.**
@@ -101,17 +102,23 @@ everything-claude-code/
 |   |-- e2e-runner.md        # Playwright E2E testing
 |   |-- refactor-cleaner.md  # Dead code cleanup
 |   |-- doc-updater.md       # Documentation sync
+|   |-- go-reviewer.md       # Go code review (NEW)
+|   |-- go-build-resolver.md # Go build error resolution (NEW)
 |
 |-- skills/           # Workflow definitions and domain knowledge
 |   |-- coding-standards/           # Language best practices
 |   |-- backend-patterns/           # API, database, caching patterns
 |   |-- frontend-patterns/          # React, Next.js patterns
 |   |-- continuous-learning/        # Auto-extract patterns from sessions (Longform Guide)
+|   |-- continuous-learning-v2/     # Instinct-based learning with confidence scoring
+|   |-- iterative-retrieval/        # Progressive context refinement for subagents
 |   |-- strategic-compact/          # Manual compaction suggestions (Longform Guide)
 |   |-- tdd-workflow/               # TDD methodology
 |   |-- security-review/            # Security checklist
 |   |-- eval-harness/               # Verification loop evaluation (Longform Guide)
 |   |-- verification-loop/          # Continuous verification (Longform Guide)
+|   |-- golang-patterns/            # Go idioms and best practices (NEW)
+|   |-- golang-testing/             # Go testing patterns, TDD, benchmarks (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -123,7 +130,10 @@ everything-claude-code/
 |   |-- learn.md            # /learn - Extract patterns mid-session (Longform Guide)
 |   |-- checkpoint.md       # /checkpoint - Save verification state (Longform Guide)
 |   |-- verify.md           # /verify - Run verification loop (Longform Guide)
-|   |-- setup-pm.md         # /setup-pm - Configure package manager (NEW)
+|   |-- setup-pm.md         # /setup-pm - Configure package manager
+|   |-- go-review.md        # /go-review - Go code review (NEW)
+|   |-- go-test.md          # /go-test - Go TDD workflow (NEW)
+|   |-- go-build.md         # /go-build - Fix Go build errors (NEW)
 |
 |-- rules/            # Always-follow guidelines (copy to ~/.claude/rules/)
 |   |-- security.md         # Mandatory security checks
@@ -169,6 +179,28 @@ everything-claude-code/
 |
 |-- marketplace.json  # Self-hosted marketplace config (for /plugin marketplace add)
 ```
+
+---
+
+## Ecosystem Tools
+
+### ecc.tools - Skill Creator
+
+Automatically generate Claude Code skills from your repository.
+
+[Install GitHub App](https://github.com/apps/skill-creator) | [ecc.tools](https://ecc.tools)
+
+Analyzes your repository and creates:
+- **SKILL.md files** - Ready-to-use skills for Claude Code
+- **Instinct collections** - For continuous-learning-v2
+- **Pattern extraction** - Learns from your commit history
+
+```bash
+# After installing the GitHub App, skills appear in:
+~/.claude/skills/generated/
+```
+
+Works seamlessly with the `continuous-learning-v2` skill for inherited instincts.
 
 ---
 
@@ -251,7 +283,7 @@ Subagents handle delegated tasks with limited scope. Example:
 ---
 name: code-reviewer
 description: Reviews code for quality, security, and maintainability
-tools: Read, Grep, Glob, Bash
+tools: ["Read", "Grep", "Glob", "Bash"]
 model: opus
 ---
 
@@ -329,7 +361,7 @@ Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Ideas for Contributions
 
-- Language-specific skills (Python, Go, Rust patterns)
+- Language-specific skills (Python, Rust patterns) - Go now included!
 - Framework-specific configs (Django, Rails, Laravel)
 - DevOps agents (Kubernetes, Terraform, AWS)
 - Testing strategies (different frameworks)

@@ -113,12 +113,33 @@ async function runTests() {
     // Run the script
     await runScript(path.join(scriptsDir, 'session-end.js'));
 
-    // Check if session file was created
+    // Check if session file was created (default session ID)
+    // Use local time to match the script's getDateString() function
     const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
-    const today = new Date().toISOString().split('T')[0];
-    const sessionFile = path.join(sessionsDir, `${today}-session.tmp`);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const sessionFile = path.join(sessionsDir, `${today}-default-session.tmp`);
 
     assert.ok(fs.existsSync(sessionFile), 'Session file should exist');
+  })) passed++; else failed++;
+
+  if (await asyncTest('includes session ID in filename', async () => {
+    const testSessionId = 'test-session-abc12345';
+    const expectedShortId = 'abc12345'; // Last 8 chars
+
+    // Run with custom session ID
+    await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+      CLAUDE_SESSION_ID: testSessionId
+    });
+
+    // Check if session file was created with session ID
+    // Use local time to match the script's getDateString() function
+    const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const sessionFile = path.join(sessionsDir, `${today}-${expectedShortId}-session.tmp`);
+
+    assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
   })) passed++; else failed++;
 
   // pre-compact.js tests

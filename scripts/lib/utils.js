@@ -80,6 +80,19 @@ function getTimeString() {
 }
 
 /**
+ * Get short session ID from CLAUDE_SESSION_ID environment variable
+ * Returns the last 8 characters for uniqueness with brevity
+ * @param {string} fallback - Fallback value if no session ID (default: 'default')
+ */
+function getSessionIdShort(fallback = 'default') {
+  const sessionId = process.env.CLAUDE_SESSION_ID;
+  if (!sessionId || sessionId.length === 0) {
+    return fallback;
+  }
+  return sessionId.slice(-8);
+}
+
+/**
  * Get current datetime in YYYY-MM-DD HH:MM:SS format
  */
 function getDateTimeString() {
@@ -223,15 +236,23 @@ function appendFile(filePath, content) {
 
 /**
  * Check if a command exists in PATH
+ * Uses execFileSync to prevent command injection
  */
 function commandExists(cmd) {
+  // Validate command name - only allow alphanumeric, dash, underscore, dot
+  if (!/^[a-zA-Z0-9_.-]+$/.test(cmd)) {
+    return false;
+  }
+
   try {
     if (isWindows) {
-      execSync(`where ${cmd}`, { stdio: 'pipe' });
+      // Use spawnSync to avoid shell interpolation
+      const result = spawnSync('where', [cmd], { stdio: 'pipe' });
+      return result.status === 0;
     } else {
-      execSync(`which ${cmd}`, { stdio: 'pipe' });
+      const result = spawnSync('which', [cmd], { stdio: 'pipe' });
+      return result.status === 0;
     }
-    return true;
   } catch {
     return false;
   }
@@ -239,6 +260,13 @@ function commandExists(cmd) {
 
 /**
  * Run a command and return output
+ *
+ * SECURITY NOTE: This function executes shell commands. Only use with
+ * trusted, hardcoded commands. Never pass user-controlled input directly.
+ * For user input, use spawnSync with argument arrays instead.
+ *
+ * @param {string} cmd - Command to execute (should be trusted/hardcoded)
+ * @param {object} options - execSync options
  */
 function runCommand(cmd, options = {}) {
   try {
@@ -345,6 +373,7 @@ module.exports = {
   getDateString,
   getTimeString,
   getDateTimeString,
+  getSessionIdShort,
 
   // File operations
   findFiles,

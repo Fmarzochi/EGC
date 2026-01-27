@@ -106,6 +106,61 @@ function runTests() {
     assert.ok(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dt), `Expected YYYY-MM-DD HH:MM:SS, got ${dt}`);
   })) passed++; else failed++;
 
+  // Session ID tests
+  console.log('\nSession ID Functions:');
+
+  if (test('getSessionIdShort returns default when no env var', () => {
+    const originalEnv = process.env.CLAUDE_SESSION_ID;
+    delete process.env.CLAUDE_SESSION_ID;
+    try {
+      const shortId = utils.getSessionIdShort();
+      assert.strictEqual(shortId, 'default');
+    } finally {
+      if (originalEnv) process.env.CLAUDE_SESSION_ID = originalEnv;
+    }
+  })) passed++; else failed++;
+
+  if (test('getSessionIdShort returns last 8 characters', () => {
+    const originalEnv = process.env.CLAUDE_SESSION_ID;
+    process.env.CLAUDE_SESSION_ID = 'test-session-abc12345';
+    try {
+      const shortId = utils.getSessionIdShort();
+      assert.strictEqual(shortId, 'abc12345');
+    } finally {
+      if (originalEnv) {
+        process.env.CLAUDE_SESSION_ID = originalEnv;
+      } else {
+        delete process.env.CLAUDE_SESSION_ID;
+      }
+    }
+  })) passed++; else failed++;
+
+  if (test('getSessionIdShort uses custom fallback', () => {
+    const originalEnv = process.env.CLAUDE_SESSION_ID;
+    delete process.env.CLAUDE_SESSION_ID;
+    try {
+      const shortId = utils.getSessionIdShort('custom');
+      assert.strictEqual(shortId, 'custom');
+    } finally {
+      if (originalEnv) process.env.CLAUDE_SESSION_ID = originalEnv;
+    }
+  })) passed++; else failed++;
+
+  if (test('getSessionIdShort handles short session IDs', () => {
+    const originalEnv = process.env.CLAUDE_SESSION_ID;
+    process.env.CLAUDE_SESSION_ID = 'short';
+    try {
+      const shortId = utils.getSessionIdShort();
+      assert.strictEqual(shortId, 'short');
+    } finally {
+      if (originalEnv) {
+        process.env.CLAUDE_SESSION_ID = originalEnv;
+      } else {
+        delete process.env.CLAUDE_SESSION_ID;
+      }
+    }
+  })) passed++; else failed++;
+
   // File operations tests
   console.log('\nFile Operations:');
 

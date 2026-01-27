@@ -27,7 +27,8 @@ async function main() {
   ensureDir(learnedDir);
 
   // Check for recent session files (last 7 days)
-  const recentSessions = findFiles(sessionsDir, '*.tmp', { maxAge: 7 });
+  // Match both old format (YYYY-MM-DD-session.tmp) and new format (YYYY-MM-DD-shortid-session.tmp)
+  const recentSessions = findFiles(sessionsDir, '*-session.tmp', { maxAge: 7 });
 
   if (recentSessions.length > 0) {
     const latest = recentSessions[0];
