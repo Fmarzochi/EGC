@@ -118,6 +118,43 @@ Assume the validator is hostile and literal.
 
 ---
 
+## The `hooks` Field: DO NOT ADD
+
+> ⚠️ **CRITICAL:** Do NOT add a `"hooks"` field to `plugin.json`. This is enforced by a regression test.
+
+### Why This Matters
+
+Claude Code v2.1+ **automatically loads** `hooks/hooks.json` from any installed plugin by convention. If you also declare it in `plugin.json`, you get:
+
+```
+Duplicate hooks file detected: ./hooks/hooks.json resolves to already-loaded file.
+The standard hooks/hooks.json is loaded automatically, so manifest.hooks should
+only reference additional hook files.
+```
+
+### The Flip-Flop History
+
+This has caused repeated fix/revert cycles in this repo:
+
+| Commit | Action | Trigger |
+|--------|--------|---------|
+| `22ad036` | ADD hooks | Users reported "hooks not loading" |
+| `a7bc5f2` | REMOVE hooks | Users reported "duplicate hooks error" (#52) |
+| `779085e` | ADD hooks | Users reported "agents not loading" (#88) |
+| `e3a1306` | REMOVE hooks | Users reported "duplicate hooks error" (#103) |
+
+**Root cause:** Claude Code CLI changed behavior between versions:
+- Pre-v2.1: Required explicit `hooks` declaration
+- v2.1+: Auto-loads by convention, errors on duplicate
+
+### Current Rule (Enforced by Test)
+
+The test `plugin.json does NOT have explicit hooks declaration` in `tests/hooks/hooks.test.js` prevents this from being reintroduced.
+
+**If you're adding additional hook files** (not `hooks/hooks.json`), those CAN be declared. But the standard `hooks/hooks.json` must NOT be declared.
+
+---
+
 ## Known Anti-Patterns
 
 These look correct but are rejected:
@@ -127,6 +164,7 @@ These look correct but are rejected:
 * Missing `version`
 * Relying on inferred paths
 * Assuming marketplace behavior matches local validation
+* **Adding `"hooks": "./hooks/hooks.json"`** - auto-loaded by convention, causes duplicate error
 
 Avoid cleverness. Be explicit.
 
@@ -147,6 +185,8 @@ Avoid cleverness. Be explicit.
 ```
 
 This structure has been validated against the Claude plugin validator.
+
+**Important:** Notice there is NO `"hooks"` field. The `hooks/hooks.json` file is loaded automatically by convention. Adding it explicitly causes a duplicate error.
 
 ---
 
