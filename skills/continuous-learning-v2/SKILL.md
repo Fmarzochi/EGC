@@ -92,7 +92,32 @@ Session Activity
 
 ### 1. Enable Observation Hooks
 
-Add to your `~/.claude/settings.json`:
+Add to your `~/.claude/settings.json`.
+
+**If installed as a plugin** (recommended):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/skills/continuous-learning-v2/hooks/observe.sh pre"
+      }]
+    }],
+    "PostToolUse": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/skills/continuous-learning-v2/hooks/observe.sh post"
+      }]
+    }]
+  }
+}
+```
+
+**If installed manually** to `~/.claude/skills`:
 
 ```json
 {
@@ -117,18 +142,20 @@ Add to your `~/.claude/settings.json`:
 
 ### 2. Initialize Directory Structure
 
+The Python CLI will create these automatically, but you can also create them manually:
+
 ```bash
 mkdir -p ~/.claude/homunculus/{instincts/{personal,inherited},evolved/{agents,skills,commands}}
 touch ~/.claude/homunculus/observations.jsonl
 ```
 
-### 3. Run the Observer Agent (Optional)
-
-The observer can run in the background analyzing observations:
+### 3. Use the Instinct Commands
 
 ```bash
-# Start background observer
-~/.claude/skills/continuous-learning-v2/agents/start-observer.sh
+/instinct-status     # Show learned instincts with confidence scores
+/evolve              # Cluster related instincts into skills/commands
+/instinct-export     # Export instincts for sharing
+/instinct-import     # Import instincts from others
 ```
 
 ## Commands

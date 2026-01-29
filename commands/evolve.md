@@ -1,13 +1,20 @@
 ---
 name: evolve
 description: Cluster related instincts into skills, commands, or agents
-command: /evolve
-implementation: python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py evolve
+command: true
 ---
 
 # Evolve Command
 
 ## Implementation
+
+Run the instinct CLI using the plugin root path:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/continuous-learning-v2/scripts/instinct-cli.py" evolve [--generate]
+```
+
+Or if `CLAUDE_PLUGIN_ROOT` is not set (manual installation):
 
 ```bash
 python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py evolve [--generate]

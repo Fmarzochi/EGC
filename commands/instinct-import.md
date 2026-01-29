@@ -1,16 +1,23 @@
 ---
 name: instinct-import
 description: Import instincts from teammates, Skill Creator, or other sources
-command: /instinct-import
-implementation: python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py import <file>
+command: true
 ---
 
 # Instinct Import Command
 
 ## Implementation
 
+Run the instinct CLI using the plugin root path:
+
 ```bash
-python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py import <file-or-url> [--dry-run] [--force] [--min-confidence 0.7]
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/continuous-learning-v2/scripts/instinct-cli.py" import <file-or-url> [--dry-run] [--force] [--min-confidence 0.7]
+```
+
+Or if `CLAUDE_PLUGIN_ROOT` is not set (manual installation):
+
+```bash
+python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py import <file-or-url>
 ```
 
 Import instincts from:
