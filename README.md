@@ -497,6 +497,106 @@ Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
+## 🔌 OpenCode Support
+
+ECC provides **full OpenCode support** including plugins and hooks.
+
+### Quick Start
+
+```bash
+# Install OpenCode
+npm install -g opencode
+
+# Run in the repository root
+opencode
+```
+
+The configuration is automatically detected from `.opencode/opencode.json`.
+
+### Feature Parity
+
+| Feature | Claude Code | OpenCode | Status |
+|---------|-------------|----------|--------|
+| Agents | ✅ 12 agents | ✅ 12 agents | **Full parity** |
+| Commands | ✅ 23 commands | ✅ 24 commands | **Full parity** |
+| Skills | ✅ 16 skills | ✅ 16 skills | **Full parity** |
+| Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
+| Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
+| MCP Servers | ✅ Full | ✅ Full | **Full parity** |
+| Custom Tools | ✅ Via hooks | ✅ Native support | **OpenCode is better** |
+
+### Hook Support via Plugins
+
+OpenCode's plugin system is MORE sophisticated than Claude Code with 20+ event types:
+
+| Claude Code Hook | OpenCode Plugin Event |
+|-----------------|----------------------|
+| PreToolUse | `tool.execute.before` |
+| PostToolUse | `tool.execute.after` |
+| Stop | `session.idle` |
+| SessionStart | `session.created` |
+| SessionEnd | `session.deleted` |
+
+**Additional OpenCode events**: `file.edited`, `file.watcher.updated`, `message.updated`, `lsp.client.diagnostics`, `tui.toast.show`, and more.
+
+### Available Commands (24)
+
+| Command | Description |
+|---------|-------------|
+| `/plan` | Create implementation plan |
+| `/tdd` | Enforce TDD workflow |
+| `/code-review` | Review code changes |
+| `/security` | Run security review |
+| `/build-fix` | Fix build errors |
+| `/e2e` | Generate E2E tests |
+| `/refactor-clean` | Remove dead code |
+| `/orchestrate` | Multi-agent workflow |
+| `/learn` | Extract patterns from session |
+| `/checkpoint` | Save verification state |
+| `/verify` | Run verification loop |
+| `/eval` | Evaluate against criteria |
+| `/update-docs` | Update documentation |
+| `/update-codemaps` | Update codemaps |
+| `/test-coverage` | Analyze coverage |
+| `/go-review` | Go code review |
+| `/go-test` | Go TDD workflow |
+| `/go-build` | Fix Go build errors |
+| `/skill-create` | Generate skills from git |
+| `/instinct-status` | View learned instincts |
+| `/instinct-import` | Import instincts |
+| `/instinct-export` | Export instincts |
+| `/evolve` | Cluster instincts into skills |
+| `/setup-pm` | Configure package manager |
+
+### Plugin Installation
+
+**Option 1: Use directly**
+```bash
+cd everything-claude-code
+opencode
+```
+
+**Option 2: Install as npm package**
+```bash
+npm install opencode-ecc
+```
+
+Then add to your `opencode.json`:
+```json
+{
+  "plugin": ["opencode-ecc"]
+}
+```
+
+### Documentation
+
+- **Migration Guide**: `.opencode/MIGRATION.md`
+- **OpenCode Plugin README**: `.opencode/README.md`
+- **Consolidated Rules**: `.opencode/instructions/INSTRUCTIONS.md`
+- **LLM Documentation**: `llms.txt` (complete OpenCode docs for LLMs)
+
+---
+
 ## 📖 Background
 
 I've been using Claude Code since the experimental rollout. Won the Anthropic x Forum Ventures hackathon in Sep 2025 building [zenith.chat](https://zenith.chat) with [@DRodriguezFX](https://x.com/DRodriguezFX) - entirely using Claude Code.
