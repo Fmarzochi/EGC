@@ -3,11 +3,17 @@
 # Everything Claude Code
 
 [![Stars](https://img.shields.io/github/stars/affaan-m/everything-claude-code?style=flat)](https://github.com/affaan-m/everything-claude-code/stargazers)
+[![Forks](https://img.shields.io/github/forks/affaan-m/everything-claude-code?style=flat)](https://github.com/affaan-m/everything-claude-code/network/members)
+[![Contributors](https://img.shields.io/github/contributors/affaan-m/everything-claude-code?style=flat)](https://github.com/affaan-m/everything-claude-code/graphs/contributors)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Shell](https://img.shields.io/badge/-Shell-4EAA25?logo=gnu-bash&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?logo=typescript&logoColor=white)
+![Python](https://img.shields.io/badge/-Python-3776AB?logo=python&logoColor=white)
 ![Go](https://img.shields.io/badge/-Go-00ADD8?logo=go&logoColor=white)
+![Java](https://img.shields.io/badge/-Java-ED8B00?logo=openjdk&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
+
+> **41K+ stars** | **5K+ forks** | **22 contributors** | **6 languages supported**
 
 ---
 
@@ -61,6 +67,38 @@ This repo is the raw code only. The guides explain everything.
 
 ---
 
+## What's New
+
+### v1.4.1 — Bug Fix (Feb 2026)
+
+- **Fixed instinct import content loss** — `parse_instinct_file()` was silently dropping all content after frontmatter (Action, Evidence, Examples sections) during `/instinct-import`. Fixed by community contributor @ericcai0814 ([#148](https://github.com/affaan-m/everything-claude-code/issues/148), [#161](https://github.com/affaan-m/everything-claude-code/pull/161))
+
+### v1.4.0 — Multi-Language Rules, Installation Wizard & PM2 (Feb 2026)
+
+- **Interactive installation wizard** — New `configure-ecc` skill provides guided setup with merge/overwrite detection
+- **PM2 & multi-agent orchestration** — 6 new commands (`/pm2`, `/multi-plan`, `/multi-execute`, `/multi-backend`, `/multi-frontend`, `/multi-workflow`) for managing complex multi-service workflows
+- **Multi-language rules architecture** — Rules restructured from flat files into `common/` + `typescript/` + `python/` + `golang/` directories. Install only the languages you need
+- **Chinese (zh-CN) translations** — Complete translation of all agents, commands, skills, and rules (80+ files)
+- **GitHub Sponsors support** — Sponsor the project via GitHub Sponsors
+- **Enhanced CONTRIBUTING.md** — Detailed PR templates for each contribution type
+
+### v1.3.0 — OpenCode Plugin Support (Feb 2026)
+
+- **Full OpenCode integration** — 12 agents, 24 commands, 16 skills with hook support via OpenCode's plugin system (20+ event types)
+- **3 native custom tools** — run-tests, check-coverage, security-audit
+- **LLM documentation** — `llms.txt` for comprehensive OpenCode docs
+
+### v1.2.0 — Unified Commands & Skills (Feb 2026)
+
+- **Python/Django support** — Django patterns, security, TDD, and verification skills
+- **Java Spring Boot skills** — Patterns, security, TDD, and verification for Spring Boot
+- **Session management** — `/sessions` command for session history
+- **Continuous learning v2** — Instinct-based learning with confidence scoring, import/export, evolution
+
+See the full changelog in [Releases](https://github.com/affaan-m/everything-claude-code/releases).
+
+---
+
 ## 🚀 Quick Start
 
 Get up and running in under 2 minutes:
@@ -102,7 +140,7 @@ cp -r everything-claude-code/rules/golang/* ~/.claude/rules/
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 15+ agents, 30+ skills, and 20+ commands.
+✨ **That's it!** You now have access to 15+ agents, 30+ skills, and 30+ commands.
 
 ---
 
@@ -161,8 +199,10 @@ everything-claude-code/
 |   |-- e2e-runner.md        # Playwright E2E testing
 |   |-- refactor-cleaner.md  # Dead code cleanup
 |   |-- doc-updater.md       # Documentation sync
-|   |-- go-reviewer.md       # Go code review (NEW)
-|   |-- go-build-resolver.md # Go build error resolution (NEW)
+|   |-- go-reviewer.md       # Go code review
+|   |-- go-build-resolver.md # Go build error resolution
+|   |-- python-reviewer.md   # Python code review (NEW)
+|   |-- database-reviewer.md # Database/Supabase review (NEW)
 |
 |-- skills/           # Workflow definitions and domain knowledge
 |   |-- coding-standards/           # Language best practices
@@ -176,8 +216,19 @@ everything-claude-code/
 |   |-- security-review/            # Security checklist
 |   |-- eval-harness/               # Verification loop evaluation (Longform Guide)
 |   |-- verification-loop/          # Continuous verification (Longform Guide)
-|   |-- golang-patterns/            # Go idioms and best practices (NEW)
-|   |-- golang-testing/             # Go testing patterns, TDD, benchmarks (NEW)
+|   |-- golang-patterns/            # Go idioms and best practices
+|   |-- golang-testing/             # Go testing patterns, TDD, benchmarks
+|   |-- django-patterns/            # Django patterns, models, views (NEW)
+|   |-- django-security/            # Django security best practices (NEW)
+|   |-- django-tdd/                 # Django TDD workflow (NEW)
+|   |-- django-verification/        # Django verification loops (NEW)
+|   |-- python-patterns/            # Python idioms and best practices (NEW)
+|   |-- python-testing/             # Python testing with pytest (NEW)
+|   |-- springboot-patterns/        # Java Spring Boot patterns (NEW)
+|   |-- springboot-security/        # Spring Boot security (NEW)
+|   |-- springboot-tdd/             # Spring Boot TDD (NEW)
+|   |-- springboot-verification/    # Spring Boot verification (NEW)
+|   |-- configure-ecc/              # Interactive installation wizard (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -197,7 +248,13 @@ everything-claude-code/
 |   |-- instinct-status.md  # /instinct-status - View learned instincts (NEW)
 |   |-- instinct-import.md  # /instinct-import - Import instincts (NEW)
 |   |-- instinct-export.md  # /instinct-export - Export instincts (NEW)
-|   |-- evolve.md           # /evolve - Cluster instincts into skills (NEW)
+|   |-- evolve.md           # /evolve - Cluster instincts into skills
+|   |-- pm2.md              # /pm2 - PM2 service lifecycle management (NEW)
+|   |-- multi-plan.md       # /multi-plan - Multi-agent task decomposition (NEW)
+|   |-- multi-execute.md    # /multi-execute - Orchestrated multi-agent workflows (NEW)
+|   |-- multi-backend.md    # /multi-backend - Backend multi-service orchestration (NEW)
+|   |-- multi-frontend.md   # /multi-frontend - Frontend multi-service orchestration (NEW)
+|   |-- multi-workflow.md   # /multi-workflow - General multi-service workflows (NEW)
 |
 |-- rules/            # Always-follow guidelines (copy to ~/.claude/rules/)
 |   |-- README.md            # Structure overview and installation guide
@@ -511,10 +568,10 @@ Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Ideas for Contributions
 
-- Language-specific skills (Python, Rust patterns) - Go now included!
-- Framework-specific configs (Django, Rails, Laravel)
-- DevOps agents (Kubernetes, Terraform, AWS)
-- Testing strategies (different frameworks)
+- Language-specific skills (Rust, C#, Swift, Kotlin) — Go, Python, Java already included
+- Framework-specific configs (Rails, Laravel, FastAPI, NestJS) — Django, Spring Boot already included
+- DevOps agents (Kubernetes, Terraform, AWS, Docker)
+- Testing strategies (different frameworks, visual regression)
 - Domain-specific knowledge (ML, data engineering, mobile)
 
 ---
@@ -539,9 +596,9 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 
 | Feature | Claude Code | OpenCode | Status |
 |---------|-------------|----------|--------|
-| Agents | ✅ 12 agents | ✅ 12 agents | **Full parity** |
-| Commands | ✅ 23 commands | ✅ 24 commands | **Full parity** |
-| Skills | ✅ 16 skills | ✅ 16 skills | **Full parity** |
+| Agents | ✅ 14 agents | ✅ 12 agents | **Claude Code leads** |
+| Commands | ✅ 30 commands | ✅ 24 commands | **Claude Code leads** |
+| Skills | ✅ 28 skills | ✅ 16 skills | **Claude Code leads** |
 | Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
 | Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
 | MCP Servers | ✅ Full | ✅ Full | **Full parity** |
