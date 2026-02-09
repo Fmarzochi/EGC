@@ -13,7 +13,7 @@
 ![Java](https://img.shields.io/badge/-Java-ED8B00?logo=openjdk&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
-> **41K+ stars** | **5K+ forks** | **22 contributors** | **6 languages supported**
+> **42K+ stars** | **5K+ forks** | **24 contributors** | **6 languages supported**
 
 ---
 

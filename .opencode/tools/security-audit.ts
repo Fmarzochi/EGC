@@ -8,7 +8,7 @@
  * The regex patterns below are used to DETECT potential issues in user code.
  */
 
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@opencode-ai/plugin/tool"
 import * as path from "path"
 import * as fs from "fs"
 
@@ -102,7 +102,7 @@ export default tool({
     // Generate recommendations
     results.recommendations = generateRecommendations(results)
 
-    return results
+    return JSON.stringify(results)
   },
 })
 

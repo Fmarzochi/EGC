@@ -5,7 +5,7 @@
  * Automatically detects the package manager and test framework.
  */
 
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@opencode-ai/plugin/tool"
 import * as path from "path"
 import * as fs from "fs"
 
@@ -82,7 +82,7 @@ export default tool({
 
     const command = cmd.join(" ")
 
-    return {
+    return JSON.stringify({
       command,
       packageManager,
       testFramework,
@@ -93,7 +93,7 @@ export default tool({
         updateSnapshots: updateSnapshots || false,
       },
       instructions: `Run this command to execute tests:\n\n${command}`,
-    }
+    })
   },
 })
 
