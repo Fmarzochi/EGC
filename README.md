@@ -576,6 +576,36 @@ Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
+## Cursor IDE Support
+
+ecc-universal includes pre-translated configurations for [Cursor IDE](https://cursor.com). The `.cursor/` directory contains rules, agents, skills, commands, and MCP configs adapted for Cursor's format.
+
+### Quick Start (Cursor)
+
+```bash
+# Install the package
+npm install ecc-universal
+
+# Install for your language(s)
+./install.sh --target cursor typescript
+./install.sh --target cursor python golang
+```
+
+### What's Translated
+
+| Component | Claude Code → Cursor | Parity |
+|-----------|---------------------|--------|
+| Rules | YAML frontmatter added, paths flattened | Full |
+| Agents | Model IDs expanded, tools → readonly flag | Full |
+| Skills | No changes needed (identical standard) | Identical |
+| Commands | Path references updated, multi-* stubbed | Partial |
+| MCP Config | Env interpolation syntax updated | Full |
+| Hooks | No equivalent in Cursor | See alternatives |
+
+See [.cursor/README.md](.cursor/README.md) for details and [.cursor/MIGRATION.md](.cursor/MIGRATION.md) for the full migration guide.
+
+---
+
 ## 🔌 OpenCode Support
 
 ECC provides **full OpenCode support** including plugins and hooks.
@@ -657,13 +687,13 @@ opencode
 
 **Option 2: Install as npm package**
 ```bash
-npm install opencode-ecc
+npm install ecc-universal
 ```
 
 Then add to your `opencode.json`:
 ```json
 {
-  "plugin": ["opencode-ecc"]
+  "plugin": ["ecc-universal"]
 }
 ```
 
