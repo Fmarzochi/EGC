@@ -229,6 +229,7 @@ everything-claude-code/
 |   |-- springboot-tdd/             # Spring Boot TDD (NEW)
 |   |-- springboot-verification/    # Spring Boot verification (NEW)
 |   |-- configure-ecc/              # Interactive installation wizard (NEW)
+|   |-- security-scan/              # AgentShield security auditor integration (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -344,6 +345,30 @@ Both options create:
 - **SKILL.md files** - Ready-to-use skills for Claude Code
 - **Instinct collections** - For continuous-learning-v2
 - **Pattern extraction** - Learns from your commit history
+
+### AgentShield — Security Auditor
+
+Scan your Claude Code configuration for vulnerabilities, misconfigurations, and injection risks.
+
+```bash
+# Quick scan (no install needed)
+npx ecc-agentshield scan
+
+# Auto-fix safe issues
+npx ecc-agentshield scan --fix
+
+# Deep analysis with Opus 4.6
+npx ecc-agentshield scan --opus --stream
+
+# Generate secure config from scratch
+npx ecc-agentshield init
+```
+
+Checks CLAUDE.md, settings.json, MCP servers, hooks, and agent definitions. Produces a security grade (A-F) with actionable findings.
+
+Use `/security-scan` in Claude Code to run it, or add to CI with the [GitHub Action](https://github.com/affaan-m/agentshield).
+
+[GitHub](https://github.com/affaan-m/agentshield) | [npm](https://www.npmjs.com/package/ecc-agentshield)
 
 ### 🧠 Continuous Learning v2
 
