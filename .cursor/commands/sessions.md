@@ -23,8 +23,8 @@ Display all sessions with metadata, filtering, and pagination.
 **Script:**
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const result = sm.getAllSessions({ limit: 20 });
 const aliases = aa.listAliases();
@@ -62,8 +62,8 @@ Load and display a session's content (by ID or alias).
 **Script:**
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 const id = process.argv[1];
 
 // First try to resolve as alias
@@ -123,8 +123,8 @@ Create a memorable alias for a session.
 **Script:**
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const sessionId = process.argv[1];
 const aliasName = process.argv[2];
@@ -163,7 +163,7 @@ Delete an existing alias.
 **Script:**
 ```bash
 node -e "
-const aa = require('./scripts/lib/session-aliases');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const aliasName = process.argv[1];
 if (!aliasName) {
@@ -192,8 +192,8 @@ Show detailed information about a session.
 **Script:**
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const id = process.argv[1];
 const resolved = aa.resolveAlias(id);
@@ -239,7 +239,7 @@ Show all session aliases.
 **Script:**
 ```bash
 node -e "
-const aa = require('./scripts/lib/session-aliases');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const aliases = aa.listAliases();
 console.log('Session Aliases (' + aliases.length + '):');

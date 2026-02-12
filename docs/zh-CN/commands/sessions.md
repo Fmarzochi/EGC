@@ -24,8 +24,8 @@
 
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const result = sm.getAllSessions({ limit: 20 });
 const aliases = aa.listAliases();
@@ -64,8 +64,8 @@ for (const s of result.sessions) {
 
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 const id = process.argv[1];
 
 // First try to resolve as alias
@@ -126,8 +126,8 @@ if (session.metadata.lastUpdated) {
 
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const sessionId = process.argv[1];
 const aliasName = process.argv[2];
@@ -167,7 +167,7 @@ if (result.success) {
 
 ```bash
 node -e "
-const aa = require('./scripts/lib/session-aliases');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const aliasName = process.argv[1];
 if (!aliasName) {
@@ -197,8 +197,8 @@ if (result.success) {
 
 ```bash
 node -e "
-const sm = require('./scripts/lib/session-manager');
-const aa = require('./scripts/lib/session-aliases');
+const sm = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-manager');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const id = process.argv[1];
 const resolved = aa.resolveAlias(id);
@@ -245,7 +245,7 @@ if (aliases.length > 0) {
 
 ```bash
 node -e "
-const aa = require('./scripts/lib/session-aliases');
+const aa = require((process.env.CLAUDE_PLUGIN_ROOT||require('path').join(require('os').homedir(),'.claude'))+'/scripts/lib/session-aliases');
 
 const aliases = aa.listAliases();
 console.log('Session Aliases (' + aliases.length + '):');
