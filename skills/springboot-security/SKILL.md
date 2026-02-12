@@ -7,6 +7,16 @@ description: Spring Security best practices for authn/authz, validation, CSRF, s
 
 Use when adding auth, handling input, creating endpoints, or dealing with secrets.
 
+## When to Activate
+
+- Adding authentication (JWT, OAuth2, session-based)
+- Implementing authorization (@PreAuthorize, role-based access)
+- Validating user input (Bean Validation, custom validators)
+- Configuring CORS, CSRF, or security headers
+- Managing secrets (Vault, environment variables)
+- Adding rate limiting or brute-force protection
+- Scanning dependencies for CVEs
+
 ## Authentication
 
 - Prefer stateless JWT or opaque tokens with revocation list

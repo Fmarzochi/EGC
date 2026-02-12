@@ -7,6 +7,14 @@ description: "Verification loop for Spring Boot projects: build, static analysis
 
 Run before PRs, after major changes, and pre-deploy.
 
+## When to Activate
+
+- Before opening a pull request for a Spring Boot service
+- After major refactoring or dependency upgrades
+- Pre-deployment verification for staging or production
+- Running full build → lint → test → security scan pipeline
+- Validating test coverage meets thresholds
+
 ## Phase 1: Build
 
 ```bash

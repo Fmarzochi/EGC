@@ -7,6 +7,14 @@ description: Automatically extract reusable patterns from Claude Code sessions a
 
 Automatically evaluates Claude Code sessions on end to extract reusable patterns that can be saved as learned skills.
 
+## When to Activate
+
+- Setting up automatic pattern extraction from Claude Code sessions
+- Configuring the Stop hook for session evaluation
+- Reviewing or curating learned skills in `~/.claude/skills/learned/`
+- Adjusting extraction thresholds or pattern categories
+- Comparing v1 (this) vs v2 (instinct-based) approaches
+
 ## How It Works
 
 This skill runs as a **Stop hook** at the end of each session:

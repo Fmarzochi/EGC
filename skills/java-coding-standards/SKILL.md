@@ -7,6 +7,14 @@ description: "Java coding standards for Spring Boot services: naming, immutabili
 
 Standards for readable, maintainable Java (17+) code in Spring Boot services.
 
+## When to Activate
+
+- Writing or reviewing Java code in Spring Boot projects
+- Enforcing naming, immutability, or exception handling conventions
+- Working with records, sealed classes, or pattern matching (Java 17+)
+- Reviewing use of Optional, streams, or generics
+- Structuring packages and project layout
+
 ## Core Principles
 
 - Prefer clarity over cleverness
