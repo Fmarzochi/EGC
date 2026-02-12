@@ -143,7 +143,7 @@ For manual install instructions see the README in the `rules/` folder.
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 13 agents, 35 skills, and 31 commands.
+✨ **That's it!** You now have access to 13 agents, 36 skills, and 31 commands.
 
 ---
 
@@ -242,6 +242,7 @@ everything-claude-code/
 |   |-- database-migrations/         # Migration patterns (Prisma, Drizzle, Django, Go) (NEW)
 |   |-- api-design/                  # REST API design, pagination, error responses (NEW)
 |   |-- deployment-patterns/         # CI/CD, Docker, health checks, rollbacks (NEW)
+|   |-- e2e-testing/                 # Playwright E2E patterns and Page Object Model (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -372,7 +373,7 @@ Both options create:
 
 ### AgentShield — Security Auditor
 
-> Built at the Claude Code Hackathon (Cerebral Valley x Anthropic, Feb 2026). 520 tests, 98% coverage, 35 static analysis rules.
+> Built at the Claude Code Hackathon (Cerebral Valley x Anthropic, Feb 2026). 611 tests, 98% coverage, 36 static analysis rules.
 
 Scan your Claude Code configuration for vulnerabilities, misconfigurations, and injection risks.
 
@@ -798,7 +799,7 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 |---------|-------------|----------|--------|
 | Agents | ✅ 13 agents | ✅ 12 agents | **Claude Code leads** |
 | Commands | ✅ 31 commands | ✅ 24 commands | **Claude Code leads** |
-| Skills | ✅ 35 skills | ✅ 16 skills | **Claude Code leads** |
+| Skills | ✅ 36 skills | ✅ 16 skills | **Claude Code leads** |
 | Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
 | Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
 | MCP Servers | ✅ Full | ✅ Full | **Full parity** |
