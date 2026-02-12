@@ -248,6 +248,131 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Edge case tests for defensive code
+  console.log('\nEdge Cases:');
+
+  if (test('findFiles returns empty for null/undefined dir', () => {
+    assert.deepStrictEqual(utils.findFiles(null, '*.txt'), []);
+    assert.deepStrictEqual(utils.findFiles(undefined, '*.txt'), []);
+    assert.deepStrictEqual(utils.findFiles('', '*.txt'), []);
+  })) passed++; else failed++;
+
+  if (test('findFiles returns empty for null/undefined pattern', () => {
+    assert.deepStrictEqual(utils.findFiles('/tmp', null), []);
+    assert.deepStrictEqual(utils.findFiles('/tmp', undefined), []);
+    assert.deepStrictEqual(utils.findFiles('/tmp', ''), []);
+  })) passed++; else failed++;
+
+  if (test('findFiles supports maxAge filter', () => {
+    const testDir = path.join(utils.getTempDir(), `utils-test-maxage-${Date.now()}`);
+    try {
+      fs.mkdirSync(testDir);
+      fs.writeFileSync(path.join(testDir, 'recent.txt'), 'content');
+      const results = utils.findFiles(testDir, '*.txt', { maxAge: 1 });
+      assert.strictEqual(results.length, 1);
+      assert.ok(results[0].path.endsWith('recent.txt'));
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('findFiles supports recursive option', () => {
+    const testDir = path.join(utils.getTempDir(), `utils-test-recursive-${Date.now()}`);
+    const subDir = path.join(testDir, 'sub');
+    try {
+      fs.mkdirSync(subDir, { recursive: true });
+      fs.writeFileSync(path.join(testDir, 'top.txt'), 'content');
+      fs.writeFileSync(path.join(subDir, 'nested.txt'), 'content');
+      // Without recursive: only top level
+      const shallow = utils.findFiles(testDir, '*.txt', { recursive: false });
+      assert.strictEqual(shallow.length, 1);
+      // With recursive: finds nested too
+      const deep = utils.findFiles(testDir, '*.txt', { recursive: true });
+      assert.strictEqual(deep.length, 2);
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('countInFile handles invalid regex pattern', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'test content');
+      const count = utils.countInFile(testFile, '(unclosed');
+      assert.strictEqual(count, 0);
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  if (test('countInFile handles non-string non-regex pattern', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'test content');
+      const count = utils.countInFile(testFile, 42);
+      assert.strictEqual(count, 0);
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  if (test('countInFile enforces global flag on RegExp', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'foo bar foo baz foo');
+      // RegExp without global flag — countInFile should still count all
+      const count = utils.countInFile(testFile, /foo/);
+      assert.strictEqual(count, 3);
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  if (test('grepFile handles invalid regex pattern', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'test content');
+      const matches = utils.grepFile(testFile, '[invalid');
+      assert.deepStrictEqual(matches, []);
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  if (test('replaceInFile returns false for non-existent file', () => {
+    const result = utils.replaceInFile('/non/existent/file.txt', 'foo', 'bar');
+    assert.strictEqual(result, false);
+  })) passed++; else failed++;
+
+  if (test('countInFile returns 0 for non-existent file', () => {
+    const count = utils.countInFile('/non/existent/file.txt', /foo/g);
+    assert.strictEqual(count, 0);
+  })) passed++; else failed++;
+
+  if (test('grepFile returns empty for non-existent file', () => {
+    const matches = utils.grepFile('/non/existent/file.txt', /foo/);
+    assert.deepStrictEqual(matches, []);
+  })) passed++; else failed++;
+
+  if (test('commandExists rejects unsafe command names', () => {
+    assert.strictEqual(utils.commandExists('cmd; rm -rf'), false);
+    assert.strictEqual(utils.commandExists('$(whoami)'), false);
+    assert.strictEqual(utils.commandExists('cmd && echo hi'), false);
+  })) passed++; else failed++;
+
+  if (test('ensureDir is idempotent', () => {
+    const testDir = path.join(utils.getTempDir(), `utils-test-idem-${Date.now()}`);
+    try {
+      const result1 = utils.ensureDir(testDir);
+      const result2 = utils.ensureDir(testDir);
+      assert.strictEqual(result1, testDir);
+      assert.strictEqual(result2, testDir);
+      assert.ok(fs.existsSync(testDir));
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // System functions tests
   console.log('\nSystem Functions:');
 

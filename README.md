@@ -143,7 +143,7 @@ For manual install instructions see the README in the `rules/` folder.
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 13 agents, 34 skills, and 31 commands.
+✨ **That's it!** You now have access to 13 agents, 35 skills, and 31 commands.
 
 ---
 
@@ -239,6 +239,9 @@ everything-claude-code/
 |   |-- postgres-patterns/         # PostgreSQL optimization patterns (NEW)
 |   |-- nutrient-document-processing/ # Document processing with Nutrient API (NEW)
 |   |-- project-guidelines-example/   # Template for project-specific skills
+|   |-- database-migrations/         # Migration patterns (Prisma, Drizzle, Django, Go) (NEW)
+|   |-- api-design/                  # REST API design, pagination, error responses (NEW)
+|   |-- deployment-patterns/         # CI/CD, Docker, health checks, rollbacks (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -794,7 +797,7 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 |---------|-------------|----------|--------|
 | Agents | ✅ 13 agents | ✅ 12 agents | **Claude Code leads** |
 | Commands | ✅ 31 commands | ✅ 24 commands | **Claude Code leads** |
-| Skills | ✅ 34 skills | ✅ 16 skills | **Claude Code leads** |
+| Skills | ✅ 35 skills | ✅ 16 skills | **Claude Code leads** |
 | Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
 | Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
 | MCP Servers | ✅ Full | ✅ Full | **Full parity** |

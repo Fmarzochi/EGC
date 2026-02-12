@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const HOOKS_FILE = path.join(__dirname, '../../hooks/hooks.json');
 const VALID_EVENTS = ['PreToolUse', 'PostToolUse', 'PreCompact', 'SessionStart', 'SessionEnd', 'Stop', 'Notification', 'SubagentStop'];
@@ -68,6 +69,17 @@ function validateHooks() {
             if (!hook.command || (typeof hook.command !== 'string' && !Array.isArray(hook.command))) {
               console.error(`ERROR: ${eventType}[${i}].hooks[${j}] missing or invalid 'command' field`);
               hasErrors = true;
+            } else if (typeof hook.command === 'string') {
+              // Validate inline JS syntax in node -e commands
+              const nodeEMatch = hook.command.match(/^node -e "(.*)"$/s);
+              if (nodeEMatch) {
+                try {
+                  new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
+                } catch (syntaxErr) {
+                  console.error(`ERROR: ${eventType}[${i}].hooks[${j}] has invalid inline JS: ${syntaxErr.message}`);
+                  hasErrors = true;
+                }
+              }
             }
           }
         }
@@ -96,6 +108,17 @@ function validateHooks() {
           if (!h.command || (typeof h.command !== 'string' && !Array.isArray(h.command))) {
             console.error(`ERROR: Hook ${i}.hooks[${j}] missing or invalid 'command' field`);
             hasErrors = true;
+          } else if (typeof h.command === 'string') {
+            // Validate inline JS syntax in node -e commands
+            const nodeEMatch = h.command.match(/^node -e "(.*)"$/s);
+            if (nodeEMatch) {
+              try {
+                new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
+              } catch (syntaxErr) {
+                console.error(`ERROR: Hook ${i}.hooks[${j}] has invalid inline JS: ${syntaxErr.message}`);
+                hasErrors = true;
+              }
+            }
           }
         }
       }
