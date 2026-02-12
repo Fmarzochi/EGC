@@ -97,7 +97,8 @@ export function parseSessionMetadata(content: string | null): SessionMetadata;
 
 /**
  * Calculate statistics for a session.
- * Accepts either a file path (ending in .tmp) or pre-read content string.
+ * Accepts either a file path (absolute, ending in .tmp) or pre-read content string.
+ * Supports both Unix (/path/to/session.tmp) and Windows (C:\path\to\session.tmp) paths.
  */
 export function getSessionStats(sessionPathOrContent: string): SessionStats;
 

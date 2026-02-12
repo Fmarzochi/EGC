@@ -146,12 +146,14 @@ function parseSessionMetadata(content) {
  */
 function getSessionStats(sessionPathOrContent) {
   // Accept pre-read content string to avoid redundant file reads.
-  // If the argument looks like a file path (no newlines, ends with .tmp),
-  // read from disk. Otherwise treat it as content.
-  const content = (typeof sessionPathOrContent === 'string' &&
+  // If the argument looks like a file path (no newlines, ends with .tmp,
+  // starts with / on Unix or drive letter on Windows), read from disk.
+  // Otherwise treat it as content.
+  const looksLikePath = typeof sessionPathOrContent === 'string' &&
     !sessionPathOrContent.includes('\n') &&
-    sessionPathOrContent.startsWith('/') &&
-    sessionPathOrContent.endsWith('.tmp'))
+    sessionPathOrContent.endsWith('.tmp') &&
+    (sessionPathOrContent.startsWith('/') || /^[A-Za-z]:[/\\]/.test(sessionPathOrContent));
+  const content = looksLikePath
     ? getSessionContent(sessionPathOrContent)
     : sessionPathOrContent;
 

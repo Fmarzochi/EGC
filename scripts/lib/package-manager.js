@@ -246,7 +246,12 @@ function setPreferredPackageManager(pmName) {
   const config = loadConfig() || {};
   config.packageManager = pmName;
   config.setAt = new Date().toISOString();
-  saveConfig(config);
+
+  try {
+    saveConfig(config);
+  } catch (err) {
+    throw new Error(`Failed to save package manager preference: ${err.message}`);
+  }
 
   return config;
 }

@@ -68,7 +68,7 @@ export function getPackageManager(options?: GetPackageManagerOptions): PackageMa
 /**
  * Set the user's globally preferred package manager.
  * Saves to ~/.claude/package-manager.json.
- * @throws If pmName is not a known package manager
+ * @throws If pmName is not a known package manager or if save fails
  */
 export function setPreferredPackageManager(pmName: PackageManagerName): { packageManager: string; setAt: string };
 
