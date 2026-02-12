@@ -13,7 +13,7 @@
 ![Java](https://img.shields.io/badge/-Java-ED8B00?logo=openjdk&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
-> **42K+ stars** | **5K+ forks** | **24 contributors** | **6 languages supported**
+> **42K+ stars** | **5K+ forks** | **24 contributors** | **6 languages supported** | **Anthropic Hackathon Winner**
 
 ---
 
@@ -368,6 +368,8 @@ Both options create:
 
 ### AgentShield — Security Auditor
 
+> Built at the Claude Code Hackathon (Cerebral Valley x Anthropic, Feb 2026). 387 tests, 98% coverage, 16 static analysis rules.
+
 Scan your Claude Code configuration for vulnerabilities, misconfigurations, and injection risks.
 
 ```bash
@@ -377,14 +379,18 @@ npx ecc-agentshield scan
 # Auto-fix safe issues
 npx ecc-agentshield scan --fix
 
-# Deep analysis with Opus 4.6
+# Deep analysis with three Opus 4.6 agents
 npx ecc-agentshield scan --opus --stream
 
 # Generate secure config from scratch
 npx ecc-agentshield init
 ```
 
-Checks CLAUDE.md, settings.json, MCP servers, hooks, and agent definitions. Produces a security grade (A-F) with actionable findings.
+**What it scans:** CLAUDE.md, settings.json, MCP configs, hooks, agent definitions, and skills across 5 categories — secrets detection (11 patterns), permission auditing, hook injection analysis, MCP server risk profiling, and agent config review.
+
+**The `--opus` flag** runs three Claude Opus 4.6 agents in a red-team/blue-team/auditor pipeline. The attacker finds exploit chains, the defender evaluates protections, and the auditor synthesizes both into a prioritized risk assessment. Adversarial reasoning, not just pattern matching.
+
+**Output formats:** Terminal (color-graded A-F), JSON (CI pipelines), Markdown, HTML. Exit code 2 on critical findings for build gates.
 
 Use `/security-scan` in Claude Code to run it, or add to CI with the [GitHub Action](https://github.com/affaan-m/agentshield).
 
@@ -894,6 +900,14 @@ These configs work for my workflow. You should:
 2. Modify for your stack
 3. Remove what you don't use
 4. Add your own patterns
+
+---
+
+## 💜 Sponsors
+
+This project is free and open source. Sponsors help keep it maintained and growing.
+
+[**Become a Sponsor**](https://github.com/sponsors/affaan-m) | [Sponsor Tiers](SPONSORS.md)
 
 ---
 
