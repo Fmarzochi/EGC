@@ -25,11 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Run AgentShield Security Scan
+        uses: affaan-m/agentshield@v1
         with:
-          node-version: '20.x'
-
-      - name: Run AgentShield security scan
-        run: npx ecc-agentshield scan --path . --min-severity medium --format terminal
-        continue-on-error: true  # Informational only — ECC contains intentional config examples
+          path: '.'
+          min-severity: 'medium'
+          format: 'terminal'
+          fail-on-findings: 'false'
