@@ -27,9 +27,11 @@ process.stdin.on('end', () => {
     const input = JSON.parse(data);
     const filePath = input.tool_input?.file_path;
 
-    if (filePath && /\.(ts|tsx)$/.test(filePath) && fs.existsSync(filePath)) {
+    if (filePath && /\.(ts|tsx)$/.test(filePath)) {
+      const resolvedPath = path.resolve(filePath);
+      if (!fs.existsSync(resolvedPath)) { console.log(data); return; }
       // Find nearest tsconfig.json by walking up (max 20 levels to prevent infinite loop)
-      let dir = path.dirname(path.resolve(filePath));
+      let dir = path.dirname(resolvedPath);
       const root = path.parse(dir).root;
       let depth = 0;
 

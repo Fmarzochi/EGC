@@ -25,14 +25,14 @@ process.stdin.on('end', () => {
     const input = JSON.parse(data);
     const filePath = input.tool_input?.file_path;
 
-    if (filePath && /\.(ts|tsx|js|jsx)$/.test(filePath) && fs.existsSync(filePath)) {
+    if (filePath && /\.(ts|tsx|js|jsx)$/.test(filePath)) {
       try {
         execFileSync('npx', ['prettier', '--write', filePath], {
           stdio: ['pipe', 'pipe', 'pipe'],
           timeout: 15000
         });
       } catch {
-        // Prettier not installed or failed — non-blocking
+        // Prettier not installed, file missing, or failed — non-blocking
       }
     }
   } catch {

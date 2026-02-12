@@ -366,6 +366,7 @@ function getGitModifiedFiles(patterns = []) {
     // Pre-compile patterns, skipping invalid ones
     const compiled = [];
     for (const pattern of patterns) {
+      if (typeof pattern !== 'string' || pattern.length === 0) continue;
       try {
         compiled.push(new RegExp(pattern));
       } catch {

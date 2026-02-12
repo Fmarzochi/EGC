@@ -10,6 +10,7 @@
  */
 
 const fs = require('fs');
+const { readFile } = require('../lib/utils');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = '';
@@ -25,8 +26,9 @@ process.stdin.on('end', () => {
     const input = JSON.parse(data);
     const filePath = input.tool_input?.file_path;
 
-    if (filePath && /\.(ts|tsx|js|jsx)$/.test(filePath) && fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf8');
+    if (filePath && /\.(ts|tsx|js|jsx)$/.test(filePath)) {
+      const content = readFile(filePath);
+      if (!content) { console.log(data); return; }
       const lines = content.split('\n');
       const matches = [];
 

@@ -14,7 +14,7 @@
  */
 
 const fs = require('fs');
-const { isGitRepo, getGitModifiedFiles, log } = require('../lib/utils');
+const { isGitRepo, getGitModifiedFiles, readFile, log } = require('../lib/utils');
 
 // Files where console.log is expected and should not trigger warnings
 const EXCLUDED_PATTERNS = [
@@ -49,8 +49,8 @@ process.stdin.on('end', () => {
     let hasConsole = false;
 
     for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      if (content.includes('console.log')) {
+      const content = readFile(file);
+      if (content && content.includes('console.log')) {
         log(`[Hook] WARNING: console.log found in ${file}`);
         hasConsole = true;
       }
