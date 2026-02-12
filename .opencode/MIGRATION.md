@@ -285,13 +285,13 @@ The `.opencode/` directory contains everything pre-configured.
 ### Option 2: Install as npm Package
 
 ```bash
-npm install opencode-ecc
+npm install ecc-universal
 ```
 
 Then in your `opencode.json`:
 ```json
 {
-  "plugin": ["opencode-ecc"]
+  "plugin": ["ecc-universal"]
 }
 ```
 

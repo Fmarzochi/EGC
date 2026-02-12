@@ -1,5 +1,5 @@
 {
-  "name": "opencode-ecc",
+  "name": "ecc-universal",
   "version": "1.0.0",
   "description": "Everything Claude Code (ECC) plugin for OpenCode - agents, commands, hooks, and skills",
   "main": "dist/index.js",

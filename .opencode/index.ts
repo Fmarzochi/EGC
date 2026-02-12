@@ -12,13 +12,13 @@
  *
  * Option 1: Install via npm
  * ```bash
- * npm install opencode-ecc
+ * npm install ecc-universal
  * ```
  *
  * Then add to your opencode.json:
  * ```json
  * {
- *   "plugin": ["opencode-ecc"]
+ *   "plugin": ["ecc-universal"]
  * }
  * ```
  *
@@ -43,7 +43,7 @@ export const VERSION = "1.0.0"
 
 // Plugin metadata
 export const metadata = {
-  name: "opencode-ecc",
+  name: "ecc-universal",
   version: VERSION,
   description: "Everything Claude Code plugin for OpenCode",
   author: "affaan-m",

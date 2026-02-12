@@ -7,14 +7,14 @@ Everything Claude Code (ECC) plugin for OpenCode - agents, commands, hooks, and 
 ### Option 1: npm Package
 
 ```bash
-npm install opencode-ecc
+npm install ecc-universal
 ```
 
 Add to your `opencode.json`:
 
 ```json
 {
-  "plugin": ["opencode-ecc"]
+  "plugin": ["ecc-universal"]
 }
 ```
 
