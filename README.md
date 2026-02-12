@@ -143,7 +143,7 @@ For manual install instructions see the README in the `rules/` folder.
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 15+ agents, 30+ skills, and 30+ commands.
+✨ **That's it!** You now have access to 13 agents, 34 skills, and 31 commands.
 
 ---
 
@@ -234,6 +234,11 @@ everything-claude-code/
 |   |-- springboot-verification/    # Spring Boot verification (NEW)
 |   |-- configure-ecc/              # Interactive installation wizard (NEW)
 |   |-- security-scan/              # AgentShield security auditor integration (NEW)
+|   |-- java-coding-standards/     # Java coding standards (NEW)
+|   |-- jpa-patterns/              # JPA/Hibernate patterns (NEW)
+|   |-- postgres-patterns/         # PostgreSQL optimization patterns (NEW)
+|   |-- nutrient-document-processing/ # Document processing with Nutrient API (NEW)
+|   |-- project-guidelines-example/   # Template for project-specific skills
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -260,6 +265,13 @@ everything-claude-code/
 |   |-- multi-backend.md    # /multi-backend - Backend multi-service orchestration (NEW)
 |   |-- multi-frontend.md   # /multi-frontend - Frontend multi-service orchestration (NEW)
 |   |-- multi-workflow.md   # /multi-workflow - General multi-service workflows (NEW)
+|   |-- orchestrate.md      # /orchestrate - Multi-agent coordination
+|   |-- sessions.md         # /sessions - Session history management
+|   |-- eval.md             # /eval - Evaluate against criteria
+|   |-- test-coverage.md    # /test-coverage - Test coverage analysis
+|   |-- update-docs.md      # /update-docs - Update documentation
+|   |-- update-codemaps.md  # /update-codemaps - Update codemaps
+|   |-- python-review.md    # /python-review - Python code review (NEW)
 |
 |-- rules/            # Always-follow guidelines (copy to ~/.claude/rules/)
 |   |-- README.md            # Structure overview and installation guide
@@ -304,8 +316,9 @@ everything-claude-code/
 |   |-- research.md         # Research/exploration mode context
 |
 |-- examples/         # Example configurations and sessions
-|   |-- CLAUDE.md           # Example project-level config
-|   |-- user-CLAUDE.md      # Example user-level config
+|   |-- CLAUDE.md             # Example project-level config
+|   |-- user-CLAUDE.md        # Example user-level config
+|   |-- saas-nextjs-CLAUDE.md # Real-world SaaS (Next.js + Supabase + Stripe)
 |
 |-- mcp-configs/      # MCP server configurations
 |   |-- mcp-servers.json    # GitHub, Supabase, Vercel, Railway, etc.
@@ -567,6 +580,121 @@ See [`rules/README.md`](rules/README.md) for installation and structure details.
 
 ---
 
+## 🗺️ Which Agent Should I Use?
+
+Not sure where to start? Use this quick reference:
+
+| I want to... | Use this command | Agent used |
+|--------------|-----------------|------------|
+| Plan a new feature | `/plan "Add auth"` | planner |
+| Design system architecture | `/plan` + architect agent | architect |
+| Write code with tests first | `/tdd` | tdd-guide |
+| Review code I just wrote | `/code-review` | code-reviewer |
+| Fix a failing build | `/build-fix` | build-error-resolver |
+| Run end-to-end tests | `/e2e` | e2e-runner |
+| Find security vulnerabilities | `/security-scan` | security-reviewer |
+| Remove dead code | `/refactor-clean` | refactor-cleaner |
+| Update documentation | `/update-docs` | doc-updater |
+| Review Go code | `/go-review` | go-reviewer |
+| Review Python code | `/python-review` | python-reviewer |
+| Audit database queries | *(auto-delegated)* | database-reviewer |
+
+### Common Workflows
+
+**Starting a new feature:**
+```
+/plan "Add user authentication with OAuth"   → planner creates implementation blueprint
+/tdd                                          → tdd-guide enforces write-tests-first
+/code-review                                  → code-reviewer checks your work
+```
+
+**Fixing a bug:**
+```
+/tdd                                          → tdd-guide: write a failing test that reproduces it
+                                              → implement the fix, verify test passes
+/code-review                                  → code-reviewer: catch regressions
+```
+
+**Preparing for production:**
+```
+/security-scan                                → security-reviewer: OWASP Top 10 audit
+/e2e                                          → e2e-runner: critical user flow tests
+/test-coverage                                → verify 80%+ coverage
+```
+
+---
+
+## ❓ FAQ
+
+<details>
+<summary><b>How do I check which agents/commands are installed?</b></summary>
+
+```bash
+/plugin list everything-claude-code@everything-claude-code
+```
+
+This shows all available agents, commands, and skills from the plugin.
+</details>
+
+<details>
+<summary><b>My hooks aren't working / I see "Duplicate hooks file" errors</b></summary>
+
+This is the most common issue. **Do NOT add a `"hooks"` field to `.claude-plugin/plugin.json`.** Claude Code v2.1+ automatically loads `hooks/hooks.json` from installed plugins. Explicitly declaring it causes duplicate detection errors. See [#29](https://github.com/affaan-m/everything-claude-code/issues/29), [#52](https://github.com/affaan-m/everything-claude-code/issues/52), [#103](https://github.com/affaan-m/everything-claude-code/issues/103).
+</details>
+
+<details>
+<summary><b>My context window is shrinking / Claude is running out of context</b></summary>
+
+Too many MCP servers eat your context. Each MCP tool description consumes tokens from your 200k window, potentially reducing it to ~70k.
+
+**Fix:** Disable unused MCPs per project:
+```json
+// In your project's .claude/settings.json
+{
+  "disabledMcpServers": ["supabase", "railway", "vercel"]
+}
+```
+
+Keep under 10 MCPs enabled and under 80 tools active.
+</details>
+
+<details>
+<summary><b>Can I use only some components (e.g., just agents)?</b></summary>
+
+Yes. Use Option 2 (manual installation) and copy only what you need:
+
+```bash
+# Just agents
+cp everything-claude-code/agents/*.md ~/.claude/agents/
+
+# Just rules
+cp -r everything-claude-code/rules/common/* ~/.claude/rules/
+```
+
+Each component is fully independent.
+</details>
+
+<details>
+<summary><b>Does this work with Cursor / OpenCode?</b></summary>
+
+Yes. ECC is cross-platform:
+- **Cursor**: Pre-translated configs in `.cursor/`. See [Cursor IDE Support](#cursor-ide-support).
+- **OpenCode**: Full plugin support in `.opencode/`. See [OpenCode Support](#-opencode-support).
+- **Claude Code**: Native — this is the primary target.
+</details>
+
+<details>
+<summary><b>How do I contribute a new skill or agent?</b></summary>
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The short version:
+1. Fork the repo
+2. Create your skill in `skills/your-skill-name/SKILL.md` (with YAML frontmatter)
+3. Or create an agent in `agents/your-agent.md`
+4. Submit a PR with a clear description of what it does and when to use it
+</details>
+
+---
+
 ## 🧪 Running Tests
 
 The plugin includes a comprehensive test suite:
@@ -655,9 +783,9 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 
 | Feature | Claude Code | OpenCode | Status |
 |---------|-------------|----------|--------|
-| Agents | ✅ 14 agents | ✅ 12 agents | **Claude Code leads** |
-| Commands | ✅ 30 commands | ✅ 24 commands | **Claude Code leads** |
-| Skills | ✅ 28 skills | ✅ 16 skills | **Claude Code leads** |
+| Agents | ✅ 13 agents | ✅ 12 agents | **Claude Code leads** |
+| Commands | ✅ 31 commands | ✅ 24 commands | **Claude Code leads** |
+| Skills | ✅ 34 skills | ✅ 16 skills | **Claude Code leads** |
 | Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
 | Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
 | MCP Servers | ✅ Full | ✅ Full | **Full parity** |
