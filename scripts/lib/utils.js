@@ -206,7 +206,7 @@ function findFiles(dir, pattern, options = {}) {
 async function readStdinJson(options = {}) {
   const { timeoutMs = 5000, maxSize = 1024 * 1024 } = options;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let data = '';
     let settled = false;
 
@@ -235,16 +235,19 @@ async function readStdinJson(options = {}) {
       clearTimeout(timer);
       try {
         resolve(data.trim() ? JSON.parse(data) : {});
-      } catch (err) {
-        reject(err);
+      } catch {
+        // Consistent with timeout path: resolve with empty object
+        // so hooks don't crash on malformed input
+        resolve({});
       }
     });
 
-    process.stdin.on('error', err => {
+    process.stdin.on('error', () => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(err);
+      // Resolve with empty object so hooks don't crash on stdin errors
+      resolve({});
     });
   });
 }
@@ -414,7 +417,7 @@ function countInFile(filePath, pattern) {
   try {
     if (pattern instanceof RegExp) {
       // Ensure global flag is set for correct counting
-      regex = pattern.global ? pattern : new RegExp(pattern.source, pattern.flags + 'g');
+      regex = pattern.global ? pattern : new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
     } else if (typeof pattern === 'string') {
       regex = new RegExp(pattern, 'g');
     } else {

@@ -132,7 +132,8 @@ export interface ReadStdinJsonOptions {
 
 /**
  * Read JSON from stdin (for hook input).
- * Returns an empty object if stdin is empty or times out.
+ * Returns an empty object if stdin is empty, times out, or contains invalid JSON.
+ * Never rejects — safe to use without try-catch in hooks.
  */
 export function readStdinJson(options?: ReadStdinJsonOptions): Promise<Record<string, unknown>>;
 

@@ -150,6 +150,7 @@ function getSessionStats(sessionPathOrContent) {
   // read from disk. Otherwise treat it as content.
   const content = (typeof sessionPathOrContent === 'string' &&
     !sessionPathOrContent.includes('\n') &&
+    sessionPathOrContent.startsWith('/') &&
     sessionPathOrContent.endsWith('.tmp'))
     ? getSessionContent(sessionPathOrContent)
     : sessionPathOrContent;

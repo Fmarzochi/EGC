@@ -74,7 +74,7 @@ function validateHooks() {
               const nodeEMatch = hook.command.match(/^node -e "(.*)"$/s);
               if (nodeEMatch) {
                 try {
-                  new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
+                  new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\'));
                 } catch (syntaxErr) {
                   console.error(`ERROR: ${eventType}[${i}].hooks[${j}] has invalid inline JS: ${syntaxErr.message}`);
                   hasErrors = true;
@@ -113,7 +113,7 @@ function validateHooks() {
             const nodeEMatch = h.command.match(/^node -e "(.*)"$/s);
             if (nodeEMatch) {
               try {
-                new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
+                new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\'));
               } catch (syntaxErr) {
                 console.error(`ERROR: Hook ${i}.hooks[${j}] has invalid inline JS: ${syntaxErr.message}`);
                 hasErrors = true;

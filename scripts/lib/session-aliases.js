@@ -252,7 +252,7 @@ function listAliases(options = {}) {
   }));
 
   // Sort by updated time (newest first)
-  aliases.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  aliases.sort((a, b) => (new Date(b.updatedAt || b.createdAt || 0).getTime() || 0) - (new Date(a.updatedAt || a.createdAt || 0).getTime() || 0));
 
   // Apply search filter
   if (search) {
@@ -337,7 +337,9 @@ function renameAlias(oldAlias, newAlias) {
   // Restore old alias and remove new alias on failure
   data.aliases[oldAlias] = aliasData;
   delete data.aliases[newAlias];
-  return { success: false, error: 'Failed to rename alias' };
+  // Attempt to persist the rollback
+  saveAliases(data);
+  return { success: false, error: 'Failed to save renamed alias — rolled back to original' };
 }
 
 /**
@@ -359,17 +361,21 @@ function resolveSessionAlias(aliasOrId) {
 /**
  * Update alias title
  * @param {string} alias - Alias name
- * @param {string} title - New title
+ * @param {string|null} title - New title (string or null to clear)
  * @returns {object} Result with success status
  */
 function updateAliasTitle(alias, title) {
+  if (title !== null && typeof title !== 'string') {
+    return { success: false, error: 'Title must be a string or null' };
+  }
+
   const data = loadAliases();
 
   if (!data.aliases[alias]) {
     return { success: false, error: `Alias '${alias}' not found` };
   }
 
-  data.aliases[alias].title = title;
+  data.aliases[alias].title = title || null;
   data.aliases[alias].updatedAt = new Date().toISOString();
 
   if (saveAliases(data)) {

@@ -123,8 +123,8 @@ export function renameAlias(oldAlias: string, newAlias: string): RenameAliasResu
  */
 export function resolveSessionAlias(aliasOrId: string): string;
 
-/** Update the title of an existing alias */
-export function updateAliasTitle(alias: string, title: string): AliasResult;
+/** Update the title of an existing alias. Pass null to clear. */
+export function updateAliasTitle(alias: string, title: string | null): AliasResult;
 
 /** Get all aliases that point to a specific session path */
 export function getAliasesForSession(sessionPath: string): Array<{ name: string; createdAt: string; title: string | null }>;

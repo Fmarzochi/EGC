@@ -267,7 +267,11 @@ function setProjectPackageManager(pmName, projectDir = process.cwd()) {
     setAt: new Date().toISOString()
   };
 
-  writeFile(configPath, JSON.stringify(config, null, 2));
+  try {
+    writeFile(configPath, JSON.stringify(config, null, 2));
+  } catch (err) {
+    throw new Error(`Failed to save package manager config to ${configPath}: ${err.message}`);
+  }
   return config;
 }
 

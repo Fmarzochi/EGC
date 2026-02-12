@@ -17,7 +17,7 @@ function extractFrontmatter(content) {
   if (!match) return null;
 
   const frontmatter = {};
-  const lines = match[1].split('\n');
+  const lines = match[1].split(/\r?\n/);
   for (const line of lines) {
     const colonIdx = line.indexOf(':');
     if (colonIdx > 0) {
