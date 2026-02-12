@@ -9,7 +9,6 @@
  * sessions and learned skills.
  */
 
-const fs = require('fs');
 const {
   getSessionsDir,
   getLearnedSkillsDir,

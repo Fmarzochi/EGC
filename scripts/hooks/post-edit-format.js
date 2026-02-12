@@ -9,7 +9,6 @@
  */
 
 const { execFileSync } = require('child_process');
-const fs = require('fs');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = '';

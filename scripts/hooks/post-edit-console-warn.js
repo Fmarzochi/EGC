@@ -9,7 +9,6 @@
  * before committing.
  */
 
-const fs = require('fs');
 const { readFile } = require('../lib/utils');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
