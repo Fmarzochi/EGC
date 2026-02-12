@@ -340,6 +340,164 @@ function runTests() {
     assert.ok(prompt.includes('lock file'), 'Should mention lock file option');
   })) passed++; else failed++;
 
+  // setProjectPackageManager tests
+  console.log('\nsetProjectPackageManager:');
+
+  if (test('sets project package manager', () => {
+    const testDir = createTestDir();
+    try {
+      const result = pm.setProjectPackageManager('pnpm', testDir);
+      assert.strictEqual(result.packageManager, 'pnpm');
+      assert.ok(result.setAt, 'Should have setAt timestamp');
+
+      // Verify file was created
+      const configPath = path.join(testDir, '.claude', 'package-manager.json');
+      assert.ok(fs.existsSync(configPath), 'Config file should exist');
+      const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.strictEqual(saved.packageManager, 'pnpm');
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('rejects unknown package manager', () => {
+    assert.throws(() => {
+      pm.setProjectPackageManager('cargo');
+    }, /Unknown package manager/);
+  })) passed++; else failed++;
+
+  // setPreferredPackageManager tests
+  console.log('\nsetPreferredPackageManager:');
+
+  if (test('rejects unknown package manager', () => {
+    assert.throws(() => {
+      pm.setPreferredPackageManager('pip');
+    }, /Unknown package manager/);
+  })) passed++; else failed++;
+
+  // detectFromPackageJson edge cases
+  console.log('\ndetectFromPackageJson (edge cases):');
+
+  if (test('handles invalid JSON in package.json', () => {
+    const testDir = createTestDir();
+    try {
+      fs.writeFileSync(path.join(testDir, 'package.json'), 'NOT VALID JSON');
+      const result = pm.detectFromPackageJson(testDir);
+      assert.strictEqual(result, null);
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('returns null for unknown package manager in packageManager field', () => {
+    const testDir = createTestDir();
+    try {
+      fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({
+        name: 'test',
+        packageManager: 'deno@1.0'
+      }));
+      const result = pm.detectFromPackageJson(testDir);
+      assert.strictEqual(result, null);
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  // getExecCommand edge cases
+  console.log('\ngetExecCommand (edge cases):');
+
+  if (test('returns exec command without args', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getExecCommand('prettier');
+      assert.strictEqual(cmd, 'npx prettier');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
+  // getRunCommand additional cases
+  console.log('\ngetRunCommand (additional):');
+
+  if (test('returns correct build command', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      assert.strictEqual(pm.getRunCommand('build'), 'npm run build');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
+  if (test('returns correct dev command', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      assert.strictEqual(pm.getRunCommand('dev'), 'npm run dev');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
+  if (test('returns correct custom script command', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      assert.strictEqual(pm.getRunCommand('lint'), 'npm run lint');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
+  // DETECTION_PRIORITY tests
+  console.log('\nDETECTION_PRIORITY:');
+
+  if (test('has pnpm first', () => {
+    assert.strictEqual(pm.DETECTION_PRIORITY[0], 'pnpm');
+  })) passed++; else failed++;
+
+  if (test('has npm last', () => {
+    assert.strictEqual(pm.DETECTION_PRIORITY[pm.DETECTION_PRIORITY.length - 1], 'npm');
+  })) passed++; else failed++;
+
+  // getCommandPattern additional cases
+  console.log('\ngetCommandPattern (additional):');
+
+  if (test('generates pattern for install command', () => {
+    const pattern = pm.getCommandPattern('install');
+    const regex = new RegExp(pattern);
+    assert.ok(regex.test('npm install'), 'Should match npm install');
+    assert.ok(regex.test('pnpm install'), 'Should match pnpm install');
+    assert.ok(regex.test('yarn'), 'Should match yarn (install implicit)');
+    assert.ok(regex.test('bun install'), 'Should match bun install');
+  })) passed++; else failed++;
+
+  if (test('generates pattern for custom action', () => {
+    const pattern = pm.getCommandPattern('lint');
+    const regex = new RegExp(pattern);
+    assert.ok(regex.test('npm run lint'), 'Should match npm run lint');
+    assert.ok(regex.test('pnpm lint'), 'Should match pnpm lint');
+    assert.ok(regex.test('yarn lint'), 'Should match yarn lint');
+    assert.ok(regex.test('bun run lint'), 'Should match bun run lint');
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
