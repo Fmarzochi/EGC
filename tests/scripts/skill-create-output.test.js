@@ -7,8 +7,6 @@
  */
 
 const assert = require('assert');
-const path = require('path');
-
 // Import the module
 const { SkillCreateOutput } = require('../../scripts/skill-create-output');
 
