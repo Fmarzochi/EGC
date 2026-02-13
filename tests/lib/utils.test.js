@@ -1096,6 +1096,41 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 79: countInFile with valid string pattern ──
+  console.log('\nRound 79: countInFile (valid string pattern):');
+
+  if (test('countInFile counts occurrences using a plain string pattern', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-count-str-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'apple banana apple cherry apple');
+      // Pass a plain string (not RegExp) — exercises typeof pattern === 'string'
+      // branch at utils.js:441-442 which creates new RegExp(pattern, 'g')
+      const count = utils.countInFile(testFile, 'apple');
+      assert.strictEqual(count, 3, 'String pattern should count all occurrences');
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  // ── Round 79: grepFile with valid string pattern ──
+  console.log('\nRound 79: grepFile (valid string pattern):');
+
+  if (test('grepFile finds matching lines using a plain string pattern', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-grep-str-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'line1 alpha\nline2 beta\nline3 alpha\nline4 gamma');
+      // Pass a plain string (not RegExp) — exercises the else branch
+      // at utils.js:468-469 which creates new RegExp(pattern)
+      const matches = utils.grepFile(testFile, 'alpha');
+      assert.strictEqual(matches.length, 2, 'String pattern should find 2 matching lines');
+      assert.strictEqual(matches[0].lineNumber, 1, 'First match at line 1');
+      assert.strictEqual(matches[1].lineNumber, 3, 'Second match at line 3');
+      assert.ok(matches[0].content.includes('alpha'), 'Content should include pattern');
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

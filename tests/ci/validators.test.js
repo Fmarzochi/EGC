@@ -2031,6 +2031,28 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 79: validate-commands.js warnings count suffix in output ──
+  console.log('\nRound 79: validate-commands.js (warnings count in output):');
+
+  if (test('output includes (N warnings) suffix when skill references produce warnings', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+    // Create a command that references 2 non-existent skill directories
+    // Each triggers a WARN (not error) — warnCount should be 2
+    fs.writeFileSync(path.join(testDir, 'cmd-warn.md'),
+      '# Command\nSee skills/fake-skill-a/ and skills/fake-skill-b/ for details.');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 0, 'Skill warnings should not cause error exit');
+    // The validate-commands output appends "(N warnings)" when warnCount > 0
+    assert.ok(result.stdout.includes('(2 warnings)'),
+      `Output should include "(2 warnings)" suffix, got: ${result.stdout}`);
+    cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
