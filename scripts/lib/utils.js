@@ -150,8 +150,10 @@ function findFiles(dir, pattern, options = {}) {
     return results;
   }
 
+  // Escape all regex special characters, then convert glob wildcards.
+  // Order matters: escape specials first, then convert * and ? to regex equivalents.
   const regexPattern = pattern
-    .replace(/\./g, '\\.')
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.');
   const regex = new RegExp(`^${regexPattern}$`);

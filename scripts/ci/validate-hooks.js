@@ -42,7 +42,7 @@ function validateHookEntry(hook, label) {
     const nodeEMatch = hook.command.match(/^node -e "(.*)"$/s);
     if (nodeEMatch) {
       try {
-        new vm.Script(nodeEMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\'));
+        new vm.Script(nodeEMatch[1].replace(/\\\\/g, '\\').replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t'));
       } catch (syntaxErr) {
         console.error(`ERROR: ${label} has invalid inline JS: ${syntaxErr.message}`);
         hasErrors = true;

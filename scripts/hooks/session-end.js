@@ -88,6 +88,7 @@ function extractSessionSummary(transcriptPath) {
 // Read hook input from stdin (Claude Code provides transcript_path via stdin JSON)
 const MAX_STDIN = 1024 * 1024;
 let stdinData = '';
+process.stdin.setEncoding('utf8');
 
 process.stdin.on('data', chunk => {
   if (stdinData.length < MAX_STDIN) {

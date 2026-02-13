@@ -12,6 +12,7 @@ const { execFileSync } = require('child_process');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = '';
+process.stdin.setEncoding('utf8');
 
 process.stdin.on('data', chunk => {
   if (data.length < MAX_STDIN) {
