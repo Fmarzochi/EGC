@@ -618,6 +618,27 @@ async function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  if (await asyncTest('stops tsconfig walk at max depth (20)', async () => {
+    // Create a deeply nested directory (>20 levels) with no tsconfig anywhere
+    const testDir = createTestDir();
+    let deepDir = testDir;
+    for (let i = 0; i < 25; i++) {
+      deepDir = path.join(deepDir, `d${i}`);
+    }
+    fs.mkdirSync(deepDir, { recursive: true });
+    const testFile = path.join(deepDir, 'deep.ts');
+    fs.writeFileSync(testFile, 'const x: number = 1;');
+
+    const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
+    const startTime = Date.now();
+    const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
+    const elapsed = Date.now() - startTime;
+
+    assert.strictEqual(result.code, 0, 'Should not hang at depth limit');
+    assert.ok(elapsed < 5000, `Should complete quickly at depth limit, took ${elapsed}ms`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // session-end.js extractSessionSummary tests
   console.log('\nsession-end.js (extractSessionSummary):');
 

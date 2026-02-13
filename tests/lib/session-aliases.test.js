@@ -402,6 +402,27 @@ function runTests() {
     assert.ok(result.error);
   })) passed++; else failed++;
 
+  if (test('handles sessionExists that throws an exception', () => {
+    resetAliases();
+    aliases.setAlias('bomb', '/path/bomb');
+    aliases.setAlias('safe', '/path/safe');
+
+    // Callback that throws for one entry
+    let threw = false;
+    try {
+      aliases.cleanupAliases((p) => {
+        if (p === '/path/bomb') throw new Error('simulated failure');
+        return true;
+      });
+    } catch {
+      threw = true;
+    }
+
+    // Currently cleanupAliases does not catch callback exceptions
+    // This documents the behavior — it throws, which is acceptable
+    assert.ok(threw, 'Should propagate callback exception to caller');
+  })) passed++; else failed++;
+
   // listAliases edge cases
   console.log('\nlistAliases (edge cases):');
 
