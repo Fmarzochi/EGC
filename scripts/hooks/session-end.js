@@ -153,8 +153,9 @@ async function main() {
     if (summary) {
       const existing = readFile(sessionFile);
       if (existing && existing.includes('[Session context goes here]')) {
+        // Use a flexible regex that tolerates CRLF, extra whitespace, and minor template variations
         const updatedContent = existing.replace(
-          /## Current State\n\n\[Session context goes here\]\n\n### Completed\n- \[ \]\n\n### In Progress\n- \[ \]\n\n### Notes for Next Session\n-\n\n### Context to Load\n```\n\[relevant files\]\n```/,
+          /## Current State\s*\n\s*\[Session context goes here\][\s\S]*?### Context to Load\s*\n```\s*\n\[relevant files\]\s*\n```/,
           buildSummarySection(summary)
         );
         writeFile(sessionFile, updatedContent);

@@ -189,7 +189,7 @@ with open("config.json") as f:  # Good
 
 ## Integration with Other Commands
 
-- Use `/python-test` first to ensure tests pass
+- Use `/tdd` first to ensure tests pass
 - Use `/code-review` for non-Python specific concerns
 - Use `/python-review` before committing
 - Use `/build-fix` if static analysis tools fail

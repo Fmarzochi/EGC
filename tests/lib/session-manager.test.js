@@ -328,6 +328,148 @@ src/main.ts
     assert.strictEqual(title, 'Untitled Session');
   })) passed++; else failed++;
 
+  // getAllSessions tests
+  console.log('\ngetAllSessions:');
+
+  // Override HOME to a temp dir for isolated getAllSessions/getSessionById tests
+  const tmpHome = path.join(os.tmpdir(), `ecc-session-mgr-test-${Date.now()}`);
+  const tmpSessionsDir = path.join(tmpHome, '.claude', 'sessions');
+  fs.mkdirSync(tmpSessionsDir, { recursive: true });
+  const origHome = process.env.HOME;
+
+  // Create test session files with controlled modification times
+  const testSessions = [
+    { name: '2026-01-15-abcd1234-session.tmp', content: '# Session 1' },
+    { name: '2026-01-20-efgh5678-session.tmp', content: '# Session 2' },
+    { name: '2026-02-01-ijkl9012-session.tmp', content: '# Session 3' },
+    { name: '2026-02-01-mnop3456-session.tmp', content: '# Session 4' },
+    { name: '2026-02-10-session.tmp', content: '# Old format session' },
+  ];
+  for (let i = 0; i < testSessions.length; i++) {
+    const filePath = path.join(tmpSessionsDir, testSessions[i].name);
+    fs.writeFileSync(filePath, testSessions[i].content);
+    // Stagger modification times so sort order is deterministic
+    const mtime = new Date(Date.now() - (testSessions.length - i) * 60000);
+    fs.utimesSync(filePath, mtime, mtime);
+  }
+
+  process.env.HOME = tmpHome;
+
+  if (test('getAllSessions returns all sessions', () => {
+    const result = sessionManager.getAllSessions({ limit: 100 });
+    assert.strictEqual(result.total, 5);
+    assert.strictEqual(result.sessions.length, 5);
+    assert.strictEqual(result.hasMore, false);
+  })) passed++; else failed++;
+
+  if (test('getAllSessions paginates correctly', () => {
+    const page1 = sessionManager.getAllSessions({ limit: 2, offset: 0 });
+    assert.strictEqual(page1.sessions.length, 2);
+    assert.strictEqual(page1.hasMore, true);
+    assert.strictEqual(page1.total, 5);
+
+    const page2 = sessionManager.getAllSessions({ limit: 2, offset: 2 });
+    assert.strictEqual(page2.sessions.length, 2);
+    assert.strictEqual(page2.hasMore, true);
+
+    const page3 = sessionManager.getAllSessions({ limit: 2, offset: 4 });
+    assert.strictEqual(page3.sessions.length, 1);
+    assert.strictEqual(page3.hasMore, false);
+  })) passed++; else failed++;
+
+  if (test('getAllSessions filters by date', () => {
+    const result = sessionManager.getAllSessions({ date: '2026-02-01', limit: 100 });
+    assert.strictEqual(result.total, 2);
+    assert.ok(result.sessions.every(s => s.date === '2026-02-01'));
+  })) passed++; else failed++;
+
+  if (test('getAllSessions filters by search (short ID)', () => {
+    const result = sessionManager.getAllSessions({ search: 'abcd', limit: 100 });
+    assert.strictEqual(result.total, 1);
+    assert.strictEqual(result.sessions[0].shortId, 'abcd1234');
+  })) passed++; else failed++;
+
+  if (test('getAllSessions returns sorted by newest first', () => {
+    const result = sessionManager.getAllSessions({ limit: 100 });
+    for (let i = 1; i < result.sessions.length; i++) {
+      assert.ok(
+        result.sessions[i - 1].modifiedTime >= result.sessions[i].modifiedTime,
+        'Sessions should be sorted newest first'
+      );
+    }
+  })) passed++; else failed++;
+
+  if (test('getAllSessions handles offset beyond total', () => {
+    const result = sessionManager.getAllSessions({ offset: 999, limit: 10 });
+    assert.strictEqual(result.sessions.length, 0);
+    assert.strictEqual(result.total, 5);
+    assert.strictEqual(result.hasMore, false);
+  })) passed++; else failed++;
+
+  if (test('getAllSessions returns empty for non-existent date', () => {
+    const result = sessionManager.getAllSessions({ date: '2099-12-31', limit: 100 });
+    assert.strictEqual(result.total, 0);
+    assert.strictEqual(result.sessions.length, 0);
+  })) passed++; else failed++;
+
+  if (test('getAllSessions ignores non-.tmp files', () => {
+    fs.writeFileSync(path.join(tmpSessionsDir, 'notes.txt'), 'not a session');
+    fs.writeFileSync(path.join(tmpSessionsDir, 'compaction-log.txt'), 'log');
+    const result = sessionManager.getAllSessions({ limit: 100 });
+    assert.strictEqual(result.total, 5, 'Should only count .tmp session files');
+  })) passed++; else failed++;
+
+  // getSessionById tests
+  console.log('\ngetSessionById:');
+
+  if (test('getSessionById finds by short ID prefix', () => {
+    const result = sessionManager.getSessionById('abcd1234');
+    assert.ok(result, 'Should find session by exact short ID');
+    assert.strictEqual(result.shortId, 'abcd1234');
+  })) passed++; else failed++;
+
+  if (test('getSessionById finds by short ID prefix match', () => {
+    const result = sessionManager.getSessionById('abcd');
+    assert.ok(result, 'Should find session by short ID prefix');
+    assert.strictEqual(result.shortId, 'abcd1234');
+  })) passed++; else failed++;
+
+  if (test('getSessionById finds by full filename', () => {
+    const result = sessionManager.getSessionById('2026-01-15-abcd1234-session.tmp');
+    assert.ok(result, 'Should find session by full filename');
+    assert.strictEqual(result.shortId, 'abcd1234');
+  })) passed++; else failed++;
+
+  if (test('getSessionById finds by filename without .tmp', () => {
+    const result = sessionManager.getSessionById('2026-01-15-abcd1234-session');
+    assert.ok(result, 'Should find session by filename without extension');
+  })) passed++; else failed++;
+
+  if (test('getSessionById returns null for non-existent ID', () => {
+    const result = sessionManager.getSessionById('zzzzzzzz');
+    assert.strictEqual(result, null);
+  })) passed++; else failed++;
+
+  if (test('getSessionById includes content when requested', () => {
+    const result = sessionManager.getSessionById('abcd1234', true);
+    assert.ok(result, 'Should find session');
+    assert.ok(result.content, 'Should include content');
+    assert.ok(result.content.includes('Session 1'), 'Content should match');
+  })) passed++; else failed++;
+
+  if (test('getSessionById finds old format (no short ID)', () => {
+    const result = sessionManager.getSessionById('2026-02-10-session');
+    assert.ok(result, 'Should find old-format session by filename');
+  })) passed++; else failed++;
+
+  // Cleanup
+  process.env.HOME = origHome;
+  try {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  } catch {
+    // best-effort
+  }
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -216,6 +216,96 @@ async function runTests() {
     fs.unlinkSync(counterFile);
   })) passed++; else failed++;
 
+  if (await asyncTest('does not suggest below threshold', async () => {
+    const sessionId = 'test-below-' + Date.now();
+    const counterFile = path.join(os.tmpdir(), `claude-tool-count-${sessionId}`);
+
+    fs.writeFileSync(counterFile, '10');
+
+    const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
+      CLAUDE_SESSION_ID: sessionId,
+      COMPACT_THRESHOLD: '50'
+    });
+
+    assert.ok(
+      !result.stderr.includes('tool calls'),
+      'Should not suggest compact below threshold'
+    );
+
+    fs.unlinkSync(counterFile);
+  })) passed++; else failed++;
+
+  if (await asyncTest('suggests at regular intervals after threshold', async () => {
+    const sessionId = 'test-interval-' + Date.now();
+    const counterFile = path.join(os.tmpdir(), `claude-tool-count-${sessionId}`);
+
+    // Set counter to 74 (next will be 75, which is >50 and 75%25==0)
+    fs.writeFileSync(counterFile, '74');
+
+    const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
+      CLAUDE_SESSION_ID: sessionId,
+      COMPACT_THRESHOLD: '50'
+    });
+
+    assert.ok(
+      result.stderr.includes('75 tool calls'),
+      'Should suggest at 25-call intervals after threshold'
+    );
+
+    fs.unlinkSync(counterFile);
+  })) passed++; else failed++;
+
+  if (await asyncTest('handles corrupted counter file', async () => {
+    const sessionId = 'test-corrupt-' + Date.now();
+    const counterFile = path.join(os.tmpdir(), `claude-tool-count-${sessionId}`);
+
+    fs.writeFileSync(counterFile, 'not-a-number');
+
+    const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
+      CLAUDE_SESSION_ID: sessionId
+    });
+
+    assert.strictEqual(result.code, 0, 'Should handle corrupted counter gracefully');
+
+    // Counter should be reset to 1
+    const newCount = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
+    assert.strictEqual(newCount, 1, 'Should reset counter to 1 on corrupt data');
+
+    fs.unlinkSync(counterFile);
+  })) passed++; else failed++;
+
+  if (await asyncTest('uses default session ID when no env var', async () => {
+    const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
+      CLAUDE_SESSION_ID: '' // Empty, should use 'default'
+    });
+
+    assert.strictEqual(result.code, 0, 'Should work with default session ID');
+
+    // Cleanup the default counter file
+    const counterFile = path.join(os.tmpdir(), 'claude-tool-count-default');
+    if (fs.existsSync(counterFile)) fs.unlinkSync(counterFile);
+  })) passed++; else failed++;
+
+  if (await asyncTest('validates threshold bounds', async () => {
+    const sessionId = 'test-bounds-' + Date.now();
+    const counterFile = path.join(os.tmpdir(), `claude-tool-count-${sessionId}`);
+
+    // Invalid threshold should fall back to 50
+    fs.writeFileSync(counterFile, '49');
+
+    const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
+      CLAUDE_SESSION_ID: sessionId,
+      COMPACT_THRESHOLD: '-5' // Invalid: negative
+    });
+
+    assert.ok(
+      result.stderr.includes('50 tool calls'),
+      'Should use default threshold (50) for invalid value'
+    );
+
+    fs.unlinkSync(counterFile);
+  })) passed++; else failed++;
+
   // evaluate-session.js tests
   console.log('\nevaluate-session.js:');
 

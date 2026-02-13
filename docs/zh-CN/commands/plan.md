@@ -107,7 +107,7 @@ Agent (planner):
 计划之后：
 
 * 使用 `/tdd` 以测试驱动开发的方式实施
-* 如果出现构建错误，使用 `/build-and-fix`
+* 如果出现构建错误，使用 `/build-fix`
 * 使用 `/code-review` 审查已完成的实施
 
 ## 相关代理

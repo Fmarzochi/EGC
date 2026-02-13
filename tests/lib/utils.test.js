@@ -397,6 +397,155 @@ function runTests() {
     assert.strictEqual(result.success, false);
   })) passed++; else failed++;
 
+  // output() and log() tests
+  console.log('\noutput() and log():');
+
+  if (test('output() writes string to stdout', () => {
+    // Capture stdout by temporarily replacing console.log
+    let captured = null;
+    const origLog = console.log;
+    console.log = (v) => { captured = v; };
+    try {
+      utils.output('hello');
+      assert.strictEqual(captured, 'hello');
+    } finally {
+      console.log = origLog;
+    }
+  })) passed++; else failed++;
+
+  if (test('output() JSON-stringifies objects', () => {
+    let captured = null;
+    const origLog = console.log;
+    console.log = (v) => { captured = v; };
+    try {
+      utils.output({ key: 'value', num: 42 });
+      assert.strictEqual(captured, '{"key":"value","num":42}');
+    } finally {
+      console.log = origLog;
+    }
+  })) passed++; else failed++;
+
+  if (test('output() JSON-stringifies null (typeof null === "object")', () => {
+    let captured = null;
+    const origLog = console.log;
+    console.log = (v) => { captured = v; };
+    try {
+      utils.output(null);
+      // typeof null === 'object' in JS, so it goes through JSON.stringify
+      assert.strictEqual(captured, 'null');
+    } finally {
+      console.log = origLog;
+    }
+  })) passed++; else failed++;
+
+  if (test('output() handles arrays as objects', () => {
+    let captured = null;
+    const origLog = console.log;
+    console.log = (v) => { captured = v; };
+    try {
+      utils.output([1, 2, 3]);
+      assert.strictEqual(captured, '[1,2,3]');
+    } finally {
+      console.log = origLog;
+    }
+  })) passed++; else failed++;
+
+  if (test('log() writes to stderr', () => {
+    let captured = null;
+    const origError = console.error;
+    console.error = (v) => { captured = v; };
+    try {
+      utils.log('test message');
+      assert.strictEqual(captured, 'test message');
+    } finally {
+      console.error = origError;
+    }
+  })) passed++; else failed++;
+
+  // isGitRepo() tests
+  console.log('\nisGitRepo():');
+
+  if (test('isGitRepo returns true in a git repo', () => {
+    // We're running from within the ECC repo, so this should be true
+    assert.strictEqual(utils.isGitRepo(), true);
+  })) passed++; else failed++;
+
+  // getGitModifiedFiles() tests
+  console.log('\ngetGitModifiedFiles():');
+
+  if (test('getGitModifiedFiles returns an array', () => {
+    const files = utils.getGitModifiedFiles();
+    assert.ok(Array.isArray(files));
+  })) passed++; else failed++;
+
+  if (test('getGitModifiedFiles filters by regex patterns', () => {
+    const files = utils.getGitModifiedFiles(['\\.NONEXISTENT_EXTENSION$']);
+    assert.ok(Array.isArray(files));
+    assert.strictEqual(files.length, 0);
+  })) passed++; else failed++;
+
+  if (test('getGitModifiedFiles skips invalid patterns', () => {
+    // Mix of valid and invalid patterns — should not throw
+    const files = utils.getGitModifiedFiles(['(unclosed', '\\.js$', '[invalid']);
+    assert.ok(Array.isArray(files));
+  })) passed++; else failed++;
+
+  if (test('getGitModifiedFiles skips non-string patterns', () => {
+    const files = utils.getGitModifiedFiles([null, undefined, 42, '', '\\.js$']);
+    assert.ok(Array.isArray(files));
+  })) passed++; else failed++;
+
+  // getLearnedSkillsDir() test
+  console.log('\ngetLearnedSkillsDir():');
+
+  if (test('getLearnedSkillsDir returns path under Claude dir', () => {
+    const dir = utils.getLearnedSkillsDir();
+    assert.ok(dir.includes('.claude'));
+    assert.ok(dir.includes('skills'));
+    assert.ok(dir.includes('learned'));
+  })) passed++; else failed++;
+
+  // findFiles with regex special characters in pattern
+  console.log('\nfindFiles (regex chars):');
+
+  if (test('findFiles handles regex special chars in pattern', () => {
+    const testDir = path.join(utils.getTempDir(), `utils-test-regex-${Date.now()}`);
+    try {
+      fs.mkdirSync(testDir);
+      // Create files with regex-special characters in names
+      fs.writeFileSync(path.join(testDir, 'file(1).txt'), 'content');
+      fs.writeFileSync(path.join(testDir, 'file+2.txt'), 'content');
+      fs.writeFileSync(path.join(testDir, 'file[3].txt'), 'content');
+
+      // These patterns should match literally, not as regex metacharacters
+      const parens = utils.findFiles(testDir, 'file(1).txt');
+      assert.strictEqual(parens.length, 1, 'Should match file(1).txt literally');
+
+      const plus = utils.findFiles(testDir, 'file+2.txt');
+      assert.strictEqual(plus.length, 1, 'Should match file+2.txt literally');
+
+      const brackets = utils.findFiles(testDir, 'file[3].txt');
+      assert.strictEqual(brackets.length, 1, 'Should match file[3].txt literally');
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('findFiles wildcard still works with special chars', () => {
+    const testDir = path.join(utils.getTempDir(), `utils-test-glob-${Date.now()}`);
+    try {
+      fs.mkdirSync(testDir);
+      fs.writeFileSync(path.join(testDir, 'app(v2).js'), 'content');
+      fs.writeFileSync(path.join(testDir, 'app(v3).ts'), 'content');
+
+      const jsFiles = utils.findFiles(testDir, '*.js');
+      assert.strictEqual(jsFiles.length, 1);
+      assert.ok(jsFiles[0].path.endsWith('app(v2).js'));
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

@@ -17,7 +17,7 @@ planner -> tdd-guide -> code-reviewer -> security-reviewer
 ### bugfix
 Bug 調查和修復工作流程：
 ```
-explorer -> tdd-guide -> code-reviewer
+planner -> tdd-guide -> code-reviewer
 ```
 
 ### refactor

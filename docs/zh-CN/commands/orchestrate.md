@@ -21,7 +21,7 @@ planner -> tdd-guide -> code-reviewer -> security-reviewer
 错误调查与修复工作流：
 
 ```
-explorer -> tdd-guide -> code-reviewer
+planner -> tdd-guide -> code-reviewer
 ```
 
 ### refactor
