@@ -1689,6 +1689,71 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 57: readFileSync error path, statSync catch block, adjacent code blocks ──
+  console.log('\nRound 57: validate-skills.js (SKILL.md is a directory — readFileSync error):');
+
+  if (test('fails gracefully when SKILL.md is a directory instead of a file', () => {
+    const testDir = createTestDir();
+    const skillDir = path.join(testDir, 'dir-skill');
+    fs.mkdirSync(skillDir);
+    // Create SKILL.md as a DIRECTORY, not a file — existsSync returns true
+    // but readFileSync throws EISDIR, exercising the catch block (lines 33-37)
+    fs.mkdirSync(path.join(skillDir, 'SKILL.md'));
+
+    const result = runValidatorWithDir('validate-skills', 'SKILLS_DIR', testDir);
+    assert.strictEqual(result.code, 1, 'Should fail when SKILL.md is a directory');
+    assert.ok(result.stderr.includes('dir-skill'), 'Should report the problematic skill');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 57: validate-rules.js (broken symlink — statSync catch block):');
+
+  if (test('reports error for broken symlink .md file in rules directory', () => {
+    const testDir = createTestDir();
+    // Create a valid rule first
+    fs.writeFileSync(path.join(testDir, 'valid.md'), '# Valid Rule');
+    // Create a broken symlink (dangling → target doesn't exist)
+    // statSync follows symlinks and throws ENOENT, exercising catch (lines 35-38)
+    try {
+      fs.symlinkSync('/nonexistent/target.md', path.join(testDir, 'broken.md'));
+    } catch {
+      // Skip on systems that don't support symlinks
+      console.log('    (skipped — symlinks not supported)');
+      cleanupTestDir(testDir);
+      return;
+    }
+
+    const result = runValidatorWithDir('validate-rules', 'RULES_DIR', testDir);
+    assert.strictEqual(result.code, 1, 'Should fail on broken symlink');
+    assert.ok(result.stderr.includes('broken.md'), 'Should report the broken symlink file');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 57: validate-commands.js (adjacent code blocks both stripped):');
+
+  if (test('strips multiple adjacent code blocks before checking references', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+    // Two adjacent code blocks, each with broken refs — BOTH must be stripped
+    fs.writeFileSync(path.join(testDir, 'multi-blocks.md'),
+      '# Multi Block\n\n' +
+      '```\n`/phantom-a` in first block\n```\n\n' +
+      'Content between blocks\n\n' +
+      '```\n`/phantom-b` in second block\nagents/ghost-agent.md\n```\n\n' +
+      'Final content');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 0,
+      'Both code blocks should be stripped — no broken refs reported');
+    assert.ok(!result.stderr.includes('phantom-a'), 'First block ref should be stripped');
+    assert.ok(!result.stderr.includes('phantom-b'), 'Second block ref should be stripped');
+    assert.ok(!result.stderr.includes('ghost-agent'), 'Agent ref in second block should be stripped');
+    cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
