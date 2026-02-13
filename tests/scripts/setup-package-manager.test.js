@@ -344,6 +344,51 @@ function runTests() {
     assert.strictEqual(currentCount, 1, `Expected exactly 1 "(current)" in --list, found ${currentCount}`);
   })) passed++; else failed++;
 
+  // ── Round 74: setGlobal catch — setPreferredPackageManager throws ──
+  console.log('\nRound 74: setGlobal catch (save failure):');
+
+  if (test('--global npm fails when HOME is not a directory', () => {
+    if (process.platform === 'win32') {
+      console.log('    (skipped — /dev/null not available on Windows)');
+      return;
+    }
+    // HOME=/dev/null causes ensureDir to throw ENOTDIR when creating ~/.claude/
+    const result = run(['--global', 'npm'], { HOME: '/dev/null', USERPROFILE: '/dev/null' });
+    assert.strictEqual(result.code, 1, `Expected exit 1, got ${result.code}`);
+    assert.ok(result.stderr.includes('Error:'),
+      `stderr should contain Error:, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  // ── Round 74: setProject catch — setProjectPackageManager throws ──
+  console.log('\nRound 74: setProject catch (save failure):');
+
+  if (test('--project npm fails when CWD is read-only', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return;
+    }
+    const tmpDir = path.join(os.tmpdir(), `spm-test-ro-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    try {
+      // Make CWD read-only so .claude/ dir creation fails with EACCES
+      fs.chmodSync(tmpDir, 0o555);
+      const result = require('child_process').spawnSync('node', [SCRIPT, '--project', 'npm'], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env },
+        timeout: 10000,
+        cwd: tmpDir
+      });
+      assert.strictEqual(result.status, 1,
+        `Expected exit 1, got ${result.status}. stderr: ${result.stderr}`);
+      assert.ok(result.stderr.includes('Error:'),
+        `stderr should contain Error:, got: ${result.stderr}`);
+    } finally {
+      try { fs.chmodSync(tmpDir, 0o755); } catch { /* best-effort */ }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

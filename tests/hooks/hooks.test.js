@@ -3153,6 +3153,26 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 74: session-start.js main().catch handler ──
+  console.log('\nRound 74: session-start.js (main catch — unrecoverable error):');
+
+  if (await asyncTest('session-start exits 0 with error message when HOME is non-directory', async () => {
+    if (process.platform === 'win32') {
+      console.log('    (skipped — /dev/null not available on Windows)');
+      return;
+    }
+    // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
+    // which propagates to main().catch — the top-level error boundary
+    const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+      HOME: '/dev/null',
+      USERPROFILE: '/dev/null'
+    });
+    assert.strictEqual(result.code, 0,
+      `Should exit 0 (don't block on errors), got ${result.code}`);
+    assert.ok(result.stderr.includes('[SessionStart] Error:'),
+      `stderr should contain [SessionStart] Error:, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
