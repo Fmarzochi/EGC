@@ -2603,6 +2603,83 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 50: alias reporting, parallel compaction, graceful degradation ──
+  console.log('\nRound 50: session-start.js (alias reporting):');
+
+  if (await asyncTest('reports available session aliases on startup', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-start-alias-${Date.now()}`);
+    fs.mkdirSync(path.join(isoHome, '.claude', 'sessions'), { recursive: true });
+    fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
+
+    // Pre-populate the aliases file
+    fs.writeFileSync(path.join(isoHome, '.claude', 'session-aliases.json'), JSON.stringify({
+      version: '1.0',
+      aliases: {
+        'my-feature': { sessionPath: '/sessions/feat', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), title: null },
+        'bug-fix': { sessionPath: '/sessions/fix', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), title: null }
+      },
+      metadata: { totalCount: 2, lastUpdated: new Date().toISOString() }
+    }));
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0);
+      assert.ok(result.stderr.includes('alias'), 'Should mention aliases in stderr');
+      assert.ok(
+        result.stderr.includes('my-feature') || result.stderr.includes('bug-fix'),
+        'Should list at least one alias name'
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 50: pre-compact.js (parallel execution):');
+
+  if (await asyncTest('parallel compaction runs all append to log without loss', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-compact-par-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    try {
+      const promises = Array(3).fill(null).map(() =>
+        runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+          HOME: isoHome, USERPROFILE: isoHome
+        })
+      );
+      const results = await Promise.all(promises);
+      results.forEach((r, i) => assert.strictEqual(r.code, 0, `Run ${i} should exit 0`));
+
+      const logFile = path.join(sessionsDir, 'compaction-log.txt');
+      assert.ok(fs.existsSync(logFile), 'Compaction log should exist');
+      const content = fs.readFileSync(logFile, 'utf8');
+      const entries = (content.match(/Context compaction triggered/g) || []).length;
+      assert.strictEqual(entries, 3, `Should have 3 log entries, got ${entries}`);
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 50: session-start.js (graceful degradation):');
+
+  if (await asyncTest('exits 0 when sessions path is a file (not a directory)', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-start-blocked-${Date.now()}`);
+    fs.mkdirSync(path.join(isoHome, '.claude'), { recursive: true });
+    // Block sessions dir creation by placing a file at that path
+    fs.writeFileSync(path.join(isoHome, '.claude', 'sessions'), 'blocked');
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0 even when sessions dir is blocked');
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
