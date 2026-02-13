@@ -927,6 +927,69 @@ function runTests() {
     assert.deepStrictEqual(JSON.parse(result), {});
   })) passed++; else failed++;
 
+  // ── Round 31: ensureDir error propagation ──
+  console.log('\nensureDir Error Propagation (Round 31):');
+
+  if (test('ensureDir wraps non-EEXIST errors with descriptive message', () => {
+    // Attempting to create a dir under a file should fail with ENOTDIR, not EEXIST
+    const testFile = path.join(utils.getTempDir(), `ensure-err-${Date.now()}.txt`);
+    try {
+      fs.writeFileSync(testFile, 'blocking file');
+      const badPath = path.join(testFile, 'subdir');
+      assert.throws(
+        () => utils.ensureDir(badPath),
+        (err) => err.message.includes('Failed to create directory'),
+        'Should throw with descriptive "Failed to create directory" message'
+      );
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  if (test('ensureDir error includes the directory path', () => {
+    const testFile = path.join(utils.getTempDir(), `ensure-err2-${Date.now()}.txt`);
+    try {
+      fs.writeFileSync(testFile, 'blocker');
+      const badPath = path.join(testFile, 'nested', 'dir');
+      try {
+        utils.ensureDir(badPath);
+        assert.fail('Should have thrown');
+      } catch (err) {
+        assert.ok(err.message.includes(badPath), 'Error should include the target path');
+      }
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  // ── Round 31: runCommand stderr preference on failure ──
+  console.log('\nrunCommand failure output (Round 31):');
+
+  if (test('runCommand returns stderr content on failure when stderr exists', () => {
+    const result = utils.runCommand('node -e "process.stderr.write(\'custom error\'); process.exit(1)"');
+    assert.strictEqual(result.success, false);
+    assert.ok(result.output.includes('custom error'), 'Should include stderr output');
+  })) passed++; else failed++;
+
+  if (test('runCommand falls back to err.message when no stderr', () => {
+    // An invalid command that won't produce stderr through child process
+    const result = utils.runCommand('nonexistent_cmd_xyz_12345');
+    assert.strictEqual(result.success, false);
+    assert.ok(result.output.length > 0, 'Should have some error output');
+  })) passed++; else failed++;
+
+  // ── Round 31: getGitModifiedFiles with empty patterns ──
+  console.log('\ngetGitModifiedFiles empty patterns (Round 31):');
+
+  if (test('getGitModifiedFiles with empty array returns all modified files', () => {
+    // With an empty patterns array, every file should match (no filter applied)
+    const withEmpty = utils.getGitModifiedFiles([]);
+    const withNone = utils.getGitModifiedFiles();
+    // Both should return the same list (no filtering)
+    assert.deepStrictEqual(withEmpty, withNone,
+      'Empty patterns array should behave same as no patterns');
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

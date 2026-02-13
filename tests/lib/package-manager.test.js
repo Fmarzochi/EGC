@@ -1024,6 +1024,75 @@ function runTests() {
     assert.ok(regex.test('pnpm dev'), 'Known action pnpm dev should match');
   })) passed++; else failed++;
 
+  // ── Round 31: setProjectPackageManager write verification ──
+  console.log('\nsetProjectPackageManager (write verification, Round 31):');
+
+  if (test('setProjectPackageManager creates .claude directory if missing', () => {
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-mkdir-'));
+    try {
+      const claudeDir = path.join(testDir, '.claude');
+      assert.ok(!fs.existsSync(claudeDir), '.claude should not pre-exist');
+      pm.setProjectPackageManager('npm', testDir);
+      assert.ok(fs.existsSync(claudeDir), '.claude should be created');
+      const configPath = path.join(claudeDir, 'package-manager.json');
+      assert.ok(fs.existsSync(configPath), 'Config file should be created');
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('setProjectPackageManager includes setAt timestamp', () => {
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-ts-'));
+    try {
+      const before = new Date().toISOString();
+      const config = pm.setProjectPackageManager('yarn', testDir);
+      const after = new Date().toISOString();
+      assert.ok(config.setAt >= before, 'setAt should be >= before');
+      assert.ok(config.setAt <= after, 'setAt should be <= after');
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // ── Round 31: getExecCommand safe argument edge cases ──
+  console.log('\ngetExecCommand (safe argument edge cases, Round 31):');
+
+  if (test('allows colons in args (e.g. --fix:all)', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getExecCommand('eslint', '--fix:all');
+      assert.ok(cmd.includes('--fix:all'), 'Colons should be allowed in args');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('allows at-sign in args (e.g. @latest)', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getExecCommand('create-next-app', '@latest');
+      assert.ok(cmd.includes('@latest'), 'At-sign should be allowed in args');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('allows equals in args (e.g. --config=path)', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getExecCommand('prettier', '--config=.prettierrc');
+      assert.ok(cmd.includes('--config=.prettierrc'), 'Equals should be allowed');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

@@ -175,6 +175,59 @@ function runTests() {
     assert.ok(result.stdout.includes('(current)'), 'Should mark current PM');
   })) passed++; else failed++;
 
+  // ── Round 31: flag-as-PM-name rejection ──
+  // Note: --help, --detect, --list are checked BEFORE --global/--project in argv
+  // parsing, so passing e.g. --global --list triggers the --list handler first.
+  // The startsWith('-') fix protects against flags that AREN'T caught earlier,
+  // like --global --project or --project --unknown-flag.
+  console.log('\n--global flag validation (Round 31):');
+
+  if (test('rejects --global --project (flag not caught by earlier checks)', () => {
+    const result = run(['--global', '--project']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('requires a package manager name'));
+  })) passed++; else failed++;
+
+  if (test('rejects --global --unknown-flag (arbitrary flag as PM name)', () => {
+    const result = run(['--global', '--foo-bar']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('requires a package manager name'));
+  })) passed++; else failed++;
+
+  if (test('rejects --global -x (single-dash flag as PM name)', () => {
+    const result = run(['--global', '-x']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('requires a package manager name'));
+  })) passed++; else failed++;
+
+  if (test('--global --list is handled by --list check first (exit 0)', () => {
+    // --list is checked before --global in the parsing order
+    const result = run(['--global', '--list']);
+    assert.strictEqual(result.code, 0);
+    assert.ok(result.stdout.includes('Available Package Managers'));
+  })) passed++; else failed++;
+
+  console.log('\n--project flag validation (Round 31):');
+
+  if (test('rejects --project --global (cross-flag confusion)', () => {
+    // --global handler runs before --project, catches it first
+    const result = run(['--project', '--global']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('requires a package manager name'));
+  })) passed++; else failed++;
+
+  if (test('rejects --project --unknown-flag', () => {
+    const result = run(['--project', '--bar']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('requires a package manager name'));
+  })) passed++; else failed++;
+
+  if (test('rejects --project -z (single-dash flag)', () => {
+    const result = run(['--project', '-z']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('requires a package manager name'));
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

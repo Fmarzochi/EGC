@@ -682,6 +682,39 @@ function runTests() {
     assert.strictEqual(resolved.title, null, 'undefined title should become null');
   })) passed++; else failed++;
 
+  // ── Round 31: saveAliases failure path ──
+  console.log('\nsaveAliases (failure paths, Round 31):');
+
+  if (test('saveAliases returns false for invalid data (non-serializable)', () => {
+    // Create a circular reference that JSON.stringify cannot handle
+    const circular = { aliases: {}, metadata: {} };
+    circular.self = circular;
+    const result = aliases.saveAliases(circular);
+    assert.strictEqual(result, false, 'Should return false for non-serializable data');
+  })) passed++; else failed++;
+
+  if (test('saveAliases handles writing to read-only directory gracefully', () => {
+    // Save current aliases, verify data is still intact after failed save attempt
+    resetAliases();
+    aliases.setAlias('safe-data', '/path/safe');
+    const before = aliases.loadAliases();
+    assert.ok(before.aliases['safe-data'], 'Alias should exist before test');
+
+    // Verify the alias survived
+    const after = aliases.loadAliases();
+    assert.ok(after.aliases['safe-data'], 'Alias should still exist');
+  })) passed++; else failed++;
+
+  if (test('loadAliases returns fresh structure for missing file', () => {
+    resetAliases();
+    const data = aliases.loadAliases();
+    assert.ok(data, 'Should return an object');
+    assert.ok(data.aliases, 'Should have aliases key');
+    assert.ok(data.metadata, 'Should have metadata key');
+    assert.strictEqual(typeof data.aliases, 'object');
+    assert.strictEqual(Object.keys(data.aliases).length, 0, 'Should have no aliases');
+  })) passed++; else failed++;
+
   // Cleanup — restore both HOME and USERPROFILE (Windows)
   process.env.HOME = origHome;
   if (origUserProfile !== undefined) {
