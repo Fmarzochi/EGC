@@ -406,6 +406,125 @@ async function runTests() {
   })) passed++; else failed++;
 
   // ==========================================
+  // Session End Transcript Parsing Tests
+  // ==========================================
+  console.log('\nSession End Transcript Parsing:');
+
+  if (await asyncTest('session-end extracts summary from mixed JSONL formats', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'mixed-transcript.jsonl');
+
+    // Create transcript with both direct tool_use and nested assistant message formats
+    const lines = [
+      JSON.stringify({ type: 'user', content: 'Fix the login bug' }),
+      JSON.stringify({ type: 'tool_use', name: 'Read', input: { file_path: 'src/auth.ts' } }),
+      JSON.stringify({ type: 'assistant', message: { content: [
+        { type: 'tool_use', name: 'Edit', input: { file_path: 'src/auth.ts' } }
+      ]}}),
+      JSON.stringify({ type: 'user', content: 'Now add tests' }),
+      JSON.stringify({ type: 'assistant', message: { content: [
+        { type: 'tool_use', name: 'Write', input: { file_path: 'tests/auth.test.ts' } },
+        { type: 'text', text: 'Here are the tests' }
+      ]}}),
+      JSON.stringify({ type: 'user', content: 'Looks good, commit' })
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    try {
+      const result = await runHookWithInput(
+        path.join(scriptsDir, 'session-end.js'),
+        { transcript_path: transcriptPath },
+        { HOME: testDir, USERPROFILE: testDir }
+      );
+
+      assert.strictEqual(result.code, 0, 'Should exit 0');
+      assert.ok(result.stderr.includes('[SessionEnd]'), 'Should have SessionEnd log');
+
+      // Verify a session file was created
+      const sessionsDir = path.join(testDir, '.claude', 'sessions');
+      if (fs.existsSync(sessionsDir)) {
+        const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
+        assert.ok(files.length > 0, 'Should create a session file');
+
+        // Verify session content includes tasks from user messages
+        const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+        assert.ok(content.includes('Fix the login bug'), 'Should include first user message');
+        assert.ok(content.includes('auth.ts'), 'Should include modified files');
+      }
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('session-end handles transcript with malformed lines gracefully', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'malformed-transcript.jsonl');
+
+    const lines = [
+      JSON.stringify({ type: 'user', content: 'Task 1' }),
+      '{broken json here',
+      JSON.stringify({ type: 'user', content: 'Task 2' }),
+      '{"truncated":',
+      JSON.stringify({ type: 'user', content: 'Task 3' })
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    try {
+      const result = await runHookWithInput(
+        path.join(scriptsDir, 'session-end.js'),
+        { transcript_path: transcriptPath },
+        { HOME: testDir, USERPROFILE: testDir }
+      );
+
+      assert.strictEqual(result.code, 0, 'Should exit 0 despite malformed lines');
+      // Should still process the valid lines
+      assert.ok(result.stderr.includes('[SessionEnd]'), 'Should have SessionEnd log');
+      assert.ok(result.stderr.includes('unparseable'), 'Should warn about unparseable lines');
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('session-end creates session file with nested user messages', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'nested-transcript.jsonl');
+
+    // Claude Code JSONL format uses nested message.content arrays
+    const lines = [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [
+        { type: 'text', text: 'Refactor the utils module' }
+      ]}}),
+      JSON.stringify({ type: 'assistant', message: { content: [
+        { type: 'tool_use', name: 'Read', input: { file_path: 'lib/utils.js' } }
+      ]}}),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'Approve the changes' }})
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    try {
+      const result = await runHookWithInput(
+        path.join(scriptsDir, 'session-end.js'),
+        { transcript_path: transcriptPath },
+        { HOME: testDir, USERPROFILE: testDir }
+      );
+
+      assert.strictEqual(result.code, 0, 'Should exit 0');
+
+      // Check session file was created
+      const sessionsDir = path.join(testDir, '.claude', 'sessions');
+      if (fs.existsSync(sessionsDir)) {
+        const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
+        assert.ok(files.length > 0, 'Should create session file');
+        const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+        assert.ok(content.includes('Refactor the utils module') || content.includes('Approve'),
+          'Should extract user messages from nested format');
+      }
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  // ==========================================
   // Error Handling Tests
   // ==========================================
   console.log('\nError Handling:');

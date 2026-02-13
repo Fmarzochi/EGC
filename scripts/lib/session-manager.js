@@ -32,9 +32,13 @@ function parseSessionFilename(filename) {
 
   const dateStr = match[1];
 
-  // Validate date components are in valid ranges (not just format)
+  // Validate date components are calendar-accurate (not just format)
   const [year, month, day] = dateStr.split('-').map(Number);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  // Reject impossible dates like Feb 31, Apr 31 — Date constructor rolls
+  // over invalid days (e.g., Feb 31 → Mar 3), so check month roundtrips
+  const d = new Date(year, month - 1, day);
+  if (d.getMonth() !== month - 1 || d.getDate() !== day) return null;
 
   // match[2] is undefined for old format (no ID)
   const shortId = match[2] || 'no-id';

@@ -738,6 +738,126 @@ function runTests() {
     assert.ok(pattern.includes('yarn build'), 'Should include yarn build');
   })) passed++; else failed++;
 
+  // getRunCommand PM-specific format tests
+  console.log('\ngetRunCommand (PM-specific formats):');
+
+  if (test('pnpm custom script: pnpm <script> (no run keyword)', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'pnpm';
+      const cmd = pm.getRunCommand('lint');
+      assert.strictEqual(cmd, 'pnpm lint', 'pnpm uses "pnpm <script>" format');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('yarn custom script: yarn <script>', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'yarn';
+      const cmd = pm.getRunCommand('format');
+      assert.strictEqual(cmd, 'yarn format', 'yarn uses "yarn <script>" format');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('bun custom script: bun run <script>', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'bun';
+      const cmd = pm.getRunCommand('typecheck');
+      assert.strictEqual(cmd, 'bun run typecheck', 'bun uses "bun run <script>" format');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('npm custom script: npm run <script>', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getRunCommand('lint');
+      assert.strictEqual(cmd, 'npm run lint', 'npm uses "npm run <script>" format');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('pnpm install returns pnpm install', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'pnpm';
+      assert.strictEqual(pm.getRunCommand('install'), 'pnpm install');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('yarn install returns yarn (no install keyword)', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'yarn';
+      assert.strictEqual(pm.getRunCommand('install'), 'yarn');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('bun test returns bun test', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'bun';
+      assert.strictEqual(pm.getRunCommand('test'), 'bun test');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  // getExecCommand PM-specific format tests
+  console.log('\ngetExecCommand (PM-specific formats):');
+
+  if (test('pnpm exec: pnpm dlx <binary>', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'pnpm';
+      assert.strictEqual(pm.getExecCommand('prettier', '--write .'), 'pnpm dlx prettier --write .');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('yarn exec: yarn dlx <binary>', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'yarn';
+      assert.strictEqual(pm.getExecCommand('eslint', '.'), 'yarn dlx eslint .');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
+  if (test('bun exec: bunx <binary>', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'bun';
+      assert.strictEqual(pm.getExecCommand('tsc', '--noEmit'), 'bunx tsc --noEmit');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
   if (test('ignores unknown env var package manager', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
     try {

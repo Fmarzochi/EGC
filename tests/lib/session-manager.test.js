@@ -614,6 +614,38 @@ src/main.ts
     assert.strictEqual(result.date, '2026-12-31');
   })) passed++; else failed++;
 
+  if (test('rejects Feb 31 (calendar-inaccurate date)', () => {
+    const result = sessionManager.parseSessionFilename('2026-02-31-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'Feb 31 does not exist');
+  })) passed++; else failed++;
+
+  if (test('rejects Apr 31 (calendar-inaccurate date)', () => {
+    const result = sessionManager.parseSessionFilename('2026-04-31-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'Apr 31 does not exist');
+  })) passed++; else failed++;
+
+  if (test('rejects Feb 29 in non-leap year', () => {
+    const result = sessionManager.parseSessionFilename('2025-02-29-abcd1234-session.tmp');
+    assert.strictEqual(result, null, '2025 is not a leap year');
+  })) passed++; else failed++;
+
+  if (test('accepts Feb 29 in leap year', () => {
+    const result = sessionManager.parseSessionFilename('2024-02-29-abcd1234-session.tmp');
+    assert.ok(result, '2024 is a leap year');
+    assert.strictEqual(result.date, '2024-02-29');
+  })) passed++; else failed++;
+
+  if (test('accepts Jun 30 (valid 30-day month)', () => {
+    const result = sessionManager.parseSessionFilename('2026-06-30-abcd1234-session.tmp');
+    assert.ok(result, 'June has 30 days');
+    assert.strictEqual(result.date, '2026-06-30');
+  })) passed++; else failed++;
+
+  if (test('rejects Jun 31 (invalid 30-day month)', () => {
+    const result = sessionManager.parseSessionFilename('2026-06-31-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'June has only 30 days');
+  })) passed++; else failed++;
+
   if (test('datetime field is a Date object', () => {
     const result = sessionManager.parseSessionFilename('2026-06-15-abcdef12-session.tmp');
     assert.ok(result);
@@ -720,6 +752,32 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
+  })) passed++; else failed++;
+
+  // getSessionStats with code blocks and special characters
+  console.log('\ngetSessionStats (code blocks & special chars):');
+
+  if (test('counts tasks with inline backticks correctly', () => {
+    const content = '# Test\n\n### Completed\n- [x] Fixed `app.js` bug with `fs.readFile()`\n- [x] Ran `npm install` successfully\n\n### In Progress\n- [ ] Review `config.ts` changes\n';
+    const stats = sessionManager.getSessionStats(content);
+    assert.strictEqual(stats.completedItems, 2, 'Should count 2 completed items');
+    assert.strictEqual(stats.inProgressItems, 1, 'Should count 1 in-progress item');
+    assert.strictEqual(stats.totalItems, 3);
+  })) passed++; else failed++;
+
+  if (test('handles special chars in notes section', () => {
+    const content = '# Test\n\n### Notes for Next Session\nDon\'t forget: <important> & "quotes" & \'apostrophes\'\n';
+    const stats = sessionManager.getSessionStats(content);
+    assert.strictEqual(stats.hasNotes, true, 'Should detect notes section');
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.ok(meta.notes.includes('<important>'), 'Notes should preserve HTML-like content');
+  })) passed++; else failed++;
+
+  if (test('counts items in multiline code-heavy session', () => {
+    const content = '# Code Session\n\n### Completed\n- [x] Refactored `lib/utils.js`\n- [x] Updated `package.json` version\n- [x] Fixed `\\`` escaping bug\n\n### In Progress\n- [ ] Test `getSessionStats()` function\n- [ ] Review PR #42\n';
+    const stats = sessionManager.getSessionStats(content);
+    assert.strictEqual(stats.completedItems, 3);
+    assert.strictEqual(stats.inProgressItems, 2);
   })) passed++; else failed++;
 
   // getSessionStats with empty content
