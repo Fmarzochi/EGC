@@ -2517,6 +2517,35 @@ async function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 44: session-start.js empty session file ──
+  console.log('\nRound 44: session-start.js (empty session file):');
+
+  if (await asyncTest('does not inject empty session file content into context', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-start-empty-file-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
+
+    // Create a 0-byte session file (simulates truncated/corrupted write)
+    const today = new Date().toISOString().slice(0, 10);
+    const sessionFile = path.join(sessionsDir, `${today}-empty0000-session.tmp`);
+    fs.writeFileSync(sessionFile, '');
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0 with empty session file');
+      // readFile returns '' (falsy) → the if (content && ...) guard skips injection
+      assert.ok(
+        !result.stdout.includes('Previous session summary'),
+        'Should NOT inject empty string into context'
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
