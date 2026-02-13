@@ -622,6 +622,76 @@ async function runTests() {
     assert.strictEqual(code, 0, 'Should not crash on truncated JSON');
   })) passed++; else failed++;
 
+  // ==========================================
+  // Round 51: Timeout Enforcement
+  // ==========================================
+  console.log('\nRound 51: Timeout Enforcement:');
+
+  if (await asyncTest('runHookWithInput kills hanging hooks after timeout', async () => {
+    const testDir = createTestDir();
+    const hangingHookPath = path.join(testDir, 'hanging-hook.js');
+    fs.writeFileSync(hangingHookPath, 'setInterval(() => {}, 100);');
+
+    try {
+      const startTime = Date.now();
+      let error = null;
+
+      try {
+        await runHookWithInput(hangingHookPath, {}, {}, 500);
+      } catch (err) {
+        error = err;
+      }
+
+      const elapsed = Date.now() - startTime;
+      assert.ok(error, 'Should throw timeout error');
+      assert.ok(error.message.includes('timed out'), 'Error should mention timeout');
+      assert.ok(elapsed >= 450, `Should wait at least ~500ms, waited ${elapsed}ms`);
+      assert.ok(elapsed < 2000, `Should not wait much longer than 500ms, waited ${elapsed}ms`);
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  // ==========================================
+  // Round 51: hooks.json Schema Validation
+  // ==========================================
+  console.log('\nRound 51: hooks.json Schema Validation:');
+
+  if (await asyncTest('hooks.json async hook has valid timeout field', async () => {
+    const asyncHook = hooks.hooks.PostToolUse.find(h =>
+      h.hooks && h.hooks[0] && h.hooks[0].async === true
+    );
+
+    assert.ok(asyncHook, 'Should have at least one async hook defined');
+    assert.strictEqual(asyncHook.hooks[0].async, true, 'async field should be true');
+    assert.ok(asyncHook.hooks[0].timeout, 'Should have timeout field');
+    assert.strictEqual(typeof asyncHook.hooks[0].timeout, 'number', 'Timeout should be a number');
+    assert.ok(asyncHook.hooks[0].timeout > 0, 'Timeout should be positive');
+
+    const match = asyncHook.hooks[0].command.match(/^node -e "(.+)"$/s);
+    assert.ok(match, 'Async hook command should be node -e format');
+  })) passed++; else failed++;
+
+  if (await asyncTest('all hook commands in hooks.json are valid format', async () => {
+    for (const [hookType, hookArray] of Object.entries(hooks.hooks)) {
+      for (const hookDef of hookArray) {
+        assert.ok(hookDef.hooks, `${hookType} entry should have hooks array`);
+
+        for (const hook of hookDef.hooks) {
+          assert.ok(hook.command, `Hook in ${hookType} should have command field`);
+
+          const isInline = hook.command.startsWith('node -e');
+          const isFilePath = hook.command.startsWith('node "');
+
+          assert.ok(
+            isInline || isFilePath,
+            `Hook command in ${hookType} should be inline (node -e) or file path (node "), got: ${hook.command.substring(0, 50)}`
+          );
+        }
+      }
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
