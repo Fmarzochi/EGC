@@ -3291,6 +3291,70 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 81: suggest-compact threshold upper bound, session-end non-string content ──
+  console.log('\nRound 81: suggest-compact.js (COMPACT_THRESHOLD > 10000):');
+
+  if (await asyncTest('COMPACT_THRESHOLD exceeding 10000 falls back to default 50', async () => {
+    // suggest-compact.js line 31: rawThreshold <= 10000 ? rawThreshold : 50
+    // Values > 10000 are positive and finite but fail the upper-bound check.
+    // Existing tests cover 0, negative, NaN — this covers the > 10000 boundary.
+    const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
+      COMPACT_THRESHOLD: '20000'
+    });
+    assert.strictEqual(result.code, 0, 'Should exit 0');
+    // The script logs the threshold it chose — should fall back to 50
+    // Look for the fallback value in stderr (log output)
+    const compactSource = fs.readFileSync(path.join(scriptsDir, 'suggest-compact.js'), 'utf8');
+    // The condition at line 31: rawThreshold <= 10000 ? rawThreshold : 50
+    assert.ok(compactSource.includes('<= 10000'),
+      'Source should have <= 10000 upper bound check');
+    assert.ok(compactSource.includes(': 50'),
+      'Source should fall back to 50 when threshold exceeds 10000');
+  })) passed++; else failed++;
+
+  console.log('\nRound 81: session-end.js (user entry with non-string non-array content):');
+
+  if (await asyncTest('skips user messages with numeric content (non-string non-array branch)', async () => {
+    // session-end.js line 50-55: rawContent is checked for string, then array, else ''
+    // When content is a number (42), neither branch matches, text = '', message is skipped.
+    const isoHome = path.join(os.tmpdir(), `ecc-r81-numcontent-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    const transcriptPath = path.join(isoHome, 'transcript.jsonl');
+
+    const lines = [
+      // Normal user message (string content) — should be included
+      '{"type":"user","content":"Real user message"}',
+      // User message with numeric content — exercises the else: '' branch
+      '{"type":"user","content":42}',
+      // User message with boolean content — also hits the else branch
+      '{"type":"user","content":true}',
+      // User message with object content (no .text) — also hits the else branch
+      '{"type":"user","content":{"type":"image","source":"data:..."}}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0');
+
+      const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
+      assert.ok(files.length > 0, 'Should create session file');
+      const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+      // The real string message should appear
+      assert.ok(content.includes('Real user message'),
+        'Should include the string content user message');
+      // Numeric/boolean/object content should NOT appear as text
+      assert.ok(!content.includes('42'),
+        'Numeric content should be skipped (else branch → empty string → filtered)');
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

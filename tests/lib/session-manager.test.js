@@ -1291,6 +1291,23 @@ src/main.ts
     }
   })) passed++; else failed++;
 
+  // ── Round 81: getSessionStats(null) ──
+  console.log('\nRound 81: getSessionStats(null) (null input):');
+
+  if (test('getSessionStats(null) returns zero lineCount and empty metadata', () => {
+    // session-manager.js line 158-177: getSessionStats accepts path or content.
+    // typeof null === 'string' is false → looksLikePath = false → content = null.
+    // Line 177: content ? content.split('\n').length : 0 → lineCount: 0.
+    // parseSessionMetadata(null) returns defaults → totalItems/completedItems/inProgressItems = 0.
+    const stats = sessionManager.getSessionStats(null);
+    assert.strictEqual(stats.lineCount, 0, 'null input should yield lineCount 0');
+    assert.strictEqual(stats.totalItems, 0, 'null input should yield totalItems 0');
+    assert.strictEqual(stats.completedItems, 0, 'null input should yield completedItems 0');
+    assert.strictEqual(stats.inProgressItems, 0, 'null input should yield inProgressItems 0');
+    assert.strictEqual(stats.hasNotes, false, 'null input should yield hasNotes false');
+    assert.strictEqual(stats.hasContext, false, 'null input should yield hasContext false');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
