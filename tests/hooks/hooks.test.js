@@ -2856,6 +2856,87 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 59: session-start unreadable file, console-log stdin overflow, pre-compact write error ──
+  console.log('\nRound 59: session-start.js (unreadable session file — readFile returns null):');
+
+  if (await asyncTest('does not inject content when session file is unreadable', async () => {
+    // Skip on Windows or when running as root (permissions won't work)
+    if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
+      console.log('    (skipped — not supported on this platform)');
+      return;
+    }
+    const isoHome = path.join(os.tmpdir(), `ecc-start-unreadable-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Create a session file with real content, then make it unreadable
+    const sessionFile = path.join(sessionsDir, `${Date.now()}-session.tmp`);
+    fs.writeFileSync(sessionFile, '# Sensitive session content that should NOT appear');
+    fs.chmodSync(sessionFile, 0o000);
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0 even with unreadable session file');
+      // readFile returns null for unreadable files → content is null → no injection
+      assert.ok(!result.stdout.includes('Sensitive session content'),
+        'Should NOT inject content from unreadable file');
+    } finally {
+      try { fs.chmodSync(sessionFile, 0o644); } catch { /* best-effort */ }
+      try { fs.rmSync(isoHome, { recursive: true, force: true }); } catch { /* best-effort */ }
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 59: check-console-log.js (stdin exceeding 1MB — truncation):');
+
+  if (await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
+    // Send 1.2MB of data — exceeds the 1MB MAX_STDIN limit
+    const payload = 'x'.repeat(1024 * 1024 + 200000);
+    const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), payload);
+
+    assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
+    // Output should be truncated — significantly less than input
+    assert.ok(result.stdout.length < payload.length,
+      `stdout (${result.stdout.length}) should be shorter than input (${payload.length})`);
+    // Output should be approximately 1MB (last accepted chunk may push slightly over)
+    assert.ok(result.stdout.length <= 1024 * 1024 + 65536,
+      `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
+    assert.ok(result.stdout.length > 0, 'Should still pass through truncated data');
+  })) passed++; else failed++;
+
+  console.log('\nRound 59: pre-compact.js (read-only session file — appendFile error):');
+
+  if (await asyncTest('exits 0 when session file is read-only (appendFile fails)', async () => {
+    if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
+      console.log('    (skipped — not supported on this platform)');
+      return;
+    }
+    const isoHome = path.join(os.tmpdir(), `ecc-compact-ro-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Create a session file then make it read-only
+    const sessionFile = path.join(sessionsDir, `${Date.now()}-session.tmp`);
+    fs.writeFileSync(sessionFile, '# Active session\n');
+    fs.chmodSync(sessionFile, 0o444);
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      // Should exit 0 — hooks must not block the user (catch at lines 45-47)
+      assert.strictEqual(result.code, 0, 'Should exit 0 even when append fails');
+      // Session file should remain unchanged (write was blocked)
+      const content = fs.readFileSync(sessionFile, 'utf8');
+      assert.strictEqual(content, '# Active session\n',
+        'Read-only session file should remain unchanged');
+    } finally {
+      try { fs.chmodSync(sessionFile, 0o644); } catch { /* best-effort */ }
+      try { fs.rmSync(isoHome, { recursive: true, force: true }); } catch { /* best-effort */ }
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
