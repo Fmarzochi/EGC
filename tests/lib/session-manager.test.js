@@ -1207,6 +1207,29 @@ src/main.ts
     }
   })) passed++; else failed++;
 
+  // ── Round 75: deleteSession catch — unlinkSync throws on read-only dir ──
+  console.log('\nRound 75: deleteSession (unlink failure in read-only dir):');
+
+  if (test('deleteSession returns false when file exists but directory is read-only', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return;
+    }
+    const tmpDir = path.join(os.tmpdir(), `sm-del-ro-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const sessionFile = path.join(tmpDir, 'test-session.tmp');
+    fs.writeFileSync(sessionFile, 'session content');
+    try {
+      // Make directory read-only so unlinkSync throws EACCES
+      fs.chmodSync(tmpDir, 0o555);
+      const result = sessionManager.deleteSession(sessionFile);
+      assert.strictEqual(result, false, 'Should return false when unlinkSync fails');
+    } finally {
+      try { fs.chmodSync(tmpDir, 0o755); } catch { /* best-effort */ }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
