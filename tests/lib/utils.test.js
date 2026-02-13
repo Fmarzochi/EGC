@@ -1248,6 +1248,40 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 93: countInFile with /pattern/i (g flag appended) ──
+  console.log('\nRound 93: countInFile (case-insensitive RegExp, g flag auto-appended):');
+
+  if (test('countInFile with /pattern/i appends g flag and counts case-insensitively', () => {
+    // utils.js line 440: pattern.flags = 'i', 'i'.includes('g') → false,
+    // so new RegExp(source, 'i' + 'g') → /pattern/ig
+    const testFile = path.join(utils.getTempDir(), `utils-test-ci-flag-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'Foo foo FOO fOo bar baz');
+      const count = utils.countInFile(testFile, /foo/i);
+      assert.strictEqual(count, 4,
+        'Case-insensitive regex with auto-appended g should match all 4 occurrences');
+    } finally {
+      try { fs.unlinkSync(testFile); } catch { /* best-effort */ }
+    }
+  })) passed++; else failed++;
+
+  // ── Round 93: countInFile with /pattern/gi (g flag already present) ──
+  console.log('\nRound 93: countInFile (case-insensitive RegExp, g flag preserved):');
+
+  if (test('countInFile with /pattern/gi preserves existing flags and counts correctly', () => {
+    // utils.js line 440: pattern.flags = 'gi', 'gi'.includes('g') → true,
+    // so new RegExp(source, 'gi') — flags preserved unchanged
+    const testFile = path.join(utils.getTempDir(), `utils-test-gi-flag-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'Foo foo FOO fOo bar baz');
+      const count = utils.countInFile(testFile, /foo/gi);
+      assert.strictEqual(count, 4,
+        'Case-insensitive regex with pre-existing g should match all 4 occurrences');
+    } finally {
+      try { fs.unlinkSync(testFile); } catch { /* best-effort */ }
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

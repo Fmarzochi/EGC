@@ -1474,6 +1474,20 @@ src/main.ts
       'UNC path should be treated as single-line content (not a recognized path)');
   })) passed++; else failed++;
 
+  // ── Round 93: getSessionStats with drive letter but no slash (regex boundary) ──
+  console.log('\nRound 93: getSessionStats (drive letter without slash — regex boundary):');
+
+  if (test('getSessionStats treats drive letter without slash as content (not a path)', () => {
+    // session-manager.js line 166: /^[A-Za-z]:[/\\]/ requires a '/' or '\'
+    // immediately after the colon.  'Z:nosession.tmp' has 'Z:n' which does NOT
+    // match, so looksLikePath is false even though .endsWith('.tmp') is true.
+    const stats = sessionManager.getSessionStats('Z:nosession.tmp');
+    assert.strictEqual(stats.lineCount, 1,
+      'Z:nosession.tmp (no slash) should be treated as single-line content');
+    assert.strictEqual(stats.totalItems, 0,
+      'Content without session items should have 0 totalItems');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
