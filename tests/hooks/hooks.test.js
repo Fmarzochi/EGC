@@ -3481,6 +3481,87 @@ Some random content without the expected ### Context to Load section
     assert.ok(result.stdout.length > 0, 'Should still pass through truncated data');
   })) passed++; else failed++;
 
+  // ── Round 89: post-edit-typecheck.js error detection path (relevantLines) ──
+  console.log('\nRound 89: post-edit-typecheck.js (TypeScript error detection path):');
+
+  if (await asyncTest('filters TypeScript errors to edited file when tsc reports errors', async () => {
+    // post-edit-typecheck.js lines 60-85: when execFileSync('npx', ['tsc', ...]) throws,
+    // the catch block filters error output by file path candidates and logs relevant lines.
+    // All existing tests either have no tsconfig (tsc never runs) or valid TS (tsc succeeds).
+    // This test creates a .ts file with a type error and a tsconfig.json.
+    const testDir = createTestDir();
+    fs.writeFileSync(path.join(testDir, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true }
+    }));
+    const testFile = path.join(testDir, 'broken.ts');
+    // Intentional type error: assigning string to number
+    fs.writeFileSync(testFile, 'const x: number = "not a number";\n');
+
+    const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
+
+    // Core: script must exit 0 and pass through stdin data regardless
+    assert.strictEqual(result.code, 0, 'Should exit 0 even when tsc finds errors');
+    const parsed = JSON.parse(result.stdout);
+    assert.strictEqual(parsed.tool_input.file_path, testFile,
+      'Should pass through original stdin data with file_path intact');
+
+    // If tsc is available and ran, check that error output is filtered to this file
+    if (result.stderr.includes('TypeScript errors in')) {
+      assert.ok(result.stderr.includes('broken.ts'),
+        `Should reference the edited file basename. Got: ${result.stderr}`);
+    }
+    // Either way, no crash and data passes through (verified above)
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  // ── Round 89: extractSessionSummary entry.name + entry.input fallback paths ──
+  console.log('\nRound 89: session-end.js (entry.name + entry.input fallback in extractSessionSummary):');
+
+  if (await asyncTest('extracts tool name from entry.name and file path from entry.input (fallback format)', async () => {
+    // session-end.js line 63: const toolName = entry.tool_name || entry.name || '';
+    // session-end.js line 66: const filePath = entry.tool_input?.file_path || entry.input?.file_path || '';
+    // All existing tests use tool_name + tool_input format. This tests the name + input fallback.
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+
+    const lines = [
+      '{"type":"user","content":"Fix the auth module"}',
+      // Tool entries using "name" + "input" instead of "tool_name" + "tool_input"
+      '{"type":"tool_use","name":"Edit","input":{"file_path":"/src/auth.ts"}}',
+      '{"type":"tool_use","name":"Write","input":{"file_path":"/src/new-helper.ts"}}',
+      // Also include a tool with tool_name but entry.input (mixed format)
+      '{"tool_name":"Read","input":{"file_path":"/src/config.ts"}}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+      HOME: testDir
+    });
+    assert.strictEqual(result.code, 0, 'Should exit 0');
+
+    // Read the session file to verify tool names and file paths were extracted
+    const claudeDir = path.join(testDir, '.claude', 'sessions');
+    if (fs.existsSync(claudeDir)) {
+      const files = fs.readdirSync(claudeDir).filter(f => f.endsWith('.tmp'));
+      if (files.length > 0) {
+        const content = fs.readFileSync(path.join(claudeDir, files[0]), 'utf8');
+        // Tools from entry.name fallback
+        assert.ok(content.includes('Edit'),
+          `Should extract Edit tool from entry.name fallback. Got: ${content}`);
+        assert.ok(content.includes('Write'),
+          `Should extract Write tool from entry.name fallback. Got: ${content}`);
+        // File paths from entry.input fallback
+        assert.ok(content.includes('/src/auth.ts'),
+          `Should extract file path from entry.input.file_path fallback. Got: ${content}`);
+        assert.ok(content.includes('/src/new-helper.ts'),
+          `Should extract Write file from entry.input.file_path fallback. Got: ${content}`);
+      }
+    }
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

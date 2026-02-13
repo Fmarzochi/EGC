@@ -1401,6 +1401,53 @@ src/main.ts
     assert.strictEqual(meta.notes, 'Some notes');
   })) passed++; else failed++;
 
+  // ── Round 89: getAllSessions skips subdirectories (!entry.isFile()) ──
+  console.log('\nRound 89: getAllSessions (subdirectory skip):');
+
+  if (test('getAllSessions skips subdirectories inside sessions dir', () => {
+    // session-manager.js line 220: if (!entry.isFile() || ...) continue;
+    // Existing tests create non-.tmp FILES to test filtering (e.g., notes.txt).
+    // This test creates a DIRECTORY — entry.isFile() returns false, so it should be skipped.
+    const isoHome = path.join(os.tmpdir(), `ecc-r89-subdir-skip-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Create a real session file
+    const realFile = '2026-02-11-abcd1234-session.tmp';
+    fs.writeFileSync(path.join(sessionsDir, realFile), '# Test session');
+
+    // Create a subdirectory inside sessions dir — should be skipped by !entry.isFile()
+    const subdir = path.join(sessionsDir, 'some-nested-dir');
+    fs.mkdirSync(subdir);
+
+    // Also create a subdirectory whose name ends in .tmp — still not a file
+    const tmpSubdir = path.join(sessionsDir, '2026-02-11-fakeid00-session.tmp');
+    fs.mkdirSync(tmpSubdir);
+
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+    process.env.HOME = isoHome;
+    process.env.USERPROFILE = isoHome;
+    try {
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshManager = require('../../scripts/lib/session-manager');
+      const result = freshManager.getAllSessions({ limit: 100 });
+
+      // Should find only the real file, not either subdirectory
+      assert.strictEqual(result.total, 1,
+        `Should find 1 session (the file), not subdirectories. Got ${result.total}`);
+      assert.strictEqual(result.sessions[0].filename, realFile,
+        `Should return the real file. Got: ${result.sessions[0].filename}`);
+    } finally {
+      process.env.HOME = origHome;
+      process.env.USERPROFILE = origUserProfile;
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
