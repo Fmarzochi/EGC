@@ -93,11 +93,19 @@ export function writeFile(filePath: string, content: string): void;
 /** Append to a text file, creating parent directories if needed */
 export function appendFile(filePath: string, content: string): void;
 
+export interface ReplaceInFileOptions {
+  /**
+   * When true and search is a string, replaces ALL occurrences (uses String.replaceAll).
+   * Ignored for RegExp patterns — use the `g` flag instead.
+   */
+  all?: boolean;
+}
+
 /**
  * Replace text in a file (cross-platform sed alternative).
  * @returns true if the file was found and updated, false if file not found
  */
-export function replaceInFile(filePath: string, search: string | RegExp, replace: string): boolean;
+export function replaceInFile(filePath: string, search: string | RegExp, replace: string, options?: ReplaceInFileOptions): boolean;
 
 /**
  * Count occurrences of a pattern in a file.
