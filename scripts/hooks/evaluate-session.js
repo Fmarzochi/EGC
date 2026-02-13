@@ -64,7 +64,7 @@ async function main() {
   if (configContent) {
     try {
       const config = JSON.parse(configContent);
-      minSessionLength = config.min_session_length || 10;
+      minSessionLength = config.min_session_length ?? 10;
 
       if (config.learned_skills_path) {
         // Handle ~ in path

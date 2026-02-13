@@ -30,7 +30,7 @@ async function main() {
   appendFile(compactionLog, `[${timestamp}] Context compaction triggered\n`);
 
   // If there's an active session file, note the compaction
-  const sessions = findFiles(sessionsDir, '*.tmp');
+  const sessions = findFiles(sessionsDir, '*-session.tmp');
 
   if (sessions.length > 0) {
     const activeSession = sessions[0].path;

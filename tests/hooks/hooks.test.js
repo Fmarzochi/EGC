@@ -1520,6 +1520,351 @@ async function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ─── Round 23: Bug fixes & high-priority gap coverage ───
+
+  // Helper: create a patched evaluate-session.js wrapper that resolves
+  // require('../lib/utils') to the real utils.js and uses a custom config path
+  const realUtilsPath = path.resolve(__dirname, '..', '..', 'scripts', 'lib', 'utils.js');
+  function createEvalWrapper(testDir, configPath) {
+    const wrapperScript = path.join(testDir, 'eval-wrapper.js');
+    let src = fs.readFileSync(path.join(scriptsDir, 'evaluate-session.js'), 'utf8');
+    // Patch require to use absolute path (the temp dir doesn't have ../lib/utils)
+    src = src.replace(
+      /require\('\.\.\/lib\/utils'\)/,
+      `require(${JSON.stringify(realUtilsPath)})`
+    );
+    // Patch config file path to point to our test config
+    src = src.replace(
+      /const configFile = path\.join\(scriptDir.*?config\.json'\);/,
+      `const configFile = ${JSON.stringify(configPath)};`
+    );
+    fs.writeFileSync(wrapperScript, src);
+    return wrapperScript;
+  }
+
+  console.log('\nRound 23: evaluate-session.js (config & nullish coalescing):');
+
+  if (await asyncTest('respects min_session_length=0 from config (nullish coalescing)', async () => {
+    // This tests the ?? fix: min_session_length=0 should mean "evaluate ALL sessions"
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'short.jsonl');
+    // Only 2 user messages — normally below the default threshold of 10
+    const lines = [
+      '{"type":"user","content":"msg1"}',
+      '{"type":"user","content":"msg2"}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    // Create a config file with min_session_length=0
+    const skillsDir = path.join(testDir, 'skills', 'continuous-learning');
+    fs.mkdirSync(skillsDir, { recursive: true });
+    const configPath = path.join(skillsDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      min_session_length: 0,
+      learned_skills_path: path.join(testDir, 'learned')
+    }));
+
+    const wrapperScript = createEvalWrapper(testDir, configPath);
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(wrapperScript, stdinJson, {
+      HOME: testDir, USERPROFILE: testDir
+    });
+    assert.strictEqual(result.code, 0);
+    // With min_session_length=0, even 2 messages should trigger evaluation
+    assert.ok(
+      result.stderr.includes('2 messages') && result.stderr.includes('evaluate'),
+      'Should evaluate session with min_session_length=0 (not skip as too short)'
+    );
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (await asyncTest('config with min_session_length=null falls back to default 10', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'short.jsonl');
+    // 5 messages — below default 10
+    const lines = [];
+    for (let i = 0; i < 5; i++) lines.push(`{"type":"user","content":"msg${i}"}`);
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const skillsDir = path.join(testDir, 'skills', 'continuous-learning');
+    fs.mkdirSync(skillsDir, { recursive: true });
+    const configPath = path.join(skillsDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      min_session_length: null,
+      learned_skills_path: path.join(testDir, 'learned')
+    }));
+
+    const wrapperScript = createEvalWrapper(testDir, configPath);
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(wrapperScript, stdinJson, {
+      HOME: testDir, USERPROFILE: testDir
+    });
+    assert.strictEqual(result.code, 0);
+    // null ?? 10 === 10, so 5 messages should be "too short"
+    assert.ok(result.stderr.includes('too short'), 'Should fall back to default 10 when null');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (await asyncTest('config with custom learned_skills_path creates directory', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    fs.writeFileSync(transcriptPath, '{"type":"user","content":"msg"}');
+
+    const customLearnedDir = path.join(testDir, 'custom-learned-skills');
+    const skillsDir = path.join(testDir, 'skills', 'continuous-learning');
+    fs.mkdirSync(skillsDir, { recursive: true });
+    const configPath = path.join(skillsDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      learned_skills_path: customLearnedDir
+    }));
+
+    const wrapperScript = createEvalWrapper(testDir, configPath);
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    await runScript(wrapperScript, stdinJson, {
+      HOME: testDir, USERPROFILE: testDir
+    });
+    assert.ok(fs.existsSync(customLearnedDir), 'Should create custom learned skills directory');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (await asyncTest('handles invalid config JSON gracefully (uses defaults)', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    const lines = [];
+    for (let i = 0; i < 5; i++) lines.push(`{"type":"user","content":"msg${i}"}`);
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const skillsDir = path.join(testDir, 'skills', 'continuous-learning');
+    fs.mkdirSync(skillsDir, { recursive: true });
+    const configPath = path.join(skillsDir, 'config.json');
+    fs.writeFileSync(configPath, 'not valid json!!!');
+
+    const wrapperScript = createEvalWrapper(testDir, configPath);
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(wrapperScript, stdinJson, {
+      HOME: testDir, USERPROFILE: testDir
+    });
+    assert.strictEqual(result.code, 0);
+    // Should log parse failure and fall back to default 10 → 5 msgs too short
+    assert.ok(result.stderr.includes('too short'), 'Should use defaults when config is invalid JSON');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 23: session-end.js (update existing file path):');
+
+  if (await asyncTest('updates Last Updated timestamp in existing session file', async () => {
+    const testDir = createTestDir();
+    const sessionsDir = path.join(testDir, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Get the expected filename
+    const utils = require('../../scripts/lib/utils');
+    const today = utils.getDateString();
+
+    // Create a pre-existing session file with known timestamp
+    const shortId = 'update01';
+    const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
+    const originalContent = `# Session: ${today}\n**Date:** ${today}\n**Started:** 09:00\n**Last Updated:** 09:00\n\n---\n\n## Current State\n\n[Session context goes here]\n\n### Completed\n- [ ]\n\n### In Progress\n- [ ]\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\`\n`;
+    fs.writeFileSync(sessionFile, originalContent);
+
+    const result = await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+      HOME: testDir, USERPROFILE: testDir,
+      CLAUDE_SESSION_ID: `session-${shortId}`
+    });
+    assert.strictEqual(result.code, 0);
+
+    const updated = fs.readFileSync(sessionFile, 'utf8');
+    // The timestamp should have been updated (no longer 09:00)
+    assert.ok(updated.includes('**Last Updated:**'), 'Should still have Last Updated field');
+    assert.ok(result.stderr.includes('Updated session file'), 'Should log update');
+  })) passed++; else failed++;
+
+  if (await asyncTest('replaces blank template with summary when updating existing file', async () => {
+    const testDir = createTestDir();
+    const sessionsDir = path.join(testDir, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const utils = require('../../scripts/lib/utils');
+    const today = utils.getDateString();
+
+    const shortId = 'update02';
+    const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
+    // Pre-existing file with blank template
+    const originalContent = `# Session: ${today}\n**Date:** ${today}\n**Started:** 09:00\n**Last Updated:** 09:00\n\n---\n\n## Current State\n\n[Session context goes here]\n\n### Completed\n- [ ]\n\n### In Progress\n- [ ]\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\`\n`;
+    fs.writeFileSync(sessionFile, originalContent);
+
+    // Create a transcript with user messages
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    const lines = [
+      '{"type":"user","content":"Fix auth bug"}',
+      '{"type":"tool_use","tool_name":"Edit","tool_input":{"file_path":"/src/auth.ts"}}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+      HOME: testDir, USERPROFILE: testDir,
+      CLAUDE_SESSION_ID: `session-${shortId}`
+    });
+    assert.strictEqual(result.code, 0);
+
+    const updated = fs.readFileSync(sessionFile, 'utf8');
+    // Should have replaced blank template with actual summary
+    assert.ok(!updated.includes('[Session context goes here]'), 'Should replace blank template');
+    assert.ok(updated.includes('Fix auth bug'), 'Should include user message in summary');
+    assert.ok(updated.includes('/src/auth.ts'), 'Should include modified file');
+  })) passed++; else failed++;
+
+  if (await asyncTest('preserves existing session content when no blank template marker', async () => {
+    const testDir = createTestDir();
+    const sessionsDir = path.join(testDir, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const utils = require('../../scripts/lib/utils');
+    const today = utils.getDateString();
+
+    const shortId = 'update03';
+    const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
+    // Pre-existing file with ALREADY-FILLED summary (no blank template marker)
+    const existingContent = `# Session: ${today}\n**Date:** ${today}\n**Started:** 08:00\n**Last Updated:** 08:30\n\n---\n\n## Session Summary\n\n### Tasks\n- Previous task from earlier\n`;
+    fs.writeFileSync(sessionFile, existingContent);
+
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    fs.writeFileSync(transcriptPath, '{"type":"user","content":"New task"}');
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+      HOME: testDir, USERPROFILE: testDir,
+      CLAUDE_SESSION_ID: `session-${shortId}`
+    });
+    assert.strictEqual(result.code, 0);
+
+    const updated = fs.readFileSync(sessionFile, 'utf8');
+    // Should NOT overwrite existing summary (no blank template marker found)
+    assert.ok(updated.includes('Previous task from earlier'), 'Should preserve existing content');
+    assert.ok(!updated.includes('New task'), 'Should not replace non-template content');
+  })) passed++; else failed++;
+
+  console.log('\nRound 23: pre-compact.js (glob specificity):');
+
+  if (await asyncTest('only annotates *-session.tmp files, not other .tmp files', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-compact-glob-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Create a session .tmp file and a non-session .tmp file
+    const sessionFile = path.join(sessionsDir, '2026-02-11-abc-session.tmp');
+    const otherTmpFile = path.join(sessionsDir, 'other-data.tmp');
+    fs.writeFileSync(sessionFile, '# Session\n');
+    fs.writeFileSync(otherTmpFile, 'some other data\n');
+
+    try {
+      await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+
+      const sessionContent = fs.readFileSync(sessionFile, 'utf8');
+      const otherContent = fs.readFileSync(otherTmpFile, 'utf8');
+
+      assert.ok(sessionContent.includes('Compaction occurred'), 'Should annotate session file');
+      assert.strictEqual(otherContent, 'some other data\n', 'Should NOT annotate non-session .tmp file');
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('handles no active session files gracefully', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-compact-nosession-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0 with no session files');
+      assert.ok(result.stderr.includes('[PreCompact]'), 'Should still log success');
+
+      // Compaction log should still be created
+      const logFile = path.join(sessionsDir, 'compaction-log.txt');
+      assert.ok(fs.existsSync(logFile), 'Should create compaction log even with no sessions');
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 23: session-end.js (extractSessionSummary edge cases):');
+
+  if (await asyncTest('handles transcript with only assistant messages (no user messages)', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    // Only assistant messages — no user messages
+    const lines = [
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"response"}]}}',
+      '{"type":"tool_use","tool_name":"Read","tool_input":{"file_path":"/src/app.ts"}}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+      HOME: testDir
+    });
+    assert.strictEqual(result.code, 0);
+
+    // With no user messages, extractSessionSummary returns null → blank template
+    const claudeDir = path.join(testDir, '.claude', 'sessions');
+    if (fs.existsSync(claudeDir)) {
+      const files = fs.readdirSync(claudeDir).filter(f => f.endsWith('.tmp'));
+      if (files.length > 0) {
+        const content = fs.readFileSync(path.join(claudeDir, files[0]), 'utf8');
+        assert.ok(content.includes('[Session context goes here]'), 'Should use blank template when no user messages');
+      }
+    }
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (await asyncTest('extracts tool_use from assistant message content blocks', async () => {
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    // Claude Code JSONL format: tool_use blocks inside assistant message content array
+    const lines = [
+      '{"type":"user","content":"Edit config"}',
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'I will edit the config.' },
+            { type: 'tool_use', name: 'Edit', input: { file_path: '/src/config.ts' } },
+            { type: 'tool_use', name: 'Write', input: { file_path: '/src/new.ts' } },
+          ]
+        }
+      }),
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+      HOME: testDir
+    });
+    assert.strictEqual(result.code, 0);
+
+    const claudeDir = path.join(testDir, '.claude', 'sessions');
+    if (fs.existsSync(claudeDir)) {
+      const files = fs.readdirSync(claudeDir).filter(f => f.endsWith('.tmp'));
+      if (files.length > 0) {
+        const content = fs.readFileSync(path.join(claudeDir, files[0]), 'utf8');
+        assert.ok(content.includes('/src/config.ts'), 'Should extract file from nested tool_use block');
+        assert.ok(content.includes('/src/new.ts'), 'Should extract Write file from nested block');
+        assert.ok(content.includes('Edit'), 'Should list Edit in tools used');
+      }
+    }
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
