@@ -1587,6 +1587,57 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 47: escape sequence and frontmatter edge cases ──
+  console.log('\nRound 47: validate-hooks (inline JS escape sequences):');
+
+  if (test('validates inline JS with mixed escape sequences (newline + escaped quote)', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    // Command value after JSON parse: node -e "var a = \"ok\"\nconsole.log(a)"
+    // Regex captures: var a = \"ok\"\nconsole.log(a)
+    // After unescape chain: var a = "ok"\nconsole.log(a) (real newline) — valid JS
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command',
+          command: 'node -e "var a = \\"ok\\"\\nconsole.log(a)"' }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 0, 'Should handle escaped quotes and newline separators');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('rejects inline JS with syntax error after unescaping', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    // After unescape this becomes: var x = { — missing closing brace
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command',
+          command: 'node -e "var x = {"' }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 1, 'Should reject JS syntax error after unescaping');
+    assert.ok(result.stderr.includes('invalid inline JS'), 'Should report inline JS error');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 47: validate-agents (frontmatter lines without colon):');
+
+  if (test('silently ignores frontmatter line without colon', () => {
+    const testDir = createTestDir();
+    // Line "just some text" has no colon — should be skipped, not cause crash
+    fs.writeFileSync(path.join(testDir, 'mixed.md'),
+      '---\nmodel: sonnet\njust some text without colon\ntools: Read\n---\n# Agent');
+
+    const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
+    assert.strictEqual(result.code, 0, 'Should ignore lines without colon in frontmatter');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
