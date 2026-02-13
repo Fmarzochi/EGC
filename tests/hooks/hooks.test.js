@@ -3075,6 +3075,48 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 70: session-end.js entry.name / entry.input fallback in direct tool_use entries ──
+  console.log('\nRound 70: session-end.js (entry.name/entry.input fallback):');
+
+  if (await asyncTest('extracts tool name and file path from entry.name/entry.input (not tool_name/tool_input)', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-r70-entryname-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    const transcriptPath = path.join(isoHome, 'transcript.jsonl');
+
+    // Use "name" and "input" fields instead of "tool_name" and "tool_input"
+    // This exercises the fallback at session-end.js lines 63 and 66:
+    //   const toolName = entry.tool_name || entry.name || '';
+    //   const filePath  = entry.tool_input?.file_path || entry.input?.file_path || '';
+    const lines = [
+      '{"type":"user","content":"Use the alt format fields"}',
+      '{"type":"tool_use","name":"Edit","input":{"file_path":"/src/alt-format.ts"}}',
+      '{"type":"tool_use","name":"Read","input":{"file_path":"/src/other.ts"}}',
+      '{"type":"tool_use","name":"Write","input":{"file_path":"/src/written.ts"}}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0');
+
+      const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
+      assert.ok(files.length > 0, 'Should create session file');
+      const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+      // Tools extracted via entry.name fallback
+      assert.ok(content.includes('Edit'), 'Should list Edit via entry.name fallback');
+      assert.ok(content.includes('Read'), 'Should list Read via entry.name fallback');
+      // Files modified via entry.input fallback (Edit and Write, not Read)
+      assert.ok(content.includes('/src/alt-format.ts'), 'Should list edited file via entry.input fallback');
+      assert.ok(content.includes('/src/written.ts'), 'Should list written file via entry.input fallback');
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

@@ -1895,6 +1895,28 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 70: validate-commands.js "would create:" line skip ──
+  console.log('\nRound 70: validate-commands.js (would create: skip):');
+
+  if (test('skips command references on "would create:" lines', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+    // "Would create:" is the alternate form checked by the regex at line 80:
+    //   if (/creates:|would create:/i.test(line)) continue;
+    // Only "creates:" was previously tested (Round 20). "Would create:" exercises
+    // the second alternation in the regex.
+    fs.writeFileSync(path.join(testDir, 'gen-cmd.md'),
+      '# Generator Command\n\nWould create: `/phantom-cmd` in your project.\n\nThis is safe.');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 0, 'Should skip "would create:" lines');
+    assert.ok(!result.stderr.includes('phantom-cmd'), 'Should not flag ref on "would create:" line');
+    cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

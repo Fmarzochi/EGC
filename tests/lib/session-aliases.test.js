@@ -983,6 +983,53 @@ function runTests() {
     resetAliases();
   })) passed++; else failed++;
 
+  // ── Round 70: updateAliasTitle save failure path ──
+  console.log('\nupdateAliasTitle save failure (Round 70):');
+
+  if (test('updateAliasTitle returns failure when saveAliases fails (read-only dir)', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return;
+    }
+    // Use a fresh isolated HOME to avoid .tmp/.bak leftovers from other tests.
+    // On macOS, overwriting an EXISTING file in a read-only dir succeeds,
+    // so we must start clean with ONLY the .json file present.
+    const isoHome = path.join(os.tmpdir(), `ecc-alias-r70-${Date.now()}`);
+    const isoClaudeDir = path.join(isoHome, '.claude');
+    fs.mkdirSync(isoClaudeDir, { recursive: true });
+    const savedHome = process.env.HOME;
+    const savedProfile = process.env.USERPROFILE;
+    try {
+      process.env.HOME = isoHome;
+      process.env.USERPROFILE = isoHome;
+      // Re-require to pick up new HOME
+      delete require.cache[require.resolve('../../scripts/lib/session-aliases')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshAliases = require('../../scripts/lib/session-aliases');
+
+      // Set up a valid alias
+      freshAliases.setAlias('title-save-fail', '/path/session', 'Original Title');
+      // Verify no leftover .tmp/.bak
+      const ap = freshAliases.getAliasesPath();
+      assert.ok(fs.existsSync(ap), 'Alias file should exist after setAlias');
+
+      // Make .claude dir read-only so saveAliases fails when creating .bak
+      fs.chmodSync(isoClaudeDir, 0o555);
+
+      const result = freshAliases.updateAliasTitle('title-save-fail', 'New Title');
+      assert.strictEqual(result.success, false, 'Should fail when save is blocked');
+      assert.ok(result.error.includes('Failed to update alias title'),
+        `Should return save failure error, got: ${result.error}`);
+    } finally {
+      try { fs.chmodSync(isoClaudeDir, 0o755); } catch { /* best-effort */ }
+      process.env.HOME = savedHome;
+      process.env.USERPROFILE = savedProfile;
+      delete require.cache[require.resolve('../../scripts/lib/session-aliases')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
