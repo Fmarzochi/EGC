@@ -31,7 +31,8 @@ process.stdin.on("end", () => {
     if (filePath && /\.(ts|tsx)$/.test(filePath)) {
       const resolvedPath = path.resolve(filePath);
       if (!fs.existsSync(resolvedPath)) {
-        console.log(data);
+        process.stdout.write(data);
+        process.exit(0);
         return;
       }
       // Find nearest tsconfig.json by walking up (max 20 levels to prevent infinite loop)
@@ -90,5 +91,6 @@ process.stdin.on("end", () => {
     // Invalid input — pass through
   }
 
-  console.log(data);
+  process.stdout.write(data);
+  process.exit(0);
 });

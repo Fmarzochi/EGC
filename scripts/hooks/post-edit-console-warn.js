@@ -49,4 +49,5 @@ process.stdin.on('end', () => {
   }
 
   process.stdout.write(data);
+  process.exit(0);
 });

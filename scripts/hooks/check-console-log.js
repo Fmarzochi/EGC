@@ -66,4 +66,5 @@ process.stdin.on('end', () => {
 
   // Always output the original data
   process.stdout.write(data);
+  process.exit(0);
 });

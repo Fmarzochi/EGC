@@ -5,7 +5,7 @@
  * Usage: node tests/run-all.js
  */
 
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -46,32 +46,25 @@ for (const testFile of testFiles) {
 
   console.log(`\n━━━ Running ${testFile} ━━━`);
 
-  try {
-    const output = execSync(`node "${testPath}"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    console.log(output);
+  const result = spawnSync('node', [testPath], {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
 
-    // Parse results from output
-    const passedMatch = output.match(/Passed:\s*(\d+)/);
-    const failedMatch = output.match(/Failed:\s*(\d+)/);
+  const stdout = result.stdout || '';
+  const stderr = result.stderr || '';
 
-    if (passedMatch) totalPassed += parseInt(passedMatch[1], 10);
-    if (failedMatch) totalFailed += parseInt(failedMatch[1], 10);
+  // Show both stdout and stderr so hook warnings are visible
+  if (stdout) console.log(stdout);
+  if (stderr) console.log(stderr);
 
-  } catch (err) {
-    console.log(err.stdout || '');
-    console.log(err.stderr || '');
+  // Parse results from combined output
+  const combined = stdout + stderr;
+  const passedMatch = combined.match(/Passed:\s*(\d+)/);
+  const failedMatch = combined.match(/Failed:\s*(\d+)/);
 
-    // Parse results even on failure
-    const output = (err.stdout || '') + (err.stderr || '');
-    const passedMatch = output.match(/Passed:\s*(\d+)/);
-    const failedMatch = output.match(/Failed:\s*(\d+)/);
-
-    if (passedMatch) totalPassed += parseInt(passedMatch[1], 10);
-    if (failedMatch) totalFailed += parseInt(failedMatch[1], 10);
-  }
+  if (passedMatch) totalPassed += parseInt(passedMatch[1], 10);
+  if (failedMatch) totalFailed += parseInt(failedMatch[1], 10);
 }
 
 totalTests = totalPassed + totalFailed;

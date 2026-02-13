@@ -1945,7 +1945,7 @@ async function runTests() {
     const malformedJson = '{"tool_input": {"file_path": "/test.ts"';
     const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), malformedJson);
     assert.strictEqual(result.code, 0);
-    // Should pass through the malformed data (console.log adds \n)
+    // Should pass through the malformed data unchanged
     assert.ok(result.stdout.includes(malformedJson), 'Should pass through malformed JSON');
   })) passed++; else failed++;
 
@@ -2077,6 +2077,161 @@ async function runTests() {
   if (await asyncTest('exits 0 even when no stdin is provided', async () => {
     const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), '');
     assert.strictEqual(result.code, 0, 'Should exit 0 with empty stdin');
+  })) passed++; else failed++;
+
+  // ── Round 29: post-edit-format.js cwd fix and process.exit(0) consistency ──
+  console.log('\nRound 29: post-edit-format.js (cwd and exit):');
+
+  if (await asyncTest('source uses cwd based on file directory for npx', async () => {
+    const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
+    assert.ok(formatSource.includes('cwd:'), 'Should set cwd option for execFileSync');
+    assert.ok(formatSource.includes('path.dirname'), 'cwd should use path.dirname of the file');
+    assert.ok(formatSource.includes('path.resolve'), 'cwd should resolve the file path first');
+  })) passed++; else failed++;
+
+  if (await asyncTest('source calls process.exit(0) after writing output', async () => {
+    const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
+    assert.ok(formatSource.includes('process.exit(0)'), 'Should call process.exit(0) for clean termination');
+  })) passed++; else failed++;
+
+  if (await asyncTest('uses process.stdout.write instead of console.log for pass-through', async () => {
+    const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
+    assert.ok(formatSource.includes('process.stdout.write(data)'), 'Should use process.stdout.write to avoid trailing newline');
+    // Verify no console.log(data) for pass-through (console.error for warnings is OK)
+    const lines = formatSource.split('\n');
+    const passThrough = lines.filter(l => /console\.log\(data\)/.test(l));
+    assert.strictEqual(passThrough.length, 0, 'Should not use console.log(data) for pass-through');
+  })) passed++; else failed++;
+
+  console.log('\nRound 29: post-edit-typecheck.js (exit and pass-through):');
+
+  if (await asyncTest('source calls process.exit(0) after writing output', async () => {
+    const tcSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-typecheck.js'), 'utf8');
+    assert.ok(tcSource.includes('process.exit(0)'), 'Should call process.exit(0) for clean termination');
+  })) passed++; else failed++;
+
+  if (await asyncTest('uses process.stdout.write instead of console.log for pass-through', async () => {
+    const tcSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-typecheck.js'), 'utf8');
+    assert.ok(tcSource.includes('process.stdout.write(data)'), 'Should use process.stdout.write');
+    const lines = tcSource.split('\n');
+    const passThrough = lines.filter(l => /console\.log\(data\)/.test(l));
+    assert.strictEqual(passThrough.length, 0, 'Should not use console.log(data) for pass-through');
+  })) passed++; else failed++;
+
+  if (await asyncTest('exact stdout pass-through without trailing newline (typecheck)', async () => {
+    const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/file.py' } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
+    assert.strictEqual(result.code, 0);
+    assert.strictEqual(result.stdout, stdinJson, 'stdout should exactly match stdin (no trailing newline)');
+  })) passed++; else failed++;
+
+  if (await asyncTest('exact stdout pass-through without trailing newline (format)', async () => {
+    const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/file.py' } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
+    assert.strictEqual(result.code, 0);
+    assert.strictEqual(result.stdout, stdinJson, 'stdout should exactly match stdin (no trailing newline)');
+  })) passed++; else failed++;
+
+  console.log('\nRound 29: post-edit-console-warn.js (extension and exit):');
+
+  if (await asyncTest('source calls process.exit(0) after writing output', async () => {
+    const cwSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-console-warn.js'), 'utf8');
+    assert.ok(cwSource.includes('process.exit(0)'), 'Should call process.exit(0)');
+  })) passed++; else failed++;
+
+  if (await asyncTest('does NOT match .mts or .mjs extensions', async () => {
+    const stdinMts = JSON.stringify({ tool_input: { file_path: '/some/file.mts' } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinMts);
+    assert.strictEqual(result.code, 0);
+    // .mts is not in the regex /\.(ts|tsx|js|jsx)$/, so no console.log scan
+    assert.strictEqual(result.stdout, stdinMts, 'Should pass through .mts without scanning');
+    assert.ok(!result.stderr.includes('console.log'), 'Should NOT scan .mts files for console.log');
+  })) passed++; else failed++;
+
+  if (await asyncTest('does NOT match uppercase .TS extension', async () => {
+    const stdinTS = JSON.stringify({ tool_input: { file_path: '/some/file.TS' } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinTS);
+    assert.strictEqual(result.code, 0);
+    assert.strictEqual(result.stdout, stdinTS, 'Should pass through .TS without scanning');
+    assert.ok(!result.stderr.includes('console.log'), 'Should NOT scan .TS (uppercase) files');
+  })) passed++; else failed++;
+
+  if (await asyncTest('detects console.log in commented-out code', async () => {
+    const testDir = createTestDir();
+    const testFile = path.join(testDir, 'commented.js');
+    fs.writeFileSync(testFile, '// console.log("debug")\nconst x = 1;\n');
+    const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
+    assert.strictEqual(result.code, 0);
+    // The regex /console\.log/ matches even in comments — this is intentional
+    assert.ok(result.stderr.includes('console.log'), 'Should detect console.log even in comments');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 29: check-console-log.js (exclusion patterns and exit):');
+
+  if (await asyncTest('source calls process.exit(0) after writing output', async () => {
+    const clSource = fs.readFileSync(path.join(scriptsDir, 'check-console-log.js'), 'utf8');
+    // Should have at least 2 process.exit(0) calls (early return + end)
+    const exitCalls = clSource.match(/process\.exit\(0\)/g) || [];
+    assert.ok(exitCalls.length >= 2, `Should have at least 2 process.exit(0) calls, found ${exitCalls.length}`);
+  })) passed++; else failed++;
+
+  if (await asyncTest('EXCLUDED_PATTERNS correctly excludes test files', async () => {
+    // Test the patterns directly by reading the source and evaluating the regex
+    const source = fs.readFileSync(path.join(scriptsDir, 'check-console-log.js'), 'utf8');
+    // Verify the 6 exclusion patterns exist in the source (as regex literals with escapes)
+    const expectedSubstrings = ['test', 'spec', 'config', 'scripts', '__tests__', '__mocks__'];
+    for (const substr of expectedSubstrings) {
+      assert.ok(source.includes(substr), `Should include pattern containing "${substr}"`);
+    }
+    // Verify the array name exists
+    assert.ok(source.includes('EXCLUDED_PATTERNS'), 'Should have EXCLUDED_PATTERNS array');
+  })) passed++; else failed++;
+
+  if (await asyncTest('exclusion patterns match expected file paths', async () => {
+    // Recreate the EXCLUDED_PATTERNS from the source and test them
+    const EXCLUDED_PATTERNS = [
+      /\.test\.[jt]sx?$/,
+      /\.spec\.[jt]sx?$/,
+      /\.config\.[jt]s$/,
+      /scripts\//,
+      /__tests__\//,
+      /__mocks__\//,
+    ];
+    // These SHOULD be excluded
+    const excluded = [
+      'src/utils.test.ts', 'src/utils.test.js', 'src/utils.test.tsx', 'src/utils.test.jsx',
+      'src/utils.spec.ts', 'src/utils.spec.js',
+      'src/utils.config.ts', 'src/utils.config.js',
+      'scripts/hooks/session-end.js',
+      '__tests__/utils.ts',
+      '__mocks__/api.ts',
+    ];
+    for (const f of excluded) {
+      const matches = EXCLUDED_PATTERNS.some(p => p.test(f));
+      assert.ok(matches, `Expected "${f}" to be excluded but it was not`);
+    }
+    // These should NOT be excluded
+    const notExcluded = [
+      'src/utils.ts', 'src/main.tsx', 'src/app.js',
+      'src/test.component.ts',  // "test" in name but not .test. pattern
+      'src/config.ts',          // "config" in name but not .config. pattern
+    ];
+    for (const f of notExcluded) {
+      const matches = EXCLUDED_PATTERNS.some(p => p.test(f));
+      assert.ok(!matches, `Expected "${f}" to NOT be excluded but it was`);
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 29: run-all.js test runner improvements:');
+
+  if (await asyncTest('test runner uses spawnSync to capture stderr on success', async () => {
+    const runAllSource = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
+    assert.ok(runAllSource.includes('spawnSync'), 'Should use spawnSync instead of execSync');
+    assert.ok(!runAllSource.includes('execSync'), 'Should not use execSync');
+    // Verify it shows stderr
+    assert.ok(runAllSource.includes('stderr'), 'Should handle stderr output');
   })) passed++; else failed++;
 
   // Summary

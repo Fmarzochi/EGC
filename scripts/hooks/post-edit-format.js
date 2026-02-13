@@ -9,6 +9,7 @@
  */
 
 const { execFileSync } = require('child_process');
+const path = require('path');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = '';
@@ -30,6 +31,7 @@ process.stdin.on('end', () => {
         // Use npx.cmd on Windows to avoid shell: true which enables command injection
         const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
         execFileSync(npxBin, ['prettier', '--write', filePath], {
+          cwd: path.dirname(path.resolve(filePath)),
           stdio: ['pipe', 'pipe', 'pipe'],
           timeout: 15000
         });
@@ -41,5 +43,6 @@ process.stdin.on('end', () => {
     // Invalid input — pass through
   }
 
-  console.log(data);
+  process.stdout.write(data);
+  process.exit(0);
 });

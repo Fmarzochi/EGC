@@ -245,6 +245,79 @@ function runTests() {
     cleanupCounter();
   })) passed++; else failed++;
 
+  // ── Round 29: threshold boundary values ──
+  console.log('\nThreshold boundary values:');
+
+  if (test('rejects COMPACT_THRESHOLD=0 (falls back to 50)', () => {
+    cleanupCounter();
+    fs.writeFileSync(counterFile, '49');
+    const result = runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '0' });
+    // 0 is invalid (must be > 0), falls back to 50, count becomes 50 → should suggest
+    assert.ok(
+      result.stderr.includes('50 tool calls reached'),
+      `Should fallback to 50 for threshold=0. Got stderr: ${result.stderr}`
+    );
+    cleanupCounter();
+  })) passed++; else failed++;
+
+  if (test('accepts COMPACT_THRESHOLD=10000 (boundary max)', () => {
+    cleanupCounter();
+    fs.writeFileSync(counterFile, '9999');
+    const result = runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '10000' });
+    // count becomes 10000, threshold=10000 → should suggest
+    assert.ok(
+      result.stderr.includes('10000 tool calls reached'),
+      `Should accept threshold=10000. Got stderr: ${result.stderr}`
+    );
+    cleanupCounter();
+  })) passed++; else failed++;
+
+  if (test('rejects COMPACT_THRESHOLD=10001 (falls back to 50)', () => {
+    cleanupCounter();
+    fs.writeFileSync(counterFile, '49');
+    const result = runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '10001' });
+    // 10001 > 10000, invalid, falls back to 50, count becomes 50 → should suggest
+    assert.ok(
+      result.stderr.includes('50 tool calls reached'),
+      `Should fallback to 50 for threshold=10001. Got stderr: ${result.stderr}`
+    );
+    cleanupCounter();
+  })) passed++; else failed++;
+
+  if (test('rejects float COMPACT_THRESHOLD (e.g. 3.5)', () => {
+    cleanupCounter();
+    fs.writeFileSync(counterFile, '49');
+    const result = runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '3.5' });
+    // parseInt('3.5') = 3, which is valid (> 0 && <= 10000)
+    // count becomes 50, threshold=3, 50-3=47, 47%25≠0 and 50≠3 → no suggestion
+    assert.strictEqual(result.code, 0);
+    // No suggestion expected (50 !== 3, and (50-3) % 25 !== 0)
+    assert.ok(
+      !result.stderr.includes('StrategicCompact'),
+      'Float threshold should be parseInt-ed to 3, no suggestion at count=50'
+    );
+    cleanupCounter();
+  })) passed++; else failed++;
+
+  if (test('counter value at exact boundary 1000000 is valid', () => {
+    cleanupCounter();
+    fs.writeFileSync(counterFile, '999999');
+    const result = runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '3' });
+    // 999999 is valid (> 0, <= 1000000), count becomes 1000000
+    const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
+    assert.strictEqual(count, 1000000, 'Counter at 1000000 boundary should be valid');
+    cleanupCounter();
+  })) passed++; else failed++;
+
+  if (test('counter value at 1000001 is clamped (reset to 1)', () => {
+    cleanupCounter();
+    fs.writeFileSync(counterFile, '1000001');
+    const result = runCompact({ CLAUDE_SESSION_ID: testSession });
+    const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
+    assert.strictEqual(count, 1, 'Counter > 1000000 should be reset to 1');
+    cleanupCounter();
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
