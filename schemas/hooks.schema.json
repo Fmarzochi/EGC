@@ -11,7 +11,18 @@
       ],
       "properties": {
         "type": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "PreToolUse",
+            "PostToolUse",
+            "PreCompact",
+            "SessionStart",
+            "SessionEnd",
+            "Stop",
+            "Notification",
+            "SubagentStop"
+          ],
+          "description": "Hook event type that triggers this hook"
         },
         "command": {
           "oneOf": [

@@ -418,8 +418,8 @@ function countInFile(filePath, pattern) {
   let regex;
   try {
     if (pattern instanceof RegExp) {
-      // Ensure global flag is set for correct counting
-      regex = pattern.global ? pattern : new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+      // Always create new RegExp to avoid shared lastIndex state; ensure global flag
+      regex = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
     } else if (typeof pattern === 'string') {
       regex = new RegExp(pattern, 'g');
     } else {
