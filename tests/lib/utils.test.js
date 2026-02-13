@@ -1025,6 +1025,29 @@ function runTests() {
     assert.strictEqual(parsed.test, 'settled-guard', 'Should parse normally when end fires first');
   })) passed++; else failed++;
 
+  // replaceInFile returns false when write fails (e.g., read-only file)
+  if (test('replaceInFile returns false on write failure (read-only file)', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return;
+    }
+    const testDir = path.join(utils.getTempDir(), `utils-test-readonly-${Date.now()}`);
+    fs.mkdirSync(testDir, { recursive: true });
+    const filePath = path.join(testDir, 'readonly.txt');
+    try {
+      fs.writeFileSync(filePath, 'hello world', 'utf8');
+      fs.chmodSync(filePath, 0o444);
+      const result = utils.replaceInFile(filePath, 'hello', 'goodbye');
+      assert.strictEqual(result, false, 'Should return false when file is read-only');
+      // Verify content unchanged
+      const content = fs.readFileSync(filePath, 'utf8');
+      assert.strictEqual(content, 'hello world', 'Original content should be preserved');
+    } finally {
+      fs.chmodSync(filePath, 0o644);
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

@@ -1196,6 +1196,40 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // getPackageManager falls through corrupted global config to npm default
+  if (test('getPackageManager falls through corrupted global config to npm default', () => {
+    const tmpDir = createTestDir();
+    const projDir = path.join(tmpDir, 'proj');
+    fs.mkdirSync(projDir, { recursive: true });
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+    const origPM = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      // Create corrupted global config file
+      const claudeDir = path.join(tmpDir, '.claude');
+      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.writeFileSync(path.join(claudeDir, 'package-manager.json'), '{ invalid json !!!', 'utf8');
+      process.env.HOME = tmpDir;
+      process.env.USERPROFILE = tmpDir;
+      delete process.env.CLAUDE_PACKAGE_MANAGER;
+      // Re-require to pick up new HOME
+      delete require.cache[require.resolve('../../scripts/lib/package-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshPM = require('../../scripts/lib/package-manager');
+      // Empty project dir: no lock file, no package.json, no project config
+      const result = freshPM.getPackageManager({ projectDir: projDir });
+      assert.strictEqual(result.name, 'npm', 'Should fall through to npm default');
+      assert.strictEqual(result.source, 'default', 'Source should be default');
+    } finally {
+      process.env.HOME = origHome;
+      process.env.USERPROFILE = origUserProfile;
+      if (origPM !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = origPM;
+      delete require.cache[require.resolve('../../scripts/lib/package-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      cleanupTestDir(tmpDir);
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

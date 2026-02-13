@@ -1139,6 +1139,32 @@ src/main.ts
     assert.strictEqual(meta.completed[0], 'Lowercase task');
   })) passed++; else failed++;
 
+  // getAllSessions returns empty result when sessions directory does not exist
+  if (test('getAllSessions returns empty when sessions dir missing', () => {
+    const tmpDir = createTempSessionDir();
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+    try {
+      // Point HOME to a dir with no .claude/sessions/
+      process.env.HOME = tmpDir;
+      process.env.USERPROFILE = tmpDir;
+      // Re-require to pick up new HOME
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshSM = require('../../scripts/lib/session-manager');
+      const result = freshSM.getAllSessions();
+      assert.deepStrictEqual(result.sessions, [], 'Should return empty sessions array');
+      assert.strictEqual(result.total, 0, 'Total should be 0');
+      assert.strictEqual(result.hasMore, false, 'hasMore should be false');
+    } finally {
+      process.env.HOME = origHome;
+      process.env.USERPROFILE = origUserProfile;
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      cleanup(tmpDir);
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
