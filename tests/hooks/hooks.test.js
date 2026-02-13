@@ -101,6 +101,123 @@ async function runTests() {
     );
   })) passed++; else failed++;
 
+  // session-start.js edge cases
+  console.log('\nsession-start.js (edge cases):');
+
+  if (await asyncTest('exits 0 even with isolated empty HOME', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-iso-start-${Date.now()}`);
+    fs.mkdirSync(path.join(isoHome, '.claude', 'sessions'), { recursive: true });
+    fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome
+      });
+      assert.strictEqual(result.code, 0, `Exit code should be 0, got ${result.code}`);
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('reports package manager detection', async () => {
+    const result = await runScript(path.join(scriptsDir, 'session-start.js'));
+    assert.ok(
+      result.stderr.includes('Package manager') || result.stderr.includes('[SessionStart]'),
+      'Should report package manager info'
+    );
+  })) passed++; else failed++;
+
+  if (await asyncTest('skips template session content', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-tpl-start-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
+
+    // Create a session file with template placeholder
+    const sessionFile = path.join(sessionsDir, '2026-02-11-abcd1234-session.tmp');
+    fs.writeFileSync(sessionFile, '## Current State\n\n[Session context goes here]\n');
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome
+      });
+      assert.strictEqual(result.code, 0);
+      // stdout should NOT contain the template content
+      assert.ok(
+        !result.stdout.includes('Previous session summary'),
+        'Should not inject template session content'
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('injects real session content', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-real-start-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
+
+    // Create a real session file
+    const sessionFile = path.join(sessionsDir, '2026-02-11-efgh5678-session.tmp');
+    fs.writeFileSync(sessionFile, '# Real Session\n\nI worked on authentication refactor.\n');
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome
+      });
+      assert.strictEqual(result.code, 0);
+      assert.ok(
+        result.stdout.includes('Previous session summary'),
+        'Should inject real session content'
+      );
+      assert.ok(
+        result.stdout.includes('authentication refactor'),
+        'Should include session content text'
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('reports learned skills count', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-skills-start-${Date.now()}`);
+    const learnedDir = path.join(isoHome, '.claude', 'skills', 'learned');
+    fs.mkdirSync(learnedDir, { recursive: true });
+    fs.mkdirSync(path.join(isoHome, '.claude', 'sessions'), { recursive: true });
+
+    // Create learned skill files
+    fs.writeFileSync(path.join(learnedDir, 'testing-patterns.md'), '# Testing');
+    fs.writeFileSync(path.join(learnedDir, 'debugging.md'), '# Debugging');
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+        HOME: isoHome
+      });
+      assert.strictEqual(result.code, 0);
+      assert.ok(
+        result.stderr.includes('2 learned skill(s)'),
+        `Should report 2 learned skills, stderr: ${result.stderr}`
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // check-console-log.js tests
+  console.log('\ncheck-console-log.js:');
+
+  if (await asyncTest('passes through stdin data to stdout', async () => {
+    const stdinData = JSON.stringify({ tool_name: 'Write', tool_input: {} });
+    const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), stdinData);
+    assert.strictEqual(result.code, 0);
+    assert.ok(result.stdout.includes('tool_name'), 'Should pass through stdin data');
+  })) passed++; else failed++;
+
+  if (await asyncTest('exits 0 with empty stdin', async () => {
+    const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), '');
+    assert.strictEqual(result.code, 0);
+  })) passed++; else failed++;
+
   // session-end.js tests
   console.log('\nsession-end.js:');
 

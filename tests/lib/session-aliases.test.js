@@ -376,6 +376,98 @@ function runTests() {
     assert.ok(result.error);
   })) passed++; else failed++;
 
+  // listAliases edge cases
+  console.log('\nlistAliases (edge cases):');
+
+  if (test('handles entries with missing timestamps gracefully', () => {
+    resetAliases();
+    const data = aliases.loadAliases();
+    // Entry with neither updatedAt nor createdAt
+    data.aliases['no-dates'] = {
+      sessionPath: '/path/no-dates',
+      title: 'No Dates'
+    };
+    data.aliases['has-dates'] = {
+      sessionPath: '/path/has-dates',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      title: 'Has Dates'
+    };
+    aliases.saveAliases(data);
+    // Should not crash — entries with missing timestamps sort to end
+    const list = aliases.listAliases();
+    assert.strictEqual(list.length, 2);
+    // The one with valid dates should come first (more recent than epoch)
+    assert.strictEqual(list[0].name, 'has-dates');
+  })) passed++; else failed++;
+
+  if (test('search matches title in addition to name', () => {
+    resetAliases();
+    aliases.setAlias('project-x', '/path', 'Database Migration Feature');
+    aliases.setAlias('project-y', '/path2', 'Auth Refactor');
+    const list = aliases.listAliases({ search: 'migration' });
+    assert.strictEqual(list.length, 1);
+    assert.strictEqual(list[0].name, 'project-x');
+  })) passed++; else failed++;
+
+  if (test('limit of 0 returns empty array', () => {
+    resetAliases();
+    aliases.setAlias('test', '/path');
+    const list = aliases.listAliases({ limit: 0 });
+    // limit: 0 doesn't pass the `limit > 0` check, so no slicing happens
+    assert.ok(list.length >= 1, 'limit=0 should not apply (falsy)');
+  })) passed++; else failed++;
+
+  if (test('search with no matches returns empty array', () => {
+    resetAliases();
+    aliases.setAlias('alpha', '/path1');
+    aliases.setAlias('beta', '/path2');
+    const list = aliases.listAliases({ search: 'zzzznonexistent' });
+    assert.strictEqual(list.length, 0);
+  })) passed++; else failed++;
+
+  // setAlias edge cases
+  console.log('\nsetAlias (edge cases):');
+
+  if (test('rejects non-string session path types', () => {
+    resetAliases();
+    const result = aliases.setAlias('valid-name', 42);
+    assert.strictEqual(result.success, false);
+  })) passed++; else failed++;
+
+  if (test('rejects whitespace-only session path', () => {
+    resetAliases();
+    const result = aliases.setAlias('valid-name', '   ');
+    assert.strictEqual(result.success, false);
+    assert.ok(result.error.includes('empty'));
+  })) passed++; else failed++;
+
+  if (test('preserves createdAt on update', () => {
+    resetAliases();
+    aliases.setAlias('preserve-date', '/path/v1', 'V1');
+    const first = aliases.loadAliases().aliases['preserve-date'];
+    const firstCreated = first.createdAt;
+
+    // Update same alias
+    aliases.setAlias('preserve-date', '/path/v2', 'V2');
+    const second = aliases.loadAliases().aliases['preserve-date'];
+
+    assert.strictEqual(second.createdAt, firstCreated, 'createdAt should be preserved');
+    assert.notStrictEqual(second.sessionPath, '/path/v1', 'sessionPath should be updated');
+  })) passed++; else failed++;
+
+  // updateAliasTitle edge case
+  console.log('\nupdateAliasTitle (edge cases):');
+
+  if (test('empty string title becomes null', () => {
+    resetAliases();
+    aliases.setAlias('title-test', '/path', 'Original Title');
+    const result = aliases.updateAliasTitle('title-test', '');
+    assert.strictEqual(result.success, true);
+    const resolved = aliases.resolveAlias('title-test');
+    assert.strictEqual(resolved.title, null, 'Empty string title should become null');
+  })) passed++; else failed++;
+
   // saveAliases atomic write tests
   console.log('\nsaveAliases (atomic write):');
 

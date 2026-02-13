@@ -462,6 +462,122 @@ src/main.ts
     assert.ok(result, 'Should find old-format session by filename');
   })) passed++; else failed++;
 
+  // parseSessionMetadata edge cases
+  console.log('\nparseSessionMetadata (edge cases):');
+
+  if (test('handles CRLF line endings', () => {
+    const content = '# CRLF Session\r\n\r\n**Date:** 2026-03-01\r\n**Started:** 09:00\r\n\r\n### Completed\r\n- [x] Task A\r\n- [x] Task B\r\n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.strictEqual(meta.title, 'CRLF Session');
+    assert.strictEqual(meta.date, '2026-03-01');
+    assert.strictEqual(meta.started, '09:00');
+    assert.strictEqual(meta.completed.length, 2);
+  })) passed++; else failed++;
+
+  if (test('takes first h1 heading as title', () => {
+    const content = '# First Title\n\nSome text\n\n# Second Title\n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.strictEqual(meta.title, 'First Title');
+  })) passed++; else failed++;
+
+  if (test('handles empty sections (Completed with no items)', () => {
+    const content = '# Session\n\n### Completed\n\n### In Progress\n\n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.deepStrictEqual(meta.completed, []);
+    assert.deepStrictEqual(meta.inProgress, []);
+  })) passed++; else failed++;
+
+  if (test('handles content with only title and notes', () => {
+    const content = '# Just Notes\n\n### Notes for Next Session\nRemember to test\n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.strictEqual(meta.title, 'Just Notes');
+    assert.strictEqual(meta.notes, 'Remember to test');
+    assert.deepStrictEqual(meta.completed, []);
+    assert.deepStrictEqual(meta.inProgress, []);
+  })) passed++; else failed++;
+
+  if (test('extracts context with backtick fenced block', () => {
+    const content = '# Session\n\n### Context to Load\n```\nsrc/index.ts\nlib/utils.js\n```\n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.strictEqual(meta.context, 'src/index.ts\nlib/utils.js');
+  })) passed++; else failed++;
+
+  if (test('trims whitespace from title', () => {
+    const content = '#   Spaces Around Title   \n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    assert.strictEqual(meta.title, 'Spaces Around Title');
+  })) passed++; else failed++;
+
+  // getSessionStats edge cases
+  console.log('\ngetSessionStats (edge cases):');
+
+  if (test('detects notes and context presence', () => {
+    const content = '# Stats Test\n\n### Notes for Next Session\nSome notes\n\n### Context to Load\n```\nfile.ts\n```\n';
+    const stats = sessionManager.getSessionStats(content);
+    assert.strictEqual(stats.hasNotes, true);
+    assert.strictEqual(stats.hasContext, true);
+  })) passed++; else failed++;
+
+  if (test('detects absence of notes and context', () => {
+    const content = '# Simple Session\n\nJust some content\n';
+    const stats = sessionManager.getSessionStats(content);
+    assert.strictEqual(stats.hasNotes, false);
+    assert.strictEqual(stats.hasContext, false);
+  })) passed++; else failed++;
+
+  if (test('treats Unix absolute path ending with .tmp as file path', () => {
+    // Content that starts with / and ends with .tmp should be treated as a path
+    // This tests the looksLikePath heuristic
+    const fakeContent = '/some/path/session.tmp';
+    // Since the file doesn't exist, getSessionContent returns null,
+    // parseSessionMetadata(null) returns defaults
+    const stats = sessionManager.getSessionStats(fakeContent);
+    assert.strictEqual(stats.totalItems, 0);
+    assert.strictEqual(stats.lineCount, 0);
+  })) passed++; else failed++;
+
+  // getSessionSize edge case
+  console.log('\ngetSessionSize (edge cases):');
+
+  if (test('returns MB for large file', () => {
+    const dir = createTempSessionDir();
+    try {
+      const sessionPath = path.join(dir, 'large.tmp');
+      // Create a file > 1MB
+      fs.writeFileSync(sessionPath, 'x'.repeat(1024 * 1024 + 100));
+      const size = sessionManager.getSessionSize(sessionPath);
+      assert.ok(size.includes('MB'), `Expected MB, got: ${size}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  // appendSessionContent edge case
+  if (test('appendSessionContent returns false for invalid path', () => {
+    const result = sessionManager.appendSessionContent('/nonexistent/deep/path/session.tmp', 'content');
+    assert.strictEqual(result, false);
+  })) passed++; else failed++;
+
+  // parseSessionFilename edge cases
+  console.log('\nparseSessionFilename (additional edge cases):');
+
+  if (test('rejects uppercase letters in short ID', () => {
+    const result = sessionManager.parseSessionFilename('2026-02-01-ABCD1234-session.tmp');
+    assert.strictEqual(result, null, 'Uppercase letters should be rejected');
+  })) passed++; else failed++;
+
+  if (test('rejects filenames with extra segments', () => {
+    const result = sessionManager.parseSessionFilename('2026-02-01-abc12345-extra-session.tmp');
+    assert.strictEqual(result, null, 'Extra segments should be rejected');
+  })) passed++; else failed++;
+
+  if (test('datetime field is a Date object', () => {
+    const result = sessionManager.parseSessionFilename('2026-06-15-abcdef12-session.tmp');
+    assert.ok(result);
+    assert.ok(result.datetime instanceof Date, 'datetime should be a Date');
+    assert.ok(!isNaN(result.datetime.getTime()), 'datetime should be valid');
+  })) passed++; else failed++;
+
   // Cleanup
   process.env.HOME = origHome;
   try {
