@@ -209,6 +209,7 @@ everything-claude-code/
 |
 |-- skills/           # Workflow definitions and domain knowledge
 |   |-- coding-standards/           # Language best practices
+|   |-- clickhouse-io/              # ClickHouse analytics, queries, data engineering
 |   |-- backend-patterns/           # API, database, caching patterns
 |   |-- frontend-patterns/          # React, Next.js patterns
 |   |-- continuous-learning/        # Auto-extract patterns from sessions (Longform Guide)
