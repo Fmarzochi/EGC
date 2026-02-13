@@ -274,6 +274,51 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 27: box and progressBar edge cases ──
+  console.log('\nbox() content overflow:');
+
+  if (test('box does not crash when content line exceeds width', () => {
+    const output = new SkillCreateOutput('repo', { width: 30 });
+    // Force a very long instinct name that exceeds width
+    const logs = captureLog(() => output.instincts([
+      { name: 'this-is-an-extremely-long-instinct-name-that-clearly-exceeds-width', confidence: 0.9 },
+    ]));
+    // Math.max(0, padding) should prevent RangeError
+    assert.ok(logs.length > 0, 'Should produce output without RangeError');
+  })) passed++; else failed++;
+
+  if (test('patterns renders negative confidence without crash', () => {
+    const output = new SkillCreateOutput('repo');
+    // confidence -0.1 => percent -10 — Math.max(0, ...) should clamp filled to 0
+    const logs = captureLog(() => output.patterns([
+      { name: 'Negative', trigger: 'never', confidence: -0.1, evidence: 'impossible' },
+    ]));
+    const combined = stripAnsi(logs.join('\n'));
+    assert.ok(combined.includes('-10%'), 'Should show -10%');
+  })) passed++; else failed++;
+
+  if (test('header does not crash with very long repo name', () => {
+    const longRepo = 'A'.repeat(100);
+    const output = new SkillCreateOutput(longRepo);
+    // Math.max(0, 55 - stripAnsi(subtitle).length) protects against negative repeat
+    const logs = captureLog(() => output.header());
+    assert.ok(logs.length > 0, 'Should produce output without crash');
+  })) passed++; else failed++;
+
+  if (test('stripAnsi handles nested ANSI codes with multi-digit params', () => {
+    // Simulate bold + color + reset
+    const ansiStr = '\x1b[1m\x1b[36mBold Cyan\x1b[0m\x1b[0m';
+    const stripped = stripAnsi(ansiStr);
+    assert.strictEqual(stripped, 'Bold Cyan', 'Should strip all nested ANSI sequences');
+  })) passed++; else failed++;
+
+  if (test('footer produces output', () => {
+    const output = new SkillCreateOutput('repo');
+    const logs = captureLog(() => output.footer());
+    const combined = stripAnsi(logs.join('\n'));
+    assert.ok(combined.includes('Powered by'), 'Should include attribution text');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

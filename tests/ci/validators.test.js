@@ -1181,6 +1181,160 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 27: hook validation edge cases ──
+  console.log('\nvalidate-hooks.js (Round 27 edge cases):');
+
+  if (test('rejects array command with empty string element', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: ['node', '', 'script.js'] }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 1, 'Should reject array with empty string element');
+    assert.ok(result.stderr.includes('command'), 'Should report command field error');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('rejects negative timeout', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: 'echo hi', timeout: -5 }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 1, 'Should reject negative timeout');
+    assert.ok(result.stderr.includes('timeout'), 'Should report timeout error');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('rejects non-boolean async field', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PostToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: 'echo ok', async: 'yes' }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 1, 'Should reject non-boolean async');
+    assert.ok(result.stderr.includes('async'), 'Should report async type error');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('reports correct index for error in deeply nested hook', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    const manyHooks = [];
+    for (let i = 0; i < 5; i++) {
+      manyHooks.push({ type: 'command', command: 'echo ok' });
+    }
+    // Add an invalid hook at index 5
+    manyHooks.push({ type: 'command', command: '' });
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: manyHooks }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 1, 'Should fail on invalid hook at high index');
+    assert.ok(result.stderr.includes('hooks[5]'), 'Should report correct hook index 5');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('validates node -e with escaped quotes in inline JS', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: 'node -e "const x = 1 + 2; process.exit(0)"' }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 0, 'Should pass valid multi-statement inline JS');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('accepts multiple valid event types in single hooks file', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: 'echo pre' }] }],
+        PostToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: 'echo post' }] }],
+        Stop: [{ matcher: 'test', hooks: [{ type: 'command', command: 'echo stop' }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 0, 'Should accept multiple valid event types');
+    assert.ok(result.stdout.includes('3'), 'Should report 3 matchers validated');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  // ── Round 27: command validation edge cases ──
+  console.log('\nvalidate-commands.js (Round 27 edge cases):');
+
+  if (test('validates multiple command refs on same non-creates line', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+    // Create two valid commands
+    fs.writeFileSync(path.join(testDir, 'cmd-a.md'), '# Command A\nBasic command.');
+    fs.writeFileSync(path.join(testDir, 'cmd-b.md'), '# Command B\nBasic command.');
+    // Create a third command that references both on one line
+    fs.writeFileSync(path.join(testDir, 'cmd-c.md'),
+      '# Command C\nUse `/cmd-a` and `/cmd-b` together.');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 0, 'Should pass when multiple refs on same line are all valid');
+    cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
+  })) passed++; else failed++;
+
+  if (test('fails when one of multiple refs on same line is invalid', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+    // Only cmd-a exists
+    fs.writeFileSync(path.join(testDir, 'cmd-a.md'), '# Command A\nBasic command.');
+    // cmd-c references cmd-a (valid) and cmd-z (invalid) on same line
+    fs.writeFileSync(path.join(testDir, 'cmd-c.md'),
+      '# Command C\nUse `/cmd-a` and `/cmd-z` together.');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 1, 'Should fail when any ref is invalid');
+    assert.ok(result.stderr.includes('cmd-z'), 'Should report the invalid reference');
+    cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
+  })) passed++; else failed++;
+
+  if (test('code blocks are stripped before checking references', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+    // Reference inside a code block should not be validated
+    fs.writeFileSync(path.join(testDir, 'cmd-x.md'),
+      '# Command X\n```\n`/nonexistent-cmd` in code block\n```\nEnd.');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 0, 'Should ignore command refs inside code blocks');
+    cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
+  })) passed++; else failed++;
+
   // --- validate-skills.js: mixed valid/invalid ---
   console.log('\nvalidate-skills.js (mixed dirs):');
 

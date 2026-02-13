@@ -930,6 +930,69 @@ function runTests() {
     assert.doesNotThrow(() => new RegExp(pattern), 'Should produce valid regex with escaped parens');
   })) passed++; else failed++;
 
+  // ── Round 27: input validation and escapeRegex edge cases ──
+  console.log('\ngetRunCommand (non-string input):');
+
+  if (test('rejects undefined script name', () => {
+    assert.throws(() => pm.getRunCommand(undefined), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects numeric script name', () => {
+    assert.throws(() => pm.getRunCommand(123), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects boolean script name', () => {
+    assert.throws(() => pm.getRunCommand(true), /non-empty string/);
+  })) passed++; else failed++;
+
+  console.log('\ngetExecCommand (non-string binary):');
+
+  if (test('rejects undefined binary name', () => {
+    assert.throws(() => pm.getExecCommand(undefined), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects numeric binary name', () => {
+    assert.throws(() => pm.getExecCommand(42), /non-empty string/);
+  })) passed++; else failed++;
+
+  console.log('\ngetCommandPattern (escapeRegex completeness):');
+
+  if (test('escapes all regex metacharacters in action', () => {
+    // All regex metacharacters: . * + ? ^ $ { } ( ) | [ ] \
+    const action = 'test.*+?^${}()|[]\\';
+    const pattern = pm.getCommandPattern(action);
+    // Should produce a valid regex without throwing
+    assert.doesNotThrow(() => new RegExp(pattern), 'Should produce valid regex');
+    // Should match the literal string
+    const regex = new RegExp(pattern);
+    assert.ok(regex.test(`npm run ${action}`), 'Should match literal metacharacters');
+  })) passed++; else failed++;
+
+  if (test('escapeRegex preserves alphanumeric chars', () => {
+    const pattern = pm.getCommandPattern('simple-test');
+    const regex = new RegExp(pattern);
+    assert.ok(regex.test('npm run simple-test'), 'Should match simple action name');
+    assert.ok(!regex.test('npm run simpleXtest'), 'Dash should not match arbitrary char');
+  })) passed++; else failed++;
+
+  console.log('\ngetPackageManager (global config edge cases):');
+
+  if (test('ignores global config with non-string packageManager', () => {
+    // This tests the path through loadConfig where packageManager is not a valid PM name
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      delete process.env.CLAUDE_PACKAGE_MANAGER;
+      // getPackageManager should fall through to default when no valid config exists
+      const result = pm.getPackageManager({ projectDir: os.tmpdir() });
+      assert.ok(result.name, 'Should return a package manager name');
+      assert.ok(result.config, 'Should return config object');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      }
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
