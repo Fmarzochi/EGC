@@ -627,46 +627,34 @@ function runTests() {
   })) passed++; else failed++;
 
   // readStdinJson tests (via subprocess — safe hardcoded inputs)
+  // Use execFileSync with input option instead of shell echo|pipe for Windows compat
   console.log('\nreadStdinJson():');
 
+  const stdinScript = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000}).then(d=>{process.stdout.write(JSON.stringify(d))})';
+  const stdinOpts = { encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), timeout: 5000 };
+
   if (test('readStdinJson parses valid JSON from stdin', () => {
-    const { execSync } = require('child_process');
-    const script = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000}).then(d=>{process.stdout.write(JSON.stringify(d))})';
-    const result = execSync(
-      `echo '{"tool_input":{"command":"ls"}}' | node -e '${script}'`,
-      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), timeout: 5000 }
-    );
+    const { execFileSync } = require('child_process');
+    const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '{"tool_input":{"command":"ls"}}' });
     const parsed = JSON.parse(result);
     assert.deepStrictEqual(parsed, { tool_input: { command: 'ls' } });
   })) passed++; else failed++;
 
   if (test('readStdinJson returns {} for invalid JSON', () => {
-    const { execSync } = require('child_process');
-    const script = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000}).then(d=>{process.stdout.write(JSON.stringify(d))})';
-    const result = execSync(
-      `echo 'not json' | node -e '${script}'`,
-      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), timeout: 5000 }
-    );
+    const { execFileSync } = require('child_process');
+    const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: 'not json' });
     assert.deepStrictEqual(JSON.parse(result), {});
   })) passed++; else failed++;
 
   if (test('readStdinJson returns {} for empty stdin', () => {
-    const { execSync } = require('child_process');
-    const script = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000}).then(d=>{process.stdout.write(JSON.stringify(d))})';
-    const result = execSync(
-      `echo '' | node -e '${script}'`,
-      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), timeout: 5000 }
-    );
+    const { execFileSync } = require('child_process');
+    const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '' });
     assert.deepStrictEqual(JSON.parse(result), {});
   })) passed++; else failed++;
 
   if (test('readStdinJson handles nested objects', () => {
-    const { execSync } = require('child_process');
-    const script = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000}).then(d=>{process.stdout.write(JSON.stringify(d))})';
-    const result = execSync(
-      `echo '{"a":{"b":1},"c":[1,2]}' | node -e '${script}'`,
-      { encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), timeout: 5000 }
-    );
+    const { execFileSync } = require('child_process');
+    const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '{"a":{"b":1},"c":[1,2]}' });
     const parsed = JSON.parse(result);
     assert.deepStrictEqual(parsed, { a: { b: 1 }, c: [1, 2] });
   })) passed++; else failed++;
