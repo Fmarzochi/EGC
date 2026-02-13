@@ -13,7 +13,7 @@
 
 **🌐 Language / 语言 / 語言**
 
-[**English**](../../README.md) | [简体中文](../../README.zh-CN.md) | [繁體中文](README.md)
+[**English**](../../README.md) | [简体中文](../../README.zh-CN.md) | [繁體中文](README.md) | [日本語](../../docs/ja-JP/README.md)
 
 </div>
 
