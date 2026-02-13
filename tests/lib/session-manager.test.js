@@ -1544,6 +1544,27 @@ src/main.ts
       'Should return at most 1 session (clamped limit)');
   })) passed++; else failed++;
 
+  // ── Round 97: getAllSessions with whitespace search filters out everything ──
+  console.log('\nRound 97: getAllSessions (whitespace search — truthy but unmatched):');
+
+  if (test('getAllSessions with search: " " returns empty because space is truthy but never matches shortId', () => {
+    // session-manager.js line 233: if (search && !metadata.shortId.includes(search))
+    // ' ' (space) is truthy so the filter is applied, but shortIds are hex strings
+    // that never contain spaces, so ALL sessions are filtered out.
+    // The search filter is inside the loop, so total is also 0.
+    const result = sessionManager.getAllSessions({ search: ' ', limit: 100 });
+    assert.strictEqual(result.sessions.length, 0,
+      'Whitespace search should filter out all sessions (space never appears in hex shortIds)');
+    assert.strictEqual(result.total, 0,
+      'Total should be 0 because search filter is applied inside the loop (line 233)');
+    assert.strictEqual(result.hasMore, false,
+      'hasMore should be false since no sessions matched');
+    // Contrast with null/empty search which returns all sessions:
+    const allResult = sessionManager.getAllSessions({ search: null, limit: 100 });
+    assert.ok(allResult.total > 0,
+      'Null search should return sessions (confirming they exist but space filtered them)');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

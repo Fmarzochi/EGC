@@ -1300,6 +1300,56 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 97: getSessionIdShort with whitespace-only CLAUDE_SESSION_ID ──
+  console.log('\nRound 97: getSessionIdShort (whitespace-only session ID):');
+
+  if (test('getSessionIdShort returns whitespace when CLAUDE_SESSION_ID is all spaces', () => {
+    // utils.js line 116: if (sessionId && sessionId.length > 0) — '   ' is truthy
+    // and has length > 0, so it passes the check instead of falling back.
+    const original = process.env.CLAUDE_SESSION_ID;
+    try {
+      process.env.CLAUDE_SESSION_ID = '          ';  // 10 spaces
+      const result = utils.getSessionIdShort('fallback');
+      // slice(-8) on 10 spaces returns 8 spaces — not the expected fallback
+      assert.strictEqual(result, '        ',
+        'Whitespace-only ID should return 8 trailing spaces (no trim check)');
+      assert.strictEqual(result.trim().length, 0,
+        'Result should be entirely whitespace (demonstrating the missing trim)');
+    } finally {
+      if (original !== undefined) {
+        process.env.CLAUDE_SESSION_ID = original;
+      } else {
+        delete process.env.CLAUDE_SESSION_ID;
+      }
+    }
+  })) passed++; else failed++;
+
+  // ── Round 97: countInFile with same RegExp object called twice (lastIndex reuse) ──
+  console.log('\nRound 97: countInFile (RegExp lastIndex reuse validation):');
+
+  if (test('countInFile returns consistent count when same RegExp object is reused', () => {
+    // utils.js lines 438-440: Always creates a new RegExp to prevent lastIndex
+    // state bugs. Without this defense, a global regex's lastIndex would persist
+    // between calls, causing alternating match/miss behavior.
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r97-lastindex-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      fs.writeFileSync(testFile, 'foo bar foo baz foo\nfoo again foo');
+      const sharedRegex = /foo/g;
+      // First call
+      const count1 = utils.countInFile(testFile, sharedRegex);
+      // Second call with SAME regex object — would fail without defensive new RegExp
+      const count2 = utils.countInFile(testFile, sharedRegex);
+      assert.strictEqual(count1, 5, 'First call should find 5 matches');
+      assert.strictEqual(count2, 5,
+        'Second call with same RegExp should also find 5 (lastIndex reset by defensive code)');
+      assert.strictEqual(count1, count2,
+        'Both calls must return identical counts (proves lastIndex is not shared)');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
