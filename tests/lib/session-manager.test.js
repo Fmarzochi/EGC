@@ -978,6 +978,22 @@ src/main.ts
     assert.ok(result.includes('sessions'), 'Path should include sessions directory');
   })) passed++; else failed++;
 
+  // ── Round 66: getSessionById noIdMatch path (date-only string for old format) ──
+  console.log('\nRound 66: getSessionById (noIdMatch — date-only match for old format):');
+
+  if (test('getSessionById finds old-format session by date-only string (noIdMatch)', () => {
+    // File is 2026-02-10-session.tmp (old format, shortId = 'no-id')
+    // Calling with '2026-02-10' → filenameMatch fails (filename !== '2026-02-10' and !== '2026-02-10.tmp')
+    // shortIdMatch fails (shortId === 'no-id', not !== 'no-id')
+    // noIdMatch succeeds: shortId === 'no-id' && filename === '2026-02-10-session.tmp'
+    const result = sessionManager.getSessionById('2026-02-10');
+    assert.ok(result, 'Should find old-format session by date-only string');
+    assert.strictEqual(result.shortId, 'no-id', 'Should have no-id shortId');
+    assert.ok(result.filename.includes('2026-02-10-session.tmp'), 'Should match old-format file');
+    assert.ok(result.sessionPath, 'Should have sessionPath');
+    assert.ok(result.date === '2026-02-10', 'Should have correct date');
+  })) passed++; else failed++;
+
   // Cleanup — restore both HOME and USERPROFILE (Windows)
   process.env.HOME = origHome;
   if (origUserProfile !== undefined) {

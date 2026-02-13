@@ -3012,6 +3012,69 @@ async function runTests() {
       'Should pass through data unchanged when tool_input is absent');
   })) passed++; else failed++;
 
+  // ── Round 66: session-end.js entry.role === 'user' fallback and nonexistent transcript ──
+  console.log('\nRound 66: session-end.js (entry.role user fallback):');
+
+  if (await asyncTest('extracts user messages from role-only format (no type field)', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-role-only-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    // Use entries with ONLY role field (no type:"user") to exercise the fallback
+    const lines = [
+      '{"role":"user","content":"Deploy the production build"}',
+      '{"role":"assistant","content":"I will deploy now"}',
+      '{"role":"user","content":"Check the logs after deploy"}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0);
+
+      const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('-session.tmp'));
+      assert.ok(files.length > 0, 'Should create session file');
+      const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+      // The role-only user messages should be extracted
+      assert.ok(content.includes('Deploy the production build') || content.includes('deploy'),
+        `Session file should include role-only user messages. Got: ${content.substring(0, 300)}`);
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 66: session-end.js (nonexistent transcript path):');
+
+  if (await asyncTest('logs "Transcript not found" for nonexistent transcript_path', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-notfound-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const stdinJson = JSON.stringify({ transcript_path: '/tmp/nonexistent-transcript-99999.jsonl' });
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0, 'Should exit 0 for missing transcript');
+      assert.ok(
+        result.stderr.includes('Transcript not found') || result.stderr.includes('not found'),
+        `Should log transcript not found. Got stderr: ${result.stderr.substring(0, 300)}`
+      );
+      // Should still create a session file (with blank template, since summary is null)
+      const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('-session.tmp'));
+      assert.ok(files.length > 0, 'Should still create session file even without transcript');
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
