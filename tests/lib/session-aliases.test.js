@@ -1072,6 +1072,88 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 73: cleanupAliases save failure path ──
+  console.log('\nRound 73: cleanupAliases (save failure):');
+
+  if (test('cleanupAliases returns failure when saveAliases fails after removing aliases', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return;
+    }
+    const isoHome = path.join(os.tmpdir(), `ecc-alias-r73-cleanup-${Date.now()}`);
+    const isoClaudeDir = path.join(isoHome, '.claude');
+    fs.mkdirSync(isoClaudeDir, { recursive: true });
+    const savedHome = process.env.HOME;
+    const savedProfile = process.env.USERPROFILE;
+    try {
+      process.env.HOME = isoHome;
+      process.env.USERPROFILE = isoHome;
+      delete require.cache[require.resolve('../../scripts/lib/session-aliases')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshAliases = require('../../scripts/lib/session-aliases');
+
+      // Create aliases — one to keep, one to remove
+      freshAliases.setAlias('keep-me', '/sessions/real', 'Kept');
+      freshAliases.setAlias('remove-me', '/sessions/gone', 'Gone');
+
+      // Make .claude dir read-only so save will fail
+      fs.chmodSync(isoClaudeDir, 0o555);
+
+      // Cleanup: "gone" session doesn't exist, so remove-me should be removed
+      const result = freshAliases.cleanupAliases((p) => p === '/sessions/real');
+      assert.strictEqual(result.success, false, 'Should fail when save is blocked');
+      assert.ok(result.error.includes('Failed to save after cleanup'),
+        `Should return cleanup save failure error, got: ${result.error}`);
+      assert.strictEqual(result.removed, 1, 'Should report 1 removed alias');
+      assert.ok(result.removedAliases.some(a => a.name === 'remove-me'),
+        'Should report remove-me in removedAliases');
+    } finally {
+      try { fs.chmodSync(isoClaudeDir, 0o755); } catch { /* best-effort */ }
+      process.env.HOME = savedHome;
+      process.env.USERPROFILE = savedProfile;
+      delete require.cache[require.resolve('../../scripts/lib/session-aliases')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // ── Round 73: setAlias save failure path ──
+  console.log('\nRound 73: setAlias (save failure):');
+
+  if (test('setAlias returns failure when saveAliases fails', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return;
+    }
+    const isoHome = path.join(os.tmpdir(), `ecc-alias-r73-set-${Date.now()}`);
+    const isoClaudeDir = path.join(isoHome, '.claude');
+    fs.mkdirSync(isoClaudeDir, { recursive: true });
+    const savedHome = process.env.HOME;
+    const savedProfile = process.env.USERPROFILE;
+    try {
+      process.env.HOME = isoHome;
+      process.env.USERPROFILE = isoHome;
+      delete require.cache[require.resolve('../../scripts/lib/session-aliases')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshAliases = require('../../scripts/lib/session-aliases');
+
+      // Make .claude dir read-only BEFORE any setAlias call
+      fs.chmodSync(isoClaudeDir, 0o555);
+
+      const result = freshAliases.setAlias('my-alias', '/sessions/test', 'Test');
+      assert.strictEqual(result.success, false, 'Should fail when save is blocked');
+      assert.ok(result.error.includes('Failed to save alias'),
+        `Should return save failure error, got: ${result.error}`);
+    } finally {
+      try { fs.chmodSync(isoClaudeDir, 0o755); } catch { /* best-effort */ }
+      process.env.HOME = savedHome;
+      process.env.USERPROFILE = savedProfile;
+      delete require.cache[require.resolve('../../scripts/lib/session-aliases')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -1960,6 +1960,37 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 73: validate-commands.js skill directory statSync catch ──
+  console.log('\nRound 73: validate-commands.js (unreadable skill entry — statSync catch):');
+
+  if (test('skips unreadable skill directory entries without error (broken symlink)', () => {
+    const testDir = createTestDir();
+    const agentsDir = createTestDir();
+    const skillsDir = createTestDir();
+
+    // Create one valid skill directory and one broken symlink
+    const validSkill = path.join(skillsDir, 'valid-skill');
+    fs.mkdirSync(validSkill, { recursive: true });
+    // Broken symlink: target does not exist — statSync will throw ENOENT
+    const brokenLink = path.join(skillsDir, 'broken-skill');
+    fs.symlinkSync('/nonexistent/target/path', brokenLink);
+
+    // Command that references the valid skill (should resolve)
+    fs.writeFileSync(path.join(testDir, 'cmd.md'),
+      '# Command\nSee skills/valid-skill/ for details.');
+
+    const result = runValidatorWithDirs('validate-commands', {
+      COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
+    });
+    assert.strictEqual(result.code, 0,
+      'Should pass — broken symlink in skills dir should be skipped silently');
+    // The broken-skill should NOT be in validSkills, so referencing it would warn
+    // but the valid-skill reference should resolve fine
+    cleanupTestDir(testDir);
+    cleanupTestDir(agentsDir);
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
