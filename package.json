@@ -75,7 +75,7 @@
   "scripts": {
     "postinstall": "echo '\\n  ecc-universal installed!\\n  Run: npx ecc-install typescript\\n  Docs: https://github.com/affaan-m/everything-claude-code\\n'",
     "lint": "eslint . && markdownlint '**/*.md' --ignore node_modules",
-    "test": "node scripts/ci/validate-agents.js && node scripts/ci/validate-commands.js && node scripts/ci/validate-rules.js && node scripts/ci/validate-skills.js && node scripts/ci/validate-hooks.js && node tests/lib/utils.test.js && node tests/lib/package-manager.test.js && node tests/hooks/hooks.test.js && node tests/integration/hooks.test.js"
+    "test": "node scripts/ci/validate-agents.js && node scripts/ci/validate-commands.js && node scripts/ci/validate-rules.js && node scripts/ci/validate-skills.js && node scripts/ci/validate-hooks.js && node tests/run-all.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
