@@ -3252,6 +3252,45 @@ async function runTests() {
       `stderr should contain [StrategicCompact] Error:, got: ${result.stderr}`);
   })) passed++; else failed++;
 
+  // ── Round 80: session-end.js entry.message?.role === 'user' third OR condition ──
+  console.log('\nRound 80: session-end.js (entry.message.role user — third OR condition):');
+
+  if (await asyncTest('extracts user messages from entries where only message.role is user (not type or role)', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-msgrole-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const testDir = createTestDir();
+    const transcriptPath = path.join(testDir, 'transcript.jsonl');
+    // Entries where type is NOT 'user' and there is no direct role field,
+    // but message.role IS 'user'. This exercises the third OR condition at
+    // session-end.js line 48: entry.message?.role === 'user'
+    const lines = [
+      '{"type":"human","message":{"role":"user","content":"Refactor the auth module"}}',
+      '{"type":"human","message":{"role":"assistant","content":"I will refactor it"}}',
+      '{"type":"human","message":{"role":"user","content":"Add integration tests too"}}',
+    ];
+    fs.writeFileSync(transcriptPath, lines.join('\n'));
+    const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
+
+    try {
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+      assert.strictEqual(result.code, 0);
+
+      const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('-session.tmp'));
+      assert.ok(files.length > 0, 'Should create session file');
+      const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+      // The third OR condition should fire for type:"human" + message.role:"user"
+      assert.ok(content.includes('Refactor the auth module') || content.includes('auth'),
+        `Session should include message extracted via message.role path. Got: ${content.substring(0, 300)}`);
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

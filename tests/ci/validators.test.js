@@ -2053,6 +2053,31 @@ function runTests() {
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
   })) passed++; else failed++;
 
+  // ── Round 80: validate-hooks.js legacy array format (lines 115-135) ──
+  console.log('\nRound 80: validate-hooks.js (legacy array format):');
+
+  if (test('validates hooks in legacy array format (hooks is an array, not object)', () => {
+    const testDir = createTestDir();
+    // The legacy array format wraps hooks as { hooks: [...] } where the array
+    // contains matcher objects directly. This exercises lines 115-135 of
+    // validate-hooks.js which use "Hook ${i}" error labels instead of "${eventType}[${i}]".
+    const hooksJson = JSON.stringify({
+      hooks: [
+        {
+          matcher: 'Edit',
+          hooks: [{ type: 'command', command: 'echo legacy test' }]
+        }
+      ]
+    });
+    fs.writeFileSync(path.join(testDir, 'hooks.json'), hooksJson);
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', path.join(testDir, 'hooks.json'));
+    assert.strictEqual(result.code, 0, 'Should pass on valid legacy array format');
+    assert.ok(result.stdout.includes('Validated 1 hook'),
+      `Should report 1 validated matcher, got: ${result.stdout}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

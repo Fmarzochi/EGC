@@ -1331,6 +1331,25 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 80: getExecCommand with truthy non-string args ──
+  console.log('\nRound 80: getExecCommand (truthy non-string args):');
+
+  if (test('getExecCommand with args=42 (truthy number) appends stringified value', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      // args=42: truthy, so typeof check at line 334 short-circuits
+      // (typeof 42 !== 'string'), skipping validation. Line 339:
+      // 42 ? ' ' + 42 → ' 42' → appended.
+      const cmd = pm.getExecCommand('prettier', 42);
+      assert.ok(cmd.includes('prettier'), 'Should include binary name');
+      assert.ok(cmd.includes('42'), 'Truthy number should be stringified and appended');
+    } finally {
+      if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      else delete process.env.CLAUDE_PACKAGE_MANAGER;
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
