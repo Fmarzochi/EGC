@@ -1754,6 +1754,60 @@ function runTests() {
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
   })) passed++; else failed++;
 
+  // ── Round 58: readFileSync catch block, colonIdx edge case, command-as-object ──
+  console.log('\nRound 58: validate-agents.js (unreadable agent file — readFileSync catch):');
+
+  if (test('reports error when agent .md file is unreadable (chmod 000)', () => {
+    // Skip on Windows or when running as root (permissions won't work)
+    if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
+      console.log('    (skipped — not supported on this platform)');
+      return;
+    }
+    const testDir = createTestDir();
+    const agentFile = path.join(testDir, 'locked.md');
+    fs.writeFileSync(agentFile, '---\nmodel: sonnet\ntools: Read\n---\n# Agent');
+    fs.chmodSync(agentFile, 0o000);
+
+    try {
+      const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
+      assert.strictEqual(result.code, 1, 'Should exit 1 on read error');
+      assert.ok(result.stderr.includes('locked.md'), 'Should mention the unreadable file');
+    } finally {
+      fs.chmodSync(agentFile, 0o644);
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  console.log('\nRound 58: validate-agents.js (frontmatter line with colon at position 0):');
+
+  if (test('rejects agent when required field key has colon at position 0 (no key name)', () => {
+    const testDir = createTestDir();
+    fs.writeFileSync(path.join(testDir, 'bad-colon.md'),
+      '---\n:sonnet\ntools: Read\n---\n# Agent with leading colon');
+
+    const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
+    assert.strictEqual(result.code, 1, 'Should fail — model field is missing (colon at idx 0 skipped)');
+    assert.ok(result.stderr.includes('model'), 'Should report missing model field');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 58: validate-hooks.js (command is a plain object — not string or array):');
+
+  if (test('rejects hook entry where command is a plain object', () => {
+    const testDir = createTestDir();
+    const hooksFile = path.join(testDir, 'hooks.json');
+    fs.writeFileSync(hooksFile, JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command', command: { run: 'echo hi' } }] }]
+      }
+    }));
+
+    const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
+    assert.strictEqual(result.code, 1, 'Should reject object command (not string or array)');
+    assert.ok(result.stderr.includes('command'), 'Should report invalid command field');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
