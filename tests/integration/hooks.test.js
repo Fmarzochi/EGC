@@ -445,6 +445,64 @@ async function runTests() {
     assert.ok(elapsed < 5000, `Should complete in <5s, took ${elapsed}ms`);
   })) passed++; else failed++;
 
+  if (await asyncTest('hooks survive stdin exceeding 1MB limit', async () => {
+    // The post-edit-console-warn hook reads stdin up to 1MB then passes through
+    // Send > 1MB to verify truncation doesn't crash the hook
+    const oversizedInput = JSON.stringify({
+      tool_input: { file_path: '/test.js' },
+      tool_output: { output: 'x'.repeat(1200000) } // ~1.2MB
+    });
+
+    const proc = spawn('node', [path.join(scriptsDir, 'post-edit-console-warn.js')], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let code = null;
+    // MUST drain stdout/stderr to prevent backpressure blocking the child process
+    proc.stdout.on('data', () => {});
+    proc.stderr.on('data', () => {});
+    proc.stdin.on('error', (err) => {
+      if (err.code !== 'EPIPE' && err.code !== 'EOF') throw err;
+    });
+    proc.stdin.write(oversizedInput);
+    proc.stdin.end();
+
+    await new Promise(resolve => {
+      proc.on('close', (c) => { code = c; resolve(); });
+    });
+
+    assert.strictEqual(code, 0, 'Should exit 0 despite oversized input');
+  })) passed++; else failed++;
+
+  if (await asyncTest('hooks handle truncated JSON from overflow gracefully', async () => {
+    // session-end parses stdin JSON. If input is > 1MB and truncated mid-JSON,
+    // JSON.parse should fail and fall back to env var
+    const proc = spawn('node', [path.join(scriptsDir, 'session-end.js')], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let code = null;
+    let stderr = '';
+    // MUST drain stdout to prevent backpressure blocking the child process
+    proc.stdout.on('data', () => {});
+    proc.stderr.on('data', data => stderr += data);
+    proc.stdin.on('error', (err) => {
+      if (err.code !== 'EPIPE' && err.code !== 'EOF') throw err;
+    });
+
+    // Build a string that will be truncated mid-JSON at 1MB
+    const bigValue = 'x'.repeat(1200000);
+    proc.stdin.write(`{"transcript_path":"/tmp/none","padding":"${bigValue}"}`);
+    proc.stdin.end();
+
+    await new Promise(resolve => {
+      proc.on('close', (c) => { code = c; resolve(); });
+    });
+
+    // Should exit 0 even if JSON parse fails (falls back to env var or null)
+    assert.strictEqual(code, 0, 'Should not crash on truncated JSON');
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

@@ -388,13 +388,26 @@ function getGitModifiedFiles(patterns = []) {
 
 /**
  * Replace text in a file (cross-platform sed alternative)
+ * @param {string} filePath - Path to the file
+ * @param {string|RegExp} search - Pattern to search for. String patterns replace
+ *   the FIRST occurrence only; use a RegExp with the `g` flag for global replacement.
+ * @param {string} replace - Replacement string
+ * @param {object} options - Options
+ * @param {boolean} options.all - When true and search is a string, replaces ALL
+ *   occurrences (uses String.replaceAll). Ignored for RegExp patterns.
+ * @returns {boolean} true if file was written, false on error
  */
-function replaceInFile(filePath, search, replace) {
+function replaceInFile(filePath, search, replace, options = {}) {
   const content = readFile(filePath);
   if (content === null) return false;
 
   try {
-    const newContent = content.replace(search, replace);
+    let newContent;
+    if (options.all && typeof search === 'string') {
+      newContent = content.replaceAll(search, replace);
+    } else {
+      newContent = content.replace(search, replace);
+    }
     writeFile(filePath, newContent);
     return true;
   } catch (err) {

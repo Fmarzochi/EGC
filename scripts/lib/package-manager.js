@@ -280,12 +280,24 @@ function setProjectPackageManager(pmName, projectDir = process.cwd()) {
   return config;
 }
 
+// Allowed characters in script/binary names: alphanumeric, dash, underscore, dot, slash, @
+// This prevents shell metacharacter injection while allowing scoped packages (e.g., @scope/pkg)
+const SAFE_NAME_REGEX = /^[@a-zA-Z0-9_.\/-]+$/;
+
 /**
  * Get the command to run a script
  * @param {string} script - Script name (e.g., "dev", "build", "test")
  * @param {object} options - { projectDir }
+ * @throws {Error} If script name contains unsafe characters
  */
 function getRunCommand(script, options = {}) {
+  if (!script || typeof script !== 'string') {
+    throw new Error('Script name must be a non-empty string');
+  }
+  if (!SAFE_NAME_REGEX.test(script)) {
+    throw new Error(`Script name contains unsafe characters: ${script}`);
+  }
+
   const pm = getPackageManager(options);
 
   switch (script) {
@@ -306,8 +318,16 @@ function getRunCommand(script, options = {}) {
  * Get the command to execute a package binary
  * @param {string} binary - Binary name (e.g., "prettier", "eslint")
  * @param {string} args - Arguments to pass
+ * @throws {Error} If binary name contains unsafe characters
  */
 function getExecCommand(binary, args = '', options = {}) {
+  if (!binary || typeof binary !== 'string') {
+    throw new Error('Binary name must be a non-empty string');
+  }
+  if (!SAFE_NAME_REGEX.test(binary)) {
+    throw new Error(`Binary name contains unsafe characters: ${binary}`);
+  }
+
   const pm = getPackageManager(options);
   return `${pm.config.execCmd} ${binary}${args ? ' ' + args : ''}`;
 }

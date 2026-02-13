@@ -546,6 +546,31 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('replaces all occurrences with string when options.all is true', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'hello world hello again hello');
+      utils.replaceInFile(testFile, 'hello', 'goodbye', { all: true });
+      const content = utils.readFile(testFile);
+      assert.strictEqual(content, 'goodbye world goodbye again goodbye');
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  if (test('options.all is ignored for regex patterns', () => {
+    const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'foo bar foo');
+      // all option should be ignored for regex; only g flag matters
+      utils.replaceInFile(testFile, /foo/, 'qux', { all: true });
+      const content = utils.readFile(testFile);
+      assert.strictEqual(content, 'qux bar foo', 'Regex without g should still replace first only');
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
   if (test('replaces with capture groups', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {

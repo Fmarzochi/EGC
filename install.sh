@@ -70,6 +70,12 @@ fi
 if [[ "$TARGET" == "claude" ]]; then
     DEST_DIR="${CLAUDE_RULES_DIR:-$HOME/.claude/rules}"
 
+    # Warn if destination already exists (user may have local customizations)
+    if [[ -d "$DEST_DIR" ]] && [[ "$(ls -A "$DEST_DIR" 2>/dev/null)" ]]; then
+        echo "Note: $DEST_DIR/ already exists. Existing files will be overwritten."
+        echo "      Back up any local customizations before proceeding."
+    fi
+
     # Always install common rules
     echo "Installing common rules -> $DEST_DIR/common/"
     mkdir -p "$DEST_DIR/common"

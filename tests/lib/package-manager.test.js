@@ -498,6 +498,131 @@ function runTests() {
     assert.ok(regex.test('bun run lint'), 'Should match bun run lint');
   })) passed++; else failed++;
 
+  // getPackageManager robustness tests
+  console.log('\ngetPackageManager (robustness):');
+
+  if (test('falls through on corrupted project config JSON', () => {
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-robust-'));
+    const claudeDir = path.join(testDir, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'package-manager.json'), '{not valid json!!!');
+
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      delete process.env.CLAUDE_PACKAGE_MANAGER;
+      const result = pm.getPackageManager({ projectDir: testDir });
+      // Should fall through to default (npm) since project config is corrupt
+      assert.ok(result.name, 'Should return a package manager');
+      assert.ok(result.source !== 'project-config', 'Should not use corrupt project config');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      }
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('falls through on project config with unknown PM', () => {
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-robust-'));
+    const claudeDir = path.join(testDir, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'package-manager.json'),
+      JSON.stringify({ packageManager: 'nonexistent-pm' }));
+
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      delete process.env.CLAUDE_PACKAGE_MANAGER;
+      const result = pm.getPackageManager({ projectDir: testDir });
+      assert.ok(result.name, 'Should return a package manager');
+      assert.ok(result.source !== 'project-config', 'Should not use unknown PM config');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      }
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // getRunCommand validation tests
+  console.log('\ngetRunCommand (validation):');
+
+  if (test('rejects empty script name', () => {
+    assert.throws(() => pm.getRunCommand(''), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects null script name', () => {
+    assert.throws(() => pm.getRunCommand(null), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects script name with shell metacharacters', () => {
+    assert.throws(() => pm.getRunCommand('test; rm -rf /'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('rejects script name with backticks', () => {
+    assert.throws(() => pm.getRunCommand('test`whoami`'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('accepts scoped package names', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getRunCommand('@scope/my-script');
+      assert.strictEqual(cmd, 'npm run @scope/my-script');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
+  // getExecCommand validation tests
+  console.log('\ngetExecCommand (validation):');
+
+  if (test('rejects empty binary name', () => {
+    assert.throws(() => pm.getExecCommand(''), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects null binary name', () => {
+    assert.throws(() => pm.getExecCommand(null), /non-empty string/);
+  })) passed++; else failed++;
+
+  if (test('rejects binary name with shell metacharacters', () => {
+    assert.throws(() => pm.getExecCommand('prettier; cat /etc/passwd'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('accepts dotted binary names like tsc', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      const cmd = pm.getExecCommand('tsc');
+      assert.strictEqual(cmd, 'npx tsc');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
+  if (test('ignores unknown env var package manager', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'totally-fake-pm';
+      const result = pm.getPackageManager();
+      // Should ignore invalid env var and fall through
+      assert.notStrictEqual(result.name, 'totally-fake-pm', 'Should not use unknown PM');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

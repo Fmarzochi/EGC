@@ -8,6 +8,7 @@ const path = require('path');
 
 const AGENTS_DIR = path.join(__dirname, '../../agents');
 const REQUIRED_FIELDS = ['model', 'tools'];
+const VALID_MODELS = ['haiku', 'sonnet', 'opus'];
 
 function extractFrontmatter(content) {
   // Strip BOM if present (UTF-8 BOM: \uFEFF)
@@ -61,6 +62,12 @@ function validateAgents() {
         console.error(`ERROR: ${file} - Missing required field: ${field}`);
         hasErrors = true;
       }
+    }
+
+    // Validate model is a known value
+    if (frontmatter.model && !VALID_MODELS.includes(frontmatter.model)) {
+      console.error(`ERROR: ${file} - Invalid model '${frontmatter.model}'. Must be one of: ${VALID_MODELS.join(', ')}`);
+      hasErrors = true;
     }
   }
 

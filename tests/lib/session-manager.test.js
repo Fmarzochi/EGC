@@ -465,6 +465,20 @@ src/main.ts
     assert.ok(result, 'Should find old-format session by filename');
   })) passed++; else failed++;
 
+  if (test('getSessionById returns null for empty string', () => {
+    const result = sessionManager.getSessionById('');
+    assert.strictEqual(result, null, 'Empty string should not match any session');
+  })) passed++; else failed++;
+
+  if (test('getSessionById metadata and stats populated when includeContent=true', () => {
+    const result = sessionManager.getSessionById('abcd1234', true);
+    assert.ok(result, 'Should find session');
+    assert.ok(result.metadata, 'Should have metadata');
+    assert.ok(result.stats, 'Should have stats');
+    assert.strictEqual(typeof result.stats.totalItems, 'number', 'stats.totalItems should be number');
+    assert.strictEqual(typeof result.stats.lineCount, 'number', 'stats.lineCount should be number');
+  })) passed++; else failed++;
+
   // parseSessionMetadata edge cases
   console.log('\nparseSessionMetadata (edge cases):');
 
@@ -572,6 +586,32 @@ src/main.ts
   if (test('rejects filenames with extra segments', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-abc12345-extra-session.tmp');
     assert.strictEqual(result, null, 'Extra segments should be rejected');
+  })) passed++; else failed++;
+
+  if (test('rejects impossible month (13)', () => {
+    const result = sessionManager.parseSessionFilename('2026-13-01-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'Month 13 should be rejected');
+  })) passed++; else failed++;
+
+  if (test('rejects impossible day (32)', () => {
+    const result = sessionManager.parseSessionFilename('2026-01-32-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'Day 32 should be rejected');
+  })) passed++; else failed++;
+
+  if (test('rejects month 00', () => {
+    const result = sessionManager.parseSessionFilename('2026-00-15-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'Month 00 should be rejected');
+  })) passed++; else failed++;
+
+  if (test('rejects day 00', () => {
+    const result = sessionManager.parseSessionFilename('2026-01-00-abcd1234-session.tmp');
+    assert.strictEqual(result, null, 'Day 00 should be rejected');
+  })) passed++; else failed++;
+
+  if (test('accepts valid edge date (month 12, day 31)', () => {
+    const result = sessionManager.parseSessionFilename('2026-12-31-abcd1234-session.tmp');
+    assert.ok(result, 'Month 12, day 31 should be accepted');
+    assert.strictEqual(result.date, '2026-12-31');
   })) passed++; else failed++;
 
   if (test('datetime field is a Date object', () => {
