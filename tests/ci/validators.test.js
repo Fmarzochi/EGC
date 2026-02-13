@@ -1866,6 +1866,35 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 65: empty directories for rules and skills ──
+  console.log('\nRound 65: validate-rules.js (empty directory — no .md files):');
+
+  if (test('passes on rules directory with no .md files (Validated 0)', () => {
+    const testDir = createTestDir();
+    // Only non-.md files — readdirSync filter yields empty array
+    fs.writeFileSync(path.join(testDir, 'notes.txt'), 'not a rule');
+    fs.writeFileSync(path.join(testDir, 'config.json'), '{}');
+
+    const result = runValidatorWithDir('validate-rules', 'RULES_DIR', testDir);
+    assert.strictEqual(result.code, 0, 'Should pass on empty rules directory');
+    assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 validated rule files');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 65: validate-skills.js (empty directory — no subdirectories):');
+
+  if (test('passes on skills directory with only files, no subdirectories (Validated 0)', () => {
+    const testDir = createTestDir();
+    // Only files, no subdirectories — isDirectory filter yields empty array
+    fs.writeFileSync(path.join(testDir, 'README.md'), '# Skills');
+    fs.writeFileSync(path.join(testDir, '.gitkeep'), '');
+
+    const result = runValidatorWithDir('validate-skills', 'SKILLS_DIR', testDir);
+    assert.strictEqual(result.code, 0, 'Should pass on skills directory with no subdirectories');
+    assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 validated skill directories');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

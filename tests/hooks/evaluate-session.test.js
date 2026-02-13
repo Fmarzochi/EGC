@@ -284,6 +284,33 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ── Round 65: regex whitespace tolerance in countInFile ──
+  console.log('\nRound 65: regex whitespace tolerance around colon:');
+
+  if (test('counts user messages when JSON has spaces around colon ("type" : "user")', () => {
+    const testDir = createTestDir();
+    const filePath = path.join(testDir, 'spaced.jsonl');
+    // Manually write JSON with spaces around the colon — NOT JSON.stringify
+    // The regex /"type"\s*:\s*"user"/g should match these
+    const lines = [];
+    for (let i = 0; i < 12; i++) {
+      lines.push(`{"type" : "user", "content": "msg ${i}"}`);
+      lines.push(`{"type" : "assistant", "content": "resp ${i}"}`);
+    }
+    fs.writeFileSync(filePath, lines.join('\n') + '\n');
+
+    const result = runEvaluate({ transcript_path: filePath });
+    assert.strictEqual(result.code, 0);
+    // 12 user messages >= 10 threshold → should evaluate (not "too short")
+    assert.ok(!result.stderr.includes('too short'),
+      'Should NOT say too short for 12 spaced-colon user messages');
+    assert.ok(
+      result.stderr.includes('12 messages') || result.stderr.includes('evaluate'),
+      `Should evaluate session with spaced-colon JSON. Got stderr: ${result.stderr}`
+    );
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
