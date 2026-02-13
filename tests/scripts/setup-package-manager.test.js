@@ -8,6 +8,8 @@
 
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { execFileSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'setup-package-manager.js');
@@ -254,6 +256,54 @@ function runTests() {
     assert.strictEqual(lockFileCount, 4, `Expected 4 "Lock file:" entries, found ${lockFileCount}`);
     const installCount = (result.stdout.match(/Install:/g) || []).length;
     assert.strictEqual(installCount, 4, `Expected 4 "Install:" entries, found ${installCount}`);
+  })) passed++; else failed++;
+
+  // ── Round 62: --global success path and bare PM name ──
+  console.log('\n--global success path (Round 62):');
+
+  if (test('--global npm writes config and succeeds', () => {
+    const tmpDir = path.join(os.tmpdir(), `spm-test-global-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    try {
+      const result = run(['--global', 'npm'], { HOME: tmpDir, USERPROFILE: tmpDir });
+      assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}. stderr: ${result.stderr}`);
+      assert.ok(result.stdout.includes('Global preference set to'), 'Should show success message');
+      assert.ok(result.stdout.includes('npm'), 'Should mention npm');
+      // Verify config file was created
+      const configPath = path.join(tmpDir, '.claude', 'package-manager.json');
+      assert.ok(fs.existsSync(configPath), 'Config file should be created');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.strictEqual(config.packageManager, 'npm', 'Config should contain npm');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  console.log('\nbare PM name success (Round 62):');
+
+  if (test('bare npm sets global preference and succeeds', () => {
+    const tmpDir = path.join(os.tmpdir(), `spm-test-bare-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    try {
+      const result = run(['npm'], { HOME: tmpDir, USERPROFILE: tmpDir });
+      assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}. stderr: ${result.stderr}`);
+      assert.ok(result.stdout.includes('Global preference set to'), 'Should show success message');
+      // Verify config file was created
+      const configPath = path.join(tmpDir, '.claude', 'package-manager.json');
+      assert.ok(fs.existsSync(configPath), 'Config file should be created');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.strictEqual(config.packageManager, 'npm', 'Config should contain npm');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  console.log('\n--detect source label (Round 62):');
+
+  if (test('--detect with env var shows source as environment', () => {
+    const result = run(['--detect'], { CLAUDE_PACKAGE_MANAGER: 'pnpm' });
+    assert.strictEqual(result.code, 0);
+    assert.ok(result.stdout.includes('Source: environment'), 'Should show environment as source');
   })) passed++; else failed++;
 
   // Summary
