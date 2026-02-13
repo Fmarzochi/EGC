@@ -314,11 +314,15 @@ function getRunCommand(script, options = {}) {
   }
 }
 
+// Allowed characters in arguments: alphanumeric, whitespace, dashes, dots, slashes,
+// equals, colons, commas, quotes, @. Rejects shell metacharacters like ; | & ` $ ( ) { } < > !
+const SAFE_ARGS_REGEX = /^[@a-zA-Z0-9\s_.\/:=,'"*+-]+$/;
+
 /**
  * Get the command to execute a package binary
  * @param {string} binary - Binary name (e.g., "prettier", "eslint")
  * @param {string} args - Arguments to pass
- * @throws {Error} If binary name contains unsafe characters
+ * @throws {Error} If binary name or args contain unsafe characters
  */
 function getExecCommand(binary, args = '', options = {}) {
   if (!binary || typeof binary !== 'string') {
@@ -326,6 +330,9 @@ function getExecCommand(binary, args = '', options = {}) {
   }
   if (!SAFE_NAME_REGEX.test(binary)) {
     throw new Error(`Binary name contains unsafe characters: ${binary}`);
+  }
+  if (args && typeof args === 'string' && !SAFE_ARGS_REGEX.test(args)) {
+    throw new Error(`Arguments contain unsafe characters: ${args}`);
   }
 
   const pm = getPackageManager(options);
@@ -349,6 +356,11 @@ function getSelectionPrompt() {
   message += '  - Or add a lock file to your project (e.g., pnpm-lock.yaml)\n';
 
   return message;
+}
+
+// Escape regex metacharacters in a string before interpolating into a pattern
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -387,12 +399,13 @@ function getCommandPattern(action) {
       'bun run build'
     );
   } else {
-    // Generic run command
+    // Generic run command — escape regex metacharacters in action
+    const escaped = escapeRegex(action);
     patterns.push(
-      `npm run ${action}`,
-      `pnpm( run)? ${action}`,
-      `yarn ${action}`,
-      `bun run ${action}`
+      `npm run ${escaped}`,
+      `pnpm( run)? ${escaped}`,
+      `yarn ${escaped}`,
+      `bun run ${escaped}`
     );
   }
 

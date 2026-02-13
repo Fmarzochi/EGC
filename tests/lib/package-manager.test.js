@@ -874,6 +874,62 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ─── Round 21: getExecCommand args validation ───
+  console.log('\ngetExecCommand (args validation):');
+
+  if (test('rejects args with shell metacharacter semicolon', () => {
+    assert.throws(() => pm.getExecCommand('prettier', '; rm -rf /'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('rejects args with pipe character', () => {
+    assert.throws(() => pm.getExecCommand('prettier', '--write . | cat'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('rejects args with backtick injection', () => {
+    assert.throws(() => pm.getExecCommand('prettier', '`whoami`'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('rejects args with dollar sign', () => {
+    assert.throws(() => pm.getExecCommand('prettier', '$HOME'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('rejects args with ampersand', () => {
+    assert.throws(() => pm.getExecCommand('prettier', '--write . && echo pwned'), /unsafe characters/);
+  })) passed++; else failed++;
+
+  if (test('allows safe args like --write .', () => {
+    const cmd = pm.getExecCommand('prettier', '--write .');
+    assert.ok(cmd.includes('--write .'), 'Should include safe args');
+  })) passed++; else failed++;
+
+  if (test('allows empty args without trailing space', () => {
+    const cmd = pm.getExecCommand('prettier', '');
+    assert.ok(!cmd.endsWith(' '), 'Should not have trailing space for empty args');
+  })) passed++; else failed++;
+
+  // ─── Round 21: getCommandPattern regex escaping ───
+  console.log('\ngetCommandPattern (regex escaping):');
+
+  if (test('escapes dot in action name for regex safety', () => {
+    const pattern = pm.getCommandPattern('test.all');
+    // The dot should be escaped to \\. in the pattern
+    const regex = new RegExp(pattern);
+    assert.ok(regex.test('npm run test.all'), 'Should match literal dot');
+    assert.ok(!regex.test('npm run testXall'), 'Should NOT match arbitrary character in place of dot');
+  })) passed++; else failed++;
+
+  if (test('escapes brackets in action name', () => {
+    const pattern = pm.getCommandPattern('build[prod]');
+    const regex = new RegExp(pattern);
+    assert.ok(regex.test('npm run build[prod]'), 'Should match literal brackets');
+  })) passed++; else failed++;
+
+  if (test('escapes parentheses in action name', () => {
+    // Should not throw when compiled as regex
+    const pattern = pm.getCommandPattern('foo(bar)');
+    assert.doesNotThrow(() => new RegExp(pattern), 'Should produce valid regex with escaped parens');
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

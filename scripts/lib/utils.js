@@ -215,6 +215,11 @@ async function readStdinJson(options = {}) {
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
+        // Clean up stdin listeners so the event loop can exit
+        process.stdin.removeAllListeners('data');
+        process.stdin.removeAllListeners('end');
+        process.stdin.removeAllListeners('error');
+        if (process.stdin.unref) process.stdin.unref();
         // Resolve with whatever we have so far rather than hanging
         try {
           resolve(data.trim() ? JSON.parse(data) : {});
