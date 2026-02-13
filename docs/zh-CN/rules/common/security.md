@@ -15,17 +15,10 @@
 
 ## 密钥管理
 
-```typescript
-// NEVER: Hardcoded secrets
-const apiKey = "sk-proj-xxxxx"
-
-// ALWAYS: Environment variables
-const apiKey = process.env.OPENAI_API_KEY
-
-if (!apiKey) {
-  throw new Error('OPENAI_API_KEY not configured')
-}
-```
+* 切勿在源代码中硬编码密钥
+* 始终使用环境变量或密钥管理器
+* 在启动时验证所需的密钥是否存在
+* 轮换任何可能已泄露的密钥
 
 ## 安全响应协议
 

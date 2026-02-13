@@ -6,25 +6,6 @@
 * **PostToolUse**：工具执行后（自动格式化、检查）
 * **Stop**：会话结束时（最终验证）
 
-## 当前 Hooks（位于 ~/.claude/settings.json）
-
-### PreToolUse
-
-* **tmux 提醒**：建议对长时间运行的命令（npm、pnpm、yarn、cargo 等）使用 tmux
-* **git push 审查**：推送前在 Zed 中打开进行审查
-* **文档拦截器**：阻止创建不必要的 .md/.txt 文件
-
-### PostToolUse
-
-* **PR 创建**：记录 PR URL 和 GitHub Actions 状态
-* **Prettier**：编辑后自动格式化 JS/TS 文件
-* **TypeScript 检查**：编辑 .ts/.tsx 文件后运行 tsc
-* **console.log 警告**：警告编辑的文件中存在 console.log
-
-### Stop
-
-* **console.log 审计**：会话结束前检查所有修改的文件中是否存在 console.log
-
 ## 自动接受权限
 
 谨慎使用：

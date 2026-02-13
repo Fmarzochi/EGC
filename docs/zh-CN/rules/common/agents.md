@@ -30,14 +30,15 @@
 对于独立操作，**始终**使用并行任务执行：
 
 ```markdown
-# GOOD: Parallel execution
-Launch 3 agents in parallel:
-1. Agent 1: Security analysis of auth.ts
-2. Agent 2: Performance review of cache system
-3. Agent 3: Type checking of utils.ts
+# 良好：并行执行
+同时启动 3 个智能体：
+1. 智能体 1：认证模块的安全分析
+2. 智能体 2：缓存系统的性能审查
+3. 智能体 3：工具类的类型检查
 
-# BAD: Sequential when unnecessary
-First agent 1, then agent 2, then agent 3
+# 不良：不必要的顺序执行
+先智能体 1，然后智能体 2，最后智能体 3
+
 ```
 
 ## 多视角分析

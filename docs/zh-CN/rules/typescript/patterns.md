@@ -1,4 +1,6 @@
-# 常见模式
+# TypeScript/JavaScript 模式
+
+> 此文件在 [common/patterns.md](../common/patterns.md) 的基础上扩展了 TypeScript/JavaScript 特定的内容。
 
 ## API 响应格式
 
@@ -41,16 +43,3 @@ interface Repository<T> {
   delete(id: string): Promise<void>
 }
 ```
-
-## 骨架项目
-
-当实现新功能时：
-
-1. 搜索经过实战检验的骨架项目
-2. 使用并行代理评估选项：
-   * 安全性评估
-   * 可扩展性分析
-   * 相关性评分
-   * 实施规划
-3. 克隆最佳匹配作为基础
-4. 在已验证的结构内迭代
