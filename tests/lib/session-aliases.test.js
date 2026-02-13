@@ -927,6 +927,62 @@ function runTests() {
     resetAliases();
   })) passed++; else failed++;
 
+  // ── Round 67: loadAliases empty file, resolveSessionAlias null, metadata-only backfill ──
+  console.log('\nRound 67: loadAliases (empty 0-byte file):');
+
+  if (test('loadAliases returns default structure for empty (0-byte) file', () => {
+    resetAliases();
+    const aliasesPath = aliases.getAliasesPath();
+    // Write a 0-byte file — readFile returns '', which is falsy → !content branch
+    fs.writeFileSync(aliasesPath, '');
+    const data = aliases.loadAliases();
+    assert.ok(data.aliases, 'Should have aliases key');
+    assert.strictEqual(Object.keys(data.aliases).length, 0, 'Should have no aliases');
+    assert.strictEqual(data.version, '1.0', 'Should have default version');
+    assert.ok(data.metadata, 'Should have metadata');
+    assert.strictEqual(data.metadata.totalCount, 0, 'Should have totalCount 0');
+    resetAliases();
+  })) passed++; else failed++;
+
+  console.log('\nRound 67: resolveSessionAlias (null/falsy input):');
+
+  if (test('resolveSessionAlias returns null when given null input', () => {
+    resetAliases();
+    const result = aliases.resolveSessionAlias(null);
+    assert.strictEqual(result, null, 'Should return null for null input');
+  })) passed++; else failed++;
+
+  console.log('\nRound 67: loadAliases (metadata-only backfill, version present):');
+
+  if (test('loadAliases backfills only metadata when version already present', () => {
+    resetAliases();
+    const aliasesPath = aliases.getAliasesPath();
+    // Write a file WITH version but WITHOUT metadata
+    fs.writeFileSync(aliasesPath, JSON.stringify({
+      version: '1.0',
+      aliases: {
+        'meta-only': {
+          sessionPath: '/sessions/meta-only',
+          createdAt: '2026-01-20T00:00:00.000Z',
+          updatedAt: '2026-01-20T00:00:00.000Z',
+          title: 'Metadata Only Test'
+        }
+      }
+    }));
+
+    const data = aliases.loadAliases();
+    // Version should remain as-is (NOT overwritten)
+    assert.strictEqual(data.version, '1.0', 'Version should remain 1.0');
+    // Metadata should be backfilled
+    assert.ok(data.metadata, 'Should backfill missing metadata');
+    assert.strictEqual(data.metadata.totalCount, 1, 'Metadata totalCount should be 1');
+    assert.ok(data.metadata.lastUpdated, 'Metadata should have lastUpdated');
+    // Alias data should be preserved
+    assert.ok(data.aliases['meta-only'], 'Alias should be preserved');
+    assert.strictEqual(data.aliases['meta-only'].title, 'Metadata Only Test');
+    resetAliases();
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
