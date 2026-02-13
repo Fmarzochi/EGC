@@ -218,6 +218,13 @@ async function runTests() {
     assert.strictEqual(result.code, 0);
   })) passed++; else failed++;
 
+  if (await asyncTest('handles invalid JSON stdin gracefully', async () => {
+    const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), 'not valid json');
+    assert.strictEqual(result.code, 0, 'Should exit 0 on invalid JSON');
+    // Should still pass through the data
+    assert.ok(result.stdout.includes('not valid json'), 'Should pass through invalid data');
+  })) passed++; else failed++;
+
   // session-end.js tests
   console.log('\nsession-end.js:');
 
@@ -281,6 +288,53 @@ async function runTests() {
     await runScript(path.join(scriptsDir, 'pre-compact.js'));
     const logFile = path.join(os.homedir(), '.claude', 'sessions', 'compaction-log.txt');
     assert.ok(fs.existsSync(logFile), 'Compaction log should exist');
+  })) passed++; else failed++;
+
+  if (await asyncTest('annotates active session file with compaction marker', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-compact-annotate-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Create an active .tmp session file
+    const sessionFile = path.join(sessionsDir, '2026-02-11-test-session.tmp');
+    fs.writeFileSync(sessionFile, '# Session: 2026-02-11\n**Started:** 10:00\n');
+
+    try {
+      await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+
+      const content = fs.readFileSync(sessionFile, 'utf8');
+      assert.ok(
+        content.includes('Compaction occurred'),
+        'Should annotate the session file with compaction marker'
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('compaction log contains timestamp', async () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-compact-ts-${Date.now()}`);
+    const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    try {
+      await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+        HOME: isoHome, USERPROFILE: isoHome
+      });
+
+      const logFile = path.join(sessionsDir, 'compaction-log.txt');
+      assert.ok(fs.existsSync(logFile), 'Compaction log should exist');
+      const content = fs.readFileSync(logFile, 'utf8');
+      // Should have a timestamp like [2026-02-11 14:30:00]
+      assert.ok(
+        /\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]/.test(content),
+        `Log should contain timestamped entry, got: ${content.substring(0, 100)}`
+      );
+    } finally {
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   // suggest-compact.js tests

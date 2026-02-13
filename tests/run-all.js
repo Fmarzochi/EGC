@@ -22,9 +22,12 @@ const testFiles = [
   'scripts/skill-create-output.test.js'
 ];
 
-console.log('╔══════════════════════════════════════════════════════════╗');
-console.log('║           Everything Claude Code - Test Suite            ║');
-console.log('╚══════════════════════════════════════════════════════════╝');
+const BOX_W = 58; // inner width between ║ delimiters
+const boxLine = (s) => `║${s.padEnd(BOX_W)}║`;
+
+console.log('╔' + '═'.repeat(BOX_W) + '╗');
+console.log(boxLine('           Everything Claude Code - Test Suite'));
+console.log('╚' + '═'.repeat(BOX_W) + '╝');
 console.log();
 
 let totalPassed = 0;
@@ -71,12 +74,12 @@ for (const testFile of testFiles) {
 
 totalTests = totalPassed + totalFailed;
 
-console.log('\n╔══════════════════════════════════════════════════════════╗');
-console.log('║                     Final Results                        ║');
-console.log('╠══════════════════════════════════════════════════════════╣');
-console.log(`║  Total Tests: ${String(totalTests).padStart(4)}                                      ║`);
-console.log(`║  Passed:      ${String(totalPassed).padStart(4)}  ✓                                   ║`);
-console.log(`║  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}                                   ║`);
-console.log('╚══════════════════════════════════════════════════════════╝');
+console.log('\n╔' + '═'.repeat(BOX_W) + '╗');
+console.log(boxLine('                     Final Results'));
+console.log('╠' + '═'.repeat(BOX_W) + '╣');
+console.log(boxLine(`  Total Tests: ${String(totalTests).padStart(4)}`));
+console.log(boxLine(`  Passed:      ${String(totalPassed).padStart(4)}  ✓`));
+console.log(boxLine(`  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}`));
+console.log('╚' + '═'.repeat(BOX_W) + '╝');
 
 process.exit(totalFailed > 0 ? 1 : 0);

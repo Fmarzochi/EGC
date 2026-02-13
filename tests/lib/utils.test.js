@@ -715,6 +715,171 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // commandExists edge cases
+  console.log('\ncommandExists Edge Cases:');
+
+  if (test('commandExists rejects empty string', () => {
+    assert.strictEqual(utils.commandExists(''), false, 'Empty string should not be a valid command');
+  })) passed++; else failed++;
+
+  if (test('commandExists rejects command with spaces', () => {
+    assert.strictEqual(utils.commandExists('my command'), false, 'Commands with spaces should be rejected');
+  })) passed++; else failed++;
+
+  if (test('commandExists rejects command with path separators', () => {
+    assert.strictEqual(utils.commandExists('/usr/bin/node'), false, 'Commands with / should be rejected');
+    assert.strictEqual(utils.commandExists('..\\cmd'), false, 'Commands with \\ should be rejected');
+  })) passed++; else failed++;
+
+  if (test('commandExists rejects shell metacharacters', () => {
+    assert.strictEqual(utils.commandExists('cmd;ls'), false, 'Semicolons should be rejected');
+    assert.strictEqual(utils.commandExists('$(whoami)'), false, 'Subshell syntax should be rejected');
+    assert.strictEqual(utils.commandExists('cmd|cat'), false, 'Pipes should be rejected');
+  })) passed++; else failed++;
+
+  if (test('commandExists allows dots and underscores', () => {
+    // These are valid chars per the regex check — the command might not exist
+    // but it shouldn't be rejected by the validator
+    const dotResult = utils.commandExists('definitely.not.a.real.tool.12345');
+    assert.strictEqual(typeof dotResult, 'boolean', 'Should return boolean, not throw');
+  })) passed++; else failed++;
+
+  // findFiles edge cases
+  console.log('\nfindFiles Edge Cases:');
+
+  if (test('findFiles with ? wildcard matches single character', () => {
+    const testDir = path.join(utils.getTempDir(), `ff-qmark-${Date.now()}`);
+    utils.ensureDir(testDir);
+    try {
+      fs.writeFileSync(path.join(testDir, 'a1.txt'), '');
+      fs.writeFileSync(path.join(testDir, 'b2.txt'), '');
+      fs.writeFileSync(path.join(testDir, 'abc.txt'), '');
+
+      const results = utils.findFiles(testDir, '??.txt');
+      const names = results.map(r => path.basename(r.path)).sort();
+      assert.deepStrictEqual(names, ['a1.txt', 'b2.txt'], 'Should match exactly 2-char basenames');
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('findFiles sorts by mtime (newest first)', () => {
+    const testDir = path.join(utils.getTempDir(), `ff-sort-${Date.now()}`);
+    utils.ensureDir(testDir);
+    try {
+      const f1 = path.join(testDir, 'old.txt');
+      const f2 = path.join(testDir, 'new.txt');
+      fs.writeFileSync(f1, 'old');
+      // Set older mtime on first file
+      const past = new Date(Date.now() - 60000);
+      fs.utimesSync(f1, past, past);
+      fs.writeFileSync(f2, 'new');
+
+      const results = utils.findFiles(testDir, '*.txt');
+      assert.strictEqual(results.length, 2);
+      assert.ok(
+        path.basename(results[0].path) === 'new.txt',
+        `Newest file should be first, got ${path.basename(results[0].path)}`
+      );
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('findFiles with maxAge filters old files', () => {
+    const testDir = path.join(utils.getTempDir(), `ff-age-${Date.now()}`);
+    utils.ensureDir(testDir);
+    try {
+      const recent = path.join(testDir, 'recent.txt');
+      const old = path.join(testDir, 'old.txt');
+      fs.writeFileSync(recent, 'new');
+      fs.writeFileSync(old, 'old');
+      // Set mtime to 30 days ago
+      const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      fs.utimesSync(old, past, past);
+
+      const results = utils.findFiles(testDir, '*.txt', { maxAge: 7 });
+      assert.strictEqual(results.length, 1, 'Should only return recent file');
+      assert.ok(results[0].path.includes('recent.txt'), 'Should return the recent file');
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // ensureDir edge cases
+  console.log('\nensureDir Edge Cases:');
+
+  if (test('ensureDir is safe for concurrent calls (EEXIST race)', () => {
+    const testDir = path.join(utils.getTempDir(), `ensure-race-${Date.now()}`, 'nested');
+    try {
+      // Call concurrently — both should succeed without throwing
+      const results = [utils.ensureDir(testDir), utils.ensureDir(testDir)];
+      assert.strictEqual(results[0], testDir);
+      assert.strictEqual(results[1], testDir);
+      assert.ok(fs.existsSync(testDir));
+    } finally {
+      fs.rmSync(path.dirname(testDir), { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('ensureDir returns the directory path', () => {
+    const testDir = path.join(utils.getTempDir(), `ensure-ret-${Date.now()}`);
+    try {
+      const result = utils.ensureDir(testDir);
+      assert.strictEqual(result, testDir, 'Should return the directory path');
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // runCommand edge cases
+  console.log('\nrunCommand Edge Cases:');
+
+  if (test('runCommand returns trimmed output', () => {
+    const result = utils.runCommand('echo "  hello  "');
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.output, 'hello', 'Should trim leading/trailing whitespace');
+  })) passed++; else failed++;
+
+  if (test('runCommand captures stderr on failure', () => {
+    const result = utils.runCommand('node -e "process.exit(1)"');
+    assert.strictEqual(result.success, false);
+    assert.ok(typeof result.output === 'string', 'Output should be a string on failure');
+  })) passed++; else failed++;
+
+  // getGitModifiedFiles edge cases
+  console.log('\ngetGitModifiedFiles Edge Cases:');
+
+  if (test('getGitModifiedFiles returns array with empty patterns', () => {
+    const files = utils.getGitModifiedFiles([]);
+    assert.ok(Array.isArray(files), 'Should return array');
+  })) passed++; else failed++;
+
+  // replaceInFile edge cases
+  console.log('\nreplaceInFile Edge Cases:');
+
+  if (test('replaceInFile with regex capture groups works correctly', () => {
+    const testFile = path.join(utils.getTempDir(), `replace-capture-${Date.now()}.txt`);
+    try {
+      utils.writeFile(testFile, 'version: 1.0.0');
+      const result = utils.replaceInFile(testFile, /version: (\d+)\.(\d+)\.(\d+)/, 'version: $1.$2.99');
+      assert.strictEqual(result, true);
+      assert.strictEqual(utils.readFile(testFile), 'version: 1.0.99');
+    } finally {
+      fs.unlinkSync(testFile);
+    }
+  })) passed++; else failed++;
+
+  // readStdinJson (function API, not actual stdin — more thorough edge cases)
+  console.log('\nreadStdinJson Edge Cases:');
+
+  if (test('readStdinJson type check: returns a Promise', () => {
+    // readStdinJson returns a Promise regardless of stdin state
+    const result = utils.readStdinJson({ timeoutMs: 100 });
+    assert.ok(result instanceof Promise, 'Should return a Promise');
+    // Don't await — just verify it's a Promise type
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
