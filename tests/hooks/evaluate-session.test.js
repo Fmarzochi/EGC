@@ -258,6 +258,32 @@ function runTests() {
     assert.strictEqual(result.status, 0, 'Should exit 0 on empty stdin');
   })) passed++; else failed++;
 
+  // ── Round 53: env var fallback path ──
+  console.log('\nRound 53: CLAUDE_TRANSCRIPT_PATH fallback:');
+
+  if (test('falls back to CLAUDE_TRANSCRIPT_PATH env var when stdin is invalid JSON', () => {
+    const testDir = createTestDir();
+    const transcript = createTranscript(testDir, 15);
+
+    const result = spawnSync('node', [evaluateScript], {
+      encoding: 'utf8',
+      input: 'invalid json {{{',
+      timeout: 10000,
+      env: { ...process.env, CLAUDE_TRANSCRIPT_PATH: transcript }
+    });
+
+    assert.strictEqual(result.status, 0, 'Should exit 0');
+    assert.ok(
+      result.stderr.includes('15 messages'),
+      'Should evaluate using env var fallback path'
+    );
+    assert.ok(
+      result.stderr.includes('evaluate'),
+      'Should indicate session evaluation'
+    );
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

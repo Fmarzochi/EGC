@@ -2680,6 +2680,39 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 53: console-warn max matches and format non-existent file ──
+  console.log('\nRound 53: post-edit-console-warn.js (max matches truncation):');
+
+  if (await asyncTest('reports maximum 5 console.log matches per file', async () => {
+    const testDir = createTestDir();
+    const testFile = path.join(testDir, 'many-logs.js');
+    const lines = Array(7).fill(null).map((_, i) =>
+      `console.log("debug line ${i + 1}");`
+    );
+    fs.writeFileSync(testFile, lines.join('\n'));
+
+    const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
+
+    assert.strictEqual(result.code, 0, 'Should exit 0');
+    // Count line number reports in stderr (format: "N: console.log(...)")
+    const lineReports = (result.stderr.match(/^\d+:/gm) || []).length;
+    assert.strictEqual(lineReports, 5, `Should report max 5 matches, got ${lineReports}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  console.log('\nRound 53: post-edit-format.js (non-existent file):');
+
+  if (await asyncTest('passes through data for non-existent .tsx file path', async () => {
+    const stdinJson = JSON.stringify({
+      tool_input: { file_path: '/nonexistent/path/file.tsx' }
+    });
+    const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
+
+    assert.strictEqual(result.code, 0, 'Should exit 0 for non-existent file');
+    assert.strictEqual(result.stdout, stdinJson, 'Should pass through stdin data unchanged');
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
