@@ -2017,6 +2017,44 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 120: replaceInFile with empty string search — prepend vs insert-between-every-char ──
+  console.log('\nRound 120: replaceInFile (empty string search — replace vs replaceAll dramatic difference):');
+  if (test('replaceInFile with empty search: replace prepends at pos 0; replaceAll inserts between every char', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r120-empty-search-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // Without options.all: .replace('', 'X') prepends at position 0
+      fs.writeFileSync(testFile, 'hello');
+      utils.replaceInFile(testFile, '', 'X');
+      const prepended = utils.readFile(testFile);
+      assert.strictEqual(prepended, 'Xhello',
+        'replace("", "X") should prepend X at position 0 only');
+
+      // With options.all: .replaceAll('', 'X') inserts between every character
+      fs.writeFileSync(testFile, 'hello');
+      utils.replaceInFile(testFile, '', 'X', { all: true });
+      const insertedAll = utils.readFile(testFile);
+      assert.strictEqual(insertedAll, 'XhXeXlXlXoX',
+        'replaceAll("", "X") inserts X at every position boundary');
+
+      // Empty file + empty search
+      fs.writeFileSync(testFile, '');
+      utils.replaceInFile(testFile, '', 'X');
+      const emptyReplace = utils.readFile(testFile);
+      assert.strictEqual(emptyReplace, 'X',
+        'Empty content + empty search: single insertion at position 0');
+
+      // Empty file + empty search + all
+      fs.writeFileSync(testFile, '');
+      utils.replaceInFile(testFile, '', 'X', { all: true });
+      const emptyAll = utils.readFile(testFile);
+      assert.strictEqual(emptyAll, 'X',
+        'Empty content + replaceAll("", "X"): single position boundary → "X"');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

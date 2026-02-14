@@ -1647,6 +1647,37 @@ function runTests() {
     assert.strictEqual(validResult.success, true, 'Non-reserved name should succeed');
   })) passed++; else failed++;
 
+  // ── Round 120: setAlias max length boundary — 128 accepted, 129 rejected ──
+  console.log('\nRound 120: setAlias (max alias length boundary — 128 ok, 129 rejected):');
+  if (test('setAlias accepts exactly 128-char alias name but rejects 129 chars (> 128 boundary)', () => {
+    resetAliases();
+
+    // 128 characters — exactly at limit (alias.length > 128 is false)
+    const name128 = 'a'.repeat(128);
+    const result128 = aliases.setAlias(name128, '/path/to/session');
+    assert.strictEqual(result128.success, true,
+      '128-char alias should be accepted (128 > 128 is false)');
+
+    // 129 characters — just over limit
+    const name129 = 'a'.repeat(129);
+    const result129 = aliases.setAlias(name129, '/path/to/session');
+    assert.strictEqual(result129.success, false,
+      '129-char alias should be rejected (129 > 128 is true)');
+    assert.ok(result129.error.includes('128'),
+      'Error should mention the 128 character limit');
+
+    // 1 character — minimum valid
+    const name1 = 'x';
+    const result1 = aliases.setAlias(name1, '/path/to/session');
+    assert.strictEqual(result1.success, true,
+      'Single character alias should be accepted');
+
+    // Verify the 128-char alias was actually stored
+    const resolved = aliases.resolveAlias(name128);
+    assert.ok(resolved, '128-char alias should be resolvable');
+    assert.strictEqual(resolved.sessionPath, '/path/to/session');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -2246,6 +2246,44 @@ file.ts
       'Empty code block should result in empty context (trim of empty)');
   })) passed++; else failed++;
 
+  // ── Round 120: parseSessionMetadata "Notes for Next Session" extraction edge cases ──
+  console.log('\nRound 120: parseSessionMetadata ("Notes for Next Session" — extraction edge cases):');
+  if (test('parseSessionMetadata extracts notes section — last section, empty, followed by ###', () => {
+    // Notes as the last section (no ### or \n\n after)
+    const lastSection = '# Session\n\n### Notes for Next Session\nRemember to review PR #42\nAlso check CI status';
+    const lastMeta = sessionManager.parseSessionMetadata(lastSection);
+    assert.strictEqual(lastMeta.notes, 'Remember to review PR #42\nAlso check CI status',
+      'Notes as last section should capture everything to end of string via $ anchor');
+    assert.strictEqual(lastMeta.hasNotes, undefined,
+      'hasNotes is not a direct property of parseSessionMetadata result');
+
+    // Notes followed by another ### section
+    const withNext = '# Session\n\n### Notes for Next Session\nImportant note\n### Context to Load\n```\nfiles\n```';
+    const nextMeta = sessionManager.parseSessionMetadata(withNext);
+    assert.strictEqual(nextMeta.notes, 'Important note',
+      'Notes should stop at next ### header');
+
+    // Notes followed by \n\n (double newline)
+    const withDoubleNewline = '# Session\n\n### Notes for Next Session\nNote here\n\nSome other text';
+    const dblMeta = sessionManager.parseSessionMetadata(withDoubleNewline);
+    assert.strictEqual(dblMeta.notes, 'Note here',
+      'Notes should stop at \\n\\n boundary');
+
+    // Empty notes section (header only, followed by \n\n)
+    const emptyNotes = '# Session\n\n### Notes for Next Session\n\n### Other Section';
+    const emptyMeta = sessionManager.parseSessionMetadata(emptyNotes);
+    assert.strictEqual(emptyMeta.notes, '',
+      'Empty notes section should result in empty string after trim');
+
+    // Notes with markdown formatting
+    const markdownNotes = '# Session\n\n### Notes for Next Session\n- [ ] Review **important** PR\n- [x] Check `config.js`\n\n### Done';
+    const mdMeta = sessionManager.parseSessionMetadata(markdownNotes);
+    assert.ok(mdMeta.notes.includes('**important**'),
+      'Markdown bold should be preserved in notes');
+    assert.ok(mdMeta.notes.includes('`config.js`'),
+      'Markdown code should be preserved in notes');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
