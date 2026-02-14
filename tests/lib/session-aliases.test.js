@@ -1375,6 +1375,26 @@ function runTests() {
       'Another path-traversal pattern also returned unchanged');
   })) passed++; else failed++;
 
+  // ── Round 107: setAlias with whitespace-only title (not trimmed unlike sessionPath) ──
+  console.log('\nRound 107: setAlias (whitespace-only title — truthy string stored as-is, unlike sessionPath which is trim-checked):');
+  if (test('setAlias stores whitespace-only title as-is (no trim validation, unlike sessionPath)', () => {
+    resetAliases();
+    // sessionPath with whitespace is rejected (line 195: sessionPath.trim().length === 0)
+    const pathResult = aliases.setAlias('ws-path', '   ');
+    assert.strictEqual(pathResult.success, false,
+      'Whitespace-only sessionPath is rejected by trim check');
+    // But title with whitespace is stored as-is (line 221: title || null — whitespace is truthy)
+    const titleResult = aliases.setAlias('ws-title', '/valid/path', '   ');
+    assert.strictEqual(titleResult.success, true,
+      'Whitespace-only title is accepted (no trim check on title)');
+    assert.strictEqual(titleResult.title, '   ',
+      'Title stored as whitespace string (truthy, so title || null returns the whitespace)');
+    // Verify persisted correctly
+    const loaded = aliases.loadAliases();
+    assert.strictEqual(loaded.aliases['ws-title'].title, '   ',
+      'Whitespace title persists in JSON as-is');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

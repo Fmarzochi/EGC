@@ -1548,6 +1548,43 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 107: grepFile with ^$ pattern — empty line matching after split ──
+  console.log('\nRound 107: grepFile (empty line matching — ^$ on split lines, trailing \\n creates extra empty element):');
+  if (test('grepFile matches empty lines with ^$ pattern including trailing newline phantom line', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r107-grep-empty-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // 'line1\n\nline3\n\n'.split('\n') → ['line1','','line3','',''] (5 elements, 3 empty)
+      fs.writeFileSync(testFile, 'line1\n\nline3\n\n');
+      const results = utils.grepFile(testFile, /^$/);
+      assert.strictEqual(results.length, 3,
+        'Should match 3 empty lines: line 2, line 4, and trailing phantom line 5');
+      assert.strictEqual(results[0].lineNumber, 2, 'First empty line at position 2');
+      assert.strictEqual(results[1].lineNumber, 4, 'Second empty line at position 4');
+      assert.strictEqual(results[2].lineNumber, 5, 'Third empty line is the trailing phantom from split');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // ── Round 107: replaceInFile where replacement re-introduces search pattern (single-pass) ──
+  console.log('\nRound 107: replaceInFile (replacement contains search pattern — String.replace is single-pass):');
+  if (test('replaceInFile does not re-scan replacement text (single-pass, no infinite loop)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r107-replace-reintr-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      fs.writeFileSync(testFile, 'foo bar baz');
+      // Replace "foo" with "foo extra foo" — should only replace the first occurrence
+      const result = utils.replaceInFile(testFile, 'foo', 'foo extra foo');
+      assert.strictEqual(result, true, 'replaceInFile should return true');
+      const content = utils.readFile(testFile);
+      assert.strictEqual(content, 'foo extra foo bar baz',
+        'Only the original "foo" is replaced — replacement text is not re-scanned');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // ── Round 106: countInFile with named capture groups — match(g) ignores group details ──
   console.log('\nRound 106: countInFile (named capture groups — String.match(g) returns full matches only):');
   if (test('countInFile with named capture groups counts matches not groups', () => {
