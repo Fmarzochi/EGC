@@ -1833,6 +1833,42 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 117: grepFile with CRLF content — split('\n') leaves \r, anchored patterns fail ──
+  console.log('\nRound 117: grepFile (CRLF content — trailing \\r breaks anchored regex patterns):');
+  if (test('grepFile with CRLF content: unanchored patterns work but anchored $ fails due to trailing \\r', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r117-grep-crlf-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // Write CRLF content
+      fs.writeFileSync(testFile, 'hello\r\nworld\r\nfoo bar\r\n');
+
+      // Unanchored pattern works — 'hello' matches in 'hello\r'
+      const unanchored = utils.grepFile(testFile, 'hello');
+      assert.strictEqual(unanchored.length, 1, 'Unanchored pattern should find 1 match');
+      assert.strictEqual(unanchored[0].lineNumber, 1, 'Should be on line 1');
+      assert.ok(unanchored[0].content.endsWith('\r'),
+        'Line content should have trailing \\r from split("\\n") on CRLF');
+
+      // Anchored pattern /^hello$/ does NOT match 'hello\r' because $ is before \r
+      const anchored = utils.grepFile(testFile, /^hello$/);
+      assert.strictEqual(anchored.length, 0,
+        'Anchored /^hello$/ should NOT match "hello\\r" — $ fails before \\r');
+
+      // But /^hello\r?$/ or /^hello/ work
+      const withOptCr = utils.grepFile(testFile, /^hello\r?$/);
+      assert.strictEqual(withOptCr.length, 1,
+        '/^hello\\r?$/ matches "hello\\r" because \\r? consumes the trailing CR');
+
+      // Contrast: LF-only content works with anchored patterns
+      fs.writeFileSync(testFile, 'hello\nworld\nfoo bar\n');
+      const lfAnchored = utils.grepFile(testFile, /^hello$/);
+      assert.strictEqual(lfAnchored.length, 1,
+        'LF-only content: anchored /^hello$/ matches normally');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // ── Round 116: replaceInFile with null/undefined replacement — JS coerces to string ──
   console.log('\nRound 116: replaceInFile (null/undefined replacement — JS coerces to string "null"/"undefined"):');
   if (test('replaceInFile with null replacement coerces to string "null" via String.replace ToString', () => {

@@ -2111,6 +2111,81 @@ file.ts
       'Should find at least 1 completed item in CRLF-only content');
   })) passed++; else failed++;
 
+  // ── Round 117: getSessionSize boundary values — B/KB/MB formatting thresholds ──
+  console.log('\nRound 117: getSessionSize (B/KB/MB formatting at exact boundary thresholds):');
+  if (test('getSessionSize formats correctly at B→KB boundary (1023→"1023 B", 1024→"1.0 KB") and KB→MB', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r117-size-boundary-'));
+    try {
+      // Zero-byte file
+      const zeroFile = path.join(tmpDir, '2026-01-01-session.tmp');
+      fs.writeFileSync(zeroFile, '');
+      assert.strictEqual(sessionManager.getSessionSize(zeroFile), '0 B',
+        'Empty file should be "0 B"');
+
+      // 1 byte file
+      const oneByteFile = path.join(tmpDir, '2026-01-02-session.tmp');
+      fs.writeFileSync(oneByteFile, 'x');
+      assert.strictEqual(sessionManager.getSessionSize(oneByteFile), '1 B',
+        'Single byte file should be "1 B"');
+
+      // 1023 bytes — last value in B range (size < 1024)
+      const file1023 = path.join(tmpDir, '2026-01-03-session.tmp');
+      fs.writeFileSync(file1023, 'x'.repeat(1023));
+      assert.strictEqual(sessionManager.getSessionSize(file1023), '1023 B',
+        '1023 bytes is still in B range (< 1024)');
+
+      // 1024 bytes — first value in KB range (size >= 1024, < 1024*1024)
+      const file1024 = path.join(tmpDir, '2026-01-04-session.tmp');
+      fs.writeFileSync(file1024, 'x'.repeat(1024));
+      assert.strictEqual(sessionManager.getSessionSize(file1024), '1.0 KB',
+        '1024 bytes = exactly 1.0 KB');
+
+      // 1025 bytes — KB with decimal
+      const file1025 = path.join(tmpDir, '2026-01-05-session.tmp');
+      fs.writeFileSync(file1025, 'x'.repeat(1025));
+      assert.strictEqual(sessionManager.getSessionSize(file1025), '1.0 KB',
+        '1025 bytes rounds to 1.0 KB (1025/1024 = 1.000...)');
+
+      // Non-existent file returns '0 B'
+      assert.strictEqual(sessionManager.getSessionSize('/nonexistent/file.tmp'), '0 B',
+        'Non-existent file should return "0 B"');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // ── Round 117: parseSessionFilename with uppercase short ID — regex rejects [A-Z] ──
+  console.log('\nRound 117: parseSessionFilename (uppercase short ID — regex [a-z0-9] rejects uppercase):');
+  if (test('parseSessionFilename rejects uppercase short IDs because regex uses [a-z0-9] not [a-zA-Z0-9]', () => {
+    // The regex: /^(\d{4}-\d{2}-\d{2})(?:-([a-z0-9]{8,}))?-session\.tmp$/
+    // Note: [a-z0-9] — lowercase only
+
+    // All uppercase — rejected
+    const upper = sessionManager.parseSessionFilename('2026-01-15-ABCDEFGH-session.tmp');
+    assert.strictEqual(upper, null,
+      'All-uppercase ID should be rejected (regex uses [a-z0-9])');
+
+    // Mixed case — rejected
+    const mixed = sessionManager.parseSessionFilename('2026-01-15-AbCdEfGh-session.tmp');
+    assert.strictEqual(mixed, null,
+      'Mixed-case ID should be rejected (uppercase chars not in [a-z0-9])');
+
+    // All lowercase — accepted
+    const lower = sessionManager.parseSessionFilename('2026-01-15-abcdefgh-session.tmp');
+    assert.notStrictEqual(lower, null, 'All-lowercase ID should be accepted');
+    assert.strictEqual(lower.shortId, 'abcdefgh');
+
+    // Uppercase hex-like (common in UUIDs) — rejected
+    const hexUpper = sessionManager.parseSessionFilename('2026-01-15-A1B2C3D4-session.tmp');
+    assert.strictEqual(hexUpper, null,
+      'Uppercase hex ID should be rejected');
+
+    // Lowercase hex — accepted
+    const hexLower = sessionManager.parseSessionFilename('2026-01-15-a1b2c3d4-session.tmp');
+    assert.notStrictEqual(hexLower, null, 'Lowercase hex ID should be accepted');
+    assert.strictEqual(hexLower.shortId, 'a1b2c3d4');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
