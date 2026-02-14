@@ -1469,6 +1469,26 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  // ── Round 105: getExecCommand with object args (bypasses SAFE_ARGS_REGEX, coerced to [object Object]) ──
+  console.log('\nRound 105: getExecCommand (object args — typeof bypass coerces to [object Object]):');
+
+  if (test('getExecCommand with args={} bypasses SAFE_ARGS validation and coerces to "[object Object]"', () => {
+    // package-manager.js line 334: `if (args && typeof args === 'string' && !SAFE_ARGS_REGEX.test(args))`
+    // When args is an object: typeof {} === 'object' (not 'string'), so the
+    // SAFE_ARGS_REGEX check is entirely SKIPPED.
+    // Line 339: `args ? ' ' + args : ''` — object is truthy, so it reaches
+    // string concatenation which calls {}.toString() → "[object Object]"
+    // Final command: "npx prettier [object Object]" — brackets bypass validation.
+    const cmd = pm.getExecCommand('prettier', {});
+    assert.ok(cmd.includes('[object Object]'),
+      'Object args should be coerced to "[object Object]" via implicit toString()');
+    // Verify the SAFE_ARGS regex WOULD reject this string if it were a string arg
+    assert.throws(
+      () => pm.getExecCommand('prettier', '[object Object]'),
+      /unsafe characters/,
+      'Same string as explicit string arg is correctly rejected by SAFE_ARGS_REGEX');
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

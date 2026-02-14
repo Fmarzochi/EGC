@@ -1717,6 +1717,28 @@ file.ts
       'hasContext should be true (context section has actual content)');
   })) passed++; else failed++;
 
+  // ── Round 105: parseSessionMetadata blank-line boundary truncates section items ──
+  console.log('\nRound 105: parseSessionMetadata (blank line inside section — regex stops at \\n\\n):');
+
+  if (test('parseSessionMetadata drops completed items after a blank line within the section', () => {
+    // session-manager.js line 119: regex `(?=###|\n\n|$)` uses lazy [\s\S]*? with
+    // a lookahead that stops at the first \n\n. If completed items are separated
+    // by a blank line, items below the blank line are silently lost.
+    const content = '# Session\n\n### Completed\n- [x] Task A\n\n- [x] Task B\n\n### In Progress\n- [ ] Task C\n';
+    const meta = sessionManager.parseSessionMetadata(content);
+    // The regex captures "- [x] Task A\n" then hits \n\n and stops.
+    // "- [x] Task B" is between the two sections but outside both regex captures.
+    assert.strictEqual(meta.completed.length, 1,
+      'Only Task A captured — blank line terminates the section regex before Task B');
+    assert.strictEqual(meta.completed[0], 'Task A',
+      'First completed item should be Task A');
+    // Task B is lost — it appears after the blank line, outside the captured range
+    assert.strictEqual(meta.inProgress.length, 1,
+      'In Progress should still capture Task C');
+    assert.strictEqual(meta.inProgress[0], 'Task C',
+      'In-progress item should be Task C');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

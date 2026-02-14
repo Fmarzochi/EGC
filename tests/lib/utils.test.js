@@ -1519,6 +1519,35 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 105: grepFile with sticky (y) flag — not stripped, causes stateful .test() ──
+  console.log('\nRound 105: grepFile (sticky y flag — not stripped like g, stateful .test() bug):');
+
+  if (test('grepFile with /pattern/y sticky flag misses lines due to lastIndex state', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r105-grep-sticky-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      fs.writeFileSync(testFile, 'hello world\nhello again\nhello third');
+      // grepFile line 466: `pattern.flags.replace('g', '')` strips g but not y.
+      // With /hello/y (sticky), .test() advances lastIndex after each successful
+      // match. On the next line, .test() starts at lastIndex (not 0), so it fails
+      // unless the match happens at that exact position.
+      const stickyResults = utils.grepFile(testFile, /hello/y);
+      // Without the bug, all 3 lines should match. With sticky flag preserved,
+      // line 1 matches (lastIndex advances to 5), line 2 fails (no 'hello' at
+      // position 5 of "hello again"), line 3 also likely fails.
+      // The g-flag version (properly stripped) should find all 3:
+      const globalResults = utils.grepFile(testFile, /hello/g);
+      assert.strictEqual(globalResults.length, 3,
+        'g-flag regex should find all 3 lines (g is stripped, stateless)');
+      // Sticky flag causes fewer matches — demonstrating the bug
+      assert.ok(stickyResults.length < 3,
+        `Sticky y flag causes stateful .test() — found ${stickyResults.length}/3 lines ` +
+        '(y flag not stripped like g, so lastIndex advances between lines)');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
