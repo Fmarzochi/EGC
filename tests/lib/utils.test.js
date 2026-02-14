@@ -1799,6 +1799,40 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 115: countInFile with empty string pattern — matches at every position boundary ──
+  console.log('\nRound 115: countInFile (empty string pattern — matches at every zero-width position):');
+  if (test('countInFile with empty string pattern returns content.length + 1 (matches between every char)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r115-empty-pattern-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // "hello" is 5 chars → 6 zero-width positions: |h|e|l|l|o|
+      fs.writeFileSync(testFile, 'hello');
+      const count = utils.countInFile(testFile, '');
+      assert.strictEqual(count, 6,
+        'Empty string pattern creates /(?:)/g which matches at 6 position boundaries in "hello"');
+
+      // Empty file → "" has 1 zero-width position (the empty string itself)
+      fs.writeFileSync(testFile, '');
+      const emptyCount = utils.countInFile(testFile, '');
+      assert.strictEqual(emptyCount, 1,
+        'Empty file still has 1 zero-width position boundary');
+
+      // Single char → 2 positions: |a|
+      fs.writeFileSync(testFile, 'a');
+      const singleCount = utils.countInFile(testFile, '');
+      assert.strictEqual(singleCount, 2,
+        'Single character file has 2 position boundaries');
+
+      // Newlines count as characters too
+      fs.writeFileSync(testFile, 'a\nb');
+      const newlineCount = utils.countInFile(testFile, '');
+      assert.strictEqual(newlineCount, 4,
+        '"a\\nb" is 3 chars → 4 position boundaries');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

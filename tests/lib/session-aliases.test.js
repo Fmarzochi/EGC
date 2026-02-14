@@ -1483,6 +1483,40 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  // ── Round 115: updateAliasTitle with empty string — stored as null via || but returned as "" ──
+  console.log('\nRound 115: updateAliasTitle (empty string title — stored null, returned ""):');
+  if (test('updateAliasTitle with empty string stores null but returns empty string (|| coercion mismatch)', () => {
+    resetAliases();
+
+    // Create alias with a title
+    aliases.setAlias('r115-alias', '/path/to/session', 'Original Title');
+    const before = aliases.resolveAlias('r115-alias');
+    assert.strictEqual(before.title, 'Original Title', 'Baseline: title should be set');
+
+    // Update title with empty string
+    // Line 383: typeof "" === 'string' → passes validation
+    // Line 393: "" || null → null (empty string is falsy in JS)
+    // Line 400: returns { title: "" } (original parameter, not stored value)
+    const result = aliases.updateAliasTitle('r115-alias', '');
+    assert.strictEqual(result.success, true, 'Should succeed (empty string passes validation)');
+    assert.strictEqual(result.title, '', 'Return value reflects the input parameter (empty string)');
+
+    // But what's actually stored?
+    const after = aliases.resolveAlias('r115-alias');
+    assert.strictEqual(after.title, null,
+      'Stored title should be null because "" || null evaluates to null');
+
+    // Contrast: non-empty string is stored as-is
+    aliases.updateAliasTitle('r115-alias', 'New Title');
+    const withTitle = aliases.resolveAlias('r115-alias');
+    assert.strictEqual(withTitle.title, 'New Title', 'Non-empty string stored as-is');
+
+    // null explicitly clears title
+    aliases.updateAliasTitle('r115-alias', null);
+    const cleared = aliases.resolveAlias('r115-alias');
+    assert.strictEqual(cleared.title, null, 'null clears title');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -2055,6 +2055,62 @@ file.ts
       'Trailing whitespace should be trimmed');
   })) passed++; else failed++;
 
+  // ── Round 115: parseSessionMetadata with CRLF line endings — section boundaries differ ──
+  console.log('\nRound 115: parseSessionMetadata (CRLF line endings — \\r\\n vs \\n in section regexes):');
+  if (test('parseSessionMetadata handles CRLF content — title trimmed, sections may over-capture', () => {
+    // Title regex /^#\s+(.+)$/m: . matches \r, trim() removes it
+    const crlfTitle = '# My Session\r\n\r\n**Date:** 2026-01-15';
+    const titleMeta = sessionManager.parseSessionMetadata(crlfTitle);
+    assert.strictEqual(titleMeta.title, 'My Session',
+      'Title should be trimmed (\\r removed by .trim())');
+    assert.strictEqual(titleMeta.date, '2026-01-15',
+      'Date extraction unaffected by CRLF');
+
+    // Completed section with CRLF: regex ### Completed\s*\n works because \s* matches \r
+    // But the boundary (?=###|\n\n|$) — \n\n won't match \r\n\r\n
+    const crlfSections = [
+      '# Session\r\n',
+      '\r\n',
+      '### Completed\r\n',
+      '- [x] Task A\r\n',
+      '- [x] Task B\r\n',
+      '\r\n',
+      '### In Progress\r\n',
+      '- [ ] Task C\r\n'
+    ].join('');
+
+    const sectionMeta = sessionManager.parseSessionMetadata(crlfSections);
+
+    // \s* in "### Completed\s*\n" matches the \r before \n, so section header matches
+    assert.ok(sectionMeta.completed.length >= 2,
+      'Should find at least 2 completed items (\\s* consumes \\r before \\n)');
+    assert.ok(sectionMeta.completed.includes('Task A'), 'Should find Task A');
+    assert.ok(sectionMeta.completed.includes('Task B'), 'Should find Task B');
+
+    // In Progress section: \n\n boundary fails on \r\n\r\n, so the lazy [\s\S]*?
+    // stops at ### instead — this still works because ### is present
+    assert.ok(sectionMeta.inProgress.length >= 1,
+      'Should find at least 1 in-progress item');
+    assert.ok(sectionMeta.inProgress.includes('Task C'), 'Should find Task C');
+
+    // Edge case: CRLF content with NO section headers after Completed —
+    // \n\n boundary fails, so [\s\S]*? falls through to $ (end of string)
+    const crlfNoNextSection = [
+      '# Session\r\n',
+      '\r\n',
+      '### Completed\r\n',
+      '- [x] Only task\r\n',
+      '\r\n',
+      'Some trailing text\r\n'
+    ].join('');
+
+    const noNextMeta = sessionManager.parseSessionMetadata(crlfNoNextSection);
+    // Without a ### boundary, the \n\n lookahead fails on \r\n\r\n,
+    // so [\s\S]*? extends to $ and captures everything including trailing text
+    assert.ok(noNextMeta.completed.length >= 1,
+      'Should find at least 1 completed item in CRLF-only content');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
