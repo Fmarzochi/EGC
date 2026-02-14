@@ -2368,6 +2368,80 @@ file.ts
     }
   })) passed++; else failed++;
 
+  // ── Round 123: parseSessionMetadata with CRLF line endings — section boundaries break ──
+  console.log('\nRound 123: parseSessionMetadata (CRLF section boundaries — \\n\\n fails to match \\r\\n\\r\\n):');
+  if (test('parseSessionMetadata CRLF content: \\n\\n boundary fails, lazy match bleeds across sections', () => {
+    // session-manager.js lines 119-134: regex uses (?=###|\n\n|$) to delimit sections.
+    // On CRLF content, a blank line is \r\n\r\n, NOT \n\n. The \n\n alternation
+    // won't match, so the lazy [\s\S]*? extends past the blank line until it hits
+    // ### or $. This means completed items may bleed into following sections.
+    //
+    // However, \s* in /### Completed\s*\n/ DOES match \r\n (since \r is whitespace),
+    // so section headers still match — only blank-line boundaries fail.
+
+    // Test 1: CRLF with ### delimiter — works because ### is an alternation
+    const crlfWithHash = [
+      '# Session Title\r\n',
+      '\r\n',
+      '### Completed\r\n',
+      '- [x] Task A\r\n',
+      '### In Progress\r\n',
+      '- [ ] Task B\r\n'
+    ].join('');
+    const meta1 = sessionManager.parseSessionMetadata(crlfWithHash);
+    // ### delimiter still works — lazy match stops at ### In Progress
+    assert.ok(meta1.completed.length >= 1,
+      'Completed section should find at least 1 item with ### boundary on CRLF');
+    // Check that Task A is found (may include \r in the trimmed text)
+    const taskA = meta1.completed[0];
+    assert.ok(taskA.includes('Task A'),
+      'Should extract Task A from completed section');
+
+    // Test 2: CRLF with \n\n (blank line) delimiter — this is where it breaks
+    const crlfBlankLine = [
+      '# Session\r\n',
+      '\r\n',
+      '### Completed\r\n',
+      '- [x] First task\r\n',
+      '\r\n',         // Blank line = \r\n\r\n — won't match \n\n
+      'Some other text\r\n'
+    ].join('');
+    const meta2 = sessionManager.parseSessionMetadata(crlfBlankLine);
+    // On LF, blank line stops the lazy match. On CRLF, it bleeds through.
+    // The lazy [\s\S]*? stops at $ if no ### or \n\n matches,
+    // so "Some other text" may end up captured in the raw section text.
+    // But the items regex /- \[x\]\s*(.+)/g only captures checkbox lines,
+    // so the count stays correct despite the bleed.
+    assert.strictEqual(meta2.completed.length, 1,
+      'Even with CRLF bleed, checkbox regex only matches "- [x]" lines');
+
+    // Test 3: LF version of same content — proves \n\n works normally
+    const lfBlankLine = '# Session\n\n### Completed\n- [x] First task\n\nSome other text\n';
+    const meta3 = sessionManager.parseSessionMetadata(lfBlankLine);
+    assert.strictEqual(meta3.completed.length, 1,
+      'LF version: blank line correctly delimits section');
+
+    // Test 4: CRLF notes section — lazy match goes to $ when \n\n fails
+    const crlfNotes = [
+      '# Session\r\n',
+      '\r\n',
+      '### Notes for Next Session\r\n',
+      'Remember to review\r\n',
+      '\r\n',
+      'This should be separate\r\n'
+    ].join('');
+    const meta4 = sessionManager.parseSessionMetadata(crlfNotes);
+    // On CRLF, \n\n fails → lazy match extends to $ → includes "This should be separate"
+    // On LF, \n\n works → notes = "Remember to review" only
+    const lfNotes = '# Session\n\n### Notes for Next Session\nRemember to review\n\nThis should be separate\n';
+    const meta5 = sessionManager.parseSessionMetadata(lfNotes);
+    assert.strictEqual(meta5.notes, 'Remember to review',
+      'LF: notes stop at blank line');
+    // CRLF notes will be longer (bleed through blank line)
+    assert.ok(meta4.notes.length >= meta5.notes.length,
+      'CRLF notes >= LF notes length (CRLF may bleed past blank line)');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

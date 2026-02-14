@@ -2110,6 +2110,85 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 123: countInFile with overlapping patterns — match(g) is non-overlapping ──
+  console.log('\nRound 123: countInFile (overlapping patterns — String.match(/g/) is non-overlapping):');
+  if (test('countInFile counts non-overlapping matches only — "aaa" with /aa/g returns 1 not 2', () => {
+    // utils.js line 449: `content.match(regex)` with 'g' flag returns an array of
+    // non-overlapping matches. After matching "aa" starting at index 0, the engine
+    // advances to index 2, where only one "a" remains — no second match.
+    // This is standard JS regex behavior but can surprise users expecting overlap.
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r123-overlap-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // "aaa" — a human might count 2 occurrences of "aa" (at 0,1) but match(g) finds 1
+      fs.writeFileSync(testFile, 'aaa');
+      const count1 = utils.countInFile(testFile, 'aa');
+      assert.strictEqual(count1, 1,
+        '"aaa".match(/aa/g) returns ["aa"] — only 1 non-overlapping match');
+
+      // "aaaa" — 2 non-overlapping matches (at 0,2), not 3 overlapping (at 0,1,2)
+      fs.writeFileSync(testFile, 'aaaa');
+      const count2 = utils.countInFile(testFile, 'aa');
+      assert.strictEqual(count2, 2,
+        '"aaaa".match(/aa/g) returns ["aa","aa"] — 2 non-overlapping, not 3 overlapping');
+
+      // "abab" with /aba/g — only 1 match (at 0), not 2 (overlapping at 0,2)
+      fs.writeFileSync(testFile, 'ababab');
+      const count3 = utils.countInFile(testFile, 'aba');
+      assert.strictEqual(count3, 1,
+        '"ababab".match(/aba/g) returns 1 — after match at 0, next try starts at 3');
+
+      // RegExp object behaves the same
+      fs.writeFileSync(testFile, 'aaa');
+      const count4 = utils.countInFile(testFile, /aa/);
+      assert.strictEqual(count4, 1,
+        'RegExp /aa/ also gives 1 non-overlapping match on "aaa" (g flag auto-added)');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // ── Round 123: replaceInFile with $& and $$ substitution tokens in replacement string ──
+  console.log('\nRound 123: replaceInFile ($& and $$ substitution tokens in replacement):');
+  if (test('replaceInFile replacement string interprets $& as matched text and $$ as literal $', () => {
+    // JS String.replace() interprets special patterns in the replacement string:
+    //   $&  → inserts the entire matched substring
+    //   $$  → inserts a literal "$" character
+    //   $'  → inserts the portion after the matched substring
+    //   $`  → inserts the portion before the matched substring
+    // This is different from capture groups ($1, $2) already tested in Round 91.
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r123-dollar-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // $& — inserts the matched text itself
+      fs.writeFileSync(testFile, 'hello world');
+      utils.replaceInFile(testFile, 'world', '[$&]');
+      assert.strictEqual(utils.readFile(testFile), 'hello [world]',
+        '$& in replacement inserts the matched text "world" → "[world]"');
+
+      // $$ — inserts a literal $ sign
+      fs.writeFileSync(testFile, 'price is 100');
+      utils.replaceInFile(testFile, '100', '$$100');
+      assert.strictEqual(utils.readFile(testFile), 'price is $100',
+        '$$ becomes literal $ → "100" replaced with "$100"');
+
+      // $& with options.all — applies to each match
+      fs.writeFileSync(testFile, 'foo bar foo');
+      utils.replaceInFile(testFile, 'foo', '($&)', { all: true });
+      assert.strictEqual(utils.readFile(testFile), '(foo) bar (foo)',
+        '$& in replaceAll inserts each respective matched text');
+
+      // Combined $$ and $& in same replacement (3 $ + &)
+      fs.writeFileSync(testFile, 'item costs 50');
+      utils.replaceInFile(testFile, '50', '$$$&');
+      // In replacement string: $$ → "$" then $& → "50" so result is "$50"
+      assert.strictEqual(utils.readFile(testFile), 'item costs $50',
+        '$$$& (3 dollars + ampersand) means literal $ followed by matched text → "$50"');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
