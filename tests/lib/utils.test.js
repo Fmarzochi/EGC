@@ -1933,6 +1933,47 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  // ── Round 118: writeFile with non-string content — TypeError propagates (no try/catch) ──
+  console.log('\nRound 118: writeFile (non-string content — TypeError propagates uncaught):');
+  if (test('writeFile with null/number content throws TypeError because fs.writeFileSync rejects non-string data', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r118-writefile-type-'));
+    const testFile = path.join(tmpDir, 'test.txt');
+    try {
+      // null content → TypeError from fs.writeFileSync (data must be string/Buffer/etc.)
+      assert.throws(
+        () => utils.writeFile(testFile, null),
+        (err) => err instanceof TypeError,
+        'writeFile(path, null) should throw TypeError (no try/catch in writeFile)'
+      );
+
+      // undefined content → TypeError
+      assert.throws(
+        () => utils.writeFile(testFile, undefined),
+        (err) => err instanceof TypeError,
+        'writeFile(path, undefined) should throw TypeError'
+      );
+
+      // number content → TypeError (numbers not valid for fs.writeFileSync)
+      assert.throws(
+        () => utils.writeFile(testFile, 42),
+        (err) => err instanceof TypeError,
+        'writeFile(path, 42) should throw TypeError (number not a valid data type)'
+      );
+
+      // Contrast: string content works fine
+      utils.writeFile(testFile, 'valid string content');
+      assert.strictEqual(utils.readFile(testFile), 'valid string content',
+        'String content should write and read back correctly');
+
+      // Empty string is valid
+      utils.writeFile(testFile, '');
+      assert.strictEqual(utils.readFile(testFile), '',
+        'Empty string should write correctly');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

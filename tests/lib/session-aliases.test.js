@@ -1563,6 +1563,60 @@ function runTests() {
       'Extra field should survive save/load round-trip');
   })) passed++; else failed++;
 
+  // ── Round 118: renameAlias to the same name — "already exists" because self-check ──
+  console.log('\nRound 118: renameAlias (same name — "already exists" because data.aliases[newAlias] is truthy):');
+  if (test('renameAlias to the same name returns "already exists" error (no self-rename short-circuit)', () => {
+    resetAliases();
+    aliases.setAlias('same-name', '/path/to/session');
+
+    // Rename 'same-name' → 'same-name'
+    // Line 333: data.aliases[newAlias] → truthy (the alias exists under that name)
+    // Returns error before checking if oldAlias === newAlias
+    const result = aliases.renameAlias('same-name', 'same-name');
+    assert.strictEqual(result.success, false, 'Should fail');
+    assert.ok(result.error.includes('already exists'),
+      'Error should say "already exists" (not "same name" or a no-op success)');
+
+    // Verify alias is unchanged
+    const resolved = aliases.resolveAlias('same-name');
+    assert.ok(resolved, 'Original alias should still exist');
+    assert.strictEqual(resolved.sessionPath, '/path/to/session');
+  })) passed++; else failed++;
+
+  // ── Round 118: setAlias reserved names — case-insensitive rejection ──
+  console.log('\nRound 118: setAlias (reserved names — case-insensitive rejection):');
+  if (test('setAlias rejects all reserved names case-insensitively (list, help, remove, delete, create, set)', () => {
+    resetAliases();
+
+    // All reserved names in lowercase
+    const reserved = ['list', 'help', 'remove', 'delete', 'create', 'set'];
+    for (const name of reserved) {
+      const result = aliases.setAlias(name, '/path/to/session');
+      assert.strictEqual(result.success, false,
+        `'${name}' should be rejected as reserved`);
+      assert.ok(result.error.includes('reserved'),
+        `Error for '${name}' should mention "reserved"`);
+    }
+
+    // Case-insensitive: uppercase variants also rejected
+    const upperResult = aliases.setAlias('LIST', '/path/to/session');
+    assert.strictEqual(upperResult.success, false,
+      '"LIST" (uppercase) should be rejected (toLowerCase check)');
+
+    const mixedResult = aliases.setAlias('Help', '/path/to/session');
+    assert.strictEqual(mixedResult.success, false,
+      '"Help" (mixed case) should be rejected');
+
+    const allCapsResult = aliases.setAlias('DELETE', '/path/to/session');
+    assert.strictEqual(allCapsResult.success, false,
+      '"DELETE" (all caps) should be rejected');
+
+    // Non-reserved names work fine
+    const validResult = aliases.setAlias('my-session', '/path/to/session');
+    assert.strictEqual(validResult.success, true,
+      'Non-reserved name should succeed');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
