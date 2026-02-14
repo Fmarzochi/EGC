@@ -1675,6 +1675,33 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 110: findFiles root directory unreadable — silent empty return (not throw) ──
+  console.log('\nRound 110: findFiles (root directory unreadable — EACCES on readdirSync caught silently):');
+  if (test('findFiles returns empty array when root directory exists but is unreadable', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r110-unreadable-root-'));
+    const unreadableDir = path.join(tmpDir, 'no-read');
+    fs.mkdirSync(unreadableDir);
+    fs.writeFileSync(path.join(unreadableDir, 'secret.txt'), 'hidden');
+    try {
+      fs.chmodSync(unreadableDir, 0o000);
+      // Verify dir exists but is unreadable
+      assert.ok(fs.existsSync(unreadableDir), 'Directory should exist');
+      // findFiles should NOT throw — catch block at line 188 handles EACCES
+      const results = utils.findFiles(unreadableDir, '*');
+      assert.ok(Array.isArray(results), 'Should return an array');
+      assert.strictEqual(results.length, 0,
+        'Should return empty array when root dir is unreadable (not throw)');
+      // Also test with recursive flag
+      const recursiveResults = utils.findFiles(unreadableDir, '*', { recursive: true });
+      assert.strictEqual(recursiveResults.length, 0,
+        'Recursive search on unreadable root should also return empty array');
+    } finally {
+      // Restore permissions before cleanup
+      try { fs.chmodSync(unreadableDir, 0o755); } catch {}
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

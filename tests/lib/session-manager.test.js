@@ -1850,6 +1850,47 @@ file.ts
     }
   })) passed++; else failed++;
 
+  // ── Round 110: parseSessionFilename year 0000 — JS Date maps year 0 to 1900 ──
+  console.log('\nRound 110: parseSessionFilename (year 0000 — Date constructor maps 0→1900):');
+  if (test('parseSessionFilename with year 0000 produces datetime in 1900 due to JS Date legacy mapping', () => {
+    // JavaScript's multi-arg Date constructor treats years 0-99 as 1900-1999
+    // So new Date(0, 0, 1) → January 1, 1900 (not year 0000)
+    const result = sessionManager.parseSessionFilename('0000-01-01-abcd1234-session.tmp');
+    assert.notStrictEqual(result, null, 'Should parse successfully (regex \\d{4} matches 0000)');
+    assert.strictEqual(result.date, '0000-01-01', 'Date string should be "0000-01-01"');
+    assert.strictEqual(result.shortId, 'abcd1234');
+    // The key quirk: datetime is year 1900, not 0000
+    assert.strictEqual(result.datetime.getFullYear(), 1900,
+      'JS Date maps year 0 to 1900 in multi-arg constructor');
+    // Year 99 maps to 1999
+    const result99 = sessionManager.parseSessionFilename('0099-06-15-testid01-session.tmp');
+    assert.notStrictEqual(result99, null, 'Year 0099 should also parse');
+    assert.strictEqual(result99.datetime.getFullYear(), 1999,
+      'JS Date maps year 99 to 1999');
+    // Year 100 does NOT get the 1900 mapping — it stays as year 100
+    const result100 = sessionManager.parseSessionFilename('0100-03-10-validid1-session.tmp');
+    assert.notStrictEqual(result100, null, 'Year 0100 should also parse');
+    assert.strictEqual(result100.datetime.getFullYear(), 100,
+      'Year 100+ is not affected by the 0-99 → 1900-1999 mapping');
+  })) passed++; else failed++;
+
+  // ── Round 110: parseSessionFilename rejects uppercase IDs (regex is [a-z0-9]) ──
+  console.log('\nRound 110: parseSessionFilename (uppercase ID — regex [a-z0-9]{8,} rejects [A-Z]):');
+  if (test('parseSessionFilename rejects filenames with uppercase characters in short ID', () => {
+    // SESSION_FILENAME_REGEX uses [a-z0-9]{8,} — strictly lowercase
+    const upperResult = sessionManager.parseSessionFilename('2026-01-15-ABCD1234-session.tmp');
+    assert.strictEqual(upperResult, null,
+      'All-uppercase ID should be rejected by [a-z0-9]{8,}');
+    const mixedResult = sessionManager.parseSessionFilename('2026-01-15-AbCd1234-session.tmp');
+    assert.strictEqual(mixedResult, null,
+      'Mixed-case ID should be rejected by [a-z0-9]{8,}');
+    // Confirm lowercase is accepted
+    const lowerResult = sessionManager.parseSessionFilename('2026-01-15-abcd1234-session.tmp');
+    assert.notStrictEqual(lowerResult, null,
+      'All-lowercase ID should be accepted');
+    assert.strictEqual(lowerResult.shortId, 'abcd1234');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
