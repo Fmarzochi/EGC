@@ -2324,6 +2324,50 @@ file.ts
       'Loose [\\d:]+ regex captures any digits-and-colons combination');
   })) passed++; else failed++;
 
+  // ── Round 122: getSessionById old format (no-id) — noIdMatch path ──
+  console.log('\nRound 122: getSessionById (old format no-id — date-only filename match):');
+  if (test('getSessionById matches old format YYYY-MM-DD-session.tmp via noIdMatch path', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r122-old-format-'));
+    const origHome = process.env.HOME;
+    const origDir = process.env.CLAUDE_DIR;
+    try {
+      // Set up isolated environment
+      const claudeDir = path.join(tmpDir, '.claude');
+      const sessionsDir = path.join(claudeDir, 'sessions');
+      fs.mkdirSync(sessionsDir, { recursive: true });
+      process.env.HOME = tmpDir;
+      delete process.env.CLAUDE_DIR;
+
+      // Clear require cache for fresh module with new HOME
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      const freshSM = require('../../scripts/lib/session-manager');
+
+      // Create old-format session file (no short ID)
+      const oldFile = path.join(sessionsDir, '2026-01-15-session.tmp');
+      fs.writeFileSync(oldFile, '# Old Format Session\n\n**Date:** 2026-01-15\n');
+
+      // Search by date — triggers noIdMatch path
+      const result = freshSM.getSessionById('2026-01-15');
+      assert.ok(result, 'Should find old-format session by date string');
+      assert.strictEqual(result.shortId, 'no-id',
+        'Old format should have shortId "no-id"');
+      assert.strictEqual(result.date, '2026-01-15');
+      assert.strictEqual(result.filename, '2026-01-15-session.tmp');
+
+      // Search by non-matching date — should not find
+      const noResult = freshSM.getSessionById('2026-01-16');
+      assert.strictEqual(noResult, null,
+        'Non-matching date should return null');
+    } finally {
+      process.env.HOME = origHome;
+      if (origDir) process.env.CLAUDE_DIR = origDir;
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

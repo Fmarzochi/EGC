@@ -2086,6 +2086,30 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 122: findFiles dot extension escaping — *.txt must not match filetxt ──
+  console.log('\nRound 122: findFiles (dot escaping — *.txt matches file.txt but not filetxt):');
+  if (test('findFiles escapes dots in glob pattern so *.txt only matches literal .txt extension', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r122-dot-escape-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'a');
+      fs.writeFileSync(path.join(tmpDir, 'filetxt'), 'b');
+      fs.writeFileSync(path.join(tmpDir, 'file.txtx'), 'c');
+      fs.writeFileSync(path.join(tmpDir, 'notes.txt'), 'd');
+
+      const results = utils.findFiles(tmpDir, '*.txt');
+      const names = results.map(r => path.basename(r.path)).sort();
+
+      assert.ok(names.includes('file.txt'), 'Should match file.txt');
+      assert.ok(names.includes('notes.txt'), 'Should match notes.txt');
+      assert.ok(!names.includes('filetxt'),
+        'Should NOT match filetxt (dot is escaped to literal, not wildcard)');
+      assert.ok(!names.includes('file.txtx'),
+        'Should NOT match file.txtx ($ anchor requires exact end)');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // Summary
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);

@@ -1713,6 +1713,45 @@ function runTests() {
     assert.strictEqual(validResult.success, true, 'Valid string path should succeed');
   })) passed++; else failed++;
 
+  // ── Round 122: listAliases limit edge cases — limit=0, negative, NaN bypassed (JS falsy) ──
+  console.log('\nRound 122: listAliases (limit edge cases — 0/negative/NaN are falsy, return all):');
+  if (test('listAliases limit=0 returns all aliases because 0 is falsy in JS (no slicing)', () => {
+    resetAliases();
+    aliases.setAlias('alias-a', '/path/a');
+    aliases.setAlias('alias-b', '/path/b');
+    aliases.setAlias('alias-c', '/path/c');
+
+    // limit=0: 0 is falsy → `if (0 && 0 > 0)` short-circuits → no slicing → ALL returned
+    const zeroResult = aliases.listAliases({ limit: 0 });
+    assert.strictEqual(zeroResult.length, 3,
+      'limit=0 should return ALL aliases (0 is falsy in JS)');
+
+    // limit=-1: -1 is truthy but -1 > 0 is false → no slicing → ALL returned
+    const negResult = aliases.listAliases({ limit: -1 });
+    assert.strictEqual(negResult.length, 3,
+      'limit=-1 should return ALL aliases (-1 > 0 is false)');
+
+    // limit=NaN: NaN is falsy → no slicing → ALL returned
+    const nanResult = aliases.listAliases({ limit: NaN });
+    assert.strictEqual(nanResult.length, 3,
+      'limit=NaN should return ALL aliases (NaN is falsy)');
+
+    // limit=1: normal case — returns exactly 1
+    const oneResult = aliases.listAliases({ limit: 1 });
+    assert.strictEqual(oneResult.length, 1,
+      'limit=1 should return exactly 1 alias');
+
+    // limit=2: returns exactly 2
+    const twoResult = aliases.listAliases({ limit: 2 });
+    assert.strictEqual(twoResult.length, 2,
+      'limit=2 should return exactly 2 aliases');
+
+    // limit=100 (more than total): returns all 3
+    const bigResult = aliases.listAliases({ limit: 100 });
+    assert.strictEqual(bigResult.length, 3,
+      'limit > total should return all aliases');
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
