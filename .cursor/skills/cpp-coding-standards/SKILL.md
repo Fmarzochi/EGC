@@ -689,7 +689,7 @@ constexpr auto lookup_table = [] {
 
 // Per.19: Prefer contiguous data for cache-friendliness
 std::vector<Point> points;           // GOOD: contiguous
-std::vector<std::unique_ptr<Point>>; // BAD: pointer chasing
+std::vector<std::unique_ptr<Point>> indirect_points; // BAD: pointer chasing
 ```
 
 ### Anti-Patterns
