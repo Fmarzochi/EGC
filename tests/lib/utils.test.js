@@ -1629,6 +1629,29 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // ── Round 109: appendFile creating new file in non-existent directory (ensureDir + appendFileSync) ──
+  console.log('\nRound 109: appendFile (new file creation — ensureDir creates parent, appendFileSync creates file):');
+  if (test('appendFile creates parent directory and new file when neither exist', () => {
+    const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r109-append-new-'));
+    const nestedPath = path.join(tmpDir, 'deep', 'nested', 'dir', 'newfile.txt');
+    try {
+      // Parent directory 'deep/nested/dir' does not exist yet
+      assert.ok(!fs.existsSync(path.join(tmpDir, 'deep')),
+        'Parent "deep" should not exist before appendFile');
+      utils.appendFile(nestedPath, 'first line\n');
+      assert.ok(fs.existsSync(nestedPath),
+        'File should be created by appendFile');
+      assert.strictEqual(utils.readFile(nestedPath), 'first line\n',
+        'Content should match what was appended');
+      // Append again to verify it adds to existing file
+      utils.appendFile(nestedPath, 'second line\n');
+      assert.strictEqual(utils.readFile(nestedPath), 'first line\nsecond line\n',
+        'Second append should add to existing file');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // ── Round 108: grepFile with Unicode/emoji content — UTF-16 string matching on split lines ──
   console.log('\nRound 108: grepFile (Unicode/emoji — regex matching on UTF-16 split lines):');
   if (test('grepFile finds Unicode emoji patterns across lines', () => {

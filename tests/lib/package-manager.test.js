@@ -1489,6 +1489,29 @@ function runTests() {
       'Same string as explicit string arg is correctly rejected by SAFE_ARGS_REGEX');
   })) passed++; else failed++;
 
+  // ── Round 109: getExecCommand with ../ path traversal in binary — SAFE_NAME_REGEX allows it ──
+  console.log('\nRound 109: getExecCommand (path traversal in binary — SAFE_NAME_REGEX permits ../ in binary name):');
+  if (test('getExecCommand accepts ../../../etc/passwd as binary because SAFE_NAME_REGEX allows ../', () => {
+    const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
+    try {
+      process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
+      // SAFE_NAME_REGEX = /^[@a-zA-Z0-9_.\/-]+$/ individually allows . and /
+      const cmd = pm.getExecCommand('../../../etc/passwd');
+      assert.strictEqual(cmd, 'npx ../../../etc/passwd',
+        'Path traversal in binary passes SAFE_NAME_REGEX because . and / are individually allowed');
+      // Also verify scoped path traversal
+      const cmd2 = pm.getExecCommand('@scope/../../evil');
+      assert.strictEqual(cmd2, 'npx @scope/../../evil',
+        'Scoped path traversal also passes the regex');
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PACKAGE_MANAGER;
+      }
+    }
+  })) passed++; else failed++;
+
   // ── Round 108: getRunCommand with path traversal — SAFE_NAME_REGEX allows ../ sequences ──
   console.log('\nRound 108: getRunCommand (path traversal — SAFE_NAME_REGEX permits ../ via allowed / and . chars):');
   if (test('getRunCommand accepts @scope/../../evil because SAFE_NAME_REGEX allows ../', () => {

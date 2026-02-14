@@ -1785,6 +1785,41 @@ file.ts
     }
   })) passed++; else failed++;
 
+  // ── Round 109: getAllSessions skips .tmp files that don't match session filename format ──
+  console.log('\nRound 109: getAllSessions (non-session .tmp files — parseSessionFilename returns null → skip):');
+  if (test('getAllSessions ignores .tmp files with non-matching filenames', () => {
+    const isoHome = path.join(os.tmpdir(), `ecc-r109-nonsession-${Date.now()}`);
+    const isoSessionsDir = path.join(isoHome, '.claude', 'sessions');
+    fs.mkdirSync(isoSessionsDir, { recursive: true });
+    // Create one valid session file
+    const validName = '2026-03-01-abcd1234-session.tmp';
+    fs.writeFileSync(path.join(isoSessionsDir, validName), '# Valid Session');
+    // Create non-session .tmp files that don't match the expected pattern
+    fs.writeFileSync(path.join(isoSessionsDir, 'notes.tmp'), 'personal notes');
+    fs.writeFileSync(path.join(isoSessionsDir, 'scratch.tmp'), 'scratch data');
+    fs.writeFileSync(path.join(isoSessionsDir, 'backup-2026.tmp'), 'backup');
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+    process.env.HOME = isoHome;
+    process.env.USERPROFILE = isoHome;
+    try {
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      const freshManager = require('../../scripts/lib/session-manager');
+      const result = freshManager.getAllSessions({ limit: 100 });
+      assert.strictEqual(result.total, 1,
+        'Should find only 1 valid session (non-matching .tmp files skipped via !metadata continue)');
+      assert.strictEqual(result.sessions[0].shortId, 'abcd1234',
+        'The one valid session should have correct shortId');
+    } finally {
+      process.env.HOME = origHome;
+      process.env.USERPROFILE = origUserProfile;
+      delete require.cache[require.resolve('../../scripts/lib/session-manager')];
+      delete require.cache[require.resolve('../../scripts/lib/utils')];
+      fs.rmSync(isoHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   // ── Round 108: getSessionSize exact boundary at 1024 bytes — B→KB transition ──
   console.log('\nRound 108: getSessionSize (exact 1024-byte boundary — < means 1024 is KB, 1023 is B):');
   if (test('getSessionSize returns KB at exactly 1024 bytes and B at 1023', () => {
