@@ -454,6 +454,7 @@ Duplicate hooks file detected: ./hooks/hooks.json resolves to already-loaded fil
 > git clone https://github.com/affaan-m/everything-claude-code.git
 >
 > # オプション A：ユーザーレベルルール（すべてのプロジェクトに適用）
+> mkdir -p ~/.claude/rules
 > cp -r everything-claude-code/rules/common/* ~/.claude/rules/
 > cp -r everything-claude-code/rules/typescript/* ~/.claude/rules/   # スタックを選択
 > cp -r everything-claude-code/rules/python/* ~/.claude/rules/

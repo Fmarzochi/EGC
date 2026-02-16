@@ -456,6 +456,7 @@ Duplicate hooks file detected: ./hooks/hooks.json resolves to already-loaded fil
 > git clone https://github.com/affaan-m/everything-claude-code.git
 >
 > # 选项 A：用户级规则（适用于所有项目）
+> mkdir -p ~/.claude/rules
 > cp -r everything-claude-code/rules/common/* ~/.claude/rules/
 > cp -r everything-claude-code/rules/typescript/* ~/.claude/rules/   # 选择您的技术栈
 > cp -r everything-claude-code/rules/python/* ~/.claude/rules/
