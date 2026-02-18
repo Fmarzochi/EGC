@@ -787,7 +787,7 @@ function runTests() {
     // Verify the file exists
     const aliasesPath = path.join(tmpHome, '.claude', 'session-aliases.json');
     assert.ok(fs.existsSync(aliasesPath), 'Aliases file should exist');
-    const contentBefore = fs.readFileSync(aliasesPath, 'utf8');
+    const _contentBefore = fs.readFileSync(aliasesPath, 'utf8');
 
     // Attempt to save circular data — will fail
     const circular = { aliases: {}, metadata: {} };

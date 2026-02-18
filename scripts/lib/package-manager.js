@@ -282,7 +282,7 @@ function setProjectPackageManager(pmName, projectDir = process.cwd()) {
 
 // Allowed characters in script/binary names: alphanumeric, dash, underscore, dot, slash, @
 // This prevents shell metacharacter injection while allowing scoped packages (e.g., @scope/pkg)
-const SAFE_NAME_REGEX = /^[\[@a-zA-Z0-9_./-]+$/;
+const SAFE_NAME_REGEX = /^[@a-zA-Z0-9_./-]+$/;
 
 /**
  * Get the command to run a script

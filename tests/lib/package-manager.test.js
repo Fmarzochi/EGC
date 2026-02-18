@@ -18,9 +18,9 @@ function test(name, fn) {
     fn();
     console.log(` ✓ ${name}`);
     return true;
-  } catch (err) {
+  } catch (_err) {
     console.log(` ✗ ${name}`);
-    console.log(` Error: ${err.message}`);
+    console.log(` Error: ${_err.message}`);
     return false;
   }
 }
@@ -39,9 +39,7 @@ function cleanupTestDir(testDir) {
 
 // Test suite
 function runTests() {
-  console.log('
-=== Testing package-manager.js ===
-');
+  console.log('\n=== Testing package-manager.js ===\n');
 
   let passed = 0;
   let failed = 0;
@@ -68,8 +66,7 @@ function runTests() {
   else failed++;
 
   // detectFromLockFile tests
-  console.log('
-detectFromLockFile:');
+  console.log('\ndetectFromLockFile:');
 
   if (test('detects npm from package-lock.json', () => {
     const testDir = createTestDir();
@@ -146,8 +143,7 @@ detectFromLockFile:');
   else failed++;
 
   // detectFromPackageJson tests
-  console.log('
-detectFromPackageJson:');
+  console.log('\ndetectFromPackageJson:');
 
   if (test('detects package manager from packageManager field', () => {
     const testDir = createTestDir();
@@ -197,8 +193,7 @@ detectFromPackageJson:');
   else failed++;
 
   // getAvailablePackageManagers tests
-  console.log('
-getAvailablePackageManagers:');
+  console.log('\ngetAvailablePackageManagers:');
 
   if (test('returns array of available managers', () => {
     const available = pm.getAvailablePackageManagers();
@@ -209,8 +204,7 @@ getAvailablePackageManagers:');
   else failed++;
 
   // getPackageManager tests
-  console.log('
-getPackageManager:');
+  console.log('\ngetPackageManager:');
 
   if (test('returns object with name, config, and source', () => {
     const result = pm.getPackageManager();
@@ -256,8 +250,7 @@ getPackageManager:');
   else failed++;
 
   // getRunCommand tests
-  console.log('
-getRunCommand:');
+  console.log('\ngetRunCommand:');
 
   if (test('returns correct install command', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -292,8 +285,7 @@ getRunCommand:');
   else failed++;
 
   // getExecCommand tests
-  console.log('
-getExecCommand:');
+  console.log('\ngetExecCommand:');
 
   if (test('returns correct exec command for npm', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -328,8 +320,7 @@ getExecCommand:');
   else failed++;
 
   // getCommandPattern tests
-  console.log('
-getCommandPattern:');
+  console.log('\ngetCommandPattern:');
 
   if (test('generates pattern for dev command', () => {
     const pattern = pm.getCommandPattern('dev');
@@ -352,8 +343,7 @@ getCommandPattern:');
   else failed++;
 
   // getSelectionPrompt tests
-  console.log('
-getSelectionPrompt:');
+  console.log('\ngetSelectionPrompt:');
 
   if (test('returns informative prompt', () => {
     const prompt = pm.getSelectionPrompt();
@@ -364,8 +354,7 @@ getSelectionPrompt:');
   else failed++;
 
   // setProjectPackageManager tests
-  console.log('
-setProjectPackageManager:');
+  console.log('\nsetProjectPackageManager:');
 
   if (test('sets project package manager', () => {
     const testDir = createTestDir();
@@ -392,8 +381,7 @@ setProjectPackageManager:');
   else failed++;
 
   // setPreferredPackageManager tests
-  console.log('
-setPreferredPackageManager:');
+  console.log('\nsetPreferredPackageManager:');
 
   if (test('rejects unknown package manager', () => {
     assert.throws(() => {
@@ -403,8 +391,7 @@ setPreferredPackageManager:');
   else failed++;
 
   // detectFromPackageJson edge cases
-  console.log('
-detectFromPackageJson (edge cases):');
+  console.log('\ndetectFromPackageJson (edge cases):');
 
   if (test('handles invalid JSON in package.json', () => {
     const testDir = createTestDir();
@@ -431,8 +418,7 @@ detectFromPackageJson (edge cases):');
   else failed++;
 
   // getExecCommand edge cases
-  console.log('
-getExecCommand (edge cases):');
+  console.log('\ngetExecCommand (edge cases):');
 
   if (test('returns exec command without args', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -451,8 +437,7 @@ getExecCommand (edge cases):');
   else failed++;
 
   // getRunCommand additional cases
-  console.log('
-getRunCommand (additional):');
+  console.log('\ngetRunCommand (additional):');
 
   if (test('returns correct build command', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -500,8 +485,7 @@ getRunCommand (additional):');
   else failed++;
 
   // DETECTION_PRIORITY tests
-  console.log('
-DETECTION_PRIORITY:');
+  console.log('\nDETECTION_PRIORITY:');
 
   if (test('has pnpm first', () => {
     assert.strictEqual(pm.DETECTION_PRIORITY[0], 'pnpm');
@@ -514,8 +498,7 @@ DETECTION_PRIORITY:');
   else failed++;
 
   // getCommandPattern additional cases
-  console.log('
-getCommandPattern (additional):');
+  console.log('\ngetCommandPattern (additional):');
 
   if (test('generates pattern for install command', () => {
     const pattern = pm.getCommandPattern('install');
@@ -538,8 +521,7 @@ getCommandPattern (additional):');
   else failed++;
 
   // getPackageManager robustness tests
-  console.log('
-getPackageManager (robustness):');
+  console.log('\ngetPackageManager (robustness):');
 
   if (test('falls through on corrupted project config JSON', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-robust-'));
@@ -583,8 +565,7 @@ getPackageManager (robustness):');
   else failed++;
 
   // getRunCommand validation tests
-  console.log('
-getRunCommand (validation):');
+  console.log('\ngetRunCommand (validation):');
 
   if (test('rejects empty script name', () => {
     assert.throws(() => pm.getRunCommand(''), /non-empty string/);
@@ -623,8 +604,7 @@ getRunCommand (validation):');
   else failed++;
 
   // getExecCommand validation tests
-  console.log('
-getExecCommand (validation):');
+  console.log('\ngetExecCommand (validation):');
 
   if (test('rejects empty binary name', () => {
     assert.throws(() => pm.getExecCommand(''), /non-empty string/);
@@ -658,8 +638,7 @@ getExecCommand (validation):');
   else failed++;
 
   // getPackageManager source detection tests
-  console.log('
-getPackageManager (source detection):');
+  console.log('\ngetPackageManager (source detection):');
 
   if (test('detects from valid project-config (.claude/package-manager.json)', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-projcfg-'));
@@ -745,8 +724,7 @@ getPackageManager (source detection):');
   else failed++;
 
   // setPreferredPackageManager success
-  console.log('
-setPreferredPackageManager (success):');
+  console.log('\nsetPreferredPackageManager (success):');
 
   if (test('successfully saves preferred package manager', () => {
     // This writes to ~/.claude/package-manager.json — read original to restore
@@ -767,7 +745,7 @@ setPreferredPackageManager (success):');
       } else {
         try {
           fs.unlinkSync(configPath);
-        } catch (err) {
+        } catch (_err) {
           // ignore
         }
       }
@@ -776,8 +754,7 @@ setPreferredPackageManager (success):');
   else failed++;
 
   // getCommandPattern completeness
-  console.log('
-getCommandPattern (completeness):');
+  console.log('\ngetCommandPattern (completeness):');
 
   if (test('generates pattern for test command', () => {
     const pattern = pm.getCommandPattern('test');
@@ -795,8 +772,7 @@ getCommandPattern (completeness):');
   else failed++;
 
   // getRunCommand PM-specific format tests
-  console.log('
-getRunCommand (PM-specific formats):');
+  console.log('\ngetRunCommand (PM-specific formats):');
 
   if (test('pnpm custom script: pnpm (no run keyword)', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -887,8 +863,7 @@ getRunCommand (PM-specific formats):');
   else failed++;
 
   // getExecCommand PM-specific format tests
-  console.log('
-getExecCommand (PM-specific formats):');
+  console.log('\ngetExecCommand (PM-specific formats):');
 
   if (test('pnpm exec: pnpm dlx <binary>', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -944,8 +919,7 @@ getExecCommand (PM-specific formats):');
   else failed++;
 
   // ─── Round 21: getExecCommand args validation ───
-  console.log('
-getExecCommand (args validation):');
+  console.log('\ngetExecCommand (args validation):');
 
   if (test('rejects args with shell metacharacter semicolon', () => {
     assert.throws(() => pm.getExecCommand('prettier', '; rm -rf /'), /unsafe characters/);
@@ -985,8 +959,7 @@ getExecCommand (args validation):');
   else failed++;
 
   // ─── Round 21: getCommandPattern regex escaping ───
-  console.log('
-getCommandPattern (regex escaping):');
+  console.log('\ngetCommandPattern (regex escaping):');
 
   if (test('escapes dot in action name for regex safety', () => {
     const pattern = pm.getCommandPattern('test.all');
@@ -1012,8 +985,7 @@ getCommandPattern (regex escaping):');
   else failed++;
 
   // ── Round 27: input validation and escapeRegex edge cases ──
-  console.log('
-getRunCommand (non-string input):');
+  console.log('\ngetRunCommand (non-string input):');
 
   if (test('rejects undefined script name', () => {
     assert.throws(() => pm.getRunCommand(undefined), /non-empty string/);
@@ -1030,8 +1002,7 @@ getRunCommand (non-string input):');
   })) passed++;
   else failed++;
 
-  console.log('
-getExecCommand (non-string binary):');
+  console.log('\ngetExecCommand (non-string binary):');
 
   if (test('rejects undefined binary name', () => {
     assert.throws(() => pm.getExecCommand(undefined), /non-empty string/);
@@ -1043,8 +1014,7 @@ getExecCommand (non-string binary):');
   })) passed++;
   else failed++;
 
-  console.log('
-getCommandPattern (escapeRegex completeness):');
+  console.log('\ngetCommandPattern (escapeRegex completeness):');
 
   if (test('escapes all regex metacharacters in action', () => {
     // All regex metacharacters: . * + ? ^ $ { } ( ) | [ ] \
@@ -1066,8 +1036,7 @@ getCommandPattern (escapeRegex completeness):');
   })) passed++;
   else failed++;
 
-  console.log('
-getPackageManager (global config edge cases):');
+  console.log('\ngetPackageManager (global config edge cases):');
 
   if (test('ignores global config with non-string packageManager', () => {
     // This tests the path through loadConfig where packageManager is not a valid PM name
@@ -1087,8 +1056,7 @@ getPackageManager (global config edge cases):');
   else failed++;
 
   // ── Round 30: getCommandPattern with special action patterns ──
-  console.log('
-Round 30: getCommandPattern edge cases:');
+  console.log('\nRound 30: getCommandPattern edge cases:');
 
   if (test('escapes pipe character in action name', () => {
     const pattern = pm.getCommandPattern('lint|fix');
@@ -1113,8 +1081,8 @@ Round 30: getCommandPattern edge cases:');
   })) passed++;
   else failed++;
 
-  if (test('known action \"dev\" does NOT use escapeRegex path', () => {
-    // \"dev\" is a known action with hardcoded patterns, not the generic path
+  if (test('known action "dev" does NOT use escapeRegex path', () => {
+    // "dev" is a known action with hardcoded patterns, not the generic path
     const pattern = pm.getCommandPattern('dev');
     // Should match pnpm dev (without \"run\")
     const regex = new RegExp(pattern);
@@ -1123,8 +1091,7 @@ Round 30: getCommandPattern edge cases:');
   else failed++;
 
   // ── Round 31: setProjectPackageManager write verification ──
-  console.log('
-setProjectPackageManager (write verification, Round 31):');
+  console.log('\nsetProjectPackageManager (write verification, Round 31):');
 
   if (test('setProjectPackageManager creates .claude directory if missing', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-mkdir-'));
@@ -1156,8 +1123,7 @@ setProjectPackageManager (write verification, Round 31):');
   else failed++;
 
   // ── Round 31: getExecCommand safe argument edge cases ──
-  console.log('
-getExecCommand (safe argument edge cases, Round 31):');
+  console.log('\ngetExecCommand (safe argument edge cases, Round 31):');
 
   if (test('allows colons in args (e.g. --fix:all)', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -1199,8 +1165,7 @@ getExecCommand (safe argument edge cases, Round 31):');
   else failed++;
 
   // ── Round 34: getExecCommand non-string args & packageManager type ──
-  console.log('
-Round 34: getExecCommand non-string args:');
+  console.log('\nRound 34: getExecCommand non-string args:');
 
   if (test('getExecCommand with args=0 produces command without extra args', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -1245,8 +1210,7 @@ Round 34: getExecCommand non-string args:');
   })) passed++;
   else failed++;
 
-  console.log('
-Round 34: detectFromPackageJson with non-string packageManager:');
+  console.log('\nRound 34: detectFromPackageJson with non-string packageManager:');
 
   if (test('detectFromPackageJson handles array packageManager field gracefully', () => {
     const tmpDir = createTestDir();
@@ -1275,8 +1239,7 @@ Round 34: detectFromPackageJson with non-string packageManager:');
   else failed++;
 
   // ── Round 48: detectFromPackageJson format edge cases ──
-  console.log('
-Round 48: detectFromPackageJson (version format edge cases):');
+  console.log('\nRound 48: detectFromPackageJson (version format edge cases):');
 
   if (test('returns null for packageManager with non-@ separator', () => {
     const testDir = createTestDir();
@@ -1345,8 +1308,7 @@ Round 48: detectFromPackageJson (version format edge cases):');
   else failed++;
 
   // ── Round 69: getPackageManager global-config success path ──
-  console.log('
-Round 69: getPackageManager (global-config success):');
+  console.log('\nRound 69: getPackageManager (global-config success):');
 
   if (test('getPackageManager returns source global-config when valid global config exists', () => {
     const tmpDir = createTestDir();
@@ -1391,8 +1353,7 @@ Round 69: getPackageManager (global-config success):');
   else failed++;
 
   // ── Round 71: setPreferredPackageManager save failure wraps error ──
-  console.log('
-Round 71: setPreferredPackageManager (save failure):');
+  console.log('\nRound 71: setPreferredPackageManager (save failure):');
 
   if (test('setPreferredPackageManager throws wrapped error when save fails', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
@@ -1418,7 +1379,7 @@ Round 71: setPreferredPackageManager (save failure):');
     } finally {
       try {
         fs.chmodSync(claudeDir, 0o755);
-      } catch (err) {
+      } catch (_err) {
         /* best-effort */
       }
       process.env.HOME = savedHome;
@@ -1431,8 +1392,7 @@ Round 71: setPreferredPackageManager (save failure):');
   else failed++;
 
   // ── Round 72: setProjectPackageManager save failure wraps error ──
-  console.log('
-Round 72: setProjectPackageManager (save failure):');
+  console.log('\nRound 72: setProjectPackageManager (save failure):');
 
   if (test('setProjectPackageManager throws wrapped error when write fails', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
@@ -1456,8 +1416,7 @@ Round 72: setProjectPackageManager (save failure):');
   else failed++;
 
   // ── Round 80: getExecCommand with truthy non-string args ──
-  console.log('
-Round 80: getExecCommand (truthy non-string args):');
+  console.log('\nRound 80: getExecCommand (truthy non-string args):');
 
   if (test('getExecCommand with args=42 (truthy number) appends stringified value', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -1477,8 +1436,7 @@ Round 80: getExecCommand (truthy non-string args):');
   else failed++;
 
   // ── Round 86: detectFromPackageJson with empty (0-byte) package.json ──
-  console.log('
-Round 86: detectFromPackageJson (empty package.json):');
+  console.log('\nRound 86: detectFromPackageJson (empty package.json):');
 
   if (test('detectFromPackageJson returns null for empty (0-byte) package.json', () => {
     // package-manager.js line 109-111: readFile returns "" for empty file.
@@ -1492,8 +1450,7 @@ Round 86: detectFromPackageJson (empty package.json):');
   else failed++;
 
   // ── Round 91: getCommandPattern with empty action string ──
-  console.log('
-Round 91: getCommandPattern (empty action):');
+  console.log('\nRound 91: getCommandPattern (empty action):');
 
   if (test('getCommandPattern with empty string returns valid regex pattern', () => {
     // package-manager.js line 401-409: Empty action falls to the else branch.
@@ -1512,8 +1469,7 @@ Round 91: getCommandPattern (empty action):');
   else failed++;
 
   // ── Round 91: detectFromPackageJson with whitespace-only packageManager ──
-  console.log('
-Round 91: detectFromPackageJson (whitespace-only packageManager):');
+  console.log('\nRound 91: detectFromPackageJson (whitespace-only packageManager):');
 
   if (test('detectFromPackageJson returns null for whitespace-only packageManager field', () => {
     // package-manager.js line 114-119: \" \" is truthy, so enters the if block.
@@ -1530,8 +1486,7 @@ Round 91: detectFromPackageJson (whitespace-only packageManager):');
   else failed++;
 
   // ── Round 92: detectFromPackageJson with empty string packageManager ──
-  console.log('
-Round 92: detectFromPackageJson (empty string packageManager):');
+  console.log('\nRound 92: detectFromPackageJson (empty string packageManager):');
 
   if (test('detectFromPackageJson returns null for empty string packageManager field', () => {
     // package-manager.js line 114: if (pkg.packageManager) — empty string \"\" is falsy,
@@ -1549,15 +1504,14 @@ Round 92: detectFromPackageJson (empty string packageManager):');
   else failed++;
 
   // ── Round 94: detectFromPackageJson with scoped package name ──
-  console.log('
-Round 94: detectFromPackageJson (scoped package name @scope/pkg@version):');
+  console.log('\nRound 94: detectFromPackageJson (scoped package name @scope/pkg@version):');
 
   if (test('detectFromPackageJson returns null for scoped package name (@scope/pkg@version)', () => {
     // package-manager.js line 116: pmName = pkg.packageManager.split('@')[0]\
-    // For \\\"@pnpm/exe@8.0.0\\\", split('@') -> ['', 'pnpm/exe', '8.0.0'], so [0] = ''\
+    // For \"@pnpm/exe@8.0.0\", split('@') -> ['', 'pnpm/exe', '8.0.0'], so [0] = ''\
     // PACKAGE_MANAGERS[''] is undefined -> returns null.\
     // Scoped npm packages like @pnpm/exe are a real-world pattern but the\
-    // packageManager field spec uses unscoped names (e.g., \\\"pnpm@8\\\"), so returning\
+    // packageManager field spec uses unscoped names (e.g., \"pnpm@8\"), so returning\
     // null is the correct defensive behaviour for this edge case.
     const testDir = createTestDir();
     fs.writeFileSync(
@@ -1565,14 +1519,13 @@ Round 94: detectFromPackageJson (scoped package name @scope/pkg@version):');
       JSON.stringify({ name: 'test', packageManager: '@pnpm/exe@8.0.0' })
     );
     const result = pm.detectFromPackageJson(testDir);
-    assert.strictEqual(result, null, 'Scoped package name should return null (split(\"@\")[0] is empty string)');
+    assert.strictEqual(result, null, 'Scoped package name should return null (split("@")[0] is empty string)');
     cleanupTestDir(testDir);
   })) passed++;
   else failed++;
 
   // ── Round 94: getPackageManager with empty string CLAUDE_PACKAGE_MANAGER ──
-  console.log('
-Round 94: getPackageManager (empty string CLAUDE_PACKAGE_MANAGER env var):');
+  console.log('\nRound 94: getPackageManager (empty string CLAUDE_PACKAGE_MANAGER env var):');
 
   if (test('getPackageManager skips empty string CLAUDE_PACKAGE_MANAGER (falsy short-circuit)', () => {
     // package-manager.js line 168: if (envPm && PACKAGE_MANAGERS[envPm])\
@@ -1595,8 +1548,7 @@ Round 94: getPackageManager (empty string CLAUDE_PACKAGE_MANAGER env var):');
   else failed++;
 
   // ── Round 104: detectFromLockFile with null projectDir (no input validation) ──
-  console.log('
-Round 104: detectFromLockFile (null projectDir — throws TypeError):');
+  console.log('\nRound 104: detectFromLockFile (null projectDir — throws TypeError):');
 
   if (test('detectFromLockFile(null) throws TypeError (path.join rejects null)', () => {
     // package-manager.js line 95: `path.join(projectDir, pm.lockFile)` — there is no\
@@ -1612,18 +1564,17 @@ Round 104: detectFromLockFile (null projectDir — throws TypeError):');
   else failed++;
 
   // ── Round 105: getExecCommand with object args (bypasses SAFE_ARGS_REGEX, coerced to [object Object]) ──
-  console.log('
-Round 105: getExecCommand (object args — typeof bypass coerces to [object Object]):');
+  console.log('\nRound 105: getExecCommand (object args — typeof bypass coerces to [object Object]):');
 
-  if (test('getExecCommand with args={} bypasses SAFE_ARGS validation and coerces to \"[object Object]\"', () => {
-    // package-manager.js line 334: `if (args && typeof args === 'string' && !SAFE_ARGS_REGEX.test(args))`\
-    // When args is an object: typeof {} === 'object' (not 'string'), so the\
+  if (test('getExecCommand with args={} bypasses SAFE_ARGS validation and coerces to "[object Object]"', () => {
+    // package-manager.js line 334: `if (args && typeof args === 'string' && !SAFE_ARGS_REGEX.test(args))`
+    // When args is an object: typeof {} === 'object' (not 'string'), so the
     // SAFE_ARGS_REGEX check is entirely SKIPPED.\
     // Line 339: `args ? ' ' + args : ''` — object is truthy, so it reaches\
     // string concatenation which calls {}.toString() -> \"[object Object]\"\
-    // Final command: \"npx prettier [object Object]\" — brackets bypass validation.
+    // Final command: "npx prettier [object Object]" — brackets bypass validation.
     const cmd = pm.getExecCommand('prettier', {});
-    assert.ok(cmd.includes('[object Object]'), 'Object args should be coerced to \"[object Object]\" via implicit toString()');
+    assert.ok(cmd.includes('[object Object]'), 'Object args should be coerced to "[object Object]" via implicit toString()');
     // Verify the SAFE_ARGS regex WOULD reject this string if it were a string arg
     assert.throws(
       () => pm.getExecCommand('prettier', '[object Object]'),
@@ -1634,8 +1585,7 @@ Round 105: getExecCommand (object args — typeof bypass coerces to [object Obje
   else failed++;
 
   // ── Round 109: getExecCommand with ../ path traversal in binary — SAFE_NAME_REGEX allows it ──
-  console.log('
-Round 109: getExecCommand (path traversal in binary — SAFE_NAME_REGEX permits ../ in binary name):');
+  console.log('\nRound 109: getExecCommand (path traversal in binary — SAFE_NAME_REGEX permits ../ in binary name):');
 
   if (test('getExecCommand accepts ../../../etc/passwd as binary because SAFE_NAME_REGEX allows ../', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -1658,8 +1608,7 @@ Round 109: getExecCommand (path traversal in binary — SAFE_NAME_REGEX permits 
   else failed++;
 
   // ── Round 108: getRunCommand with path traversal — SAFE_NAME_REGEX allows ../ sequences ──
-  console.log('
-Round 108: getRunCommand (path traversal — SAFE_NAME_REGEX permits ../ via allowed / and . chars):');
+  console.log('\nRound 108: getRunCommand (path traversal — SAFE_NAME_REGEX permits ../ via allowed / and . chars):');
 
   if (test('getRunCommand accepts @scope/../../evil because SAFE_NAME_REGEX allows ../', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
@@ -1682,35 +1631,24 @@ Round 108: getRunCommand (path traversal — SAFE_NAME_REGEX permits ../ via all
   })) passed++;
   else failed++;
 
-  // ── Round 111: getExecCommand with newline in args — SAFE_ARGS_REGEX \\s includes 
- ──
-  console.log('
-Round 111: getExecCommand (newline in args — SAFE_ARGS_REGEX \\\\\\\\s matches \\\\\
-):');
+  // Round 111: getExecCommand with newline in args
+  console.log('\nRound 111: getExecCommand (newline in args — SAFE_ARGS_REGEX \\\\\\\\s matches \\\\\\n):');
 
-  if (test('getExecCommand accepts newline in args because SAFE_ARGS_REGEX \\\\\\\\s includes \\\\\
-', () => {
-    // SAFE_ARGS_REGEX = /^[@a-zA-Z0-9\\\\s_.\\\\/:=,'\\\"*+-\\\\]+$/\
-    // \\\\\\\\s matches [\\\	\\\
-\\\\v\\\\f\\\\r ] — includes newline!\
-    // This means \\\"file.js\\\
-malicious\\\" passes the regex.
+  if (test('getExecCommand accepts newline in args because SAFE_ARGS_REGEX includes newline', () => {
+    // SAFE_ARGS_REGEX = /^[@a-zA-Z0-9\\s_.\\/:=,'\"*+-\\]+$/
+    // \\s matches whitespace including newline
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
     try {
       process.env.CLAUDE_PACKAGE_MANAGER = 'npm';
-      // Newline in args should pass SAFE_ARGS_REGEX because \\\\\\\\s matches \\\\\
-\
-      const cmd = pm.getExecCommand('prettier', 'file.js\
-echo injected');
-      assert.strictEqual(cmd, 'npx prettier file.js\
-echo injected', 'Newline passes SAFE_ARGS_REGEX (\\\\\\\\s includes \\\\\
-) — potential command injection vector');
+      // Newline in args should pass SAFE_ARGS_REGEX because \\s matches newline
+      const cmd = pm.getExecCommand('prettier', 'file.js\necho injected');
+      assert.strictEqual(cmd, 'npx prettier file.js\necho injected', 'Newline passes SAFE_ARGS_REGEX');
       // Tab also passes
-      const cmd2 = pm.getExecCommand('eslint', 'file.js\	--fix');
-      assert.strictEqual(cmd2, 'npx eslint file.js\	--fix', 'Tab also passes SAFE_ARGS_REGEX via \\\\\\\\s');
+      const cmd2 = pm.getExecCommand('eslint', 'file.js\t--fix');
+      assert.strictEqual(cmd2, 'npx eslint file.js\t--fix', 'Tab also passes SAFE_ARGS_REGEX via \\s');
       // Carriage return also passes
-      const cmd3 = pm.getExecCommand('tsc', 'src\\r--strict');
-      assert.strictEqual(cmd3, 'npx tsc src\\r--strict', 'Carriage return passes via \\\\\\\\s');
+      const cmd3 = pm.getExecCommand('tsc', 'src\r--strict');
+      assert.strictEqual(cmd3, 'npx tsc src\r--strict', 'Carriage return passes via \\s');
     } finally {
       if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
       else delete process.env.CLAUDE_PACKAGE_MANAGER;
@@ -1719,8 +1657,7 @@ echo injected', 'Newline passes SAFE_ARGS_REGEX (\\\\\\\\s includes \\\\\
   else failed++;
 
   // Summary
-  console.log('
-=== Test Results ===');
+  console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
   console.log(`Failed: ${failed}`);
   console.log(`Total: ${passed + failed}

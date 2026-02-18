@@ -1124,7 +1124,7 @@ src/main.ts
   } else {
     delete process.env.USERPROFILE;
   }
-  try { fs.rmSync(r33Home, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(r33Home, { recursive: true, force: true }); } catch (_e) { /* ignore cleanup errors */ }
 
   // ── Round 46: path heuristic and checklist edge cases ──
   console.log('\ngetSessionStats Windows path heuristic (Round 46):');
@@ -1985,7 +1985,7 @@ file.ts
       assert.ok(!afterContent.includes('Appended data'),
         'Original content should be unchanged');
     } finally {
-      try { fs.chmodSync(readOnlyFile, 0o644); } catch {}
+      try { fs.chmodSync(readOnlyFile, 0o644); } catch (_e) { /* ignore permission errors */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   })) passed++; else failed++;

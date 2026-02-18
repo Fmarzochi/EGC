@@ -1697,7 +1697,7 @@ function runTests() {
         'Recursive search on unreadable root should also return empty array');
     } finally {
       // Restore permissions before cleanup
-      try { fs.chmodSync(unreadableDir, 0o755); } catch {}
+      try { fs.chmodSync(unreadableDir, 0o755); } catch (_e) { /* ignore permission errors */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
