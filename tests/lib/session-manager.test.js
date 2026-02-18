@@ -2364,6 +2364,7 @@ file.ts
   if (test('getSessionById matches old format YYYY-MM-DD-session.tmp via noIdMatch path', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r122-old-format-'));
     const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
     const origDir = process.env.CLAUDE_DIR;
     try {
       // Set up isolated environment
@@ -2371,6 +2372,7 @@ file.ts
       const sessionsDir = path.join(claudeDir, 'sessions');
       fs.mkdirSync(sessionsDir, { recursive: true });
       process.env.HOME = tmpDir;
+      process.env.USERPROFILE = tmpDir; // Windows: os.homedir() uses USERPROFILE
       delete process.env.CLAUDE_DIR;
 
       // Clear require cache for fresh module with new HOME
@@ -2396,6 +2398,8 @@ file.ts
         'Non-matching date should return null');
     } finally {
       process.env.HOME = origHome;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile;
+      else delete process.env.USERPROFILE;
       if (origDir) process.env.CLAUDE_DIR = origDir;
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
@@ -2485,6 +2489,7 @@ file.ts
     // "2026/01/15" or "Jan 15 2026" will never match, silently returning empty.
     // No validation or normalization occurs on the date parameter.
     const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
     const origDir = process.env.CLAUDE_DIR;
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r124-date-format-'));
     const homeDir = path.join(tmpDir, 'home');
@@ -2492,6 +2497,7 @@ file.ts
 
     try {
       process.env.HOME = homeDir;
+      process.env.USERPROFILE = homeDir; // Windows: os.homedir() uses USERPROFILE
       delete process.env.CLAUDE_DIR;
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
@@ -2530,6 +2536,8 @@ file.ts
         'null date skips filter and returns all sessions');
     } finally {
       process.env.HOME = origHome;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile;
+      else delete process.env.USERPROFILE;
       if (origDir) process.env.CLAUDE_DIR = origDir;
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
