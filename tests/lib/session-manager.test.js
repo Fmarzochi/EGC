@@ -1488,6 +1488,27 @@ src/main.ts
       'Content without session items should have 0 totalItems');
   })) passed++; else failed++;
 
+  // Re-establish test environment for Rounds 95-98 (these tests need sessions to exist)
+  const tmpHome2 = path.join(os.tmpdir(), `ecc-session-mgr-test-2-${Date.now()}`);
+  const tmpSessionsDir2 = path.join(tmpHome2, '.claude', 'sessions');
+  fs.mkdirSync(tmpSessionsDir2, { recursive: true });
+  const origHome2 = process.env.HOME;
+  const origUserProfile2 = process.env.USERPROFILE;
+
+  // Create test session files for these tests
+  const testSessions2 = [
+    { name: '2026-01-15-aaaa1111-session.tmp', content: '# Test Session 1' },
+    { name: '2026-02-01-bbbb2222-session.tmp', content: '# Test Session 2' },
+    { name: '2026-02-10-cccc3333-session.tmp', content: '# Test Session 3' },
+  ];
+  for (const session of testSessions2) {
+    const filePath = path.join(tmpSessionsDir2, session.name);
+    fs.writeFileSync(filePath, session.content);
+  }
+
+  process.env.HOME = tmpHome2;
+  process.env.USERPROFILE = tmpHome2;
+
   // ── Round 95: getAllSessions with both negative offset AND negative limit ──
   console.log('\nRound 95: getAllSessions (both negative offset and negative limit):');
 
@@ -1578,6 +1599,20 @@ src/main.ts
       'null.length should throw TypeError (no input guard at function entry)'
     );
   })) passed++; else failed++;
+
+  // Cleanup test environment for Rounds 95-98 that needed sessions
+  // (Round 98: parseSessionFilename below doesn't need sessions)
+  process.env.HOME = origHome2;
+  if (origUserProfile2 !== undefined) {
+    process.env.USERPROFILE = origUserProfile2;
+  } else {
+    delete process.env.USERPROFILE;
+  }
+  try {
+    fs.rmSync(tmpHome2, { recursive: true, force: true });
+  } catch {
+    // best-effort
+  }
 
   // ── Round 98: parseSessionFilename with null input throws TypeError ──
   console.log('\nRound 98: parseSessionFilename (null input — crashes at line 30):');
