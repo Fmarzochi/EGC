@@ -29,7 +29,8 @@ process.stdin.setEncoding('utf8');
 
 process.stdin.on('data', chunk => {
   if (stdinData.length < MAX_STDIN) {
-    stdinData += chunk;
+    const remaining = MAX_STDIN - stdinData.length;
+    stdinData += chunk.substring(0, remaining);
   }
 });
 

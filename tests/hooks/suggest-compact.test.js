@@ -19,11 +19,11 @@ const compactScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'sugg
 function test(name, fn) {
   try {
     fn();
-    console.log(`  \u2713 ${name}`);
+    console.log(` \u2713 ${name}`);
     return true;
-  } catch (err) {
-    console.log(`  \u2717 ${name}`);
-    console.log(`    Error: ${err.message}`);
+  } catch (_err) {
+    console.log(` \u2717 ${name}`);
+    console.log(` Error: ${_err.message}`);
     return false;
   }
 }
@@ -66,7 +66,11 @@ function runTests() {
 
   // Cleanup helper
   function cleanupCounter() {
-    try { fs.unlinkSync(counterFile); } catch {}
+    try {
+      fs.unlinkSync(counterFile);
+    } catch (_err) {
+      // Ignore error
+    }
   }
 
   // Basic functionality
@@ -80,7 +84,8 @@ function runTests() {
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 1, 'Counter should be 1 after first run');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('increments counter on subsequent runs', () => {
     cleanupCounter();
@@ -90,7 +95,8 @@ function runTests() {
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 3, 'Counter should be 3 after three runs');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Threshold suggestion
   console.log('\nThreshold suggestion:');
@@ -106,7 +112,8 @@ function runTests() {
       `Should suggest compact at threshold. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('does NOT suggest compact before threshold', () => {
     cleanupCounter();
@@ -117,7 +124,8 @@ function runTests() {
       'Should NOT suggest compact before threshold'
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Interval suggestion (every 25 calls after threshold)
   console.log('\nInterval suggestion:');
@@ -135,7 +143,8 @@ function runTests() {
       `Should suggest at threshold+25 interval. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Environment variable handling
   console.log('\nEnvironment variable handling:');
@@ -151,7 +160,8 @@ function runTests() {
       `Should use default threshold of 50. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('ignores invalid COMPACT_THRESHOLD (negative)', () => {
     cleanupCounter();
@@ -163,7 +173,8 @@ function runTests() {
       `Should fallback to 50 for negative threshold. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('ignores non-numeric COMPACT_THRESHOLD', () => {
     cleanupCounter();
@@ -175,7 +186,8 @@ function runTests() {
       `Should fallback to 50 for non-numeric threshold. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Corrupted counter file
   console.log('\nCorrupted counter file:');
@@ -189,7 +201,8 @@ function runTests() {
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 1, 'Should reset to 1 on corrupted file');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('resets counter on extremely large value', () => {
     cleanupCounter();
@@ -200,7 +213,8 @@ function runTests() {
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 1, 'Should reset to 1 for value > 1000000');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('handles empty counter file', () => {
     cleanupCounter();
@@ -211,7 +225,8 @@ function runTests() {
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 1, 'Should start at 1 for empty file');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Session isolation
   console.log('\nSession isolation:');
@@ -230,10 +245,11 @@ function runTests() {
       assert.strictEqual(countA, 2, 'Session A should have count 2');
       assert.strictEqual(countB, 1, 'Session B should have count 1');
     } finally {
-      try { fs.unlinkSync(fileA); } catch {}
-      try { fs.unlinkSync(fileB); } catch {}
+      try { fs.unlinkSync(fileA); } catch (_err) { /* ignore */ }
+      try { fs.unlinkSync(fileB); } catch (_err) { /* ignore */ }
     }
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Always exits 0
   console.log('\nExit code:');
@@ -243,7 +259,8 @@ function runTests() {
     const result = runCompact({ CLAUDE_SESSION_ID: testSession });
     assert.strictEqual(result.code, 0, 'Should always exit 0');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // ── Round 29: threshold boundary values ──
   console.log('\nThreshold boundary values:');
@@ -258,7 +275,8 @@ function runTests() {
       `Should fallback to 50 for threshold=0. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('accepts COMPACT_THRESHOLD=10000 (boundary max)', () => {
     cleanupCounter();
@@ -270,7 +288,8 @@ function runTests() {
       `Should accept threshold=10000. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('rejects COMPACT_THRESHOLD=10001 (falls back to 50)', () => {
     cleanupCounter();
@@ -282,7 +301,8 @@ function runTests() {
       `Should fallback to 50 for threshold=10001. Got stderr: ${result.stderr}`
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('rejects float COMPACT_THRESHOLD (e.g. 3.5)', () => {
     cleanupCounter();
@@ -297,33 +317,36 @@ function runTests() {
       'Float threshold should be parseInt-ed to 3, no suggestion at count=50'
     );
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('counter value at exact boundary 1000000 is valid', () => {
     cleanupCounter();
     fs.writeFileSync(counterFile, '999999');
-    const result = runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '3' });
+    runCompact({ CLAUDE_SESSION_ID: testSession, COMPACT_THRESHOLD: '3' });
     // 999999 is valid (> 0, <= 1000000), count becomes 1000000
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 1000000, 'Counter at 1000000 boundary should be valid');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   if (test('counter value at 1000001 is clamped (reset to 1)', () => {
     cleanupCounter();
     fs.writeFileSync(counterFile, '1000001');
-    const result = runCompact({ CLAUDE_SESSION_ID: testSession });
+    runCompact({ CLAUDE_SESSION_ID: testSession });
     const count = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
     assert.strictEqual(count, 1, 'Counter > 1000000 should be reset to 1');
     cleanupCounter();
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // ── Round 64: default session ID fallback ──
   console.log('\nDefault session ID fallback (Round 64):');
 
   if (test('uses "default" session ID when CLAUDE_SESSION_ID is empty', () => {
     const defaultCounterFile = getCounterFilePath('default');
-    try { fs.unlinkSync(defaultCounterFile); } catch {}
+    try { fs.unlinkSync(defaultCounterFile); } catch (_err) { /* ignore */ }
     try {
       // Pass empty CLAUDE_SESSION_ID — falsy, so script uses 'default'
       const env = { ...process.env, CLAUDE_SESSION_ID: '' };
@@ -338,12 +361,14 @@ function runTests() {
       const count = parseInt(fs.readFileSync(defaultCounterFile, 'utf8').trim(), 10);
       assert.strictEqual(count, 1, 'Counter should be 1 for first run with default session');
     } finally {
-      try { fs.unlinkSync(defaultCounterFile); } catch {}
+      try { fs.unlinkSync(defaultCounterFile); } catch (_err) { /* ignore */ }
     }
-  })) passed++; else failed++;
+  })) passed++;
+  else failed++;
 
   // Summary
-  console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
+  console.log(`
+Results: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
 

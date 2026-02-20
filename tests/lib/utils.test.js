@@ -836,7 +836,8 @@ function runTests() {
   console.log('\nrunCommand Edge Cases:');
 
   if (test('runCommand returns trimmed output', () => {
-    const result = utils.runCommand('echo "  hello  "');
+    // Windows echo includes quotes in output, use node to ensure consistent behavior
+    const result = utils.runCommand('node -e "process.stdout.write(\'  hello  \')"');
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.output, 'hello', 'Should trim leading/trailing whitespace');
   })) passed++; else failed++;
@@ -884,6 +885,10 @@ function runTests() {
   console.log('\nreadStdinJson maxSize truncation:');
 
   if (test('readStdinJson maxSize stops accumulating after threshold (chunk-level guard)', () => {
+    if (process.platform === 'win32') {
+      console.log('    (skipped — stdin chunking behavior differs on Windows)');
+      return true;
+    }
     const { execFileSync } = require('child_process');
     // maxSize is a chunk-level guard: once data.length >= maxSize, no MORE chunks are added.
     // A single small chunk that arrives when data.length < maxSize is added in full.
@@ -1678,6 +1683,10 @@ function runTests() {
   // ── Round 110: findFiles root directory unreadable — silent empty return (not throw) ──
   console.log('\nRound 110: findFiles (root directory unreadable — EACCES on readdirSync caught silently):');
   if (test('findFiles returns empty array when root directory exists but is unreadable', () => {
+    if (process.platform === 'win32' || process.getuid?.() === 0) {
+      console.log('    (skipped — chmod ineffective on Windows/root)');
+      return true;
+    }
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r110-unreadable-root-'));
     const unreadableDir = path.join(tmpDir, 'no-read');
     fs.mkdirSync(unreadableDir);
@@ -1697,7 +1706,7 @@ function runTests() {
         'Recursive search on unreadable root should also return empty array');
     } finally {
       // Restore permissions before cleanup
-      try { fs.chmodSync(unreadableDir, 0o755); } catch {}
+      try { fs.chmodSync(unreadableDir, 0o755); } catch (_e) { /* ignore permission errors */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   })) passed++; else failed++;

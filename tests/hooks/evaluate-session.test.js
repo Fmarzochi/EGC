@@ -11,7 +11,7 @@ const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawnSync, execFileSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 const evaluateScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'evaluate-session.js');
 

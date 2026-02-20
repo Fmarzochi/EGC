@@ -1124,7 +1124,7 @@ src/main.ts
   } else {
     delete process.env.USERPROFILE;
   }
-  try { fs.rmSync(r33Home, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(r33Home, { recursive: true, force: true }); } catch (_e) { /* ignore cleanup errors */ }
 
   // ── Round 46: path heuristic and checklist edge cases ──
   console.log('\ngetSessionStats Windows path heuristic (Round 46):');
@@ -1488,6 +1488,27 @@ src/main.ts
       'Content without session items should have 0 totalItems');
   })) passed++; else failed++;
 
+  // Re-establish test environment for Rounds 95-98 (these tests need sessions to exist)
+  const tmpHome2 = path.join(os.tmpdir(), `ecc-session-mgr-test-2-${Date.now()}`);
+  const tmpSessionsDir2 = path.join(tmpHome2, '.claude', 'sessions');
+  fs.mkdirSync(tmpSessionsDir2, { recursive: true });
+  const origHome2 = process.env.HOME;
+  const origUserProfile2 = process.env.USERPROFILE;
+
+  // Create test session files for these tests
+  const testSessions2 = [
+    { name: '2026-01-15-aaaa1111-session.tmp', content: '# Test Session 1' },
+    { name: '2026-02-01-bbbb2222-session.tmp', content: '# Test Session 2' },
+    { name: '2026-02-10-cccc3333-session.tmp', content: '# Test Session 3' },
+  ];
+  for (const session of testSessions2) {
+    const filePath = path.join(tmpSessionsDir2, session.name);
+    fs.writeFileSync(filePath, session.content);
+  }
+
+  process.env.HOME = tmpHome2;
+  process.env.USERPROFILE = tmpHome2;
+
   // ── Round 95: getAllSessions with both negative offset AND negative limit ──
   console.log('\nRound 95: getAllSessions (both negative offset and negative limit):');
 
@@ -1578,6 +1599,20 @@ src/main.ts
       'null.length should throw TypeError (no input guard at function entry)'
     );
   })) passed++; else failed++;
+
+  // Cleanup test environment for Rounds 95-98 that needed sessions
+  // (Round 98: parseSessionFilename below doesn't need sessions)
+  process.env.HOME = origHome2;
+  if (origUserProfile2 !== undefined) {
+    process.env.USERPROFILE = origUserProfile2;
+  } else {
+    delete process.env.USERPROFILE;
+  }
+  try {
+    fs.rmSync(tmpHome2, { recursive: true, force: true });
+  } catch {
+    // best-effort
+  }
 
   // ── Round 98: parseSessionFilename with null input throws TypeError ──
   console.log('\nRound 98: parseSessionFilename (null input — crashes at line 30):');
@@ -1985,7 +2020,7 @@ file.ts
       assert.ok(!afterContent.includes('Appended data'),
         'Original content should be unchanged');
     } finally {
-      try { fs.chmodSync(readOnlyFile, 0o644); } catch {}
+      try { fs.chmodSync(readOnlyFile, 0o644); } catch (_e) { /* ignore permission errors */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
@@ -2329,6 +2364,7 @@ file.ts
   if (test('getSessionById matches old format YYYY-MM-DD-session.tmp via noIdMatch path', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r122-old-format-'));
     const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
     const origDir = process.env.CLAUDE_DIR;
     try {
       // Set up isolated environment
@@ -2336,6 +2372,7 @@ file.ts
       const sessionsDir = path.join(claudeDir, 'sessions');
       fs.mkdirSync(sessionsDir, { recursive: true });
       process.env.HOME = tmpDir;
+      process.env.USERPROFILE = tmpDir; // Windows: os.homedir() uses USERPROFILE
       delete process.env.CLAUDE_DIR;
 
       // Clear require cache for fresh module with new HOME
@@ -2361,6 +2398,8 @@ file.ts
         'Non-matching date should return null');
     } finally {
       process.env.HOME = origHome;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile;
+      else delete process.env.USERPROFILE;
       if (origDir) process.env.CLAUDE_DIR = origDir;
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
@@ -2450,6 +2489,7 @@ file.ts
     // "2026/01/15" or "Jan 15 2026" will never match, silently returning empty.
     // No validation or normalization occurs on the date parameter.
     const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
     const origDir = process.env.CLAUDE_DIR;
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r124-date-format-'));
     const homeDir = path.join(tmpDir, 'home');
@@ -2457,6 +2497,7 @@ file.ts
 
     try {
       process.env.HOME = homeDir;
+      process.env.USERPROFILE = homeDir; // Windows: os.homedir() uses USERPROFILE
       delete process.env.CLAUDE_DIR;
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
@@ -2495,6 +2536,8 @@ file.ts
         'null date skips filter and returns all sessions');
     } finally {
       process.env.HOME = origHome;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile;
+      else delete process.env.USERPROFILE;
       if (origDir) process.env.CLAUDE_DIR = origDir;
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];

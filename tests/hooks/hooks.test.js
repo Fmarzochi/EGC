@@ -1324,7 +1324,7 @@ async function runTests() {
       val = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
       assert.strictEqual(val, 2, 'Second call should write count 2');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1341,7 +1341,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stderr.includes('5 tool calls reached'), 'Should suggest compact at threshold');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1359,7 +1359,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stderr.includes('30 tool calls'), 'Should suggest at threshold + 25n intervals');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1376,7 +1376,7 @@ async function runTests() {
       assert.ok(!result.stderr.includes('tool calls reached'), 'Should not suggest below threshold');
       assert.ok(!result.stderr.includes('checkpoint'), 'Should not suggest checkpoint');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1394,7 +1394,7 @@ async function runTests() {
       const newCount = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
       assert.strictEqual(newCount, 1, 'Should reset to 1 on overflow value');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1410,7 +1410,7 @@ async function runTests() {
       const newCount = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
       assert.strictEqual(newCount, 1, 'Should reset to 1 on negative value');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1426,7 +1426,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stderr.includes('50 tool calls reached'), 'Zero threshold should fall back to 50');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1443,7 +1443,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stderr.includes('50 tool calls reached'), 'Should use default threshold of 50');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1883,7 +1883,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stderr.includes('38 tool calls'), 'Should suggest at threshold(13) + 25 = 38');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1901,7 +1901,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(!result.stderr.includes('checkpoint'), 'Should NOT suggest at count=50 with threshold=13');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1918,7 +1918,7 @@ async function runTests() {
       const newCount = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
       assert.strictEqual(newCount, 1, 'Should reset to 1 on corrupted file content');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
@@ -1935,7 +1935,7 @@ async function runTests() {
       const newCount = parseInt(fs.readFileSync(counterFile, 'utf8').trim(), 10);
       assert.strictEqual(newCount, 1000001, 'Should increment from exactly 1000000');
     } finally {
-      try { fs.unlinkSync(counterFile); } catch {}
+      try { fs.unlinkSync(counterFile); } catch { /* ignore */ }
     }
   })) passed++; else failed++;
 
