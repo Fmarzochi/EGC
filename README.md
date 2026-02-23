@@ -13,7 +13,7 @@
 ![Java](https://img.shields.io/badge/-Java-ED8B00?logo=openjdk&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
-> **42K+ stars** | **5K+ forks** | **24 contributors** | **6 languages supported** | **Anthropic Hackathon Winner**
+> **50K+ stars** | **6K+ forks** | **30 contributors** | **6 languages supported** | **Anthropic Hackathon Winner**
 
 ---
 
@@ -143,7 +143,7 @@ For manual install instructions see the README in the `rules/` folder.
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 13 agents, 43 skills, and 31 commands.
+✨ **That's it!** You now have access to 13 agents, 44 skills, and 32 commands.
 
 ---
 
@@ -251,6 +251,7 @@ everything-claude-code/
 |   |-- regex-vs-llm-structured-text/ # Decision framework: regex vs LLM for text parsing (NEW)
 |   |-- swift-actor-persistence/     # Thread-safe Swift data persistence with actors (NEW)
 |   |-- swift-protocol-di-testing/   # Protocol-based DI for testable Swift code (NEW)
+|   |-- search-first/               # Research-before-coding workflow (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -260,6 +261,7 @@ everything-claude-code/
 |   |-- build-fix.md        # /build-fix - Fix build errors
 |   |-- refactor-clean.md   # /refactor-clean - Dead code removal
 |   |-- learn.md            # /learn - Extract patterns mid-session (Longform Guide)
+|   |-- learn-eval.md       # /learn-eval - Extract, evaluate, and save patterns (NEW)
 |   |-- checkpoint.md       # /checkpoint - Save verification state (Longform Guide)
 |   |-- verify.md           # /verify - Run verification loop (Longform Guide)
 |   |-- setup-pm.md         # /setup-pm - Configure package manager
@@ -698,11 +700,12 @@ Each component is fully independent.
 </details>
 
 <details>
-<summary><b>Does this work with Cursor / OpenCode?</b></summary>
+<summary><b>Does this work with Cursor / OpenCode / Codex?</b></summary>
 
 Yes. ECC is cross-platform:
 - **Cursor**: Pre-translated configs in `.cursor/`. See [Cursor IDE Support](#cursor-ide-support).
 - **OpenCode**: Full plugin support in `.opencode/`. See [OpenCode Support](#-opencode-support).
+- **Codex**: First-class support with adapter drift guards and SessionStart fallback. See PR [#257](https://github.com/affaan-m/everything-claude-code/pull/257).
 - **Claude Code**: Native — this is the primary target.
 </details>
 
@@ -807,8 +810,8 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 | Feature | Claude Code | OpenCode | Status |
 |---------|-------------|----------|--------|
 | Agents | ✅ 13 agents | ✅ 12 agents | **Claude Code leads** |
-| Commands | ✅ 31 commands | ✅ 24 commands | **Claude Code leads** |
-| Skills | ✅ 43 skills | ✅ 16 skills | **Claude Code leads** |
+| Commands | ✅ 32 commands | ✅ 24 commands | **Claude Code leads** |
+| Skills | ✅ 44 skills | ✅ 16 skills | **Claude Code leads** |
 | Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
 | Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
 | MCP Servers | ✅ Full | ✅ Full | **Full parity** |
@@ -828,7 +831,7 @@ OpenCode's plugin system is MORE sophisticated than Claude Code with 20+ event t
 
 **Additional OpenCode events**: `file.edited`, `file.watcher.updated`, `message.updated`, `lsp.client.diagnostics`, `tui.toast.show`, and more.
 
-### Available Commands (31)
+### Available Commands (32)
 
 | Command | Description |
 |---------|-------------|
@@ -862,6 +865,7 @@ OpenCode's plugin system is MORE sophisticated than Claude Code with 20+ event t
 | `/instinct-import` | Import instincts |
 | `/instinct-export` | Export instincts |
 | `/evolve` | Cluster instincts into skills |
+| `/learn-eval` | Extract and evaluate patterns before saving |
 | `/setup-pm` | Configure package manager |
 
 ### Plugin Installation
