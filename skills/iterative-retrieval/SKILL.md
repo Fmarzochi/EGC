@@ -1,6 +1,7 @@
 ---
 name: iterative-retrieval
 description: Pattern for progressively refining context retrieval to solve the subagent context problem
+origin: ECC
 ---
 
 # Iterative Retrieval Pattern
