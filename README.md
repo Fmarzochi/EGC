@@ -143,7 +143,7 @@ For manual install instructions see the README in the `rules/` folder.
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-✨ **That's it!** You now have access to 13 agents, 44 skills, and 32 commands.
+✨ **That's it!** You now have access to 13 agents, 48 skills, and 32 commands.
 
 ---
 
@@ -252,6 +252,10 @@ everything-claude-code/
 |   |-- swift-actor-persistence/     # Thread-safe Swift data persistence with actors (NEW)
 |   |-- swift-protocol-di-testing/   # Protocol-based DI for testable Swift code (NEW)
 |   |-- search-first/               # Research-before-coding workflow (NEW)
+|   |-- skill-stocktake/            # Audit skills and commands for quality (NEW)
+|   |-- liquid-glass-design/         # iOS 26 Liquid Glass design system (NEW)
+|   |-- foundation-models-on-device/ # Apple on-device LLM with FoundationModels (NEW)
+|   |-- swift-concurrency-6-2/       # Swift 6.2 Approachable Concurrency (NEW)
 |
 |-- commands/         # Slash commands for quick execution
 |   |-- tdd.md              # /tdd - Test-driven development
@@ -811,7 +815,7 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 |---------|-------------|----------|--------|
 | Agents | ✅ 13 agents | ✅ 12 agents | **Claude Code leads** |
 | Commands | ✅ 32 commands | ✅ 24 commands | **Claude Code leads** |
-| Skills | ✅ 44 skills | ✅ 16 skills | **Claude Code leads** |
+| Skills | ✅ 48 skills | ✅ 16 skills | **Claude Code leads** |
 | Hooks | ✅ 3 phases | ✅ 20+ events | **OpenCode has more!** |
 | Rules | ✅ 8 rules | ✅ 8 rules | **Full parity** |
 | MCP Servers | ✅ Full | ✅ Full | **Full parity** |
