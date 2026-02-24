@@ -174,11 +174,14 @@ function main() {
   const sessionPath = getSessionPath(sessionName);
   const eccContext = loadECCContext();
 
-  const skillCount = (process.env.CLAW_SKILLS || '').split(',').filter(s => s.trim()).length;
+  const requestedSkills = (process.env.CLAW_SKILLS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const loadedCount = requestedSkills.filter(name =>
+    fs.existsSync(path.join(process.cwd(), 'skills', name, 'SKILL.md'))
+  ).length;
 
   console.log('NanoClaw v1.0 — Session: ' + sessionName);
-  if (skillCount > 0) {
-    console.log('Loaded ' + skillCount + ' skill(s) as context.');
+  if (loadedCount > 0) {
+    console.log('Loaded ' + loadedCount + ' skill(s) as context.');
   }
   console.log('Type /help for commands, exit to quit.\n');
 
@@ -227,8 +230,8 @@ function main() {
       }
 
       // Regular message — send to Claude
-      appendTurn(sessionPath, 'User', line);
       const history = loadHistory(sessionPath);
+      appendTurn(sessionPath, 'User', line);
       const response = askClaude(eccContext, history, line);
       console.log('\n' + response + '\n');
       appendTurn(sessionPath, 'Assistant', response);

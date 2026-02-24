@@ -33,6 +33,7 @@ function test(name, fn) {
   } catch (err) {
     console.log(`  \u2717 ${name}`);
     console.log(`    Error: ${err.message}`);
+    if (err.stack) { console.log(`    Stack: ${err.stack}`); }
     return false;
   }
 }
