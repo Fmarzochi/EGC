@@ -178,6 +178,7 @@ for try await partial in stream {
 
 ```swift
 @State private var partialResult: TripIdeas.PartiallyGenerated?
+@State private var errorMessage: String?
 
 var body: some View {
     List {
@@ -185,10 +186,17 @@ var body: some View {
             Text(idea)
         }
     }
+    .overlay {
+        if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+    }
     .task {
-        let stream = session.streamResponse(to: prompt, generating: TripIdeas.self)
-        for try await partial in stream {
-            partialResult = partial
+        do {
+            let stream = session.streamResponse(to: prompt, generating: TripIdeas.self)
+            for try await partial in stream {
+                partialResult = partial
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

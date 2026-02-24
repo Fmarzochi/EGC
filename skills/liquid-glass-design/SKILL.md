@@ -138,13 +138,27 @@ glassEffect.tintColor = UIColor.systemBlue.withAlphaComponent(0.3)
 glassEffect.isInteractive = true
 
 let visualEffectView = UIVisualEffectView(effect: glassEffect)
+visualEffectView.translatesAutoresizingMaskIntoConstraints = false
 visualEffectView.layer.cornerRadius = 20
 visualEffectView.clipsToBounds = true
+
+view.addSubview(visualEffectView)
+NSLayoutConstraint.activate([
+    visualEffectView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+    visualEffectView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+    visualEffectView.widthAnchor.constraint(equalToConstant: 200),
+    visualEffectView.heightAnchor.constraint(equalToConstant: 120)
+])
 
 // Add content to contentView
 let label = UILabel()
 label.text = "Liquid Glass"
+label.translatesAutoresizingMaskIntoConstraints = false
 visualEffectView.contentView.addSubview(label)
+NSLayoutConstraint.activate([
+    label.centerXAnchor.constraint(equalTo: visualEffectView.contentView.centerXAnchor),
+    label.centerYAnchor.constraint(equalTo: visualEffectView.contentView.centerYAnchor)
+])
 ```
 
 ### UIGlassContainerEffect for Multiple Elements

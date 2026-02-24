@@ -136,10 +136,9 @@ This mode is opt-in and recommended for apps, scripts, and other executable targ
 
 When you need actual parallelism, explicitly offload with `@concurrent`:
 
+> **Important:** This example requires Approachable Concurrency build settings — SE-0466 (MainActor default isolation) and SE-0461 (NonisolatedNonsendingByDefault). With these enabled, `extractSticker` stays on the caller's actor, making mutable state access safe. **Without these settings, this code has a data race** — the compiler will flag it.
+
 ```swift
-// Assumes Approachable Concurrency build settings are enabled:
-// SE-0466 (MainActor default isolation) and SE-0461 (NonisolatedNonsendingByDefault).
-// Safe mutation of cachedStickers via await depends on these compiler options.
 nonisolated final class PhotoProcessor {
     private var cachedStickers: [String: Sticker] = [:]
 
