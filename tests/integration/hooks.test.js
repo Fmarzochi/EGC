@@ -692,10 +692,11 @@ async function runTests() {
 
           const isInline = hook.command.startsWith('node -e');
           const isFilePath = hook.command.startsWith('node "');
+          const isShellScript = hook.command.endsWith('.sh');
 
           assert.ok(
-            isInline || isFilePath,
-            `Hook command in ${hookType} should be inline (node -e) or file path (node "), got: ${hook.command.substring(0, 50)}`
+            isInline || isFilePath || isShellScript,
+            `Hook command in ${hookType} should be inline (node -e), file path (node "), or shell script (.sh), got: ${hook.command.substring(0, 80)}`
           );
         }
       }

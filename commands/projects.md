@@ -37,4 +37,3 @@ python3 ~/.claude/skills/continuous-learning-v2/scripts/instinct-cli.py projects
    - Observation event count
    - Last seen timestamp
 3. Also display global instinct totals
-

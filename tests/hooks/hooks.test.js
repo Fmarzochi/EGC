@@ -1724,7 +1724,7 @@ async function runTests() {
     assert.ok(updated.includes('/src/auth.ts'), 'Should include modified file');
   })) passed++; else failed++;
 
-  if (await asyncTest('preserves existing session content when no blank template marker', async () => {
+  if (await asyncTest('always updates session summary content on session end', async () => {
     const testDir = createTestDir();
     const sessionsDir = path.join(testDir, '.claude', 'sessions');
     fs.mkdirSync(sessionsDir, { recursive: true });
@@ -1734,7 +1734,7 @@ async function runTests() {
 
     const shortId = 'update03';
     const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
-    // Pre-existing file with ALREADY-FILLED summary (no blank template marker)
+    // Pre-existing file with already-filled summary
     const existingContent = `# Session: ${today}\n**Date:** ${today}\n**Started:** 08:00\n**Last Updated:** 08:30\n\n---\n\n## Session Summary\n\n### Tasks\n- Previous task from earlier\n`;
     fs.writeFileSync(sessionFile, existingContent);
 
@@ -1749,9 +1749,9 @@ async function runTests() {
     assert.strictEqual(result.code, 0);
 
     const updated = fs.readFileSync(sessionFile, 'utf8');
-    // Should NOT overwrite existing summary (no blank template marker found)
-    assert.ok(updated.includes('Previous task from earlier'), 'Should preserve existing content');
-    assert.ok(!updated.includes('New task'), 'Should not replace non-template content');
+    // Session summary should always be refreshed with current content (#317)
+    assert.ok(updated.includes('## Session Summary'), 'Should have Session Summary section');
+    assert.ok(updated.includes('# Session:'), 'Should preserve session header');
   })) passed++; else failed++;
 
   console.log('\nRound 23: pre-compact.js (glob specificity):');

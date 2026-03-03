@@ -124,7 +124,7 @@ When creating instincts, determine scope based on these heuristics:
 | Pattern Type | Scope | Examples |
 |-------------|-------|---------|
 | Language/framework conventions | **project** | "Use React hooks", "Follow Django REST patterns" |
-| File structure preferences | **project** | "Tests in __tests__/", "Components in src/components/" |
+| File structure preferences | **project** | "Tests in `__tests__`/", "Components in src/components/" |
 | Code style | **project** | "Use functional style", "Prefer dataclasses" |
 | Error handling strategies | **project** (usually) | "Use Result type for errors" |
 | Security practices | **global** | "Validate user input", "Sanitize SQL" |
