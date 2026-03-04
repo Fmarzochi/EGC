@@ -11,8 +11,9 @@
 #   ./install.sh --target cursor typescript python golang
 #
 # Targets:
-#   claude  (default) — Install rules to ~/.claude/rules/
-#   cursor  — Install rules, agents, skills, commands, and MCP to ./.cursor/
+#   claude       (default) — Install rules to ~/.claude/rules/
+#   cursor       — Install rules, agents, skills, commands, and MCP to ./.cursor/
+#   antigravity  — Install configs to .agent/
 #
 # This script copies rules into the target directory keeping the common/ and
 # language-specific subdirectories intact so that:
@@ -44,8 +45,8 @@ if [[ "${1:-}" == "--target" ]]; then
     shift 2
 fi
 
-if [[ "$TARGET" != "claude" && "$TARGET" != "cursor" ]]; then
-    echo "Error: unknown target '$TARGET'. Must be 'claude' or 'cursor'." >&2
+if [[ "$TARGET" != "claude" && "$TARGET" != "cursor" && "$TARGET" != "antigravity" ]]; then
+    echo "Error: unknown target '$TARGET'. Must be 'claude', 'cursor', or 'antigravity'." >&2
     exit 1
 fi
 
@@ -54,8 +55,9 @@ if [[ $# -eq 0 ]]; then
     echo "Usage: $0 [--target <claude|cursor>] <language> [<language> ...]"
     echo ""
     echo "Targets:"
-    echo "  claude  (default) — Install rules to ~/.claude/rules/"
-    echo "  cursor  — Install rules, agents, skills, commands, and MCP to ./.cursor/"
+    echo "  claude       (default) — Install rules to ~/.claude/rules/"
+    echo "  cursor       — Install rules, agents, skills, commands, and MCP to ./.cursor/"
+    echo "  antigravity  — Install configs to .agent/"
     echo ""
     echo "Available languages:"
     for dir in "$RULES_DIR"/*/; do
@@ -180,4 +182,65 @@ if [[ "$TARGET" == "cursor" ]]; then
     fi
 
     echo "Done. Cursor configs installed to $DEST_DIR/"
+fi
+
+# --- Antigravity target ---
+if [[ "$TARGET" == "antigravity" ]]; then
+    DEST_DIR=".agent"
+    
+    if [[ -d "$DEST_DIR/rules" ]] && [[ "$(ls -A "$DEST_DIR/rules" 2>/dev/null)" ]]; then
+        echo "Note: $DEST_DIR/rules/ already exists. Existing files will be overwritten."
+        echo "      Back up any local customizations before proceeding."
+    fi
+
+    # --- Rules ---
+    echo "Installing common rules -> $DEST_DIR/rules/"
+    mkdir -p "$DEST_DIR/rules"
+    if [[ -d "$RULES_DIR/common" ]]; then
+        for f in "$RULES_DIR/common"/*.md; do
+            if [[ -f "$f" ]]; then
+                cp "$f" "$DEST_DIR/rules/common-$(basename "$f")"
+            fi
+        done
+    fi
+
+    for lang in "$@"; do
+        # Validate language name to prevent path traversal
+        if [[ ! "$lang" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "Error: invalid language name '$lang'. Only alphanumeric, dash, and underscore allowed." >&2
+            continue
+        fi
+        lang_dir="$RULES_DIR/$lang"
+        if [[ ! -d "$lang_dir" ]]; then
+            echo "Warning: rules/$lang/ does not exist, skipping." >&2
+            continue
+        fi
+        
+        echo "Installing $lang rules -> $DEST_DIR/rules/"
+        for f in "$lang_dir"/*.md; do
+            if [[ -f "$f" ]]; then
+                cp "$f" "$DEST_DIR/rules/${lang}-$(basename "$f")"
+            fi
+        done
+    done
+
+    # --- Workflows (Commands) ---
+    if [[ -d "$SCRIPT_DIR/commands" ]]; then
+        echo "Installing commands -> $DEST_DIR/workflows/"
+        mkdir -p "$DEST_DIR/workflows"
+        cp -r "$SCRIPT_DIR/commands/." "$DEST_DIR/workflows/"
+    fi
+
+    # --- Skills and Agents ---
+    mkdir -p "$DEST_DIR/skills"
+    if [[ -d "$SCRIPT_DIR/agents" ]]; then
+        echo "Installing agents -> $DEST_DIR/skills/"
+        cp -r "$SCRIPT_DIR/agents/." "$DEST_DIR/skills/"
+    fi
+    if [[ -d "$SCRIPT_DIR/skills" ]]; then
+        echo "Installing skills -> $DEST_DIR/skills/"
+        cp -r "$SCRIPT_DIR/skills/." "$DEST_DIR/skills/"
+    fi
+    
+    echo "Done. Antigravity configs installed to $DEST_DIR/"
 fi

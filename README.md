@@ -157,6 +157,8 @@ cd everything-claude-code
 # ./install.sh typescript python golang
 # or target cursor:
 # ./install.sh --target cursor typescript
+# or target antigravity:
+# ./install.sh --target antigravity typescript
 ```
 
 For manual install instructions see the README in the `rules/` folder.
@@ -180,7 +182,7 @@ For manual install instructions see the README in the `rules/` folder.
 
 ## 🌐 Cross-Platform Support
 
-This plugin now fully supports **Windows, macOS, and Linux**. All hooks and scripts have been rewritten in Node.js for maximum compatibility.
+This plugin now fully supports **Windows, macOS, and Linux**, alongside tight integration across major IDEs (Cursor, OpenCode, Antigravity) and CLI harnesses. All hooks and scripts have been rewritten in Node.js for maximum compatibility.
 
 ### Package Manager Detection
 
@@ -767,12 +769,13 @@ Each component is fully independent.
 </details>
 
 <details>
-<summary><b>Does this work with Cursor / OpenCode / Codex?</b></summary>
+<summary><b>Does this work with Cursor / OpenCode / Codex / Antigravity?</b></summary>
 
 Yes. ECC is cross-platform:
 - **Cursor**: Pre-translated configs in `.cursor/`. See [Cursor IDE Support](#cursor-ide-support).
 - **OpenCode**: Full plugin support in `.opencode/`. See [OpenCode Support](#-opencode-support).
 - **Codex**: First-class support for both macOS app and CLI, with adapter drift guards and SessionStart fallback. See PR [#257](https://github.com/affaan-m/everything-claude-code/pull/257).
+- **Antigravity**: Tightly integrated setup for workflows, skills, and flatten rules in `.agent/`.
 - **Claude Code**: Native — this is the primary target.
 </details>
 
