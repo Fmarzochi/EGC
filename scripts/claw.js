@@ -144,10 +144,11 @@ function searchSessions(query, dir) {
   const q = String(query || '').toLowerCase().trim();
   if (!q) return [];
 
-  const sessions = listSessions(dir);
+  const sessionDir = dir || getClawDir();
+  const sessions = listSessions(sessionDir);
   const results = [];
   for (const name of sessions) {
-    const p = getSessionPath(name);
+    const p = path.join(sessionDir, `${name}.md`);
     const content = loadHistory(p);
     if (!content) continue;
 
@@ -212,12 +213,12 @@ function exportSession(filePath, format, outputPath) {
   return { ok: false, message: `Unsupported export format: ${format}` };
 }
 
-function branchSession(currentSessionPath, newSessionName) {
+function branchSession(currentSessionPath, newSessionName, targetDir = getClawDir()) {
   if (!isValidSessionName(newSessionName)) {
     return { ok: false, message: `Invalid branch session name: ${newSessionName}` };
   }
 
-  const target = getSessionPath(newSessionName);
+  const target = path.join(targetDir, `${newSessionName}.md`);
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   const content = loadHistory(currentSessionPath);

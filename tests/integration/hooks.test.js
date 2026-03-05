@@ -100,11 +100,15 @@ function runHookWithInput(scriptPath, input = {}, env = {}, timeoutMs = 10000) {
 function runHookCommand(command, input = {}, env = {}, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === 'win32';
+    const mergedEnv = { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...env };
+    const resolvedCommand = isWindows
+      ? command.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (_, name) => String(mergedEnv[name] || ''))
+      : command;
     const shell = isWindows ? 'cmd' : 'bash';
-    const shellArgs = isWindows ? ['/d', '/s', '/c', command] : ['-lc', command];
+    const shellArgs = isWindows ? ['/d', '/s', '/c', resolvedCommand] : ['-lc', resolvedCommand];
 
     const proc = spawn(shell, shellArgs, {
-      env: { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...env },
+      env: mergedEnv,
       stdio: ['pipe', 'pipe', 'pipe']
     });
 

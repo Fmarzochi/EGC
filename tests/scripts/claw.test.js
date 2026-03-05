@@ -252,35 +252,31 @@ function runTests() {
 
   if (test('searchSessions finds query in saved session', () => {
     const tmpDir = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = tmpDir;
     try {
-      const sessionPath = path.join(tmpDir, '.claude', 'claw', 'alpha.md');
-      fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+      const clawDir = path.join(tmpDir, '.claude', 'claw');
+      const sessionPath = path.join(clawDir, 'alpha.md');
+      fs.mkdirSync(clawDir, { recursive: true });
       appendTurn(sessionPath, 'User', 'Need oauth migration');
-      const results = searchSessions('oauth');
+      const results = searchSessions('oauth', clawDir);
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].session, 'alpha');
     } finally {
-      process.env.HOME = originalHome;
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 
   if (test('branchSession copies history into new branch session', () => {
     const tmpDir = makeTmpDir();
-    const originalHome = process.env.HOME;
-    process.env.HOME = tmpDir;
     try {
-      const source = path.join(tmpDir, '.claude', 'claw', 'base.md');
-      fs.mkdirSync(path.dirname(source), { recursive: true });
+      const clawDir = path.join(tmpDir, '.claude', 'claw');
+      const source = path.join(clawDir, 'base.md');
+      fs.mkdirSync(clawDir, { recursive: true });
       appendTurn(source, 'User', 'base content');
-      const result = branchSession(source, 'feature-branch');
+      const result = branchSession(source, 'feature-branch', clawDir);
       assert.strictEqual(result.ok, true);
       const branched = fs.readFileSync(result.path, 'utf8');
       assert.ok(branched.includes('base content'));
     } finally {
-      process.env.HOME = originalHome;
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
