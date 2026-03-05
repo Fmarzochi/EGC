@@ -70,3 +70,5 @@ Use this on calls:
 > We track adoption through npm distribution, GitHub App installs, and repository growth.  
 > Claude plugin installs are structurally undercounted publicly, so we use a blended metrics model.  
 > The project supports Claude Code, Cursor, OpenCode, and Codex app/CLI with production-grade hook reliability and a large passing test suite.
+
+For launch-ready social copy snippets, see [`social-launch-copy.md`](./social-launch-copy.md).
