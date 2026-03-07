@@ -1,0 +1,649 @@
+# Instincts generated from https://github.com/affaan-m/everything-claude-code
+# Generated: 2026-03-04T22:56:16.069Z
+# Version: 2.0
+
+---
+id: everything-claude-code-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Commit Length
+
+## Action
+
+Write moderate-length commit messages (~50 characters)
+
+## Evidence
+
+- Average commit message length: 70 chars
+- Based on 200 commits
+
+---
+id: everything-claude-code-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: everything-claude-code-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Export Style
+
+## Action
+
+Prefer mixed exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: mixed
+
+---
+id: everything-claude-code-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: everything-claude-code-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Test Framework
+
+## Action
+
+Use unknown as the test framework
+
+## Evidence
+
+- Test framework detected: unknown
+- File pattern: *.test.js
+
+---
+id: everything-claude-code-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.js
+
+## Evidence
+
+- File pattern: *.test.js
+- Consistent across test files
+
+---
+id: everything-claude-code-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Test Types
+
+## Action
+
+Write unit, integration tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration
+- Coverage config: yes
+
+---
+id: everything-claude-code-workflow-database-migration
+trigger: "when modifying the database schema or adding tables"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Database Migration
+
+## Action
+
+Follow the database-migration workflow:
+1. Create migration file
+2. Update schema definitions
+3. Generate/update types
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: migrations/*
+
+---
+id: everything-claude-code-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~14x per month
+- Files: .opencode/*, .opencode/plugins/*, .opencode/tools/*
+
+---
+id: everything-claude-code-workflow-multi-language-documentation-sync
+trigger: "when doing multi language documentation sync"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Multi Language Documentation Sync
+
+## Action
+
+Follow the multi-language-documentation-sync workflow:
+1. Update English documentation
+2. Translate changes to zh-CN
+3. Translate changes to zh-TW
+4. Translate changes to ja-JP
+5. Update cross-references
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~10x per month
+- Files: README.md, docs/zh-CN/*.md, docs/zh-TW/*.md
+
+---
+id: everything-claude-code-workflow-cross-platform-harness-sync
+trigger: "when doing cross platform harness sync"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Cross Platform Harness Sync
+
+## Action
+
+Follow the cross-platform-harness-sync workflow:
+1. Update main platform files
+2. Port to .cursor/ directory
+3. Port to .codex/ directory
+4. Port to .opencode/ directory
+5. Update platform-specific configs
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~8x per month
+- Files: .cursor/*, .codex/*, .opencode/*
+
+---
+id: everything-claude-code-workflow-skill-addition-workflow
+trigger: "when doing skill addition workflow"
+confidence: 0.8
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Skill Addition Workflow
+
+## Action
+
+Follow the skill-addition-workflow workflow:
+1. Create main skill SKILL.md
+2. Add to README.md
+3. Port to .cursor/skills/
+4. Port to .agents/skills/ with openai.yaml
+5. Update package.json
+6. Add translations if needed
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~6x per month
+- Files: skills/*/SKILL.md, README.md, .cursor/skills/*/SKILL.md
+
+---
+id: everything-claude-code-workflow-version-release-workflow
+trigger: "when doing version release workflow"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Version Release Workflow
+
+## Action
+
+Follow the version-release-workflow workflow:
+1. Update package.json version
+2. Update .claude-plugin/ manifests
+3. Update .opencode/package.json
+4. Update README version references
+5. Update CHANGELOG.md
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json
+
+---
+id: everything-claude-code-workflow-hook-system-updates
+trigger: "when doing hook system updates"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Hook System Updates
+
+## Action
+
+Follow the hook-system-updates workflow:
+1. Update hooks/hooks.json
+2. Create/update hook scripts
+3. Port to .cursor/hooks/
+4. Update tests/hooks/ or tests/integration/
+5. Update hook documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: hooks/hooks.json, scripts/hooks/*.js, .cursor/hooks/*.js
+
+---
+id: everything-claude-code-workflow-continuous-learning-updates
+trigger: "when doing continuous learning updates"
+confidence: 0.75
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Workflow Continuous Learning Updates
+
+## Action
+
+Follow the continuous-learning-updates workflow:
+1. Update main continuous-learning-v2 skill
+2. Update observer scripts
+3. Port to platform-specific directories
+4. Update translations
+5. Update related commands
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~5x per month
+- Files: skills/continuous-learning-v2/*, .cursor/skills/continuous-learning-v2/*, commands/evolve.md
+
+---
+id: everything-claude-code-camel-case-files
+trigger: "When creating new JavaScript files"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Camel Case Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Consistent camelCase pattern in codeStyle analysis
+- Files follow camelCase in folderStructure
+
+---
+id: everything-claude-code-pascal-case-classes
+trigger: "When defining JavaScript classes"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Pascal Case Classes
+
+## Action
+
+Use PascalCase naming convention
+
+## Evidence
+
+- PascalCase classes specified in namingConventions
+- Consistent pattern across codebase
+
+---
+id: everything-claude-code-screaming-snake-constants
+trigger: "When defining constants"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Screaming Snake Constants
+
+## Action
+
+Use SCREAMING_SNAKE_CASE naming convention
+
+## Evidence
+
+- SCREAMING_SNAKE_CASE constants in namingConventions
+- Standard JavaScript practice
+
+---
+id: everything-claude-code-try-catch-errors
+trigger: "When handling potential errors"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Try Catch Errors
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- try-catch style specified in errorHandling
+- No custom error classes or global handlers detected
+
+---
+id: everything-claude-code-unit-integration-tests
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Unit Integration Tests
+
+## Action
+
+Create both unit and integration tests using *.test.js pattern
+
+## Evidence
+
+- testTypes include unit and integration
+- filePattern shows *.test.js convention
+
+---
+id: everything-claude-code-conventional-commits
+trigger: "When making commits"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Conventional Commits
+
+## Action
+
+Use conventional commit format with prefixes: feat, fix, docs, chore, test, refactor
+
+## Evidence
+
+- All commit examples follow conventional format
+- Consistent prefixes across commit history
+
+---
+id: everything-claude-code-70-char-commit-length
+trigger: "When writing commit messages"
+confidence: 0.75
+domain: git
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code 70 Char Commit Length
+
+## Action
+
+Keep commit messages around 70 characters average length
+
+## Evidence
+
+- averageLength shows 70 characters
+- Commit examples align with this pattern
+
+---
+id: everything-claude-code-multilang-docs-sync
+trigger: "When updating core documentation or features"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Multilang Docs Sync
+
+## Action
+
+Update English first, then translate to zh-CN, zh-TW, ja-JP and update cross-references
+
+## Evidence
+
+- multi-language-documentation-sync workflow frequency ~10x/month
+- Clear pattern in filesInvolved across language directories
+
+---
+id: everything-claude-code-cross-platform-sync
+trigger: "When adding new features or updating platform configurations"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Cross Platform Sync
+
+## Action
+
+Port changes to .cursor/, .codex/, .opencode/, and .agents/ directories
+
+## Evidence
+
+- cross-platform-harness-sync workflow frequency ~8x/month
+- Multiple platform directories in architecture
+
+---
+id: everything-claude-code-skill-structure
+trigger: "When adding a new skill or capability"
+confidence: 0.88
+domain: workflow
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Skill Structure
+
+## Action
+
+Create SKILL.md in main skills/, port to platform-specific directories, update README.md and package.json
+
+## Evidence
+
+- skill-addition-workflow frequency ~6x/month
+- Consistent skill structure across platforms
+
+---
+id: everything-claude-code-version-release-sync
+trigger: "When preparing a new release"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Version Release Sync
+
+## Action
+
+Update all package.json files, plugin manifests, README version references, and CHANGELOG.md
+
+## Evidence
+
+- version-release-workflow frequency ~3x/month
+- Multiple package.json files in different directories
+
+---
+id: everything-claude-code-hook-system-testing
+trigger: "When modifying hook behavior or adding new hooks"
+confidence: 0.82
+domain: workflow
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Hook System Testing
+
+## Action
+
+Update hooks.json, create/update scripts, port to .cursor/, and update corresponding tests
+
+## Evidence
+
+- hook-system-updates workflow frequency ~4x/month
+- hooks/ and tests/ directories in architecture
+
+---
+id: everything-claude-code-learning-system-updates
+trigger: "When enhancing continuous learning capabilities"
+confidence: 0.87
+domain: workflow
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Learning System Updates
+
+## Action
+
+Update main continuous-learning-v2 skill, port to platforms, update translations and related commands
+
+## Evidence
+
+- continuous-learning-updates workflow frequency ~5x/month
+- commands/evolve.md and instinct-*.md files referenced
+
+---
+id: everything-claude-code-hybrid-module-organization
+trigger: "When organizing code modules"
+confidence: 0.75
+domain: architecture
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Hybrid Module Organization
+
+## Action
+
+Use hybrid module organization with separate test location
+
+## Evidence
+
+- moduleOrganization: hybrid
+- testLocation: separate in architecture analysis
+
+---
+id: everything-claude-code-mixed-import-export
+trigger: "When writing import/export statements"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: affaan-m/everything-claude-code
+---
+
+# Everything Claude Code Mixed Import Export
+
+## Action
+
+Use mixed import and export styles as appropriate for the context
+
+## Evidence
+
+- importStyle: mixed and exportStyle: mixed in codeStyle
+- Flexible approach across codebase
+
