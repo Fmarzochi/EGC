@@ -7,10 +7,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"pre:bash:dev-server-block\" \"scripts/hooks/pre-bash-dev-server-block.js\" \"standard,strict\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/auto-tmux-dev.js\""
           }
         ],
-        "description": "Block dev servers outside tmux - ensures you can access logs"
+        "description": "Auto-start dev servers in tmux with directory-based session names"
       },
       {
         "matcher": "Bash",
