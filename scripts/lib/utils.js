@@ -339,6 +339,20 @@ function commandExists(cmd) {
  * @param {object} options - execSync options
  */
 function runCommand(cmd, options = {}) {
+  // Allowlist: only permit known-safe command prefixes
+  const allowedPrefixes = ['git ', 'node ', 'npx ', 'which ', 'where '];
+  if (!allowedPrefixes.some(prefix => cmd.startsWith(prefix))) {
+    return { success: false, output: 'runCommand blocked: unrecognized command prefix' };
+  }
+
+  // Reject shell metacharacters. $() and backticks are evaluated inside
+  // double quotes, so block $ and ` anywhere in cmd. Other operators
+  // (;|&) are literal inside quotes, so only check unquoted portions.
+  const unquoted = cmd.replace(/"[^"]*"/g, '').replace(/'[^']*'/g, '');
+  if (/[;|&\n]/.test(unquoted) || /[`$]/.test(cmd)) {
+    return { success: false, output: 'runCommand blocked: shell metacharacters not allowed' };
+  }
+
   try {
     const result = execSync(cmd, {
       encoding: 'utf8',

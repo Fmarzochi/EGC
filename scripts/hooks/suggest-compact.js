@@ -25,7 +25,7 @@ async function main() {
   // Track tool call count (increment in a temp file)
   // Use a session-specific counter file based on session ID from environment
   // or parent PID as fallback
-  const sessionId = process.env.CLAUDE_SESSION_ID || 'default';
+  const sessionId = (process.env.CLAUDE_SESSION_ID || 'default').replace(/[^a-zA-Z0-9_-]/g, '') || 'default';
   const counterFile = path.join(getTempDir(), `claude-tool-count-${sessionId}`);
   const rawThreshold = parseInt(process.env.COMPACT_THRESHOLD || '50', 10);
   const threshold = Number.isFinite(rawThreshold) && rawThreshold > 0 && rawThreshold <= 10000

@@ -64,6 +64,14 @@ _clv2_detect_project() {
     fi
   fi
 
+  # Compute hash from the original remote URL (legacy, for backward compatibility)
+  local legacy_hash_input="${remote_url:-$project_root}"
+
+  # Strip embedded credentials from remote URL (e.g., https://ghp_xxxx@github.com/...)
+  if [ -n "$remote_url" ]; then
+    remote_url=$(printf '%s' "$remote_url" | sed -E 's|://[^@]+@|://|')
+  fi
+
   local hash_input="${remote_url:-$project_root}"
   # Use SHA256 via python3 (portable across macOS/Linux, no shasum/sha256sum divergence)
   project_id=$(printf '%s' "$hash_input" | python3 -c "import sys,hashlib; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:12])" 2>/dev/null)
@@ -73,6 +81,17 @@ _clv2_detect_project() {
     project_id=$(printf '%s' "$hash_input" | shasum -a 256 2>/dev/null | cut -c1-12 || \
                  printf '%s' "$hash_input" | sha256sum 2>/dev/null | cut -c1-12 || \
                  echo "fallback")
+  fi
+
+  # Backward compatibility: if credentials were stripped and the hash changed,
+  # check if a project dir exists under the legacy hash and reuse it
+  if [ "$legacy_hash_input" != "$hash_input" ]; then
+    local legacy_id
+    legacy_id=$(printf '%s' "$legacy_hash_input" | python3 -c "import sys,hashlib; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:12])" 2>/dev/null)
+    if [ -n "$legacy_id" ] && [ -d "${_CLV2_PROJECTS_DIR}/${legacy_id}" ] && [ ! -d "${_CLV2_PROJECTS_DIR}/${project_id}" ]; then
+      # Migrate legacy directory to new hash
+      mv "${_CLV2_PROJECTS_DIR}/${legacy_id}" "${_CLV2_PROJECTS_DIR}/${project_id}" 2>/dev/null || project_id="$legacy_id"
+    fi
   fi
 
   # Export results
