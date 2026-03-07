@@ -186,7 +186,7 @@ def detect_project() -> dict:
 def _update_registry(pid: str, pname: str, proot: str, premote: str) -> None:
     """Update the projects.json registry."""
     try:
-        with open(REGISTRY_FILE) as f:
+        with open(REGISTRY_FILE, encoding="utf-8") as f:
             registry = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         registry = {}
@@ -200,7 +200,7 @@ def _update_registry(pid: str, pname: str, proot: str, premote: str) -> None:
 
     REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp_file = REGISTRY_FILE.parent / f".{REGISTRY_FILE.name}.tmp.{os.getpid()}"
-    with open(tmp_file, "w") as f:
+    with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(registry, f, indent=2)
         f.flush()
         os.fsync(f.fileno())
@@ -210,7 +210,7 @@ def _update_registry(pid: str, pname: str, proot: str, premote: str) -> None:
 def load_registry() -> dict:
     """Load the projects registry."""
     try:
-        with open(REGISTRY_FILE) as f:
+        with open(REGISTRY_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
@@ -272,7 +272,7 @@ def _load_instincts_from_dir(directory: Path, source_type: str, scope_label: str
     ]
     for file in files:
         try:
-            content = file.read_text()
+            content = file.read_text(encoding="utf-8")
             parsed = parse_instinct_file(content)
             for inst in parsed:
                 inst['_source_file'] = str(file)
@@ -379,7 +379,7 @@ def cmd_status(args) -> int:
     # Observations stats
     obs_file = project.get("observations_file")
     if obs_file and Path(obs_file).exists():
-        with open(obs_file) as f:
+        with open(obs_file, encoding="utf-8") as f:
             obs_count = sum(1 for _ in f)
         print(f"-" * 60)
         print(f"  Observations: {obs_count} events logged")
@@ -450,7 +450,7 @@ def cmd_import(args) -> int:
         except ValueError as e:
             print(f"Invalid path: {e}", file=sys.stderr)
             return 1
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
 
     # Parse instincts
     new_instincts = parse_instinct_file(content)
@@ -981,7 +981,7 @@ def cmd_projects(args) -> int:
         inherited_count = len(_load_instincts_from_dir(inherited_dir, "inherited", "project"))
         obs_file = project_dir / "observations.jsonl"
         if obs_file.exists():
-            with open(obs_file) as f:
+            with open(obs_file, encoding="utf-8") as f:
                 obs_count = sum(1 for _ in f)
         else:
             obs_count = 0

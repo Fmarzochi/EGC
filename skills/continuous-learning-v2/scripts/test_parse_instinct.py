@@ -13,6 +13,7 @@ Covers:
 """
 
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -483,6 +484,21 @@ def test_load_supports_md_extension(tmp_path):
     assert "test-instinct" in ids
 
 
+def test_load_instincts_from_dir_uses_utf8_encoding(tmp_path, monkeypatch):
+    yaml_file = tmp_path / "test.yaml"
+    yaml_file.write_text("placeholder")
+    calls = []
+
+    def fake_read_text(self, *args, **kwargs):
+        calls.append(kwargs.get("encoding"))
+        return SAMPLE_INSTINCT_YAML
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+    result = _load_instincts_from_dir(tmp_path, "personal", "project")
+    assert result[0]["id"] == "test-instinct"
+    assert calls == ["utf-8"]
+
+
 # ─────────────────────────────────────────────
 # load_all_instincts tests
 # ─────────────────────────────────────────────
@@ -938,6 +954,18 @@ def test_load_registry_valid(patch_globals):
     tree["registry_file"].write_text(json.dumps(data))
     result = load_registry()
     assert result == data
+
+
+def test_load_registry_uses_utf8_encoding(monkeypatch):
+    calls = []
+
+    def fake_open(path, mode="r", *args, **kwargs):
+        calls.append(kwargs.get("encoding"))
+        return io.StringIO("{}")
+
+    monkeypatch.setattr(_mod, "open", fake_open, raising=False)
+    assert load_registry() == {}
+    assert calls == ["utf-8"]
 
 
 def test_validate_instinct_id():
