@@ -53,7 +53,7 @@ origin: auto-extracted
 
 5. **Quality gate — Checklist + Holistic verdict**
 
-   #### 5a. Required checklist (verify by actually reading files)
+   ### 5a. Required checklist (verify by actually reading files)
 
    Execute **all** of the following before evaluating the draft:
 
@@ -62,7 +62,7 @@ origin: auto-extracted
    - [ ] Consider whether appending to an existing skill would suffice
    - [ ] Confirm this is a reusable pattern, not a one-off fix
 
-   #### 5b. Holistic verdict
+   ### 5b. Holistic verdict
 
    Synthesize the checklist results and draft quality, then choose **one** of the following:
 
