@@ -58,7 +58,7 @@ Write every section honestly. Do not skip sections — write "Nothing yet" or "N
 After writing, display the full contents and ask:
 
 ```
-Session saved to .claude/sessions/YYYY-MM-DD-<short-id>-session.tmp
+Session saved to [actual resolved path to the session file]
 
 Does this look accurate? Anything to correct or add before we close?
 ```
