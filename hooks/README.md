@@ -25,6 +25,7 @@ User request → Claude picks a tool → PreToolUse hook runs → Tool executes 
 | **Git push reminder** | `Bash` | Reminds to review changes before `git push` | 0 (warns) |
 | **Doc file warning** | `Write` | Warns about non-standard `.md`/`.txt` files (allows README, CLAUDE, CONTRIBUTING, CHANGELOG, LICENSE, SKILL, docs/, skills/); cross-platform path handling | 0 (warns) |
 | **Strategic compact** | `Edit\|Write` | Suggests manual `/compact` at logical intervals (every ~50 tool calls) | 0 (warns) |
+| **InsAIts security monitor** | `*` | Detects credential exposure, prompt injection, hallucinations, and behavioral anomalies (23 types) before tool execution. Blocks on critical findings, warns on non-critical. Writes audit log to `.insaits_audit_session.jsonl`. Requires `pip install insa-its`. [Details](../scripts/hooks/insaits-security-monitor.py) | 2 (blocks critical) / 0 (warns) |
 
 ### PostToolUse Hooks
 
@@ -36,7 +37,6 @@ User request → Claude picks a tool → PreToolUse hook runs → Tool executes 
 | **Prettier format** | `Edit` | Auto-formats JS/TS files with Prettier after edits |
 | **TypeScript check** | `Edit` | Runs `tsc --noEmit` after editing `.ts`/`.tsx` files |
 | **console.log warning** | `Edit` | Warns about `console.log` statements in edited files |
-| **InsAIts security monitor** | `.*` | Real-time AI security: catches credential exposure, prompt injection, hallucinations, behavioral anomalies (23 types). Writes audit log to `.insaits_audit_session.jsonl`. Requires `pip install insa-its`. [Details](../scripts/hooks/insaits-security-monitor.py) |
 
 ### Lifecycle Hooks
 

@@ -63,6 +63,18 @@
           }
         ],
         "description": "Capture tool use observations for continuous learning"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"pre:insaits-security\" \"scripts/hooks/insaits-security-wrapper.js\" \"standard,strict\"",
+            "async": true,
+            "timeout": 15
+          }
+        ],
+        "description": "InsAIts AI security monitor: detects credential exposure, prompt injection, hallucinations, and 20+ anomaly types before tool execution. Requires: pip install insa-its"
       }
     ],
     "PreCompact": [
@@ -165,17 +177,6 @@
           }
         ],
         "description": "Capture tool use results for continuous learning"
-      },
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/insaits-security-monitor.py\"",
-            "timeout": 15
-          }
-        ],
-        "description": "InsAIts AI security monitor: catches credential exposure, prompt injection, hallucinations, and 20+ anomaly types. Requires: pip install insa-its"
       }
     ],
     "Stop": [
