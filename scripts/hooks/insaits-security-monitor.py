@@ -175,7 +175,7 @@ def main() -> None:
 
     monitor: insAItsMonitor = insAItsMonitor(
         session_name="claude-code-hook",
-        dev_mode=True,
+        dev_mode=os.environ.get("INSAITS_DEV_MODE", "true").lower() in ("1", "true", "yes"),
     )
     result: Dict[str, Any] = monitor.send_message(
         text=text[:4000],
