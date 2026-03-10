@@ -58,7 +58,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Configure logging to stderr so it does not interfere with stdout protocol
 logging.basicConfig(
@@ -87,7 +87,6 @@ def extract_content(data: Dict[str, Any]) -> Tuple[str, str]:
     """
     tool_name: str = data.get("tool_name", "")
     tool_input: Dict[str, Any] = data.get("tool_input", {})
-    tool_result: Any = data.get("tool_response", {})
 
     text: str = ""
     context: str = ""
@@ -96,16 +95,9 @@ def extract_content(data: Dict[str, Any]) -> Tuple[str, str]:
         text = tool_input.get("content", "") or tool_input.get("new_string", "")
         context = "file:" + str(tool_input.get("file_path", ""))[:80]
     elif tool_name == "Bash":
+        # PreToolUse: the tool hasn't executed yet, inspect the command
         command: str = str(tool_input.get("command", ""))
-        # For PreToolUse we inspect the command itself
         text = command
-        # Also check tool_response if present (for flexibility)
-        if isinstance(tool_result, dict):
-            output = tool_result.get("output", "") or tool_result.get("stdout", "")
-            if output:
-                text = text + "\n" + output
-        elif isinstance(tool_result, str) and tool_result:
-            text = text + "\n" + tool_result
         context = "bash:" + command[:80]
     elif "content" in data:
         content: Any = data["content"]

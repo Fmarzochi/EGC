@@ -54,9 +54,24 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
+  // Log non-ENOENT spawn errors (timeout, signal kill, etc.) so users
+  // know the security monitor did not run — fail-open with a warning.
+  if (result.error) {
+    process.stderr.write(`[InsAIts] Security monitor failed to run: ${result.error.message}\n`);
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
 
-  const code = Number.isInteger(result.status) ? result.status : 0;
-  process.exit(code);
+  // result.status is null when the process was killed by a signal or
+  // timed out.  Treat that as an error rather than silently passing.
+  if (!Number.isInteger(result.status)) {
+    const signal = result.signal || 'unknown';
+    process.stderr.write(`[InsAIts] Security monitor killed (signal: ${signal}). Tool execution continues.\n`);
+    process.exit(0);
+  }
+
+  process.exit(result.status);
 });
