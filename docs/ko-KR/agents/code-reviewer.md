@@ -42,6 +42,23 @@ model: sonnet
 - **취약한 의존성** — 알려진 취약점이 있는 패키지
 - **로그에 비밀 노출** — 민감한 데이터 로깅 (토큰, 비밀번호, PII)
 
+```typescript
+// BAD: 문자열 연결을 통한 SQL 인젝션
+const query = `SELECT * FROM users WHERE id = ${userId}`;
+
+// GOOD: 매개변수화된 쿼리
+const query = `SELECT * FROM users WHERE id = $1`;
+const result = await db.query(query, [userId]);
+```
+
+```typescript
+// BAD: 소독 없이 사용자 HTML 렌더링
+// 항상 DOMPurify.sanitize() 또는 동등한 것으로 사용자 콘텐츠 소독
+
+// GOOD: 텍스트 콘텐츠 사용 또는 소독
+<div>{userComment}</div>
+```
+
 ### 코드 품질 (HIGH)
 
 - **큰 함수** (50줄 초과) — 작고 집중된 함수로 분리
@@ -52,6 +69,31 @@ model: sonnet
 - **console.log 문** — merge 전에 디버그 로깅 제거
 - **테스트 누락** — 테스트 커버리지 없는 새 코드 경로
 - **죽은 코드** — 주석 처리된 코드, 사용되지 않는 import, 도달 불가능한 분기
+
+```typescript
+// BAD: 깊은 중첩 + 변이
+function processUsers(users) {
+  if (users) {
+    for (const user of users) {
+      if (user.active) {
+        if (user.email) {
+          user.verified = true;  // 변이!
+          results.push(user);
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// GOOD: 조기 반환 + 불변성 + 플랫
+function processUsers(users) {
+  if (!users) return [];
+  return users
+    .filter(user => user.active && user.email)
+    .map(user => ({ ...user, verified: true }));
+}
+```
 
 ### React/Next.js 패턴 (HIGH)
 
@@ -66,6 +108,26 @@ React/Next.js 코드 리뷰 시 추가 확인:
 - **로딩/에러 상태 누락** — 폴백 UI 없는 데이터 페칭
 - **오래된 클로저** — 오래된 상태 값을 캡처하는 이벤트 핸들러
 
+```tsx
+// BAD: 의존성 누락, 오래된 클로저
+useEffect(() => {
+  fetchData(userId);
+}, []); // userId가 deps에서 누락
+
+// GOOD: 완전한 의존성
+useEffect(() => {
+  fetchData(userId);
+}, [userId]);
+```
+
+```tsx
+// BAD: 재정렬 가능한 목록에서 인덱스를 key로 사용
+{items.map((item, i) => <ListItem key={i} item={item} />)}
+
+// GOOD: 안정적인 고유 key
+{items.map(item => <ListItem key={item.id} item={item} />)}
+```
+
 ### Node.js/Backend 패턴 (HIGH)
 
 백엔드 코드 리뷰 시:
@@ -77,6 +139,22 @@ React/Next.js 코드 리뷰 시 추가 확인:
 - **타임아웃 누락** — 타임아웃 설정 없는 외부 HTTP 호출
 - **에러 메시지 누출** — 클라이언트에 내부 에러 세부사항 전송
 - **CORS 설정 누락** — 의도하지 않은 오리진에서 접근 가능한 API
+
+```typescript
+// BAD: N+1 쿼리 패턴
+const users = await db.query('SELECT * FROM users');
+for (const user of users) {
+  user.posts = await db.query('SELECT * FROM posts WHERE user_id = $1', [user.id]);
+}
+
+// GOOD: JOIN 또는 배치를 사용한 단일 쿼리
+const usersWithPosts = await db.query(`
+  SELECT u.*, json_agg(p.*) as posts
+  FROM users u
+  LEFT JOIN posts p ON p.user_id = u.id
+  GROUP BY u.id
+`);
+```
 
 ### 성능 (MEDIUM)
 
@@ -132,7 +210,20 @@ Fix: 환경 변수로 이동하고 .gitignore/.env.example에 추가
 - **경고**: HIGH 이슈만 (주의하여 merge 가능)
 - **차단**: CRITICAL 이슈 발견 — merge 전에 반드시 수정
 
-## AI 생성 코드 리뷰 부록
+## 프로젝트별 가이드라인
+
+가능한 경우, `CLAUDE.md` 또는 프로젝트 규칙의 프로젝트별 컨벤션도 확인:
+
+- 파일 크기 제한 (예: 일반적으로 200-400줄, 최대 800줄)
+- 이모지 정책 (많은 프로젝트가 코드에서 이모지 사용 금지)
+- 불변성 요구사항 (변이 대신 spread 연산자)
+- 데이터베이스 정책 (RLS, 마이그레이션 패턴)
+- 에러 처리 패턴 (커스텀 에러 클래스, 에러 바운더리)
+- 상태 관리 컨벤션 (Zustand, Redux, Context)
+
+프로젝트의 확립된 패턴에 맞게 리뷰를 조정하세요. 확신이 없을 때는 코드베이스의 나머지 부분이 하는 방식에 맞추세요.
+
+## v1.8 AI 생성 코드 리뷰 부록
 
 AI 생성 변경사항 리뷰 시 우선순위:
 
@@ -140,3 +231,7 @@ AI 생성 변경사항 리뷰 시 우선순위:
 2. 보안 가정 및 신뢰 경계
 3. 숨겨진 결합 또는 의도치 않은 아키텍처 드리프트
 4. 불필요한 모델 비용 유발 복잡성
+
+비용 인식 체크:
+- 명확한 추론 필요 없이 더 비싼 모델로 에스컬레이션하는 워크플로우를 플래그하세요.
+- 결정론적 리팩토링에는 저비용 티어를 기본으로 사용하도록 권장하세요.

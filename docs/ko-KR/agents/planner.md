@@ -95,6 +95,85 @@ model: opus
 6. **점진적으로** — 각 단계가 검증 가능해야 함
 7. **결정 문서화** — 무엇만이 아닌 왜를 설명
 
+## 실전 예제: Stripe 구독 추가
+
+기대되는 상세 수준을 보여주는 완전한 계획입니다:
+
+```markdown
+# 구현 계획: Stripe 구독 결제
+
+## 개요
+무료/프로/엔터프라이즈 티어의 구독 결제를 추가합니다. 사용자는 Stripe Checkout을
+통해 업그레이드하고, 웹훅 이벤트가 구독 상태를 동기화합니다.
+
+## 요구사항
+- 세 가지 티어: Free (기본), Pro ($29/월), Enterprise ($99/월)
+- 결제 흐름을 위한 Stripe Checkout
+- 구독 라이프사이클 이벤트를 위한 웹훅 핸들러
+- 구독 티어 기반 기능 게이팅
+
+## 아키텍처 변경사항
+- 새 테이블: `subscriptions` (user_id, stripe_customer_id, stripe_subscription_id, status, tier)
+- 새 API 라우트: `app/api/checkout/route.ts` — Stripe Checkout 세션 생성
+- 새 API 라우트: `app/api/webhooks/stripe/route.ts` — Stripe 이벤트 처리
+- 새 미들웨어: 게이트된 기능에 대한 구독 티어 확인
+- 새 컴포넌트: `PricingTable` — 업그레이드 버튼이 있는 티어 표시
+
+## 구현 단계
+
+### Phase 1: 데이터베이스 & 백엔드 (2개 파일)
+1. **구독 마이그레이션 생성** (File: supabase/migrations/004_subscriptions.sql)
+   - Action: RLS 정책과 함께 CREATE TABLE subscriptions
+   - Why: 결제 상태를 서버 측에 저장, 클라이언트를 절대 신뢰하지 않음
+   - Dependencies: 없음
+   - Risk: Low
+
+2. **Stripe 웹훅 핸들러 생성** (File: src/app/api/webhooks/stripe/route.ts)
+   - Action: checkout.session.completed, customer.subscription.updated,
+     customer.subscription.deleted 이벤트 처리
+   - Why: 구독 상태를 Stripe와 동기화 유지
+   - Dependencies: 단계 1 (subscriptions 테이블 필요)
+   - Risk: High — 웹훅 서명 검증이 중요
+
+### Phase 2: 체크아웃 흐름 (2개 파일)
+3. **체크아웃 API 라우트 생성** (File: src/app/api/checkout/route.ts)
+   - Action: price_id와 success/cancel URL로 Stripe Checkout 세션 생성
+   - Why: 서버 측 세션 생성으로 가격 변조 방지
+   - Dependencies: 단계 1
+   - Risk: Medium — 사용자 인증 여부를 반드시 검증해야 함
+
+4. **가격 페이지 구축** (File: src/components/PricingTable.tsx)
+   - Action: 기능 비교와 업그레이드 버튼이 있는 세 가지 티어 표시
+   - Why: 사용자 대면 업그레이드 흐름
+   - Dependencies: 단계 3
+   - Risk: Low
+
+### Phase 3: 기능 게이팅 (1개 파일)
+5. **티어 기반 미들웨어 추가** (File: src/middleware.ts)
+   - Action: 보호된 라우트에서 구독 티어 확인, 무료 사용자 리다이렉트
+   - Why: 서버 측에서 티어 제한 강제
+   - Dependencies: 단계 1-2 (구독 데이터 필요)
+   - Risk: Medium — 엣지 케이스 처리 필요 (expired, past_due)
+
+## 테스트 전략
+- 단위 테스트: 웹훅 이벤트 파싱, 티어 확인 로직
+- 통합 테스트: 체크아웃 세션 생성, 웹훅 처리
+- E2E 테스트: 전체 업그레이드 흐름 (Stripe 테스트 모드)
+
+## 위험 및 완화
+- **위험**: 웹훅 이벤트가 순서 없이 도착
+  - 완화: 이벤트 타임스탬프 사용, 멱등 업데이트
+- **위험**: 사용자가 업그레이드했지만 웹훅 실패
+  - 완화: 폴백으로 Stripe 폴링, "처리 중" 상태 표시
+
+## 성공 기준
+- [ ] 사용자가 Stripe Checkout을 통해 Free에서 Pro로 업그레이드 가능
+- [ ] 웹훅이 구독 상태를 정확히 동기화
+- [ ] 무료 사용자가 Pro 기능에 접근 불가
+- [ ] 다운그레이드/취소가 정상 작동
+- [ ] 모든 테스트가 80% 이상 커버리지로 통과
+```
+
 ## 리팩토링 계획 시
 
 1. 코드 스멜과 기술 부채 식별
@@ -114,6 +193,17 @@ model: opus
 
 각 Phase는 독립적으로 merge 가능해야 합니다. 모든 Phase가 완료되어야 작동하는 계획은 피하세요.
 
----
+## 확인해야 할 위험 신호
+
+- 큰 함수 (50줄 초과)
+- 깊은 중첩 (4단계 초과)
+- 중복 코드
+- 에러 처리 누락
+- 하드코딩된 값
+- 테스트 누락
+- 성능 병목
+- 테스트 전략 없는 계획
+- 명확한 파일 경로 없는 단계
+- 독립적으로 전달할 수 없는 Phase
 
 **기억하세요**: 좋은 계획은 구체적이고, 실행 가능하며, 해피 패스와 엣지 케이스 모두를 고려합니다. 최고의 계획은 자신감 있고 점진적인 구현을 가능하게 합니다.
