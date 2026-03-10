@@ -104,6 +104,19 @@ function readCommandLog(logFile) {
     .map(line => JSON.parse(line));
 }
 
+function withPrependedPath(binDir, env = {}) {
+  const pathKey = Object.keys(process.env).find(key => key.toLowerCase() === 'path')
+    || (process.platform === 'win32' ? 'Path' : 'PATH');
+  const currentPath = process.env[pathKey] || process.env.PATH || '';
+  const nextPath = `${binDir}${path.delimiter}${currentPath}`;
+
+  return {
+    ...env,
+    [pathKey]: nextPath,
+    PATH: nextPath
+  };
+}
+
 // Test suite
 async function runTests() {
   console.log('\n=== Testing Hook Scripts ===\n');
@@ -744,9 +757,11 @@ async function runTests() {
     createCommandShim(binDir, 'npx', logFile);
 
     const stdinJson = JSON.stringify({ tool_input: { file_path: filePath } });
-    const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson, {
-      PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`
-    });
+    const result = await runScript(
+      path.join(scriptsDir, 'post-edit-format.js'),
+      stdinJson,
+      withPrependedPath(binDir)
+    );
 
     assert.strictEqual(result.code, 0, 'Should exit 0 for config-only repo');
     const logEntries = readCommandLog(logFile);
@@ -777,10 +792,11 @@ async function runTests() {
     createCommandShim(binDir, 'pnpm', logFile);
 
     const stdinJson = JSON.stringify({ tool_input: { file_path: filePath } });
-    const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson, {
-      PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
-      CLAUDE_PACKAGE_MANAGER: 'pnpm'
-    });
+    const result = await runScript(
+      path.join(scriptsDir, 'post-edit-format.js'),
+      stdinJson,
+      withPrependedPath(binDir, { CLAUDE_PACKAGE_MANAGER: 'pnpm' })
+    );
 
     assert.strictEqual(result.code, 0, 'Should exit 0 when pnpm fallback is used');
     const logEntries = readCommandLog(logFile);
@@ -808,9 +824,11 @@ async function runTests() {
     createCommandShim(binDir, 'bunx', logFile);
 
     const stdinJson = JSON.stringify({ tool_input: { file_path: filePath } });
-    const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson, {
-      PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`
-    });
+    const result = await runScript(
+      path.join(scriptsDir, 'post-edit-format.js'),
+      stdinJson,
+      withPrependedPath(binDir)
+    );
 
     assert.strictEqual(result.code, 0, 'Should exit 0 when project config selects bun');
     const logEntries = readCommandLog(logFile);
