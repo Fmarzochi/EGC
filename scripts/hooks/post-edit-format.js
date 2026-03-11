@@ -7,83 +7,70 @@
  * Runs after Edit tool use. If the edited file is a JS/TS file,
  * auto-detects the project formatter (Biome or Prettier) by looking
  * for config files, then formats accordingly.
+ *
+ * For Biome, uses `check --write` (format + lint in one pass) to
+ * avoid a redundant second invocation from quality-gate.js.
+ *
+ * Prefers the local node_modules/.bin binary over npx to skip
+ * package-resolution overhead (~200-500ms savings per invocation).
+ *
  * Fails silently if no formatter is found or installed.
  */
 
-const { execFileSync } = require('child_process');
-const fs = require('fs');
+const { execFileSync, spawnSync } = require('child_process');
 const path = require('path');
 
+// Shell metacharacters that cmd.exe interprets as command separators/operators
+const UNSAFE_PATH_CHARS = /[&|<>^%!]/;
+
+const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
+
 const MAX_STDIN = 1024 * 1024; // 1MB limit
-let data = '';
-process.stdin.setEncoding('utf8');
 
-process.stdin.on('data', chunk => {
-  if (data.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - data.length;
-    data += chunk.substring(0, remaining);
-  }
-});
-
-function findProjectRoot(startDir) {
-  let dir = startDir;
-  while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
-    dir = path.dirname(dir);
-  }
-  return startDir;
-}
-
-function detectFormatter(projectRoot) {
-  const biomeConfigs = ['biome.json', 'biome.jsonc'];
-  for (const cfg of biomeConfigs) {
-    if (fs.existsSync(path.join(projectRoot, cfg))) return 'biome';
-  }
-
-  const prettierConfigs = [
-    '.prettierrc',
-    '.prettierrc.json',
-    '.prettierrc.js',
-    '.prettierrc.cjs',
-    '.prettierrc.mjs',
-    '.prettierrc.yml',
-    '.prettierrc.yaml',
-    '.prettierrc.toml',
-    'prettier.config.js',
-    'prettier.config.cjs',
-    'prettier.config.mjs',
-  ];
-  for (const cfg of prettierConfigs) {
-    if (fs.existsSync(path.join(projectRoot, cfg))) return 'prettier';
-  }
-
-  return null;
-}
-
-function getFormatterCommand(formatter, filePath) {
-  const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  if (formatter === 'biome') {
-    return { bin: npxBin, args: ['@biomejs/biome', 'format', '--write', filePath] };
-  }
-  if (formatter === 'prettier') {
-    return { bin: npxBin, args: ['prettier', '--write', filePath] };
-  }
-  return null;
-}
-
-process.stdin.on('end', () => {
+/**
+ * Core logic — exported so run-with-flags.js can call directly
+ * without spawning a child process.
+ *
+ * @param {string} rawInput - Raw JSON string from stdin
+ * @returns {string} The original input (pass-through)
+ */
+function run(rawInput) {
   try {
-    const input = JSON.parse(data);
+    const input = JSON.parse(rawInput);
     const filePath = input.tool_input?.file_path;
 
     if (filePath && /\.(ts|tsx|js|jsx)$/.test(filePath)) {
       try {
-        const projectRoot = findProjectRoot(path.dirname(path.resolve(filePath)));
+        const resolvedFilePath = path.resolve(filePath);
+        const projectRoot = findProjectRoot(path.dirname(resolvedFilePath));
         const formatter = detectFormatter(projectRoot);
-        const cmd = getFormatterCommand(formatter, filePath);
+        if (!formatter) return rawInput;
 
-        if (cmd) {
-          execFileSync(cmd.bin, cmd.args, {
+        const resolved = resolveFormatterBin(projectRoot, formatter);
+        if (!resolved) return rawInput;
+
+        // Biome: `check --write` = format + lint in one pass
+        // Prettier: `--write` = format only
+        const args = formatter === 'biome' ? [...resolved.prefix, 'check', '--write', resolvedFilePath] : [...resolved.prefix, '--write', resolvedFilePath];
+
+        if (process.platform === 'win32' && resolved.bin.endsWith('.cmd')) {
+          // Windows: .cmd files require shell to execute. Guard against
+          // command injection by rejecting paths with shell metacharacters.
+          if (UNSAFE_PATH_CHARS.test(resolvedFilePath)) {
+            throw new Error('File path contains unsafe shell characters');
+          }
+          const result = spawnSync(resolved.bin, args, {
+            cwd: projectRoot,
+            shell: true,
+            stdio: 'pipe',
+            timeout: 15000
+          });
+          if (result.error) throw result.error;
+          if (typeof result.status === 'number' && result.status !== 0) {
+            throw new Error(result.stderr?.toString() || `Formatter exited with status ${result.status}`);
+          }
+        } else {
+          execFileSync(resolved.bin, args, {
             cwd: projectRoot,
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: 15000
@@ -97,6 +84,26 @@ process.stdin.on('end', () => {
     // Invalid input — pass through
   }
 
-  process.stdout.write(data);
-  process.exit(0);
-});
+  return rawInput;
+}
+
+// ── stdin entry point (backwards-compatible) ────────────────────
+if (require.main === module) {
+  let data = '';
+  process.stdin.setEncoding('utf8');
+
+  process.stdin.on('data', chunk => {
+    if (data.length < MAX_STDIN) {
+      const remaining = MAX_STDIN - data.length;
+      data += chunk.substring(0, remaining);
+    }
+  });
+
+  process.stdin.on('end', () => {
+    data = run(data);
+    process.stdout.write(data);
+    process.exit(0);
+  });
+}
+
+module.exports = { run };
