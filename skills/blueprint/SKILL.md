@@ -74,12 +74,13 @@ Produces a plan with parallel steps where possible (e.g., "implement Anthropic p
 
 This skill ships with Everything Claude Code. No separate installation is needed when ECC is installed.
 
-```bash
-# Verify the skill is present in your ECC checkout
-ls ~/.claude/plugins/ecc/skills/blueprint/SKILL.md
-```
+### Full ECC install
 
-If you are vendoring only this skill outside the full ECC install, copy the reviewed file from this repository into `~/.claude/skills/blueprint/SKILL.md` and keep it pinned to a reviewed ECC commit.
+If you are working from the ECC repository checkout, verify the skill is present with:
+
+```bash
+test -f skills/blueprint/SKILL.md
+```
 
 To update later, review the ECC diff before updating:
 
@@ -90,6 +91,10 @@ git log --oneline HEAD..origin/main       # review new commits before updating
 git checkout <reviewed-full-sha>          # pin to a specific reviewed commit
 ```
 
+### Vendored standalone install
+
+If you are vendoring only this skill outside the full ECC install, copy the reviewed file from the ECC repository into `~/.claude/skills/blueprint/SKILL.md`. Vendored copies do not have a git remote, so update them by re-copying the file from a reviewed ECC commit rather than running `git pull`.
+
 ## Requirements
 
 - Claude Code (for `/blueprint` slash command)
@@ -97,4 +102,4 @@ git checkout <reviewed-full-sha>          # pin to a specific reviewed commit
 
 ## Source
 
-Inspired by [github.com/antbotlab/blueprint](https://github.com/antbotlab/blueprint) — upstream project and reference design.
+Inspired by antbotlab/blueprint — upstream project and reference design.
