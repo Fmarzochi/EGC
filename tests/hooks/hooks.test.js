@@ -2106,6 +2106,21 @@ async function runTests() {
   else failed++;
 
   if (
+    test('observer-loop uses a configurable max-turn budget with safe default', () => {
+      const observerLoopSource = fs.readFileSync(
+        path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'agents', 'observer-loop.sh'),
+        'utf8'
+      );
+
+      assert.ok(observerLoopSource.includes('ECC_OBSERVER_MAX_TURNS'), 'observer-loop should allow max-turn overrides');
+      assert.ok(observerLoopSource.includes('max_turns="${ECC_OBSERVER_MAX_TURNS:-10}"'), 'observer-loop should default to 10 turns');
+      assert.ok(!observerLoopSource.includes('--max-turns 3'), 'observer-loop should not hardcode a 3-turn limit');
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
     await asyncTest('detect-project exports the resolved Python command for downstream scripts', async () => {
       const detectProjectPath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'scripts', 'detect-project.sh');
       const shellCommand = [`source "${detectProjectPath}" >/dev/null 2>&1`, 'printf "%s\\n" "${CLV2_PYTHON_CMD:-}"'].join('; ');
