@@ -57,7 +57,7 @@ origin: auto-extracted
 
    Execute **all** of the following before evaluating the draft:
 
-   - [ ] Grep `~/.claude/skills/` by keyword to check for content overlap
+   - [ ] Grep `~/.claude/skills/` and relevant project `.claude/skills/` files by keyword to check for content overlap
    - [ ] Check MEMORY.md (both project and global) for overlap
    - [ ] Consider whether appending to an existing skill would suffice
    - [ ] Confirm this is a reusable pattern, not a one-off fix
@@ -82,6 +82,7 @@ origin: auto-extracted
 
 6. **Verdict-specific confirmation flow**
 
+   - **Improve then Save**: Present the required improvements + revised draft + updated checklist/verdict after one re-evaluation; if the revised verdict is **Save**, save after user confirmation, otherwise follow the new verdict
    - **Save**: Present save path + checklist results + 1-line verdict rationale + full draft → save after user confirmation
    - **Absorb into [X]**: Present target path + additions (diff format) + checklist results + verdict rationale → append after user confirmation
    - **Drop**: Show checklist results + reasoning only (no confirmation needed)
