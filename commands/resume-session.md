@@ -1,5 +1,5 @@
 ---
-description: Load the most recent session file from .claude/sessions/ in the current project (or ~/.claude/sessions/ globally) and resume work with full context from where the last session ended.
+description: Load the most recent session file from ~/.claude/sessions/ and resume work with full context from where the last session ended.
 ---
 
 # Resume Session Command
@@ -17,10 +17,10 @@ This command is the counterpart to `/save-session`.
 ## Usage
 
 ```
-/resume-session                                                      # loads most recent file in .claude/sessions/ (project level)
+/resume-session                                                      # loads most recent file in ~/.claude/sessions/
 /resume-session 2024-01-15                                           # loads most recent session for that date
-/resume-session .claude/sessions/2024-01-15-abc123-session.tmp      # loads specific file path
-/resume-session ~/.claude/sessions/2024-01-15-abc123-session.tmp    # loads from global location
+/resume-session ~/.claude/sessions/2024-01-15-session.tmp           # loads a specific legacy-format file
+/resume-session ~/.claude/sessions/2024-01-15-abc123de-session.tmp  # loads a current short-id session file
 ```
 
 ## Process
@@ -29,20 +29,19 @@ This command is the counterpart to `/save-session`.
 
 If no argument provided:
 
-1. First check `.claude/sessions/` in the current project directory
-2. If not found there, fall back to `~/.claude/sessions/`
-3. Pick the most recently modified `.tmp` file from whichever location has files
-4. If neither folder exists or both are empty, tell the user:
+1. Check `~/.claude/sessions/`
+2. Pick the most recently modified `*-session.tmp` file
+3. If the folder does not exist or has no matching files, tell the user:
    ```
-   No session files found in .claude/sessions/ or ~/.claude/sessions/
+   No session files found in ~/.claude/sessions/
    Run /save-session at the end of a session to create one.
    ```
    Then stop.
 
 If an argument is provided:
 
-- If it looks like a date (`YYYY-MM-DD`), search `.claude/sessions/` first then `~/.claude/sessions/` for files matching
-  `YYYY-MM-DD-session.tmp` (old format) or `YYYY-MM-DD-<shortid>-session.tmp` (new format)
+- If it looks like a date (`YYYY-MM-DD`), search `~/.claude/sessions/` for files matching
+  `YYYY-MM-DD-session.tmp` (legacy format) or `YYYY-MM-DD-<shortid>-session.tmp` (current format)
   and load the most recently modified variant for that date
 - If it looks like a file path, read that file directly
 - If not found, report clearly and stop
@@ -95,8 +94,8 @@ If no next step is defined — ask the user where to start, and optionally sugge
 
 ## Edge Cases
 
-**Multiple sessions for the same date** (`2024-01-15-session.tmp`, `2024-01-15-abc123-session.tmp`):
-Load the most recently modified file for that date.
+**Multiple sessions for the same date** (`2024-01-15-session.tmp`, `2024-01-15-abc123de-session.tmp`):
+Load the most recently modified matching file for that date, regardless of whether it uses the legacy no-id format or the current short-id format.
 
 **Session file references files that no longer exist:**
 Note this during the briefing — "⚠️ `path/to/file.ts` referenced in session but not found on disk."
@@ -115,7 +114,7 @@ Report: "Session file found but appears empty or unreadable. You may need to cre
 ## Example Output
 
 ```
-SESSION LOADED: .claude/sessions/2024-01-15-abc123-session.tmp
+SESSION LOADED: /Users/you/.claude/sessions/2024-01-15-abc123de-session.tmp
 ════════════════════════════════════════════════
 
 PROJECT: my-app — JWT Authentication

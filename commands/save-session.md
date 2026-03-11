@@ -1,5 +1,5 @@
 ---
-description: Save current session state to a dated file in .claude/sessions/ (project level by default) so work can be resumed in a future session with full context.
+description: Save current session state to a dated file in ~/.claude/sessions/ so work can be resumed in a future session with full context.
 ---
 
 # Save Session Command
@@ -26,17 +26,15 @@ Before writing the file, collect:
 
 ### Step 2: Create the sessions folder if it doesn't exist
 
-Create the folder at the **project level** by default:
+Create the canonical sessions folder in the user's Claude home directory:
 
 ```bash
-mkdir -p .claude/sessions
+mkdir -p ~/.claude/sessions
 ```
-
-If the user explicitly asks for global storage, use `~/.claude/sessions` instead.
 
 ### Step 3: Write the session file
 
-Create `.claude/sessions/YYYY-MM-DD-<short-id>-session.tmp` in the current project directory, using today's actual date and a short-id that satisfies the rules enforced by `SESSION_FILENAME_REGEX` in `session-manager.js`:
+Create `~/.claude/sessions/YYYY-MM-DD-<short-id>-session.tmp`, using today's actual date and a short-id that satisfies the rules enforced by `SESSION_FILENAME_REGEX` in `session-manager.js`:
 
 - Allowed characters: lowercase `a-z`, digits `0-9`, hyphens `-`
 - Minimum length: 8 characters
@@ -47,7 +45,7 @@ Invalid examples: `ABC123de` (uppercase), `short` (under 8 chars), `test_id1` (u
 
 Full valid filename example: `2024-01-15-abc123de-session.tmp`
 
-Each session always gets a unique short-id, so multiple sessions on the same day never collide.
+The legacy filename `YYYY-MM-DD-session.tmp` is still valid, but new session files should prefer the short-id form to avoid same-day collisions.
 
 ### Step 4: Populate the file with all sections below
 
@@ -273,5 +271,5 @@ Then test with Postman — the response should include a `Set-Cookie` header.
 - The "What Did NOT Work" section is the most critical — future sessions will blindly retry failed approaches without it
 - If the user asks to save mid-session (not just at the end), save what's known so far and mark in-progress items clearly
 - The file is meant to be read by Claude at the start of the next session via `/resume-session`
-- Save to `.claude/sessions/` inside the current project by default — this keeps session logs co-located with the project they belong to
-- Use `~/.claude/sessions/` only if the user explicitly requests global storage or there is no active project directory
+- Use the canonical global session store: `~/.claude/sessions/`
+- Prefer the short-id filename form (`YYYY-MM-DD-<short-id>-session.tmp`) for any new session file
