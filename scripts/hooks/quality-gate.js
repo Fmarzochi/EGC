@@ -67,7 +67,7 @@ function maybeRunQualityGate(filePath) {
   const strict = String(process.env.ECC_QUALITY_GATE_STRICT || '').toLowerCase() === 'true';
 
   if (['.ts', '.tsx', '.js', '.jsx', '.json', '.md'].includes(ext)) {
-    const projectRoot = findProjectRoot(path.dirname(path.resolve(filePath)));
+    const projectRoot = findProjectRoot(path.dirname(filePath));
     const formatter = detectFormatter(projectRoot);
 
     if (formatter === 'biome') {

@@ -16,14 +16,11 @@ const projectRootCache = new Map();
 const formatterCache = new Map();
 const binCache = new Map();
 
-// ── Public helpers ──────────────────────────────────────────────────
+// ── Config file lists (single source of truth) ─────────────────────
 
-// Markers that indicate a project root (formatter configs included so
-// repos without package.json are still detected correctly).
-const PROJECT_ROOT_MARKERS = [
-  'package.json',
-  'biome.json',
-  'biome.jsonc',
+const BIOME_CONFIGS = ['biome.json', 'biome.jsonc'];
+
+const PRETTIER_CONFIGS = [
   '.prettierrc',
   '.prettierrc.json',
   '.prettierrc.js',
@@ -36,6 +33,19 @@ const PROJECT_ROOT_MARKERS = [
   'prettier.config.cjs',
   'prettier.config.mjs'
 ];
+
+const PROJECT_ROOT_MARKERS = ['package.json', ...BIOME_CONFIGS, ...PRETTIER_CONFIGS];
+
+// ── Windows .cmd shim mapping ───────────────────────────────────────
+const WIN_CMD_SHIMS = { npx: 'npx.cmd', pnpm: 'pnpm.cmd', yarn: 'yarn.cmd', bunx: 'bunx.cmd' };
+
+// ── Formatter → package name mapping ────────────────────────────────
+const FORMATTER_PACKAGES = {
+  biome: { binName: 'biome', pkgName: '@biomejs/biome' },
+  prettier: { binName: 'prettier', pkgName: 'prettier' }
+};
+
+// ── Public helpers ──────────────────────────────────────────────────
 
 /**
  * Walk up from `startDir` until a directory containing a known project
@@ -73,8 +83,7 @@ function findProjectRoot(startDir) {
 function detectFormatter(projectRoot) {
   if (formatterCache.has(projectRoot)) return formatterCache.get(projectRoot);
 
-  const biomeConfigs = ['biome.json', 'biome.jsonc'];
-  for (const cfg of biomeConfigs) {
+  for (const cfg of BIOME_CONFIGS) {
     if (fs.existsSync(path.join(projectRoot, cfg))) {
       formatterCache.set(projectRoot, 'biome');
       return 'biome';
@@ -95,20 +104,7 @@ function detectFormatter(projectRoot) {
     // Malformed package.json — continue to file-based detection
   }
 
-  const prettierConfigs = [
-    '.prettierrc',
-    '.prettierrc.json',
-    '.prettierrc.js',
-    '.prettierrc.cjs',
-    '.prettierrc.mjs',
-    '.prettierrc.yml',
-    '.prettierrc.yaml',
-    '.prettierrc.toml',
-    'prettier.config.js',
-    'prettier.config.cjs',
-    'prettier.config.mjs'
-  ];
-  for (const cfg of prettierConfigs) {
+  for (const cfg of PRETTIER_CONFIGS) {
     if (fs.existsSync(path.join(projectRoot, cfg))) {
       formatterCache.set(projectRoot, 'prettier');
       return 'prettier';
@@ -126,9 +122,6 @@ function detectFormatter(projectRoot) {
  * @param {string} projectRoot - Absolute path to the project root
  * @returns {{ bin: string, prefix: string[] }}
  */
-// Windows .cmd shim mapping for cross-platform safety
-const WIN_CMD_SHIMS = { npx: 'npx.cmd', pnpm: 'pnpm.cmd', yarn: 'yarn.cmd', bunx: 'bunx.cmd' };
-
 function getRunnerFromPackageManager(projectRoot) {
   const isWin = process.platform === 'win32';
   const { getPackageManager } = require('./package-manager');
@@ -154,37 +147,25 @@ function resolveFormatterBin(projectRoot, formatter) {
   const cacheKey = `${projectRoot}:${formatter}`;
   if (binCache.has(cacheKey)) return binCache.get(cacheKey);
 
+  const pkg = FORMATTER_PACKAGES[formatter];
+  if (!pkg) {
+    binCache.set(cacheKey, null);
+    return null;
+  }
+
   const isWin = process.platform === 'win32';
+  const localBin = path.join(projectRoot, 'node_modules', '.bin', isWin ? `${pkg.binName}.cmd` : pkg.binName);
 
-  if (formatter === 'biome') {
-    const localBin = path.join(projectRoot, 'node_modules', '.bin', isWin ? 'biome.cmd' : 'biome');
-    if (fs.existsSync(localBin)) {
-      const result = { bin: localBin, prefix: [] };
-      binCache.set(cacheKey, result);
-      return result;
-    }
-    const runner = getRunnerFromPackageManager(projectRoot);
-    const result = { bin: runner.bin, prefix: [...runner.prefix, '@biomejs/biome'] };
+  if (fs.existsSync(localBin)) {
+    const result = { bin: localBin, prefix: [] };
     binCache.set(cacheKey, result);
     return result;
   }
 
-  if (formatter === 'prettier') {
-    const localBin = path.join(projectRoot, 'node_modules', '.bin', isWin ? 'prettier.cmd' : 'prettier');
-    if (fs.existsSync(localBin)) {
-      const result = { bin: localBin, prefix: [] };
-      binCache.set(cacheKey, result);
-      return result;
-    }
-    const runner = getRunnerFromPackageManager(projectRoot);
-    const result = { bin: runner.bin, prefix: [...runner.prefix, 'prettier'] };
-    binCache.set(cacheKey, result);
-    return result;
-  }
-
-  // Unknown formatter — return null so callers can handle gracefully
-  binCache.set(cacheKey, null);
-  return null;
+  const runner = getRunnerFromPackageManager(projectRoot);
+  const result = { bin: runner.bin, prefix: [...runner.prefix, pkg.pkgName] };
+  binCache.set(cacheKey, result);
+  return result;
 }
 
 /**
