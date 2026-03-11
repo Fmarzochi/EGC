@@ -72,7 +72,7 @@ function getErrorMessage(error: unknown): string {
     return error.message
   }
 
-  return 'Unknown error'
+  return 'Unexpected error'
 }
 ```
 
@@ -158,12 +158,18 @@ function getErrorMessage(error: unknown): string {
   return 'Unexpected error'
 }
 
+const logger = {
+  error: (message: string, error: unknown) => {
+    // Replace with your production logger (for example, pino or winston).
+  }
+}
+
 async function loadUser(userId: string): Promise<User> {
   try {
     const result = await riskyOperation(userId)
     return result
   } catch (error: unknown) {
-    console.error('Operation failed:', error)
+    logger.error('Operation failed', error)
     throw new Error(getErrorMessage(error))
   }
 }
