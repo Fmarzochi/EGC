@@ -398,22 +398,30 @@ async function runTests() {
 
   if (
     await asyncTest('creates or updates session file', async () => {
-      // Run the script
-      await runScript(path.join(scriptsDir, 'session-end.js'));
+      const isoHome = path.join(os.tmpdir(), `ecc-session-create-${Date.now()}`);
 
-      // Check if session file was created
-      // Note: Without CLAUDE_SESSION_ID, falls back to project name (not 'default')
-      // Use local time to match the script's getDateString() function
-      const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      try {
+        await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome
+        });
 
-      // Get the expected session ID (project name fallback)
-      const utils = require('../../scripts/lib/utils');
-      const expectedId = utils.getSessionIdShort();
-      const sessionFile = path.join(sessionsDir, `${today}-${expectedId}-session.tmp`);
+        // Check if session file was created
+        // Note: Without CLAUDE_SESSION_ID, falls back to project/worktree name (not 'default')
+        // Use local time to match the script's getDateString() function
+        const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+        // Get the expected session ID (project name fallback)
+        const utils = require('../../scripts/lib/utils');
+        const expectedId = utils.getSessionIdShort();
+        const sessionFile = path.join(sessionsDir, `${today}-${expectedId}-session.tmp`);
+
+        assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
     })
   )
     passed++;
@@ -437,6 +445,39 @@ async function runTests() {
       const sessionFile = path.join(sessionsDir, `${today}-${expectedShortId}-session.tmp`);
 
       assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('writes project, branch, and worktree metadata into new session files', async () => {
+      const isoHome = path.join(os.tmpdir(), `ecc-session-metadata-${Date.now()}`);
+      const testSessionId = 'test-session-meta1234';
+      const expectedShortId = testSessionId.slice(-8);
+      const topLevel = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim();
+      const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+      const project = path.basename(topLevel);
+
+      try {
+        const result = await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome,
+          CLAUDE_SESSION_ID: testSessionId
+        });
+        assert.strictEqual(result.code, 0, 'Hook should exit 0');
+
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const sessionFile = path.join(isoHome, '.claude', 'sessions', `${today}-${expectedShortId}-session.tmp`);
+        const content = fs.readFileSync(sessionFile, 'utf8');
+
+        assert.ok(content.includes(`**Project:** ${project}`), 'Should persist project metadata');
+        assert.ok(content.includes(`**Branch:** ${branch}`), 'Should persist branch metadata');
+        assert.ok(content.includes(`**Worktree:** ${process.cwd()}`), 'Should persist worktree metadata');
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
     })
   )
     passed++;
@@ -1256,7 +1297,10 @@ async function runTests() {
       fs.writeFileSync(transcriptPath, lines.join('\n'));
 
       const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
-      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: testDir,
+        USERPROFILE: testDir
+      });
       assert.strictEqual(result.code, 0);
       // Session file should contain summary with tools used
       assert.ok(result.stderr.includes('Created session file') || result.stderr.includes('Updated session file'), 'Should create/update session file');
@@ -2487,6 +2531,42 @@ async function runTests() {
       // The timestamp should have been updated (no longer 09:00)
       assert.ok(updated.includes('**Last Updated:**'), 'Should still have Last Updated field');
       assert.ok(result.stderr.includes('Updated session file'), 'Should log update');
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('normalizes existing session headers with project, branch, and worktree metadata', async () => {
+      const testDir = createTestDir();
+      const sessionsDir = path.join(testDir, '.claude', 'sessions');
+      fs.mkdirSync(sessionsDir, { recursive: true });
+
+      const utils = require('../../scripts/lib/utils');
+      const today = utils.getDateString();
+      const shortId = 'update04';
+      const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
+      const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+      const project = path.basename(spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim());
+
+      fs.writeFileSync(
+        sessionFile,
+        `# Session: ${today}\n**Date:** ${today}\n**Started:** 09:00\n**Last Updated:** 09:00\n\n---\n\n## Current State\n\n[Session context goes here]\n`
+      );
+
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+        HOME: testDir,
+        USERPROFILE: testDir,
+        CLAUDE_SESSION_ID: `session-${shortId}`
+      });
+      assert.strictEqual(result.code, 0);
+
+      const updated = fs.readFileSync(sessionFile, 'utf8');
+      assert.ok(updated.includes(`**Project:** ${project}`), 'Should inject project metadata into existing headers');
+      assert.ok(updated.includes(`**Branch:** ${branch}`), 'Should inject branch metadata into existing headers');
+      assert.ok(updated.includes(`**Worktree:** ${process.cwd()}`), 'Should inject worktree metadata into existing headers');
+
+      cleanupTestDir(testDir);
     })
   )
     passed++;
@@ -3859,6 +3939,8 @@ async function runTests() {
 
       try {
         const result = await runScript(path.join(scriptsDir, 'session-end.js'), oversizedPayload, {
+          HOME: testDir,
+          USERPROFILE: testDir,
           CLAUDE_TRANSCRIPT_PATH: transcriptPath
         });
         assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
@@ -4488,10 +4570,20 @@ async function runTests() {
         const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
         assert.ok(files.length > 0, 'Should create session file');
         const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+        const summaryMatch = content.match(
+          /<!-- ECC:SUMMARY:START -->([\s\S]*?)<!-- ECC:SUMMARY:END -->/
+        );
         // The real string message should appear
         assert.ok(content.includes('Real user message'), 'Should include the string content user message');
-        // Numeric/boolean/object content should NOT appear as text
-        assert.ok(!content.includes('42'), 'Numeric content should be skipped (else branch → empty string → filtered)');
+        assert.ok(summaryMatch, 'Should include a generated summary block');
+        const summaryBlock = summaryMatch[1];
+        // Numeric/boolean/object content should NOT appear as task bullets
+        assert.ok(
+          !summaryBlock.includes('\n- 42\n'),
+          'Numeric content should be skipped (else branch → empty string → filtered)'
+        );
+        assert.ok(!summaryBlock.includes('\n- true\n'), 'Boolean content should be skipped');
+        assert.ok(!summaryBlock.includes('[object Object]'), 'Object content should be skipped');
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
