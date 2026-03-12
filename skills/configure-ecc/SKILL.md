@@ -82,7 +82,7 @@ If the user chooses niche or core + niche, continue to category selection below 
 
 ### 2b: Choose Skill Categories
 
-There are 27 skills organized into 4 categories. Use `AskUserQuestion` with `multiSelect: true`:
+There are 35 skills organized into 7 categories. Use `AskUserQuestion` with `multiSelect: true`:
 
 ```
 Question: "Which skill categories do you want to install?"
@@ -90,6 +90,10 @@ Options:
   - "Framework & Language" — "Django, Spring Boot, Go, Python, Java, Frontend, Backend patterns"
   - "Database" — "PostgreSQL, ClickHouse, JPA/Hibernate patterns"
   - "Workflow & Quality" — "TDD, verification, learning, security review, compaction"
+  - "Research & APIs" — "Deep research, Exa search, Claude API patterns"
+  - "Social & Content Distribution" — "X/Twitter API, crossposting alongside content-engine"
+  - "Media Generation" — "fal.ai image/video/audio alongside VideoDB"
+  - "Orchestration" — "dmux multi-agent workflows"
   - "All skills" — "Install every available skill"
 ```
 
@@ -149,6 +153,34 @@ For each selected category, print the full list of skills below and ask the user
 | `market-research` | Source-attributed market, competitor, fund, and technology research |
 | `investor-materials` | Pitch decks, one-pagers, investor memos, and financial models |
 | `investor-outreach` | Personalized investor cold emails, warm intros, and follow-ups |
+
+**Category: Research & APIs (3 skills)**
+
+| Skill | Description |
+|-------|-------------|
+| `deep-research` | Multi-source deep research using firecrawl and exa MCPs with cited reports |
+| `exa-search` | Neural search via Exa MCP for web, code, company, and people research |
+| `claude-api` | Anthropic Claude API patterns: Messages, streaming, tool use, vision, batches, Agent SDK |
+
+**Category: Social & Content Distribution (2 skills)**
+
+| Skill | Description |
+|-------|-------------|
+| `x-api` | X/Twitter API integration for posting, threads, search, and analytics |
+| `crosspost` | Multi-platform content distribution with platform-native adaptation |
+
+**Category: Media Generation (2 skills)**
+
+| Skill | Description |
+|-------|-------------|
+| `fal-ai-media` | Unified AI media generation (image, video, audio) via fal.ai MCP |
+| `video-editing` | AI-assisted video editing for cutting, structuring, and augmenting real footage |
+
+**Category: Orchestration (1 skill)**
+
+| Skill | Description |
+|-------|-------------|
+| `dmux-workflows` | Multi-agent orchestration using dmux for parallel agent sessions |
 
 **Standalone**
 
@@ -230,6 +262,10 @@ Some skills reference others. Verify these dependencies:
 - `continuous-learning-v2` references `~/.claude/homunculus/` directory
 - `python-testing` may reference `python-patterns`
 - `golang-testing` may reference `golang-patterns`
+- `crosspost` references `content-engine` and `x-api`
+- `deep-research` references `exa-search` (complementary MCP tools)
+- `fal-ai-media` references `videodb` (complementary media skill)
+- `x-api` references `content-engine` and `crosspost`
 - Language-specific rules reference `common/` counterparts
 
 ### 4d: Report Issues
