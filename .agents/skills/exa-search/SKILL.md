@@ -41,6 +41,7 @@ web_search_exa(query: "latest AI developments 2026", numResults: 5)
 ```
 
 **Parameters:**
+
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
 | `query` | string | required | Search query |
@@ -59,6 +60,7 @@ web_search_advanced_exa(
 ```
 
 **Parameters:**
+
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
 | `query` | string | required | Search query |
@@ -76,6 +78,7 @@ get_code_context_exa(query: "Python asyncio patterns", tokensNum: 3000)
 ```
 
 **Parameters:**
+
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
 | `query` | string | required | Code or API search query |
@@ -89,6 +92,7 @@ company_research_exa(companyName: "Anthropic", numResults: 5)
 ```
 
 **Parameters:**
+
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
 | `companyName` | string | required | Company name |
@@ -109,6 +113,7 @@ crawling_exa(url: "https://example.com/article", tokensNum: 5000)
 ```
 
 **Parameters:**
+
 | Param | Type | Default | Notes |
 |-------|------|---------|-------|
 | `url` | string | required | URL to extract |
