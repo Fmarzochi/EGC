@@ -2150,6 +2150,10 @@ async function runTests() {
 
   if (
     await asyncTest('detect-project writes project metadata to the registry and project directory', async () => {
+      if (process.platform === 'win32') {
+        console.log('    (skipped — bash script paths are not Windows-compatible)');
+        return true;
+      }
       const testRoot = createTestDir();
       const homeDir = path.join(testRoot, 'home');
       const repoDir = path.join(testRoot, 'repo');
