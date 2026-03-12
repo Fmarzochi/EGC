@@ -329,12 +329,12 @@ function canonicalizePath(targetPath) {
 
   try {
     return fs.realpathSync.native(resolvedPath);
-  } catch (error) {
+  } catch (_error) {
     const parentPath = path.dirname(resolvedPath);
 
     try {
       return path.join(fs.realpathSync.native(parentPath), path.basename(resolvedPath));
-    } catch (parentError) {
+    } catch (_parentError) {
       return resolvedPath;
     }
   }
