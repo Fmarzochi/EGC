@@ -230,6 +230,8 @@ print(f"Cache creation: {message.usage.cache_creation_input_tokens}")
 Process large volumes asynchronously at 50% cost reduction:
 
 ```python
+import time
+
 batch = client.messages.batches.create(
     requests=[
         {
@@ -306,6 +308,8 @@ while True:
 ## Error Handling
 
 ```python
+import time
+
 from anthropic import APIError, RateLimitError, APIConnectionError
 
 try:

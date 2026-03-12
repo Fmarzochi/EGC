@@ -161,8 +161,10 @@ resp = requests.post(
             "linkedin": {"text": linkedin_version},
             "threads": {"text": threads_version}
         }
-    }
+    },
+    timeout=30
 )
+resp.raise_for_status()
 ```
 
 ### Manual Posting

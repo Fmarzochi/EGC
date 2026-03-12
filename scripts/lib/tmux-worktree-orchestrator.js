@@ -56,6 +56,12 @@ function normalizeSeedPaths(seedPaths, repoRoot) {
     }
 
     const normalizedPath = relativePath.split(path.sep).join('/');
+    if (!normalizedPath || normalizedPath === '.') {
+      throw new Error('seedPaths entries must not target the repo root');
+    }
+    if (normalizedPath === '.git' || normalizedPath.startsWith('.git/')) {
+      throw new Error(`seedPaths entries must not target git metadata: ${entry}`);
+    }
     if (seen.has(normalizedPath)) {
       continue;
     }

@@ -92,6 +92,7 @@ def post_thread(oauth, tweets: list[str]) -> list[str]:
         if reply_to:
             payload["reply"] = {"in_reply_to_tweet_id": reply_to}
         resp = oauth.post("https://api.x.com/2/tweets", json=payload)
+        resp.raise_for_status()
         tweet_id = resp.json()["data"]["id"]
         ids.append(tweet_id)
         reply_to = tweet_id
@@ -167,6 +168,8 @@ resp = oauth.post(
 Always check `x-rate-limit-remaining` and `x-rate-limit-reset` headers.
 
 ```python
+import time
+
 remaining = int(resp.headers.get("x-rate-limit-remaining", 0))
 if remaining < 5:
     reset = int(resp.headers.get("x-rate-limit-reset", 0))

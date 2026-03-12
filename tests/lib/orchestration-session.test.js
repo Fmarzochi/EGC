@@ -204,7 +204,34 @@ test('resolveSnapshotTarget handles plan files and direct session names', () => 
 
     const fromSession = resolveSnapshotTarget('workflow-visual-proof', repoRoot);
     assert.strictEqual(fromSession.targetType, 'session');
-    assert.ok(fromSession.coordinationDir.endsWith(path.join('.claude', 'orchestration', 'workflow-visual-proof')));
+    assert.ok(fromSession.coordinationDir.endsWith(path.join('.orchestration', 'workflow-visual-proof')));
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveSnapshotTarget normalizes plan session names and defaults to the repo name', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-orch-target-'));
+  const repoRoot = path.join(tempRoot, 'My Repo');
+  fs.mkdirSync(repoRoot, { recursive: true });
+
+  const namedPlanPath = path.join(repoRoot, 'named-plan.json');
+  const defaultPlanPath = path.join(repoRoot, 'default-plan.json');
+
+  fs.writeFileSync(namedPlanPath, JSON.stringify({
+    sessionName: 'Workflow Visual Proof',
+    repoRoot
+  }));
+  fs.writeFileSync(defaultPlanPath, JSON.stringify({ repoRoot }));
+
+  try {
+    const namedPlan = resolveSnapshotTarget(namedPlanPath, repoRoot);
+    assert.strictEqual(namedPlan.sessionName, 'workflow-visual-proof');
+    assert.ok(namedPlan.coordinationDir.endsWith(path.join('.orchestration', 'workflow-visual-proof')));
+
+    const defaultPlan = resolveSnapshotTarget(defaultPlanPath, repoRoot);
+    assert.strictEqual(defaultPlan.sessionName, 'my-repo');
+    assert.ok(defaultPlan.coordinationDir.endsWith(path.join('.orchestration', 'my-repo')));
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

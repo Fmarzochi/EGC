@@ -148,6 +148,7 @@ A pattern I've been using that's made a real difference:
 If using a crossposting service (e.g., Postbridge, Buffer, or a custom API), the pattern looks like:
 
 ```python
+import os
 import requests
 
 resp = requests.post(
@@ -160,8 +161,10 @@ resp = requests.post(
             "linkedin": {"text": linkedin_version},
             "threads": {"text": threads_version}
         }
-    }
+    },
+    timeout=30
 )
+resp.raise_for_status()
 ```
 
 ### Manual Posting

@@ -24,7 +24,11 @@ Exa MCP server must be configured. Add to `~/.claude.json`:
 ```json
 "exa-web-search": {
   "command": "npx",
-  "args": ["-y", "exa-mcp-server"],
+  "args": [
+    "-y",
+    "exa-mcp-server",
+    "tools=web_search_exa,web_search_advanced_exa,get_code_context_exa,crawling_exa,company_research_exa,linkedin_search_exa,deep_researcher_start,deep_researcher_check"
+  ],
   "env": { "EXA_API_KEY": "YOUR_EXA_API_KEY_HERE" }
 }
 ```

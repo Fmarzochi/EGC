@@ -20,9 +20,32 @@ function usage() {
 
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const target = args.find(arg => !arg.startsWith('--'));
-  const writeIndex = args.indexOf('--write');
-  const writePath = writeIndex >= 0 ? args[writeIndex + 1] : null;
+  let target = null;
+  let writePath = null;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === '--write') {
+      const candidate = args[index + 1];
+      if (!candidate || candidate.startsWith('--')) {
+        throw new Error('--write requires an output path');
+      }
+      writePath = candidate;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--')) {
+      throw new Error(`Unknown flag: ${arg}`);
+    }
+
+    if (target) {
+      throw new Error('Expected a single session name or plan path');
+    }
+
+    target = arg;
+  }
 
   return { target, writePath };
 }
@@ -56,4 +79,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main };
+module.exports = { main, parseArgs };

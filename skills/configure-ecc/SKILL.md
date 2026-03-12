@@ -82,7 +82,7 @@ If the user chooses niche or core + niche, continue to category selection below 
 
 ### 2b: Choose Skill Categories
 
-There are 35 skills organized into 7 categories. Use `AskUserQuestion` with `multiSelect: true`:
+There are 41 skills organized into 8 categories. Use `AskUserQuestion` with `multiSelect: true`:
 
 ```
 Question: "Which skill categories do you want to install?"

@@ -253,7 +253,7 @@ estimate_cost(
   estimate_type: "unit_price",
   endpoints: {
     "fal-ai/nano-banana-pro": {
-      "num_images": 1
+      "unit_quantity": 1
     }
   }
 )

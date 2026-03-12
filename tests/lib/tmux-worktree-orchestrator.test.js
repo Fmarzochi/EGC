@@ -144,6 +144,17 @@ test('normalizeSeedPaths rejects paths outside the repo root', () => {
   );
 });
 
+test('normalizeSeedPaths rejects repo root and git metadata paths', () => {
+  assert.throws(
+    () => normalizeSeedPaths(['.'], '/tmp/ecc'),
+    /must not target the repo root/
+  );
+  assert.throws(
+    () => normalizeSeedPaths(['.git/config'], '/tmp/ecc'),
+    /must not target git metadata/
+  );
+});
+
 test('materializePlan keeps worker instructions inside the worktree boundary', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-orchestrator-test-'));
 

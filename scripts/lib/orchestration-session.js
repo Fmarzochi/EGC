@@ -17,6 +17,16 @@ function stripCodeTicks(value) {
   return trimmed;
 }
 
+function normalizeSessionName(value, fallback = 'session') {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || fallback;
+}
+
 function parseSection(content, heading) {
   if (typeof content !== 'string' || content.length === 0) {
     return '';
@@ -246,22 +256,29 @@ function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {
   if (fs.existsSync(absoluteTarget) && fs.statSync(absoluteTarget).isFile()) {
     const config = JSON.parse(fs.readFileSync(absoluteTarget, 'utf8'));
     const repoRoot = path.resolve(config.repoRoot || cwd);
+    const sessionName = normalizeSessionName(
+      config.sessionName || path.basename(repoRoot),
+      'session'
+    );
     const coordinationRoot = path.resolve(
       config.coordinationRoot || path.join(repoRoot, '.orchestration')
     );
 
     return {
-      sessionName: config.sessionName,
-      coordinationDir: path.join(coordinationRoot, config.sessionName),
+      sessionName,
+      coordinationDir: path.join(coordinationRoot, sessionName),
       repoRoot,
       targetType: 'plan'
     };
   }
 
+  const repoRoot = path.resolve(cwd);
+  const sessionName = normalizeSessionName(targetPath, path.basename(repoRoot));
+
   return {
-    sessionName: targetPath,
-    coordinationDir: path.join(cwd, '.claude', 'orchestration', targetPath),
-    repoRoot: cwd,
+    sessionName,
+    coordinationDir: path.join(repoRoot, '.orchestration', sessionName),
+    repoRoot,
     targetType: 'session'
   };
 }
