@@ -120,6 +120,22 @@ function normalizeComparablePath(targetPath) {
   return path.normalize(normalizedPath).replace(/\\/g, '/').replace(/^([a-z]):/, (_, drive) => `${drive.toUpperCase()}:`);
 }
 
+function pathsReferToSameLocation(leftPath, rightPath) {
+  const normalizedLeftPath = normalizeComparablePath(leftPath);
+  const normalizedRightPath = normalizeComparablePath(rightPath);
+
+  if (!normalizedLeftPath || !normalizedRightPath) return false;
+  if (normalizedLeftPath === normalizedRightPath) return true;
+
+  try {
+    const leftStats = fs.statSync(normalizedLeftPath);
+    const rightStats = fs.statSync(normalizedRightPath);
+    return leftStats.dev === rightStats.dev && leftStats.ino === rightStats.ino;
+  } catch {
+    return false;
+  }
+}
+
 function createCommandShim(binDir, baseName, logFile) {
   fs.mkdirSync(binDir, { recursive: true });
 
@@ -2224,7 +2240,10 @@ async function runTests() {
         const normalizedMetadataRoot = normalizeComparablePath(metadata.root);
         const normalizedRepoDir = normalizeComparablePath(repoDir);
         assert.ok(normalizedMetadataRoot, 'project.json should include a non-empty repo root');
-        assert.strictEqual(normalizedMetadataRoot, normalizedRepoDir, 'project.json should include the repo root');
+        assert.ok(
+          pathsReferToSameLocation(normalizedMetadataRoot, normalizedRepoDir),
+          `project.json should include the repo root (expected ${normalizedRepoDir}, got ${normalizedMetadataRoot})`,
+        );
         assert.strictEqual(metadata.remote, 'https://github.com/example/ecc-test.git', 'project.json should include the sanitized remote');
         assert.ok(metadata.created_at, 'project.json should include created_at');
         assert.ok(metadata.last_seen, 'project.json should include last_seen');
