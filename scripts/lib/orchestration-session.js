@@ -293,11 +293,12 @@ function readPlanString(config, key, absoluteTarget) {
     return undefined;
   }
 
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`Invalid orchestration plan: ${key} must be a non-empty string (${absoluteTarget})`);
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid orchestration plan: ${key} must be a string when provided (${absoluteTarget})`);
   }
 
-  return value.trim();
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {

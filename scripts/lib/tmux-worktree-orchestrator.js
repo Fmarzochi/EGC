@@ -39,7 +39,7 @@ function buildTemplateVariables(values) {
     const stringValue = String(value);
     const quotedValue = shellQuote(stringValue);
 
-    accumulator[key] = quotedValue;
+    accumulator[key] = stringValue;
     accumulator[`${key}_raw`] = stringValue;
     accumulator[`${key}_sh`] = quotedValue;
     return accumulator;

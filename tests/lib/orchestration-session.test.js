@@ -262,13 +262,19 @@ test('resolveSnapshotTarget rejects malformed plan files and invalid config fiel
   fs.mkdirSync(repoRoot, { recursive: true });
 
   const invalidJsonPath = path.join(repoRoot, 'invalid-json.json');
+  const blankFieldsPath = path.join(repoRoot, 'blank-fields.json');
   const invalidSessionNamePath = path.join(repoRoot, 'invalid-session.json');
   const invalidRepoRootPath = path.join(repoRoot, 'invalid-repo-root.json');
   const invalidCoordinationRootPath = path.join(repoRoot, 'invalid-coordination-root.json');
 
   fs.writeFileSync(invalidJsonPath, '{not valid json');
+  fs.writeFileSync(blankFieldsPath, JSON.stringify({
+    sessionName: '   ',
+    repoRoot: '   ',
+    coordinationRoot: '   '
+  }));
   fs.writeFileSync(invalidSessionNamePath, JSON.stringify({
-    sessionName: '',
+    sessionName: 42,
     repoRoot
   }));
   fs.writeFileSync(invalidRepoRootPath, JSON.stringify({
@@ -278,25 +284,30 @@ test('resolveSnapshotTarget rejects malformed plan files and invalid config fiel
   fs.writeFileSync(invalidCoordinationRootPath, JSON.stringify({
     sessionName: 'workflow',
     repoRoot,
-    coordinationRoot: '   '
+    coordinationRoot: false
   }));
 
   try {
+    const blankFields = resolveSnapshotTarget(blankFieldsPath, repoRoot);
+    assert.strictEqual(blankFields.sessionName, 'repo');
+    assert.strictEqual(blankFields.repoRoot, repoRoot);
+    assert.ok(blankFields.coordinationDir.endsWith(path.join('.orchestration', 'repo')));
+
     assert.throws(
       () => resolveSnapshotTarget(invalidJsonPath, repoRoot),
       /Invalid orchestration plan JSON/
     );
     assert.throws(
       () => resolveSnapshotTarget(invalidSessionNamePath, repoRoot),
-      /sessionName must be a non-empty string/
+      /sessionName must be a string when provided/
     );
     assert.throws(
       () => resolveSnapshotTarget(invalidRepoRootPath, repoRoot),
-      /repoRoot must be a non-empty string/
+      /repoRoot must be a string when provided/
     );
     assert.throws(
       () => resolveSnapshotTarget(invalidCoordinationRootPath, repoRoot),
-      /coordinationRoot must be a non-empty string/
+      /coordinationRoot must be a string when provided/
     );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });

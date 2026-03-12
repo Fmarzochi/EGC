@@ -57,7 +57,7 @@ test('buildOrchestrationPlan creates worktrees, branches, and tmux commands', ()
     repoRoot,
     sessionName: 'Skill Audit',
     baseRef: 'main',
-    launcherCommand: 'codex exec --cwd {worktree_path} --task-file {task_file}',
+    launcherCommand: 'codex exec --cwd {worktree_path_sh} --task-file {task_file_sh}',
     workers: [
       { name: 'Docs A', task: 'Fix skills 1-4' },
       { name: 'Docs B', task: 'Fix skills 5-8' }
@@ -152,26 +152,27 @@ test('buildOrchestrationPlan rejects worker names that collapse to the same slug
   );
 });
 
-test('buildOrchestrationPlan exposes shell-safe launcher placeholders with raw aliases', () => {
+test('buildOrchestrationPlan exposes shell-safe launcher aliases alongside raw defaults', () => {
   const repoRoot = path.join('/tmp', 'My Repo');
   const plan = buildOrchestrationPlan({
     repoRoot,
     sessionName: 'Spacing Audit',
-    launcherCommand: 'bash {repo_root}/scripts/orchestrate-codex-worker.sh {task_file} {handoff_file} {status_file} {worker_name} {worker_name_raw}',
+    launcherCommand: 'bash {repo_root_sh}/scripts/orchestrate-codex-worker.sh {task_file_sh} {handoff_file_sh} {status_file_sh} {worker_name_sh} {worker_name}',
     workers: [{ name: 'Docs Fixer', task: 'Update docs' }]
   });
+  const quote = value => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
   assert.ok(
-    plan.workerPlans[0].launchCommand.includes(`bash '${repoRoot}'/scripts/orchestrate-codex-worker.sh`),
-    'repo_root should be shell-safe by default'
+    plan.workerPlans[0].launchCommand.includes(`bash ${quote(repoRoot)}/scripts/orchestrate-codex-worker.sh`),
+    'repo_root_sh should provide a shell-safe path'
   );
   assert.ok(
-    plan.workerPlans[0].launchCommand.includes(`'${plan.workerPlans[0].taskFilePath}'`),
-    'task_file should be shell-safe by default'
+    plan.workerPlans[0].launchCommand.includes(quote(plan.workerPlans[0].taskFilePath)),
+    'task_file_sh should provide a shell-safe path'
   );
   assert.ok(
-    plan.workerPlans[0].launchCommand.includes(`'${plan.workerPlans[0].workerName}' ${plan.workerPlans[0].workerName}`),
-    'worker_name_raw should preserve the unquoted value when explicitly requested'
+    plan.workerPlans[0].launchCommand.includes(`${quote(plan.workerPlans[0].workerName)} ${plan.workerPlans[0].workerName}`),
+    'raw defaults should remain available alongside shell-safe aliases'
   );
 });
 
@@ -201,7 +202,7 @@ test('materializePlan keeps worker instructions inside the worktree boundary', (
       repoRoot: tempRoot,
       coordinationRoot: path.join(tempRoot, '.claude', 'orchestration'),
       sessionName: 'Workflow E2E',
-      launcherCommand: 'bash {repo_root}/scripts/orchestrate-codex-worker.sh {task_file} {handoff_file} {status_file}',
+      launcherCommand: 'bash {repo_root_sh}/scripts/orchestrate-codex-worker.sh {task_file_sh} {handoff_file_sh} {status_file_sh}',
       workers: [{ name: 'Docs', task: 'Update the workflow docs.' }]
     });
 
