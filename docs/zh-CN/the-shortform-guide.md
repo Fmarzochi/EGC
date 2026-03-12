@@ -211,7 +211,7 @@ git worktree add ../feature-branch feature-branch
 
 流式传输和监视 Claude 运行的日志/bash 进程：
 
-https://github.com/user-attachments/assets/shortform/07-tmux-video.mp4
+<https://github.com/user-attachments/assets/shortform/07-tmux-video.mp4>
 
 ```bash
 tmux new -s dev
