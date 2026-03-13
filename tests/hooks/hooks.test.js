@@ -98,6 +98,44 @@ function cleanupTestDir(testDir) {
   fs.rmSync(testDir, { recursive: true, force: true });
 }
 
+function normalizeComparablePath(targetPath) {
+  if (!targetPath) return '';
+
+  let normalizedPath = String(targetPath).trim().replace(/\\/g, '/');
+
+  if (/^\/[a-zA-Z]\//.test(normalizedPath)) {
+    normalizedPath = `${normalizedPath[1]}:/${normalizedPath.slice(3)}`;
+  }
+
+  if (/^[a-zA-Z]:\//.test(normalizedPath)) {
+    normalizedPath = `${normalizedPath[0].toUpperCase()}:${normalizedPath.slice(2)}`;
+  }
+
+  try {
+    normalizedPath = fs.realpathSync(normalizedPath);
+  } catch {
+    // Fall through to string normalization when the path cannot be resolved directly.
+  }
+
+  return path.normalize(normalizedPath).replace(/\\/g, '/').replace(/^([a-z]):/, (_, drive) => `${drive.toUpperCase()}:`);
+}
+
+function pathsReferToSameLocation(leftPath, rightPath) {
+  const normalizedLeftPath = normalizeComparablePath(leftPath);
+  const normalizedRightPath = normalizeComparablePath(rightPath);
+
+  if (!normalizedLeftPath || !normalizedRightPath) return false;
+  if (normalizedLeftPath === normalizedRightPath) return true;
+
+  try {
+    const leftStats = fs.statSync(normalizedLeftPath);
+    const rightStats = fs.statSync(normalizedRightPath);
+    return leftStats.dev === rightStats.dev && leftStats.ino === rightStats.ino;
+  } catch {
+    return false;
+  }
+}
+
 function createCommandShim(binDir, baseName, logFile) {
   fs.mkdirSync(binDir, { recursive: true });
 
@@ -155,6 +193,7 @@ async function runTests() {
 
   let passed = 0;
   let failed = 0;
+  let skipped = 0;
 
   const scriptsDir = path.join(__dirname, '..', '..', 'scripts', 'hooks');
 
@@ -360,22 +399,30 @@ async function runTests() {
 
   if (
     await asyncTest('creates or updates session file', async () => {
-      // Run the script
-      await runScript(path.join(scriptsDir, 'session-end.js'));
+      const isoHome = path.join(os.tmpdir(), `ecc-session-create-${Date.now()}`);
 
-      // Check if session file was created
-      // Note: Without CLAUDE_SESSION_ID, falls back to project name (not 'default')
-      // Use local time to match the script's getDateString() function
-      const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      try {
+        await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome
+        });
 
-      // Get the expected session ID (project name fallback)
-      const utils = require('../../scripts/lib/utils');
-      const expectedId = utils.getSessionIdShort();
-      const sessionFile = path.join(sessionsDir, `${today}-${expectedId}-session.tmp`);
+        // Check if session file was created
+        // Note: Without CLAUDE_SESSION_ID, falls back to project/worktree name (not 'default')
+        // Use local time to match the script's getDateString() function
+        const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+        // Get the expected session ID (project name fallback)
+        const utils = require('../../scripts/lib/utils');
+        const expectedId = utils.getSessionIdShort();
+        const sessionFile = path.join(sessionsDir, `${today}-${expectedId}-session.tmp`);
+
+        assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
     })
   )
     passed++;
@@ -399,6 +446,39 @@ async function runTests() {
       const sessionFile = path.join(sessionsDir, `${today}-${expectedShortId}-session.tmp`);
 
       assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('writes project, branch, and worktree metadata into new session files', async () => {
+      const isoHome = path.join(os.tmpdir(), `ecc-session-metadata-${Date.now()}`);
+      const testSessionId = 'test-session-meta1234';
+      const expectedShortId = testSessionId.slice(-8);
+      const topLevel = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim();
+      const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+      const project = path.basename(topLevel);
+
+      try {
+        const result = await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome,
+          CLAUDE_SESSION_ID: testSessionId
+        });
+        assert.strictEqual(result.code, 0, 'Hook should exit 0');
+
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const sessionFile = path.join(isoHome, '.claude', 'sessions', `${today}-${expectedShortId}-session.tmp`);
+        const content = fs.readFileSync(sessionFile, 'utf8');
+
+        assert.ok(content.includes(`**Project:** ${project}`), 'Should persist project metadata');
+        assert.ok(content.includes(`**Branch:** ${branch}`), 'Should persist branch metadata');
+        assert.ok(content.includes(`**Worktree:** ${process.cwd()}`), 'Should persist worktree metadata');
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
     })
   )
     passed++;
@@ -1218,7 +1298,10 @@ async function runTests() {
       fs.writeFileSync(transcriptPath, lines.join('\n'));
 
       const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
-      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson, {
+        HOME: testDir,
+        USERPROFILE: testDir
+      });
       assert.strictEqual(result.code, 0);
       // Session file should contain summary with tools used
       assert.ok(result.stderr.includes('Created session file') || result.stderr.includes('Updated session file'), 'Should create/update session file');
@@ -2148,7 +2231,11 @@ async function runTests() {
     passed++;
   else failed++;
 
-  if (
+  if (process.platform === 'win32') {
+    console.log('  - detect-project writes project metadata to the registry and project directory');
+    console.log('    (skipped — bash script paths are not Windows-compatible)');
+    skipped++;
+  } else if (
     await asyncTest('detect-project writes project metadata to the registry and project directory', async () => {
       const testRoot = createTestDir();
       const homeDir = path.join(testRoot, 'home');
@@ -2185,9 +2272,9 @@ async function runTests() {
 
         assert.strictEqual(code, 0, `detect-project should source cleanly, stderr: ${stderr}`);
 
-        const [projectId, projectDir] = stdout.trim().split(/\r?\n/);
+        const [projectId] = stdout.trim().split(/\r?\n/);
         const registryPath = path.join(homeDir, '.claude', 'homunculus', 'projects.json');
-        const projectMetadataPath = path.join(projectDir, 'project.json');
+        const projectMetadataPath = path.join(homeDir, '.claude', 'homunculus', 'projects', projectId, 'project.json');
 
         assert.ok(projectId, 'detect-project should emit a project id');
         assert.ok(fs.existsSync(registryPath), 'projects.json should be created');
@@ -2199,7 +2286,13 @@ async function runTests() {
         assert.ok(registry[projectId], 'registry should contain the detected project');
         assert.strictEqual(metadata.id, projectId, 'project.json should include the detected id');
         assert.strictEqual(metadata.name, path.basename(repoDir), 'project.json should include the repo name');
-        assert.strictEqual(fs.realpathSync(metadata.root), fs.realpathSync(repoDir), 'project.json should include the repo root');
+        const normalizedMetadataRoot = normalizeComparablePath(metadata.root);
+        const normalizedRepoDir = normalizeComparablePath(repoDir);
+        assert.ok(normalizedMetadataRoot, 'project.json should include a non-empty repo root');
+        assert.ok(
+          pathsReferToSameLocation(normalizedMetadataRoot, normalizedRepoDir),
+          `project.json should include the repo root (expected ${normalizedRepoDir}, got ${normalizedMetadataRoot})`,
+        );
         assert.strictEqual(metadata.remote, 'https://github.com/example/ecc-test.git', 'project.json should include the sanitized remote');
         assert.ok(metadata.created_at, 'project.json should include created_at');
         assert.ok(metadata.last_seen, 'project.json should include last_seen');
@@ -2516,6 +2609,42 @@ async function runTests() {
       // The timestamp should have been updated (no longer 09:00)
       assert.ok(updated.includes('**Last Updated:**'), 'Should still have Last Updated field');
       assert.ok(result.stderr.includes('Updated session file'), 'Should log update');
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('normalizes existing session headers with project, branch, and worktree metadata', async () => {
+      const testDir = createTestDir();
+      const sessionsDir = path.join(testDir, '.claude', 'sessions');
+      fs.mkdirSync(sessionsDir, { recursive: true });
+
+      const utils = require('../../scripts/lib/utils');
+      const today = utils.getDateString();
+      const shortId = 'update04';
+      const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
+      const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+      const project = path.basename(spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim());
+
+      fs.writeFileSync(
+        sessionFile,
+        `# Session: ${today}\n**Date:** ${today}\n**Started:** 09:00\n**Last Updated:** 09:00\n\n---\n\n## Current State\n\n[Session context goes here]\n`
+      );
+
+      const result = await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+        HOME: testDir,
+        USERPROFILE: testDir,
+        CLAUDE_SESSION_ID: `session-${shortId}`
+      });
+      assert.strictEqual(result.code, 0);
+
+      const updated = fs.readFileSync(sessionFile, 'utf8');
+      assert.ok(updated.includes(`**Project:** ${project}`), 'Should inject project metadata into existing headers');
+      assert.ok(updated.includes(`**Branch:** ${branch}`), 'Should inject branch metadata into existing headers');
+      assert.ok(updated.includes(`**Worktree:** ${process.cwd()}`), 'Should inject worktree metadata into existing headers');
+
+      cleanupTestDir(testDir);
     })
   )
     passed++;
@@ -3888,6 +4017,8 @@ async function runTests() {
 
       try {
         const result = await runScript(path.join(scriptsDir, 'session-end.js'), oversizedPayload, {
+          HOME: testDir,
+          USERPROFILE: testDir,
           CLAUDE_TRANSCRIPT_PATH: transcriptPath
         });
         assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
@@ -4311,12 +4442,12 @@ async function runTests() {
   // ── Round 74: session-start.js main().catch handler ──
   console.log('\nRound 74: session-start.js (main catch — unrecoverable error):');
 
-  if (
+  if (process.platform === 'win32') {
+    console.log('  - session-start exits 0 with error message when HOME is non-directory');
+    console.log('    (skipped — /dev/null not available on Windows)');
+    skipped++;
+  } else if (
     await asyncTest('session-start exits 0 with error message when HOME is non-directory', async () => {
-      if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
-        return;
-      }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
       // which propagates to main().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
@@ -4333,12 +4464,12 @@ async function runTests() {
   // ── Round 75: pre-compact.js main().catch handler ──
   console.log('\nRound 75: pre-compact.js (main catch — unrecoverable error):');
 
-  if (
+  if (process.platform === 'win32') {
+    console.log('  - pre-compact exits 0 with error message when HOME is non-directory');
+    console.log('    (skipped — /dev/null not available on Windows)');
+    skipped++;
+  } else if (
     await asyncTest('pre-compact exits 0 with error message when HOME is non-directory', async () => {
-      if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
-        return;
-      }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
       // which propagates to main().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
@@ -4355,12 +4486,12 @@ async function runTests() {
   // ── Round 75: session-end.js main().catch handler ──
   console.log('\nRound 75: session-end.js (main catch — unrecoverable error):');
 
-  if (
+  if (process.platform === 'win32') {
+    console.log('  - session-end exits 0 with error message when HOME is non-directory');
+    console.log('    (skipped — /dev/null not available on Windows)');
+    skipped++;
+  } else if (
     await asyncTest('session-end exits 0 with error message when HOME is non-directory', async () => {
-      if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
-        return;
-      }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR inside main(),
       // which propagates to runMain().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), '{}', {
@@ -4377,12 +4508,12 @@ async function runTests() {
   // ── Round 76: evaluate-session.js main().catch handler ──
   console.log('\nRound 76: evaluate-session.js (main catch — unrecoverable error):');
 
-  if (
+  if (process.platform === 'win32') {
+    console.log('  - evaluate-session exits 0 with error message when HOME is non-directory');
+    console.log('    (skipped — /dev/null not available on Windows)');
+    skipped++;
+  } else if (
     await asyncTest('evaluate-session exits 0 with error message when HOME is non-directory', async () => {
-      if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
-        return;
-      }
       // HOME=/dev/null makes ensureDir(learnedSkillsPath) throw ENOTDIR,
       // which propagates to main().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'), '{}', {
@@ -4399,12 +4530,12 @@ async function runTests() {
   // ── Round 76: suggest-compact.js main().catch handler ──
   console.log('\nRound 76: suggest-compact.js (main catch — double-failure):');
 
-  if (
+  if (process.platform === 'win32') {
+    console.log('  - suggest-compact exits 0 with error when TMPDIR is non-directory');
+    console.log('    (skipped — /dev/null not available on Windows)');
+    skipped++;
+  } else if (
     await asyncTest('suggest-compact exits 0 with error when TMPDIR is non-directory', async () => {
-      if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
-        return;
-      }
       // TMPDIR=/dev/null causes openSync to fail (ENOTDIR), then the catch
       // fallback writeFile also fails, propagating to main().catch
       const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
@@ -4517,10 +4648,20 @@ async function runTests() {
         const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
         assert.ok(files.length > 0, 'Should create session file');
         const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
+        const summaryMatch = content.match(
+          /<!-- ECC:SUMMARY:START -->([\s\S]*?)<!-- ECC:SUMMARY:END -->/
+        );
         // The real string message should appear
         assert.ok(content.includes('Real user message'), 'Should include the string content user message');
-        // Numeric/boolean/object content should NOT appear as text
-        assert.ok(!content.includes('42'), 'Numeric content should be skipped (else branch → empty string → filtered)');
+        assert.ok(summaryMatch, 'Should include a generated summary block');
+        const summaryBlock = summaryMatch[1];
+        // Numeric/boolean/object content should NOT appear as task bullets
+        assert.ok(
+          !summaryBlock.includes('\n- 42\n'),
+          'Numeric content should be skipped (else branch → empty string → filtered)'
+        );
+        assert.ok(!summaryBlock.includes('\n- true\n'), 'Boolean content should be skipped');
+        assert.ok(!summaryBlock.includes('[object Object]'), 'Object content should be skipped');
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
@@ -4876,7 +5017,8 @@ Some random content without the expected ### Context to Load section
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
   console.log(`Failed: ${failed}`);
-  console.log(`Total:  ${passed + failed}\n`);
+  console.log(`Skipped: ${skipped}`);
+  console.log(`Total:  ${passed + failed + skipped}\n`);
 
   process.exit(failed > 0 ? 1 : 0);
 }

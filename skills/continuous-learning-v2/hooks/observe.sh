@@ -113,8 +113,56 @@ if [ -f "$CONFIG_DIR/disabled" ]; then
   exit 0
 fi
 
-# FIX: Skip if a previous run already aborted due to confirmation/permission prompt
-# This is the circuit-breaker — stops retrying after a non-interactive failure
+# ─────────────────────────────────────────────
+# Automated session guards
+# Prevents observe.sh from firing on non-human sessions to avoid:
+#   - ECC observing its own Haiku observer sessions (self-loop)
+#   - ECC observing other tools' automated sessions (e.g. claude-mem)
+#   - All-night Haiku usage with no human activity
+# ─────────────────────────────────────────────
+
+# Env-var checks first (cheapest — no subprocess spawning):
+
+# Layer 1: CLAUDE_CODE_ENTRYPOINT — set by Claude Code itself to indicate how
+# it was invoked. Only interactive terminal sessions should continue; treat any
+# explicit non-cli entrypoint as automated so future entrypoint types fail closed
+# without requiring updates here.
+case "${CLAUDE_CODE_ENTRYPOINT:-cli}" in
+  cli) ;;
+  *) exit 0 ;;
+esac
+
+# Layer 2: Respect ECC_HOOK_PROFILE=minimal — suppresses non-essential hooks
+[ "${ECC_HOOK_PROFILE:-standard}" = "minimal" ] && exit 0
+
+# Layer 3: Cooperative skip env var — tools like claude-mem can set this
+# (export ECC_SKIP_OBSERVE=1) before spawning their automated sessions
+[ "${ECC_SKIP_OBSERVE:-0}" = "1" ] && exit 0
+
+# Layer 4: Skip subagent sessions — agent_id is only present when a hook fires
+# inside a subagent (automated by definition, never a human interactive session).
+# Placed after env-var checks to avoid a Python subprocess on sessions that
+# already exit via Layers 1-3.
+_ECC_AGENT_ID=$(echo "$INPUT_JSON" | "$PYTHON_CMD" -c "import json,sys; print(json.load(sys.stdin).get('agent_id',''))" 2>/dev/null || true)
+[ -n "$_ECC_AGENT_ID" ] && exit 0
+
+# Layer 5: CWD path exclusions — skip known observer-session directories.
+# Add custom paths via ECC_OBSERVE_SKIP_PATHS (comma-separated substrings).
+# Whitespace is trimmed from each pattern; empty patterns are skipped to
+# prevent an empty-string glob from matching every path.
+_ECC_SKIP_PATHS="${ECC_OBSERVE_SKIP_PATHS:-observer-sessions,.claude-mem}"
+if [ -n "$STDIN_CWD" ]; then
+  IFS=',' read -ra _ECC_SKIP_ARRAY <<< "$_ECC_SKIP_PATHS"
+  for _pattern in "${_ECC_SKIP_ARRAY[@]}"; do
+    _pattern="${_pattern#"${_pattern%%[![:space:]]*}"}"   # trim leading whitespace
+    _pattern="${_pattern%"${_pattern##*[![:space:]]}"}"   # trim trailing whitespace
+    [ -z "$_pattern" ] && continue
+    case "$STDIN_CWD" in *"$_pattern"*) exit 0 ;; esac
+  done
+fi
+
+# Skip if a previous run already aborted due to confirmation/permission prompt.
+# This is the circuit-breaker — stops retrying after a non-interactive failure.
 if [ -f "$SENTINEL_FILE" ]; then
   echo "[observe] Skipping: previous run aborted due to confirmation/permission prompt. Remove ${SENTINEL_FILE} to re-enable." >&2
   exit 0

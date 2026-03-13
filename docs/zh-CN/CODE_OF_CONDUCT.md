@@ -71,14 +71,14 @@
 
 ## 归属
 
-本《行为准则》改编自 \[Contributor Covenant]\[homepage]，
+本《行为准则》改编自 [Contributor Covenant][homepage]，
 版本 2.0，可在
-https://www.contributor-covenant.org/version/2/0/code\_of\_conduct.html 获取。
+<https://www.contributor-covenant.org/version/2/0/code_of_conduct.html> 获取。
 
 社区影响指南的灵感来源于 [Mozilla 的行为准则执行阶梯](https://github.com/mozilla/diversity)。
 
 [homepage]: https://www.contributor-covenant.org
 
 有关本行为准则常见问题的解答，请参阅常见问题解答：
-https://www.contributor-covenant.org/faq。翻译版本可在
-https://www.contributor-covenant.org/translations 获取。
+<https://www.contributor-covenant.org/faq>。翻译版本可在
+<https://www.contributor-covenant.org/translations> 获取。

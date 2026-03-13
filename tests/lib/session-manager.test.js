@@ -80,9 +80,10 @@ function runTests() {
     assert.strictEqual(result.shortId, 'abcdef12345678');
   })) passed++; else failed++;
 
-  if (test('rejects short IDs less than 8 chars', () => {
+  if (test('accepts short IDs under 8 chars', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-abc-session.tmp');
-    assert.strictEqual(result, null);
+    assert.ok(result);
+    assert.strictEqual(result.shortId, 'abc');
   })) passed++; else failed++;
 
   // parseSessionMetadata tests
@@ -94,6 +95,9 @@ function runTests() {
 **Date:** 2026-02-01
 **Started:** 10:30
 **Last Updated:** 14:45
+**Project:** everything-claude-code
+**Branch:** feature/session-metadata
+**Worktree:** /tmp/ecc-worktree
 
 ### Completed
 - [x] Set up project
@@ -114,6 +118,9 @@ src/main.ts
     assert.strictEqual(meta.date, '2026-02-01');
     assert.strictEqual(meta.started, '10:30');
     assert.strictEqual(meta.lastUpdated, '14:45');
+    assert.strictEqual(meta.project, 'everything-claude-code');
+    assert.strictEqual(meta.branch, 'feature/session-metadata');
+    assert.strictEqual(meta.worktree, '/tmp/ecc-worktree');
     assert.strictEqual(meta.completed.length, 2);
     assert.strictEqual(meta.completed[0], 'Set up project');
     assert.strictEqual(meta.inProgress.length, 1);
@@ -578,9 +585,16 @@ src/main.ts
   // parseSessionFilename edge cases
   console.log('\nparseSessionFilename (additional edge cases):');
 
-  if (test('rejects uppercase letters in short ID', () => {
+  if (test('accepts uppercase letters in short ID', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-ABCD1234-session.tmp');
-    assert.strictEqual(result, null, 'Uppercase letters should be rejected');
+    assert.ok(result, 'Uppercase letters should be accepted');
+    assert.strictEqual(result.shortId, 'ABCD1234');
+  })) passed++; else failed++;
+
+  if (test('accepts underscores in short ID', () => {
+    const result = sessionManager.parseSessionFilename('2026-02-01-ChezMoi_2-session.tmp');
+    assert.ok(result, 'Underscores should be accepted');
+    assert.strictEqual(result.shortId, 'ChezMoi_2');
   })) passed++; else failed++;
 
   if (test('accepts hyphenated short IDs (extra segments)', () => {
@@ -1910,20 +1924,22 @@ file.ts
       'Year 100+ is not affected by the 0-99 → 1900-1999 mapping');
   })) passed++; else failed++;
 
-  // ── Round 110: parseSessionFilename rejects uppercase IDs (regex is [a-z0-9]) ──
-  console.log('\nRound 110: parseSessionFilename (uppercase ID — regex [a-z0-9]{8,} rejects [A-Z]):');
-  if (test('parseSessionFilename rejects filenames with uppercase characters in short ID', () => {
-    // SESSION_FILENAME_REGEX uses [a-z0-9]{8,} — strictly lowercase
+  // ── Round 110: parseSessionFilename accepts mixed-case IDs ──
+  console.log('\nRound 110: parseSessionFilename (mixed-case IDs are accepted):');
+  if (test('parseSessionFilename accepts filenames with uppercase characters in short ID', () => {
     const upperResult = sessionManager.parseSessionFilename('2026-01-15-ABCD1234-session.tmp');
-    assert.strictEqual(upperResult, null,
-      'All-uppercase ID should be rejected by [a-z0-9]{8,}');
+    assert.notStrictEqual(upperResult, null,
+      'All-uppercase ID should be accepted');
+    assert.strictEqual(upperResult.shortId, 'ABCD1234');
+
     const mixedResult = sessionManager.parseSessionFilename('2026-01-15-AbCd1234-session.tmp');
-    assert.strictEqual(mixedResult, null,
-      'Mixed-case ID should be rejected by [a-z0-9]{8,}');
-    // Confirm lowercase is accepted
+    assert.notStrictEqual(mixedResult, null,
+      'Mixed-case ID should be accepted');
+    assert.strictEqual(mixedResult.shortId, 'AbCd1234');
+
     const lowerResult = sessionManager.parseSessionFilename('2026-01-15-abcd1234-session.tmp');
     assert.notStrictEqual(lowerResult, null,
-      'All-lowercase ID should be accepted');
+      'All-lowercase ID should still be accepted');
     assert.strictEqual(lowerResult.shortId, 'abcd1234');
   })) passed++; else failed++;
 
@@ -2190,36 +2206,34 @@ file.ts
     }
   })) passed++; else failed++;
 
-  // ── Round 117: parseSessionFilename with uppercase short ID — regex rejects [A-Z] ──
-  console.log('\nRound 117: parseSessionFilename (uppercase short ID — regex [a-z0-9] rejects uppercase):');
-  if (test('parseSessionFilename rejects uppercase short IDs because regex uses [a-z0-9] not [a-zA-Z0-9]', () => {
-    // The regex: /^(\d{4}-\d{2}-\d{2})(?:-([a-z0-9]{8,}))?-session\.tmp$/
-    // Note: [a-z0-9] — lowercase only
-
-    // All uppercase — rejected
+  // ── Round 117: parseSessionFilename accepts uppercase, underscores, and short IDs ──
+  console.log('\nRound 117: parseSessionFilename (uppercase, underscores, and short IDs are accepted):');
+  if (test('parseSessionFilename accepts uppercase short IDs, underscores, and 7-char names', () => {
     const upper = sessionManager.parseSessionFilename('2026-01-15-ABCDEFGH-session.tmp');
-    assert.strictEqual(upper, null,
-      'All-uppercase ID should be rejected (regex uses [a-z0-9])');
+    assert.notStrictEqual(upper, null,
+      'All-uppercase ID should be accepted');
+    assert.strictEqual(upper.shortId, 'ABCDEFGH');
 
-    // Mixed case — rejected
     const mixed = sessionManager.parseSessionFilename('2026-01-15-AbCdEfGh-session.tmp');
-    assert.strictEqual(mixed, null,
-      'Mixed-case ID should be rejected (uppercase chars not in [a-z0-9])');
+    assert.notStrictEqual(mixed, null,
+      'Mixed-case ID should be accepted');
+    assert.strictEqual(mixed.shortId, 'AbCdEfGh');
 
-    // All lowercase — accepted
     const lower = sessionManager.parseSessionFilename('2026-01-15-abcdefgh-session.tmp');
     assert.notStrictEqual(lower, null, 'All-lowercase ID should be accepted');
     assert.strictEqual(lower.shortId, 'abcdefgh');
 
-    // Uppercase hex-like (common in UUIDs) — rejected
     const hexUpper = sessionManager.parseSessionFilename('2026-01-15-A1B2C3D4-session.tmp');
-    assert.strictEqual(hexUpper, null,
-      'Uppercase hex ID should be rejected');
+    assert.notStrictEqual(hexUpper, null, 'Uppercase hex ID should be accepted');
+    assert.strictEqual(hexUpper.shortId, 'A1B2C3D4');
 
-    // Lowercase hex — accepted
-    const hexLower = sessionManager.parseSessionFilename('2026-01-15-a1b2c3d4-session.tmp');
-    assert.notStrictEqual(hexLower, null, 'Lowercase hex ID should be accepted');
-    assert.strictEqual(hexLower.shortId, 'a1b2c3d4');
+    const underscored = sessionManager.parseSessionFilename('2026-01-15-ChezMoi_2-session.tmp');
+    assert.notStrictEqual(underscored, null, 'IDs with underscores should be accepted');
+    assert.strictEqual(underscored.shortId, 'ChezMoi_2');
+
+    const shortName = sessionManager.parseSessionFilename('2026-01-15-homelab-session.tmp');
+    assert.notStrictEqual(shortName, null, '7-character names should be accepted');
+    assert.strictEqual(shortName.shortId, 'homelab');
   })) passed++; else failed++;
 
   // ── Round 119: parseSessionMetadata "Context to Load" code block extraction ──

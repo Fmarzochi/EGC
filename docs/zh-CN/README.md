@@ -939,13 +939,14 @@ Codex macOS 应用：
 
 * 将此仓库作为您的工作区打开。
 * 根目录的 `AGENTS.md` 会被自动检测。
+* 参考 `.codex/config.toml` 故意不固定 `model` 或 `model_provider`，因此 Codex 会使用它自己的当前默认值，除非您显式覆盖。
 * 可选：将 `.codex/config.toml` 复制到 `~/.codex/config.toml` 以实现 CLI/应用行为一致性。
 
 ### 包含内容
 
 | 组件 | 数量 | 详情 |
 |-----------|-------|---------|
-| 配置 | 1 | `.codex/config.toml` — 模型、权限、MCP 服务器、持久指令 |
+| 配置 | 1 | `.codex/config.toml` — 权限、MCP 服务器、通知和配置文件 |
 | AGENTS.md | 2 | 根目录（通用）+ `.codex/AGENTS.md`（Codex 特定补充） |
 | 技能 | 16 | `.agents/skills/` — 每个技能包含 SKILL.md + agents/openai.yaml |
 | MCP 服务器 | 4 | GitHub、Context7、Memory、Sequential Thinking（基于命令） |

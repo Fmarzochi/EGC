@@ -940,6 +940,7 @@ Codex macOS app:
 - Open this repository as your workspace.
 - The root `AGENTS.md` is auto-detected.
 - `.codex/config.toml` and `.codex/agents/*.toml` work best when kept project-local.
+- The reference `.codex/config.toml` intentionally does not pin `model` or `model_provider`, so Codex uses its own current default unless you override it.
 - Optional: copy `.codex/config.toml` to `~/.codex/config.toml` for global defaults; keep the multi-agent role files project-local unless you also copy `.codex/agents/`.
 
 ### What's Included
