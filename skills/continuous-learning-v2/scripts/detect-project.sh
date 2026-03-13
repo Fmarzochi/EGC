@@ -46,6 +46,9 @@ _CLV2_PYTHON_CMD="$(_clv2_resolve_python_cmd 2>/dev/null || true)"
 CLV2_PYTHON_CMD="$_CLV2_PYTHON_CMD"
 export CLV2_PYTHON_CMD
 
+CLV2_OBSERVER_PROMPT_PATTERN='Can you confirm|requires permission|Awaiting (user confirmation|confirmation|approval|permission)|confirm I should proceed|once granted access|grant.*access'
+export CLV2_OBSERVER_PROMPT_PATTERN
+
 _clv2_detect_project() {
   local project_root=""
   local project_name=""
@@ -216,3 +219,10 @@ PROJECT_ID="$_CLV2_PROJECT_ID"
 PROJECT_NAME="$_CLV2_PROJECT_NAME"
 PROJECT_ROOT="$_CLV2_PROJECT_ROOT"
 PROJECT_DIR="$_CLV2_PROJECT_DIR"
+
+if [ -n "$PROJECT_ROOT" ]; then
+  CLV2_OBSERVER_SENTINEL_FILE="${PROJECT_ROOT}/.observer.lock"
+else
+  CLV2_OBSERVER_SENTINEL_FILE="${PROJECT_DIR}/.observer.lock"
+fi
+export CLV2_OBSERVER_SENTINEL_FILE

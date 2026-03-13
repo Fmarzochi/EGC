@@ -33,12 +33,9 @@ resolve_python_cmd() {
     return 0
   fi
 
-  # FIX: Windows Git Bash — check known Python install paths directly
-  # because `command -v python` triggers the Microsoft Store alias instead
-  for win_py in \
-    "/c/Users/$USER/AppData/Local/Programs/Python/Python311/python" \
-    "/c/Users/$USER/AppData/Local/Programs/Python/Python312/python" \
-    "/c/Users/$USER/AppData/Local/Programs/Python/Python310/python"; do
+  # FIX: Windows Git Bash — probe Python install paths directly because
+  # `command -v python` can hit the Microsoft Store alias instead.
+  for win_py in /c/Users/"$USER"/AppData/Local/Programs/Python/Python3*/python; do
     if [ -x "$win_py" ]; then
       printf '%s\n' "$win_py"
       return 0
@@ -105,9 +102,11 @@ CONFIG_DIR="${HOME}/.claude/homunculus"
 OBSERVATIONS_FILE="${PROJECT_DIR}/observations.jsonl"
 MAX_FILE_SIZE_MB=10
 
-# FIX: SENTINEL_FILE must be defined AFTER PROJECT_DIR is set by detect-project.sh
-# Previously it was defined at the top before PROJECT_DIR existed, making it empty/broken
-SENTINEL_FILE="${PROJECT_DIR}/.observer.lock"
+SENTINEL_FILE="${CLV2_OBSERVER_SENTINEL_FILE:-${PROJECT_ROOT:-$PROJECT_DIR}/.observer.lock}"
+
+write_guard_sentinel() {
+  printf '%s\n' 'observer paused: confirmation or permission prompt detected; rerun start-observer.sh --reset after reviewing observer.log' > "$SENTINEL_FILE"
+}
 
 # Skip if disabled globally
 if [ -f "$CONFIG_DIR/disabled" ]; then
@@ -213,13 +212,12 @@ if [ -f "$OBSERVATIONS_FILE" ]; then
   fi
 fi
 
-# FIX: Detect confirmation/permission prompts in observer output and fail closed.
+# Detect confirmation/permission prompts in observer output and fail closed.
 # A non-interactive background observer must never ask for user confirmation.
-# If detected: log once, write sentinel to suppress all future retries, exit non-zero.
-if echo "$PARSED" | grep -E -i -q "Can you confirm|requires permission|Awaiting|confirm I should proceed|once granted access|grant.*access"; then
+if echo "$PARSED" | grep -E -i -q "$CLV2_OBSERVER_PROMPT_PATTERN"; then
   echo "[observe] OBSERVER_ABORT: Confirmation or permission prompt detected in observer output. This observer run is non-actionable." >&2
   echo "[observe] Writing sentinel to suppress retries: ${SENTINEL_FILE}" >&2
-  echo "$PARSED" > "$SENTINEL_FILE"
+  write_guard_sentinel
   exit 2
 fi
 

@@ -2211,6 +2211,22 @@ async function runTests() {
     passed++;
   else failed++;
 
+  if (
+    test('continuous-learning-v2 observer scripts share prompt guard config and start-observer supports reset', () => {
+      const observeSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh'), 'utf8');
+      const startObserverSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'agents', 'start-observer.sh'), 'utf8');
+      const detectProjectSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'scripts', 'detect-project.sh'), 'utf8');
+
+      assert.ok(detectProjectSource.includes('CLV2_OBSERVER_PROMPT_PATTERN='), 'detect-project.sh should export a shared observer prompt pattern');
+      assert.ok(observeSource.includes('CLV2_OBSERVER_PROMPT_PATTERN'), 'observe.sh should use the shared observer prompt pattern');
+      assert.ok(startObserverSource.includes('CLV2_OBSERVER_PROMPT_PATTERN'), 'start-observer.sh should use the shared observer prompt pattern');
+      assert.ok(startObserverSource.includes('--reset'), 'start-observer.sh should document or support an explicit reset flag');
+      assert.ok(!startObserverSource.includes('.observer.tmp.log'), 'start-observer.sh should not leave the observer writing to a temp log file');
+    })
+  )
+    passed++;
+  else failed++;
+
   if (await asyncTest('observe.sh falls back to legacy output fields when tool_response is null', async () => {
     const homeDir = createTestDir();
     const projectDir = createTestDir();
@@ -2242,6 +2258,63 @@ async function runTests() {
 
       const observation = JSON.parse(observations[0]);
       assert.strictEqual(observation.output, 'legacy output', 'observe.sh should fall back to legacy tool_output when tool_response is null');
+    } finally {
+      cleanupTestDir(homeDir);
+      cleanupTestDir(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('observe.sh does not trip the observer lock for generic Awaiting output', async () => {
+    const homeDir = createTestDir();
+    const projectDir = createTestDir();
+    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
+    const payload = JSON.stringify({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo waiting' },
+      tool_response: 'Awaiting build completion from CI',
+      session_id: 'session-awaiting-generic',
+      cwd: projectDir
+    });
+
+    try {
+      const result = await runShellScript(observePath, ['post'], payload, {
+        HOME: homeDir,
+        CLAUDE_PROJECT_DIR: projectDir
+      }, projectDir);
+
+      assert.strictEqual(result.code, 0, `observe.sh should not fail closed for generic Awaiting output, stderr: ${result.stderr}`);
+      assert.ok(!fs.existsSync(path.join(projectDir, '.observer.lock')), 'generic Awaiting output should not create the observer lock sentinel');
+    } finally {
+      cleanupTestDir(homeDir);
+      cleanupTestDir(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('observe.sh writes a scrubbed sentinel when confirmation prompts are detected', async () => {
+    const homeDir = createTestDir();
+    const projectDir = createTestDir();
+    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
+    const payload = JSON.stringify({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo guarded' },
+      tool_response: 'Awaiting user confirmation before proceeding. token=supersecretvalue123456',
+      session_id: 'session-awaiting-confirmation',
+      cwd: projectDir
+    });
+
+    try {
+      const result = await runShellScript(observePath, ['post'], payload, {
+        HOME: homeDir,
+        CLAUDE_PROJECT_DIR: projectDir
+      }, projectDir);
+
+      const sentinelPath = path.join(projectDir, '.observer.lock');
+      assert.strictEqual(result.code, 2, `observe.sh should fail closed when a confirmation prompt is detected, stderr: ${result.stderr}`);
+      assert.ok(fs.existsSync(sentinelPath), 'confirmation prompts should create the observer lock sentinel');
+
+      const sentinelContent = fs.readFileSync(sentinelPath, 'utf8');
+      assert.ok(/confirmation|permission/i.test(sentinelContent), 'sentinel should record the reason it was created');
+      assert.ok(!sentinelContent.includes('supersecretvalue123456'), 'sentinel should not persist raw secrets from observer output');
     } finally {
       cleanupTestDir(homeDir);
       cleanupTestDir(projectDir);

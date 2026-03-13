@@ -8,9 +8,10 @@
 #       project-specific observations into project-scoped instincts.
 #
 # Usage:
-#   start-observer.sh        # Start observer for current project (or global)
-#   start-observer.sh stop   # Stop running observer
-#   start-observer.sh status # Check if observer is running
+#   start-observer.sh              # Start observer for current project (or global)
+#   start-observer.sh --reset      # Clear lock and restart observer for current project
+#   start-observer.sh stop         # Stop running observer
+#   start-observer.sh status       # Check if observer is running
 
 set -e
 
@@ -41,6 +42,31 @@ PID_FILE="${PROJECT_DIR}/.observer.pid"
 LOG_FILE="${PROJECT_DIR}/observer.log"
 OBSERVATIONS_FILE="${PROJECT_DIR}/observations.jsonl"
 INSTINCTS_DIR="${PROJECT_DIR}/instincts/personal"
+SENTINEL_FILE="${CLV2_OBSERVER_SENTINEL_FILE:-${PROJECT_ROOT:-$PROJECT_DIR}/.observer.lock}"
+
+write_guard_sentinel() {
+  printf '%s\n' 'observer paused: confirmation or permission prompt detected; rerun start-observer.sh --reset after reviewing observer.log' > "$SENTINEL_FILE"
+}
+
+stop_observer_if_running() {
+  if [ -f "$PID_FILE" ]; then
+    pid=$(cat "$PID_FILE")
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "Stopping observer for ${PROJECT_NAME} (PID: $pid)..."
+      kill "$pid"
+      rm -f "$PID_FILE"
+      echo "Observer stopped."
+      return 0
+    fi
+
+    echo "Observer not running (stale PID file)."
+    rm -f "$PID_FILE"
+    return 1
+  fi
+
+  echo "Observer not running."
+  return 1
+}
 
 # Read config values from config.json
 OBSERVER_INTERVAL_MINUTES=5
@@ -87,22 +113,31 @@ case "$UNAME_LOWER" in
   *mingw*|*msys*|*cygwin*) IS_WINDOWS=true ;;
 esac
 
-case "${1:-start}" in
+ACTION="start"
+RESET_OBSERVER=false
+
+for arg in "$@"; do
+  case "$arg" in
+    start|stop|status)
+      ACTION="$arg"
+      ;;
+    --reset)
+      RESET_OBSERVER=true
+      ;;
+    *)
+      echo "Usage: $0 [start|stop|status] [--reset]"
+      exit 1
+      ;;
+  esac
+done
+
+if [ "$RESET_OBSERVER" = "true" ]; then
+  rm -f "$SENTINEL_FILE"
+fi
+
+case "$ACTION" in
   stop)
-    if [ -f "$PID_FILE" ]; then
-      pid=$(cat "$PID_FILE")
-      if kill -0 "$pid" 2>/dev/null; then
-        echo "Stopping observer for ${PROJECT_NAME} (PID: $pid)..."
-        kill "$pid"
-        rm -f "$PID_FILE"
-        echo "Observer stopped."
-      else
-        echo "Observer not running (stale PID file)."
-        rm -f "$PID_FILE"
-      fi
-    else
-      echo "Observer not running."
-    fi
+    stop_observer_if_running || true
     exit 0
     ;;
 
@@ -153,9 +188,10 @@ case "${1:-start}" in
       exit 1
     fi
 
-    # Add strict non-interactive instruction to system prompt (if prompt file or env is used, update there as well)
-    # If observer output contains confirmation-seeking language, fail closed
-    OBSERVER_LOG_TMP="${PROJECT_DIR}/.observer.tmp.log"
+    mkdir -p "$PROJECT_DIR"
+    touch "$LOG_FILE"
+    start_line=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+
     nohup env \
       CONFIG_DIR="$CONFIG_DIR" \
       PID_FILE="$PID_FILE" \
@@ -168,16 +204,17 @@ case "${1:-start}" in
       MIN_OBSERVATIONS="$MIN_OBSERVATIONS" \
       OBSERVER_INTERVAL_SECONDS="$OBSERVER_INTERVAL_SECONDS" \
       CLV2_IS_WINDOWS="$IS_WINDOWS" \
-      "$OBSERVER_LOOP_SCRIPT" > "$OBSERVER_LOG_TMP" 2>&1 &
+      CLV2_OBSERVER_PROMPT_PATTERN="$CLV2_OBSERVER_PROMPT_PATTERN" \
+      "$OBSERVER_LOOP_SCRIPT" >> "$LOG_FILE" 2>&1 &
 
     # Wait for PID file
     sleep 2
 
     # Check for confirmation-seeking output in the observer log
-    if grep -E -i -q "Can you confirm|requires permission|Awaiting|confirm I should proceed" "$OBSERVER_LOG_TMP"; then
+    if tail -n +"$((start_line + 1))" "$LOG_FILE" 2>/dev/null | grep -E -i -q "$CLV2_OBSERVER_PROMPT_PATTERN"; then
       echo "OBSERVER_ABORT: Confirmation or permission prompt detected in observer output. Failing closed."
-      cat "$OBSERVER_LOG_TMP" >> "$LOG_FILE"
-      rm -f "$OBSERVER_LOG_TMP"
+      stop_observer_if_running >/dev/null 2>&1 || true
+      write_guard_sentinel
       exit 2
     fi
 
@@ -197,7 +234,7 @@ case "${1:-start}" in
     ;;
 
   *)
-    echo "Usage: $0 {start|stop|status}"
+    echo "Usage: $0 [start|stop|status] [--reset]"
     exit 1
     ;;
 esac
