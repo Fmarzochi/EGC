@@ -38,6 +38,12 @@ analyze_observations() {
     return
   fi
 
+  # session-guardian: gate observer cycle (active hours, cooldown, idle detection)
+  if ! bash "$(dirname "$0")/session-guardian.sh"; then
+    echo "[$(date)] Observer cycle skipped by session-guardian" >> "$LOG_FILE"
+    return
+  fi
+
   prompt_file="$(mktemp "${TMPDIR:-/tmp}/ecc-observer-prompt.XXXXXX")"
   cat > "$prompt_file" <<PROMPT
 Read ${OBSERVATIONS_FILE} and identify patterns for the project ${PROJECT_NAME} (user corrections, error resolutions, repeated workflows, tool preferences).
