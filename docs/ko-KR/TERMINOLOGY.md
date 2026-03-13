@@ -38,20 +38,20 @@
 | Merge | merge | 확정 | 영문 유지 |
 | Repository | 저장소 | 확정 | |
 | Fork | Fork | 확정 | 영문 유지 |
-| Supabase | Supabase | - | 제품명 유지 |
-| Redis | Redis | - | 제품명 유지 |
-| Playwright | Playwright | - | 제품명 유지 |
-| TypeScript | TypeScript | - | 언어명 유지 |
-| JavaScript | JavaScript | - | 언어명 유지 |
-| Go/Golang | Go | - | 언어명 유지 |
-| React | React | - | 프레임워크명 유지 |
-| Next.js | Next.js | - | 프레임워크명 유지 |
-| PostgreSQL | PostgreSQL | - | 제품명 유지 |
+| Supabase | Supabase | 확정 | 제품명 유지 |
+| Redis | Redis | 확정 | 제품명 유지 |
+| Playwright | Playwright | 확정 | 제품명 유지 |
+| TypeScript | TypeScript | 확정 | 언어명 유지 |
+| JavaScript | JavaScript | 확정 | 언어명 유지 |
+| Go/Golang | Go | 확정 | 언어명 유지 |
+| React | React | 확정 | 프레임워크명 유지 |
+| Next.js | Next.js | 확정 | 프레임워크명 유지 |
+| PostgreSQL | PostgreSQL | 확정 | 제품명 유지 |
 | RLS (Row Level Security) | RLS(행 수준 보안) | 확정 | 최초 사용 시 전개 |
-| OWASP | OWASP | - | 영문 유지 |
-| XSS | XSS | - | 영문 유지 |
+| OWASP | OWASP | 확정 | 영문 유지 |
+| XSS | XSS | 확정 | 영문 유지 |
 | SQL Injection | SQL 인젝션 | 확정 | |
-| CSRF | CSRF | - | 영문 유지 |
+| CSRF | CSRF | 확정 | 영문 유지 |
 | Refactor | 리팩토링 | 확정 | |
 | Dead Code | 데드 코드 | 확정 | |
 | Lint/Linter | Lint | 확정 | 영문 유지 |
@@ -70,11 +70,11 @@
 | Migration | 마이그레이션 | 확정 | |
 | Transaction | 트랜잭션 | 확정 | |
 | Concurrency | 동시성 | 확정 | |
-| Goroutine | Goroutine | - | Go 용어 유지 |
+| Goroutine | Goroutine | 확정 | Go 용어 유지 |
 | Channel | Channel | 확정 | Go 컨텍스트에서 유지 |
-| Mutex | Mutex | - | 영문 유지 |
+| Mutex | Mutex | 확정 | 영문 유지 |
 | Interface | 인터페이스 | 확정 | |
-| Struct | Struct | - | Go 용어 유지 |
+| Struct | Struct | 확정 | Go 용어 유지 |
 | Mock | Mock | 확정 | 테스트 용어 유지 |
 | Stub | Stub | 확정 | 테스트 용어 유지 |
 | Fixture | Fixture | 확정 | 테스트 용어 유지 |
@@ -82,7 +82,7 @@
 | Snapshot | 스냅샷 | 확정 | |
 | Trace | 트레이스 | 확정 | |
 | Artifact | 아티팩트 | 확정 | |
-| CI/CD | CI/CD | - | 영문 유지 |
+| CI/CD | CI/CD | 확정 | 영문 유지 |
 | Pipeline | 파이프라인 | 확정 | |
 
 ---

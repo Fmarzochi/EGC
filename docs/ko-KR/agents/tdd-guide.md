@@ -21,9 +21,15 @@ model: sonnet
 기대 동작을 설명하는 실패하는 테스트 작성.
 
 ### 2. 테스트 실행 -- 실패 확인
+Node.js (npm):
 ```bash
 npm test
 ```
+
+언어 중립:
+- 프로젝트의 기본 테스트 명령을 실행하세요.
+- Python: `pytest`
+- Go: `go test ./...`
 
 ### 3. 최소한의 구현 작성 (GREEN)
 테스트를 통과하기에 충분한 코드만.
@@ -34,10 +40,16 @@ npm test
 중복 제거, 이름 개선, 최적화 -- 테스트는 그린 유지.
 
 ### 6. 커버리지 확인
+Node.js (npm):
 ```bash
 npm run test:coverage
 # 필수: branches, functions, lines, statements 80% 이상
 ```
+
+언어 중립:
+- 프로젝트의 기본 커버리지 명령을 실행하세요.
+- Python: `pytest --cov`
+- Go: `go test ./... -cover`
 
 ## 필수 테스트 유형
 

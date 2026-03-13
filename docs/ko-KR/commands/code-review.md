@@ -19,9 +19,9 @@
 - 800줄 초과 파일
 - 4단계 초과 중첩 깊이
 - 누락된 에러 처리
-- console.log 문
+- 디버그 로깅 문구(예: 개발용 로그/print 등)
 - TODO/FIXME 주석
-- 공개 API에 대한 JSDoc 누락
+- 활성 언어에 대한 공개 API 문서 누락(예: JSDoc/Go doc/Docstring 등)
 
 **모범 사례 (MEDIUM):**
 - 변이(Mutation) 패턴 (불변 패턴을 사용하세요)

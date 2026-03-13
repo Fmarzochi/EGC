@@ -13,6 +13,9 @@
 | security-reviewer | 보안 분석 | 커밋 전 |
 | build-error-resolver | 빌드 에러 수정 | 빌드 실패 시 |
 | e2e-runner | E2E 테스팅 | 핵심 사용자 흐름 |
+| database-reviewer | 데이터베이스 스키마/쿼리 리뷰 | 스키마 설계, 쿼리 최적화 |
+| go-reviewer | Go 코드 리뷰 | Go 코드 작성 또는 수정 후 |
+| go-build-resolver | Go 빌드 에러 수정 | `go build` 또는 `go vet` 실패 시 |
 | refactor-cleaner | 사용하지 않는 코드 정리 | 코드 유지보수 |
 | doc-updater | 문서 관리 | 문서 업데이트 |
 

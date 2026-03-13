@@ -195,7 +195,7 @@ jobs:
 
       # Scan for secrets
       - name: Secret scanning
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d
 
       # Dependency audit
       - name: Audit dependencies
@@ -215,7 +215,7 @@ jobs:
 // package.json - Use lock files and integrity checks
 {
   "scripts": {
-    "install": "npm ci",  // Use ci for reproducible builds
+    "deps:install": "npm ci",  // Use ci for reproducible builds
     "audit": "npm audit --audit-level=moderate",
     "check": "npm outdated"
   }

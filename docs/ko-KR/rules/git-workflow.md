@@ -9,7 +9,7 @@
 
 타입: feat, fix, refactor, docs, test, chore, perf, ci
 
-참고: 어트리뷰션은 ~/.claude/settings.json에서 전역적으로 비활성화되어 있습니다.
+참고: 어트리뷰션 비활성화 여부는 각자의 `~/.claude/settings.json` 로컬 설정에 따라 달라질 수 있습니다.
 
 ## Pull Request 워크플로우
 

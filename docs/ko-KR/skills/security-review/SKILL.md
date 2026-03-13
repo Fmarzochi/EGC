@@ -215,8 +215,8 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: `
       default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline';
-      style-src 'self' 'unsafe-inline';
+      script-src 'self' 'nonce-{nonce}';
+      style-src 'self' 'nonce-{nonce}';
       img-src 'self' data: https:;
       font-src 'self';
       connect-src 'self' https://api.example.com;
@@ -224,6 +224,8 @@ const securityHeaders = [
   }
 ]
 ```
+
+`{nonce}`는 요청마다 새로 생성하고, 헤더와 인라인 `<script>`/`<style>` 태그에 동일하게 주입해야 합니다.
 
 #### 확인 단계
 - [ ] 사용자 제공 HTML이 새니타이징됨
@@ -339,7 +341,9 @@ catch (error) {
 
 #### 지갑 검증
 ```typescript
-import { verify } from '@solana/web3.js'
+import nacl from 'tweetnacl'
+import bs58 from 'bs58'
+import { PublicKey } from '@solana/web3.js'
 
 async function verifyWalletOwnership(
   publicKey: string,
@@ -347,17 +351,22 @@ async function verifyWalletOwnership(
   message: string
 ) {
   try {
-    const isValid = verify(
-      Buffer.from(message),
-      Buffer.from(signature, 'base64'),
-      Buffer.from(publicKey, 'base64')
+    const publicKeyBytes = new PublicKey(publicKey).toBytes()
+    const signatureBytes = bs58.decode(signature)
+    const messageBytes = new TextEncoder().encode(message)
+
+    return nacl.sign.detached.verify(
+      messageBytes,
+      signatureBytes,
+      publicKeyBytes
     )
-    return isValid
   } catch (error) {
     return false
   }
 }
 ```
+
+참고: Solana 공개 키와 서명은 일반적으로 base64가 아니라 base58로 인코딩됩니다.
 
 #### 트랜잭션 검증
 ```typescript

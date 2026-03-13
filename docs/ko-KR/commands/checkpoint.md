@@ -1,10 +1,15 @@
+---
+name: checkpoint
+description: 워크플로우에서 checkpoint를 생성, 검증, 조회 또는 정리합니다.
+---
+
 # Checkpoint 명령어
 
 워크플로우에서 checkpoint를 생성하거나 검증합니다.
 
 ## 사용법
 
-`/checkpoint [create|verify|list] [name]`
+`/checkpoint [create|verify|list|clear] [name]`
 
 ## Checkpoint 생성
 

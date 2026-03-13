@@ -32,7 +32,7 @@ node scripts/setup-package-manager.js --list
 3. **package.json**: `packageManager` 필드
 4. **락 파일**: package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb의 존재 여부
 5. **전역 설정**: `~/.claude/package-manager.json`
-6. **폴백**: 사용 가능한 첫 번째 패키지 매니저 (pnpm > bun > yarn > npm)
+6. **폴백**: `npm`
 
 ## 설정 파일
 

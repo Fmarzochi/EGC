@@ -51,7 +51,7 @@ SETTINGS index_granularity = 8192;
 ### ReplacingMergeTree (중복 제거)
 
 ```sql
--- For data that may have duplicates (e.g., from multiple sources)
+-- 중복이 있을 수 있는 데이터용 (예: 여러 소스에서 수집된 경우)
 CREATE TABLE user_events (
     event_id String,
     user_id String,
@@ -67,7 +67,7 @@ PRIMARY KEY (user_id, event_id);
 ### AggregatingMergeTree (사전 집계)
 
 ```sql
--- For maintaining aggregated metrics
+-- 집계 메트릭을 유지하기 위한 용도
 CREATE TABLE market_stats_hourly (
     hour DateTime,
     market_id String,
@@ -78,7 +78,7 @@ CREATE TABLE market_stats_hourly (
 PARTITION BY toYYYYMM(hour)
 ORDER BY (hour, market_id);
 
--- Query aggregated data
+-- 집계된 데이터 조회
 SELECT
     hour,
     market_id,
@@ -96,7 +96,7 @@ ORDER BY hour DESC;
 ### 효율적인 필터링
 
 ```sql
--- ✅ GOOD: Use indexed columns first
+-- ✅ 좋음: 인덱스된 컬럼을 먼저 사용
 SELECT *
 FROM markets_analytics
 WHERE date >= '2025-01-01'
@@ -105,7 +105,7 @@ WHERE date >= '2025-01-01'
 ORDER BY date DESC
 LIMIT 100;
 
--- ❌ BAD: Filter on non-indexed columns first
+-- ❌ 나쁨: 비인덱스 컬럼을 먼저 필터링
 SELECT *
 FROM markets_analytics
 WHERE volume > 1000
@@ -116,7 +116,7 @@ WHERE volume > 1000
 ### 집계
 
 ```sql
--- ✅ GOOD: Use ClickHouse-specific aggregation functions
+-- ✅ 좋음: ClickHouse 전용 집계 함수를 사용
 SELECT
     toStartOfDay(created_at) AS day,
     market_id,
@@ -129,7 +129,7 @@ WHERE created_at >= today() - INTERVAL 7 DAY
 GROUP BY day, market_id
 ORDER BY day DESC, total_volume DESC;
 
--- ✅ Use quantile for percentiles (more efficient than percentile)
+-- ✅ 백분위수에는 quantile 사용 (percentile보다 효율적)
 SELECT
     quantile(0.50)(trade_size) AS median,
     quantile(0.95)(trade_size) AS p95,
@@ -141,7 +141,7 @@ WHERE created_at >= now() - INTERVAL 1 HOUR;
 ### 윈도우 함수
 
 ```sql
--- Calculate running totals
+-- 누적 합계 계산
 SELECT
     date,
     market_id,
@@ -172,25 +172,22 @@ const clickhouse = new ClickHouse({
   }
 })
 
-// ✅ Batch insert (efficient)
+// ✅ 배치 삽입 (효율적)
 async function bulkInsertTrades(trades: Trade[]) {
-  const values = trades.map(trade => `(
-    '${trade.id}',
-    '${trade.market_id}',
-    '${trade.user_id}',
-    ${trade.amount},
-    '${trade.timestamp.toISOString()}'
-  )`).join(',')
+  const rows = trades.map(trade => ({
+    id: trade.id,
+    market_id: trade.market_id,
+    user_id: trade.user_id,
+    amount: trade.amount,
+    timestamp: trade.timestamp.toISOString()
+  }))
 
-  await clickhouse.query(`
-    INSERT INTO trades (id, market_id, user_id, amount, timestamp)
-    VALUES ${values}
-  `).toPromise()
+  await clickhouse.insert('trades', rows)
 }
 
-// ❌ Individual inserts (slow)
+// ❌ 개별 삽입 (느림)
 async function insertTrade(trade: Trade) {
-  // Don't do this in a loop!
+  // 루프 안에서 이렇게 하지 마세요!
   await clickhouse.query(`
     INSERT INTO trades VALUES ('${trade.id}', ...)
   `).toPromise()
@@ -200,7 +197,7 @@ async function insertTrade(trade: Trade) {
 ### 스트리밍 삽입
 
 ```typescript
-// For continuous data ingestion
+// 연속적인 데이터 수집용
 import { createWriteStream } from 'fs'
 import { pipeline } from 'stream/promises'
 
@@ -220,7 +217,7 @@ async function streamInserts() {
 ### 실시간 집계
 
 ```sql
--- Create materialized view for hourly stats
+-- 시간별 통계를 위한 materialized view 생성
 CREATE MATERIALIZED VIEW market_stats_hourly_mv
 TO market_stats_hourly
 AS SELECT
@@ -232,7 +229,7 @@ AS SELECT
 FROM trades
 GROUP BY hour, market_id;
 
--- Query the materialized view
+-- materialized view 조회
 SELECT
     hour,
     market_id,
@@ -249,7 +246,7 @@ GROUP BY hour, market_id;
 ### 쿼리 성능
 
 ```sql
--- Check slow queries
+-- 느린 쿼리 확인
 SELECT
     query_id,
     user,
@@ -269,7 +266,7 @@ LIMIT 10;
 ### 테이블 통계
 
 ```sql
--- Check table sizes
+-- 테이블 크기 확인
 SELECT
     database,
     table,
@@ -287,7 +284,7 @@ ORDER BY sum(bytes) DESC;
 ### 시계열 분석
 
 ```sql
--- Daily active users
+-- 일간 활성 사용자
 SELECT
     toDate(timestamp) AS date,
     uniq(user_id) AS daily_active_users
@@ -296,7 +293,7 @@ WHERE timestamp >= today() - INTERVAL 30 DAY
 GROUP BY date
 ORDER BY date;
 
--- Retention analysis
+-- 리텐션 분석
 SELECT
     signup_date,
     countIf(days_since_signup = 0) AS day_0,
@@ -319,7 +316,7 @@ ORDER BY signup_date DESC;
 ### 퍼널 분석
 
 ```sql
--- Conversion funnel
+-- 전환 퍼널
 SELECT
     countIf(step = 'viewed_market') AS viewed,
     countIf(step = 'clicked_trade') AS clicked,
@@ -340,7 +337,7 @@ GROUP BY session_id;
 ### 코호트 분석
 
 ```sql
--- User cohorts by signup month
+-- 가입 월별 사용자 코호트
 SELECT
     toStartOfMonth(signup_date) AS cohort,
     toStartOfMonth(activity_date) AS month,
@@ -362,12 +359,12 @@ ORDER BY cohort, months_since_signup;
 ### ETL 패턴
 
 ```typescript
-// Extract, Transform, Load
+// 추출, 변환, 적재(ETL)
 async function etlPipeline() {
-  // 1. Extract from source
+  // 1. 소스에서 추출
   const rawData = await extractFromPostgres()
 
-  // 2. Transform
+  // 2. 변환
   const transformed = rawData.map(row => ({
     date: new Date(row.created_at).toISOString().split('T')[0],
     market_id: row.market_slug,
@@ -375,18 +372,29 @@ async function etlPipeline() {
     trades: parseInt(row.trade_count)
   }))
 
-  // 3. Load to ClickHouse
+  // 3. ClickHouse에 적재
   await bulkInsertToClickHouse(transformed)
 }
 
-// Run periodically
-setInterval(etlPipeline, 60 * 60 * 1000)  // Every hour
+// 주기적으로 실행
+let etlRunning = false
+
+setInterval(async () => {
+  if (etlRunning) return
+
+  etlRunning = true
+  try {
+    await etlPipeline()
+  } finally {
+    etlRunning = false
+  }
+}, 60 * 60 * 1000)  // Every hour
 ```
 
 ### 변경 데이터 캡처 (CDC)
 
 ```typescript
-// Listen to PostgreSQL changes and sync to ClickHouse
+// PostgreSQL 변경을 수신하고 ClickHouse와 동기화
 import { Client } from 'pg'
 
 const pgClient = new Client({ connectionString: process.env.DATABASE_URL })

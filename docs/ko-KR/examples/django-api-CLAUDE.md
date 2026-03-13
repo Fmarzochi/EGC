@@ -142,12 +142,12 @@ from django.db import transaction
 
 def create_order(*, customer, product_id: uuid.UUID, quantity: int) -> Order:
     """재고 검증과 결제 보류를 포함한 주문 생성."""
-    product = Product.objects.select_for_update().get(id=product_id)
-
-    if product.stock < quantity:
-        raise InsufficientStockError()
-
     with transaction.atomic():
+        product = Product.objects.select_for_update().get(id=product_id)
+
+        if product.stock < quantity:
+            raise InsufficientStockError()
+
         order = Order.objects.create(
             customer=customer,
             product=product,

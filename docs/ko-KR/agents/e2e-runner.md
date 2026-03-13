@@ -71,7 +71,7 @@ npx playwright show-report                 # HTML 보고서 보기
 
 - **시맨틱 로케이터 사용**: `[data-testid="..."]` > CSS 셀렉터 > XPath
 - **시간이 아닌 조건 대기**: `waitForResponse()` > `waitForTimeout()`
-- **자동 대기 내장**: `page.locator().click()`은 자동 대기; `page.click()`은 아님
+- **자동 대기 내장**: `locator.click()`과 `page.click()` 모두 자동 대기를 제공하지만, 더 안정적인 `locator` 기반 API를 선호
 - **테스트 격리**: 각 테스트는 독립적; 공유 상태 없음
 - **빠른 실패**: 모든 핵심 단계에서 `expect()` 어설션 사용
 - **재시도 시 트레이스**: 실패 디버깅을 위해 `trace: 'on-first-retry'` 설정

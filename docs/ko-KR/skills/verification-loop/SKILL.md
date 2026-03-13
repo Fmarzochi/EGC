@@ -77,7 +77,8 @@ grep -rn "console.log" --include="*.ts" --include="*.tsx" src/ 2>/dev/null | hea
 ```bash
 # Show what changed
 git diff --stat
-git diff HEAD~1 --name-only
+git diff --name-only
+git diff --cached --name-only
 ```
 
 각 변경된 파일에서 다음을 검토합니다:

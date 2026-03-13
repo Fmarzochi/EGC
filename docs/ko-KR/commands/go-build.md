@@ -43,7 +43,7 @@ go mod tidy -v
 
 ## 예시 세션
 
-```text
+````text
 User: /go-build
 
 Agent:
@@ -141,7 +141,7 @@ ok      project/internal/handler   0.023s
 | 남은 이슈 | 0 |
 
 Build 상태: ✅ 성공
-```
+````
 
 ## 자주 발생하는 에러
 

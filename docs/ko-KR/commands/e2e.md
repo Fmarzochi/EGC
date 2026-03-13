@@ -36,7 +36,7 @@ e2e-runner 에이전트가 수행하는 작업:
 
 ## 사용 예시
 
-```
+````
 User: /e2e 마켓 검색 및 조회 흐름 테스트
 
 Agent (e2e-runner):
@@ -200,7 +200,7 @@ Running 3 tests using 3 workers
 ```
 
 ✅ CI/CD 통합 준비가 완료된 E2E 테스트 모음!
-```
+````
 
 ## 테스트 아티팩트
 

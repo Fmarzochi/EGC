@@ -68,7 +68,7 @@ govulncheck ./...
 
 ## 사용 예시
 
-```text
+````text
 User: /go-review
 
 Agent:
@@ -125,7 +125,7 @@ return fmt.Errorf("get user %s: %w", userID, err)
 - MEDIUM: 0
 
 권장: ❌ CRITICAL 이슈가 수정될 때까지 merge 차단
-```
+````
 
 ## 승인 기준
 

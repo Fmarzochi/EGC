@@ -533,7 +533,8 @@ func ProcessRequest(data []byte) []byte {
 
     buf.Write(data)
     // Process...
-    return buf.Bytes()
+    out := append([]byte(nil), buf.Bytes()...)
+    return out
 }
 ```
 

@@ -191,11 +191,9 @@ test('user can search and filter markets', async ({ page }) => {
   // Search for markets
   await page.fill('input[placeholder="Search markets"]', 'election')
 
-  // Wait for debounce and results
-  await page.waitForTimeout(600)
-
-  // Verify search results displayed
+  // Wait for stable search results instead of sleeping
   const results = page.locator('[data-testid="market-card"]')
+  await expect(results.first()).toBeVisible({ timeout: 5000 })
   await expect(results).toHaveCount(5, { timeout: 5000 })
 
   // Verify results contain search term
@@ -300,7 +298,7 @@ npm run test:coverage
 ```json
 {
   "jest": {
-    "coverageThresholds": {
+    "coverageThreshold": {
       "global": {
         "branches": 80,
         "functions": 80,

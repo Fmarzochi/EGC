@@ -42,6 +42,7 @@ GET /api/markets?status=active&sort=volume&limit=20&offset=0
 interface MarketRepository {
   findAll(filters?: MarketFilters): Promise<Market[]>
   findById(id: string): Promise<Market | null>
+  findByIds(ids: string[]): Promise<Market[]>
   create(data: CreateMarketDto): Promise<Market>
   update(id: string, data: UpdateMarketDto): Promise<Market>
   delete(id: string): Promise<void>
@@ -85,7 +86,7 @@ class MarketService {
     const markets = await this.marketRepo.findByIds(results.map(r => r.id))
 
     // Sort by similarity
-    return markets.sort((a, b) => {
+    return [...markets].sort((a, b) => {
       const scoreA = results.find(r => r.id === a.id)?.score || 0
       const scoreB = results.find(r => r.id === b.id)?.score || 0
       return scoreA - scoreB
@@ -320,7 +321,7 @@ async function fetchWithRetry<T>(
   fn: () => Promise<T>,
   maxRetries = 3
 ): Promise<T> {
-  let lastError: Error
+  let lastError: Error = new Error('Retry attempts exhausted')
 
   for (let i = 0; i < maxRetries; i++) {
     try {

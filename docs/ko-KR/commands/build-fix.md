@@ -1,3 +1,8 @@
+---
+name: build-fix
+description: 최소한의 안전한 변경으로 build 및 타입 오류를 점진적으로 수정합니다.
+---
+
 # Build 오류 수정
 
 최소한의 안전한 변경으로 build 및 타입 오류를 점진적으로 수정합니다.
@@ -14,7 +19,7 @@
 | `pom.xml` | `mvn compile` |
 | `build.gradle` | `./gradlew compileJava` |
 | `go.mod` | `go build ./...` |
-| `pyproject.toml` | `python -m py_compile` 또는 `mypy .` |
+| `pyproject.toml` | `python -m compileall .` 또는 `mypy .` |
 
 ## 2단계: 오류 파싱 및 그룹화
 

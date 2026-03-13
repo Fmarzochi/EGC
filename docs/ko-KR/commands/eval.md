@@ -4,7 +4,7 @@
 
 ## 사용법
 
-`/eval [define|check|report|list] [feature-name]`
+`/eval [define|check|report|list|clean] [feature-name]`
 
 ## 평가 정의
 

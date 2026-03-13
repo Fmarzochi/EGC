@@ -10,15 +10,16 @@
 
 ## 2단계: 코드맵 생성
 
-`docs/CODEMAPS/` (또는 `.reports/codemaps/`)에 코드맵 생성 또는 업데이트:
+`docs/CODEMAPS/`에 코드맵 생성 또는 업데이트:
 
 | 파일 | 내용 |
 |------|------|
-| `architecture.md` | 상위 시스템 다이어그램, 서비스 경계, 데이터 흐름 |
+| `INDEX.md` | 전체 코드베이스 개요와 영역별 링크 |
 | `backend.md` | API 라우트, 미들웨어 체인, 서비스 → 리포지토리 매핑 |
 | `frontend.md` | 페이지 트리, 컴포넌트 계층, 상태 관리 흐름 |
-| `data.md` | 데이터베이스 테이블, 관계, 마이그레이션 히스토리 |
-| `dependencies.md` | 외부 서비스, 서드파티 통합, 공유 라이브러리 |
+| `database.md` | 데이터베이스 스키마, 마이그레이션, 저장소 계층 |
+| `integrations.md` | 외부 서비스, 서드파티 통합, 어댑터 |
+| `workers.md` | 백그라운드 작업, 큐, 스케줄러 |
 
 ### 코드맵 형식
 
@@ -41,27 +42,33 @@ src/repos/user.ts (데이터베이스 접근, 80줄)
 - Stripe (결제 처리)
 ```
 
-## 3단계: 변경 감지
+## 3단계: 영역 분류
 
-1. 이전 코드맵이 있는 경우 변경 비율 계산
-2. 변경이 30%를 초과하면 diff를 표시하고 덮어쓰기 전에 사용자 승인 요청
-3. 변경이 30% 이하이면 기존 파일에 바로 업데이트
+생성기는 파일 경로 패턴을 기반으로 영역을 자동 분류합니다:
+
+1. 프론트엔드: `app/`, `pages/`, `components/`, `hooks/`, `.tsx`, `.jsx`
+2. 백엔드: `api/`, `routes/`, `controllers/`, `services/`, `.route.ts`
+3. 데이터베이스: `db/`, `migrations/`, `prisma/`, `repositories/`
+4. 통합: `integrations/`, `adapters/`, `connectors/`, `plugins/`
+5. 워커: `workers/`, `jobs/`, `queues/`, `tasks/`, `cron/`
 
 ## 4단계: 메타데이터 추가
 
 각 코드맵에 최신 정보 헤더를 추가합니다:
 
 ```markdown
-<!-- Generated: 2026-02-11 | Files scanned: 142 | Token estimate: ~800 -->
+**Last Updated:** 2026-03-12
+**Total Files:** 42
+**Total Lines:** 1875
 ```
 
-## 5단계: 분석 보고서 저장
+## 5단계: 인덱스와 영역 문서 동기화
 
-`.reports/codemap-diff.txt`에 요약을 작성합니다:
-- 마지막 스캔 이후 추가/제거/수정된 파일
-- 새로 감지된 의존성
-- 아키텍처 변경 사항 (새 라우트, 새 서비스 등)
-- 90일 이상 업데이트되지 않은 문서에 대한 오래된 항목 경고
+`INDEX.md`는 생성된 영역 문서를 링크하고 요약해야 합니다:
+- 각 영역의 파일 수와 총 라인 수
+- 감지된 엔트리 포인트
+- 저장소 트리의 간단한 ASCII 개요
+- 영역별 세부 문서 링크
 
 ## 팁
 
@@ -69,4 +76,4 @@ src/repos/user.ts (데이터베이스 접근, 80줄)
 - 전체 코드 블록 대신 **파일 경로와 함수 시그니처** 사용
 - 효율적인 컨텍스트 로딩을 위해 각 코드맵을 **1000 토큰 미만**으로 유지
 - 장황한 설명 대신 데이터 흐름에 ASCII 다이어그램 사용
-- 주요 기능 추가 또는 리팩토링 세션 후 실행
+- 주요 기능 추가 또는 리팩토링 세션 후 `npx tsx scripts/codemaps/generate.ts` 실행

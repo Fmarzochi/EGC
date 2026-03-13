@@ -55,7 +55,9 @@ pub enum AppError {
     #[error("Unauthorized")]
     Unauthorized,
     #[error(transparent)]
-    Internal(#[from] anyhow::Error),
+    Database(#[from] sqlx::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl IntoResponse for AppError {
@@ -64,7 +66,11 @@ impl IntoResponse for AppError {
             Self::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
             Self::Validation(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
-            Self::Internal(err) => {
+            Self::Database(err) => {
+                tracing::error!(?err, "database error");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal error".into())
+            }
+            Self::Io(err) => {
                 tracing::error!(?err, "internal error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal error".into())
             }

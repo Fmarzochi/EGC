@@ -195,6 +195,15 @@ model: sonnet
 | `tools` | 필요한 것만 포함 | `Read, Write, Edit, Bash, Grep, Glob, WebFetch, Task` |
 | `model` | 복잡도 수준 | `haiku` (단순), `sonnet` (코딩), `opus` (복잡) |
 
+### 예시 에이전트
+
+| 에이전트 | 용도 |
+|----------|------|
+| `tdd-guide.md` | 테스트 주도 개발 |
+| `code-reviewer.md` | 코드 리뷰 |
+| `security-reviewer.md` | 보안 점검 |
+| `build-error-resolver.md` | 빌드 오류 수정 |
+
 ---
 
 ## 훅 기여하기
@@ -216,6 +225,68 @@ hooks/hooks.json
 | `SessionStart` | 세션 시작 시 | 컨텍스트 로딩 |
 | `Stop` | 세션 종료 시 | 정리, 감사 |
 
+### 훅 형식
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "tool == \"Bash\" && tool_input.command matches \"rm -rf /\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] BLOCKED: Dangerous command' && exit 1"
+          }
+        ],
+        "description": "위험한 rm 명령 차단"
+      }
+    ]
+  }
+}
+```
+
+### Matcher 문법
+
+```javascript
+// 특정 도구 매칭
+tool == "Bash"
+tool == "Edit"
+tool == "Write"
+
+// 입력 패턴 매칭
+tool_input.command matches "npm install"
+tool_input.file_path matches "\\.tsx?$"
+
+// 조건 결합
+tool == "Bash" && tool_input.command matches "git push"
+```
+
+### 훅 예시
+
+```json
+// tmux 밖 dev 서버 차단
+{
+  "matcher": "tool == \"Bash\" && tool_input.command matches \"npm run dev\"",
+  "hooks": [{"type": "command", "command": "echo '개발 서버는 tmux에서 실행하세요' && exit 1"}],
+  "description": "dev 서버를 tmux에서 실행하도록 강제"
+}
+
+// TypeScript 편집 후 자동 포맷
+{
+  "matcher": "tool == \"Edit\" && tool_input.file_path matches \"\\.tsx?$\"",
+  "hooks": [{"type": "command", "command": "npx prettier --write \"$file_path\""}],
+  "description": "TypeScript 파일 편집 후 포맷"
+}
+
+// git push 전 경고
+{
+  "matcher": "tool == \"Bash\" && tool_input.command matches \"git push\"",
+  "hooks": [{"type": "command", "command": "echo '[Hook] push 전에 변경사항을 다시 검토하세요'"}],
+  "description": "push 전 검토 리마인더"
+}
+```
+
 ### 훅 체크리스트
 
 - [ ] Matcher가 구체적 (너무 광범위하지 않게)
@@ -236,6 +307,36 @@ hooks/hooks.json
 commands/your-command.md
 ```
 
+### 커맨드 템플릿
+
+```markdown
+---
+description: /help에 표시되는 간단한 설명
+---
+
+# 커맨드 이름
+
+## 목적
+
+이 커맨드가 수행하는 작업.
+
+## 사용법
+
+\`\`\`
+/your-command [args]
+\`\`\`
+
+## 워크플로우
+
+1. 첫 번째 단계
+2. 두 번째 단계
+3. 마지막 단계
+
+## 출력
+
+사용자가 받는 결과.
+```
+
 ### 커맨드 예시
 
 | 커맨드 | 용도 |
@@ -244,6 +345,34 @@ commands/your-command.md
 | `code-review.md` | 코드 변경사항 리뷰 |
 | `tdd.md` | TDD 워크플로우 |
 | `e2e.md` | E2E 테스팅 |
+
+---
+
+## 크로스-하네스 및 번역
+
+### 스킬 서브셋 (Codex 및 Cursor)
+
+ECC는 다른 하네스를 위한 스킬 서브셋도 제공합니다:
+
+- **Codex:** `.agents/skills/` — `agents/openai.yaml`에 나열된 스킬이 Codex에서 로드됩니다.
+- **Cursor:** `.cursor/skills/` — Cursor용 스킬 서브셋이 별도로 포함됩니다.
+
+Codex 또는 Cursor에서도 제공해야 하는 **새 스킬**을 추가한다면:
+
+1. 먼저 `skills/your-skill-name/` 아래에 일반적인 ECC 스킬로 추가합니다.
+2. **Codex**에서도 제공해야 하면 `.agents/skills/`에 반영하고, 필요하면 `agents/openai.yaml`에도 참조를 추가합니다.
+3. **Cursor**에서도 제공해야 하면 Cursor 레이아웃에 맞게 `.cursor/skills/` 아래에 추가합니다.
+
+기존 디렉터리의 구조를 확인한 뒤 같은 패턴을 따르세요. 이 서브셋 동기화는 수동이므로 PR 설명에 반영 여부를 적어 두는 것이 좋습니다.
+
+### 번역
+
+번역 문서는 `docs/` 아래에 있습니다. 예: `docs/zh-CN`, `docs/zh-TW`, `docs/ja-JP`.
+
+번역된 에이전트, 커맨드, 스킬을 변경한다면:
+
+- 대응하는 번역 파일도 함께 업데이트하거나
+- 유지보수자/번역자가 후속 작업을 할 수 있도록 이슈를 열어 주세요.
 
 ---
 

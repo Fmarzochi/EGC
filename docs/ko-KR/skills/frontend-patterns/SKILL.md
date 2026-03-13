@@ -154,6 +154,8 @@ const [isOpen, toggleOpen] = useToggle()
 ### 비동기 데이터 페칭 Hook
 
 ```typescript
+import { useCallback, useEffect, useRef, useState } from 'react'
+
 interface UseQueryOptions<T> {
   onSuccess?: (data: T) => void
   onError?: (error: Error) => void
@@ -168,6 +170,14 @@ export function useQuery<T>(
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [loading, setLoading] = useState(false)
+  const successRef = useRef(options?.onSuccess)
+  const errorRef = useRef(options?.onError)
+  const enabled = options?.enabled !== false
+
+  useEffect(() => {
+    successRef.current = options?.onSuccess
+    errorRef.current = options?.onError
+  }, [options?.onSuccess, options?.onError])
 
   const refetch = useCallback(async () => {
     setLoading(true)
@@ -176,21 +186,21 @@ export function useQuery<T>(
     try {
       const result = await fetcher()
       setData(result)
-      options?.onSuccess?.(result)
+      successRef.current?.(result)
     } catch (err) {
       const error = err as Error
       setError(error)
-      options?.onError?.(error)
+      errorRef.current?.(error)
     } finally {
       setLoading(false)
     }
-  }, [fetcher, options])
+  }, [fetcher])
 
   useEffect(() => {
-    if (options?.enabled !== false) {
+    if (enabled) {
       refetch()
     }
-  }, [key, refetch, options?.enabled])
+  }, [key, enabled, refetch])
 
   return { data, error, loading, refetch }
 }
@@ -296,7 +306,7 @@ export function useMarkets() {
 ```typescript
 // ✅ useMemo for expensive computations
 const sortedMarkets = useMemo(() => {
-  return markets.sort((a, b) => b.volume - a.volume)
+  return [...markets].sort((a, b) => b.volume - a.volume)
 }, [markets])
 
 // ✅ useCallback for functions passed to children
