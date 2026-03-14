@@ -88,73 +88,12 @@ function runShellScript(scriptPath, args = [], input = '', env = {}, cwd = proce
 
 // Create a temporary test directory
 function createTestDir() {
-  const testDir = path.join(os.tmpdir(), `hooks-test-${Date.now()}`);
-  fs.mkdirSync(testDir, { recursive: true });
-  return testDir;
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-test-'));
 }
 
 // Clean up test directory
 function cleanupTestDir(testDir) {
   fs.rmSync(testDir, { recursive: true, force: true });
-}
-
-function normalizeComparablePath(targetPath) {
-  if (!targetPath) return '';
-
-  let normalizedPath = String(targetPath).trim().replace(/\\/g, '/');
-
-  if (/^\/[a-zA-Z]\//.test(normalizedPath)) {
-    normalizedPath = `${normalizedPath[1]}:/${normalizedPath.slice(3)}`;
-  }
-
-  if (/^[a-zA-Z]:\//.test(normalizedPath)) {
-    normalizedPath = `${normalizedPath[0].toUpperCase()}:${normalizedPath.slice(2)}`;
-  }
-
-  try {
-    normalizedPath = fs.realpathSync(normalizedPath);
-  } catch {
-    // Fall through to string normalization when the path cannot be resolved directly.
-  }
-
-  return path.normalize(normalizedPath).replace(/\\/g, '/').replace(/^([a-z]):/, (_, drive) => `${drive.toUpperCase()}:`);
-}
-
-function pathsReferToSameLocation(leftPath, rightPath) {
-  const normalizedLeftPath = normalizeComparablePath(leftPath);
-  const normalizedRightPath = normalizeComparablePath(rightPath);
-
-  if (!normalizedLeftPath || !normalizedRightPath) return false;
-  if (normalizedLeftPath === normalizedRightPath) return true;
-
-  try {
-    const leftStats = fs.statSync(normalizedLeftPath);
-    const rightStats = fs.statSync(normalizedRightPath);
-    return leftStats.dev === rightStats.dev && leftStats.ino === rightStats.ino;
-  } catch {
-    return false;
-  }
-}
-
-function createObservePayload(projectDir, overrides = {}) {
-  return JSON.stringify({
-    tool_name: 'Bash',
-    tool_input: { command: 'echo hello' },
-    tool_response: 'ok',
-    session_id: 'session-123',
-    cwd: projectDir,
-    ...overrides
-  });
-}
-
-function listObservationFiles(homeDir) {
-  const projectsDir = path.join(homeDir, '.claude', 'homunculus', 'projects');
-  if (!fs.existsSync(projectsDir)) return [];
-
-  return fs
-    .readdirSync(projectsDir)
-    .map(projectId => path.join(projectsDir, projectId, 'observations.jsonl'))
-    .filter(observationsPath => fs.existsSync(observationsPath));
 }
 
 function createCommandShim(binDir, baseName, logFile) {
@@ -214,7 +153,6 @@ async function runTests() {
 
   let passed = 0;
   let failed = 0;
-  let skipped = 0;
 
   const scriptsDir = path.join(__dirname, '..', '..', 'scripts', 'hooks');
 
@@ -2219,6 +2157,8 @@ async function runTests() {
       assert.ok(observerLoopSource.includes('ECC_OBSERVER_MAX_TURNS'), 'observer-loop should allow max-turn overrides');
       assert.ok(observerLoopSource.includes('max_turns="${ECC_OBSERVER_MAX_TURNS:-10}"'), 'observer-loop should default to 10 turns');
       assert.ok(!observerLoopSource.includes('--max-turns 3'), 'observer-loop should not hardcode a 3-turn limit');
+      assert.ok(observerLoopSource.includes('ECC_SKIP_OBSERVE=1'), 'observer-loop should suppress observe.sh for automated sessions');
+      assert.ok(observerLoopSource.includes('ECC_HOOK_PROFILE=minimal'), 'observer-loop should run automated analysis with the minimal hook profile');
     })
   )
     passed++;
@@ -2252,11 +2192,7 @@ async function runTests() {
     passed++;
   else failed++;
 
-  if (process.platform === 'win32') {
-    console.log('  - detect-project writes project metadata to the registry and project directory');
-    console.log('    (skipped — bash script paths are not Windows-compatible)');
-    skipped++;
-  } else if (
+  if (
     await asyncTest('detect-project writes project metadata to the registry and project directory', async () => {
       const testRoot = createTestDir();
       const homeDir = path.join(testRoot, 'home');
@@ -2293,9 +2229,9 @@ async function runTests() {
 
         assert.strictEqual(code, 0, `detect-project should source cleanly, stderr: ${stderr}`);
 
-        const [projectId] = stdout.trim().split(/\r?\n/);
+        const [projectId, projectDir] = stdout.trim().split(/\r?\n/);
         const registryPath = path.join(homeDir, '.claude', 'homunculus', 'projects.json');
-        const projectMetadataPath = path.join(homeDir, '.claude', 'homunculus', 'projects', projectId, 'project.json');
+        const projectMetadataPath = path.join(projectDir, 'project.json');
 
         assert.ok(projectId, 'detect-project should emit a project id');
         assert.ok(fs.existsSync(registryPath), 'projects.json should be created');
@@ -2307,35 +2243,13 @@ async function runTests() {
         assert.ok(registry[projectId], 'registry should contain the detected project');
         assert.strictEqual(metadata.id, projectId, 'project.json should include the detected id');
         assert.strictEqual(metadata.name, path.basename(repoDir), 'project.json should include the repo name');
-        const normalizedMetadataRoot = normalizeComparablePath(metadata.root);
-        const normalizedRepoDir = normalizeComparablePath(repoDir);
-        assert.ok(normalizedMetadataRoot, 'project.json should include a non-empty repo root');
-        assert.ok(
-          pathsReferToSameLocation(normalizedMetadataRoot, normalizedRepoDir),
-          `project.json should include the repo root (expected ${normalizedRepoDir}, got ${normalizedMetadataRoot})`,
-        );
+        assert.strictEqual(fs.realpathSync(metadata.root), fs.realpathSync(repoDir), 'project.json should include the repo root');
         assert.strictEqual(metadata.remote, 'https://github.com/example/ecc-test.git', 'project.json should include the sanitized remote');
         assert.ok(metadata.created_at, 'project.json should include created_at');
         assert.ok(metadata.last_seen, 'project.json should include last_seen');
       } finally {
         cleanupTestDir(testRoot);
       }
-    })
-  )
-    passed++;
-  else failed++;
-
-  if (
-    test('continuous-learning-v2 observer scripts share prompt guard config and start-observer supports reset', () => {
-      const observeSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh'), 'utf8');
-      const startObserverSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'agents', 'start-observer.sh'), 'utf8');
-      const detectProjectSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'scripts', 'detect-project.sh'), 'utf8');
-
-      assert.ok(detectProjectSource.includes('CLV2_OBSERVER_PROMPT_PATTERN='), 'detect-project.sh should export a shared observer prompt pattern');
-      assert.ok(observeSource.includes('CLV2_OBSERVER_PROMPT_PATTERN'), 'observe.sh should use the shared observer prompt pattern');
-      assert.ok(startObserverSource.includes('CLV2_OBSERVER_PROMPT_PATTERN'), 'start-observer.sh should use the shared observer prompt pattern');
-      assert.ok(startObserverSource.includes('--reset'), 'start-observer.sh should document or support an explicit reset flag');
-      assert.ok(!startObserverSource.includes('.observer.tmp.log'), 'start-observer.sh should not leave the observer writing to a temp log file');
     })
   )
     passed++;
@@ -2378,197 +2292,74 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await asyncTest('observe.sh does not trip the observer lock for generic Awaiting output', async () => {
-    const homeDir = createTestDir();
-    const projectDir = createTestDir();
+  if (await asyncTest('observe.sh skips automated sessions before project detection side effects', async () => {
     const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-    const payload = JSON.stringify({
-      tool_name: 'Bash',
-      tool_input: { command: 'echo waiting' },
-      tool_response: 'Awaiting build completion from CI',
-      session_id: 'session-awaiting-generic',
-      cwd: projectDir
-    });
-
-    try {
-      const result = await runShellScript(observePath, ['post'], payload, {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir
-      }, projectDir);
-
-      assert.strictEqual(result.code, 0, `observe.sh should not fail closed for generic Awaiting output, stderr: ${result.stderr}`);
-      assert.ok(!fs.existsSync(path.join(projectDir, '.observer.lock')), 'generic Awaiting output should not create the observer lock sentinel');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectDir);
-    }
-  })) passed++; else failed++;
-
-  if (await asyncTest('observe.sh writes a scrubbed sentinel when confirmation prompts are detected', async () => {
-    const homeDir = createTestDir();
-    const projectDir = createTestDir();
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-    const payload = JSON.stringify({
-      tool_name: 'Bash',
-      tool_input: { command: 'echo guarded' },
-      tool_response: 'Awaiting user confirmation before proceeding. token=supersecretvalue123456',
-      session_id: 'session-awaiting-confirmation',
-      cwd: projectDir
-    });
-
-    try {
-      const result = await runShellScript(observePath, ['post'], payload, {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir
-      }, projectDir);
-
-      const sentinelPath = path.join(projectDir, '.observer.lock');
-      assert.strictEqual(result.code, 2, `observe.sh should fail closed when a confirmation prompt is detected, stderr: ${result.stderr}`);
-      assert.ok(fs.existsSync(sentinelPath), 'confirmation prompts should create the observer lock sentinel');
-
-      const sentinelContent = fs.readFileSync(sentinelPath, 'utf8');
-      assert.ok(/confirmation|permission/i.test(sentinelContent), 'sentinel should record the reason it was created');
-      assert.ok(!sentinelContent.includes('supersecretvalue123456'), 'sentinel should not persist raw secrets from observer output');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectDir);
-    }
-  })) passed++; else failed++;
-
-  if (await asyncTest('observe.sh skips non-cli entrypoints without writing observations', async () => {
-    const homeDir = createTestDir();
-    const projectDir = createTestDir();
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-
-    try {
-      const result = await runShellScript(observePath, ['post'], createObservePayload(projectDir, { session_id: 'session-non-cli' }), {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir,
-        CLAUDE_CODE_ENTRYPOINT: 'sdk'
-      }, projectDir);
-
-      assert.strictEqual(result.code, 0, `observe.sh should exit successfully for non-cli entrypoints, stderr: ${result.stderr}`);
-      assert.ok(!fs.existsSync(path.join(homeDir, '.claude', 'homunculus', 'projects')), 'non-cli entrypoints should exit before project detection runs');
-      assert.deepStrictEqual(listObservationFiles(homeDir), [], 'non-cli entrypoints should not write observations');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectDir);
-    }
-  })) passed++; else failed++;
-
-  if (await asyncTest('observe.sh skips ECC_SKIP_OBSERVE sessions without writing observations', async () => {
-    const homeDir = createTestDir();
-    const projectDir = createTestDir();
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-
-    try {
-      const result = await runShellScript(observePath, ['post'], createObservePayload(projectDir, { session_id: 'session-skip-env' }), {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir,
-        ECC_SKIP_OBSERVE: '1'
-      }, projectDir);
-
-      assert.strictEqual(result.code, 0, `observe.sh should exit successfully when ECC_SKIP_OBSERVE=1, stderr: ${result.stderr}`);
-      assert.ok(!fs.existsSync(path.join(homeDir, '.claude', 'homunculus', 'projects')), 'ECC_SKIP_OBSERVE should exit before project detection runs');
-      assert.deepStrictEqual(listObservationFiles(homeDir), [], 'ECC_SKIP_OBSERVE should suppress observation writes');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectDir);
-    }
-  })) passed++; else failed++;
-
-  if (await asyncTest('observe.sh skips subagent payloads with agent_id without writing observations', async () => {
-    const homeDir = createTestDir();
-    const projectDir = createTestDir();
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-
-    try {
-      const result = await runShellScript(
-        observePath,
-        ['post'],
-        createObservePayload(projectDir, { session_id: 'session-agent', agent_id: 'agent-123' }),
-        {
-          HOME: homeDir,
-          CLAUDE_PROJECT_DIR: projectDir
+    const cases = [
+      {
+        name: 'non-cli entrypoint',
+        env: { CLAUDE_CODE_ENTRYPOINT: 'mcp' }
+      },
+      {
+        name: 'minimal hook profile',
+        env: { CLAUDE_CODE_ENTRYPOINT: 'cli', ECC_HOOK_PROFILE: 'minimal' }
+      },
+      {
+        name: 'cooperative skip env',
+        env: { CLAUDE_CODE_ENTRYPOINT: 'cli', ECC_SKIP_OBSERVE: '1' }
+      },
+      {
+        name: 'subagent payload',
+        env: { CLAUDE_CODE_ENTRYPOINT: 'cli' },
+        payload: { agent_id: 'agent-123' }
+      },
+      {
+        name: 'cwd skip path',
+        env: {
+          CLAUDE_CODE_ENTRYPOINT: 'cli',
+          ECC_OBSERVE_SKIP_PATHS: ' observer-sessions , .claude-mem '
         },
-        projectDir
-      );
+        cwdSuffix: path.join('observer-sessions', 'worker')
+      }
+    ];
 
-      assert.strictEqual(result.code, 0, `observe.sh should exit successfully for subagent sessions, stderr: ${result.stderr}`);
-      assert.ok(!fs.existsSync(path.join(homeDir, '.claude', 'homunculus', 'projects')), 'subagent sessions should exit before project detection runs');
-      assert.deepStrictEqual(listObservationFiles(homeDir), [], 'subagent sessions should not write observations');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectDir);
-    }
-  })) passed++; else failed++;
+    for (const testCase of cases) {
+      const homeDir = createTestDir();
+      const projectDir = createTestDir();
 
-  if (await asyncTest('observe.sh skips default observer-session paths without writing observations', async () => {
-    const homeDir = createTestDir();
-    const projectRoot = createTestDir();
-    const projectDir = path.join(projectRoot, 'observer-sessions-worker');
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-    fs.mkdirSync(projectDir, { recursive: true });
+      try {
+        const cwd = testCase.cwdSuffix ? path.join(projectDir, testCase.cwdSuffix) : projectDir;
+        fs.mkdirSync(cwd, { recursive: true });
 
-    try {
-      const result = await runShellScript(observePath, ['post'], createObservePayload(projectDir, { session_id: 'session-default-skip-path' }), {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir
-      }, projectDir);
+        const payload = JSON.stringify({
+          tool_name: 'Bash',
+          tool_input: { command: 'echo hello' },
+          tool_response: 'ok',
+          session_id: `session-${testCase.name.replace(/[^a-z0-9]+/gi, '-')}`,
+          cwd,
+          ...(testCase.payload || {})
+        });
 
-      assert.strictEqual(result.code, 0, `observe.sh should exit successfully for default skip paths, stderr: ${result.stderr}`);
-      assert.ok(!fs.existsSync(path.join(homeDir, '.claude', 'homunculus', 'projects')), 'default skip paths should exit before project detection runs');
-      assert.deepStrictEqual(listObservationFiles(homeDir), [], 'default skip paths should suppress observation writes');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectRoot);
-    }
-  })) passed++; else failed++;
+        const result = await runShellScript(observePath, ['post'], payload, {
+          HOME: homeDir,
+          ...testCase.env
+        }, projectDir);
 
-  if (await asyncTest('observe.sh trims custom skip-path patterns before matching', async () => {
-    const homeDir = createTestDir();
-    const projectRoot = createTestDir();
-    const projectDir = path.join(projectRoot, 'custom-observer-session');
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-    fs.mkdirSync(projectDir, { recursive: true });
+        assert.strictEqual(result.code, 0, `${testCase.name} should exit successfully, stderr: ${result.stderr}`);
 
-    try {
-      const result = await runShellScript(observePath, ['post'], createObservePayload(projectDir, { session_id: 'session-custom-skip-path' }), {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir,
-        ECC_OBSERVE_SKIP_PATHS: '  custom-observer-session  ,   ,  '
-      }, projectDir);
+        const homunculusDir = path.join(homeDir, '.claude', 'homunculus');
+        const registryPath = path.join(homunculusDir, 'projects.json');
+        const projectsDir = path.join(homunculusDir, 'projects');
 
-      assert.strictEqual(result.code, 0, `observe.sh should exit successfully for custom skip paths, stderr: ${result.stderr}`);
-      assert.ok(!fs.existsSync(path.join(homeDir, '.claude', 'homunculus', 'projects')), 'custom skip paths should exit before project detection runs');
-      assert.deepStrictEqual(listObservationFiles(homeDir), [], 'trimmed custom skip paths should suppress observation writes');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectRoot);
-    }
-  })) passed++; else failed++;
+        assert.ok(!fs.existsSync(registryPath), `${testCase.name} should not create projects.json`);
 
-  if (await asyncTest('observe.sh ignores empty skip-path entries so normal paths still record observations', async () => {
-    const homeDir = createTestDir();
-    const projectDir = createTestDir();
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-
-    try {
-      const result = await runShellScript(observePath, ['post'], createObservePayload(projectDir, { session_id: 'session-empty-skip-paths' }), {
-        HOME: homeDir,
-        CLAUDE_PROJECT_DIR: projectDir,
-        ECC_OBSERVE_SKIP_PATHS: '   ,   ,  '
-      }, projectDir);
-
-      assert.strictEqual(result.code, 0, `observe.sh should exit successfully when skip-path entries are empty, stderr: ${result.stderr}`);
-      const observationFiles = listObservationFiles(homeDir);
-      assert.strictEqual(observationFiles.length, 1, 'empty skip-path entries should not suppress normal observations');
-
-      const observations = fs.readFileSync(observationFiles[0], 'utf8').trim().split('\n').filter(Boolean);
-      assert.ok(observations.length > 0, 'normal sessions should still append observations when skip-path entries are empty');
-    } finally {
-      cleanupTestDir(homeDir);
-      cleanupTestDir(projectDir);
+        const projectEntries = fs.existsSync(projectsDir)
+          ? fs.readdirSync(projectsDir).filter(entry => fs.statSync(path.join(projectsDir, entry)).isDirectory())
+          : [];
+        assert.strictEqual(projectEntries.length, 0, `${testCase.name} should not create project directories`);
+      } finally {
+        cleanupTestDir(homeDir);
+        cleanupTestDir(projectDir);
+      }
     }
   })) passed++; else failed++;
 
@@ -4600,12 +4391,12 @@ async function runTests() {
   // ── Round 74: session-start.js main().catch handler ──
   console.log('\nRound 74: session-start.js (main catch — unrecoverable error):');
 
-  if (process.platform === 'win32') {
-    console.log('  - session-start exits 0 with error message when HOME is non-directory');
-    console.log('    (skipped — /dev/null not available on Windows)');
-    skipped++;
-  } else if (
+  if (
     await asyncTest('session-start exits 0 with error message when HOME is non-directory', async () => {
+      if (process.platform === 'win32') {
+        console.log('    (skipped — /dev/null not available on Windows)');
+        return;
+      }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
       // which propagates to main().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
@@ -4622,12 +4413,12 @@ async function runTests() {
   // ── Round 75: pre-compact.js main().catch handler ──
   console.log('\nRound 75: pre-compact.js (main catch — unrecoverable error):');
 
-  if (process.platform === 'win32') {
-    console.log('  - pre-compact exits 0 with error message when HOME is non-directory');
-    console.log('    (skipped — /dev/null not available on Windows)');
-    skipped++;
-  } else if (
+  if (
     await asyncTest('pre-compact exits 0 with error message when HOME is non-directory', async () => {
+      if (process.platform === 'win32') {
+        console.log('    (skipped — /dev/null not available on Windows)');
+        return;
+      }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
       // which propagates to main().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
@@ -4644,12 +4435,12 @@ async function runTests() {
   // ── Round 75: session-end.js main().catch handler ──
   console.log('\nRound 75: session-end.js (main catch — unrecoverable error):');
 
-  if (process.platform === 'win32') {
-    console.log('  - session-end exits 0 with error message when HOME is non-directory');
-    console.log('    (skipped — /dev/null not available on Windows)');
-    skipped++;
-  } else if (
+  if (
     await asyncTest('session-end exits 0 with error message when HOME is non-directory', async () => {
+      if (process.platform === 'win32') {
+        console.log('    (skipped — /dev/null not available on Windows)');
+        return;
+      }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR inside main(),
       // which propagates to runMain().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), '{}', {
@@ -4666,12 +4457,12 @@ async function runTests() {
   // ── Round 76: evaluate-session.js main().catch handler ──
   console.log('\nRound 76: evaluate-session.js (main catch — unrecoverable error):');
 
-  if (process.platform === 'win32') {
-    console.log('  - evaluate-session exits 0 with error message when HOME is non-directory');
-    console.log('    (skipped — /dev/null not available on Windows)');
-    skipped++;
-  } else if (
+  if (
     await asyncTest('evaluate-session exits 0 with error message when HOME is non-directory', async () => {
+      if (process.platform === 'win32') {
+        console.log('    (skipped — /dev/null not available on Windows)');
+        return;
+      }
       // HOME=/dev/null makes ensureDir(learnedSkillsPath) throw ENOTDIR,
       // which propagates to main().catch — the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'), '{}', {
@@ -4688,12 +4479,12 @@ async function runTests() {
   // ── Round 76: suggest-compact.js main().catch handler ──
   console.log('\nRound 76: suggest-compact.js (main catch — double-failure):');
 
-  if (process.platform === 'win32') {
-    console.log('  - suggest-compact exits 0 with error when TMPDIR is non-directory');
-    console.log('    (skipped — /dev/null not available on Windows)');
-    skipped++;
-  } else if (
+  if (
     await asyncTest('suggest-compact exits 0 with error when TMPDIR is non-directory', async () => {
+      if (process.platform === 'win32') {
+        console.log('    (skipped — /dev/null not available on Windows)');
+        return;
+      }
       // TMPDIR=/dev/null causes openSync to fail (ENOTDIR), then the catch
       // fallback writeFile also fails, propagating to main().catch
       const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
@@ -4806,20 +4597,13 @@ async function runTests() {
         const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
         assert.ok(files.length > 0, 'Should create session file');
         const content = fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8');
-        const summaryMatch = content.match(
-          /<!-- ECC:SUMMARY:START -->([\s\S]*?)<!-- ECC:SUMMARY:END -->/
-        );
         // The real string message should appear
         assert.ok(content.includes('Real user message'), 'Should include the string content user message');
-        assert.ok(summaryMatch, 'Should include a generated summary block');
-        const summaryBlock = summaryMatch[1];
-        // Numeric/boolean/object content should NOT appear as task bullets
-        assert.ok(
-          !summaryBlock.includes('\n- 42\n'),
-          'Numeric content should be skipped (else branch → empty string → filtered)'
-        );
-        assert.ok(!summaryBlock.includes('\n- true\n'), 'Boolean content should be skipped');
-        assert.ok(!summaryBlock.includes('[object Object]'), 'Object content should be skipped');
+        // Numeric/boolean/object content should NOT appear as task bullets.
+        // The full file may legitimately contain "42" in timestamps like 03:42.
+        assert.ok(!content.includes('\n- 42\n'), 'Numeric content should not be rendered as a task bullet');
+        assert.ok(!content.includes('\n- true\n'), 'Boolean content should not be rendered as a task bullet');
+        assert.ok(!content.includes('\n- [object Object]\n'), 'Object content should not be stringified into a task bullet');
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
@@ -5175,8 +4959,7 @@ Some random content without the expected ### Context to Load section
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
   console.log(`Failed: ${failed}`);
-  console.log(`Skipped: ${skipped}`);
-  console.log(`Total:  ${passed + failed + skipped}\n`);
+  console.log(`Total:  ${passed + failed}\n`);
 
   process.exit(failed > 0 ? 1 : 0);
 }

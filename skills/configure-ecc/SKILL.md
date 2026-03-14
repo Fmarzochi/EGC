@@ -82,7 +82,7 @@ If the user chooses niche or core + niche, continue to category selection below 
 
 ### 2b: Choose Skill Categories
 
-There are 41 skills organized into 8 categories. Use `AskUserQuestion` with `multiSelect: true`:
+There are 7 selectable category groups below. The detailed confirmation lists that follow cover 41 skills across 8 categories, plus 1 standalone template. Use `AskUserQuestion` with `multiSelect: true`:
 
 ```
 Question: "Which skill categories do you want to install?"
@@ -90,7 +90,6 @@ Options:
   - "Framework & Language" — "Django, Spring Boot, Go, Python, Java, Frontend, Backend patterns"
   - "Database" — "PostgreSQL, ClickHouse, JPA/Hibernate patterns"
   - "Workflow & Quality" — "TDD, verification, learning, security review, compaction"
-  - "Business & Content" — "Article writing, content engine, market research, investor materials, outreach"
   - "Research & APIs" — "Deep research, Exa search, Claude API patterns"
   - "Social & Content Distribution" — "X/Twitter API, crossposting alongside content-engine"
   - "Media Generation" — "fal.ai image/video/audio alongside VideoDB"

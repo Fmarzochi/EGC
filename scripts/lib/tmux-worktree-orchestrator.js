@@ -34,18 +34,6 @@ function formatCommand(program, args) {
   return [program, ...args.map(shellQuote)].join(' ');
 }
 
-function buildTemplateVariables(values) {
-  return Object.entries(values).reduce((accumulator, [key, value]) => {
-    const stringValue = String(value);
-    const quotedValue = shellQuote(stringValue);
-
-    accumulator[key] = stringValue;
-    accumulator[`${key}_raw`] = stringValue;
-    accumulator[`${key}_sh`] = quotedValue;
-    return accumulator;
-  }, {});
-}
-
 function normalizeSeedPaths(seedPaths, repoRoot) {
   const resolvedRepoRoot = path.resolve(repoRoot);
   const entries = Array.isArray(seedPaths) ? seedPaths : [];
@@ -68,12 +56,6 @@ function normalizeSeedPaths(seedPaths, repoRoot) {
     }
 
     const normalizedPath = relativePath.split(path.sep).join('/');
-    if (!normalizedPath || normalizedPath === '.') {
-      throw new Error('seedPaths entries must not target the repo root');
-    }
-    if (normalizedPath === '.git' || normalizedPath.startsWith('.git/')) {
-      throw new Error(`seedPaths entries must not target git metadata: ${entry}`);
-    }
     if (seen.has(normalizedPath)) {
       continue;
     }
@@ -138,13 +120,6 @@ function buildWorkerArtifacts(workerPlan) {
           '## Completion',
           'Do not spawn subagents or external agents for this task.',
           'Report results in your final response.',
-          'Respond with these exact sections so orchestration parsing can succeed:',
-          '## Summary',
-          '- ...',
-          '## Validation',
-          '- ...',
-          '## Remaining Risks',
-          '- ...',
           `The worker launcher captures your response in \`${workerPlan.handoffFilePath}\` automatically.`,
           `The worker launcher updates \`${workerPlan.statusFilePath}\` automatically.`
         ].join('\n')
@@ -157,10 +132,13 @@ function buildWorkerArtifacts(workerPlan) {
           '## Summary',
           '- Pending',
           '',
-          '## Validation',
+          '## Files Changed',
           '- Pending',
           '',
-          '## Remaining Risks',
+          '## Tests / Verification',
+          '- Pending',
+          '',
+          '## Follow-ups',
           '- Pending'
         ].join('\n')
       },
@@ -196,7 +174,6 @@ function buildOrchestrationPlan(config = {}) {
     throw new Error('buildOrchestrationPlan requires at least one worker');
   }
 
-  const seenWorkerSlugs = new Map();
   const workerPlans = workers.map((worker, index) => {
     if (!worker || typeof worker.task !== 'string' || worker.task.trim().length === 0) {
       throw new Error(`Worker ${index + 1} is missing a task`);
@@ -204,13 +181,6 @@ function buildOrchestrationPlan(config = {}) {
 
     const workerName = worker.name || `worker-${index + 1}`;
     const workerSlug = slugify(workerName, `worker-${index + 1}`);
-    if (seenWorkerSlugs.has(workerSlug)) {
-      const firstWorkerName = seenWorkerSlugs.get(workerSlug);
-      throw new Error(
-        `Worker names must map to unique slugs: ${workerSlug} (${firstWorkerName}, ${workerName})`
-      );
-    }
-    seenWorkerSlugs.set(workerSlug, workerName);
     const branchName = `orchestrator-${sessionName}-${workerSlug}`;
     const worktreePath = path.join(worktreeRoot, `${repoName}-${sessionName}-${workerSlug}`);
     const workerCoordinationDir = path.join(coordinationDir, workerSlug);
@@ -220,7 +190,7 @@ function buildOrchestrationPlan(config = {}) {
     const launcherCommand = worker.launcherCommand || defaultLauncher;
     const workerSeedPaths = normalizeSeedPaths(worker.seedPaths, repoRoot);
     const seedPaths = normalizeSeedPaths([...globalSeedPaths, ...workerSeedPaths], repoRoot);
-    const templateVariables = buildTemplateVariables({
+    const templateVariables = {
       branch_name: branchName,
       handoff_file: handoffFilePath,
       repo_root: repoRoot,
@@ -230,7 +200,7 @@ function buildOrchestrationPlan(config = {}) {
       worker_name: workerName,
       worker_slug: workerSlug,
       worktree_path: worktreePath
-    });
+    };
 
     if (!launcherCommand) {
       throw new Error(`Worker ${workerName} is missing a launcherCommand`);

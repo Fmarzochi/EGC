@@ -14,6 +14,10 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 
 const validatorsDir = path.join(__dirname, '..', '..', 'scripts', 'ci');
+const repoRoot = path.join(__dirname, '..', '..');
+const modulesSchemaPath = path.join(repoRoot, 'schemas', 'install-modules.schema.json');
+const profilesSchemaPath = path.join(repoRoot, 'schemas', 'install-profiles.schema.json');
+const componentsSchemaPath = path.join(repoRoot, 'schemas', 'install-components.schema.json');
 
 // Test helpers
 function test(name, fn) {
@@ -34,6 +38,18 @@ function createTestDir() {
 
 function cleanupTestDir(testDir) {
   fs.rmSync(testDir, { recursive: true, force: true });
+}
+
+function writeJson(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function writeInstallComponentsManifest(testDir, components) {
+  writeJson(path.join(testDir, 'manifests', 'install-components.json'), {
+    version: 1,
+    components,
+  });
 }
 
 /**
@@ -2161,6 +2177,369 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject empty SKILL.md');
     assert.ok(result.stderr.includes('Empty file'),
       `Should report "Empty file", got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  // ==========================================
+  // validate-install-manifests.js
+  // ==========================================
+  console.log('\nvalidate-install-manifests.js:');
+
+  if (test('passes on real project install manifests', () => {
+    const result = runValidator('validate-install-manifests');
+    assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
+    assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
+  })) passed++; else failed++;
+
+  if (test('exits 0 when install manifests do not exist', () => {
+    const testDir = createTestDir();
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json')
+    });
+    assert.strictEqual(result.code, 0, 'Should skip when manifests are missing');
+    assert.ok(result.stdout.includes('skipping'), 'Should say skipping');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails on invalid install manifest JSON', () => {
+    const testDir = createTestDir();
+    const manifestsDir = path.join(testDir, 'manifests');
+    fs.mkdirSync(manifestsDir, { recursive: true });
+    fs.writeFileSync(path.join(manifestsDir, 'install-modules.json'), '{ invalid json');
+    writeJson(path.join(manifestsDir, 'install-profiles.json'), {
+      version: 1,
+      profiles: {}
+    });
+
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(manifestsDir, 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(manifestsDir, 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(manifestsDir, 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath
+    });
+    assert.strictEqual(result.code, 1, 'Should fail on invalid JSON');
+    assert.ok(result.stderr.includes('Invalid JSON'), 'Should report invalid JSON');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when install module references a missing path', () => {
+    const testDir = createTestDir();
+    writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+      version: 1,
+      modules: [
+        {
+          id: 'rules-core',
+          kind: 'rules',
+          description: 'Rules',
+          paths: ['rules'],
+          targets: ['claude'],
+          dependencies: [],
+          defaultInstall: true,
+          cost: 'light',
+          stability: 'stable'
+        },
+        {
+          id: 'security',
+          kind: 'skills',
+          description: 'Security',
+          paths: ['skills/security-review'],
+          targets: ['codex'],
+          dependencies: [],
+          defaultInstall: false,
+          cost: 'medium',
+          stability: 'stable'
+        }
+      ]
+    });
+    writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), {
+      version: 1,
+      profiles: {
+        core: { description: 'Core', modules: ['rules-core'] },
+        developer: { description: 'Developer', modules: ['rules-core'] },
+        security: { description: 'Security', modules: ['rules-core', 'security'] },
+        research: { description: 'Research', modules: ['rules-core'] },
+        full: { description: 'Full', modules: ['rules-core', 'security'] }
+      }
+    });
+    writeInstallComponentsManifest(testDir, [
+      {
+        id: 'baseline:rules',
+        family: 'baseline',
+        description: 'Rules',
+        modules: ['rules-core']
+      },
+      {
+        id: 'capability:security',
+        family: 'capability',
+        description: 'Security',
+        modules: ['security']
+      }
+    ]);
+    fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
+
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath
+    });
+    assert.strictEqual(result.code, 1, 'Should fail when a referenced path is missing');
+    assert.ok(result.stderr.includes('references missing path'), 'Should report missing path');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when two install modules claim the same path', () => {
+    const testDir = createTestDir();
+    writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+      version: 1,
+      modules: [
+        {
+          id: 'agents-core',
+          kind: 'agents',
+          description: 'Agents',
+          paths: ['agents'],
+          targets: ['codex'],
+          dependencies: [],
+          defaultInstall: true,
+          cost: 'light',
+          stability: 'stable'
+        },
+        {
+          id: 'commands-core',
+          kind: 'commands',
+          description: 'Commands',
+          paths: ['agents'],
+          targets: ['codex'],
+          dependencies: [],
+          defaultInstall: true,
+          cost: 'light',
+          stability: 'stable'
+        }
+      ]
+    });
+    writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), {
+      version: 1,
+      profiles: {
+        core: { description: 'Core', modules: ['agents-core', 'commands-core'] },
+        developer: { description: 'Developer', modules: ['agents-core', 'commands-core'] },
+        security: { description: 'Security', modules: ['agents-core', 'commands-core'] },
+        research: { description: 'Research', modules: ['agents-core', 'commands-core'] },
+        full: { description: 'Full', modules: ['agents-core', 'commands-core'] }
+      }
+    });
+    writeInstallComponentsManifest(testDir, [
+      {
+        id: 'baseline:agents',
+        family: 'baseline',
+        description: 'Agents',
+        modules: ['agents-core']
+      },
+      {
+        id: 'baseline:commands',
+        family: 'baseline',
+        description: 'Commands',
+        modules: ['commands-core']
+      }
+    ]);
+    fs.mkdirSync(path.join(testDir, 'agents'), { recursive: true });
+
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath
+    });
+    assert.strictEqual(result.code, 1, 'Should fail on duplicate claimed paths');
+    assert.ok(result.stderr.includes('claimed by both'), 'Should report duplicate path claims');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when an install profile references an unknown module', () => {
+    const testDir = createTestDir();
+    writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+      version: 1,
+      modules: [
+        {
+          id: 'rules-core',
+          kind: 'rules',
+          description: 'Rules',
+          paths: ['rules'],
+          targets: ['claude'],
+          dependencies: [],
+          defaultInstall: true,
+          cost: 'light',
+          stability: 'stable'
+        }
+      ]
+    });
+    writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), {
+      version: 1,
+      profiles: {
+        core: { description: 'Core', modules: ['rules-core'] },
+        developer: { description: 'Developer', modules: ['rules-core'] },
+        security: { description: 'Security', modules: ['rules-core'] },
+        research: { description: 'Research', modules: ['rules-core'] },
+        full: { description: 'Full', modules: ['rules-core', 'ghost-module'] }
+      }
+    });
+    writeInstallComponentsManifest(testDir, [
+      {
+        id: 'baseline:rules',
+        family: 'baseline',
+        description: 'Rules',
+        modules: ['rules-core']
+      }
+    ]);
+    fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
+
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath
+    });
+    assert.strictEqual(result.code, 1, 'Should fail on unknown profile module');
+    assert.ok(result.stderr.includes('references unknown module ghost-module'),
+      'Should report unknown module reference');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('passes on a valid standalone install manifest fixture', () => {
+    const testDir = createTestDir();
+    writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+      version: 1,
+      modules: [
+        {
+          id: 'rules-core',
+          kind: 'rules',
+          description: 'Rules',
+          paths: ['rules'],
+          targets: ['claude'],
+          dependencies: [],
+          defaultInstall: true,
+          cost: 'light',
+          stability: 'stable'
+        },
+        {
+          id: 'orchestration',
+          kind: 'orchestration',
+          description: 'Orchestration',
+          paths: ['scripts/orchestrate-worktrees.js'],
+          targets: ['codex'],
+          dependencies: ['rules-core'],
+          defaultInstall: false,
+          cost: 'medium',
+          stability: 'beta'
+        }
+      ]
+    });
+    writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), {
+      version: 1,
+      profiles: {
+        core: { description: 'Core', modules: ['rules-core'] },
+        developer: { description: 'Developer', modules: ['rules-core', 'orchestration'] },
+        security: { description: 'Security', modules: ['rules-core'] },
+        research: { description: 'Research', modules: ['rules-core'] },
+        full: { description: 'Full', modules: ['rules-core', 'orchestration'] }
+      }
+    });
+    writeInstallComponentsManifest(testDir, [
+      {
+        id: 'baseline:rules',
+        family: 'baseline',
+        description: 'Rules',
+        modules: ['rules-core']
+      },
+      {
+        id: 'capability:orchestration',
+        family: 'capability',
+        description: 'Orchestration',
+        modules: ['orchestration']
+      }
+    ]);
+    fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'scripts', 'orchestrate-worktrees.js'), '#!/usr/bin/env node\n');
+
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath
+    });
+    assert.strictEqual(result.code, 0, `Should pass valid fixture, got stderr: ${result.stderr}`);
+    assert.ok(result.stdout.includes('Validated 2 install modules, 2 install components, and 5 profiles'),
+      'Should report validated install manifest counts');
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when an install component references an unknown module', () => {
+    const testDir = createTestDir();
+    writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+      version: 1,
+      modules: [
+        {
+          id: 'rules-core',
+          kind: 'rules',
+          description: 'Rules',
+          paths: ['rules'],
+          targets: ['claude'],
+          dependencies: [],
+          defaultInstall: true,
+          cost: 'light',
+          stability: 'stable'
+        }
+      ]
+    });
+    writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), {
+      version: 1,
+      profiles: {
+        core: { description: 'Core', modules: ['rules-core'] },
+        developer: { description: 'Developer', modules: ['rules-core'] },
+        security: { description: 'Security', modules: ['rules-core'] },
+        research: { description: 'Research', modules: ['rules-core'] },
+        full: { description: 'Full', modules: ['rules-core'] }
+      }
+    });
+    writeInstallComponentsManifest(testDir, [
+      {
+        id: 'capability:security',
+        family: 'capability',
+        description: 'Security',
+        modules: ['ghost-module']
+      }
+    ]);
+    fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
+
+    const result = runValidatorWithDirs('validate-install-manifests', {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath
+    });
+    assert.strictEqual(result.code, 1, 'Should fail on unknown component module');
+    assert.ok(result.stderr.includes('references unknown module ghost-module'),
+      'Should report unknown component module');
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
