@@ -34,15 +34,16 @@ function planInstallTargetScaffold(options = {}) {
     projectRoot: options.projectRoot || options.repoRoot,
     homeDir: options.homeDir,
   };
+  const validationIssues = adapter.validate(planningInput);
+  const blockingIssues = validationIssues.filter(issue => issue.severity === 'error');
+  if (blockingIssues.length > 0) {
+    throw new Error(blockingIssues.map(issue => issue.message).join('; '));
+  }
   const targetRoot = adapter.resolveRoot(planningInput);
   const installStatePath = adapter.getInstallStatePath(planningInput);
-  const operations = modules.flatMap(module => {
-    const paths = Array.isArray(module.paths) ? module.paths : [];
-    return paths.map(sourceRelativePath => adapter.createScaffoldOperation(
-      module.id,
-      sourceRelativePath,
-      planningInput
-    ));
+  const operations = adapter.planOperations({
+    ...planningInput,
+    modules,
   });
 
   return {
@@ -53,6 +54,7 @@ function planInstallTargetScaffold(options = {}) {
     },
     targetRoot,
     installStatePath,
+    validationIssues,
     operations,
   };
 }

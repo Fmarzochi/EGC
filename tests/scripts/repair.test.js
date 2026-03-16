@@ -12,6 +12,16 @@ const INSTALL_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-appl
 const DOCTOR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
 const REPAIR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'repair.js');
 const REPO_ROOT = path.join(__dirname, '..', '..');
+const CURRENT_PACKAGE_VERSION = JSON.parse(
+  fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')
+).version;
+const CURRENT_MANIFEST_VERSION = JSON.parse(
+  fs.readFileSync(path.join(REPO_ROOT, 'manifests', 'install-modules.json'), 'utf8')
+).version;
+const {
+  createInstallState,
+  writeInstallState,
+} = require('../../scripts/lib/install-state');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -19,6 +29,12 @@ function createTempDir(prefix) {
 
 function cleanup(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
+}
+
+function writeState(filePath, options) {
+  const state = createInstallState(options);
+  writeInstallState(filePath, state);
+  return state;
 }
 
 function runNode(scriptPath, args = [], options = {}) {
@@ -64,26 +80,25 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  if (test('repairs drifted managed files and refreshes install-state', () => {
+  if (test('repairs drifted files from a real install-apply state', () => {
     const homeDir = createTempDir('repair-home-');
     const projectRoot = createTempDir('repair-project-');
 
     try {
-      const installResult = runNode(INSTALL_SCRIPT, ['--target', 'cursor', '--modules', 'platform-configs'], {
+      const installResult = runNode(INSTALL_SCRIPT, ['--target', 'cursor', 'typescript'], {
         cwd: projectRoot,
         homeDir,
       });
       assert.strictEqual(installResult.code, 0, installResult.stderr);
 
-      const cursorRoot = path.join(projectRoot, '.cursor');
-      const managedPath = path.join(cursorRoot, 'hooks.json');
-      const statePath = path.join(cursorRoot, 'ecc-install-state.json');
-      const managedRealPath = fs.realpathSync(cursorRoot);
-      const expectedManagedPath = path.join(managedRealPath, 'hooks.json');
-      const expectedContent = fs.readFileSync(path.join(REPO_ROOT, '.cursor', 'hooks.json'), 'utf8');
-      const installedAtBefore = JSON.parse(fs.readFileSync(statePath, 'utf8')).installedAt;
-
-      fs.writeFileSync(managedPath, '{"drifted":true}\n');
+      const normalizedProjectRoot = fs.realpathSync(projectRoot);
+      const managedPath = path.join(normalizedProjectRoot, '.cursor', 'hooks', 'session-start.js');
+      const statePath = path.join(normalizedProjectRoot, '.cursor', 'ecc-install-state.json');
+      const expectedContent = fs.readFileSync(
+        path.join(REPO_ROOT, '.cursor', 'hooks', 'session-start.js'),
+        'utf8'
+      );
+      fs.writeFileSync(managedPath, '// drifted\n');
 
       const doctorBefore = runNode(DOCTOR_SCRIPT, ['--target', 'cursor', '--json'], {
         cwd: projectRoot,
@@ -100,8 +115,118 @@ function runTests() {
 
       const parsed = JSON.parse(repairResult.stdout);
       assert.strictEqual(parsed.results[0].status, 'repaired');
-      assert.ok(parsed.results[0].repairedPaths.includes(expectedManagedPath));
+      assert.ok(parsed.results[0].repairedPaths.includes(managedPath));
       assert.strictEqual(fs.readFileSync(managedPath, 'utf8'), expectedContent);
+      assert.ok(fs.existsSync(statePath));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repairs drifted non-copy managed operations and refreshes install-state', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const targetRoot = path.join(projectRoot, '.cursor');
+      fs.mkdirSync(targetRoot, { recursive: true });
+      const normalizedTargetRoot = fs.realpathSync(targetRoot);
+      const statePath = path.join(normalizedTargetRoot, 'ecc-install-state.json');
+      const jsonPath = path.join(normalizedTargetRoot, 'hooks.json');
+      const renderedPath = path.join(normalizedTargetRoot, 'generated.md');
+      const removedPath = path.join(normalizedTargetRoot, 'legacy-note.txt');
+      fs.writeFileSync(jsonPath, JSON.stringify({ existing: true, managed: false }, null, 2));
+      fs.writeFileSync(renderedPath, '# drifted\n');
+      fs.writeFileSync(removedPath, 'stale\n');
+
+      writeState(statePath, {
+        adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
+        targetRoot: normalizedTargetRoot,
+        installStatePath: statePath,
+        request: {
+          profile: null,
+          modules: ['platform-configs'],
+          includeComponents: [],
+          excludeComponents: [],
+          legacyLanguages: [],
+          legacyMode: false,
+        },
+        resolution: {
+          selectedModules: ['platform-configs'],
+          skippedModules: [],
+        },
+        operations: [
+          {
+            kind: 'merge-json',
+            moduleId: 'platform-configs',
+            sourceRelativePath: '.cursor/hooks.json',
+            destinationPath: jsonPath,
+            strategy: 'merge-json',
+            ownership: 'managed',
+            scaffoldOnly: false,
+            mergePayload: {
+              managed: true,
+              nested: {
+                enabled: true,
+              },
+            },
+          },
+          {
+            kind: 'render-template',
+            moduleId: 'platform-configs',
+            sourceRelativePath: '.cursor/generated.md.template',
+            destinationPath: renderedPath,
+            strategy: 'render-template',
+            ownership: 'managed',
+            scaffoldOnly: false,
+            renderedContent: '# generated\n',
+          },
+          {
+            kind: 'remove',
+            moduleId: 'platform-configs',
+            sourceRelativePath: '.cursor/legacy-note.txt',
+            destinationPath: removedPath,
+            strategy: 'remove',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: {
+          repoVersion: CURRENT_PACKAGE_VERSION,
+          repoCommit: 'abc123',
+          manifestVersion: CURRENT_MANIFEST_VERSION,
+        },
+      });
+
+      const doctorBefore = runNode(DOCTOR_SCRIPT, ['--target', 'cursor', '--json'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(doctorBefore.code, 1);
+      assert.ok(JSON.parse(doctorBefore.stdout).results[0].issues.some(issue => issue.code === 'drifted-managed-files'));
+
+      const installedAtBefore = JSON.parse(fs.readFileSync(statePath, 'utf8')).installedAt;
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor', '--json'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 0, repairResult.stderr);
+
+      const parsed = JSON.parse(repairResult.stdout);
+      assert.strictEqual(parsed.results[0].status, 'repaired');
+      assert.ok(parsed.results[0].repairedPaths.includes(jsonPath));
+      assert.ok(parsed.results[0].repairedPaths.includes(renderedPath));
+      assert.ok(parsed.results[0].repairedPaths.includes(removedPath));
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(jsonPath, 'utf8')), {
+        existing: true,
+        managed: true,
+        nested: {
+          enabled: true,
+        },
+      });
+      assert.strictEqual(fs.readFileSync(renderedPath, 'utf8'), '# generated\n');
+      assert.ok(!fs.existsSync(removedPath));
 
       const repairedState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
       assert.strictEqual(repairedState.installedAt, installedAtBefore);
@@ -119,23 +244,52 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('supports dry-run without mutating drifted files', () => {
+  if (test('supports dry-run without mutating drifted non-copy operations', () => {
     const homeDir = createTempDir('repair-home-');
     const projectRoot = createTempDir('repair-project-');
 
     try {
-      const installResult = runNode(INSTALL_SCRIPT, ['--target', 'cursor', '--modules', 'platform-configs'], {
-        cwd: projectRoot,
-        homeDir,
-      });
-      assert.strictEqual(installResult.code, 0, installResult.stderr);
+      const targetRoot = path.join(projectRoot, '.cursor');
+      fs.mkdirSync(targetRoot, { recursive: true });
+      const normalizedTargetRoot = fs.realpathSync(targetRoot);
+      const statePath = path.join(normalizedTargetRoot, 'ecc-install-state.json');
+      const renderedPath = path.join(normalizedTargetRoot, 'generated.md');
+      fs.writeFileSync(renderedPath, '# drifted\n');
 
-      const cursorRoot = path.join(projectRoot, '.cursor');
-      const managedPath = path.join(cursorRoot, 'hooks.json');
-      const managedRealPath = fs.realpathSync(cursorRoot);
-      const expectedManagedPath = path.join(managedRealPath, 'hooks.json');
-      const driftedContent = '{"drifted":true}\n';
-      fs.writeFileSync(managedPath, driftedContent);
+      writeState(statePath, {
+        adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
+        targetRoot: normalizedTargetRoot,
+        installStatePath: statePath,
+        request: {
+          profile: null,
+          modules: ['platform-configs'],
+          includeComponents: [],
+          excludeComponents: [],
+          legacyLanguages: [],
+          legacyMode: false,
+        },
+        resolution: {
+          selectedModules: ['platform-configs'],
+          skippedModules: [],
+        },
+        operations: [
+          {
+            kind: 'render-template',
+            moduleId: 'platform-configs',
+            sourceRelativePath: '.cursor/generated.md.template',
+            destinationPath: renderedPath,
+            strategy: 'render-template',
+            ownership: 'managed',
+            scaffoldOnly: false,
+            renderedContent: '# generated\n',
+          },
+        ],
+        source: {
+          repoVersion: CURRENT_PACKAGE_VERSION,
+          repoCommit: 'abc123',
+          manifestVersion: CURRENT_MANIFEST_VERSION,
+        },
+      });
 
       const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor', '--dry-run', '--json'], {
         cwd: projectRoot,
@@ -144,8 +298,8 @@ function runTests() {
       assert.strictEqual(repairResult.code, 0, repairResult.stderr);
       const parsed = JSON.parse(repairResult.stdout);
       assert.strictEqual(parsed.dryRun, true);
-      assert.ok(parsed.results[0].plannedRepairs.includes(expectedManagedPath));
-      assert.strictEqual(fs.readFileSync(managedPath, 'utf8'), driftedContent);
+      assert.ok(parsed.results[0].plannedRepairs.includes(renderedPath));
+      assert.strictEqual(fs.readFileSync(renderedPath, 'utf8'), '# drifted\n');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

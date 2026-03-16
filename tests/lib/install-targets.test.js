@@ -60,7 +60,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('plans scaffold operations and flattens native target roots', () => {
-    const repoRoot = '/repo/ecc';
+    const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const modules = [
       {
@@ -85,15 +85,124 @@ function runTests() {
     assert.strictEqual(plan.installStatePath, path.join(projectRoot, '.cursor', 'ecc-install-state.json'));
 
     const flattened = plan.operations.find(operation => operation.sourceRelativePath === '.cursor');
-    const preserved = plan.operations.find(operation => operation.sourceRelativePath === 'rules');
+    const preserved = plan.operations.find(operation => (
+      operation.sourceRelativePath === path.join('rules', 'common', 'coding-style.md')
+    ));
 
     assert.ok(flattened, 'Should include .cursor scaffold operation');
     assert.strictEqual(flattened.strategy, 'sync-root-children');
     assert.strictEqual(flattened.destinationPath, path.join(projectRoot, '.cursor'));
 
-    assert.ok(preserved, 'Should include rules scaffold operation');
-    assert.strictEqual(preserved.strategy, 'preserve-relative-path');
-    assert.strictEqual(preserved.destinationPath, path.join(projectRoot, '.cursor', 'rules'));
+    assert.ok(preserved, 'Should include flattened rules scaffold operations');
+    assert.strictEqual(preserved.strategy, 'flatten-copy');
+    assert.strictEqual(
+      preserved.destinationPath,
+      path.join(projectRoot, '.cursor', 'rules', 'common-coding-style.md')
+    );
+  })) passed++; else failed++;
+
+  if (test('plans cursor rules with flat namespaced filenames to avoid rule collisions', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      projectRoot,
+      modules: [
+        {
+          id: 'rules-core',
+          paths: ['rules'],
+        },
+      ],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.sourceRelativePath === path.join('rules', 'common', 'coding-style.md')
+        && operation.destinationPath === path.join(projectRoot, '.cursor', 'rules', 'common-coding-style.md')
+      )),
+      'Should flatten common rules into namespaced files'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.sourceRelativePath === path.join('rules', 'typescript', 'testing.md')
+        && operation.destinationPath === path.join(projectRoot, '.cursor', 'rules', 'typescript-testing.md')
+      )),
+      'Should flatten language rules into namespaced files'
+    );
+    assert.ok(
+      !plan.operations.some(operation => (
+        operation.destinationPath === path.join(projectRoot, '.cursor', 'rules', 'common', 'coding-style.md')
+      )),
+      'Should not preserve nested rule directories for cursor installs'
+    );
+  })) passed++; else failed++;
+
+  if (test('plans antigravity remaps for workflows, skills, and flat rules', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'antigravity',
+      repoRoot,
+      projectRoot,
+      modules: [
+        {
+          id: 'commands-core',
+          paths: ['commands'],
+        },
+        {
+          id: 'agents-core',
+          paths: ['agents'],
+        },
+        {
+          id: 'rules-core',
+          paths: ['rules'],
+        },
+      ],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.sourceRelativePath === 'commands'
+        && operation.destinationPath === path.join(projectRoot, '.agent', 'workflows')
+      )),
+      'Should remap commands into workflows'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.sourceRelativePath === 'agents'
+        && operation.destinationPath === path.join(projectRoot, '.agent', 'skills')
+      )),
+      'Should remap agents into skills'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.sourceRelativePath === path.join('rules', 'common', 'coding-style.md')
+        && operation.destinationPath === path.join(projectRoot, '.agent', 'rules', 'common-coding-style.md')
+      )),
+      'Should flatten common rules for antigravity'
+    );
+  })) passed++; else failed++;
+
+  if (test('exposes validate and planOperations on adapters', () => {
+    const claudeAdapter = getInstallTargetAdapter('claude');
+    const cursorAdapter = getInstallTargetAdapter('cursor');
+
+    assert.strictEqual(typeof claudeAdapter.planOperations, 'function');
+    assert.strictEqual(typeof claudeAdapter.validate, 'function');
+    assert.deepStrictEqual(
+      claudeAdapter.validate({ homeDir: '/Users/example', repoRoot: '/repo/ecc' }),
+      []
+    );
+
+    assert.strictEqual(typeof cursorAdapter.planOperations, 'function');
+    assert.strictEqual(typeof cursorAdapter.validate, 'function');
+    assert.deepStrictEqual(
+      cursorAdapter.validate({ projectRoot: '/workspace/app', repoRoot: '/repo/ecc' }),
+      []
+    );
   })) passed++; else failed++;
 
   if (test('throws on unknown target adapter', () => {
