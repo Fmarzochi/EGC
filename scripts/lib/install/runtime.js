@@ -1,6 +1,7 @@
 'use strict';
 
 const {
+  createLegacyCompatInstallPlan,
   createLegacyInstallPlan,
   createManifestInstallPlan,
 } = require('../install-executor');
@@ -19,6 +20,17 @@ function createInstallPlanFromRequest(request, options = {}) {
       excludeComponentIds: request.excludeComponentIds,
       projectRoot: options.projectRoot,
       homeDir: options.homeDir,
+      sourceRoot: options.sourceRoot,
+    });
+  }
+
+  if (request.mode === 'legacy-compat') {
+    return createLegacyCompatInstallPlan({
+      target: request.target,
+      legacyLanguages: request.legacyLanguages,
+      projectRoot: options.projectRoot,
+      homeDir: options.homeDir,
+      claudeRulesDir: options.claudeRulesDir,
       sourceRoot: options.sourceRoot,
     });
   }

@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateInstallModuleIds } = require('../install-manifests');
+
 const LEGACY_INSTALL_TARGETS = ['claude', 'cursor', 'antigravity'];
 
 function dedupeStrings(values) {
@@ -35,7 +37,7 @@ function parseInstallArgs(argv) {
       index += 1;
     } else if (arg === '--modules') {
       const raw = args[index + 1] || '';
-      parsed.moduleIds = raw.split(',').map(value => value.trim()).filter(Boolean);
+      parsed.moduleIds = dedupeStrings(raw.split(','));
       index += 1;
     } else if (arg === '--with') {
       const componentId = args[index + 1] || '';
@@ -70,7 +72,9 @@ function normalizeInstallRequest(options = {}) {
     ? options.config
     : null;
   const profileId = options.profileId || config?.profileId || null;
-  const moduleIds = dedupeStrings([...(config?.moduleIds || []), ...(options.moduleIds || [])]);
+  const moduleIds = validateInstallModuleIds(
+    dedupeStrings([...(config?.moduleIds || []), ...(options.moduleIds || [])])
+  );
   const includeComponentIds = dedupeStrings([
     ...(config?.includeComponentIds || []),
     ...(options.includeComponentIds || []),
@@ -79,29 +83,32 @@ function normalizeInstallRequest(options = {}) {
     ...(config?.excludeComponentIds || []),
     ...(options.excludeComponentIds || []),
   ]);
-  const languages = Array.isArray(options.languages) ? [...options.languages] : [];
+  const legacyLanguages = dedupeStrings(dedupeStrings([
+    ...(Array.isArray(options.legacyLanguages) ? options.legacyLanguages : []),
+    ...(Array.isArray(options.languages) ? options.languages : []),
+  ]).map(language => language.toLowerCase()));
   const target = options.target || config?.target || 'claude';
   const hasManifestBaseSelection = Boolean(profileId) || moduleIds.length > 0 || includeComponentIds.length > 0;
   const usingManifestMode = hasManifestBaseSelection || excludeComponentIds.length > 0;
 
-  if (usingManifestMode && languages.length > 0) {
+  if (usingManifestMode && legacyLanguages.length > 0) {
     throw new Error(
       'Legacy language arguments cannot be combined with --profile, --modules, --with, --without, or manifest config selections'
     );
   }
 
-  if (!options.help && !hasManifestBaseSelection && languages.length === 0) {
+  if (!options.help && !hasManifestBaseSelection && legacyLanguages.length === 0) {
     throw new Error('No install profile, module IDs, included components, or legacy languages were provided');
   }
 
   return {
-    mode: usingManifestMode ? 'manifest' : 'legacy',
+    mode: usingManifestMode ? 'manifest' : 'legacy-compat',
     target,
     profileId,
     moduleIds,
     includeComponentIds,
     excludeComponentIds,
-    languages,
+    legacyLanguages,
     configPath: config?.path || options.configPath || null,
   };
 }

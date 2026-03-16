@@ -8,19 +8,16 @@
 
 const {
   SUPPORTED_INSTALL_TARGETS,
-  listAvailableLanguages,
-} = require('./lib/install-executor');
+  listLegacyCompatibilityLanguages,
+} = require('./lib/install-manifests');
 const {
   LEGACY_INSTALL_TARGETS,
   normalizeInstallRequest,
   parseInstallArgs,
 } = require('./lib/install/request');
-const { loadInstallConfig } = require('./lib/install/config');
-const { applyInstallPlan } = require('./lib/install/apply');
-const { createInstallPlanFromRequest } = require('./lib/install/runtime');
 
 function showHelp(exitCode = 0) {
-  const languages = listAvailableLanguages();
+  const languages = listLegacyCompatibilityLanguages();
 
   console.log(`
 Usage: install.sh [--target <${LEGACY_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json] <language> [<language> ...]
@@ -61,6 +58,9 @@ function printHumanPlan(plan, dryRun) {
   if (plan.mode === 'legacy') {
     console.log(`Languages: ${plan.languages.join(', ')}`);
   } else {
+    if (plan.mode === 'legacy-compat') {
+      console.log(`Legacy languages: ${plan.legacyLanguages.join(', ')}`);
+    }
     console.log(`Profile: ${plan.profileId || '(custom modules)'}`);
     console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
     console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
@@ -100,6 +100,9 @@ function main() {
       showHelp(0);
     }
 
+    const { loadInstallConfig } = require('./lib/install/config');
+    const { applyInstallPlan } = require('./lib/install-executor');
+    const { createInstallPlanFromRequest } = require('./lib/install/runtime');
     const config = options.configPath
       ? loadInstallConfig(options.configPath, { cwd: process.cwd() })
       : null;

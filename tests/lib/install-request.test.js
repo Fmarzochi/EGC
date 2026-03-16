@@ -33,6 +33,7 @@ function runTests() {
       'scripts/install-apply.js',
       '--target', 'cursor',
       '--profile', 'developer',
+      '--modules', 'platform-configs, workflow-quality ,platform-configs',
       '--with', 'lang:typescript',
       '--without', 'capability:media',
       '--config', 'ecc-install.json',
@@ -43,6 +44,7 @@ function runTests() {
     assert.strictEqual(parsed.target, 'cursor');
     assert.strictEqual(parsed.profileId, 'developer');
     assert.strictEqual(parsed.configPath, 'ecc-install.json');
+    assert.deepStrictEqual(parsed.moduleIds, ['platform-configs', 'workflow-quality']);
     assert.deepStrictEqual(parsed.includeComponentIds, ['lang:typescript']);
     assert.deepStrictEqual(parsed.excludeComponentIds, ['capability:media']);
     assert.strictEqual(parsed.dryRun, true);
@@ -58,9 +60,9 @@ function runTests() {
       languages: ['typescript', 'python']
     });
 
-    assert.strictEqual(request.mode, 'legacy');
+    assert.strictEqual(request.mode, 'legacy-compat');
     assert.strictEqual(request.target, 'claude');
-    assert.deepStrictEqual(request.languages, ['typescript', 'python']);
+    assert.deepStrictEqual(request.legacyLanguages, ['typescript', 'python']);
     assert.deepStrictEqual(request.moduleIds, []);
     assert.strictEqual(request.profileId, null);
   })) passed++; else failed++;
@@ -80,7 +82,7 @@ function runTests() {
     assert.strictEqual(request.profileId, 'developer');
     assert.deepStrictEqual(request.includeComponentIds, ['lang:typescript']);
     assert.deepStrictEqual(request.excludeComponentIds, ['capability:media']);
-    assert.deepStrictEqual(request.languages, []);
+    assert.deepStrictEqual(request.legacyLanguages, []);
   })) passed++; else failed++;
 
   if (test('merges config-backed component selections with CLI overrides', () => {
@@ -109,6 +111,20 @@ function runTests() {
     assert.deepStrictEqual(request.includeComponentIds, ['lang:typescript', 'framework:nextjs']);
     assert.deepStrictEqual(request.excludeComponentIds, ['capability:orchestration', 'capability:media']);
     assert.strictEqual(request.configPath, '/workspace/app/ecc-install.json');
+  })) passed++; else failed++;
+
+  if (test('validates explicit module IDs against the manifest catalog', () => {
+    assert.throws(
+      () => normalizeInstallRequest({
+        target: 'cursor',
+        profileId: null,
+        moduleIds: ['ghost-module'],
+        includeComponentIds: [],
+        excludeComponentIds: [],
+        languages: [],
+      }),
+      /Unknown install module: ghost-module/
+    );
   })) passed++; else failed++;
 
   if (test('rejects mixing legacy languages with manifest flags', () => {

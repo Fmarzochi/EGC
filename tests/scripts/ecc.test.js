@@ -60,16 +60,18 @@ function main() {
       assert.strictEqual(result.status, 0, result.stderr);
       const payload = parseJson(result.stdout);
       assert.strictEqual(payload.dryRun, true);
-      assert.strictEqual(payload.plan.mode, 'legacy');
-      assert.deepStrictEqual(payload.plan.languages, ['typescript']);
+      assert.strictEqual(payload.plan.mode, 'legacy-compat');
+      assert.deepStrictEqual(payload.plan.legacyLanguages, ['typescript']);
+      assert.ok(payload.plan.selectedModuleIds.includes('framework-language'));
     }],
     ['routes implicit top-level args to install', () => {
       const result = runCli(['--dry-run', '--json', 'typescript']);
       assert.strictEqual(result.status, 0, result.stderr);
       const payload = parseJson(result.stdout);
       assert.strictEqual(payload.dryRun, true);
-      assert.strictEqual(payload.plan.mode, 'legacy');
-      assert.deepStrictEqual(payload.plan.languages, ['typescript']);
+      assert.strictEqual(payload.plan.mode, 'legacy-compat');
+      assert.deepStrictEqual(payload.plan.legacyLanguages, ['typescript']);
+      assert.ok(payload.plan.selectedModuleIds.includes('framework-language'));
     }],
     ['delegates plan command', () => {
       const result = runCli(['plan', '--list-profiles', '--json']);

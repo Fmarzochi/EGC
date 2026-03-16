@@ -89,18 +89,26 @@ function runTests() {
       const result = run(['typescript'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      const rulesDir = path.join(homeDir, '.claude', 'rules');
-      assert.ok(fs.existsSync(path.join(rulesDir, 'common', 'coding-style.md')));
-      assert.ok(fs.existsSync(path.join(rulesDir, 'typescript', 'testing.md')));
+      const claudeRoot = path.join(homeDir, '.claude');
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'rules', 'common', 'coding-style.md')));
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'rules', 'typescript', 'testing.md')));
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'commands', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'scripts', 'hooks', 'session-end.js')));
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'skills', 'tdd-workflow', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'skills', 'coding-standards', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'plugin.json')));
 
       const statePath = path.join(homeDir, '.claude', 'ecc', 'install-state.json');
       const state = readJson(statePath);
       assert.strictEqual(state.target.id, 'claude-home');
       assert.deepStrictEqual(state.request.legacyLanguages, ['typescript']);
       assert.strictEqual(state.request.legacyMode, true);
+      assert.deepStrictEqual(state.request.modules, []);
+      assert.ok(state.resolution.selectedModules.includes('rules-core'));
+      assert.ok(state.resolution.selectedModules.includes('framework-language'));
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath === path.join(rulesDir, 'common', 'coding-style.md')
+          operation.destinationPath === path.join(claudeRoot, 'rules', 'common', 'coding-style.md')
         )),
         'Should record common rule file operation'
       );
@@ -118,22 +126,28 @@ function runTests() {
       const result = run(['--target', 'cursor', 'typescript'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'rules', 'common-coding-style.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'rules', 'typescript-testing.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'rules', 'common', 'coding-style.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'rules', 'typescript', 'testing.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'agents', 'architect.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'commands', 'plan.md')));
       assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'hooks.json')));
       assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'hooks', 'session-start.js')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'skills', 'article-writing', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'skills', 'tdd-workflow', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'skills', 'coding-standards', 'SKILL.md')));
 
       const statePath = path.join(projectDir, '.cursor', 'ecc-install-state.json');
       const state = readJson(statePath);
       const normalizedProjectDir = fs.realpathSync(projectDir);
       assert.strictEqual(state.target.id, 'cursor-project');
       assert.strictEqual(state.target.root, path.join(normalizedProjectDir, '.cursor'));
+      assert.deepStrictEqual(state.request.legacyLanguages, ['typescript']);
+      assert.strictEqual(state.request.legacyMode, true);
+      assert.ok(state.resolution.selectedModules.includes('framework-language'));
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath === path.join(normalizedProjectDir, '.cursor', 'hooks', 'session-start.js')
+          operation.destinationPath === path.join(normalizedProjectDir, '.cursor', 'commands', 'plan.md')
         )),
-        'Should record hook file copy operation'
+        'Should record manifest command file copy operation'
       );
     } finally {
       cleanup(homeDir);
@@ -149,20 +163,22 @@ function runTests() {
       const result = run(['--target', 'antigravity', 'typescript'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'common-coding-style.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'typescript-testing.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'workflows', 'code-review.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'skills', 'architect.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'skills', 'article-writing', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'common', 'coding-style.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'typescript', 'testing.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'commands', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'agents', 'architect.md')));
 
       const statePath = path.join(projectDir, '.agent', 'ecc-install-state.json');
       const state = readJson(statePath);
       assert.strictEqual(state.target.id, 'antigravity-project');
+      assert.deepStrictEqual(state.request.legacyLanguages, ['typescript']);
+      assert.strictEqual(state.request.legacyMode, true);
+      assert.deepStrictEqual(state.resolution.selectedModules, ['rules-core', 'agents-core', 'commands-core']);
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath.endsWith(path.join('.agent', 'workflows', 'code-review.md'))
+          operation.destinationPath.endsWith(path.join('.agent', 'commands', 'plan.md'))
         )),
-        'Should record workflow file copy operation'
+        'Should record manifest command file copy operation'
       );
     } finally {
       cleanup(homeDir);
@@ -181,6 +197,8 @@ function runTests() {
       });
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Dry-run install plan'));
+      assert.ok(result.stdout.includes('Mode: legacy-compat'));
+      assert.ok(result.stdout.includes('Legacy languages: typescript'));
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'hooks.json')));
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'ecc-install-state.json')));
     } finally {
@@ -240,6 +258,31 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('installs antigravity manifest profiles while skipping incompatible modules', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--target', 'antigravity', '--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'common', 'coding-style.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'agents', 'architect.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'commands', 'plan.md')));
+      assert.ok(!fs.existsSync(path.join(projectDir, '.agent', 'skills', 'tdd-workflow', 'SKILL.md')));
+
+      const state = readJson(path.join(projectDir, '.agent', 'ecc-install-state.json'));
+      assert.strictEqual(state.request.profile, 'core');
+      assert.strictEqual(state.request.legacyMode, false);
+      assert.deepStrictEqual(state.resolution.selectedModules, ['rules-core', 'agents-core', 'commands-core']);
+      assert.ok(state.resolution.skippedModules.includes('workflow-quality'));
+      assert.ok(state.resolution.skippedModules.includes('platform-configs'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs explicit modules for cursor using manifest operations', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
@@ -268,6 +311,12 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
+  })) passed++; else failed++;
+
+  if (test('rejects unknown explicit manifest modules before resolution', () => {
+    const result = run(['--modules', 'ghost-module']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('Unknown install module: ghost-module'));
   })) passed++; else failed++;
 
   if (test('installs from ecc-install.json and persists component selections', () => {

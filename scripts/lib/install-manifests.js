@@ -11,6 +11,50 @@ const COMPONENT_FAMILY_PREFIXES = {
   framework: 'framework:',
   capability: 'capability:',
 };
+const LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET = Object.freeze({
+  claude: [
+    'rules-core',
+    'agents-core',
+    'commands-core',
+    'hooks-runtime',
+    'platform-configs',
+    'workflow-quality',
+  ],
+  cursor: [
+    'rules-core',
+    'agents-core',
+    'commands-core',
+    'hooks-runtime',
+    'platform-configs',
+    'workflow-quality',
+  ],
+  antigravity: [
+    'rules-core',
+    'agents-core',
+    'commands-core',
+  ],
+});
+const LEGACY_LANGUAGE_ALIAS_TO_CANONICAL = Object.freeze({
+  go: 'go',
+  golang: 'go',
+  java: 'java',
+  javascript: 'typescript',
+  kotlin: 'java',
+  perl: 'perl',
+  php: 'php',
+  python: 'python',
+  swift: 'swift',
+  typescript: 'typescript',
+});
+const LEGACY_LANGUAGE_EXTRA_MODULE_IDS = Object.freeze({
+  go: ['framework-language'],
+  java: ['framework-language'],
+  perl: [],
+  php: [],
+  python: ['framework-language'],
+  swift: [],
+  typescript: ['framework-language'],
+});
 
 function readJson(filePath, label) {
   try {
@@ -22,6 +66,19 @@ function readJson(filePath, label) {
 
 function dedupeStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(value => String(value).trim()).filter(Boolean))];
+}
+
+function assertKnownModuleIds(moduleIds, manifests) {
+  const unknownModuleIds = dedupeStrings(moduleIds)
+    .filter(moduleId => !manifests.modulesById.has(moduleId));
+
+  if (unknownModuleIds.length === 1) {
+    throw new Error(`Unknown install module: ${unknownModuleIds[0]}`);
+  }
+
+  if (unknownModuleIds.length > 1) {
+    throw new Error(`Unknown install modules: ${unknownModuleIds.join(', ')}`);
+  }
 }
 
 function intersectTargets(modules) {
@@ -102,6 +159,17 @@ function listInstallModules(options = {}) {
   }));
 }
 
+function listLegacyCompatibilityLanguages() {
+  return Object.keys(LEGACY_LANGUAGE_ALIAS_TO_CANONICAL).sort();
+}
+
+function validateInstallModuleIds(moduleIds, options = {}) {
+  const manifests = loadInstallManifests(options);
+  const normalizedModuleIds = dedupeStrings(moduleIds);
+  assertKnownModuleIds(normalizedModuleIds, manifests);
+  return normalizedModuleIds;
+}
+
 function listInstallComponents(options = {}) {
   const manifests = loadInstallManifests(options);
   const family = options.family || null;
@@ -152,6 +220,59 @@ function expandComponentIdsToModuleIds(componentIds, manifests) {
   }
 
   return dedupeStrings(expandedModuleIds);
+}
+
+function resolveLegacyCompatibilitySelection(options = {}) {
+  const manifests = loadInstallManifests(options);
+  const target = options.target || null;
+
+  if (target && !SUPPORTED_INSTALL_TARGETS.includes(target)) {
+    throw new Error(
+      `Unknown install target: ${target}. Expected one of ${SUPPORTED_INSTALL_TARGETS.join(', ')}`
+    );
+  }
+
+  const legacyLanguages = dedupeStrings(options.legacyLanguages)
+    .map(language => language.toLowerCase());
+  const normalizedLegacyLanguages = dedupeStrings(legacyLanguages);
+
+  if (normalizedLegacyLanguages.length === 0) {
+    throw new Error('No legacy languages were provided');
+  }
+
+  const unknownLegacyLanguages = normalizedLegacyLanguages
+    .filter(language => !Object.hasOwn(LEGACY_LANGUAGE_ALIAS_TO_CANONICAL, language));
+
+  if (unknownLegacyLanguages.length === 1) {
+    throw new Error(
+      `Unknown legacy language: ${unknownLegacyLanguages[0]}. Expected one of ${listLegacyCompatibilityLanguages().join(', ')}`
+    );
+  }
+
+  if (unknownLegacyLanguages.length > 1) {
+    throw new Error(
+      `Unknown legacy languages: ${unknownLegacyLanguages.join(', ')}. Expected one of ${listLegacyCompatibilityLanguages().join(', ')}`
+    );
+  }
+
+  const canonicalLegacyLanguages = normalizedLegacyLanguages
+    .map(language => LEGACY_LANGUAGE_ALIAS_TO_CANONICAL[language]);
+  const baseModuleIds = LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET[target || 'claude']
+    || LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET.claude;
+  const moduleIds = dedupeStrings([
+    ...baseModuleIds,
+    ...(target === 'antigravity'
+      ? []
+      : canonicalLegacyLanguages.flatMap(language => LEGACY_LANGUAGE_EXTRA_MODULE_IDS[language] || [])),
+  ]);
+
+  assertKnownModuleIds(moduleIds, manifests);
+
+  return {
+    legacyLanguages: normalizedLegacyLanguages,
+    canonicalLegacyLanguages,
+    moduleIds,
+  };
 }
 
 function resolveInstallPlan(options = {}) {
@@ -212,7 +333,7 @@ function resolveInstallPlan(options = {}) {
   const visitingIds = new Set();
   const resolvedIds = new Set();
 
-  function resolveModule(moduleId, dependencyOf) {
+  function resolveModule(moduleId, dependencyOf, rootRequesterId) {
     const module = manifests.modulesById.get(moduleId);
     if (!module) {
       throw new Error(`Unknown install module: ${moduleId}`);
@@ -230,16 +351,15 @@ function resolveInstallPlan(options = {}) {
 
     if (target && !module.targets.includes(target)) {
       if (dependencyOf) {
-        throw new Error(
-          `Module ${dependencyOf} depends on ${moduleId}, which does not support target ${target}`
-        );
+        skippedTargetIds.add(rootRequesterId || dependencyOf);
+        return false;
       }
       skippedTargetIds.add(moduleId);
-      return;
+      return false;
     }
 
     if (resolvedIds.has(moduleId)) {
-      return;
+      return true;
     }
 
     if (visitingIds.has(moduleId)) {
@@ -248,15 +368,27 @@ function resolveInstallPlan(options = {}) {
 
     visitingIds.add(moduleId);
     for (const dependencyId of module.dependencies) {
-      resolveModule(dependencyId, moduleId);
+      const dependencyResolved = resolveModule(
+        dependencyId,
+        moduleId,
+        rootRequesterId || moduleId
+      );
+      if (!dependencyResolved) {
+        visitingIds.delete(moduleId);
+        if (!dependencyOf) {
+          skippedTargetIds.add(moduleId);
+        }
+        return false;
+      }
     }
     visitingIds.delete(moduleId);
     resolvedIds.add(moduleId);
     selectedIds.add(moduleId);
+    return true;
   }
 
   for (const moduleId of effectiveRequestedIds) {
-    resolveModule(moduleId, null);
+    resolveModule(moduleId, null, moduleId);
   }
 
   const selectedModules = manifests.modules.filter(module => selectedIds.has(module.id));
@@ -299,7 +431,10 @@ module.exports = {
   getManifestPaths,
   loadInstallManifests,
   listInstallComponents,
+  listLegacyCompatibilityLanguages,
   listInstallModules,
   listInstallProfiles,
   resolveInstallPlan,
+  resolveLegacyCompatibilitySelection,
+  validateInstallModuleIds,
 };
