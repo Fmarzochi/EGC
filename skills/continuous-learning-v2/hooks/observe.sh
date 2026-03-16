@@ -76,6 +76,10 @@ fi
 # ─────────────────────────────────────────────
 # Lightweight config and automated session guards
 # ─────────────────────────────────────────────
+#
+# IMPORTANT: keep these guards above detect-project.sh.
+# Sourcing detect-project.sh creates project-scoped directories and updates
+# projects.json, so automated sessions must return before that point.
 
 CONFIG_DIR="${HOME}/.claude/homunculus"
 

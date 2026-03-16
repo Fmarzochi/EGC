@@ -147,6 +147,71 @@ function withPrependedPath(binDir, env = {}) {
   };
 }
 
+function assertNoProjectDetectionSideEffects(homeDir, testName) {
+  const homunculusDir = path.join(homeDir, '.claude', 'homunculus');
+  const registryPath = path.join(homunculusDir, 'projects.json');
+  const projectsDir = path.join(homunculusDir, 'projects');
+
+  assert.ok(!fs.existsSync(registryPath), `${testName} should not create projects.json`);
+
+  const projectEntries = fs.existsSync(projectsDir)
+    ? fs.readdirSync(projectsDir).filter(entry => fs.statSync(path.join(projectsDir, entry)).isDirectory())
+    : [];
+  assert.strictEqual(projectEntries.length, 0, `${testName} should not create project directories`);
+}
+
+async function assertObserveSkipBeforeProjectDetection(testCase) {
+  const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
+  const homeDir = createTestDir();
+  const projectDir = createTestDir();
+
+  try {
+    const cwd = testCase.cwdSuffix ? path.join(projectDir, testCase.cwdSuffix) : projectDir;
+    fs.mkdirSync(cwd, { recursive: true });
+
+    const payload = JSON.stringify({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo hello' },
+      tool_response: 'ok',
+      session_id: `session-${testCase.name.replace(/[^a-z0-9]+/gi, '-')}`,
+      cwd,
+      ...(testCase.payload || {})
+    });
+
+    const result = await runShellScript(observePath, ['post'], payload, {
+      HOME: homeDir,
+      USERPROFILE: homeDir,
+      ...testCase.env
+    }, projectDir);
+
+    assert.strictEqual(result.code, 0, `${testCase.name} should exit successfully, stderr: ${result.stderr}`);
+    assertNoProjectDetectionSideEffects(homeDir, testCase.name);
+  } finally {
+    cleanupTestDir(homeDir);
+    cleanupTestDir(projectDir);
+  }
+}
+
+function runPatchedRunAll(tempRoot) {
+  const wrapperPath = path.join(tempRoot, 'run-all-wrapper.js');
+  const tempTestsDir = path.join(tempRoot, 'tests');
+  let source = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
+  source = source.replace('const testsDir = __dirname;', `const testsDir = ${JSON.stringify(tempTestsDir)};`);
+  fs.writeFileSync(wrapperPath, source);
+
+  const result = spawnSync('node', [wrapperPath], {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 15000,
+  });
+
+  return {
+    code: result.status ?? 1,
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+  };
+}
+
 // Test suite
 async function runTests() {
   console.log('\n=== Testing Hook Scripts ===\n');
@@ -389,22 +454,28 @@ async function runTests() {
 
   if (
     await asyncTest('includes session ID in filename', async () => {
+      const isoHome = path.join(os.tmpdir(), `ecc-session-id-${Date.now()}`);
       const testSessionId = 'test-session-abc12345';
       const expectedShortId = 'abc12345'; // Last 8 chars
 
-      // Run with custom session ID
-      await runScript(path.join(scriptsDir, 'session-end.js'), '', {
-        CLAUDE_SESSION_ID: testSessionId
-      });
+      try {
+        await runScript(path.join(scriptsDir, 'session-end.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome,
+          CLAUDE_SESSION_ID: testSessionId
+        });
 
-      // Check if session file was created with session ID
-      // Use local time to match the script's getDateString() function
-      const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const sessionFile = path.join(sessionsDir, `${today}-${expectedShortId}-session.tmp`);
+        // Check if session file was created with session ID
+        // Use local time to match the script's getDateString() function
+        const sessionsDir = path.join(isoHome, '.claude', 'sessions');
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const sessionFile = path.join(sessionsDir, `${today}-${expectedShortId}-session.tmp`);
 
-      assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+        assert.ok(fs.existsSync(sessionFile), `Session file should exist: ${sessionFile}`);
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
     })
   )
     passed++;
@@ -1661,6 +1732,21 @@ async function runTests() {
   else failed++;
 
   if (
+    test('SessionEnd marker hook is async and cleanup-safe', () => {
+      const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
+      const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
+      const sessionEndHooks = hooks.hooks.SessionEnd.flatMap(entry => entry.hooks);
+      const markerHook = sessionEndHooks.find(hook => hook.command.includes('session-end-marker.js'));
+
+      assert.ok(markerHook, 'SessionEnd should invoke session-end-marker.js');
+      assert.strictEqual(markerHook.async, true, 'SessionEnd marker hook should run async during cleanup');
+      assert.ok(Number.isInteger(markerHook.timeout) && markerHook.timeout > 0, 'SessionEnd marker hook should define a timeout');
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
     test('all hook commands use node or approved shell wrappers', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
@@ -2292,75 +2378,44 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await asyncTest('observe.sh skips automated sessions before project detection side effects', async () => {
-    const observePath = path.join(__dirname, '..', '..', 'skills', 'continuous-learning-v2', 'hooks', 'observe.sh');
-    const cases = [
-      {
-        name: 'non-cli entrypoint',
-        env: { CLAUDE_CODE_ENTRYPOINT: 'mcp' }
+  if (await asyncTest('observe.sh skips non-cli entrypoints before project detection side effects', async () => {
+    await assertObserveSkipBeforeProjectDetection({
+      name: 'non-cli entrypoint',
+      env: { CLAUDE_CODE_ENTRYPOINT: 'mcp' }
+    });
+  })) passed++; else failed++;
+
+  if (await asyncTest('observe.sh skips minimal hook profile before project detection side effects', async () => {
+    await assertObserveSkipBeforeProjectDetection({
+      name: 'minimal hook profile',
+      env: { CLAUDE_CODE_ENTRYPOINT: 'cli', ECC_HOOK_PROFILE: 'minimal' }
+    });
+  })) passed++; else failed++;
+
+  if (await asyncTest('observe.sh skips cooperative skip env before project detection side effects', async () => {
+    await assertObserveSkipBeforeProjectDetection({
+      name: 'cooperative skip env',
+      env: { CLAUDE_CODE_ENTRYPOINT: 'cli', ECC_SKIP_OBSERVE: '1' }
+    });
+  })) passed++; else failed++;
+
+  if (await asyncTest('observe.sh skips subagent payloads before project detection side effects', async () => {
+    await assertObserveSkipBeforeProjectDetection({
+      name: 'subagent payload',
+      env: { CLAUDE_CODE_ENTRYPOINT: 'cli' },
+      payload: { agent_id: 'agent-123' }
+    });
+  })) passed++; else failed++;
+
+  if (await asyncTest('observe.sh skips configured observer-session paths before project detection side effects', async () => {
+    await assertObserveSkipBeforeProjectDetection({
+      name: 'cwd skip path',
+      env: {
+        CLAUDE_CODE_ENTRYPOINT: 'cli',
+        ECC_OBSERVE_SKIP_PATHS: ' observer-sessions , .claude-mem '
       },
-      {
-        name: 'minimal hook profile',
-        env: { CLAUDE_CODE_ENTRYPOINT: 'cli', ECC_HOOK_PROFILE: 'minimal' }
-      },
-      {
-        name: 'cooperative skip env',
-        env: { CLAUDE_CODE_ENTRYPOINT: 'cli', ECC_SKIP_OBSERVE: '1' }
-      },
-      {
-        name: 'subagent payload',
-        env: { CLAUDE_CODE_ENTRYPOINT: 'cli' },
-        payload: { agent_id: 'agent-123' }
-      },
-      {
-        name: 'cwd skip path',
-        env: {
-          CLAUDE_CODE_ENTRYPOINT: 'cli',
-          ECC_OBSERVE_SKIP_PATHS: ' observer-sessions , .claude-mem '
-        },
-        cwdSuffix: path.join('observer-sessions', 'worker')
-      }
-    ];
-
-    for (const testCase of cases) {
-      const homeDir = createTestDir();
-      const projectDir = createTestDir();
-
-      try {
-        const cwd = testCase.cwdSuffix ? path.join(projectDir, testCase.cwdSuffix) : projectDir;
-        fs.mkdirSync(cwd, { recursive: true });
-
-        const payload = JSON.stringify({
-          tool_name: 'Bash',
-          tool_input: { command: 'echo hello' },
-          tool_response: 'ok',
-          session_id: `session-${testCase.name.replace(/[^a-z0-9]+/gi, '-')}`,
-          cwd,
-          ...(testCase.payload || {})
-        });
-
-        const result = await runShellScript(observePath, ['post'], payload, {
-          HOME: homeDir,
-          ...testCase.env
-        }, projectDir);
-
-        assert.strictEqual(result.code, 0, `${testCase.name} should exit successfully, stderr: ${result.stderr}`);
-
-        const homunculusDir = path.join(homeDir, '.claude', 'homunculus');
-        const registryPath = path.join(homunculusDir, 'projects.json');
-        const projectsDir = path.join(homunculusDir, 'projects');
-
-        assert.ok(!fs.existsSync(registryPath), `${testCase.name} should not create projects.json`);
-
-        const projectEntries = fs.existsSync(projectsDir)
-          ? fs.readdirSync(projectsDir).filter(entry => fs.statSync(path.join(projectsDir, entry)).isDirectory())
-          : [];
-        assert.strictEqual(projectEntries.length, 0, `${testCase.name} should not create project directories`);
-      } finally {
-        cleanupTestDir(homeDir);
-        cleanupTestDir(projectDir);
-      }
-    }
+      cwdSuffix: path.join('observer-sessions', 'worker')
+    });
   })) passed++; else failed++;
 
   if (await asyncTest('matches .tsx extension for type checking', async () => {
@@ -3315,6 +3370,32 @@ async function runTests() {
       // Verify it shows stderr
       assert.ok(runAllSource.includes('stderr'), 'Should handle stderr output');
       assert.ok(runAllSource.includes('result.status !== 0'), 'Should treat non-zero child exits as failures');
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('test runner discovers nested tests via tests/**/*.test.js glob', async () => {
+      const testRoot = createTestDir();
+      const testsDir = path.join(testRoot, 'tests');
+      const nestedDir = path.join(testsDir, 'nested');
+      fs.mkdirSync(nestedDir, { recursive: true });
+
+      fs.writeFileSync(path.join(testsDir, 'top.test.js'), "console.log('Passed: 1\\nFailed: 0');\n");
+      fs.writeFileSync(path.join(nestedDir, 'deep.test.js'), "console.log('Passed: 2\\nFailed: 0');\n");
+      fs.writeFileSync(path.join(nestedDir, 'ignore.js'), "console.log('Passed: 999\\nFailed: 999');\n");
+
+      try {
+        const result = runPatchedRunAll(testRoot);
+        assert.strictEqual(result.code, 0, `run-all wrapper should succeed, stderr: ${result.stderr}`);
+        assert.ok(result.stdout.includes('Running top.test.js'), 'Should run the top-level test');
+        assert.ok(result.stdout.includes('Running nested/deep.test.js'), 'Should run nested .test.js files');
+        assert.ok(!result.stdout.includes('ignore.js'), 'Should ignore non-.test.js files');
+        assert.ok(result.stdout.includes('Total Tests:    3'), `Should aggregate nested test totals, got: ${result.stdout}`);
+      } finally {
+        cleanupTestDir(testRoot);
+      }
     })
   )
     passed++;
