@@ -76,9 +76,9 @@ function parseReadmeExpectations(readmeContent) {
   );
 
   const tablePatterns = [
-    { category: 'agents', regex: /\|\s*Agents\s*\|\s*✅\s*(\d+)\s+agents\s*\|/i, source: 'README.md comparison table' },
-    { category: 'commands', regex: /\|\s*Commands\s*\|\s*✅\s*(\d+)\s+commands\s*\|/i, source: 'README.md comparison table' },
-    { category: 'skills', regex: /\|\s*Skills\s*\|\s*✅\s*(\d+)\s+skills\s*\|/i, source: 'README.md comparison table' }
+    { category: 'agents', regex: /\|\s*(?:\*\*)?Agents(?:\*\*)?\s*\|\s*✅\s*(\d+)\s+agents\s*\|/i, source: 'README.md comparison table' },
+    { category: 'commands', regex: /\|\s*(?:\*\*)?Commands(?:\*\*)?\s*\|\s*✅\s*(\d+)\s+commands\s*\|/i, source: 'README.md comparison table' },
+    { category: 'skills', regex: /\|\s*(?:\*\*)?Skills(?:\*\*)?\s*\|\s*✅\s*(\d+)\s+skills\s*\|/i, source: 'README.md comparison table' }
   ];
 
   for (const pattern of tablePatterns) {
@@ -104,7 +104,7 @@ function parseAgentsDocExpectations(agentsContent) {
     throw new Error('AGENTS.md is missing the catalog summary line');
   }
 
-  return [
+  const expectations = [
     { category: 'agents', mode: 'exact', expected: Number(summaryMatch[1]), source: 'AGENTS.md summary' },
     {
       category: 'skills',
@@ -114,6 +114,43 @@ function parseAgentsDocExpectations(agentsContent) {
     },
     { category: 'commands', mode: 'exact', expected: Number(summaryMatch[4]), source: 'AGENTS.md summary' }
   ];
+
+  const structurePatterns = [
+    {
+      category: 'agents',
+      mode: 'exact',
+      regex: /^\s*agents\/\s*[—–-]\s*(\d+)\s+specialized subagents\s*$/im,
+      source: 'AGENTS.md project structure'
+    },
+    {
+      category: 'skills',
+      mode: 'minimum',
+      regex: /^\s*skills\/\s*[—–-]\s*(\d+)(\+)?\s+workflow skills and domain knowledge\s*$/im,
+      source: 'AGENTS.md project structure'
+    },
+    {
+      category: 'commands',
+      mode: 'exact',
+      regex: /^\s*commands\/\s*[—–-]\s*(\d+)\s+slash commands\s*$/im,
+      source: 'AGENTS.md project structure'
+    }
+  ];
+
+  for (const pattern of structurePatterns) {
+    const match = agentsContent.match(pattern.regex);
+    if (!match) {
+      throw new Error(`${pattern.source} is missing the ${pattern.category} entry`);
+    }
+
+    expectations.push({
+      category: pattern.category,
+      mode: pattern.mode === 'minimum' && match[2] ? 'minimum' : pattern.mode,
+      expected: Number(match[1]),
+      source: `${pattern.source} (${pattern.category})`
+    });
+  }
+
+  return expectations;
 }
 
 function evaluateExpectations(catalog, expectations) {
