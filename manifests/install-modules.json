@@ -103,18 +103,36 @@
       "kind": "skills",
       "description": "Core framework, language, and application-engineering skills.",
       "paths": [
+        "skills/android-clean-architecture",
+        "skills/api-design",
         "skills/backend-patterns",
         "skills/coding-standards",
+        "skills/compose-multiplatform-patterns",
+        "skills/cpp-coding-standards",
+        "skills/cpp-testing",
+        "skills/django-patterns",
+        "skills/django-tdd",
+        "skills/django-verification",
         "skills/frontend-patterns",
         "skills/frontend-slides",
         "skills/golang-patterns",
         "skills/golang-testing",
+        "skills/java-coding-standards",
+        "skills/kotlin-coroutines-flows",
+        "skills/kotlin-exposed-patterns",
+        "skills/kotlin-ktor-patterns",
+        "skills/kotlin-patterns",
+        "skills/kotlin-testing",
+        "skills/laravel-patterns",
+        "skills/laravel-tdd",
+        "skills/laravel-verification",
+        "skills/mcp-server-patterns",
+        "skills/perl-patterns",
+        "skills/perl-testing",
         "skills/python-patterns",
         "skills/python-testing",
-        "skills/django-patterns",
-        "skills/django-tdd",
-        "skills/django-verification",
-        "skills/java-coding-standards",
+        "skills/rust-patterns",
+        "skills/rust-testing",
         "skills/springboot-patterns",
         "skills/springboot-tdd",
         "skills/springboot-verification"
@@ -142,6 +160,7 @@
       "description": "Database and persistence-focused skills.",
       "paths": [
         "skills/clickhouse-io",
+        "skills/database-migrations",
         "skills/jpa-patterns",
         "skills/postgres-patterns"
       ],
@@ -164,10 +183,16 @@
       "kind": "skills",
       "description": "Evaluation, TDD, verification, learning, and compaction skills.",
       "paths": [
+        "skills/ai-regression-testing",
+        "skills/configure-ecc",
         "skills/continuous-learning",
         "skills/continuous-learning-v2",
+        "skills/e2e-testing",
         "skills/eval-harness",
         "skills/iterative-retrieval",
+        "skills/plankton-code-quality",
+        "skills/project-guidelines-example",
+        "skills/skill-stocktake",
         "skills/strategic-compact",
         "skills/tdd-workflow",
         "skills/verification-loop"
@@ -191,9 +216,11 @@
       "kind": "skills",
       "description": "Security review and security-focused framework guidance.",
       "paths": [
+        "skills/django-security",
+        "skills/laravel-security",
+        "skills/perl-security",
         "skills/security-review",
         "skills/security-scan",
-        "skills/django-security",
         "skills/springboot-security",
         "the-security-guide.md"
       ],
@@ -330,6 +357,141 @@
       "defaultInstall": false,
       "cost": "medium",
       "stability": "beta"
+    },
+    {
+      "id": "swift-apple",
+      "kind": "skills",
+      "description": "Swift, SwiftUI, and Apple platform skills including concurrency, persistence, and design patterns.",
+      "paths": [
+        "skills/foundation-models-on-device",
+        "skills/liquid-glass-design",
+        "skills/swift-actor-persistence",
+        "skills/swift-concurrency-6-2",
+        "skills/swift-protocol-di-testing",
+        "skills/swiftui-patterns"
+      ],
+      "targets": [
+        "claude",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode"
+      ],
+      "dependencies": [
+        "platform-configs"
+      ],
+      "defaultInstall": false,
+      "cost": "medium",
+      "stability": "stable"
+    },
+    {
+      "id": "agentic-patterns",
+      "kind": "skills",
+      "description": "Agentic engineering, autonomous loops, agent harness construction, and LLM pipeline optimization skills.",
+      "paths": [
+        "skills/agent-harness-construction",
+        "skills/agentic-engineering",
+        "skills/ai-first-engineering",
+        "skills/autonomous-loops",
+        "skills/blueprint",
+        "skills/claude-devfleet",
+        "skills/content-hash-cache-pattern",
+        "skills/continuous-agent-loop",
+        "skills/cost-aware-llm-pipeline",
+        "skills/data-scraper-agent",
+        "skills/enterprise-agent-ops",
+        "skills/nanoclaw-repl",
+        "skills/prompt-optimizer",
+        "skills/ralphinho-rfc-pipeline",
+        "skills/regex-vs-llm-structured-text",
+        "skills/search-first",
+        "skills/team-builder"
+      ],
+      "targets": [
+        "claude",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode"
+      ],
+      "dependencies": [
+        "platform-configs"
+      ],
+      "defaultInstall": false,
+      "cost": "medium",
+      "stability": "stable"
+    },
+    {
+      "id": "devops-infra",
+      "kind": "skills",
+      "description": "Deployment workflows, Docker patterns, and infrastructure skills.",
+      "paths": [
+        "skills/deployment-patterns",
+        "skills/docker-patterns"
+      ],
+      "targets": [
+        "claude",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode"
+      ],
+      "dependencies": [
+        "platform-configs"
+      ],
+      "defaultInstall": false,
+      "cost": "medium",
+      "stability": "stable"
+    },
+    {
+      "id": "supply-chain-domain",
+      "kind": "skills",
+      "description": "Supply chain, logistics, procurement, and manufacturing domain skills.",
+      "paths": [
+        "skills/carrier-relationship-management",
+        "skills/customs-trade-compliance",
+        "skills/energy-procurement",
+        "skills/inventory-demand-planning",
+        "skills/logistics-exception-management",
+        "skills/production-scheduling",
+        "skills/quality-nonconformance",
+        "skills/returns-reverse-logistics"
+      ],
+      "targets": [
+        "claude",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode"
+      ],
+      "dependencies": [
+        "platform-configs"
+      ],
+      "defaultInstall": false,
+      "cost": "heavy",
+      "stability": "stable"
+    },
+    {
+      "id": "document-processing",
+      "kind": "skills",
+      "description": "Document processing, conversion, and translation skills.",
+      "paths": [
+        "skills/nutrient-document-processing",
+        "skills/visa-doc-translate"
+      ],
+      "targets": [
+        "claude",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode"
+      ],
+      "dependencies": [
+        "platform-configs"
+      ],
+      "defaultInstall": false,
+      "cost": "medium",
+      "stability": "stable"
     }
   ]
 }
