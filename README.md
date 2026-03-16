@@ -155,6 +155,9 @@ Get up and running in under 2 minutes:
 git clone https://github.com/affaan-m/everything-claude-code.git
 cd everything-claude-code
 
+# Install dependencies (pick your package manager)
+npm install        # or: pnpm install | yarn install | bun install
+
 # macOS/Linux
 ./install.sh typescript    # or python or golang or swift or php
 # ./install.sh typescript python golang swift php
