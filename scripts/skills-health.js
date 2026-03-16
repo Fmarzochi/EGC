@@ -2,6 +2,7 @@
 'use strict';
 
 const { collectSkillHealth, formatHealthReport } = require('./lib/skill-evolution/health');
+const { renderDashboard } = require('./lib/skill-evolution/dashboard');
 
 function showHelp() {
   console.log(`
@@ -15,6 +16,8 @@ Options:
   --home <path>           Override home directory for learned/imported skill roots
   --runs-file <path>      Override skill run JSONL path
   --now <timestamp>       Override current time for deterministic reports
+  --dashboard             Show rich health dashboard with charts
+  --panel <name>          Show only a specific panel (success-rate, failures, amendments, versions)
   --warn-threshold <n>    Decline sensitivity threshold (default: 0.1)
   --help                  Show this help text
 `);
@@ -87,6 +90,17 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--dashboard') {
+      options.dashboard = true;
+      continue;
+    }
+
+    if (arg === '--panel') {
+      options.panel = requireValue(argv, index, '--panel');
+      index += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -102,8 +116,13 @@ function main() {
       process.exit(0);
     }
 
-    const report = collectSkillHealth(options);
-    process.stdout.write(formatHealthReport(report, { json: options.json }));
+    if (options.dashboard || options.panel) {
+      const result = renderDashboard(options);
+      process.stdout.write(options.json ? `${JSON.stringify(result.data, null, 2)}\n` : result.text);
+    } else {
+      const report = collectSkillHealth(options);
+      process.stdout.write(formatHealthReport(report, { json: options.json }));
+    }
   } catch (error) {
     process.stderr.write(`Error: ${error.message}\n`);
     process.exit(1);
