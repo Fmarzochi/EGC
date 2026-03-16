@@ -70,6 +70,8 @@
     "scripts/lib/",
     "scripts/claw.js",
     "scripts/doctor.js",
+    "scripts/status.js",
+    "scripts/sessions-cli.js",
     "scripts/install-apply.js",
     "scripts/install-plan.js",
     "scripts/list-installed.js",
@@ -101,6 +103,9 @@
     "orchestrate:tmux": "node scripts/orchestrate-worktrees.js",
     "test": "node scripts/ci/validate-agents.js && node scripts/ci/validate-commands.js && node scripts/ci/validate-rules.js && node scripts/ci/validate-skills.js && node scripts/ci/validate-hooks.js && node scripts/ci/validate-install-manifests.js && node scripts/ci/validate-no-personal-paths.js && node tests/run-all.js",
     "coverage": "c8 --all --include=\"scripts/**/*.js\" --check-coverage --lines 80 --functions 80 --branches 80 --statements 80 --reporter=text --reporter=lcov node tests/run-all.js"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

@@ -29,6 +29,14 @@ const COMMANDS = {
     script: 'repair.js',
     description: 'Restore drifted or missing ECC-managed files',
   },
+  status: {
+    script: 'status.js',
+    description: 'Query the ECC SQLite state store status summary',
+  },
+  sessions: {
+    script: 'sessions-cli.js',
+    description: 'List or inspect ECC sessions from the SQLite state store',
+  },
   'session-inspect': {
     script: 'session-inspect.js',
     description: 'Emit canonical ECC session snapshots from dmux or Claude history targets',
@@ -45,6 +53,8 @@ const PRIMARY_COMMANDS = [
   'list-installed',
   'doctor',
   'repair',
+  'status',
+  'sessions',
   'session-inspect',
   'uninstall',
 ];
@@ -72,6 +82,9 @@ Examples:
   ecc list-installed --json
   ecc doctor --target cursor
   ecc repair --dry-run
+  ecc status --json
+  ecc sessions
+  ecc sessions session-active --json
   ecc session-inspect claude:latest
   ecc uninstall --target antigravity --dry-run
 `);
