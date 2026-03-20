@@ -12,7 +12,7 @@ const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 
 let passed = 0;
 let failed = 0;
@@ -52,7 +52,7 @@ function toBashPath(filePath) {
 }
 
 function runBash(command, options = {}) {
-  return execSync(`bash -lc '${command.replace(/'/g, "'\\''")}'`, options).toString().trim();
+  return execFileSync('bash', ['-lc', command], options).toString().trim();
 }
 
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -209,7 +209,7 @@ test('detect-project.sh sets PROJECT_NAME and non-global PROJECT_ID for worktree
       echo "PROJECT_ID=\${PROJECT_ID}"
     `;
 
-    const result = execSync(`bash -lc '${script.replace(/'/g, "'\\''")}'`, {
+    const result = execFileSync('bash', ['-lc', script], {
       cwd: worktreeDir,
       timeout: 10000,
       env: {

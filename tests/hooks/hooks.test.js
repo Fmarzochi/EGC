@@ -20,6 +20,19 @@ function toBashPath(filePath) {
     .replace(/\\/g, '/');
 }
 
+function fromBashPath(filePath) {
+  if (process.platform !== 'win32') {
+    return filePath;
+  }
+
+  const match = String(filePath).match(/^\/([A-Za-z])\/(.*)$/);
+  if (!match) {
+    return filePath;
+  }
+
+  return `${match[1].toUpperCase()}:\\${match[2].replace(/\//g, '\\')}`;
+}
+
 function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
@@ -2343,8 +2356,9 @@ async function runTests() {
         assert.strictEqual(code, 0, `detect-project should source cleanly, stderr: ${stderr}`);
 
         const [projectId, projectDir] = stdout.trim().split(/\r?\n/);
+        const nativeProjectDir = fromBashPath(projectDir);
         const registryPath = path.join(homeDir, '.claude', 'homunculus', 'projects.json');
-        const projectMetadataPath = path.join(projectDir, 'project.json');
+        const projectMetadataPath = path.join(nativeProjectDir, 'project.json');
 
         assert.ok(projectId, 'detect-project should emit a project id');
         assert.ok(fs.existsSync(registryPath), 'projects.json should be created');
@@ -2352,11 +2366,12 @@ async function runTests() {
 
         const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
         const metadata = JSON.parse(fs.readFileSync(projectMetadataPath, 'utf8'));
+        const nativeMetadataRoot = fromBashPath(metadata.root);
 
         assert.ok(registry[projectId], 'registry should contain the detected project');
         assert.strictEqual(metadata.id, projectId, 'project.json should include the detected id');
         assert.strictEqual(metadata.name, path.basename(repoDir), 'project.json should include the repo name');
-        assert.strictEqual(fs.realpathSync(metadata.root), fs.realpathSync(repoDir), 'project.json should include the repo root');
+        assert.strictEqual(fs.realpathSync(nativeMetadataRoot), fs.realpathSync(repoDir), 'project.json should include the repo root');
         assert.strictEqual(metadata.remote, 'https://github.com/example/ecc-test.git', 'project.json should include the sanitized remote');
         assert.ok(metadata.created_at, 'project.json should include created_at');
         assert.ok(metadata.last_seen, 'project.json should include last_seen');
