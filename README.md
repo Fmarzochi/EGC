@@ -75,6 +75,18 @@ This repo is the raw code only. The guides explain everything.
 
 ## What's New
 
+### v1.9.0 — Selective Install & Language Expansion (Mar 2026)
+
+- **Selective install architecture** — Manifest-driven install pipeline with `install-plan.js` and `install-apply.js` for targeted component installation. State store tracks what's installed and enables incremental updates.
+- **6 new agents** — `typescript-reviewer`, `pytorch-build-resolver`, `java-build-resolver`, `java-reviewer`, `kotlin-reviewer`, `kotlin-build-resolver` expand language coverage to 10 languages.
+- **New skills** — `pytorch-patterns` for deep learning workflows, `documentation-lookup` for API reference research, `bun-runtime` and `nextjs-turbopack` for modern JS toolchains, plus 8 operational domain skills and `mcp-server-patterns`.
+- **Session & state infrastructure** — SQLite state store with query CLI, session adapters for structured recording, skill evolution foundation for self-improving skills.
+- **Orchestration overhaul** — Harness audit scoring made deterministic, orchestration status and launcher compatibility hardened, observer loop prevention with 5-layer guard.
+- **Observer reliability** — Memory explosion fix with throttling and tail sampling, sandbox access fix, lazy-start logic, and re-entrancy guard.
+- **12 language ecosystems** — New rules for Java, PHP, Perl, Kotlin/Android/KMP, C++, and Rust join existing TypeScript, Python, Go, and common rules.
+- **Community contributions** — Korean and Chinese translations, InsAIts security hook, biome hook optimization, VideoDB skills, Evos operational skills, PowerShell installer, Antigravity IDE support.
+- **CI hardening** — 19 test failure fixes, catalog count enforcement, install manifest validation, and full test suite green.
+
 ### v1.8.0 — Harness Performance System (Mar 2026)
 
 - **Harness-first release** — ECC is now explicitly framed as an agent harness performance system, not just a config pack.
@@ -252,7 +264,7 @@ everything-claude-code/
 |   |-- plugin.json         # Plugin metadata and component paths
 |   |-- marketplace.json    # Marketplace catalog for /plugin marketplace add
 |
-|-- agents/           # Specialized subagents for delegation
+|-- agents/           # 27 specialized subagents for delegation
 |   |-- planner.md           # Feature implementation planning
 |   |-- architect.md         # System design decisions
 |   |-- tdd-guide.md         # Test-driven development
@@ -263,13 +275,23 @@ everything-claude-code/
 |   |-- refactor-cleaner.md  # Dead code cleanup
 |   |-- doc-updater.md       # Documentation sync
 |   |-- docs-lookup.md       # Documentation/API lookup
+|   |-- chief-of-staff.md    # Communication triage and drafts
+|   |-- loop-operator.md     # Autonomous loop execution
+|   |-- harness-optimizer.md # Harness config tuning
 |   |-- cpp-reviewer.md      # C++ code review
 |   |-- cpp-build-resolver.md # C++ build error resolution
 |   |-- go-reviewer.md       # Go code review
 |   |-- go-build-resolver.md # Go build error resolution
-|   |-- python-reviewer.md   # Python code review (NEW)
-|   |-- database-reviewer.md # Database/Supabase review (NEW)
-|   |-- typescript-reviewer.md # TypeScript/JavaScript code review (NEW)
+|   |-- python-reviewer.md   # Python code review
+|   |-- database-reviewer.md # Database/Supabase review
+|   |-- typescript-reviewer.md # TypeScript/JavaScript code review
+|   |-- java-reviewer.md     # Java/Spring Boot code review
+|   |-- java-build-resolver.md # Java/Maven/Gradle build errors
+|   |-- kotlin-reviewer.md   # Kotlin/Android/KMP code review
+|   |-- kotlin-build-resolver.md # Kotlin/Gradle build errors
+|   |-- rust-reviewer.md     # Rust code review
+|   |-- rust-build-resolver.md # Rust build error resolution
+|   |-- pytorch-build-resolver.md # PyTorch/CUDA training errors
 |
 |-- skills/           # Workflow definitions and domain knowledge
 |   |-- coding-standards/           # Language best practices
@@ -1167,7 +1189,7 @@ ECC is the **first plugin to maximize every major AI coding tool**. Here's how e
 | **Context File** | CLAUDE.md + AGENTS.md | AGENTS.md | AGENTS.md | AGENTS.md |
 | **Secret Detection** | Hook-based | beforeSubmitPrompt hook | Sandbox-based | Hook-based |
 | **Auto-Format** | PostToolUse hook | afterFileEdit hook | N/A | file.edited hook |
-| **Version** | Plugin | Plugin | Reference config | 1.8.0 |
+| **Version** | Plugin | Plugin | Reference config | 1.9.0 |
 
 **Key architectural decisions:**
 - **AGENTS.md** at root is the universal cross-tool file (read by all 4 tools)
