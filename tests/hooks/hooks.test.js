@@ -1782,10 +1782,11 @@ async function runTests() {
           for (const hook of entry.hooks) {
             if (hook.type === 'command') {
               const isNode = hook.command.startsWith('node');
+              const isNpx = hook.command.startsWith('npx ');
               const isSkillScript = hook.command.includes('/skills/') && (/^(bash|sh)\s/.test(hook.command) || hook.command.startsWith('${CLAUDE_PLUGIN_ROOT}/skills/'));
               const isHookShellWrapper = /^(bash|sh)\s+["']?\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/hooks\/run-with-flags-shell\.sh/.test(hook.command);
               const isSessionStartFallback = hook.command.startsWith('bash -lc') && hook.command.includes('run-with-flags.js');
-              assert.ok(isNode || isSkillScript || isHookShellWrapper || isSessionStartFallback, `Hook command should use node or approved shell wrapper: ${hook.command.substring(0, 100)}...`);
+              assert.ok(isNode || isNpx || isSkillScript || isHookShellWrapper || isSessionStartFallback, `Hook command should use node or approved shell wrapper: ${hook.command.substring(0, 100)}...`);
             }
           }
         }

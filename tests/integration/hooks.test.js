@@ -673,6 +673,7 @@ async function runTests() {
 
           const isInline = hook.command.startsWith('node -e');
           const isFilePath = hook.command.startsWith('node "');
+          const isNpx = hook.command.startsWith('npx ');
           const isShellWrapper =
             hook.command.startsWith('bash "') ||
             hook.command.startsWith('sh "') ||
@@ -681,8 +682,8 @@ async function runTests() {
           const isShellScriptPath = hook.command.endsWith('.sh');
 
           assert.ok(
-            isInline || isFilePath || isShellWrapper || isShellScriptPath,
-            `Hook command in ${hookType} should be node -e, node script, or shell wrapper/script, got: ${hook.command.substring(0, 80)}`
+            isInline || isFilePath || isNpx || isShellWrapper || isShellScriptPath,
+            `Hook command in ${hookType} should be node -e, node script, npx, or shell wrapper/script, got: ${hook.command.substring(0, 80)}`
           );
         }
       }

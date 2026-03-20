@@ -23,7 +23,6 @@ const {
 } = require('../../scripts/lib/install/request');
 
 const {
-  loadInstallManifests,
   listInstallComponents,
   resolveInstallPlan,
 } = require('../../scripts/lib/install-manifests');
@@ -564,7 +563,7 @@ function runTests() {
     const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-install-project-'));
 
     try {
-      const result = execFileSync('node', [
+      const _result = execFileSync('node', [
         scriptPath,
         '--profile', 'core',
         '--with', 'capability:security',
