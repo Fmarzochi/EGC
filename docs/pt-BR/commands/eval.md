@@ -15,21 +15,21 @@ Crie uma nova definição de eval:
 1. Crie `.claude/evals/feature-name.md` com o template:
 
 ```markdown
+```markdown
 ## EVAL: feature-name
 Created: $(date)
 
-### Capability Evals
-- [ ] [Description of capability 1]
-- [ ] [Description of capability 2]
+### Evals de Capacidade
+- [ ] [Descrição da capacidade 1]
+- [ ] [Descrição da capacidade 2]
 
-### Regression Evals
-- [ ] [Existing behavior 1 still works]
-- [ ] [Existing behavior 2 still works]
+### Evals de Regressão
+- [ ] [Comportamento existente 1 ainda funciona]
+- [ ] [Comportamento existente 2 ainda funciona]
 
-### Success Criteria
-- pass@3 > 90% for capability evals
-- pass^3 = 100% for regression evals
-```
+### Critérios de Sucesso
+- pass@3 > 90% para evals de capacidade
+- pass^3 = 100% para evals de regressão
 
 2. Peça ao usuário para preencher os critérios específicos
 
