@@ -57,7 +57,7 @@ This repo is the raw code only. The guides explain everything.
 </td>
 <td width="33%">
 <a href="https://x.com/affaanmustafa/status/2033263813387223421">
-<img src="./assets/images/security/attack-vectors.png" alt="The Shorthand Guide to Everything Agentic Security" />
+<img src="./assets/images/security/security-guide-header.png" alt="The Shorthand Guide to Everything Agentic Security" />
 </a>
 </td>
 </tr>
