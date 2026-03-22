@@ -142,15 +142,14 @@ RECOMMENDATION
 Para verificações independentes, rode agentes em paralelo:
 
 ```markdown
-### Parallel Phase
-Run simultaneously:
-- code-reviewer (quality)
-- security-reviewer (security)
+### Fase Paralela
+Executar simultaneamente:
+- code-reviewer (qualidade)
+- security-reviewer (segurança)
 - architect (design)
 
-### Merge Results
-Combine outputs into single report
-```
+### Mesclar Resultados
+Combinar saídas em um único relatório
 
 Para workers externos em tmux panes com git worktrees separados, use `node scripts/orchestrate-worktrees.js plan.json --execute`. O padrão embutido de orquestração permanece no processo atual; o helper é para sessões longas ou cross-harness.
 
