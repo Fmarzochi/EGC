@@ -77,3 +77,32 @@ Sinalizar estes padrões imediatamente:
 **Sempre verificar o contexto antes de sinalizar.**
 
 ## Resposta a Emergências
+
+Se você encontrar uma vulnerabilidade CRÍTICA:
+1. Documente em um relatório detalhado
+2. Alerte imediatamente o responsável pelo projeto
+3. Forneça um exemplo de um código seguro
+4. Verifique se a correção funciona
+5. Troque as informações confidenciais se as credenciais forem expostas
+
+## Quando rodar
+
+**SEMPRE:** Novos endpoints na API, alterações no código de autenticação, tratamento de entrada de dados do usuário, alterações em consultas ao banco de dados, uploads de arquivos, código de pagamento, integrações de API externa, atualizações de dependências.
+
+**IMEDIATAMENTE:** Incidentes de produção, CVEs de dependências, relatórios de segurança do usuário, antes de grandes lançamentos.
+
+## Métricas de sucesso 
+
+- Nenhum problema CRÍTICO encontrado
+- Todos os problemas de ALTA prioridade foram resolvidos
+- Nenhum segredo no código
+- Dependências atualizadas
+- Lista de verificação de segurança concluída
+
+## Referência
+
+Para obter padrões de vulnerabilidade detalhados, exemplos de código, modelos de relatório e modelos de revisão de pull requests, consulte a habilidade: `security-review`.
+
+---
+
+**Lembre**: Segurança não é opcional. Uma única vulnerabilidade pode causar prejuízos financeiros reais aos usuários. Seja minucioso, seja cauteloso, seja proativo.

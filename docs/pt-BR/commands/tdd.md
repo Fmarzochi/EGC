@@ -49,12 +49,12 @@ REPEAT:   Next feature/scenario
 ## Exemplo de Uso
 
 ```
-User: /tdd I need a function to calculate market liquidity score
+Usuário: /tdd Preciso de uma função para calcular a pontuação de liquidez do mercado
 
 Agent (tdd-guide):
-# TDD Session: Market Liquidity Score Calculator
+# Sessão TDD: Calculadora de Pontuação de Liquidez de Mercado
 
-## Step 1: Define Interface (SCAFFOLD)
+## Etapa 1: Definir Interface (SCAFFOLD)
 
 ```typescript
 // lib/liquidity.ts
@@ -71,7 +71,7 @@ export function calculateLiquidityScore(market: MarketData): number {
 }
 ```
 
-## Step 2: Write Failing Test (RED)
+## Etapa 2: Escreva o teste com falha (VERMELHO)
 
 ```typescript
 // lib/liquidity.test.ts
@@ -121,7 +121,7 @@ describe('calculateLiquidityScore', () => {
 })
 ```
 
-## Step 3: Run Tests - Verify FAIL
+## Etapa 3: Executar testes - Verificar FALHA
 
 ```bash
 npm test lib/liquidity.test.ts
@@ -133,9 +133,9 @@ FAIL lib/liquidity.test.ts
 1 test failed, 0 passed
 ```
 
-✅ Tests fail as expected. Ready to implement.
+✅ Os testes falharam conforme o esperado. Pronto para implementação.
 
-## Step 4: Implement Minimal Code (GREEN)
+## Etapa 4: Implementar o código mínimo (VERDE)
 
 ```typescript
 // lib/liquidity.ts
@@ -166,7 +166,7 @@ export function calculateLiquidityScore(market: MarketData): number {
 }
 ```
 
-## Step 5: Run Tests - Verify PASS
+## Etapa 5: Executar testes - Verificar se foi aprovado
 
 ```bash
 npm test lib/liquidity.test.ts
@@ -179,12 +179,12 @@ PASS lib/liquidity.test.ts
 3 tests passed
 ```
 
-✅ All tests passing!
+✅ Todos os testes passando
 
-## Step 6: Refactor (IMPROVE)
+## Etapa 6: Refatorar (MELHORAR)
 
 ```typescript
-// lib/liquidity.ts - Refactored with constants and better readability
+// lib/liquidity.ts - Refatorado com constantes e melhor legibilidade.
 const WEIGHTS = {
   VOLUME: 0.4,
   SPREAD: 0.3,
@@ -223,7 +223,7 @@ export function calculateLiquidityScore(market: MarketData): number {
 }
 ```
 
-## Step 7: Verify Tests Still Pass
+## Etapa 7: Verificar se os testes ainda são aprovados
 
 ```bash
 npm test lib/liquidity.test.ts
@@ -236,9 +236,9 @@ PASS lib/liquidity.test.ts
 3 tests passed
 ```
 
-✅ Refactoring complete, tests still passing!
+✅ Refatoração concluída, testes ainda passando!
 
-## Step 8: Check Coverage
+## Etapa 8: Verificar a cobertura
 
 ```bash
 npm test -- --coverage lib/liquidity.test.ts
@@ -250,12 +250,12 @@ liquidity.ts   |   100   |   100    |   100   |   100
 Coverage: 100% ✅ (Target: 80%)
 ```
 
-✅ TDD session complete!
+✅ TDD sessão completa!
 ```
 
 ## Boas Práticas de TDD
 
-**DO:**
+**Fazer:**
 - ✅ Escreva o teste PRIMEIRO, antes da implementação
 - ✅ Rode testes e confirme que FALHAM antes de implementar
 - ✅ Escreva código mínimo para fazer passar
@@ -263,7 +263,7 @@ Coverage: 100% ✅ (Target: 80%)
 - ✅ Adicione casos de borda e cenários de erro
 - ✅ Mire 80%+ de cobertura (100% para código crítico)
 
-**DON'T:**
+**Não fazer:**
 - ❌ Escrever implementação antes de testes
 - ❌ Pular execução de testes após cada mudança
 - ❌ Escrever código demais de uma vez

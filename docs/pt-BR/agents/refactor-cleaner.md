@@ -78,3 +78,8 @@ Após cada lote:
 - Em código que você não entende
 
 ## Métricas de Sucesso
+
+- Todos os testes foram aprovados
+- Compilação concluída com sucesso
+- Sem regressões
+- Tamanho do pacote reduzido
