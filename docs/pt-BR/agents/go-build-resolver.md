@@ -24,7 +24,7 @@ Execute nesta ordem:
 ```bash
 go build ./...
 go vet ./...
-staticcheck ./... 2>/dev/null || echo "staticcheck não instalado"
+if command -v staticcheck >/dev/null; then staticcheck ./...; else echo "staticcheck não instalado"; fi
 golangci-lint run 2>/dev/null || echo "golangci-lint não instalado"
 go mod verify
 go mod tidy -v
