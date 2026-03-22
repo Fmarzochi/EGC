@@ -182,7 +182,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"post:edit:format\" \"scripts/hooks/post-edit-format.js\" \"standard,strict\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"post:edit:format\" \"scripts/hooks/post-edit-format.js\" \"strict\""
           }
         ],
         "description": "Auto-format JS/TS files after edits (auto-detects Biome or Prettier)"
@@ -192,7 +192,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"post:edit:typecheck\" \"scripts/hooks/post-edit-typecheck.js\" \"standard,strict\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"post:edit:typecheck\" \"scripts/hooks/post-edit-typecheck.js\" \"strict\""
           }
         ],
         "description": "TypeScript check after editing .ts/.tsx files"
