@@ -15,7 +15,6 @@ Crie uma nova definição de eval:
 1. Crie `.claude/evals/feature-name.md` com o template:
 
 ```markdown
-```markdown
 ## EVAL: feature-name
 Created: $(date)
 
