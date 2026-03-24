@@ -358,6 +358,67 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('auto-detects ecc-install.json from the project root', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    const configPath = path.join(projectDir, 'ecc-install.json');
+
+    try {
+      fs.writeFileSync(configPath, JSON.stringify({
+        version: 1,
+        target: 'claude',
+        profile: 'developer',
+        include: ['capability:security'],
+        exclude: ['capability:orchestration'],
+      }, null, 2));
+
+      const result = run([], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      assert.ok(fs.existsSync(path.join(homeDir, '.claude', 'skills', 'security-review', 'SKILL.md')));
+      assert.ok(!fs.existsSync(path.join(homeDir, '.claude', 'skills', 'dmux-workflows', 'SKILL.md')));
+
+      const state = readJson(path.join(homeDir, '.claude', 'ecc', 'install-state.json'));
+      assert.strictEqual(state.request.profile, 'developer');
+      assert.deepStrictEqual(state.request.includeComponents, ['capability:security']);
+      assert.deepStrictEqual(state.request.excludeComponents, ['capability:orchestration']);
+      assert.ok(state.resolution.selectedModules.includes('security'));
+      assert.ok(!state.resolution.selectedModules.includes('orchestration'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('preserves legacy language installs when a project config is present', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    const configPath = path.join(projectDir, 'ecc-install.json');
+
+    try {
+      fs.writeFileSync(configPath, JSON.stringify({
+        version: 1,
+        target: 'claude',
+        profile: 'developer',
+        include: ['capability:security'],
+      }, null, 2));
+
+      const result = run(['typescript'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const state = readJson(path.join(homeDir, '.claude', 'ecc', 'install-state.json'));
+      assert.strictEqual(state.request.legacyMode, true);
+      assert.deepStrictEqual(state.request.legacyLanguages, ['typescript']);
+      assert.strictEqual(state.request.profile, null);
+      assert.deepStrictEqual(state.request.includeComponents, []);
+      assert.ok(state.resolution.selectedModules.includes('framework-language'));
+      assert.ok(!state.resolution.selectedModules.includes('security'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

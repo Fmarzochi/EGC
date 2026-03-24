@@ -216,6 +216,45 @@ function listInstallComponents(options = {}) {
     .filter(component => !target || component.targets.includes(target));
 }
 
+function getInstallComponent(componentId, options = {}) {
+  const manifests = loadInstallManifests(options);
+  const normalizedComponentId = String(componentId || '').trim();
+
+  if (!normalizedComponentId) {
+    throw new Error('An install component ID is required');
+  }
+
+  const component = manifests.componentsById.get(normalizedComponentId);
+  if (!component) {
+    throw new Error(`Unknown install component: ${normalizedComponentId}`);
+  }
+
+  const moduleIds = dedupeStrings(component.modules);
+  const modules = moduleIds
+    .map(moduleId => manifests.modulesById.get(moduleId))
+    .filter(Boolean)
+    .map(module => ({
+      id: module.id,
+      kind: module.kind,
+      description: module.description,
+      targets: module.targets,
+      defaultInstall: module.defaultInstall,
+      cost: module.cost,
+      stability: module.stability,
+      dependencies: dedupeStrings(module.dependencies),
+    }));
+
+  return {
+    id: component.id,
+    family: component.family,
+    description: component.description,
+    moduleIds,
+    moduleCount: moduleIds.length,
+    targets: intersectTargets(modules),
+    modules,
+  };
+}
+
 function expandComponentIdsToModuleIds(componentIds, manifests) {
   const expandedModuleIds = [];
 
@@ -438,6 +477,7 @@ module.exports = {
   SUPPORTED_INSTALL_TARGETS,
   getManifestPaths,
   loadInstallManifests,
+  getInstallComponent,
   listInstallComponents,
   listLegacyCompatibilityLanguages,
   listInstallModules,

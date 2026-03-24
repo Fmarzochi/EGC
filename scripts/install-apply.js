@@ -100,12 +100,18 @@ function main() {
       showHelp(0);
     }
 
-    const { loadInstallConfig } = require('./lib/install/config');
+    const {
+      findDefaultInstallConfigPath,
+      loadInstallConfig,
+    } = require('./lib/install/config');
     const { applyInstallPlan } = require('./lib/install-executor');
     const { createInstallPlanFromRequest } = require('./lib/install/runtime');
+    const defaultConfigPath = options.configPath || options.languages.length > 0
+      ? null
+      : findDefaultInstallConfigPath({ cwd: process.cwd() });
     const config = options.configPath
       ? loadInstallConfig(options.configPath, { cwd: process.cwd() })
-      : null;
+      : (defaultConfigPath ? loadInstallConfig(defaultConfigPath, { cwd: process.cwd() }) : null);
     const request = normalizeInstallRequest({
       ...options,
       config,
