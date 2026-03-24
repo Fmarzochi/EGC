@@ -99,12 +99,15 @@ npm test
 
 This step is mandatory and is the RED gate for all production changes.
 
-Before modifying business logic or other production code, you must verify all of the following:
-- The relevant test target compiles successfully, or the compile failure is itself the RED signal (i.e., the new test instantiates the buggy code path and a compile-time RED is the intended failure)
-- The new or changed test is actually executed
-- The result is RED
-- The failure is caused by the intended business-logic bug, undefined behavior, or missing implementation
-- A compile-time RED is valid if the new test newly instantiates, references, or exercises the buggy code path and exposes the intended defect
+Before modifying business logic or other production code, you must verify a valid RED state via one of these paths:
+- Runtime RED:
+  - The relevant test target compiles successfully
+  - The new or changed test is actually executed
+  - The result is RED
+- Compile-time RED:
+  - The new test newly instantiates, references, or exercises the buggy code path
+  - The compile failure is itself the intended RED signal
+- In either case, the failure is caused by the intended business-logic bug, undefined behavior, or missing implementation
 - The failure is not caused only by unrelated syntax errors, broken test setup, missing dependencies, or unrelated regressions
 
 A test that was only written but not compiled and executed does not count as RED.
