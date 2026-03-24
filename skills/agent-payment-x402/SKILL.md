@@ -156,7 +156,10 @@ async function preToolCheck(agentpay: Client, apiCost: number): Promise<void> {
   }
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
 ```
 
 ## Best Practices
