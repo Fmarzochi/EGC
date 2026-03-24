@@ -40,11 +40,14 @@ function extractSummary(message) {
 
 /**
  * Send a macOS notification via osascript.
- * Uses spawnSync with an argument array to avoid shell injection.
+ * AppleScript strings do not support backslash escapes, so we replace
+ * double quotes with curly quotes and strip backslashes before embedding.
  */
 function notifyMacOS(title, body) {
-  const script = `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`;
-  spawnSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 5000 });
+  const safeBody = body.replace(/\\/g, '').replace(/"/g, '\u201C');
+  const safeTitle = title.replace(/\\/g, '').replace(/"/g, '\u201C');
+  const script = `display notification "${safeBody}" with title "${safeTitle}"`;
+  spawnSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 3000 });
 }
 
 // TODO: future platform support
