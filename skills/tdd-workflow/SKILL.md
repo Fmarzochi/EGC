@@ -100,7 +100,7 @@ npm test
 This step is mandatory and is the RED gate for all production changes.
 
 Before modifying business logic or other production code, you must verify all of the following:
-- The relevant test target compiles successfully
+- The relevant test target compiles successfully, or the compile failure is itself the RED signal (i.e., the new test instantiates the buggy code path and a compile-time RED is the intended failure)
 - The new or changed test is actually executed
 - The result is RED
 - The failure is caused by the intended business-logic bug, undefined behavior, or missing implementation
@@ -126,9 +126,7 @@ export async function searchMarkets(query: string) {
 }
 ```
 
-If the repository is under Git, create a checkpoint commit immediately after the minimal fix is in place.
-Recommended commit message format:
-- `fix: minimal fix for <bug>`
+If the repository is under Git, stage the minimal fix now but defer the checkpoint commit until GREEN is validated in Step 5.
 
 ### Step 5: Run Tests Again
 ```bash
