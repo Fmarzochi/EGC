@@ -116,7 +116,7 @@ Do not edit production code until this RED state is confirmed.
 
 If the repository is under Git, create a checkpoint commit immediately after this stage is validated.
 Recommended commit message format:
-- `test: add reproducer for <bug>`
+- `test: add reproducer for <feature or bug>`
 - This commit may also serve as the RED validation checkpoint if the reproducer was compiled and executed and failed for the intended reason
 
 ### Step 4: Implement Code
@@ -143,6 +143,7 @@ Only after a valid GREEN result may you proceed to refactor.
 
 If the repository is under Git, create a checkpoint commit immediately after GREEN is validated.
 Recommended commit message format:
+- `fix: <feature or bug>`
 - The fix commit may also serve as the GREEN validation checkpoint if the same relevant test target was rerun and passed
 
 ### Step 6: Refactor
