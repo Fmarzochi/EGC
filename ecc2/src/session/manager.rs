@@ -357,7 +357,7 @@ impl fmt::Display for SessionStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, Theme};
+    use crate::config::{Config, PaneLayout, Theme};
     use crate::session::{Session, SessionMetrics, SessionState};
     use anyhow::{Context, Result};
     use chrono::{Duration, Utc};
@@ -403,6 +403,7 @@ mod tests {
             cost_budget_usd: 10.0,
             token_budget: 500_000,
             theme: Theme::Dark,
+            pane_layout: PaneLayout::Horizontal,
         }
     }
 

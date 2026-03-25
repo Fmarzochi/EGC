@@ -2,6 +2,15 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneLayout {
+    #[default]
+    Horizontal,
+    Vertical,
+    Grid,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -15,6 +24,7 @@ pub struct Config {
     pub cost_budget_usd: f64,
     pub token_budget: u64,
     pub theme: Theme,
+    pub pane_layout: PaneLayout,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +47,7 @@ impl Default for Config {
             cost_budget_usd: 10.0,
             token_budget: 500_000,
             theme: Theme::Dark,
+            pane_layout: PaneLayout::Horizontal,
         }
     }
 }
@@ -60,7 +71,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{Config, PaneLayout};
 
     #[test]
     fn default_includes_positive_budget_thresholds() {
@@ -88,5 +99,18 @@ theme = "Dark"
 
         assert_eq!(config.cost_budget_usd, defaults.cost_budget_usd);
         assert_eq!(config.token_budget, defaults.token_budget);
+        assert_eq!(config.pane_layout, defaults.pane_layout);
+    }
+
+    #[test]
+    fn default_pane_layout_is_horizontal() {
+        assert_eq!(Config::default().pane_layout, PaneLayout::Horizontal);
+    }
+
+    #[test]
+    fn pane_layout_deserializes_from_toml() {
+        let config: Config = toml::from_str(r#"pane_layout = "grid""#).unwrap();
+
+        assert_eq!(config.pane_layout, PaneLayout::Grid);
     }
 }
