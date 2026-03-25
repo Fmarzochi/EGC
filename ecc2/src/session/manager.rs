@@ -281,6 +281,8 @@ mod tests {
             session_timeout_secs: 60,
             heartbeat_interval_secs: 5,
             default_agent: "claude".to_string(),
+            cost_budget_usd: 10.0,
+            token_budget: 500_000,
             theme: Theme::Dark,
         }
     }
