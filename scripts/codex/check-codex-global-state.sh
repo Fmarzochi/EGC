@@ -11,7 +11,7 @@ CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CONFIG_FILE="$CODEX_HOME/config.toml"
 AGENTS_FILE="$CODEX_HOME/AGENTS.md"
 PROMPTS_DIR="$CODEX_HOME/prompts"
-SKILLS_DIR="$CODEX_HOME/skills"
+SKILLS_DIR="${AGENTS_HOME:-$HOME/.agents}/skills"
 HOOKS_DIR_EXPECT="${ECC_GLOBAL_HOOKS_DIR:-$CODEX_HOME/git-hooks}"
 
 failures=0
@@ -144,12 +144,12 @@ if [[ -d "$SKILLS_DIR" ]]; then
   done
 
   if [[ "$missing_skills" -eq 0 ]]; then
-    ok "All 16 ECC Codex skills are present"
+    ok "All 16 ECC skills are present in $SKILLS_DIR"
   else
-    fail "$missing_skills required skills are missing"
+    warn "$missing_skills ECC skills missing from $SKILLS_DIR (install via ECC installer or npx skills)"
   fi
 else
-  fail "Skills directory missing ($SKILLS_DIR)"
+  warn "Skills directory missing ($SKILLS_DIR) — install via ECC installer or npx skills"
 fi
 
 if [[ -f "$PROMPTS_DIR/ecc-prompts-manifest.txt" ]]; then
