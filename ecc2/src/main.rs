@@ -7,6 +7,7 @@ mod worktree;
 
 use anyhow::Result;
 use clap::Parser;
+use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
@@ -46,6 +47,17 @@ enum Commands {
     },
     /// Run as background daemon
     Daemon,
+    #[command(hide = true)]
+    RunSession {
+        #[arg(long)]
+        session_id: String,
+        #[arg(long)]
+        task: String,
+        #[arg(long)]
+        agent: String,
+        #[arg(long)]
+        cwd: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -90,6 +102,14 @@ async fn main() -> Result<()> {
         Some(Commands::Daemon) => {
             println!("Starting ECC daemon...");
             session::daemon::run(db, cfg).await?;
+        }
+        Some(Commands::RunSession {
+            session_id,
+            task,
+            agent,
+            cwd,
+        }) => {
+            session::manager::run_session(&cfg, &session_id, &task, &agent, &cwd).await?;
         }
     }
 

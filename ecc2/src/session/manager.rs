@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::Command;
 
+use super::output::SessionOutputStore;
+use super::runtime::capture_command_output;
 use super::store::StateStore;
 use super::{Session, SessionMetrics, SessionState};
 use crate::config::Config;
@@ -18,18 +20,7 @@ pub async fn create_session(
 ) -> Result<String> {
     let repo_root =
         std::env::current_dir().context("Failed to resolve current working directory")?;
-    let agent_program = agent_program(agent_type)?;
-
-    create_session_in_dir(
-        db,
-        cfg,
-        task,
-        agent_type,
-        use_worktree,
-        &repo_root,
-        &agent_program,
-    )
-    .await
+    queue_session_in_dir(db, cfg, task, agent_type, use_worktree, &repo_root).await
 }
 
 pub fn list_sessions(db: &StateStore) -> Result<Vec<Session>> {
@@ -62,6 +53,97 @@ fn resolve_session(db: &StateStore, id: &str) -> Result<Session> {
     session.ok_or_else(|| anyhow::anyhow!("Session not found: {id}"))
 }
 
+pub async fn run_session(
+    cfg: &Config,
+    session_id: &str,
+    task: &str,
+    agent_type: &str,
+    working_dir: &Path,
+) -> Result<()> {
+    let db = StateStore::open(&cfg.db_path)?;
+    let session = resolve_session(&db, session_id)?;
+
+    if session.state != SessionState::Pending {
+        tracing::info!(
+            "Skipping run_session for {} because state is {}",
+            session_id,
+            session.state
+        );
+        return Ok(());
+    }
+
+    let agent_program = agent_program(agent_type)?;
+    let command = build_agent_command(&agent_program, task, session_id, working_dir);
+    capture_command_output(
+        cfg.db_path.clone(),
+        session_id.to_string(),
+        command,
+        SessionOutputStore::default(),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn queue_session_in_dir(
+    db: &StateStore,
+    cfg: &Config,
+    task: &str,
+    agent_type: &str,
+    use_worktree: bool,
+    repo_root: &Path,
+) -> Result<String> {
+    let session = build_session_record(task, agent_type, use_worktree, cfg, repo_root)?;
+    db.insert_session(&session)?;
+
+    let working_dir = session
+        .worktree
+        .as_ref()
+        .map(|worktree| worktree.path.as_path())
+        .unwrap_or(repo_root);
+
+    match spawn_session_runner(task, &session.id, agent_type, working_dir).await {
+        Ok(()) => Ok(session.id),
+        Err(error) => {
+            db.update_state(&session.id, &SessionState::Failed)?;
+
+            if let Some(worktree) = session.worktree.as_ref() {
+                let _ = crate::worktree::remove(&worktree.path);
+            }
+
+            Err(error.context(format!("Failed to queue session {}", session.id)))
+        }
+    }
+}
+
+fn build_session_record(
+    task: &str,
+    agent_type: &str,
+    use_worktree: bool,
+    cfg: &Config,
+    repo_root: &Path,
+) -> Result<Session> {
+    let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+    let now = chrono::Utc::now();
+
+    let worktree = if use_worktree {
+        Some(worktree::create_for_session_in_repo(&id, cfg, repo_root)?)
+    } else {
+        None
+    };
+
+    Ok(Session {
+        id,
+        task: task.to_string(),
+        agent_type: agent_type.to_string(),
+        state: SessionState::Pending,
+        pid: None,
+        worktree,
+        created_at: now,
+        updated_at: now,
+        metrics: SessionMetrics::default(),
+    })
+}
+
 async fn create_session_in_dir(
     db: &StateStore,
     cfg: &Config,
@@ -71,26 +153,7 @@ async fn create_session_in_dir(
     repo_root: &Path,
     agent_program: &Path,
 ) -> Result<String> {
-    let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let now = chrono::Utc::now();
-
-    let wt = if use_worktree {
-        Some(worktree::create_for_session_in_repo(&id, cfg, repo_root)?)
-    } else {
-        None
-    };
-
-    let session = Session {
-        id: id.clone(),
-        task: task.to_string(),
-        agent_type: agent_type.to_string(),
-        state: SessionState::Pending,
-        pid: None,
-        worktree: wt,
-        created_at: now,
-        updated_at: now,
-        metrics: SessionMetrics::default(),
-    };
+    let session = build_session_record(task, agent_type, use_worktree, cfg, repo_root)?;
 
     db.insert_session(&session)?;
 
@@ -118,19 +181,60 @@ async fn create_session_in_dir(
     }
 }
 
+async fn spawn_session_runner(
+    task: &str,
+    session_id: &str,
+    agent_type: &str,
+    working_dir: &Path,
+) -> Result<()> {
+    let current_exe = std::env::current_exe().context("Failed to resolve ECC executable path")?;
+    let child = Command::new(&current_exe)
+        .arg("run-session")
+        .arg("--session-id")
+        .arg(session_id)
+        .arg("--task")
+        .arg(task)
+        .arg("--agent")
+        .arg(agent_type)
+        .arg("--cwd")
+        .arg(working_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .with_context(|| {
+            format!(
+                "Failed to spawn ECC runner from {}",
+                current_exe.display()
+            )
+        })?;
+
+    child
+        .id()
+        .ok_or_else(|| anyhow::anyhow!("ECC runner did not expose a process id"))?;
+    Ok(())
+}
+
+fn build_agent_command(agent_program: &Path, task: &str, session_id: &str, working_dir: &Path) -> Command {
+    let mut command = Command::new(agent_program);
+    command
+        .arg("--print")
+        .arg("--name")
+        .arg(format!("ecc-{session_id}"))
+        .arg(task)
+        .current_dir(working_dir)
+        .stdin(Stdio::null());
+    command
+}
+
 async fn spawn_claude_code(
     agent_program: &Path,
     task: &str,
     session_id: &str,
     working_dir: &Path,
 ) -> Result<u32> {
-    let child = Command::new(agent_program)
-        .arg("--print")
-        .arg("--name")
-        .arg(format!("ecc-{session_id}"))
-        .arg(task)
-        .current_dir(working_dir)
-        .stdin(Stdio::null())
+    let mut command = build_agent_command(agent_program, task, session_id, working_dir);
+    let child = command
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
