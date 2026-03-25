@@ -1,18 +1,14 @@
 ---
 name: repo-scan
 description: Cross-stack source code asset audit — classifies every file, detects embedded third-party libraries, and delivers actionable four-level verdicts per module with interactive HTML reports.
-origin: https://github.com/haibindev/repo-scan
-tools:
-  - file analysis
-  - dependency detection
-  - HTML report generation
+origin: community
 ---
 
 # repo-scan
 
 > Every ecosystem has its own dependency manager, but no tool looks across C++, Android, iOS, and Web to tell you: how much code is actually yours, what's third-party, and what's dead weight.
 
-## When to Activate
+## When to Use
 
 - Taking over a large legacy codebase and need a structural overview
 - Before major refactoring — identify what's core, what's duplicate, what's dead
@@ -22,9 +18,10 @@ tools:
 ## Installation
 
 ```bash
-# Copy into your Claude Code skills directory
+# Clone at a pinned commit for reproducibility
 git clone https://github.com/haibindev/repo-scan.git
-cp -r repo-scan ~/.claude/skills/repo-scan
+cd repo-scan && git checkout 2742664
+cp -r ../repo-scan ~/.claude/skills/repo-scan
 ```
 
 > Review the source before installing any agent skill.
@@ -49,13 +46,13 @@ cp -r repo-scan ~/.claude/skills/repo-scan
 | `deep` | 5-10 per module | Adds thread safety, memory management, API consistency |
 | `full` | All files | Pre-merge comprehensive review |
 
-## Workflow
+## How It Works
 
 1. **Scan**: `/repo-scan` runs a pre-scan pass to classify files and detect dependencies
 2. **Analyze**: AI reviews the structured data and assigns verdicts per module
 3. **Report**: Interactive HTML report generated with verdict distribution and drill-down
 
-## Real-World Example
+## Examples
 
 On a 50,000-file C++ monorepo:
 - Found FFmpeg 2.x (2015 vintage) still in production
