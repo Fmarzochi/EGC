@@ -18,16 +18,52 @@ const MAX_STDIN = 1024 * 1024;
 function readStdinRaw() {
   return new Promise(resolve => {
     let raw = '';
+    let truncated = false;
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', chunk => {
       if (raw.length < MAX_STDIN) {
         const remaining = MAX_STDIN - raw.length;
         raw += chunk.substring(0, remaining);
+        if (chunk.length > remaining) {
+          truncated = true;
+        }
+      } else {
+        truncated = true;
       }
     });
-    process.stdin.on('end', () => resolve(raw));
-    process.stdin.on('error', () => resolve(raw));
+    process.stdin.on('end', () => resolve({ raw, truncated }));
+    process.stdin.on('error', () => resolve({ raw, truncated }));
   });
+}
+
+function writeStderr(stderr) {
+  if (typeof stderr !== 'string' || stderr.length === 0) {
+    return;
+  }
+
+  process.stderr.write(stderr.endsWith('\n') ? stderr : `${stderr}\n`);
+}
+
+function emitHookResult(raw, output) {
+  if (typeof output === 'string' || Buffer.isBuffer(output)) {
+    process.stdout.write(String(output));
+    return 0;
+  }
+
+  if (output && typeof output === 'object') {
+    writeStderr(output.stderr);
+
+    if (Object.prototype.hasOwnProperty.call(output, 'stdout')) {
+      process.stdout.write(String(output.stdout ?? ''));
+    } else if (!Number.isInteger(output.exitCode) || output.exitCode === 0) {
+      process.stdout.write(raw);
+    }
+
+    return Number.isInteger(output.exitCode) ? output.exitCode : 0;
+  }
+
+  process.stdout.write(raw);
+  return 0;
 }
 
 function getPluginRoot() {
@@ -39,7 +75,7 @@ function getPluginRoot() {
 
 async function main() {
   const [, , hookId, relScriptPath, profilesCsv] = process.argv;
-  const raw = await readStdinRaw();
+  const { raw, truncated } = await readStdinRaw();
 
   if (!hookId || !relScriptPath) {
     process.stdout.write(raw);
@@ -89,8 +125,8 @@ async function main() {
 
   if (hookModule && typeof hookModule.run === 'function') {
     try {
-      const output = hookModule.run(raw);
-      if (output !== null && output !== undefined) process.stdout.write(output);
+      const output = hookModule.run(raw, { truncated, maxStdin: MAX_STDIN });
+      process.exit(emitHookResult(raw, output));
     } catch (runErr) {
       process.stderr.write(`[Hook] run() error for ${hookId}: ${runErr.message}\n`);
       process.stdout.write(raw);
@@ -102,7 +138,11 @@ async function main() {
   const result = spawnSync('node', [scriptPath], {
     input: raw,
     encoding: 'utf8',
-    env: process.env,
+    env: {
+      ...process.env,
+      ECC_HOOK_INPUT_TRUNCATED: truncated ? '1' : '0',
+      ECC_HOOK_INPUT_MAX_BYTES: String(MAX_STDIN)
+    },
     cwd: process.cwd(),
     timeout: 30000
   });

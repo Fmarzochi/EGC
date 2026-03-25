@@ -11,13 +11,13 @@
 
 const {
   getSessionsDir,
+  getSessionSearchDirs,
   getLearnedSkillsDir,
   findFiles,
   ensureDir,
   readFile,
   stripAnsi,
-  log,
-  output
+  log
 } = require('../lib/utils');
 const { getPackageManager, getSelectionPrompt } = require('../lib/package-manager');
 const { listAliases } = require('../lib/session-aliases');
@@ -26,13 +26,16 @@ const { detectProjectType } = require('../lib/project-detect');
 async function main() {
   const sessionsDir = getSessionsDir();
   const learnedDir = getLearnedSkillsDir();
+  const additionalContextParts = [];
 
   // Ensure directories exist
   ensureDir(sessionsDir);
   ensureDir(learnedDir);
 
   // Check for recent session files (last 7 days)
-  const recentSessions = findFiles(sessionsDir, '*-session.tmp', { maxAge: 7 });
+  const recentSessions = getSessionSearchDirs()
+    .flatMap(dir => findFiles(dir, '*-session.tmp', { maxAge: 7 }))
+    .sort((a, b) => b.mtime - a.mtime);
 
   if (recentSessions.length > 0) {
     const latest = recentSessions[0];
@@ -43,7 +46,7 @@ async function main() {
     const content = stripAnsi(readFile(latest.path));
     if (content && !content.includes('[Session context goes here]')) {
       // Only inject if the session has actual content (not the blank template)
-      output(`Previous session summary:\n${content}`);
+      additionalContextParts.push(`Previous session summary:\n${content}`);
     }
   }
 
@@ -84,15 +87,49 @@ async function main() {
       parts.push(`frameworks: ${projectInfo.frameworks.join(', ')}`);
     }
     log(`[SessionStart] Project detected — ${parts.join('; ')}`);
-    output(`Project type: ${JSON.stringify(projectInfo)}`);
+    additionalContextParts.push(`Project type: ${JSON.stringify(projectInfo)}`);
   } else {
     log('[SessionStart] No specific project type detected');
   }
 
-  process.exit(0);
+  await writeSessionStartPayload(additionalContextParts.join('\n\n'));
+}
+
+function writeSessionStartPayload(additionalContext) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const payload = JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext
+      }
+    });
+
+    const handleError = (err) => {
+      if (settled) return;
+      settled = true;
+      if (err) {
+        log(`[SessionStart] stdout write error: ${err.message}`);
+      }
+      reject(err || new Error('stdout stream error'));
+    };
+
+    process.stdout.once('error', handleError);
+    process.stdout.write(payload, (err) => {
+      process.stdout.removeListener('error', handleError);
+      if (settled) return;
+      settled = true;
+      if (err) {
+        log(`[SessionStart] stdout write error: ${err.message}`);
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 main().catch(err => {
   console.error('[SessionStart] Error:', err.message);
-  process.exit(0); // Don't block on errors
+  process.exitCode = 0; // Don't block on errors
 });

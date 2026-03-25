@@ -990,7 +990,7 @@ src/main.ts
     assert.ok(result.endsWith(filename), `Path should end with filename, got: ${result}`);
     // Since HOME is overridden, sessions dir should be under tmpHome
     assert.ok(result.includes('.claude'), 'Path should include .claude directory');
-    assert.ok(result.includes('sessions'), 'Path should include sessions directory');
+    assert.ok(result.includes('session-data'), 'Path should use canonical session-data directory');
   })) passed++; else failed++;
 
   // ── Round 66: getSessionById noIdMatch path (date-only string for old format) ──
@@ -1629,18 +1629,13 @@ src/main.ts
     // best-effort
   }
 
-  // ── Round 98: parseSessionFilename with null input throws TypeError ──
-  console.log('\nRound 98: parseSessionFilename (null input — crashes at line 30):');
+  // ── Round 98: parseSessionFilename with null input returns null ──
+  console.log('\nRound 98: parseSessionFilename (null input is safely rejected):');
 
-  if (test('parseSessionFilename(null) throws TypeError because null has no .match()', () => {
-    // session-manager.js line 30: `filename.match(SESSION_FILENAME_REGEX)`
-    // When filename is null, null.match() throws TypeError.
-    // Function lacks a type guard like `if (!filename || typeof filename !== 'string')`.
-    assert.throws(
-      () => sessionManager.parseSessionFilename(null),
-      { name: 'TypeError' },
-      'null.match() should throw TypeError (no type guard on filename parameter)'
-    );
+  if (test('parseSessionFilename(null) returns null instead of throwing', () => {
+    assert.strictEqual(sessionManager.parseSessionFilename(null), null);
+    assert.strictEqual(sessionManager.parseSessionFilename(undefined), null);
+    assert.strictEqual(sessionManager.parseSessionFilename(123), null);
   })) passed++; else failed++;
 
   // ── Round 99: writeSessionContent with null path returns false (error caught) ──
