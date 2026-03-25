@@ -11,6 +11,7 @@ use tokio::sync::broadcast;
 
 use super::widgets::{budget_state, format_currency, format_token_count, BudgetState, TokenMeter};
 use crate::config::{Config, PaneLayout};
+use crate::observability::ToolLogEntry;
 use crate::session::output::{OutputEvent, OutputLine, SessionOutputStore, OutputStream, OUTPUT_BUFFER_LIMIT};
 use crate::session::store::StateStore;
 use crate::session::{Session, SessionMetrics, SessionState, WorktreeInfo};
@@ -21,6 +22,7 @@ const OUTPUT_PANE_PERCENT: u16 = 70;
 const MIN_PANE_SIZE_PERCENT: u16 = 20;
 const MAX_PANE_SIZE_PERCENT: u16 = 80;
 const PANE_RESIZE_STEP_PERCENT: u16 = 5;
+const MAX_LOG_ENTRIES: u64 = 12;
 
 pub struct Dashboard {
     db: StateStore,
@@ -29,6 +31,7 @@ pub struct Dashboard {
     output_rx: broadcast::Receiver<OutputEvent>,
     sessions: Vec<Session>,
     session_output_cache: HashMap<String, Vec<OutputLine>>,
+    logs: Vec<ToolLogEntry>,
     selected_pane: Pane,
     selected_session: usize,
     show_help: bool,
@@ -99,6 +102,7 @@ impl Dashboard {
             output_rx,
             sessions,
             session_output_cache: HashMap::new(),
+            logs: Vec::new(),
             selected_pane: Pane::Sessions,
             selected_session: 0,
             show_help: false,
@@ -109,6 +113,7 @@ impl Dashboard {
             session_table_state,
         };
         dashboard.sync_selected_output();
+        dashboard.refresh_logs();
         dashboard
     }
 
@@ -300,15 +305,26 @@ impl Dashboard {
     }
 
     fn render_log(&self, frame: &mut Frame, area: Rect) {
-        let content = if let Some(session) = self.sessions.get(self.selected_session) {
-            format!(
-                "Split-pane grid layout reserved this pane for observability.\n\nSelected session: {}\nState: {}\n\nTool call history lands in the follow-on logging PR.",
-                &session.id[..8.min(session.id.len())],
-                session.state
-            )
+        let content = if self.sessions.get(self.selected_session).is_none() {
+            "No session selected.".to_string()
+        } else if self.logs.is_empty() {
+            "No tool logs available for this session yet.".to_string()
         } else {
-            "Split-pane grid layout reserved this pane for observability.\n\nNo session selected."
-                .to_string()
+            self.logs
+                .iter()
+                .map(|entry| {
+                    format!(
+                        "[{}] {} | {}ms | risk {:.0}%\ninput: {}\noutput: {}",
+                        self.short_timestamp(&entry.timestamp),
+                        entry.tool_name,
+                        entry.duration_ms,
+                        entry.risk_score * 100.0,
+                        self.log_field(&entry.input_summary),
+                        self.log_field(&entry.output_summary)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n")
         };
 
         let paragraph = Paragraph::new(content)
@@ -318,6 +334,7 @@ impl Dashboard {
                     .title(" Log ")
                     .border_style(self.pane_border_style(Pane::Log)),
             )
+            .scroll((self.output_scroll_offset as u16, 0))
             .wrap(Wrap { trim: false });
         frame.render_widget(paragraph, area);
     }
@@ -426,6 +443,7 @@ impl Dashboard {
                 self.sync_selection();
                 self.reset_output_view();
                 self.sync_selected_output();
+                self.refresh_logs();
             }
             Pane::Output => {
                 let max_scroll = self.max_output_scroll();
@@ -441,7 +459,10 @@ impl Dashboard {
                 }
             }
             Pane::Metrics => {}
-            Pane::Log => {}
+            Pane::Log => {
+                self.output_follow = false;
+                self.output_scroll_offset = self.output_scroll_offset.saturating_add(1);
+            }
             Pane::Sessions => {}
         }
     }
@@ -453,6 +474,7 @@ impl Dashboard {
                 self.sync_selection();
                 self.reset_output_view();
                 self.sync_selected_output();
+                self.refresh_logs();
             }
             Pane::Output => {
                 if self.output_follow {
@@ -463,7 +485,10 @@ impl Dashboard {
                 self.output_scroll_offset = self.output_scroll_offset.saturating_sub(1);
             }
             Pane::Metrics => {}
-            Pane::Log => {}
+            Pane::Log => {
+                self.output_follow = false;
+                self.output_scroll_offset = self.output_scroll_offset.saturating_sub(1);
+            }
         }
     }
 
@@ -517,6 +542,7 @@ impl Dashboard {
         self.sync_selection_by_id(selected_id.as_deref());
         self.ensure_selected_pane_visible();
         self.sync_selected_output();
+        self.refresh_logs();
     }
 
     fn sync_selection(&mut self) {
@@ -595,6 +621,21 @@ impl Dashboard {
     fn reset_output_view(&mut self) {
         self.output_follow = true;
         self.output_scroll_offset = 0;
+    }
+
+    fn refresh_logs(&mut self) {
+        let Some(session_id) = self.selected_session_id().map(ToOwned::to_owned) else {
+            self.logs.clear();
+            return;
+        };
+
+        match self.db.query_tool_logs(&session_id, 1, MAX_LOG_ENTRIES) {
+            Ok(page) => self.logs = page.entries,
+            Err(error) => {
+                tracing::warn!("Failed to load tool logs: {error}");
+                self.logs.clear();
+            }
+        }
     }
 
     fn aggregate_usage(&self) -> AggregateUsage {
@@ -765,6 +806,21 @@ impl Dashboard {
             PaneLayout::Vertical => "vertical",
             PaneLayout::Grid => "grid",
         }
+    }
+
+    fn log_field<'a>(&self, value: &'a str) -> &'a str {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            "n/a"
+        } else {
+            trimmed
+        }
+    }
+
+    fn short_timestamp(&self, timestamp: &str) -> String {
+        chrono::DateTime::parse_from_rfc3339(timestamp)
+            .map(|value| value.format("%H:%M:%S").to_string())
+            .unwrap_or_else(|_| timestamp.to_string())
     }
 
     #[cfg(test)]
@@ -1135,6 +1191,7 @@ mod tests {
             output_rx,
             sessions,
             session_output_cache: HashMap::new(),
+            logs: Vec::new(),
             selected_pane: Pane::Sessions,
             selected_session,
             show_help: false,

@@ -9,6 +9,7 @@ use super::runtime::capture_command_output;
 use super::store::StateStore;
 use super::{Session, SessionMetrics, SessionState};
 use crate::config::Config;
+use crate::observability::{log_tool_call, ToolCallEvent, ToolLogEntry, ToolLogPage, ToolLogger};
 use crate::worktree;
 
 pub async fn create_session(
@@ -34,6 +35,44 @@ pub fn get_status(db: &StateStore, id: &str) -> Result<SessionStatus> {
 
 pub async fn stop_session(db: &StateStore, id: &str) -> Result<()> {
     stop_session_with_options(db, id, true).await
+}
+
+pub fn record_tool_call(
+    db: &StateStore,
+    session_id: &str,
+    tool_name: &str,
+    input_summary: &str,
+    output_summary: &str,
+    duration_ms: u64,
+) -> Result<ToolLogEntry> {
+    let session = db
+        .get_session(session_id)?
+        .ok_or_else(|| anyhow::anyhow!("Session not found: {session_id}"))?;
+
+    let event = ToolCallEvent::new(
+        session.id.clone(),
+        tool_name,
+        input_summary,
+        output_summary,
+        duration_ms,
+    );
+    let entry = log_tool_call(db, &event)?;
+    db.increment_tool_calls(&session.id)?;
+
+    Ok(entry)
+}
+
+pub fn query_tool_calls(
+    db: &StateStore,
+    session_id: &str,
+    page: u64,
+    page_size: u64,
+) -> Result<ToolLogPage> {
+    let session = db
+        .get_session(session_id)?
+        .ok_or_else(|| anyhow::anyhow!("Session not found: {session_id}"))?;
+
+    ToolLogger::new(db).query(&session.id, page, page_size)
 }
 
 pub async fn resume_session(db: &StateStore, id: &str) -> Result<String> {
