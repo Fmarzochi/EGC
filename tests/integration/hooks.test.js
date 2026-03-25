@@ -91,11 +91,10 @@ function runHookWithInput(scriptPath, input = {}, env = {}, timeoutMs = 10000) {
 }
 
 function getSessionStartPayload(stdout) {
-  if (!stdout.trim()) {
-    return null;
-  }
-
-  return JSON.parse(stdout);
+  assert.ok(stdout.trim(), 'Expected SessionStart hook to emit stdout payload');
+  const payload = JSON.parse(stdout);
+  assert.strictEqual(payload.hookSpecificOutput?.hookEventName, 'SessionStart');
+  return payload;
 }
 
 /**
@@ -262,10 +261,9 @@ async function runTests() {
     // Session-start should write info to stderr
     assert.ok(result.stderr.length > 0, 'Should have stderr output');
     assert.ok(result.stderr.includes('[SessionStart]'), 'Should have [SessionStart] prefix');
-    if (result.stdout.trim()) {
-      const payload = getSessionStartPayload(result.stdout);
-      assert.strictEqual(payload.hookSpecificOutput?.hookEventName, 'SessionStart');
-    }
+    const payload = getSessionStartPayload(result.stdout);
+    assert.ok(payload.hookSpecificOutput, 'Should include hookSpecificOutput');
+    assert.strictEqual(payload.hookSpecificOutput.hookEventName, 'SessionStart');
   })) passed++; else failed++;
 
   if (await asyncTest('PreCompact hook logs to stderr', async () => {

@@ -35,7 +35,7 @@ function runHook(input, env = {}) {
   });
 
   return {
-    code: result.status ?? 0,
+    code: Number.isInteger(result.status) ? result.status : 1,
     stdout: result.stdout || '',
     stderr: result.stderr || ''
   };

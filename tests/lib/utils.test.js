@@ -74,8 +74,8 @@ function runTests() {
 
   if (test('getSessionSearchDirs includes canonical and legacy paths', () => {
     const searchDirs = utils.getSessionSearchDirs();
-    assert.ok(searchDirs.includes(utils.getSessionsDir()), 'Should include canonical session dir');
-    assert.ok(searchDirs.includes(utils.getLegacySessionsDir()), 'Should include legacy session dir');
+    assert.strictEqual(searchDirs[0], utils.getSessionsDir(), 'Canonical session dir should be searched first');
+    assert.strictEqual(searchDirs[1], utils.getLegacySessionsDir(), 'Legacy session dir should be searched second');
   })) passed++; else failed++;
 
   if (test('getTempDir returns valid temp directory', () => {
@@ -182,6 +182,14 @@ function runTests() {
       const twice = utils.sanitizeSessionId(once);
       assert.strictEqual(once, twice, `Expected idempotent result for ${input}`);
     }
+  })) passed++; else failed++;
+
+  if (test('sanitizeSessionId avoids Windows reserved device names', () => {
+    const con = utils.sanitizeSessionId('CON');
+    const aux = utils.sanitizeSessionId('aux');
+    assert.ok(con.startsWith('CON-'), `Expected CON to get a suffix, got: ${con}`);
+    assert.ok(aux.startsWith('aux-'), `Expected aux to get a suffix, got: ${aux}`);
+    assert.notStrictEqual(utils.sanitizeSessionId('COM1'), 'COM1');
   })) passed++; else failed++;
 
   // Session ID tests

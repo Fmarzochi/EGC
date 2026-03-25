@@ -322,6 +322,15 @@ function getAllSessions(options = {}) {
  * @returns {object|null} Session object or null if not found
  */
 function getSessionById(sessionId, includeContent = false) {
+  if (typeof sessionId !== 'string') {
+    return null;
+  }
+
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    return null;
+  }
+
   const sessions = getSessionCandidates();
 
   for (const session of sessions) {
@@ -334,9 +343,9 @@ function getSessionById(sessionId, includeContent = false) {
     };
 
     // Check if session ID matches (short ID or full filename without .tmp)
-    const shortIdMatch = sessionId.length > 0 && metadata.shortId !== 'no-id' && metadata.shortId.startsWith(sessionId);
-    const filenameMatch = filename === sessionId || filename === `${sessionId}.tmp`;
-    const noIdMatch = metadata.shortId === 'no-id' && filename === `${sessionId}-session.tmp`;
+    const shortIdMatch = metadata.shortId !== 'no-id' && metadata.shortId.startsWith(normalizedSessionId);
+    const filenameMatch = filename === normalizedSessionId || filename === `${normalizedSessionId}.tmp`;
+    const noIdMatch = metadata.shortId === 'no-id' && filename === `${normalizedSessionId}-session.tmp`;
 
     if (!shortIdMatch && !filenameMatch && !noIdMatch) {
       continue;

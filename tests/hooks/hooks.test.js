@@ -91,10 +91,7 @@ function getLegacySessionsDir(homeDir) {
 }
 
 function getSessionStartAdditionalContext(stdout) {
-  if (!stdout.trim()) {
-    return '';
-  }
-
+  assert.ok(stdout.trim(), 'Expected SessionStart hook to emit stdout payload');
   const payload = JSON.parse(stdout);
   assert.strictEqual(payload.hookSpecificOutput?.hookEventName, 'SessionStart', 'Should emit SessionStart hook payload');
   assert.strictEqual(typeof payload.hookSpecificOutput?.additionalContext, 'string', 'Should include additionalContext text');
@@ -427,6 +424,42 @@ async function runTests() {
         const additionalContext = getSessionStartAdditionalContext(result.stdout);
         assert.ok(additionalContext.includes('Previous session summary'), 'Should inject real session content');
         assert.ok(additionalContext.includes('authentication refactor'), 'Should include session content text');
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('prefers canonical session-data content over legacy duplicates', async () => {
+      const isoHome = path.join(os.tmpdir(), `ecc-canonical-start-${Date.now()}`);
+      const canonicalDir = getCanonicalSessionsDir(isoHome);
+      const legacyDir = getLegacySessionsDir(isoHome);
+      const filename = '2026-02-11-dupe1234-session.tmp';
+      const canonicalFile = path.join(canonicalDir, filename);
+      const legacyFile = path.join(legacyDir, filename);
+      const sameTime = new Date('2026-02-11T12:00:00Z');
+
+      fs.mkdirSync(canonicalDir, { recursive: true });
+      fs.mkdirSync(legacyDir, { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
+
+      fs.writeFileSync(canonicalFile, '# Canonical Session\n\nUse the canonical session-data copy.\n');
+      fs.writeFileSync(legacyFile, '# Legacy Session\n\nDo not prefer the legacy duplicate.\n');
+      fs.utimesSync(canonicalFile, sameTime, sameTime);
+      fs.utimesSync(legacyFile, sameTime, sameTime);
+
+      try {
+        const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome
+        });
+        assert.strictEqual(result.code, 0);
+        const additionalContext = getSessionStartAdditionalContext(result.stdout);
+        assert.ok(additionalContext.includes('canonical session-data copy'));
+        assert.ok(!additionalContext.includes('legacy duplicate'));
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
@@ -1924,6 +1957,8 @@ async function runTests() {
       assert.ok(sessionStartHook.command.includes("plugins','everything-claude-code@everything-claude-code'"), 'Should probe the namespaced legacy plugin root');
       assert.ok(sessionStartHook.command.includes("plugins','marketplace','everything-claude-code'"), 'Should probe the marketplace legacy plugin root');
       assert.ok(sessionStartHook.command.includes("plugins','cache','everything-claude-code'"), 'Should retain cache lookup fallback');
+      assert.ok(sessionStartHook.command.includes('if(hasRunnerRoot(envRoot))return path.resolve(envRoot.trim())'), 'Should validate CLAUDE_PLUGIN_ROOT before trusting it');
+      assert.ok(sessionStartHook.command.includes('else process.stdout.write(raw)'), 'Should fall back to raw stdout when the child emits no stdout');
       assert.ok(!sessionStartHook.command.includes('find '), 'Should not scan arbitrary plugin paths with find');
       assert.ok(!sessionStartHook.command.includes('head -n 1'), 'Should not pick the first matching plugin path');
     })

@@ -477,6 +477,12 @@ src/main.ts
     assert.strictEqual(result, null, 'Empty string should not match any session');
   })) passed++; else failed++;
 
+  if (test('getSessionById returns null for non-string IDs', () => {
+    assert.strictEqual(sessionManager.getSessionById(null), null);
+    assert.strictEqual(sessionManager.getSessionById(undefined), null);
+    assert.strictEqual(sessionManager.getSessionById(42), null);
+  })) passed++; else failed++;
+
   if (test('getSessionById metadata and stats populated when includeContent=true', () => {
     const result = sessionManager.getSessionById('abcd1234', true);
     assert.ok(result, 'Should find session');
@@ -1601,18 +1607,13 @@ src/main.ts
       'Null search should return sessions (confirming they exist but space filtered them)');
   })) passed++; else failed++;
 
-  // ── Round 98: getSessionById with null sessionId throws TypeError ──
-  console.log('\nRound 98: getSessionById (null sessionId — crashes at line 297):');
+  // ── Round 98: getSessionById with null sessionId returns null ──
+  console.log('\nRound 98: getSessionById (null sessionId — guarded null return):');
 
-  if (test('getSessionById(null) throws TypeError when session files exist', () => {
-    // session-manager.js line 297: `sessionId.length > 0` — calling .length on null
-    // throws TypeError because there's no early guard for null/undefined input.
-    // This only surfaces when valid .tmp files exist in the sessions directory.
-    assert.throws(
-      () => sessionManager.getSessionById(null),
-      { name: 'TypeError' },
-      'null.length should throw TypeError (no input guard at function entry)'
-    );
+  if (test('getSessionById(null) returns null when session files exist', () => {
+    // Keep a populated sessions directory so the early input guard is exercised even when
+    // candidate files are present.
+    assert.strictEqual(sessionManager.getSessionById(null), null);
   })) passed++; else failed++;
 
   // Cleanup test environment for Rounds 95-98 that needed sessions

@@ -13,6 +13,13 @@ const { execSync, spawnSync } = require('child_process');
 const isWindows = process.platform === 'win32';
 const isMacOS = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
+const SESSION_DATA_DIR_NAME = 'session-data';
+const LEGACY_SESSIONS_DIR_NAME = 'sessions';
+const WINDOWS_RESERVED_SESSION_IDS = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+]);
 
 /**
  * Get the user's home directory (cross-platform)
@@ -32,14 +39,14 @@ function getClaudeDir() {
  * Get the sessions directory
  */
 function getSessionsDir() {
-  return path.join(getClaudeDir(), 'session-data');
+  return path.join(getClaudeDir(), SESSION_DATA_DIR_NAME);
 }
 
 /**
  * Get the legacy sessions directory used by older ECC installs
  */
 function getLegacySessionsDir() {
-  return path.join(getClaudeDir(), 'sessions');
+  return path.join(getClaudeDir(), LEGACY_SESSIONS_DIR_NAME);
 }
 
 /**
@@ -143,9 +150,11 @@ function sanitizeSessionId(raw) {
     .replace(/^-+|-+$/g, '');
 
   if (sanitized.length > 0) {
-    if (!hasNonAscii) return sanitized;
-
     const suffix = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 6);
+    if (WINDOWS_RESERVED_SESSION_IDS.has(sanitized.toUpperCase())) {
+      return `${sanitized}-${suffix}`;
+    }
+    if (!hasNonAscii) return sanitized;
     return `${sanitized}-${suffix}`;
   }
 
