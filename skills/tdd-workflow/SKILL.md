@@ -51,6 +51,9 @@ ALWAYS write tests first, then implement code to make tests pass.
 - If the repository is under Git, create a checkpoint commit after each TDD stage
 - Do not squash or rewrite these checkpoint commits until the workflow is complete
 - Each checkpoint commit message must describe the stage and the exact evidence captured
+- Count only commits created on the current active branch for the current task
+- Do not treat commits from other branches, earlier unrelated work, or distant branch history as valid checkpoint evidence
+- Before treating a checkpoint as satisfied, verify that the commit is reachable from the current `HEAD` on the active branch and belongs to the current task sequence
 - The preferred compact workflow is:
   - one commit for failing test added and RED validated
   - one commit for minimal fix applied and GREEN validated
@@ -118,6 +121,7 @@ If the repository is under Git, create a checkpoint commit immediately after thi
 Recommended commit message format:
 - `test: add reproducer for <feature or bug>`
 - This commit may also serve as the RED validation checkpoint if the reproducer was compiled and executed and failed for the intended reason
+- Verify that this checkpoint commit is on the current active branch before continuing
 
 ### Step 4: Implement Code
 Write minimal code to make tests pass:
@@ -145,6 +149,7 @@ If the repository is under Git, create a checkpoint commit immediately after GRE
 Recommended commit message format:
 - `fix: <feature or bug>`
 - The fix commit may also serve as the GREEN validation checkpoint if the same relevant test target was rerun and passed
+- Verify that this checkpoint commit is on the current active branch before continuing
 
 ### Step 6: Refactor
 Improve code quality while keeping tests green:
@@ -156,6 +161,7 @@ Improve code quality while keeping tests green:
 If the repository is under Git, create a checkpoint commit immediately after refactoring is complete and tests remain green.
 Recommended commit message format:
 - `refactor: clean up after <feature or bug> implementation`
+- Verify that this checkpoint commit is on the current active branch before considering the TDD cycle complete
 
 ### Step 7: Verify Coverage
 ```bash
