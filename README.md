@@ -214,6 +214,20 @@ For manual install instructions see the README in the `rules/` folder.
 
 ✨ **That's it!** You now have access to 28 agents, 125 skills, and 60 commands.
 
+### Multi-model commands require additional setup
+
+> ⚠️ `multi-*` commands are **not** covered by the base plugin/rules install above.
+>
+> To use `/multi-plan`, `/multi-execute`, `/multi-backend`, `/multi-frontend`, and `/multi-workflow`, you must also install the `ccg-workflow` runtime.
+>
+> Initialize it with `npx ccg-workflow`.
+>
+> That runtime provides the external dependencies these commands expect, including:
+> - `~/.claude/bin/codeagent-wrapper`
+> - `~/.claude/.ccg/prompts/*`
+>
+> Without `ccg-workflow`, these `multi-*` commands will not run correctly.
+
 ---
 
 ## 🌐 Cross-Platform Support
