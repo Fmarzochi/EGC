@@ -163,7 +163,7 @@ The codebase follows ratatui conventions well:
 | Dashboard file exceeds 1500 lines (projected) | High | Medium | At 1,273 lines currently (Section 2); extract panes into modules before it grows further |
 | SQLite lock contention | Low | High | DbWriter pattern already handles this |
 | No agent diversity | Medium | Medium | Pluggable agent support |
-| Stale `git2` dependency | Low | Low | Remove from Cargo.toml |
+| SQLite lock contention | Low | High | DbWriter pattern already handles this |
 
 ---
 
