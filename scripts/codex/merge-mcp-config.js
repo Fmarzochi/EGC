@@ -257,6 +257,10 @@ function main() {
         if (resolvedLabel !== name) {
           raw = removeServerFromText(raw, name, existing);
         }
+        if (legacyName && hasCanonical) {
+          toRemoveLog.push(`mcp_servers.${legacyName}`);
+          raw = removeServerFromText(raw, legacyName, existing);
+        }
         toAppend.push(spec.toml);
       } else {
         // Add-only mode: skip, but warn about drift
