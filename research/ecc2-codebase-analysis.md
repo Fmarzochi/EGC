@@ -42,7 +42,7 @@ ECC2 is a Rust TUI application that orchestrates AI coding agent sessions. It us
 | TODO/FIXME comments | 0 |
 | Max file size | 1,273 lines (`dashboard.rs`) |
 
-**Assessment:** The codebase is clean. Only 3 `unwrap()` calls (2 in tests, 1 in config `default()`), zero `unsafe`, and all modules use proper `anyhow::Result` error propagation. The `dashboard.rs` file at 1,273 lines exceeds the 800-line target but is manageable.
+**Assessment:** The codebase is clean. Only 3 `unwrap()` calls (2 in tests, 1 in config `default()`), zero `unsafe`, and all modules use proper `anyhow::Result` error propagation. The `dashboard.rs` file at 1,273 lines exceeds the repo's 800-line max-file guideline, but it is still manageable at the current scope.
 
 ## 3. Identified Gaps
 
@@ -64,7 +64,7 @@ ECC2 is a Rust TUI application that orchestrates AI coding agent sessions. It us
 
 `Config::load()` reads `~/.claude/ecc2.toml` only. The implementation lacks environment variable overrides (e.g., `ECC_DB_PATH`, `ECC_WORKTREE_ROOT`) and CLI flags for configuration.
 
-### 3.5 Legacy Dependency: `git2`
+### 3.5 Removed Legacy Dependency: `git2`
 
 `git2 = "0.20"` was previously declared in `Cargo.toml` but the `worktree` module shells out to `git` CLI instead. The dependency adds ~30s to clean builds and increases binary size.
 
@@ -123,8 +123,7 @@ The untested modules are the ones doing I/O (spawning processes, writing to SQLi
 
 ### P0 — Quick Wins
 
-2. **Add environment variable support to `Config::load()`** — `ECC_DB_PATH`, `ECC_WORKTREE_ROOT`, `ECC_DEFAULT_AGENT`. Standard practice for CLI tools.
-2. **Add environment variable support to `Config::load()`** — `ECC_DB_PATH`, `ECC_WORKTREE_ROOT`, `ECC_DEFAULT_AGENT`. Standard practice for CLI tools.
+1. **Add environment variable support to `Config::load()`** — `ECC_DB_PATH`, `ECC_WORKTREE_ROOT`, `ECC_DEFAULT_AGENT`. Standard practice for CLI tools.
 
 ### P1 — Feature Completions
 
@@ -163,7 +162,7 @@ The codebase follows ratatui conventions well:
 | Dashboard file exceeds 1500 lines (projected) | High | Medium | At 1,273 lines currently (Section 2); extract panes into modules before it grows further |
 | SQLite lock contention | Low | High | DbWriter pattern already handles this |
 | No agent diversity | Medium | Medium | Pluggable agent support |
-| SQLite lock contention | Low | High | DbWriter pattern already handles this |
+| Task-string handling assumptions drift over time | Medium | Medium | Keep `Command` argument handling shell-free, document the threat model, and add regression tests for metacharacter-heavy task input |
 
 ---
 
