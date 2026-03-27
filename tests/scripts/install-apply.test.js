@@ -326,6 +326,121 @@ function runTests() {
     assert.ok(result.stderr.includes('Unknown install module: ghost-module'));
   })) passed++; else failed++;
 
+  if (test('merges hooks into settings.json for claude target install', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const claudeRoot = path.join(homeDir, '.claude');
+      assert.ok(fs.existsSync(path.join(claudeRoot, 'hooks', 'hooks.json')), 'hooks.json should be copied');
+
+      const settingsPath = path.join(claudeRoot, 'settings.json');
+      assert.ok(fs.existsSync(settingsPath), 'settings.json should exist after install');
+
+      const settings = readJson(settingsPath);
+      assert.ok(settings.hooks, 'settings.json should contain hooks key');
+      assert.ok(settings.hooks.PreToolUse, 'hooks should include PreToolUse');
+      assert.ok(Array.isArray(settings.hooks.PreToolUse), 'PreToolUse should be an array');
+      assert.ok(settings.hooks.PreToolUse.length > 0, 'PreToolUse should have entries');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('preserves existing settings fields and hook entries when merging hooks', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const claudeRoot = path.join(homeDir, '.claude');
+      fs.mkdirSync(claudeRoot, { recursive: true });
+      fs.writeFileSync(
+        path.join(claudeRoot, 'settings.json'),
+        JSON.stringify({
+          effortLevel: 'high',
+          env: { MY_VAR: '1' },
+          hooks: {
+            PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: 'echo custom-pretool' }] }],
+            UserPromptSubmit: [{ matcher: '*', hooks: [{ type: 'command', command: 'echo custom-submit' }] }],
+          },
+        }, null, 2)
+      );
+
+      const result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const settings = readJson(path.join(claudeRoot, 'settings.json'));
+      assert.strictEqual(settings.effortLevel, 'high', 'existing effortLevel should be preserved');
+      assert.deepStrictEqual(settings.env, { MY_VAR: '1' }, 'existing env should be preserved');
+      assert.ok(settings.hooks, 'hooks should be merged in');
+      assert.ok(settings.hooks.PreToolUse, 'PreToolUse hooks should exist');
+      assert.ok(
+        settings.hooks.PreToolUse.some(entry => JSON.stringify(entry).includes('echo custom-pretool')),
+        'existing PreToolUse entries should be preserved'
+      );
+      assert.ok(settings.hooks.PreToolUse.length > 1, 'ECC PreToolUse hooks should be appended');
+      assert.deepStrictEqual(
+        settings.hooks.UserPromptSubmit,
+        [{ matcher: '*', hooks: [{ type: 'command', command: 'echo custom-submit' }] }],
+        'user-defined hook event types should be preserved'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('reinstall does not duplicate managed hook entries', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const firstInstall = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(firstInstall.code, 0, firstInstall.stderr);
+
+      const settingsPath = path.join(homeDir, '.claude', 'settings.json');
+      const afterFirstInstall = readJson(settingsPath);
+      const preToolUseLength = afterFirstInstall.hooks.PreToolUse.length;
+
+      const secondInstall = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(secondInstall.code, 0, secondInstall.stderr);
+
+      const afterSecondInstall = readJson(settingsPath);
+      assert.strictEqual(
+        afterSecondInstall.hooks.PreToolUse.length,
+        preToolUseLength,
+        'managed hook entries should not duplicate on reinstall'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('fails when existing settings.json is malformed', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const claudeRoot = path.join(homeDir, '.claude');
+      fs.mkdirSync(claudeRoot, { recursive: true });
+      const settingsPath = path.join(claudeRoot, 'settings.json');
+      fs.writeFileSync(settingsPath, '{ invalid json\n');
+
+      const result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 1);
+      assert.ok(result.stderr.includes('Failed to parse existing settings at'));
+      assert.strictEqual(fs.readFileSync(settingsPath, 'utf8'), '{ invalid json\n');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs from ecc-install.json and persists component selections', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
