@@ -134,6 +134,9 @@ PROMPT
     --allowedTools "Read,Write" \
     -p "$(cat "$prompt_file")" >> "$LOG_FILE" 2>&1 &
   claude_pid=$!
+  # prompt_file content was already expanded by the shell; remove early to avoid
+  # leaving stale temp files during the (potentially long) analysis window.
+  rm -f "$prompt_file"
 
   (
     sleep "$timeout_seconds"
@@ -147,7 +150,7 @@ PROMPT
   wait "$claude_pid"
   exit_code=$?
   kill "$watchdog_pid" 2>/dev/null || true
-  rm -f "$prompt_file" "$analysis_file"
+  rm -f "$analysis_file"
 
   if [ "$exit_code" -ne 0 ]; then
     echo "[$(date)] Claude analysis failed (exit $exit_code)" >> "$LOG_FILE"
