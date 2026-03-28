@@ -48,6 +48,13 @@ jobs:
         with:
           version: latest
 
+      - name: Setup Yarn (via Corepack)
+        if: matrix.pm == 'yarn'
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare yarn@stable --activate
+
       - name: Setup Bun
         if: matrix.pm == 'bun'
         uses: oven-sh/setup-bun@v2
@@ -114,14 +121,18 @@ jobs:
             ${{ runner.os }}-bun-
 
       # Install dependencies
+      # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
+      # package.json declares "packageManager": "yarn@..."
       - name: Install dependencies
         shell: bash
+        env:
+          COREPACK_ENABLE_STRICT: '0'
         run: |
           case "${{ matrix.pm }}" in
             npm) npm ci ;;
-            pnpm) pnpm install ;;
-            # --ignore-engines required for Node 18 compat with some devDependencies (e.g., markdownlint-cli)
-            yarn) yarn install --ignore-engines ;;
+            pnpm) pnpm install --no-frozen-lockfile ;;
+            # Yarn Berry (v4+) removed --ignore-engines; engine checking is no longer a core feature
+            yarn) yarn install ;;
             bun) bun install ;;
             *) echo "Unsupported package manager: ${{ matrix.pm }}" && exit 1 ;;
           esac

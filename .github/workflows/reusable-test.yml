@@ -40,6 +40,13 @@ jobs:
         with:
           version: latest
 
+      - name: Setup Yarn (via Corepack)
+        if: inputs.package-manager == 'yarn'
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare yarn@stable --activate
+
       - name: Setup Bun
         if: inputs.package-manager == 'bun'
         uses: oven-sh/setup-bun@v2
@@ -104,13 +111,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
+      # package.json declares "packageManager": "yarn@..."
       - name: Install dependencies
         shell: bash
+        env:
+          COREPACK_ENABLE_STRICT: '0'
         run: |
           case "${{ inputs.package-manager }}" in
             npm) npm ci ;;
-            pnpm) pnpm install ;;
-            yarn) yarn install --ignore-engines ;;
+            pnpm) pnpm install --no-frozen-lockfile ;;
+            # Yarn Berry (v4+) removed --ignore-engines; engine checking is no longer a core feature
+            yarn) yarn install ;;
             bun) bun install ;;
             *) echo "Unsupported package manager: ${{ inputs.package-manager }}" && exit 1 ;;
           esac
