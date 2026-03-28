@@ -5,6 +5,21 @@ const path = require('path');
 
 const { writeInstallState } = require('../install-state');
 
+function readJsonObject(filePath, label) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    throw new Error(`Failed to parse ${label} at ${filePath}: ${error.message}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`Invalid ${label} at ${filePath}: expected a JSON object`);
+  }
+
+  return parsed;
+}
+
 function mergeHookEntries(existingEntries, incomingEntries) {
   const mergedEntries = [];
   const seenEntries = new Set();
@@ -22,39 +37,32 @@ function mergeHookEntries(existingEntries, incomingEntries) {
   return mergedEntries;
 }
 
-function mergeHooksIntoSettings(plan) {
+function findHooksSourcePath(plan, hooksDestinationPath) {
+  const operation = plan.operations.find(item => item.destinationPath === hooksDestinationPath);
+  return operation ? operation.sourcePath : null;
+}
+
+function buildMergedSettings(plan) {
   if (!plan.adapter || plan.adapter.target !== 'claude') {
-    return;
+    return null;
   }
 
-  const hooksJsonPath = path.join(plan.targetRoot, 'hooks', 'hooks.json');
-  if (!fs.existsSync(hooksJsonPath)) {
-    return;
+  const hooksDestinationPath = path.join(plan.targetRoot, 'hooks', 'hooks.json');
+  const hooksSourcePath = findHooksSourcePath(plan, hooksDestinationPath) || hooksDestinationPath;
+  if (!fs.existsSync(hooksSourcePath)) {
+    return null;
   }
 
-  let hooksConfig;
-  try {
-    hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
-  } catch (error) {
-    throw new Error(`Failed to parse hooks config at ${hooksJsonPath}: ${error.message}`);
-  }
-
+  const hooksConfig = readJsonObject(hooksSourcePath, 'hooks config');
   const incomingHooks = hooksConfig.hooks;
   if (!incomingHooks || typeof incomingHooks !== 'object' || Array.isArray(incomingHooks)) {
-    return;
+    throw new Error(`Invalid hooks config at ${hooksSourcePath}: expected "hooks" to be a JSON object`);
   }
 
   const settingsPath = path.join(plan.targetRoot, 'settings.json');
   let settings = {};
   if (fs.existsSync(settingsPath)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
-        throw new Error('root value must be a JSON object');
-      }
-    } catch (error) {
-      throw new Error(`Failed to parse existing settings at ${settingsPath}: ${error.message}`);
-    }
+    settings = readJsonObject(settingsPath, 'existing settings');
   }
 
   const existingHooks = settings.hooks && typeof settings.hooks === 'object' && !Array.isArray(settings.hooks)
@@ -73,17 +81,29 @@ function mergeHooksIntoSettings(plan) {
     hooks: mergedHooks,
   };
 
-  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2) + '\n', 'utf8');
+  return {
+    settingsPath,
+    mergedSettings,
+  };
 }
 
 function applyInstallPlan(plan) {
+  const mergedSettingsPlan = buildMergedSettings(plan);
+
   for (const operation of plan.operations) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
     fs.copyFileSync(operation.sourcePath, operation.destinationPath);
   }
 
-  mergeHooksIntoSettings(plan);
+  if (mergedSettingsPlan) {
+    fs.mkdirSync(path.dirname(mergedSettingsPlan.settingsPath), { recursive: true });
+    fs.writeFileSync(
+      mergedSettingsPlan.settingsPath,
+      JSON.stringify(mergedSettingsPlan.mergedSettings, null, 2) + '\n',
+      'utf8'
+    );
+  }
+
   writeInstallState(plan.installStatePath, plan.statePreview);
 
   return {

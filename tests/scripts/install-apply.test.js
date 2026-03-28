@@ -22,6 +22,8 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+const REPO_ROOT = path.join(__dirname, '..', '..');
+
 function run(args = [], options = {}) {
   const env = {
     ...process.env,
@@ -435,6 +437,8 @@ function runTests() {
       assert.strictEqual(result.code, 1);
       assert.ok(result.stderr.includes('Failed to parse existing settings at'));
       assert.strictEqual(fs.readFileSync(settingsPath, 'utf8'), '{ invalid json\n');
+      assert.ok(!fs.existsSync(path.join(claudeRoot, 'hooks', 'hooks.json')), 'hooks.json should not be copied on validation failure');
+      assert.ok(!fs.existsSync(path.join(claudeRoot, 'ecc', 'install-state.json')), 'install state should not be written on validation failure');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
@@ -453,10 +457,36 @@ function runTests() {
 
       const result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 1);
-      assert.ok(result.stderr.includes('Failed to parse existing settings at'));
-      assert.ok(result.stderr.includes('root value must be a JSON object'));
+      assert.ok(result.stderr.includes('Invalid existing settings at'));
+      assert.ok(result.stderr.includes('expected a JSON object'));
       assert.strictEqual(fs.readFileSync(settingsPath, 'utf8'), '[]\n');
+      assert.ok(!fs.existsSync(path.join(claudeRoot, 'hooks', 'hooks.json')), 'hooks.json should not be copied on validation failure');
+      assert.ok(!fs.existsSync(path.join(claudeRoot, 'ecc', 'install-state.json')), 'install state should not be written on validation failure');
     } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('fails when source hooks.json root is not an object before copying files', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    const sourceHooksPath = path.join(REPO_ROOT, 'hooks', 'hooks.json');
+    const originalHooks = fs.readFileSync(sourceHooksPath, 'utf8');
+
+    try {
+      fs.writeFileSync(sourceHooksPath, '[]\n');
+
+      const result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 1);
+      assert.ok(result.stderr.includes('Invalid hooks config at'));
+      assert.ok(result.stderr.includes('expected a JSON object'));
+
+      const claudeRoot = path.join(homeDir, '.claude');
+      assert.ok(!fs.existsSync(path.join(claudeRoot, 'hooks', 'hooks.json')), 'hooks.json should not be copied when source hooks are invalid');
+      assert.ok(!fs.existsSync(path.join(claudeRoot, 'ecc', 'install-state.json')), 'install state should not be written when source hooks are invalid');
+    } finally {
+      fs.writeFileSync(sourceHooksPath, originalHooks);
       cleanup(homeDir);
       cleanup(projectDir);
     }
