@@ -86,7 +86,7 @@ function dlxServer(name, pkg, extraFields, extraToml) {
 const ECC_SERVERS = {
   supabase: dlxServer('supabase', '@supabase/mcp-server-supabase@latest', { startup_timeout_sec: 20.0, tool_timeout_sec: 120.0 }, 'startup_timeout_sec = 20.0\ntool_timeout_sec = 120.0'),
   playwright: dlxServer('playwright', '@playwright/mcp@latest', { startup_timeout_sec: 30 }, 'startup_timeout_sec = 30'),
-  'context7-mcp': dlxServer('context7-mcp', '@upstash/context7-mcp', { startup_timeout_sec: 30 }, 'startup_timeout_sec = 30'),
+  'context7-mcp': dlxServer('context7-mcp', '@upstash/context7-mcp@latest', { startup_timeout_sec: 30 }, 'startup_timeout_sec = 30'),
   exa: {
     fields: { url: 'https://mcp.exa.ai/mcp' },
     toml: `[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"`
