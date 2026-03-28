@@ -124,6 +124,10 @@ PROMPT
     max_turns=10
   fi
 
+  # Ensure CWD is PROJECT_DIR so the relative analysis_relpath resolves correctly
+  # on all platforms, not just when the observer happens to be launched from the project root.
+  cd "$PROJECT_DIR"
+
   # Prevent observe.sh from recording this automated Haiku session as observations.
   # Pass prompt via -p flag instead of stdin redirect for Windows compatibility (#842).
   ECC_SKIP_OBSERVE=1 ECC_HOOK_PROFILE=minimal claude --model haiku --max-turns "$max_turns" --print \
