@@ -83,20 +83,23 @@ function dlxServer(name, pkg, extraFields, extraToml) {
 }
 
 /** Each entry: key = section name under mcp_servers, value = { toml, fields } */
+const DEFAULT_MCP_STARTUP_TIMEOUT_SEC = 30;
+const DEFAULT_MCP_STARTUP_TIMEOUT_TOML = `startup_timeout_sec = ${DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`;
+
 const ECC_SERVERS = {
   supabase: dlxServer('supabase', '@supabase/mcp-server-supabase@latest', { startup_timeout_sec: 20.0, tool_timeout_sec: 120.0 }, 'startup_timeout_sec = 20.0\ntool_timeout_sec = 120.0'),
-  playwright: dlxServer('playwright', '@playwright/mcp@latest'),
-  'context7-mcp': dlxServer('context7-mcp', '@upstash/context7-mcp'),
+  playwright: dlxServer('playwright', '@playwright/mcp@latest', { startup_timeout_sec: DEFAULT_MCP_STARTUP_TIMEOUT_SEC }, DEFAULT_MCP_STARTUP_TIMEOUT_TOML),
+  'context7-mcp': dlxServer('context7-mcp', '@upstash/context7-mcp@latest', { startup_timeout_sec: DEFAULT_MCP_STARTUP_TIMEOUT_SEC }, DEFAULT_MCP_STARTUP_TIMEOUT_TOML),
   exa: {
     fields: { url: 'https://mcp.exa.ai/mcp' },
     toml: `[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"`
   },
   github: {
-    fields: { command: 'bash', args: ['-lc', GH_BOOTSTRAP] },
-    toml: `[mcp_servers.github]\ncommand = "bash"\nargs = ["-lc", ${JSON.stringify(GH_BOOTSTRAP)}]`
+    fields: { command: 'bash', args: ['-lc', GH_BOOTSTRAP], startup_timeout_sec: DEFAULT_MCP_STARTUP_TIMEOUT_SEC },
+    toml: `[mcp_servers.github]\ncommand = "bash"\nargs = ["-lc", ${JSON.stringify(GH_BOOTSTRAP)}]\n${DEFAULT_MCP_STARTUP_TIMEOUT_TOML}`
   },
-  memory: dlxServer('memory', '@modelcontextprotocol/server-memory'),
-  'sequential-thinking': dlxServer('sequential-thinking', '@modelcontextprotocol/server-sequential-thinking')
+  memory: dlxServer('memory', '@modelcontextprotocol/server-memory', { startup_timeout_sec: DEFAULT_MCP_STARTUP_TIMEOUT_SEC }, DEFAULT_MCP_STARTUP_TIMEOUT_TOML),
+  'sequential-thinking': dlxServer('sequential-thinking', '@modelcontextprotocol/server-sequential-thinking', { startup_timeout_sec: DEFAULT_MCP_STARTUP_TIMEOUT_SEC }, DEFAULT_MCP_STARTUP_TIMEOUT_TOML)
 };
 
 // Append --features arg for supabase after dlxServer builds the base

@@ -38,10 +38,12 @@ notify = [
 [mcp_servers.github]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-github"]
+startup_timeout_sec = 30
 
 [mcp_servers.context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp@latest"]
+startup_timeout_sec = 30
 
 [mcp_servers.exa]
 url = "https://mcp.exa.ai/mcp"
@@ -49,14 +51,17 @@ url = "https://mcp.exa.ai/mcp"
 [mcp_servers.memory]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
+startup_timeout_sec = 30
 
 [mcp_servers.playwright]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest", "--extension"]
+startup_timeout_sec = 30
 
 [mcp_servers.sequential-thinking]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+startup_timeout_sec = 30
 
 # Additional MCP servers (uncomment as needed):
 # [mcp_servers.supabase]
