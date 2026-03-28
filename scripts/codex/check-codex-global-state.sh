@@ -91,7 +91,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   check_config_absent '^\s*collab\s*=' "deprecated collab flag is absent"
   # persistent_instructions is recommended but optional; warn instead of fail
   # so users who rely on AGENTS.md alone are not blocked (#967).
-  if rg -n '^persistent_instructions\s*=' "$CONFIG_FILE" >/dev/null 2>&1; then
+  if rg -n '^\s*persistent_instructions\s*=' "$CONFIG_FILE" >/dev/null 2>&1; then
     ok "persistent_instructions is configured"
   else
     warn "persistent_instructions is not set (recommended but optional)"
