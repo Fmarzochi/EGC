@@ -125,6 +125,7 @@
         "skills/kotlin-ktor-patterns",
         "skills/kotlin-patterns",
         "skills/kotlin-testing",
+        "skills/laravel-plugin-discovery",
         "skills/laravel-patterns",
         "skills/laravel-tdd",
         "skills/laravel-verification",
