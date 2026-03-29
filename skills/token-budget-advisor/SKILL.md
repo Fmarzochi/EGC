@@ -1,20 +1,18 @@
 ---
 name: token-budget-advisor
 description: >-
-  Intercepts the response flow to offer the user an informed choice about
-  how much depth/tokens to consume — BEFORE responding. Use this skill
-  when the user wants to control token consumption, adjust response depth,
-  choose between short/long answers, or optimize their prompt.
-  TRIGGER when: "token budget", "response token budget", "token count",
-  "token usage", "response length", "response depth", "brief answer",
-  "short answer", "detailed answer", "full answer",
-  "respuesta corta vs larga", "cuántos tokens", "ahorrar tokens",
-  "responde al 50%", "dame la versión corta", "quiero controlar cuánto usas",
-  "75%", "100%", "at 25%", "at 50%", "at 75%", "at 100%",
-  "give me the full answer", or any variant where the user wants
-  to control length, depth, or token usage — even without mentioning tokens.
+  Offers the user an informed choice about how much response depth to
+  consume before answering. Use this skill when the user explicitly
+  wants to control response length, depth, or token budget.
+  TRIGGER when: "token budget", "token count", "token usage", "token limit",
+  "response length", "answer depth", "short version", "brief answer",
+  "detailed answer", "exhaustive answer", "respuesta corta vs larga",
+  "cuántos tokens", "ahorrar tokens", "responde al 50%", "dame la versión
+  corta", "quiero controlar cuánto usas", or clear variants where the
+  user is explicitly asking to control answer size or depth.
   DO NOT TRIGGER when: user has already specified a level in the current
-  session (maintain it) or the request is clearly a one-word answer.
+  session (maintain it), the request is clearly a one-word answer, or
+  "token" refers to auth/session/payment tokens rather than response size.
 origin: community
 ---
 
@@ -35,12 +33,14 @@ Intercept the response flow to offer the user a choice about response depth **be
 
 ### Step 1 — Estimate input tokens
 
-Use the repository's canonical estimation guidance from `skills/context-budget`.
+Use the repository's canonical context-budget heuristics to estimate the prompt's token count mentally.
 
-- Prose-first prompts: `input_tokens ≈ word_count × 1.3`
-- Code-heavy or mixed prompts: `input_tokens ≈ char_count / 4`
+Use the same calibration guidance as [context-budget](../context-budget/SKILL.md):
 
-For mixed content, prefer the code-heavy estimate as the conservative default.
+- prose: `words × 1.3`
+- code-heavy or mixed/code blocks: `chars / 4`
+
+For mixed content, use the dominant content type and keep the estimate heuristic.
 
 ### Step 2 — Estimate response size by complexity
 
@@ -72,7 +72,7 @@ Choose your depth level:
 [3] Detailed    (75%)  ->  ~[tokens]   Full answer with alternatives
 [4] Exhaustive (100%)  ->  ~[tokens]   Everything, no limits
 
-Which level? (1-4 or say "25%", "50%", "75%", "100%")
+Which level? (1-4 or say "25% depth", "50% depth", "75% depth", "100% depth")
 
 Precision: heuristic estimate ~85-90% accuracy (±15%).
 ```
@@ -98,10 +98,10 @@ If the user already signals a level, respond at that level immediately without a
 
 | What they say                                      | Level |
 |----------------------------------------------------|-------|
-| "1" / "25%" / "short answer" / "brief" / "tldr" / "one-liner" | 25% |
-| "2" / "50%" / "moderate detail" / "balanced answer" | 50% |
-| "3" / "75%" / "detailed answer" / "thorough explanation" | 75% |
-| "4" / "100%" / "exhaustive" / "everything" / "full answer" | 100% |
+| "1" / "25% depth" / "short version" / "brief answer" / "tldr"  | 25%   |
+| "2" / "50% depth" / "moderate depth" / "balanced answer"        | 50%   |
+| "3" / "75% depth" / "detailed answer" / "thorough answer"       | 75%   |
+| "4" / "100% depth" / "exhaustive answer" / "full deep dive"     | 100%  |
 
 If the user set a level earlier in the session, **maintain it silently** for subsequent responses unless they change it.
 
@@ -113,19 +113,21 @@ This skill uses heuristic estimation — no real tokenizer. Accuracy ~85-90%, va
 
 ### Triggers
 
-- "Give me the brief answer first."
-- "How many tokens will your response use?"
+- "Give me the short version first."
+- "How many tokens will your answer use?"
 - "Respond at 50% depth."
-- "I want the full answer."
-- "Dame la version corta."
+- "I want the exhaustive answer, not the summary."
+- "Dame la version corta y luego la detallada."
 
 ### Does Not Trigger
 
-- "Explain OAuth token refresh flow." (`token` here is domain language, not a budget request)
-- "Why is this JWT token invalid?" (security/domain usage, not response sizing)
-- "What is 2 + 2?" (trivially short answer)
+- "What is a JWT token?"
+- "The checkout flow uses a payment token."
+- "Is this normal?"
+- "Complete the refactor."
+- Follow-up questions after the user already chose a depth for the session
 
 ## Source
 
 Standalone skill from [TBA — Token Budget Advisor for Claude Code](https://github.com/Xabilimon1/Token-Budget-Advisor-Claude-Code-).
-The upstream project includes an optional estimator script, but this ECC skill intentionally stays zero-dependency and heuristic-only.
+Original project also ships a Python estimator script, but this repository keeps the skill self-contained and heuristic-only.
