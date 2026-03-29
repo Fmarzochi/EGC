@@ -213,6 +213,29 @@ test('marketplace.json plugin entries have required fields', () => {
   }
 });
 
+test('marketplace local plugin path resolves to the repo-root Codex bundle', () => {
+  for (const plugin of marketplace.plugins) {
+    if (!plugin.source || plugin.source.source !== 'local') {
+      continue;
+    }
+
+    const resolvedRoot = path.resolve(path.dirname(marketplacePath), plugin.source.path);
+    assert.strictEqual(
+      resolvedRoot,
+      repoRoot,
+      `Expected local marketplace path to resolve to repo root, got: ${plugin.source.path}`,
+    );
+    assert.ok(
+      fs.existsSync(path.join(resolvedRoot, '.codex-plugin', 'plugin.json')),
+      `Codex plugin manifest missing under resolved marketplace root: ${plugin.source.path}`,
+    );
+    assert.ok(
+      fs.existsSync(path.join(resolvedRoot, '.mcp.json')),
+      `Root MCP config missing under resolved marketplace root: ${plugin.source.path}`,
+    );
+  }
+});
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
