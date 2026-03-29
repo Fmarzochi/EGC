@@ -29,6 +29,16 @@ get_trae_dir() {
     fi
 }
 
+ensure_manifest_entry() {
+    local manifest="$1"
+    local entry="$2"
+
+    touch "$manifest"
+    if ! grep -Fqx "$entry" "$manifest"; then
+        echo "$entry" >> "$manifest"
+    fi
+}
+
 # Install function
 do_install() {
     local target_dir="$PWD"
@@ -70,7 +80,7 @@ do_install() {
 
     # Manifest file to track installed files
     MANIFEST="$trae_full_path/.ecc-manifest"
-    rm -f "$MANIFEST"
+    touch "$MANIFEST"
 
     # Counters for summary
     commands=0
@@ -86,9 +96,11 @@ do_install() {
             local_name=$(basename "$f")
             target_path="$trae_full_path/commands/$local_name"
             if [ ! -f "$target_path" ]; then
-                cp "$f" "$target_path" 2>/dev/null || true
-                echo "commands/$local_name" >> "$MANIFEST"
+                cp "$f" "$target_path"
+                ensure_manifest_entry "$MANIFEST" "commands/$local_name"
                 commands=$((commands + 1))
+            else
+                ensure_manifest_entry "$MANIFEST" "commands/$local_name"
             fi
         done
     fi
@@ -100,9 +112,11 @@ do_install() {
             local_name=$(basename "$f")
             target_path="$trae_full_path/agents/$local_name"
             if [ ! -f "$target_path" ]; then
-                cp "$f" "$target_path" 2>/dev/null || true
-                echo "agents/$local_name" >> "$MANIFEST"
+                cp "$f" "$target_path"
+                ensure_manifest_entry "$MANIFEST" "agents/$local_name"
                 agents=$((agents + 1))
+            else
+                ensure_manifest_entry "$MANIFEST" "agents/$local_name"
             fi
         done
     fi
@@ -113,15 +127,21 @@ do_install() {
             [ -d "$d" ] || continue
             skill_name="$(basename "$d")"
             target_skill_dir="$trae_full_path/skills/$skill_name"
-            if [ ! -d "$target_skill_dir" ]; then
-                mkdir -p "$target_skill_dir"
-                cp -r "$d"* "$target_skill_dir/" 2>/dev/null || true
-                for skill_file in "$target_skill_dir"/*; do
-                    [ -f "$skill_file" ] || continue
-                    relative_path="skills/$skill_name/$(basename "$skill_file")"
-                    echo "$relative_path" >> "$MANIFEST"
-                done
-                echo "skills/$skill_name" >> "$MANIFEST"
+            skill_copied=0
+
+            while IFS= read -r source_file; do
+                relative_path="${source_file#$d}"
+                target_path="$target_skill_dir/$relative_path"
+
+                mkdir -p "$(dirname "$target_path")"
+                if [ ! -f "$target_path" ]; then
+                    cp "$source_file" "$target_path"
+                    skill_copied=1
+                fi
+                ensure_manifest_entry "$MANIFEST" "skills/$skill_name/$relative_path"
+            done < <(find "$d" -type f | sort)
+
+            if [ "$skill_copied" -eq 1 ]; then
                 skills=$((skills + 1))
             fi
         done
@@ -129,18 +149,17 @@ do_install() {
 
     # Copy rules from repo root
     if [ -d "$REPO_ROOT/rules" ]; then
-        if [ -d "$REPO_ROOT/rules/common" ]; then
-            for f in "$REPO_ROOT/rules/common"/*.md; do
-                [ -f "$f" ] || continue
-                local_name=$(basename "$f")
-                target_path="$trae_full_path/rules/$local_name"
-                if [ ! -f "$target_path" ]; then
-                    cp "$f" "$target_path" 2>/dev/null || true
-                    echo "rules/$local_name" >> "$MANIFEST"
-                    rules=$((rules + 1))
-                fi
-            done
-        fi
+        while IFS= read -r rule_file; do
+            relative_path="${rule_file#$REPO_ROOT/rules/}"
+            target_path="$trae_full_path/rules/$relative_path"
+
+            mkdir -p "$(dirname "$target_path")"
+            if [ ! -f "$target_path" ]; then
+                cp "$rule_file" "$target_path"
+                rules=$((rules + 1))
+            fi
+            ensure_manifest_entry "$MANIFEST" "rules/$relative_path"
+        done < <(find "$REPO_ROOT/rules" -type f | sort)
     fi
 
     # Copy README files from this directory
@@ -149,9 +168,11 @@ do_install() {
             local_name=$(basename "$readme_file")
             target_path="$trae_full_path/$local_name"
             if [ ! -f "$target_path" ]; then
-                cp "$readme_file" "$target_path" 2>/dev/null || true
-                echo "$local_name" >> "$MANIFEST"
+                cp "$readme_file" "$target_path"
+                ensure_manifest_entry "$MANIFEST" "$local_name"
                 other=$((other + 1))
+            else
+                ensure_manifest_entry "$MANIFEST" "$local_name"
             fi
         fi
     done
@@ -162,16 +183,18 @@ do_install() {
             local_name=$(basename "$script_file")
             target_path="$trae_full_path/$local_name"
             if [ ! -f "$target_path" ]; then
-                cp "$script_file" "$target_path" 2>/dev/null || true
-                chmod +x "$target_path" 2>/dev/null || true
-                echo "$local_name" >> "$MANIFEST"
+                cp "$script_file" "$target_path"
+                chmod +x "$target_path"
+                ensure_manifest_entry "$MANIFEST" "$local_name"
                 other=$((other + 1))
+            else
+                ensure_manifest_entry "$MANIFEST" "$local_name"
             fi
         fi
     done
 
     # Add manifest file itself to manifest
-    echo ".ecc-manifest" >> "$MANIFEST"
+    ensure_manifest_entry "$MANIFEST" ".ecc-manifest"
 
     # Installation summary
     echo "Installation complete!"

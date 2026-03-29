@@ -1,6 +1,6 @@
 # Everything Claude Code for Trae
 
-Bring [Everything Claude Code](https://github.com/anthropics/courses/tree/master/everything-claude-code) (ECC) workflows to Trae IDE. This repository provides custom commands, agents, skills, and rules that can be installed into any Trae project with a single command.
+Bring Everything Claude Code (ECC) workflows to Trae IDE. This repository provides custom commands, agents, skills, and rules that can be installed into any Trae project with a single command.
 
 ## Quick Start
 
@@ -76,11 +76,12 @@ This creates `~/.trae-cn/` with all ECC components. All Trae projects will use t
 ### Force Environment
 
 ```bash
-# Force CN environment (global setting)
-TRAE_ENV=cn ./install.sh
+# From project root, force the CN environment
+TRAE_ENV=cn .trae/install.sh
 
-# Use default environment (default)
-./install.sh
+# From inside the .trae folder
+cd .trae
+TRAE_ENV=cn ./install.sh
 ```
 
 **Note**: `TRAE_ENV` is a global environment variable that applies to the entire installation session.

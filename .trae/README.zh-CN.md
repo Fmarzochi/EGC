@@ -1,6 +1,6 @@
 # Everything Claude Code for Trae
 
-为 Trae IDE 带来 [Everything Claude Code](https://github.com/anthropics/courses/tree/master/everything-claude-code) (ECC) 工作流。此仓库提供自定义命令、智能体、技能和规则，可以通过单个命令安装到任何 Trae 项目中。
+为 Trae IDE 带来 Everything Claude Code (ECC) 工作流。此仓库提供自定义命令、智能体、技能和规则，可以通过单个命令安装到任何 Trae 项目中。
 
 ## 快速开始
 
@@ -84,10 +84,11 @@ TRAE_ENV=cn .trae/install.sh ~
 ### 强制指定环境
 
 ```bash
-# 强制使用 CN 环境
-TRAE_ENV=cn ./install.sh
+# 从项目根目录强制使用 CN 环境
+TRAE_ENV=cn .trae/install.sh
 
-# 使用默认环境
+# 进入 .trae 目录后使用默认环境
+cd .trae
 ./install.sh
 ```
 

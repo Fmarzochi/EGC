@@ -26,6 +26,22 @@ get_trae_dir() {
     fi
 }
 
+resolve_path() {
+    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+}
+
+is_valid_manifest_entry() {
+    local file_path="$1"
+
+    case "$file_path" in
+        ""|/*|~*|*/../*|../*|*/..|..)
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
 # Main uninstall function
 do_uninstall() {
     local target_dir="$PWD"
@@ -61,6 +77,8 @@ do_uninstall() {
         exit 1
     fi
     
+    trae_root_resolved="$(resolve_path "$trae_full_path")"
+
     # Manifest file path
     MANIFEST="$trae_full_path/.ecc-manifest"
     
@@ -100,18 +118,35 @@ do_uninstall() {
     # Read manifest and remove files
     while IFS= read -r file_path; do
         [ -z "$file_path" ] && continue
-        
+
+        if ! is_valid_manifest_entry "$file_path"; then
+            echo "Skipped: $file_path (invalid manifest entry)"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
         full_path="$trae_full_path/$file_path"
-        
-        if [ -f "$full_path" ]; then
-            rm -f "$full_path"
+        resolved_full="$(resolve_path "$full_path")"
+
+        case "$resolved_full" in
+            "$trae_root_resolved"|"$trae_root_resolved"/*)
+                ;;
+            *)
+                echo "Skipped: $file_path (invalid manifest entry)"
+                skipped=$((skipped + 1))
+                continue
+                ;;
+        esac
+
+        if [ -f "$resolved_full" ]; then
+            rm -f "$resolved_full"
             echo "Removed: $file_path"
             removed=$((removed + 1))
-        elif [ -d "$full_path" ]; then
+        elif [ -d "$resolved_full" ]; then
             # Only remove directory if it's empty
-            if [ -z "$(ls -A "$full_path" 2>/dev/null)" ]; then
-                rmdir "$full_path" 2>/dev/null || true
-                if [ ! -d "$full_path" ]; then
+            if [ -z "$(ls -A "$resolved_full" 2>/dev/null)" ]; then
+                rmdir "$resolved_full" 2>/dev/null || true
+                if [ ! -d "$resolved_full" ]; then
                     echo "Removed: $file_path/"
                     removed=$((removed + 1))
                 fi
@@ -123,18 +158,16 @@ do_uninstall() {
             skipped=$((skipped + 1))
         fi
     done < "$MANIFEST"
-    
-    # Try to remove subdirectories if they're empty
-    for subdir in commands agents skills rules; do
-        subdir_path="$trae_full_path/$subdir"
-        if [ -d "$subdir_path" ] && [ -z "$(ls -A "$subdir_path" 2>/dev/null)" ]; then
-            rmdir "$subdir_path" 2>/dev/null || true
-            if [ ! -d "$subdir_path" ]; then
-                echo "Removed: $subdir/"
-                removed=$((removed + 1))
-            fi
+
+    while IFS= read -r empty_dir; do
+        [ "$empty_dir" = "$trae_full_path" ] && continue
+        relative_dir="${empty_dir#$trae_full_path/}"
+        rmdir "$empty_dir" 2>/dev/null || true
+        if [ ! -d "$empty_dir" ]; then
+            echo "Removed: $relative_dir/"
+            removed=$((removed + 1))
         fi
-    done
+    done < <(find "$trae_full_path" -depth -type d -empty 2>/dev/null | sort -r)
     
     # Try to remove the main trae directory if it's empty
     if [ -d "$trae_full_path" ] && [ -z "$(ls -A "$trae_full_path" 2>/dev/null)" ]; then
