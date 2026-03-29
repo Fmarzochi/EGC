@@ -86,7 +86,8 @@ startup_timeout_sec = 30
 # args = ["-y", "@cloudflare/mcp-server-cloudflare"]
 
 [features]
-# Codex multi-agent support is experimental as of March 2026.
+# Codex multi-agent collaboration is stable and on by default in current builds.
+# Keep the explicit toggle here so the repo documents its expectation clearly.
 multi_agent = true
 
 # Profiles — switch with `codex -p <name>`
@@ -101,6 +102,9 @@ sandbox_mode = "workspace-write"
 web_search = "live"
 
 [agents]
+[agents]
+# Multi-agent role limits and local role definitions.
+# These map to `.codex/agents/*.toml` and mirror the repo's explorer/reviewer/docs workflow.
 max_threads = 6
 max_depth = 1
 

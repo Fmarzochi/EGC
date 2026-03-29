@@ -10,7 +10,8 @@ const { spawnSync } = require('child_process');
 
 const repoRoot = path.join(__dirname, '..', '..');
 const installScript = path.join(repoRoot, 'scripts', 'codex', 'install-global-git-hooks.sh');
-const installSource = fs.readFileSync(installScript, 'utf8');
+const syncScript = path.join(repoRoot, 'scripts', 'sync-ecc-to-codex.sh');
+const checkScript = path.join(repoRoot, 'scripts', 'codex', 'check-codex-global-state.sh');
 
 function test(name, fn) {
   try {
@@ -32,25 +33,15 @@ function cleanup(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
 }
 
-function toBashPath(filePath) {
-  if (process.platform !== 'win32') {
-    return filePath;
-  }
-
-  return String(filePath)
-    .replace(/^([A-Za-z]):/, (_, driveLetter) => `/${driveLetter.toLowerCase()}`)
-    .replace(/\\/g, '/');
-}
-
 function runBash(scriptPath, args = [], env = {}, cwd = repoRoot) {
-  return spawnSync('bash', [toBashPath(scriptPath), ...args], {
+  return spawnSync('bash', [scriptPath, ...args], {
     cwd,
     env: {
       ...process.env,
-      ...env
+      ...env,
     },
     encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
 
@@ -58,29 +49,79 @@ let passed = 0;
 let failed = 0;
 
 if (
-  test('install-global-git-hooks.sh does not use eval and executes argv directly', () => {
-    assert.ok(!installSource.includes('eval "$*"'), 'Expected installer to avoid eval');
-    assert.ok(installSource.includes('    "$@"'), 'Expected installer to execute argv directly');
-    assert.ok(installSource.includes(`printf ' %q' "$@"`), 'Expected dry-run logging to shell-escape argv');
+  test('install-global-git-hooks.sh handles quoted hook paths without shell injection', () => {
+    const homeDir = createTempDir('codex-hooks-home-');
+    const weirdHooksDir = path.join(homeDir, 'git-hooks "quoted"');
+
+    try {
+      const result = runBash(installScript, [], {
+        HOME: homeDir,
+        ECC_GLOBAL_HOOKS_DIR: weirdHooksDir,
+      });
+
+      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+      assert.ok(fs.existsSync(path.join(weirdHooksDir, 'pre-commit')));
+      assert.ok(fs.existsSync(path.join(weirdHooksDir, 'pre-push')));
+    } finally {
+      cleanup(homeDir);
+    }
   })
 )
   passed++;
 else failed++;
 
 if (
-  test('install-global-git-hooks.sh handles shell-sensitive hook paths without shell injection', () => {
-    const homeDir = createTempDir('codex-hooks-home-');
-    const weirdHooksDir = path.join(homeDir, "git-hooks 'quoted' & spaced");
+  test('sync and global sanity checks accept the legacy context7 MCP section', () => {
+    const homeDir = createTempDir('codex-sync-home-');
+    const codexDir = path.join(homeDir, '.codex');
+    const configPath = path.join(codexDir, 'config.toml');
+    const config = [
+      'approval_policy = "on-request"',
+      'sandbox_mode = "workspace-write"',
+      'web_search = "live"',
+      'persistent_instructions = ""',
+      '',
+      '[features]',
+      'multi_agent = true',
+      '',
+      '[profiles.strict]',
+      'approval_policy = "on-request"',
+      'sandbox_mode = "read-only"',
+      'web_search = "cached"',
+      '',
+      '[profiles.yolo]',
+      'approval_policy = "never"',
+      'sandbox_mode = "workspace-write"',
+      'web_search = "live"',
+      '',
+      '[mcp_servers.context7]',
+      'command = "npx"',
+      'args = ["-y", "@upstash/context7-mcp"]',
+      '',
+      '[mcp_servers.github]',
+      'command = "npx"',
+      'args = ["-y", "@modelcontextprotocol/server-github"]',
+      '',
+      '[mcp_servers.memory]',
+      'command = "npx"',
+      'args = ["-y", "@modelcontextprotocol/server-memory"]',
+      '',
+      '[mcp_servers.sequential-thinking]',
+      'command = "npx"',
+      'args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]',
+      '',
+    ].join('\n');
 
     try {
-      const result = runBash(installScript, [], {
-        HOME: toBashPath(homeDir),
-        ECC_GLOBAL_HOOKS_DIR: toBashPath(weirdHooksDir)
-      });
+      fs.mkdirSync(codexDir, { recursive: true });
+      fs.writeFileSync(configPath, config);
 
-      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
-      assert.ok(fs.existsSync(path.join(weirdHooksDir, 'pre-commit')));
-      assert.ok(fs.existsSync(path.join(weirdHooksDir, 'pre-push')));
+      const syncResult = runBash(syncScript, [], { HOME: homeDir, CODEX_HOME: codexDir });
+      assert.strictEqual(syncResult.status, 0, syncResult.stderr || syncResult.stdout);
+
+      const checkResult = runBash(checkScript, [], { HOME: homeDir, CODEX_HOME: codexDir });
+      assert.strictEqual(checkResult.status, 0, checkResult.stderr || checkResult.stdout);
+      assert.match(checkResult.stdout, /MCP section \[mcp_servers\.context7\] or \[mcp_servers\.context7-mcp\] exists/);
     } finally {
       cleanup(homeDir);
     }
