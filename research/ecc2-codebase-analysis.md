@@ -64,9 +64,9 @@ ECC2 is a Rust TUI application that orchestrates AI coding agent sessions. It us
 
 `Config::load()` reads `~/.claude/ecc2.toml` only. The implementation lacks environment variable overrides (e.g., `ECC_DB_PATH`, `ECC_WORKTREE_ROOT`) and CLI flags for configuration.
 
-### 3.5 Removed Legacy Dependency: `git2`
+### 3.5 Legacy Dependency Candidate: `git2`
 
-`git2 = "0.20"` was previously declared in `Cargo.toml` but the `worktree` module shells out to `git` CLI instead. The dependency adds ~30s to clean builds and increases binary size.
+`git2 = "0.20"` is still declared in `Cargo.toml`, but the `worktree` module shells out to the `git` CLI instead. That makes `git2` a strong removal candidate rather than an already-completed cleanup.
 
 ### 3.6 No Metrics Aggregation
 
@@ -78,24 +78,26 @@ ECC2 is a Rust TUI application that orchestrates AI coding agent sessions. It us
 
 ## 4. Test Coverage Analysis
 
-29 test functions across 12 test modules:
+34 test functions across 10 source modules:
 
 | Module | Tests | Coverage Focus |
 |--------|------:|----------------|
+| `main.rs` | 1 | CLI parsing |
 | `config/mod.rs` | 5 | Defaults, deserialization, legacy fallback |
-| `session/mod.rs` | 6 | State machine transitions |
-| `session/store.rs` | 10 | CRUD, migration, message ops |
-| `session/output.rs` | 4 | Ring buffer, broadcast |
-| `observability/mod.rs` | 4 | Risk scoring, tool assessment |
+| `observability/mod.rs` | 5 | Risk scoring, persistence, pagination |
+| `session/daemon.rs` | 2 | Crash recovery / liveness handling |
+| `session/manager.rs` | 4 | Session lifecycle, resume, stop, latest status |
+| `session/output.rs` | 2 | Ring buffer, broadcast |
+| `session/runtime.rs` | 1 | Output capture persistence/events |
+| `session/store.rs` | 3 | Buffer window, migration, state transitions |
+| `tui/dashboard.rs` | 8 | Rendering, selection, pane navigation, scrolling |
+| `tui/widgets.rs` | 3 | Token meter rendering and thresholds |
 
-**Missing test coverage:**
-- `dashboard.rs` — 0 tests (1,273 lines, the largest module)
-- `manager.rs` — 0 tests (680 lines, session lifecycle)
-- `runtime.rs` — 0 tests (process output capture)
-- `daemon.rs` — 0 tests (background monitoring)
+**Direct coverage gaps:**
 - `comms/mod.rs` — 0 tests
+- `worktree/mod.rs` — 0 tests
 
-The untested modules are the ones doing I/O (spawning processes, writing to SQLite, reading from stdout). These need integration tests with mockable boundaries.
+The core I/O-heavy paths are no longer completely untested: `manager.rs`, `runtime.rs`, and `daemon.rs` each have targeted tests. The remaining gap is breadth rather than total absence, especially around `comms/`, `worktree/`, and more adversarial process/worktree failure cases.
 
 ## 5. Security Observations
 
@@ -117,7 +119,7 @@ The untested modules are the ones doing I/O (spawning processes, writing to SQLi
 | chrono | 0.4 | **0.4.44** | Update available |
 | uuid | 1 | **1.22.0** | Update available |
 
-`git2` has been removed (it was unused — the `worktree` module shells out to `git` CLI). Several other dependencies are outdated; update before the next release.
+`git2` is still present in `Cargo.toml` even though the `worktree` module shells out to the `git` CLI. Several other dependencies are outdated; either remove `git2` or start using it before the next release.
 
 ## 7. Recommendations (Prioritized)
 
@@ -133,15 +135,16 @@ The untested modules are the ones doing I/O (spawning processes, writing to SQLi
 
 ### P2 — Robustness
 
-5. **Add integration tests for `manager.rs` and `runtime.rs`** — these modules do process spawning and I/O. Test with mock agents (`/bin/echo`, `/bin/false`).
-6. **Add daemon health reporting** — PID file, structured logging, graceful shutdown via signal handler.
-7. **Task string security audit** — The session task uses `claude --print` via `tokio::process::Command`. Verify arguments are never shell-interpreted. Checklist: confirm `Command` arg usage, threat-model metacharacter injection, input validation/escaping strategy, logging of raw inputs, and automated tests. Re-audit if invocation code changes.
-8. **Break up `dashboard.rs`** — extract SessionsPane, OutputPane, MetricsPane, LogPane into separate files under `tui/panes/`.
+5. **Expand integration coverage for `manager.rs`, `runtime.rs`, and `daemon.rs`** — the repo now has baseline tests here, but it still needs failure-path coverage around process crashes, timeouts, and cleanup edge cases.
+6. **Add first-party tests for `worktree/mod.rs` and `comms/mod.rs`** — these are still uncovered and back important orchestration features.
+7. **Add daemon health reporting** — PID file, structured logging, graceful shutdown via signal handler.
+8. **Task string security audit** — The session task uses `claude --print` via `tokio::process::Command`. Verify arguments are never shell-interpreted. Checklist: confirm `Command` arg usage, threat-model metacharacter injection, input validation/escaping strategy, logging of raw inputs, and automated tests. Re-audit if invocation code changes.
+9. **Break up `dashboard.rs`** — extract SessionsPane, OutputPane, MetricsPane, LogPane into separate files under `tui/panes/`.
 
 ### P3 — Extensibility
 
-9. **Multi-agent support** — make `agent_program()` pluggable. Add `codex`, `opencode`, `custom` agent types.
-10. **Config validation** — validate risk thresholds sum correctly, budget values are positive, paths exist.
+10. **Multi-agent support** — make `agent_program()` pluggable. Add `codex`, `opencode`, `custom` agent types.
+11. **Config validation** — validate risk thresholds sum correctly, budget values are positive, paths exist.
 
 ## 8. Comparison with Ratatui 0.29 Best Practices
 
