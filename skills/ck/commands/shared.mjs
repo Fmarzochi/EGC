@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { resolve, basename } from 'path';
 import { homedir } from 'os';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { randomBytes } from 'crypto';
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
@@ -144,11 +144,13 @@ export function shortId() {
 
 function runGit(args, cwd) {
   try {
-    return execSync(`git -C "${cwd}" ${args}`, {
+    const result = spawnSync('git', ['-C', cwd, ...args], {
       timeout: 3000,
       stdio: 'pipe',
       encoding: 'utf8',
-    }).trim();
+    });
+    if (result.status !== 0) return null;
+    return result.stdout.trim();
   } catch {
     return null;
   }
@@ -156,7 +158,7 @@ function runGit(args, cwd) {
 
 export function gitLogSince(projectPath, sinceDate) {
   if (!sinceDate) return null;
-  return runGit(`log --oneline --since="${sinceDate}"`, projectPath);
+  return runGit(['log', '--oneline', `--since=${sinceDate}`], projectPath);
 }
 
 export function gitSummary(projectPath, sinceDate) {
@@ -166,9 +168,9 @@ export function gitSummary(projectPath, sinceDate) {
   if (commits === 0) return null;
 
   // Count unique files changed: use a separate runGit call to avoid nested shell substitution
-  const countStr = runGit(`rev-list --count HEAD --since="${sinceDate}"`, projectPath);
+  const countStr = runGit(['rev-list', '--count', 'HEAD', `--since=${sinceDate}`], projectPath);
   const revCount = countStr ? parseInt(countStr, 10) : commits;
-  const diff = runGit(`diff --shortstat HEAD~${Math.min(revCount, 50)}..HEAD`, projectPath);
+  const diff = runGit(['diff', '--shortstat', `HEAD~${Math.min(revCount, 50)}..HEAD`], projectPath);
 
   if (diff) {
     const filesMatch = diff.match(/(\d+) file/);

@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { homedir } from 'os';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 const CK_HOME         = resolve(homedir(), '.claude', 'ck');
 const PROJECTS_FILE   = resolve(CK_HOME, 'projects.json');
@@ -47,10 +47,14 @@ function stalenessIcon(dateStr) {
 function gitLogSince(projectPath, sinceDate) {
   if (!sinceDate || !existsSync(resolve(projectPath, '.git'))) return null;
   try {
-    const result = execSync(`git -C "${projectPath}" log --oneline --since="${sinceDate}"`, {
-      timeout: 3000, stdio: 'pipe', encoding: 'utf8',
-    }).trim();
-    const commits = result.split('\n').filter(Boolean).length;
+    const result = spawnSync(
+      'git',
+      ['-C', projectPath, 'log', '--oneline', `--since=${sinceDate}`],
+      { timeout: 3000, stdio: 'pipe', encoding: 'utf8' },
+    );
+    if (result.status !== 0) return null;
+    const output = result.stdout.trim();
+    const commits = output.split('\n').filter(Boolean).length;
     return commits > 0 ? `${commits} commit${commits !== 1 ? 's' : ''} since last session` : null;
   } catch { return null; }
 }

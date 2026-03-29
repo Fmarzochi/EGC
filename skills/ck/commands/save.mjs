@@ -79,7 +79,7 @@ if (isInit) {
 
   // Update projects.json
   projects[projectPath] = {
-    name: contextDir,
+    name,
     contextDir,
     lastUpdated: today(),
   };
