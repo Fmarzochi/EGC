@@ -606,14 +606,23 @@ description: Quick reference for [API/Library].
 Test all code examples:
 
 ```bash
-# For TypeScript (run from inside the skill directory or specify the path)
+# From the repo root
 npx tsc --noEmit skills/your-skill-name/examples/*.ts
 
-# For Python
+# Or from inside the skill directory
+npx tsc --noEmit examples/*.ts
+
+# From the repo root
 python -m py_compile skills/your-skill-name/examples/*.py
 
-# For Go
+# Or from inside the skill directory
+python -m py_compile examples/*.py
+
+# From the repo root
 go build ./skills/your-skill-name/examples/...
+
+# Or from inside the skill directory
+go build ./examples/...
 ```
 
 ---
