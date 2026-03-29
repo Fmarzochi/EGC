@@ -57,7 +57,16 @@ npx jest --testPathPattern='tests/data-integrity' --bail --ci
 Tests end-to-end flows: encounter lifecycle, template rendering, medication sets, drug/diagnosis search, prescription PDF, red flag alerts.
 
 ```bash
-npx jest --testPathPattern='tests/clinical' --ci 2>&1 | node scripts/check-pass-rate.js 95
+tmp_json=$(mktemp)
+npx jest --testPathPattern='tests/clinical' --ci --json --outputFile="$tmp_json" || true
+total=$(jq '.numTotalTests // 0' "$tmp_json")
+passed=$(jq '.numPassedTests // 0' "$tmp_json")
+if [ "$total" -eq 0 ]; then
+  echo "No clinical tests found" >&2
+  exit 1
+fi
+rate=$(echo "scale=2; $passed * 100 / $total" | bc)
+echo "Clinical pass rate: ${rate}% ($passed/$total)"
 ```
 
 **5. Integration Compliance (HIGH — 95%+ required)**
@@ -65,7 +74,16 @@ npx jest --testPathPattern='tests/clinical' --ci 2>&1 | node scripts/check-pass-
 Tests external systems: HL7 message parsing (v2.x), FHIR validation, lab result mapping, malformed message handling.
 
 ```bash
-npx jest --testPathPattern='tests/integration' --ci 2>&1 | node scripts/check-pass-rate.js 95
+tmp_json=$(mktemp)
+npx jest --testPathPattern='tests/integration' --ci --json --outputFile="$tmp_json" || true
+total=$(jq '.numTotalTests // 0' "$tmp_json")
+passed=$(jq '.numPassedTests // 0' "$tmp_json")
+if [ "$total" -eq 0 ]; then
+  echo "No integration tests found" >&2
+  exit 1
+fi
+rate=$(echo "scale=2; $passed * 100 / $total" | bc)
+echo "Integration pass rate: ${rate}% ($passed/$total)"
 ```
 
 ### Pass/Fail Matrix
@@ -108,9 +126,10 @@ jobs:
       # HIGH gates — 95%+ required
       - name: Clinical Workflows
         run: |
-          RESULT=$(npx jest --testPathPattern='tests/clinical' --ci --json 2>&1) || true
-          TOTAL=$(echo "$RESULT" | jq '.numTotalTests // 0')
-          PASSED=$(echo "$RESULT" | jq '.numPassedTests // 0')
+          TMP_JSON=$(mktemp)
+          npx jest --testPathPattern='tests/clinical' --ci --json --outputFile="$TMP_JSON" || true
+          TOTAL=$(jq '.numTotalTests // 0' "$TMP_JSON")
+          PASSED=$(jq '.numPassedTests // 0' "$TMP_JSON")
           if [ "$TOTAL" -eq 0 ]; then
             echo "::error::No clinical tests found"; exit 1
           fi
@@ -122,9 +141,10 @@ jobs:
 
       - name: Integration Compliance
         run: |
-          RESULT=$(npx jest --testPathPattern='tests/integration' --ci --json 2>&1) || true
-          TOTAL=$(echo "$RESULT" | jq '.numTotalTests // 0')
-          PASSED=$(echo "$RESULT" | jq '.numPassedTests // 0')
+          TMP_JSON=$(mktemp)
+          npx jest --testPathPattern='tests/integration' --ci --json --outputFile="$TMP_JSON" || true
+          TOTAL=$(jq '.numTotalTests // 0' "$TMP_JSON")
+          PASSED=$(jq '.numPassedTests // 0' "$TMP_JSON")
           if [ "$TOTAL" -eq 0 ]; then
             echo "::error::No integration tests found"; exit 1
           fi
@@ -157,8 +177,13 @@ npx jest --testPathPattern='tests/data-integrity' --bail --ci
 ### Example 2: Check HIGH Gate Pass Rate
 
 ```bash
-npx jest --testPathPattern='tests/clinical' --ci --json | \
-  jq '{passed: .numPassedTests, total: .numTotalTests, rate: (.numPassedTests/.numTotalTests*100)}'
+tmp_json=$(mktemp)
+npx jest --testPathPattern='tests/clinical' --ci --json --outputFile="$tmp_json" || true
+jq '{
+  passed: (.numPassedTests // 0),
+  total: (.numTotalTests // 0),
+  rate: (if (.numTotalTests // 0) == 0 then 0 else ((.numPassedTests // 0) / (.numTotalTests // 1) * 100) end)
+}' "$tmp_json"
 # Expected: { "passed": 21, "total": 22, "rate": 95.45 }
 ```
 
