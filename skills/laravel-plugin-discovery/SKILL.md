@@ -8,7 +8,7 @@ origin: ECC
 
 Find, evaluate, and choose healthy Laravel packages using the LaraPlugins.io MCP server.
 
-## When to Activate
+## When to Use
 
 - User wants to find Laravel packages for a specific feature (e.g. "auth", "permissions", "admin panel")
 - User asks "what package should I use for..." or "is there a Laravel package for..."
@@ -22,7 +22,7 @@ LaraPlugins MCP server must be configured. Add to your `~/.claude.json` mcpServe
 
 ```json
 "laraplugins": {
-  "type": "streamable-http",
+  "type": "http",
   "url": "https://laraplugins.io/mcp/plugins"
 }
 ```
@@ -156,11 +156,11 @@ Returns all healthy packages from vendor "spatie".
 
 | Version | Notes |
 |---------|-------|
-| `12` | Latest Laravel (2025) |
-| `11` | Current stable |
-| `10` | Still widely used |
-| `9` | Legacy but common |
-| `5`-`8` | Deprecated |
+| `13` | Latest Laravel |
+| `12` | Current stable |
+| `11` | Still widely used |
+| `10` | Legacy but common |
+| `5`-`9` | Deprecated |
 
 **Recommendation**: Match the target project's Laravel version.
 
