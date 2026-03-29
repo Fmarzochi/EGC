@@ -41,7 +41,7 @@ The active Claude Code installation is near-minimal:
 | Schemas | 9 JSON validators |
 | Scripts/CLI | 46+ Node.js modules + multiple CLIs |
 | Tests | 58 test files |
-| Install profiles | minimal, standard, full, enterprise |
+| Install profiles | core, developer, security, research, full |
 | Supported harnesses | Claude Code, Codex, Cursor, OpenCode |
 
 ---
@@ -88,8 +88,8 @@ TypeScript, Python, Go, Java, Kotlin, Rust, C++, C#, Swift, Perl, PHP, and commo
 
 ## Recommendations
 
-### Immediate value (minimal install)
-Run `ecc install --profile minimal` to get:
+### Immediate value (core install)
+Run `ecc install --profile core` to get:
 - Core agents (code-reviewer, planner, tdd-guide, security-reviewer)
 - Essential skills (tdd-workflow, coding-standards, security-review)
 - Key commands (/tdd, /plan, /code-review, /build-fix)

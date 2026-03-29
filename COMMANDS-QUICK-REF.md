@@ -76,9 +76,9 @@
 
 | Command | What it does |
 |---------|-------------|
-| `/save-session` | Save current session state to `~/.claude/sessions/` |
-| `/resume-session` | Load most recent session and resume from where you left off |
-| `/sessions` | Browse, search, and manage session history with aliases |
+| `/save-session` | Save current session state to `~/.claude/session-data/` |
+| `/resume-session` | Load the most recent saved session from the canonical session store and resume from where you left off |
+| `/sessions` | Browse, search, and manage session history with aliases from `~/.claude/session-data/` (with legacy reads from `~/.claude/sessions/`) |
 | `/checkpoint` | Mark a checkpoint in the current session |
 | `/aside` | Answer a quick side question without losing current task context |
 | `/context-budget` | Analyse context window usage — find token overhead, optimise |

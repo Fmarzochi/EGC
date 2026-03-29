@@ -100,6 +100,7 @@ node scripts/install-apply.js
 Regardless of profile, these components add immediate value:
 
 ### 1. Core Agents (highest ROI)
+
 | Agent | Why it matters |
 |-------|----------------|
 | `planner.md` | Breaks complex tasks into implementation plans |
@@ -109,6 +110,7 @@ Regardless of profile, these components add immediate value:
 | `architect.md` | System design & scalability decisions |
 
 ### 2. Key Commands
+
 | Command | Why it matters |
 |---------|----------------|
 | `/plan` | Implementation planning before coding |
@@ -168,7 +170,7 @@ No need to clone the repo. This is the recommended install method for most users
 1. **Keep the existing Stop hook** — it's doing its job
 2. **Run the developer profile install** from the local fork:
    ```bash
-   cd /home/user/everything-claude-code
+   cd /path/to/everything-claude-code
    node scripts/install-plan.js --profile developer
    node scripts/install-apply.js
    ```
