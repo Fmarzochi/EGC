@@ -4,12 +4,14 @@
 # Installs Everything Claude Code workflows into a Trae project.
 #
 # Usage:
-# ./install.sh              # Install to current directory
-# ./install.sh ~            # Install globally to ~/.trae/ or ~/.trae-cn/
+#   ./install.sh              # Install to current directory
+#   ./install.sh ~            # Install globally to ~/.trae/ or ~/.trae-cn/
 #
 # Environment:
-# TRAE_ENV=cn              # Force use .trae-cn directory
-# set -euo pipefail
+#   TRAE_ENV=cn              # Force use .trae-cn directory
+#
+
+set -euo pipefail
 
 # When globs match nothing, expand to empty list instead of the literal pattern
 shopt -s nullglob

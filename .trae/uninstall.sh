@@ -4,12 +4,14 @@
 # Uninstalls Everything Claude Code workflows from a Trae project.
 #
 # Usage:
-# ./uninstall.sh              # Uninstall from current directory
-# ./uninstall.sh ~            # Uninstall globally from ~/.trae/
+#   ./uninstall.sh              # Uninstall from current directory
+#   ./uninstall.sh ~            # Uninstall globally from ~/.trae/
 #
 # Environment:
-# TRAE_ENV=cn              # Force use .trae-cn directory
-# set -euo pipefail
+#   TRAE_ENV=cn              # Force use .trae-cn directory
+#
+
+set -euo pipefail
 
 # Resolve the directory where this script lives
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -44,18 +46,18 @@ is_valid_manifest_entry() {
 do_uninstall() {
     local target_dir="$PWD"
     local trae_dir="$(get_trae_dir)"
-
+    
     # Check if ~ was specified (or expanded to $HOME)
     if [ "$#" -ge 1 ]; then
         if [ "$1" = "~" ] || [ "$1" = "$HOME" ]; then
             target_dir="$HOME"
         fi
     fi
-
+    
     # Check if we're already inside a .trae or .trae-cn directory
     local current_dir_name="$(basename "$target_dir")"
     local trae_full_path
-
+    
     if [ "$current_dir_name" = ".trae" ] || [ "$current_dir_name" = ".trae-cn" ]; then
         # Already inside the trae directory, use it directly
         trae_full_path="$target_dir"
@@ -63,23 +65,23 @@ do_uninstall() {
         # Normal case: append trae_dir to target_dir
         trae_full_path="$target_dir/$trae_dir"
     fi
-
+    
     echo "ECC Trae Uninstaller"
     echo "===================="
     echo ""
     echo "Target:  $trae_full_path/"
     echo ""
-
+    
     if [ ! -d "$trae_full_path" ]; then
         echo "Error: $trae_dir directory not found at $target_dir"
         exit 1
     fi
-
+    
     trae_root_resolved="$(resolve_path "$trae_full_path")"
 
     # Manifest file path
     MANIFEST="$trae_full_path/.ecc-manifest"
-
+    
     if [ ! -f "$MANIFEST" ]; then
         echo "Warning: No manifest file found (.ecc-manifest)"
         echo ""
@@ -99,7 +101,7 @@ do_uninstall() {
         echo "Removed: $trae_full_path/"
         exit 0
     fi
-
+    
     echo "Found manifest file - will only remove files installed by ECC"
     echo ""
     read -p "Are you sure you want to uninstall ECC from $trae_dir? (y/N) " -n 1 -r
@@ -108,11 +110,11 @@ do_uninstall() {
         echo "Uninstall cancelled."
         exit 0
     fi
-
+    
     # Counters
     removed=0
     skipped=0
-
+    
     # Read manifest and remove files
     while IFS= read -r file_path; do
         [ -z "$file_path" ] && continue
@@ -166,7 +168,7 @@ do_uninstall() {
             removed=$((removed + 1))
         fi
     done < <(find "$trae_full_path" -depth -type d -empty 2>/dev/null | sort -r)
-
+    
     # Try to remove the main trae directory if it's empty
     if [ -d "$trae_full_path" ] && [ -z "$(ls -A "$trae_full_path" 2>/dev/null)" ]; then
         rmdir "$trae_full_path" 2>/dev/null || true
@@ -175,7 +177,7 @@ do_uninstall() {
             removed=$((removed + 1))
         fi
     fi
-
+    
     echo ""
     echo "Uninstall complete!"
     echo ""

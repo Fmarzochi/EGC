@@ -27,6 +27,8 @@ function test(name, fn) {
 
 // Test suite
 function runTests() {
+  const rocketParty = String.fromCodePoint(0x1F680, 0x1F389);
+  const partyEmoji = String.fromCodePoint(0x1F389);
   console.log('\n=== Testing utils.js ===\n');
 
   let passed = 0;
@@ -166,9 +168,12 @@ function runTests() {
   if (test('sanitizeSessionId returns stable hashes for non-ASCII values', () => {
     const chinese = utils.sanitizeSessionId('我的项目');
     const cyrillic = utils.sanitizeSessionId('проект');
+    const emoji = utils.sanitizeSessionId(rocketParty);
     assert.ok(/^[a-f0-9]{8}$/.test(chinese), `Expected 8-char hash, got: ${chinese}`);
     assert.ok(/^[a-f0-9]{8}$/.test(cyrillic), `Expected 8-char hash, got: ${cyrillic}`);
+    assert.ok(/^[a-f0-9]{8}$/.test(emoji), `Expected 8-char hash, got: ${emoji}`);
     assert.notStrictEqual(chinese, cyrillic);
+    assert.notStrictEqual(chinese, emoji);
     assert.strictEqual(utils.sanitizeSessionId('日本語プロジェクト'), utils.sanitizeSessionId('日本語プロジェクト'));
   })) passed++; else failed++;
 
@@ -704,7 +709,7 @@ function runTests() {
   if (test('writeFile handles unicode content', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
-      const unicode = '日本語テスト 中文 émojis';
+      const unicode = `日本語テスト ${String.fromCodePoint(0x1F680)} émojis`;
       utils.writeFile(testFile, unicode);
       const content = utils.readFile(testFile);
       assert.strictEqual(content, unicode);
@@ -1868,18 +1873,18 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  // ── Round 108: grepFile with Unicode content — UTF-16 string matching on split lines ──
-  console.log('\nRound 108: grepFile (Unicode — regex matching on UTF-16 split lines):');
-  if (test('grepFile finds Unicode patterns across lines', () => {
+  // ── Round 108: grepFile with Unicode/emoji content — UTF-16 string matching on split lines ──
+  console.log('\nRound 108: grepFile (Unicode/emoji — regex matching on UTF-16 split lines):');
+  if (test('grepFile finds Unicode emoji patterns across lines', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r108-grep-unicode-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
-      fs.writeFileSync(testFile, '猫 celebration\nnormal line\n猫 party\n日本語テスト');
-      const unicodeResults = utils.grepFile(testFile, /猫/);
-      assert.strictEqual(unicodeResults.length, 2,
-        'Should find Unicode matches on 2 lines (lines 1 and 3)');
-      assert.strictEqual(unicodeResults[0].lineNumber, 1);
-      assert.strictEqual(unicodeResults[1].lineNumber, 3);
+      fs.writeFileSync(testFile, `${partyEmoji} celebration\nnormal line\n${partyEmoji} party\n日本語テスト`);
+      const emojiResults = utils.grepFile(testFile, new RegExp(partyEmoji, 'u'));
+      assert.strictEqual(emojiResults.length, 2,
+        'Should find emoji on 2 lines (lines 1 and 3)');
+      assert.strictEqual(emojiResults[0].lineNumber, 1);
+      assert.strictEqual(emojiResults[1].lineNumber, 3);
       const cjkResults = utils.grepFile(testFile, /日本語/);
       assert.strictEqual(cjkResults.length, 1,
         'Should find CJK characters on line 4');

@@ -28,7 +28,7 @@ if (projectPath && projectPath !== cwd) {
   if (existsSync(projectPath)) {
     console.log(`→ cd ${projectPath}`);
   } else {
-    console.log(`WARNING:  Path not found: ${projectPath}`);
+    console.log(`WARNING Path not found: ${projectPath}`);
   }
 }
 

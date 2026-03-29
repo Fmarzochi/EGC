@@ -5,13 +5,13 @@
 # and creates instincts. Uses Haiku model for cost efficiency.
 #
 # v2.1: Project-scoped — detects current project and analyzes
-# project-specific observations into project-scoped instincts.
+#       project-specific observations into project-scoped instincts.
 #
 # Usage:
-# start-observer.sh              # Start observer for current project (or global)
-# start-observer.sh --reset      # Clear lock and restart observer for current project
-# start-observer.sh stop         # Stop running observer
-# start-observer.sh status       # Check if observer is running
+#   start-observer.sh              # Start observer for current project (or global)
+#   start-observer.sh --reset      # Clear lock and restart observer for current project
+#   start-observer.sh stop         # Stop running observer
+#   start-observer.sh status       # Check if observer is running
 
 set -e
 

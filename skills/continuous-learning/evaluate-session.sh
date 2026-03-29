@@ -8,15 +8,15 @@
 #
 # Hook config (in ~/.claude/settings.json):
 # {
-# "hooks": {
-# "Stop": [{
-# "matcher": "*",
-# "hooks": [{
-# "type": "command",
-# "command": "~/.claude/skills/continuous-learning/evaluate-session.sh"
-# }]
-# }]
-# }
+#   "hooks": {
+#     "Stop": [{
+#       "matcher": "*",
+#       "hooks": [{
+#         "type": "command",
+#         "command": "~/.claude/skills/continuous-learning/evaluate-session.sh"
+#       }]
+#     }]
+#   }
 # }
 #
 # Patterns to detect: error_resolution, debugging_techniques, workarounds, project_specific

@@ -7,9 +7,9 @@
 # script always picks up project-level skills without relying on the caller.
 #
 # Environment:
-# RULES_DISTILL_GLOBAL_DIR   Override ~/.claude/skills (for testing only;
-# do not set in production — intended for bats tests)
-# RULES_DISTILL_PROJECT_DIR  Override project dir detection (for testing only)
+#   RULES_DISTILL_GLOBAL_DIR   Override ~/.claude/skills (for testing only;
+#                              do not set in production — intended for bats tests)
+#   RULES_DISTILL_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
 

@@ -39,6 +39,12 @@ const textExtensions = new Set([
   '.rs',
 ]);
 
+const writableExtensions = new Set([
+  '.md',
+  '.mdx',
+  '.txt',
+]);
+
 const writeModeSkip = new Set([
   path.normalize('scripts/ci/check-unicode-safety.js'),
   path.normalize('tests/scripts/check-unicode-safety.test.js'),
@@ -47,6 +53,11 @@ const writeModeSkip = new Set([
 const dangerousInvisibleRe =
   /[\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu;
 const emojiRe = /[\p{Extended_Pictographic}\p{Regional_Indicator}]/gu;
+const allowedSymbolCodePoints = new Set([
+  0x00A9,
+  0x00AE,
+  0x2122,
+]);
 
 const targetedReplacements = [
   [new RegExp(`${String.fromCodePoint(0x26A0)}(?:\\uFE0F)?`, 'gu'), 'WARNING:'],
@@ -62,6 +73,10 @@ function shouldSkip(entryPath) {
 
 function isTextFile(filePath) {
   return textExtensions.has(path.extname(filePath).toLowerCase());
+}
+
+function canAutoWrite(relativePath) {
+  return writableExtensions.has(path.extname(relativePath).toLowerCase());
 }
 
 function listFiles(dirPath) {
@@ -87,6 +102,10 @@ function lineAndColumn(text, index) {
   return { line, column };
 }
 
+function isAllowedEmojiLikeSymbol(char) {
+  return allowedSymbolCodePoints.has(char.codePointAt(0));
+}
+
 function sanitizeText(text) {
   let next = text;
   next = next.replace(dangerousInvisibleRe, '');
@@ -95,7 +114,7 @@ function sanitizeText(text) {
     next = next.replace(pattern, replacement);
   }
 
-  next = next.replace(emojiRe, '');
+  next = next.replace(emojiRe, match => (isAllowedEmojiLikeSymbol(match) ? match : ''));
   next = next.replace(/^ +(?=\*\*)/gm, '');
   next = next.replace(/^(\*\*)\s+/gm, '$1');
   next = next.replace(/^(#+)\s{2,}/gm, '$1 ');
@@ -111,6 +130,9 @@ function collectMatches(text, regex, kind) {
   const matches = [];
   for (const match of text.matchAll(regex)) {
     const char = match[0];
+    if (kind === 'emoji' && isAllowedEmojiLikeSymbol(char)) {
+      continue;
+    }
     const index = match.index ?? 0;
     const { line, column } = lineAndColumn(text, index);
     matches.push({
@@ -136,7 +158,11 @@ for (const filePath of listFiles(repoRoot)) {
     continue;
   }
 
-  if (writeMode && !writeModeSkip.has(path.normalize(relativePath))) {
+  if (
+    writeMode &&
+    !writeModeSkip.has(path.normalize(relativePath)) &&
+    canAutoWrite(relativePath)
+  ) {
     const sanitized = sanitizeText(text);
     if (sanitized !== text) {
       fs.writeFileSync(filePath, sanitized, 'utf8');

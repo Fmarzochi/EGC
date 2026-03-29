@@ -4,16 +4,16 @@
 # Called by observer-loop.sh before spawning any Claude session.
 #
 # Config (env vars, all optional):
-# OBSERVER_INTERVAL_SECONDS    default: 300   (per-project cooldown)
-# OBSERVER_LAST_RUN_LOG        default: ~/.claude/observer-last-run.log
-# OBSERVER_ACTIVE_HOURS_START  default: 800   (8:00 AM local, set to 0 to disable)
-# OBSERVER_ACTIVE_HOURS_END    default: 2300  (11:00 PM local, set to 0 to disable)
-# OBSERVER_MAX_IDLE_SECONDS    default: 1800  (30 min; set to 0 to disable)
+#   OBSERVER_INTERVAL_SECONDS    default: 300   (per-project cooldown)
+#   OBSERVER_LAST_RUN_LOG        default: ~/.claude/observer-last-run.log
+#   OBSERVER_ACTIVE_HOURS_START  default: 800   (8:00 AM local, set to 0 to disable)
+#   OBSERVER_ACTIVE_HOURS_END    default: 2300  (11:00 PM local, set to 0 to disable)
+#   OBSERVER_MAX_IDLE_SECONDS    default: 1800  (30 min; set to 0 to disable)
 #
 # Gate execution order (cheapest first):
-# Gate 1: Time window check    (~0ms, string comparison)
-# Gate 2: Project cooldown log (~1ms, file read + mkdir lock)
-# Gate 3: Idle detection       (~5-50ms, OS syscall; fail open)
+#   Gate 1: Time window check    (~0ms, string comparison)
+#   Gate 2: Project cooldown log (~1ms, file read + mkdir lock)
+#   Gate 3: Idle detection       (~5-50ms, OS syscall; fail open)
 
 set -euo pipefail
 

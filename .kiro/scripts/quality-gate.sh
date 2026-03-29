@@ -36,7 +36,7 @@ detect_pm() {
 }
 
 PM=$(detect_pm)
-echo " Package manager: $PM"
+echo "Package manager: $PM"
 echo ""
 
 # ── Helper: run a check ─────────────────────────────────────

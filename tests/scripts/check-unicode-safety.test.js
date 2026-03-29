@@ -35,6 +35,7 @@ function makeTempRoot(prefix) {
 const warningEmoji = String.fromCodePoint(0x26A0, 0xFE0F);
 const toolsEmoji = String.fromCodePoint(0x1F6E0, 0xFE0F);
 const zeroWidthSpace = String.fromCodePoint(0x200B);
+const rocketEmoji = String.fromCodePoint(0x1F680);
 
 let passed = 0;
 let failed = 0;
@@ -73,6 +74,36 @@ if (
 
     const cleanResult = runCheck(root);
     assert.strictEqual(cleanResult.status, 0, cleanResult.stdout + cleanResult.stderr);
+  })
+)
+  passed++;
+else failed++;
+
+if (
+  test('write mode does not rewrite executable files', () => {
+    const root = makeTempRoot('ecc-unicode-code-');
+    fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
+    const scriptFile = path.join(root, 'scripts', 'sample.js');
+    const original = `const label = "Launch ${rocketEmoji}";\n`;
+    fs.writeFileSync(scriptFile, original);
+
+    const result = runCheck(root, ['--write']);
+    assert.notStrictEqual(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stderr, /scripts\/sample\.js:1:23 emoji U\+1F680/);
+    assert.strictEqual(fs.readFileSync(scriptFile, 'utf8'), original);
+  })
+)
+  passed++;
+else failed++;
+
+if (
+  test('plain symbols like copyright remain allowed', () => {
+    const root = makeTempRoot('ecc-unicode-symbols-');
+    fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'docs', 'legal.md'), 'Copyright © ECC\nTrademark ® ECC\n');
+
+    const result = runCheck(root);
+    assert.strictEqual(result.status, 0, result.stdout + result.stderr);
   })
 )
   passed++;

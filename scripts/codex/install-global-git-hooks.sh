@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Install ECC git safety hooks globally via core.hooksPath.
 # Usage:
-# ./scripts/codex/install-global-git-hooks.sh
-# ./scripts/codex/install-global-git-hooks.sh --dry-run
+#   ./scripts/codex/install-global-git-hooks.sh
+#   ./scripts/codex/install-global-git-hooks.sh --dry-run
 
 MODE="apply"
 if [[ "${1:-}" == "--dry-run" ]]; then

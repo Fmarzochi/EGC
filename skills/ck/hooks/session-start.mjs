@@ -130,7 +130,7 @@ function main() {
         // Check if previous session ID exists in sessions array
         const alreadySaved = context.sessions?.some(s => s.id === prevSession.sessionId);
         if (!alreadySaved) {
-          summaryLines.push(`WARNING:  Last session wasn't saved — run /ck:save to capture it`);
+          summaryLines.push(`WARNING Last session wasn't saved — run /ck:save to capture it`);
         }
       }
 
@@ -142,7 +142,7 @@ function main() {
       const claudeMdGoal = extractClaudeMdGoal(cwd);
       if (claudeMdGoal && context.goal &&
           claudeMdGoal.toLowerCase().trim() !== context.goal.toLowerCase().trim()) {
-        summaryLines.push(`WARNING:  Goal mismatch — ck: "${context.goal.slice(0, 40)}" · CLAUDE.md: "${claudeMdGoal.slice(0, 40)}"`);
+        summaryLines.push(`WARNING Goal mismatch — ck: "${context.goal.slice(0, 40)}" · CLAUDE.md: "${claudeMdGoal.slice(0, 40)}"`);
         summaryLines.push(`   Run /ck:save with updated goal to sync`);
       }
 
@@ -165,7 +165,7 @@ function main() {
         '```',
         ``,
         `After the block, add one line: "Ready — what are we working on?"`,
-        `If you see WARNING: warnings above, mention them briefly after the block.`,
+        `If you see WARNING lines above, mention them briefly after the block.`,
       ].join('\n'));
 
       return parts;

@@ -7,9 +7,9 @@
 # script always picks up project-level skills without relying on the caller.
 #
 # Environment:
-# SKILL_STOCKTAKE_GLOBAL_DIR   Override ~/.claude/skills (for testing only;
-# do not set in production — intended for bats tests)
-# SKILL_STOCKTAKE_PROJECT_DIR  Override project dir detection (for testing only)
+#   SKILL_STOCKTAKE_GLOBAL_DIR   Override ~/.claude/skills (for testing only;
+#                                do not set in production — intended for bats tests)
+#   SKILL_STOCKTAKE_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
 

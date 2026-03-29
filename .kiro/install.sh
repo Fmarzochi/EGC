@@ -4,10 +4,12 @@
 # Installs Everything Claude Code workflows into a Kiro project.
 #
 # Usage:
-# ./install.sh              # Install to current directory
-# ./install.sh /path/to/dir # Install to specific directory
-# ./install.sh ~            # Install globally to ~/.kiro/
-# set -euo pipefail
+#   ./install.sh              # Install to current directory
+#   ./install.sh /path/to/dir # Install to specific directory
+#   ./install.sh ~            # Install globally to ~/.kiro/
+#
+
+set -euo pipefail
 
 # When globs match nothing, expand to empty list instead of the literal pattern
 shopt -s nullglob

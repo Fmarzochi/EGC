@@ -133,7 +133,7 @@ def write_audit(event: Dict[str, Any]) -> None:
     """
     try:
         enriched: Dict[str, Any] = {
-**event,
+            **event,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         enriched["hash"] = hashlib.sha256(

@@ -10,15 +10,15 @@
 #
 # Hook config (in ~/.claude/settings.json):
 # {
-# "hooks": {
-# "PreToolUse": [{
-# "matcher": "Edit|Write",
-# "hooks": [{
-# "type": "command",
-# "command": "~/.claude/skills/strategic-compact/suggest-compact.sh"
-# }]
-# }]
-# }
+#   "hooks": {
+#     "PreToolUse": [{
+#       "matcher": "Edit|Write",
+#       "hooks": [{
+#         "type": "command",
+#         "command": "~/.claude/skills/strategic-compact/suggest-compact.sh"
+#       }]
+#     }]
+#   }
 # }
 #
 # Criteria for suggesting compact:

@@ -3,7 +3,7 @@
 # Usage: save-results.sh RESULTS_JSON <<< "$EVAL_JSON"
 #
 # stdin format:
-# { "skills": {...}, "mode"?: "full"|"quick", "batch_progress"?: {...} }
+#   { "skills": {...}, "mode"?: "full"|"quick", "batch_progress"?: {...} }
 #
 # Always sets evaluated_at to current UTC time via `date -u`.
 # Merges stdin .skills into existing results.json (new entries override old).

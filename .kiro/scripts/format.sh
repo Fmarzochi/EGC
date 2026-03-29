@@ -50,7 +50,7 @@ case "$FORMATTER" in
       exit 1
     fi
     ;;
-
+  
   prettier)
     if command -v npx &>/dev/null; then
       echo "Formatting $FILE with Prettier..."
@@ -61,7 +61,7 @@ case "$FORMATTER" in
       exit 1
     fi
     ;;
-
+  
   none)
     echo "No formatter detected (biome.json, .prettierrc, or installed formatter)"
     echo "Skipping format for: $FILE"
