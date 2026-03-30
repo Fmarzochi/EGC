@@ -1965,7 +1965,26 @@ async function runTests() {
     passed++;
   else failed++;
   if (
-    test('script references use CLAUDE_PLUGIN_ROOT variable or safe SessionStart inline resolver', () => {
+    test('Stop and SessionEnd hooks use the safe inline resolver when plugin root may be unset', () => {
+      const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
+      const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
+      const stopHooks = (hooks.hooks.Stop || []).flatMap(entry => entry.hooks || []);
+      const sessionEndHooks = (hooks.hooks.SessionEnd || []).flatMap(entry => entry.hooks || []);
+
+      for (const hook of [...stopHooks, ...sessionEndHooks]) {
+        assert.ok(hook.command.startsWith('node -e "'), 'Lifecycle hook should use inline node resolver');
+        assert.ok(hook.command.includes('run-with-flags.js'), 'Lifecycle hook should resolve the runner script');
+        assert.ok(hook.command.includes('CLAUDE_PLUGIN_ROOT'), 'Lifecycle hook should consult CLAUDE_PLUGIN_ROOT');
+        assert.ok(hook.command.includes('plugins'), 'Lifecycle hook should probe known plugin roots');
+        assert.ok(!hook.command.includes('find '), 'Lifecycle hook should not scan arbitrary plugin paths with find');
+        assert.ok(!hook.command.includes('head -n 1'), 'Lifecycle hook should not pick the first matching plugin path');
+      }
+    })
+  )
+    passed++;
+  else failed++;
+  if (
+    test('script references use CLAUDE_PLUGIN_ROOT variable or a safe inline resolver', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -1973,9 +1992,8 @@ async function runTests() {
         for (const entry of hookArray) {
           for (const hook of entry.hooks) {
             if (hook.type === 'command' && hook.command.includes('scripts/hooks/')) {
-              // Check for the literal string "${CLAUDE_PLUGIN_ROOT}" in the command
-              const isSessionStartInlineResolver = hook.command.startsWith('node -e') && hook.command.includes('session:start') && hook.command.includes('run-with-flags.js');
-              const hasPluginRoot = hook.command.includes('${CLAUDE_PLUGIN_ROOT}') || isSessionStartInlineResolver;
+              const usesInlineResolver = hook.command.startsWith('node -e') && hook.command.includes('run-with-flags.js');
+              const hasPluginRoot = hook.command.includes('${CLAUDE_PLUGIN_ROOT}') || usesInlineResolver;
               assert.ok(hasPluginRoot, `Script paths should use CLAUDE_PLUGIN_ROOT: ${hook.command.substring(0, 80)}...`);
             }
           }
