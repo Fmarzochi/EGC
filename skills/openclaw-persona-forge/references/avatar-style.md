@@ -5,10 +5,9 @@
 
 ## 风格参考
 
-亚当（Adam）—— 龙虾族创世神，本 Skill 的首个作品：
-![Adam](https://raw.githubusercontent.com/eamanc-lab/openclaw-persona-forge/main/docs/adam-claw-logo.png)
+亚当（Adam）—— 龙虾族创世神，本 Skill 的首个作品。
 
-所有新生成的龙虾头像应与此风格保持一致。
+所有新生成的龙虾头像应与这一风格保持一致：复古未来主义、街机 UI 包边、强轮廓、可在 64x64 下辨识。
 
 ## 统一风格基底（STYLE_BASE）
 
@@ -82,14 +81,15 @@ The key silhouette recognition points at small size are:
 
 提示词组装完成后：
 
-### 路径 A：已安装 baoyu-image-gen skill
+### 路径 A：已安装且已审核的生图 skill
 
-1. 用 Write 工具写入：`/tmp/openclaw-[龙虾名字]-prompt.md`
-2. 调用 `baoyu-image-gen` skill 生成图片
-3. 用 Read 工具展示生成的图片给用户
-4. 问用户是否满意，不满意可调整变量重新生成
+1. 先将龙虾名字规整为安全片段：仅保留字母、数字和连字符，其余字符替换为 `-`
+2. 用 Write 工具写入：`/tmp/openclaw-<safe-name>-prompt.md`
+3. 调用当前环境允许的生图 skill 生成图片
+4. 用 Read 工具展示生成的图片给用户
+5. 问用户是否满意，不满意可调整变量重新生成
 
-### 路径 B：未安装 baoyu-image-gen skill
+### 路径 B：未安装可用的生图 skill
 
 输出完整提示词文本，附手动使用说明：
 
@@ -101,8 +101,7 @@ The key silhouette recognition points at small size are:
 
 > [完整英文提示词]
 
-💡 安装 baoyu-image-gen skill 可获得自动生图能力：
-https://github.com/JimLiu/baoyu-skills
+如当前环境后续提供经过审核的生图 skill，可再接回自动生图流程。
 ```
 
 ## 展示给用户的格式

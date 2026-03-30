@@ -183,11 +183,11 @@ def main():
         draw_count = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     except ValueError:
         draw_count = 1
-    draw_count = min(draw_count, 5)
+    draw_count = max(1, min(draw_count, 5))
 
     total = len(FORMER_LIVES) * len(REASONS) * len(VIBES) * len(SPEECH_STYLES) * len(PROPS)
 
-    print("🦞 ═══════════════════════════════════")
+    print("LOBSTER ═════════════════════════════")
     print("   龙虾灵魂抽卡机 v2.0")
     print(f"   正在从 {total:,} 种组合中抽取...")
     print("═══════════════════════════════════════")
@@ -203,19 +203,19 @@ def main():
         if draw_count > 1:
             print(f"━━━━━━━━━━ 第 {i+1} 抽 ━━━━━━━━━━")
 
-        print(f"📋 前世身份: {life}")
-        print(f"🔗 来当龙虾的原因: {reason}")
-        print(f"🎨 核心气质: {vibe}")
-        print(f"💬 说话风格: {speech}")
-        print(f"🎒 特征道具: {prop}")
+        print(f"[身份] 前世身份: {life}")
+        print(f"[动机] 来当龙虾的原因: {reason}")
+        print(f"[气质] 核心气质: {vibe}")
+        print(f"[表达] 说话风格: {speech}")
+        print(f"[道具] 特征道具: {prop}")
         print()
-        print("📝 一句话概括:")
+        print("[概括] 一句话概括:")
         print(f"   「一只{vibe}的龙虾，前世是{life}，{reason}。")
         print(f"    {speech}，标志性形象是{prop}。」")
         print()
 
     print("═══════════════════════════════════════")
-    print("💡 拿到组合后，让 AI 继续推导：")
+    print("提示：拿到组合后，让 AI 继续推导：")
     print("   身份张力 → 底线规则 → 名字 → 头像")
     print("═══════════════════════════════════════")
 

@@ -3,7 +3,7 @@ name: openclaw-persona-forge
 description: |-
   为 OpenClaw AI Agent 锻造完整的龙虾灵魂方案。根据用户偏好或随机抽卡，
   输出身份定位、灵魂描述(SOUL.md)、角色化底线规则、名字和头像生图提示词。
-  如已安装 baoyu-image-gen skill，可自动生成统一风格头像图片。
+  如当前环境提供已审核的生图 skill，可自动生成统一风格头像图片。
   当用户需要创建、设计或定制 OpenClaw 龙虾灵魂时使用。
   不适用于：微调已有 SOUL.md、非 OpenClaw 平台的角色设计、纯工具型无性格 Agent。
   触发词：龙虾灵魂、虾魂、OpenClaw 灵魂、养虾灵魂、龙虾角色、龙虾定位、
@@ -12,14 +12,26 @@ description: |-
 origin: community
 ---
 
-# 龙虾灵魂锻造炉 🦞🔨
+# 龙虾灵魂锻造炉
 
 > 不是给你一只工具龙虾，而是帮你锻造一只有灵魂的龙虾。
+
+## When to Use
+
+- 当用户需要从零创建 OpenClaw 龙虾灵魂、角色设定、SOUL.md 或 IDENTITY.md
+- 当用户想通过引导式问答或抽卡模式快速得到完整 persona 方案
+- 当用户已经有一个粗糙设定，但还缺名字、边界规则、头像提示词或成套输出文件
+
+### Avoid when
+
+- 用户只需微调已有 SOUL.md
+- 目标平台不是 OpenClaw，需要的是其他 Agent 框架专用格式
+- 用户需要纯工具型 Agent，不需要角色化灵魂
 
 ## 前置条件
 
 - **必需**：`python3`（运行抽卡引擎 gacha.py）
-- **可选**：`baoyu-image-gen` skill（自动生成头像图片，未安装则输出提示词文本）
+- **可选**：已审核的生图 skill（自动生成头像图片，未安装则输出提示词文本）
 
 ## Skill 目录约定
 
@@ -37,20 +49,26 @@ origin: community
 
 ## 可选依赖
 
-### 头像自动生图：baoyu-image-gen skill
+### 头像自动生图：可选生图 skill
 
 本 Skill 的核心输出是**文本方案**（SOUL.md + IDENTITY.md + 头像提示词）。
-头像图片生成是**可选增强能力**，由 `baoyu-image-gen` skill 提供。
+头像图片生成是**可选增强能力**，由当前环境中**已审核并已安装**的生图 skill 提供。
 
 **判断逻辑**：
-- 如果用户已安装 `baoyu-image-gen` skill → Step 5 中调用它自动生图
+- 如果当前环境已安装并允许使用的生图 skill → Step 5 中调用它自动生图
 - 如果未安装 → Step 5 输出完整的提示词文本，用户可复制到 Gemini / ChatGPT / Midjourney 手动生成
 
-**调用方式**（仅在已安装时）：
-1. 将提示词写入临时文件 `/tmp/openclaw-[龙虾名字]-prompt.md`
-2. 使用 Skill 工具调用 `baoyu-image-gen`，传入提示词文件和输出路径
+**调用方式**（仅在已安装且已审核时）：
+1. 先将龙虾名字规整为安全片段：仅保留字母、数字和连字符，其余字符统一替换为 `-`
+2. 将提示词写入临时文件 `/tmp/openclaw-<safe-name>-prompt.md`
+3. 使用当前环境允许的生图 skill，传入提示词文件和输出路径
 
-> 安装 baoyu-image-gen：[https://github.com/JimLiu/baoyu-skills](https://github.com/JimLiu/baoyu-skills)
+**接口约定**：
+- 参数：`<prompt-file> <output-path>`
+- 提示词文件：UTF-8 Markdown 文本，包含完整英文生图提示词
+- 成功：退出码 `0`，并在输出路径生成图片文件
+- 失败：返回非 `0` 退出码，或未生成输出文件；此时必须回退到手动提示词流程
+- 如生图 skill 后续接口发生变化，调用前应重新核对其参数和输出契约
 
 ---
 
@@ -60,16 +78,7 @@ origin: community
 
 五者互相印证，缺一不可。
 
-## 不适用场景
-
-以下情况不要使用本 Skill：
-- 用户只需微调已有 SOUL.md → 直接编辑即可
-- 目标平台不是 OpenClaw → 输出格式为 SOUL.md + IDENTITY.md，其他平台需适配
-- 用户需要纯工具型 Agent（无性格需求）→ 角色化灵魂是本 Skill 的核心
-
----
-
-## 使用流程
+## How It Works
 
 ### 触发判断
 
@@ -146,8 +155,8 @@ python3 ${SKILL_DIR}/gacha.py [次数]
 
 1. 根据灵魂填充 7 个个性化变量
 2. 拼接 STYLE_BASE + 个性化描述为完整提示词
-3. **检查 baoyu-image-gen skill 是否可用**：
-   - **可用** → 写入临时文件，调用 baoyu-image-gen 生成图片，展示结果
+3. **检查当前环境是否存在可用且已审核的生图 skill**：
+   - **可用** → 写入临时文件，调用该生图 skill 生成图片，展示结果
    - **不可用** → 输出完整提示词文本，附使用说明：
 
 ```markdown
@@ -158,8 +167,7 @@ python3 ${SKILL_DIR}/gacha.py [次数]
 
 > [完整英文提示词]
 
-💡 安装 baoyu-image-gen skill 可获得自动生图能力：
-https://github.com/JimLiu/baoyu-skills
+如当前环境后续提供经过审核的生图 skill，可再接回自动生图流程。
 ```
 
 展示结果后，引导用户进入下一步。
@@ -211,6 +219,20 @@ https://github.com/JimLiu/baoyu-skills
 
 ---
 
+## Examples
+
+- `帮我设计一只 OpenClaw 龙虾灵魂，气质要冷幽默但可靠`
+- `抽卡，给我来 3 只风格完全不同的龙虾`
+- `我已经有 SOUL.md 草稿了，帮我补全名字、底线规则和头像提示词`
+- 参考细节见：
+  - `references/identity-tension.md`
+  - `references/boundary-rules.md`
+  - `references/naming-system.md`
+  - `references/avatar-style.md`
+  - `references/output-template.md`
+
+---
+
 ## 错误处理
 
 **完整降级策略**：见 [references/error-handling.md](references/error-handling.md)
@@ -220,14 +242,14 @@ https://github.com/JimLiu/baoyu-skills
 | 故障 | 降级行为 |
 |------|---------|
 | Python 不可用 | 跳过 gacha.py，从 10 类预设中随机选 |
-| baoyu-image-gen 未安装 | 输出提示词文本供手动使用 |
-| baoyu-image-gen 生图失败 | 重试 1 次，仍失败则输出提示词文本 |
+| 生图 skill 未安装 | 输出提示词文本供手动使用 |
+| 生图 skill 调用失败 | 重试 1 次，仍失败则输出提示词文本 |
 | 任何未预期错误 | 记录错误，跳过该步骤，继续主流程 |
 
 错误信息统一格式：
 
 ```markdown
-> ⚠️ **[步骤名] 已降级**
+> [警告] **[步骤名] 已降级**
 > 原因：[一句话]
 > 影响：[哪个功能受限]
 > 替代：[替代方案]
@@ -269,6 +291,6 @@ https://github.com/JimLiu/baoyu-skills
 - **其他 Agent**：支持 SKILL.md 格式的框架均可使用
 
 本 Skill 自身不包含任何网络请求或文件发送代码。
-头像生图能力通过可选依赖 `baoyu-image-gen` skill 提供。
+头像生图能力通过当前环境中已审核的可选生图 skill 提供。
 
 > 注：README.md / README.zh.md 是给人类用户看的安装说明，不影响 Skill 运行。
