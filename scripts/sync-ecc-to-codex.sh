@@ -460,16 +460,28 @@ fi
 
 log "Installing global git safety hooks"
 if [[ "$MODE" == "dry-run" ]]; then
-  "$HOOKS_INSTALLER" --dry-run
+  HOME="$HOME" \
+  CODEX_HOME="$CODEX_HOME" \
+  AGENTS_HOME="${AGENTS_HOME:-$HOME/.agents}" \
+  ECC_GLOBAL_HOOKS_DIR="${ECC_GLOBAL_HOOKS_DIR:-$CODEX_HOME/git-hooks}" \
+    "$HOOKS_INSTALLER" --dry-run
 else
-  "$HOOKS_INSTALLER"
+  HOME="$HOME" \
+  CODEX_HOME="$CODEX_HOME" \
+  AGENTS_HOME="${AGENTS_HOME:-$HOME/.agents}" \
+  ECC_GLOBAL_HOOKS_DIR="${ECC_GLOBAL_HOOKS_DIR:-$CODEX_HOME/git-hooks}" \
+    "$HOOKS_INSTALLER"
 fi
 
 log "Running global regression sanity check"
 if [[ "$MODE" == "dry-run" ]]; then
   printf '[dry-run] %s\n' "$SANITY_CHECKER"
 else
-  "$SANITY_CHECKER"
+  HOME="$HOME" \
+  CODEX_HOME="$CODEX_HOME" \
+  AGENTS_HOME="${AGENTS_HOME:-$HOME/.agents}" \
+  ECC_GLOBAL_HOOKS_DIR="${ECC_GLOBAL_HOOKS_DIR:-$CODEX_HOME/git-hooks}" \
+    "$SANITY_CHECKER"
 fi
 
 log "Sync complete"
