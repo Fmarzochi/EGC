@@ -273,7 +273,9 @@
         "skills/content-engine",
         "skills/investor-materials",
         "skills/investor-outreach",
-        "skills/market-research"
+        "skills/lead-intelligence",
+        "skills/market-research",
+        "skills/social-graph-ranker"
       ],
       "targets": [
         "claude",
@@ -317,6 +319,7 @@
       "description": "Media generation and AI-assisted editing skills.",
       "paths": [
         "skills/fal-ai-media",
+        "skills/remotion-video-creation",
         "skills/video-editing",
         "skills/videodb"
       ],
