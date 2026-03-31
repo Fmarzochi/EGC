@@ -31,7 +31,8 @@
         "write": true,
         "edit": true,
         "bash": true,
-        "read": true
+        "read": true,
+        "changed-files": true
       }
     },
     "planner": {
