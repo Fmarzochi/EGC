@@ -158,7 +158,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "#!/bin/bash\nmkdir -p ~/.claude; INPUT=$(cat);\necho \"$INPUT\" | jq -r '\"[\" + (now | todate) + \"] \" + ((.tool_input.command // \"?\") | gsub(\"\n\"; \" \") | gsub(\"--token[= ][^ ]*\"; \"--token=<REDACTED>\") | gsub(\"Authorization:[: ]*[^ ]*[: ]*[^ ]*\"; \"Authorization:<REDACTED>\") | gsub(\"AKIA[A-Z0-9]{16}\"; \"<REDACTED>\") | gsub(\"ASIA[A-Z0-9]{16}\"; \"<REDACTED>\") | gsub(\"password[= ][^ ]*\"; \"password=<REDACTED>\") | gsub(\"ghp_[A-Za-z0-9_]+\"; \"<REDACTED>\") | gsub(\"gho_[A-Za-z0-9_]+\"; \"<REDACTED>\") | gsub(\"ghs_[A-Za-z0-9_]+\"; \"<REDACTED>\") | gsub(\"github_pat_[A-Za-z0-9_]+\"; \"<REDACTED>\"))' >> ~/.claude/bash-commands.log 2>/dev/null || true;\nprintf '%s\n' \"$INPUT\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/post-bash-command-log.js\" audit"
           }
         ],
         "description": "Audit log all bash commands to ~/.claude/bash-commands.log"
@@ -168,7 +168,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "#!/bin/bash\nmkdir -p ~/.claude; INPUT=$(cat);\necho \"$INPUT\" | jq -r '\"[\" + (now | todate) + \"] tool=Bash command=\" + ((.tool_input.command // \"?\") | gsub(\"\n\"; \" \") | gsub(\"--token[= ][^ ]*\"; \"--token=<REDACTED>\") | gsub(\"Authorization:[: ]*[^ ]*[: ]*[^ ]*\"; \"Authorization:<REDACTED>\") | gsub(\"AKIA[A-Z0-9]{16}\"; \"<REDACTED>\") | gsub(\"ASIA[A-Z0-9]{16}\"; \"<REDACTED>\") | gsub(\"password[= ][^ ]*\"; \"password=<REDACTED>\") | gsub(\"ghp_[A-Za-z0-9_]+\"; \"<REDACTED>\") | gsub(\"gho_[A-Za-z0-9_]+\"; \"<REDACTED>\") | gsub(\"ghs_[A-Za-z0-9_]+\"; \"<REDACTED>\") | gsub(\"github_pat_[A-Za-z0-9_]+\"; \"<REDACTED>\"))' >> ~/.claude/cost-tracker.log 2>/dev/null || true;\nprintf '%s\n' \"$INPUT\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/post-bash-command-log.js\" cost"
           }
         ],
         "description": "Cost tracker - log bash tool usage with timestamps"
@@ -269,7 +269,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/run-with-flags.js\" \"stop:format-typecheck\" \"scripts/hooks/stop-format-typecheck.js\" \"standard,strict\"",
+            "command": "node -e \"const fs=require('fs');const path=require('path');const {spawnSync}=require('child_process');const raw=fs.readFileSync(0,'utf8');const rel=path.join('scripts','hooks','run-with-flags.js');const hasRunnerRoot=candidate=>{const value=typeof candidate==='string'?candidate.trim():'';return value.length>0&&fs.existsSync(path.join(path.resolve(value),rel));};const root=(()=>{const envRoot=process.env.CLAUDE_PLUGIN_ROOT||'';if(hasRunnerRoot(envRoot))return path.resolve(envRoot.trim());const home=require('os').homedir();const claudeDir=path.join(home,'.claude');if(hasRunnerRoot(claudeDir))return claudeDir;for(const candidate of [path.join(claudeDir,'plugins','everything-claude-code'),path.join(claudeDir,'plugins','everything-claude-code@everything-claude-code'),path.join(claudeDir,'plugins','marketplace','everything-claude-code')]){if(hasRunnerRoot(candidate))return candidate;}try{const cacheBase=path.join(claudeDir,'plugins','cache','everything-claude-code');for(const org of fs.readdirSync(cacheBase,{withFileTypes:true})){if(!org.isDirectory())continue;for(const version of fs.readdirSync(path.join(cacheBase,org.name),{withFileTypes:true})){if(!version.isDirectory())continue;const candidate=path.join(cacheBase,org.name,version.name);if(hasRunnerRoot(candidate))return candidate;}}}catch{}return claudeDir;})();const script=path.join(root,rel);if(fs.existsSync(script)){const result=spawnSync(process.execPath,[script,'stop:format-typecheck','scripts/hooks/stop-format-typecheck.js','standard,strict'],{input:raw,encoding:'utf8',env:process.env,cwd:process.cwd(),timeout:300000});const stdout=typeof result.stdout==='string'?result.stdout:'';if(stdout)process.stdout.write(stdout);else process.stdout.write(raw);if(result.stderr)process.stderr.write(result.stderr);if(result.error||result.status===null||result.signal){const reason=result.error?result.error.message:(result.signal?'signal '+result.signal:'missing exit status');process.stderr.write('[Stop] ERROR: hook runner failed: '+reason+String.fromCharCode(10));process.exit(1);}process.exit(Number.isInteger(result.status)?result.status:0);}process.stderr.write('[Stop] WARNING: could not resolve ECC plugin root; skipping hook'+String.fromCharCode(10));process.stdout.write(raw);\"",
             "timeout": 300
           }
         ],
