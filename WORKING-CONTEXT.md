@@ -57,9 +57,9 @@ Public ECC plugin repo for agents, skills, commands, hooks, rules, install surfa
   - `#1043` C# reviewer and .NET skills
 - Direct-port candidates landed after audit:
   - `#1078` hook-id dedupe for managed Claude hook reinstalls
+  - `#844` ui-demo skill
 - Port or rebuild inside ECC after full audit:
   - `#894` Jira integration
-  - `#844` ui-demo skill
   - `#814` + `#808` rebuild as a single consolidated notifications lane for Opencode and cross-harness surfaces
 
 ## Interfaces
@@ -93,3 +93,5 @@ Keep this file detailed for only the current sprint, blockers, and next actions.
 - 2026-04-01: Core English repo surfaces were shifted to a skills-first posture. README, AGENTS, plugin metadata, and contributor instructions now treat `skills/` as canonical and `commands/` as legacy slash-entry compatibility during migration.
 - 2026-04-01: Follow-up bundle cleanup closed `#1080` and `#1079`, which were generated `.claude/` bundle PRs duplicating command-first scaffolding instead of shipping canonical ECC source changes.
 - 2026-04-01: Ported the useful core of `#1078` directly into `main`, but tightened the implementation so legacy no-id hook installs deduplicate cleanly on the first reinstall instead of the second. Added stable hook ids to `hooks/hooks.json`, semantic fallback aliases in `mergeHookEntries()`, and a regression test covering upgrade from pre-id settings.
+- 2026-04-01: Collapsed the obvious command/skill duplicates into thin legacy shims so `skills/` now hold the maintained bodies for NanoClaw, context-budget, DevFleet, docs lookup, E2E, evals, orchestration, prompt optimization, rules distillation, TDD, and verification.
+- 2026-04-01: Ported the self-contained core of `#844` directly into `main` as `skills/ui-demo/SKILL.md` and registered it under the `media-generation` install module instead of merging the PR wholesale.
