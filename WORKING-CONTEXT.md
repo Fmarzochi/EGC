@@ -35,6 +35,7 @@ Public ECC plugin repo for agents, skills, commands, hooks, rules, install surfa
   - remove generic LLM rhetoric, canned CTA patterns, and forced platform stereotypes
   - continue one-by-one audit of overlapping or low-signal skill content
   - move repo guidance and contribution flow to skills-first, leaving commands only as explicit compatibility shims
+  - add operator skills that wrap connected surfaces instead of exposing only raw APIs or disconnected primitives
 - Security:
   - keep dependency posture clean
   - preserve self-contained hook and MCP behavior
@@ -95,3 +96,4 @@ Keep this file detailed for only the current sprint, blockers, and next actions.
 - 2026-04-01: Ported the useful core of `#1078` directly into `main`, but tightened the implementation so legacy no-id hook installs deduplicate cleanly on the first reinstall instead of the second. Added stable hook ids to `hooks/hooks.json`, semantic fallback aliases in `mergeHookEntries()`, and a regression test covering upgrade from pre-id settings.
 - 2026-04-01: Collapsed the obvious command/skill duplicates into thin legacy shims so `skills/` now hold the maintained bodies for NanoClaw, context-budget, DevFleet, docs lookup, E2E, evals, orchestration, prompt optimization, rules distillation, TDD, and verification.
 - 2026-04-01: Ported the self-contained core of `#844` directly into `main` as `skills/ui-demo/SKILL.md` and registered it under the `media-generation` install module instead of merging the PR wholesale.
+- 2026-04-01: Added the first connected-workflow operator lane as ECC-native skills instead of leaving the surface as raw plugins or APIs: `workspace-surface-audit`, `customer-billing-ops`, `project-flow-ops`, and `google-workspace-ops`. These are tracked under the new `operator-workflows` install module.
