@@ -55,6 +55,8 @@ Public ECC plugin repo for agents, skills, commands, hooks, rules, install surfa
 - Native-support candidates to fully diff-audit next:
   - `#1055` Dart / Flutter support
   - `#1043` C# reviewer and .NET skills
+- Direct-port candidates landed after audit:
+  - `#1078` hook-id dedupe for managed Claude hook reinstalls
 - Port or rebuild inside ECC after full audit:
   - `#894` Jira integration
   - `#844` ui-demo skill
@@ -90,3 +92,4 @@ Keep this file detailed for only the current sprint, blockers, and next actions.
 - 2026-04-01: `node scripts/ci/check-unicode-safety.js --write` sanitized the remaining emoji-bearing Markdown files, including several `remotion-video-creation` rule docs and an old local plan note.
 - 2026-04-01: Core English repo surfaces were shifted to a skills-first posture. README, AGENTS, plugin metadata, and contributor instructions now treat `skills/` as canonical and `commands/` as legacy slash-entry compatibility during migration.
 - 2026-04-01: Follow-up bundle cleanup closed `#1080` and `#1079`, which were generated `.claude/` bundle PRs duplicating command-first scaffolding instead of shipping canonical ECC source changes.
+- 2026-04-01: Ported the useful core of `#1078` directly into `main`, but tightened the implementation so legacy no-id hook installs deduplicate cleanly on the first reinstall instead of the second. Added stable hook ids to `hooks/hooks.json`, semantic fallback aliases in `mergeHookEntries()`, and a regression test covering upgrade from pre-id settings.
