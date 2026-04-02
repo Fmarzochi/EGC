@@ -24,6 +24,11 @@ Write investor communication that is short, concrete, and easy to act on.
 4. Stay concise.
 5. Never send copy that could go to any investor.
 
+## Voice Handling
+
+If the user's voice matters, run `brand-voice` first and reuse its `VOICE PROFILE`.
+This skill should keep the investor-specific structure and ask discipline, not recreate its own parallel voice system.
+
 ## Hard Bans
 
 Delete and rewrite any of these:
@@ -31,7 +36,6 @@ Delete and rewrite any of these:
 - "excited to share"
 - generic thesis praise without a real tie-in
 - vague founder adjectives
-- "no fluff"
 - begging language
 - soft closing questions when a direct ask is clearer
 

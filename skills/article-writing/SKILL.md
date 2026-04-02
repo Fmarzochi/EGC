@@ -23,50 +23,23 @@ Write long-form content that sounds like an actual person with a point of view, 
 4. Use proof instead of adjectives.
 5. Never invent facts, credibility, or customer evidence.
 
-## Voice Capture Workflow
+## Voice Handling
 
-If the user wants a specific voice, collect one or more of:
-- published articles
-- newsletters
-- X posts or threads
-- docs or memos
-- launch notes
-- a style guide
-
-Then extract:
-- sentence length and rhythm
-- whether the writing is compressed, explanatory, sharp, or formal
-- how parentheses are used
-- how often the writer asks questions
-- whether the writer uses fragments, lists, or hard pivots
-- formatting habits such as headers, bullets, code blocks, pull quotes
-- what the writer clearly avoids
+If the user wants a specific voice, run `brand-voice` first and reuse its `VOICE PROFILE`.
+Do not duplicate a second style-analysis pass here unless the user explicitly asks for one.
 
 If no voice references are given, default to a sharp operator voice: concrete, unsentimental, useful.
-
-## Affaan / ECC Voice Reference
-
-When matching Affaan / ECC voice, bias toward:
-- direct claims over scene-setting
-- high specificity
-- parentheticals used for qualification or over-clarification, not comedy
-- capitalization chosen situationally, not as a gimmick
-- very low tolerance for fake thought-leadership cadence
-- almost no bait questions
 
 ## Banned Patterns
 
 Delete and rewrite any of these:
 - "In today's rapidly evolving landscape"
 - "game-changer", "cutting-edge", "revolutionary"
-- "no fluff"
-- "not X, just Y"
 - "here's why this matters" as a standalone bridge
 - fake vulnerability arcs
 - a closing question added only to juice engagement
-- forced lowercase
-- corny parenthetical asides
 - biography padding that does not move the argument
+- generic AI throat-clearing that delays the point
 
 ## Writing Process
 
@@ -101,6 +74,6 @@ Delete and rewrite any of these:
 Before delivering:
 - factual claims are backed by provided sources
 - generic AI transitions are gone
-- the voice matches the supplied examples
+- the voice matches the supplied examples or the agreed `VOICE PROFILE`
 - every section adds something new
 - formatting matches the intended medium

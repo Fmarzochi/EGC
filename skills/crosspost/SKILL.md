@@ -39,13 +39,8 @@ Use `content-engine` first if the source still needs voice shaping.
 
 Run `brand-voice` first if the source voice is not already captured in the current session.
 
-Before adapting, note:
-- how blunt or explanatory the source is
-- whether the source uses fragments, lists, or longer transitions
-- whether the source uses parentheses
-- whether the source avoids questions, hashtags, or CTA language
-
-The adaptation should preserve that fingerprint.
+Reuse the resulting `VOICE PROFILE` directly.
+Do not build a second ad hoc voice checklist here unless the user explicitly wants a fresh override for this campaign.
 
 ### Step 3: Adapt by Platform Constraint
 
@@ -91,7 +86,6 @@ Delete and rewrite any of these:
 - "Here's what I learned"
 - "What do you think?"
 - "link in bio" unless that is literally true
-- "not X, just Y"
 - generic "professional takeaway" paragraphs that were not in the source
 
 ## Output Format

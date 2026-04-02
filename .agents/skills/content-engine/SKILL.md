@@ -38,50 +38,28 @@ Before drafting, identify the source set:
 If the user wants a specific voice, build a voice profile from real examples before writing.
 Use `brand-voice` as the canonical workflow when voice consistency matters across more than one output.
 
-## Voice Capture Workflow
+## Voice Handling
 
-Run `brand-voice` first when:
+`brand-voice` is the canonical voice layer.
+
+Run it first when:
 
 - there are multiple downstream outputs
 - the user explicitly cares about writing style
 - the content is launch, outreach, or reputation-sensitive
 
-At minimum, produce a compact `VOICE PROFILE` covering:
-- rhythm
-- compression
-- capitalization
-- parenthetical use
-- question use
-- preferred moves
-- banned moves
-
-Do not start drafting until the voice profile is clear enough to enforce.
-
-## Affaan / ECC Voice Reference
-
-When the user wants Affaan / ECC voice specifically, default to this unless newer examples clearly override it:
-- direct, compressed, concrete
-- strong preference for specific claims, numbers, mechanisms, and receipts
-- parentheticals used to qualify, narrow, or over-clarify, not to do corny bits
-- lowercase is optional, not mandatory
-- questions are rare and should not be added as bait
-- transitions should feel earned, not polished
-- tone can be sharp or blunt, but should not sound like a content marketer
+Reuse the resulting `VOICE PROFILE` here instead of rebuilding a second voice model.
+If the user wants Affaan / ECC voice specifically, still treat `brand-voice` as the source of truth and feed it the best live or source-derived material available.
 
 ## Hard Bans
 
 Delete and rewrite any of these:
 - "In today's rapidly evolving landscape"
 - "game-changer", "revolutionary", "cutting-edge"
-- "no fluff"
-- "not X, just Y"
 - "here's why this matters" unless it is followed immediately by something concrete
-- "Excited to share"
-- fake curiosity gaps
 - ending with a LinkedIn-style question just to farm replies
-- forced lowercase when the source voice does not call for it
 - forced casualness on LinkedIn
-- parenthetical jokes that were not present in the source voice
+- fake engagement padding that was not present in the source material
 
 ## Platform Adaptation Rules
 
