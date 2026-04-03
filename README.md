@@ -225,7 +225,7 @@ For manual install instructions see the README in the `rules/` folder. When copy
 /plugin list everything-claude-code@everything-claude-code
 ```
 
-**That's it!** You now have access to 36 agents, 151 skills, and 68 legacy command shims.
+**That's it!** You now have access to 38 agents, 154 skills, and 71 legacy command shims.
 
 ### Multi-model commands require additional setup
 
@@ -1118,9 +1118,9 @@ The configuration is automatically detected from `.opencode/opencode.json`.
 
 | Feature | Claude Code | OpenCode | Status |
 |---------|-------------|----------|--------|
-| Agents | PASS: 36 agents | PASS: 12 agents | **Claude Code leads** |
-| Commands | PASS: 68 commands | PASS: 31 commands | **Claude Code leads** |
-| Skills | PASS: 151 skills | PASS: 37 skills | **Claude Code leads** |
+| Agents | PASS: 38 agents | PASS: 12 agents | **Claude Code leads** |
+| Commands | PASS: 71 commands | PASS: 31 commands | **Claude Code leads** |
+| Skills | PASS: 154 skills | PASS: 37 skills | **Claude Code leads** |
 | Hooks | PASS: 8 event types | PASS: 11 events | **OpenCode has more!** |
 | Rules | PASS: 29 rules | PASS: 13 instructions | **Claude Code leads** |
 | MCP Servers | PASS: 14 servers | PASS: Full | **Full parity** |
@@ -1227,9 +1227,9 @@ ECC is the **first plugin to maximize every major AI coding tool**. Here's how e
 
 | Feature | Claude Code | Cursor IDE | Codex CLI | OpenCode |
 |---------|------------|------------|-----------|----------|
-| **Agents** | 36 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
-| **Commands** | 68 | Shared | Instruction-based | 31 |
-| **Skills** | 151 | Shared | 10 (native format) | 37 |
+| **Agents** | 38 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
+| **Commands** | 71 | Shared | Instruction-based | 31 |
+| **Skills** | 154 | Shared | 10 (native format) | 37 |
 | **Hook Events** | 8 types | 15 types | None yet | 11 types |
 | **Hook Scripts** | 20+ scripts | 16 scripts (DRY adapter) | N/A | Plugin hooks |
 | **Rules** | 34 (common + lang) | 34 (YAML frontmatter) | Instruction-based | 13 instructions |
