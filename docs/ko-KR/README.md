@@ -631,7 +631,7 @@ node tests/hooks/hooks.test.js
 ### 기여 아이디어
 
 - 언어별 스킬 (Rust, C#, Swift, Kotlin) — Go, Python, Java는 이미 포함
-- 프레임워크별 설정 (Rails, Laravel, FastAPI, NestJS) — Django, Spring Boot는 이미 포함
+- 프레임워크별 설정 (Rails, Laravel, FastAPI) — Django, NestJS, Spring Boot는 이미 포함
 - DevOps 에이전트 (Kubernetes, Terraform, AWS, Docker)
 - 테스팅 전략 (다양한 프레임워크, 비주얼 리그레션)
 - 도메인별 지식 (ML, 데이터 엔지니어링, 모바일)

@@ -441,7 +441,7 @@ Lütfen katkıda bulunun! Rehber için [CONTRIBUTING.md](../../CONTRIBUTING.md)'
 ### Katkı Fikirleri
 
 - Dile özel skill'ler (Rust, C#, Kotlin, Java) — Go, Python, Perl, Swift ve TypeScript zaten dahil
-- Framework'e özel config'ler (Rails, FastAPI, NestJS) — Django, Spring Boot, Laravel zaten dahil
+- Framework'e özel config'ler (Rails, FastAPI) — Django, NestJS, Spring Boot ve Laravel zaten dahil
 - DevOps agent'ları (Kubernetes, Terraform, AWS, Docker)
 - Test stratejileri (farklı framework'ler, görsel regresyon)
 - Domain'e özel bilgi (ML, data engineering, mobile)

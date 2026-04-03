@@ -600,7 +600,7 @@ node tests/hooks/hooks.test.js
 ### 貢献アイデア
 
 - 言語固有のスキル（Rust、C#、Swift、Kotlin） — Go、Python、Javaは既に含まれています
-- フレームワーク固有の設定（Rails、Laravel、FastAPI、NestJS） — Django、Spring Bootは既に含まれています
+- フレームワーク固有の設定（Rails、Laravel、FastAPI） — Django、NestJS、Spring Bootは既に含まれています
 - DevOpsエージェント（Kubernetes、Terraform、AWS、Docker）
 - テスト戦略（異なるフレームワーク、ビジュアルリグレッション）
 - 専門領域の知識（ML、データエンジニアリング、モバイル開発）
