@@ -1,6 +1,6 @@
 # Working Context
 
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
 ## Purpose
 
@@ -13,7 +13,7 @@ Public ECC plugin repo for agents, skills, commands, hooks, rules, install surfa
 - Local full suite status after fix: `1723/1723` passing
 - Main active operational work:
   - keep default branch green
-  - audit and classify remaining open PR backlog by full diff
+  - continue issue-driven fixes from `main` now that the public PR backlog is at zero
   - continue ECC 2.0 control-plane and operator-surface buildout
 
 ## Current Constraints
@@ -24,7 +24,7 @@ Public ECC plugin repo for agents, skills, commands, hooks, rules, install surfa
 
 ## Active Queues
 
-- PR backlog: audit and classify remaining open PRs into merge, port/rebuild, close, or park
+- PR backlog: currently cleared on the public queue; new work should land through direct mainline fixes or fresh narrowly scoped PRs
 - Product:
   - selective install cleanup
   - control plane primitives
@@ -92,7 +92,7 @@ Keep this file detailed for only the current sprint, blockers, and next actions.
 - 2026-04-02: Closed `#1125` after full diff audit. The bundle/skill-router lane hardcoded many non-existent or non-canonical surfaces and created a second routing abstraction instead of a small ECC-native index layer.
 - 2026-04-02: Closed `#1124` after full diff audit. The added agent roster was thoughtfully written, but it duplicated the existing ECC agent surface with a second competing catalog (`dispatch`, `explore`, `verifier`, `executor`, etc.) instead of strengthening canonical agents already in-tree.
 - 2026-04-02: Closed the full Argus cluster `#1098`, `#1099`, `#1100`, `#1101`, and `#1102` after full diff audit. The common failure mode was the same across all five PRs: external multi-CLI dispatch was treated as a first-class runtime dependency of shipped ECC surfaces. Any useful protocol ideas should be re-ported later into ECC-native orchestration, review, or reflection lanes without external CLI fan-out assumptions.
-- 2026-04-02: The active open PR queue is now reduced to four items: `#1081`, `#1055`, `#1043`, and `#894`. Next audit focus should stay on native-support or integration lanes that can plausibly be rebuilt inside ECC without external branded dependencies.
+- 2026-04-02: The previously open native-support / integration queue (`#1081`, `#1055`, `#1043`, `#894`) has now been fully resolved by direct-port or closure policy. The active public PR queue is currently zero; next focus stays on issue-driven mainline fixes and CI health, not backlog PR intake.
 - 2026-04-01: `main` CI was restored locally with `1723/1723` tests passing after lockfile and hook validation fixes.
 - 2026-04-01: Auto-generated ECC bundle PRs `#1068` and `#1069` were closed instead of merged; useful ideas must be ported manually after explicit diff audit.
 - 2026-04-01: Major-version ESLint bump PRs `#1063` and `#1064` were closed; revisit only inside a planned ESLint 10 migration lane.
@@ -126,3 +126,4 @@ Keep this file detailed for only the current sprint, blockers, and next actions.
 - 2026-04-02: Ported the safe core of `#1153` directly into `main`: markdownlint cleanup for orchestration/docs surfaces plus the Windows `USERPROFILE` and path-normalization fixes in `install-apply` / `repair` tests. Local validation after installing repo deps: `node tests/scripts/install-apply.test.js`, `node tests/scripts/repair.test.js`, and targeted `yarn markdownlint` all passed.
 - 2026-04-02: Direct-ported the safe web/frontend rules lane from `#1122` into `rules/web/`, but adapted `rules/web/hooks.md` to prefer project-local tooling and avoid remote one-off package execution examples.
 - 2026-04-02: Adapted the design-quality reminder from `#1127` into the current ECC hook architecture with a local `scripts/hooks/design-quality-check.js`, Claude `hooks/hooks.json` wiring, Cursor `after-file-edit.js` wiring, and dedicated hook coverage in `tests/hooks/design-quality-check.test.js`.
+- 2026-04-02: Fixed `#1141` on `main` in `16e9b17`. The observer lifecycle is now session-aware instead of purely detached: `SessionStart` writes a project-scoped lease, `SessionEnd` removes that lease and stops the observer when the final lease disappears, `observe.sh` records project activity, and `observer-loop.sh` now exits on idle when no leases remain. Targeted validation passed with `bash -n`, `node tests/hooks/observer-memory.test.js`, `node tests/integration/hooks.test.js`, `node scripts/ci/validate-hooks.js hooks/hooks.json`, and `node scripts/ci/check-unicode-safety.js`.
