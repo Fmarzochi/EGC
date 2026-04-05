@@ -16,7 +16,7 @@
 ![Java](https://img.shields.io/badge/-Java-ED8B00?logo=openjdk&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
-> **50K+ stars** | **6K+ forks** | **30 contributors** | **6개 언어 지원** | **Anthropic 해커톤 우승**
+> **140K+ stars** | **21K+ forks** | **170+ contributors** | **12+ language ecosystems** | **Anthropic 해커톤 우승**
 
 ---
 
@@ -34,7 +34,7 @@
 
 단순한 설정 파일 모음이 아닙니다. 스킬, 직관(Instinct), 메모리 최적화, 지속적 학습, 보안 스캐닝, 리서치 우선 개발을 아우르는 완전한 시스템입니다. 10개월 이상 실제 프로덕트를 만들며 매일 집중적으로 사용해 발전시킨 프로덕션 레벨의 에이전트, 훅, 커맨드, 룰, MCP 설정이 포함되어 있습니다.
 
-**Claude Code**, **Codex**, **Cowork** 등 다양한 AI 에이전트 하네스에서 사용할 수 있습니다.
+**Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Gemini** 등 다양한 AI 에이전트 하네스에서 사용할 수 있습니다.
 
 ---
 
@@ -112,7 +112,7 @@
 
 ```bash
 # 마켓플레이스 추가
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # 플러그인 설치
 /plugin install everything-claude-code@everything-claude-code
@@ -356,7 +356,7 @@ Claude Code v2.1+는 설치된 플러그인의 `hooks/hooks.json`을 **자동으
 
 ```bash
 # 마켓플레이스 추가
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # 플러그인 설치
 /plugin install everything-claude-code@everything-claude-code

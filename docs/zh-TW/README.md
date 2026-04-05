@@ -67,7 +67,7 @@
 
 ```bash
 # 新增市集
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # 安裝外掛程式
 /plugin install everything-claude-code@everything-claude-code
@@ -267,7 +267,7 @@ everything-claude-code/
 
 ```bash
 # 將此儲存庫新增為市集
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # 安裝外掛程式
 /plugin install everything-claude-code@everything-claude-code

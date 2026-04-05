@@ -16,7 +16,7 @@
 ![Java](https://img.shields.io/badge/-Java-ED8B00?logo=openjdk&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
-> **50K+ estrelas** | **6K+ forks** | **30 contribuidores** | **6 idiomas suportados** | **Vencedor do Hackathon Anthropic**
+> **140K+ estrelas** | **21K+ forks** | **170+ contribuidores** | **12+ ecossistemas de linguagem** | **Vencedor do Hackathon Anthropic**
 
 ---
 
@@ -34,7 +34,7 @@
 
 Não são apenas configurações. Um sistema completo: skills, instincts, otimização de memória, aprendizado contínuo, varredura de segurança e desenvolvimento com pesquisa em primeiro lugar. Agentes, hooks, comandos, regras e configurações MCP prontos para produção, desenvolvidos ao longo de 10+ meses de uso intensivo diário construindo produtos reais.
 
-Funciona com **Claude Code**, **Codex**, **Cowork** e outros harnesses de agentes de IA.
+Funciona com **Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Gemini** e outros harnesses de agentes de IA.
 
 ---
 
@@ -112,7 +112,7 @@ Comece em menos de 2 minutos:
 
 ```bash
 # Adicionar marketplace
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Instalar plugin
 /plugin install everything-claude-code@everything-claude-code
@@ -301,7 +301,7 @@ claude --version
 
 ```bash
 # Adicionar este repositório como marketplace
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Instalar o plugin
 /plugin install everything-claude-code@everything-claude-code

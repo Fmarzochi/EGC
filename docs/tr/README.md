@@ -33,7 +33,7 @@
 
 Sadece konfigürasyon dosyaları değil. Tam bir sistem: skill'ler, instinct'ler, memory optimizasyonu, sürekli öğrenme, güvenlik taraması ve araştırma odaklı geliştirme. 10+ ay boyunca gerçek ürünler inşa ederken yoğun günlük kullanımla evrimleşmiş production-ready agent'lar, hook'lar, command'lar, rule'lar ve MCP konfigürasyonları.
 
-**Claude Code**, **Codex**, **Cowork** ve diğer AI agent harness'larında çalışır.
+**Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Gemini** ve diğer AI agent harness'larında çalışır.
 
 ---
 
@@ -113,7 +113,7 @@ Bu repository yalnızca ham kodu içerir. Rehberler her şeyi açıklıyor.
 
 ```bash
 # Marketplace ekle
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Plugin'i kur
 /plugin install everything-claude-code@everything-claude-code

@@ -13,13 +13,13 @@
     {
       "name": "everything-claude-code",
       "source": "./",
-      "description": "The most comprehensive Claude Code plugin — 36 agents, 142 skills, 68 legacy command shims, and production-ready hooks for TDD, security scanning, code review, and continuous learning",
-      "version": "1.9.0",
+      "description": "The most comprehensive Claude Code plugin — 38 agents, 156 skills, 72 legacy command shims, selective install profiles, and production-ready hooks for TDD, security scanning, code review, and continuous learning",
+      "version": "1.10.0",
       "author": {
         "name": "Affaan Mustafa",
         "email": "me@affaanmustafa.com"
       },
-      "homepage": "https://github.com/affaan-m/everything-claude-code",
+      "homepage": "https://ecc.tools",
       "repository": "https://github.com/affaan-m/everything-claude-code",
       "license": "MIT",
       "keywords": [

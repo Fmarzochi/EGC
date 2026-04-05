@@ -66,7 +66,7 @@ function runTests() {
         },
       ],
       source: {
-        repoVersion: '1.9.0',
+        repoVersion: '1.10.0',
         repoCommit: 'abc123',
         manifestVersion: 1,
       },
@@ -100,7 +100,7 @@ function runTests() {
         },
         operations: [],
         source: {
-          repoVersion: '1.9.0',
+          repoVersion: '1.10.0',
           repoCommit: 'abc123',
           manifestVersion: 1,
         },
@@ -154,7 +154,7 @@ function runTests() {
       },
       operations: [operation],
       source: {
-        repoVersion: '1.9.0',
+        repoVersion: '1.10.0',
         repoCommit: 'abc123',
         manifestVersion: 1,
       },
@@ -208,7 +208,7 @@ function runTests() {
           skippedModules: [],
         },
         source: {
-          repoVersion: '1.9.0',
+          repoVersion: '1.10.0',
           repoCommit: 'abc123',
           manifestVersion: 1,
         },

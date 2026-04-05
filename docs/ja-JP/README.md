@@ -107,7 +107,7 @@
 
 ```bash
 # マーケットプレイスを追加
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # プラグインをインストール
 /plugin install everything-claude-code@everything-claude-code
@@ -424,7 +424,7 @@ Duplicate hook file detected: ./hooks/hooks.json is already resolved to a loaded
 
 ```bash
 # このリポジトリをマーケットプレイスとして追加
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # プラグインをインストール
 /plugin install everything-claude-code@everything-claude-code

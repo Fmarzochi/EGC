@@ -17,7 +17,7 @@
 ![Perl](https://img.shields.io/badge/-Perl-39457E?logo=perl&logoColor=white)
 ![Markdown](https://img.shields.io/badge/-Markdown-000000?logo=markdown&logoColor=white)
 
-> **50K+ stars** | **6K+ forks** | **30 contributors** | **7 languages supported** | **Anthropic Hackathon Winner**
+> **140K+ stars** | **21K+ forks** | **170+ contributors** | **12+ language ecosystems** | **Anthropic Hackathon Winner**
 
 ---
 
@@ -36,7 +36,7 @@
 
 Not just configs. A complete system: skills, instincts, memory optimization, continuous learning, security scanning, and research-first development. Production-ready agents, skills, hooks, rules, MCP configurations, and legacy command shims evolved over 10+ months of intensive daily use building real products.
 
-Works across **Claude Code**, **Codex**, **Cowork**, and other AI agent harnesses.
+Works across **Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Gemini**, and other AI agent harnesses.
 
 ---
 
@@ -81,6 +81,15 @@ This repo is the raw code only. The guides explain everything.
 ---
 
 ## What's New
+
+### v1.10.0 — Surface Refresh, Operator Workflows, and ECC 2.0 Alpha (Apr 2026)
+
+- **Public surface synced to the live repo** — metadata, catalog counts, plugin manifests, and install-facing docs now match the actual OSS surface: 38 agents, 156 skills, and 72 legacy command shims.
+- **Operator and outbound workflow expansion** — `brand-voice`, `social-graph-ranker`, `connections-optimizer`, `customer-billing-ops`, `google-workspace-ops`, `project-flow-ops`, and `workspace-surface-audit` round out the operator lane.
+- **Media and launch tooling** — `manim-video`, `remotion-video-creation`, and upgraded social publishing surfaces make technical explainers and launch content part of the same system.
+- **Framework and product surface growth** — `nestjs-patterns`, richer Codex/OpenCode install surfaces, and expanded cross-harness packaging keep the repo usable beyond Claude Code alone.
+- **ECC 2.0 alpha is in-tree** — the Rust control-plane prototype in `ecc2/` now builds locally and exposes `dashboard`, `start`, `sessions`, `status`, `stop`, `resume`, and `daemon` commands. It is usable as an alpha, not yet a general release.
+- **Ecosystem hardening** — AgentShield, ECC Tools cost controls, billing portal work, and website refreshes continue to ship around the core plugin instead of drifting into separate silos.
 
 ### v1.9.0 — Selective Install & Language Expansion (Mar 2026)
 
@@ -157,9 +166,11 @@ Get up and running in under 2 minutes:
 
 ### Step 1: Install the Plugin
 
+> NOTE: The plugin is convenient, but the OSS installer below is still the most reliable path if your Claude Code build has trouble resolving self-hosted marketplace entries.
+
 ```bash
 # Add marketplace
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Install plugin
 /plugin install everything-claude-code@everything-claude-code
@@ -607,7 +618,7 @@ The easiest way to use this repo - install as a Claude Code plugin:
 
 ```bash
 # Add this repo as a marketplace
-/plugin marketplace add affaan-m/everything-claude-code
+/plugin marketplace add https://github.com/affaan-m/everything-claude-code
 
 # Install the plugin
 /plugin install everything-claude-code@everything-claude-code
@@ -1239,7 +1250,7 @@ ECC is the **first plugin to maximize every major AI coding tool**. Here's how e
 | **Context File** | CLAUDE.md + AGENTS.md | AGENTS.md | AGENTS.md | AGENTS.md |
 | **Secret Detection** | Hook-based | beforeSubmitPrompt hook | Sandbox-based | Hook-based |
 | **Auto-Format** | PostToolUse hook | afterFileEdit hook | N/A | file.edited hook |
-| **Version** | Plugin | Plugin | Reference config | 1.9.0 |
+| **Version** | Plugin | Plugin | Reference config | 1.10.0 |
 
 **Key architectural decisions:**
 - **AGENTS.md** at root is the universal cross-tool file (read by all 4 tools)

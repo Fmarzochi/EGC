@@ -278,7 +278,7 @@ function runTests() {
   if (test('INLINE_RESOLVE discovers plugin cache when env var is unset', () => {
     const homeDir = createTempDir();
     try {
-      const expected = setupPluginCache(homeDir, 'everything-claude-code', '1.9.0');
+      const expected = setupPluginCache(homeDir, 'everything-claude-code', '1.10.0');
       const { execFileSync } = require('child_process');
       const result = execFileSync('node', [
         '-e', `console.log(${INLINE_RESOLVE})`,
