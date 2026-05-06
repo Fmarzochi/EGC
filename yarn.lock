@@ -76,10 +76,22 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@eslint/js@npm:9.39.2, @eslint/js@npm:^9.39.2":
+"@eslint/js@npm:9.39.2":
   version: 9.39.2
   resolution: "@eslint/js@npm:9.39.2"
   checksum: 10c0/00f51c52b04ac79faebfaa65a9652b2093b9c924e945479f1f3945473f78aee83cbc76c8d70bbffbf06f7024626575b16d97b66eab16182e1d0d39daff2f26f5
+  languageName: node
+  linkType: hard
+
+"@eslint/js@npm:^10.0.1":
+  version: 10.0.1
+  resolution: "@eslint/js@npm:10.0.1"
+  peerDependencies:
+    eslint: ^10.0.0
+  peerDependenciesMeta:
+    eslint:
+      optional: true
+  checksum: 10c0/9f3fcaf71ba7fdf65d82e8faad6ecfe97e11801cc3c362b306a88ea1ed1344ae0d35330dddb0e8ad18f010f6687a70b75491b9e01c8af57acd7987cee6b3ec6c
   languageName: node
   linkType: hard
 
@@ -542,27 +554,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ecc-universal@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "ecc-universal@workspace:."
-  dependencies:
-    "@eslint/js": "npm:^9.39.2"
-    "@iarna/toml": "npm:^2.2.5"
-    "@opencode-ai/plugin": "npm:^1.0.0"
-    "@types/node": "npm:^20.19.24"
-    ajv: "npm:^8.18.0"
-    c8: "npm:^11.0.0"
-    eslint: "npm:^9.39.2"
-    globals: "npm:^17.4.0"
-    markdownlint-cli: "npm:^0.48.0"
-    sql.js: "npm:^1.14.1"
-    typescript: "npm:^5.9.3"
-  bin:
-    ecc: scripts/ecc.js
-    ecc-install: scripts/install-apply.js
-  languageName: unknown
-  linkType: soft
-
 "emoji-regex@npm:^8.0.0":
   version: 8.0.0
   resolution: "emoji-regex@npm:8.0.0"
@@ -706,6 +697,27 @@ __metadata:
   checksum: 10c0/9a2fe69a41bfdade834ba7c42de4723c97ec776e40656919c62cbd13607c45e127a003f05f724a1ea55e5029a4cf2de444b13009f2af71271e42d93a637137c7
   languageName: node
   linkType: hard
+
+"everything-gemini@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "everything-gemini@workspace:."
+  dependencies:
+    "@eslint/js": "npm:^10.0.1"
+    "@iarna/toml": "npm:^2.2.5"
+    "@opencode-ai/plugin": "npm:^1.0.0"
+    "@types/node": "npm:^20.19.24"
+    ajv: "npm:^8.18.0"
+    c8: "npm:^11.0.0"
+    eslint: "npm:^9.39.2"
+    globals: "npm:^17.4.0"
+    markdownlint-cli: "npm:^0.48.0"
+    sql.js: "npm:^1.14.1"
+    typescript: "npm:^5.9.3"
+  bin:
+    ecc: scripts/ecc.js
+    ecc-install: scripts/install-apply.js
+  languageName: unknown
+  linkType: soft
 
 "fast-deep-equal@npm:^3.1.1, fast-deep-equal@npm:^3.1.3":
   version: 3.1.3
