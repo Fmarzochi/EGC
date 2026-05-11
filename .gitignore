@@ -1,99 +1,152 @@
-# Environment files
+
+# =========================================================
+
+# Python
+
+# =========================================================
+
+**pycache**/
+*.py[cod]
+*$py.class
+*.so
+
+# Python tooling
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+
+# Coverage
+
+.coverage
+htmlcov/
+
+# =========================================================
+
+# Build / Packaging
+
+# =========================================================
+
+build/
+dist/
+site/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+
+# =========================================================
+
+# Virtual Environments
+
+# =========================================================
+
+.venv/
+venv/
+env/
+ENV/
+
+# =========================================================
+
+# Environment Variables & Secrets
+
+# =========================================================
+
 .env
-.env.local
-.env.*.local
-.env.development
-.env.test
-.env.production
+.env.*
+!.env.example
 
-# API keys and secrets
-*.key
-*.pem
+# Sensitive credentials
+
+credentials.json
 secrets.json
-config/secrets.yml
-.secrets
+service-account.json
 
-# OS files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
+# =========================================================
 
-# Editor files
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-*.sublime-project
-*.sublime-workspace
+# Logs
 
-# Node
+# =========================================================
+
+*.log
+logs/
+
+# =========================================================
+
+# Runtime / Temporary
+
+# =========================================================
+
+tmp/
+temp/
+.cache/
+
+# Session/runtime artifacts
+
+.sessions/
+sessions/
+
+# =========================================================
+
+# Node.js
+
+# =========================================================
+
 node_modules/
+.next/
+.nuxt/
+dist-ssr/
+coverage/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
-.yarn/
-lerna-debug.log*
+pnpm-debug.log*
 
-# Build outputs
-dist/
-build/
-*.tsbuildinfo
-.cache/
+# Yarn Berry
 
-# Test coverage
-coverage/
-.nyc_output/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
 
-# Logs
-logs/
-*.log
+# KEEP LOCAL YARN RELEASES VERSIONED
 
-# Python
-__pycache__/
-*.pyc
+!.yarn/releases/
 
-# Task files (Claude Code teams)
-tasks/
+# =========================================================
 
-# Personal configs (if any)
-personal/
-private/
+# IDE / Editor
 
-# Session templates (not committed)
-examples/sessions/*.tmp
+# =========================================================
 
-# Local drafts
-marketing/
-.dmux/
-.dmux-hooks/
-.claude/worktrees/
-.claude/scheduled_tasks.lock
+.vscode/
+.idea/
 
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.bak
-*.backup
+*.swp
+*.swo
+*~
 
-# Observer temp files (continuous-learning-v2)
-.observer-tmp/
+.history/
 
-# Rust build artifacts
-ecc2/target/
+# =========================================================
 
-# Bootstrap pipeline outputs
-# Generated lock files in tool subdirectories
-.opencode/package-lock.json
-.opencode/node_modules/
-assets/images/security/badrudi-exploit.mp4
+# OS
+
+# =========================================================
+
+.DS_Store
+Thumbs.db
+
+# =========================================================
+
+# Optional Local Runtime Artifacts
+
+# =========================================================
+
+*.runtime
+*.trace
