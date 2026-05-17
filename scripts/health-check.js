@@ -131,7 +131,7 @@ ${report.drift.map(d => `- [${d.type}] ${d.name} (${d.ns || 'root'}): ${d.issue}
 - Single-Agent Mode: **ENFORCED**
 
 ---
-\`;
+`;
   fs.writeFileSync(reportPath, reportMD);
 
   console.log(`Report generated: reports/health-report.md (Status: ${report.status})`);
