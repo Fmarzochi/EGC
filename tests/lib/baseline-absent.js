@@ -78,7 +78,7 @@ const BASELINE_ABSENT_TEST_NAMES = Object.freeze([
 
 function isBaselineAbsentError(error, name) {
   if (!error) return false;
-  const haystack = `${error.path || ''} ${error.message || ''}`;
+  const haystack = `${error.path || ''} ${error.message || ''}`.replace(/\\/g, '/');
   // ENOENT against a known baseline-absent path
   if (error.code === 'ENOENT' && BASELINE_ABSENT_PATHS.some(p => haystack.includes(p))) {
     return true;
