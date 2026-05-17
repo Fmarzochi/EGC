@@ -145,8 +145,11 @@ state/
 .ai/
 .claude/
 .gemini/
-.cursor/
-.codex/
+.cursor/cache/
+.cursor/index/
+.cursor/egc-install-state.json
+.codex/cache/
+.codex/egc-install-state.json
 .openai/
 .anthropic/
 .mcp/
