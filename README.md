@@ -108,7 +108,7 @@ everything-gemini/
 ├── assets/             # Media, banners, and logos (hero.png, demo.mp4, ecc-logo.png)
 ├── commands/           # CLI slash-command entrypoints for the terminal
 ├── docs/               # Technical documentation and translations
-├── hooks/              # Lifecycle interceptors (PreToolUse, PostToolUse, etc.)
+├── hooks/              # Hook manifest (hooks.json) — implementations live in scripts/hooks/
 ├── rules/              # Language-specific coding standards (Python, TS, Go, etc.)
 ├── scripts/            # Core orchestration and execution logic
 ├── skills/             # Domain-specific workflows and knowledge
@@ -219,6 +219,29 @@ The EGC Dashboard will open. From here, you can browse every Agent, Skill, Comma
 
 ---
 
+## 📦 Selective Install (Targets: Cursor, Codex, Antigravity, …)
+
+EGC ships scripted installers that materialize the agents, skills, rules, and hooks
+into another harness's config layout (e.g. `.cursor/`, `~/.codex/`, `~/.gemini/`).
+Profiles and modules are declared in `manifests/install-profiles.json` and
+`manifests/install-modules.json`.
+
+```bash
+# POSIX
+./install.sh --target cursor --dry-run typescript
+
+# Windows (PowerShell)
+.\install.ps1 --target cursor --dry-run typescript
+
+# Or via npm (after a clone or global install)
+npx egc-install --target cursor typescript
+```
+
+See `docs/guides/ANTIGRAVITY-GUIDE.md` for a worked end-to-end example and the
+list of supported targets.
+
+---
+
 ## ⚡ CLI Execution
 
 Once you are comfortable with the Dashboard, you can start using EGC in your terminal.
@@ -252,12 +275,14 @@ support is best-effort and depends on which subsystem you use.
 
 ### Windows — ⚠️ Best-effort (use WSL or Git Bash)
 *   **Recommended:** Run EGC inside WSL2 (Ubuntu) — gives you a real Linux environment.
-*   **Alternative:** Git Bash for the install scripts; Python and Node CLIs work
+*   **Native entrypoint:** `install.ps1` is the supported PowerShell installer and is
+    covered by the CI matrix on Windows Server (Node 18/20/22). Run it directly
+    from PowerShell or Command Prompt.
+*   **Alternative:** Git Bash for `install.sh`; Python and Node CLIs work
     from PowerShell/Command Prompt.
-*   **Limitation:** Several lifecycle hooks ship as POSIX shell scripts (`*.sh`),
-    so plain PowerShell will skip those hooks even though the dispatcher itself
-    runs. The core dashboard and CLI commands work, but the full hook pipeline
-    is degraded.
+*   **Limitation:** The hook pipeline is mostly Node-based, but one POSIX shell
+    hook (`*.sh`) is skipped when running outside Git Bash/WSL. Core dashboard
+    and CLI commands work fully.
 *   **Paths:** EGC normalizes paths internally via Node's `path` module, but
     embedded shell snippets assume a POSIX shell is available.
 
