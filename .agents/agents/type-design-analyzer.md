@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/type-design-analyzer.md
+../../agents/type-design-analyzer.md

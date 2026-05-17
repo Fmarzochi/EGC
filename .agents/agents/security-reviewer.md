@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/security-reviewer.md
+../../agents/security-reviewer.md

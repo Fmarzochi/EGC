@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/fastapi-reviewer.md
+../../agents/fastapi-reviewer.md

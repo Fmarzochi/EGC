@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/network-troubleshooter.md
+../../agents/network-troubleshooter.md

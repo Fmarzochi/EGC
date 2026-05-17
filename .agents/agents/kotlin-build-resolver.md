@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/kotlin-build-resolver.md
+../../agents/kotlin-build-resolver.md

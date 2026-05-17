@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/django-reviewer.md
+../../agents/django-reviewer.md

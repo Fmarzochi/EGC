@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/docs-lookup.md
+../../agents/docs-lookup.md

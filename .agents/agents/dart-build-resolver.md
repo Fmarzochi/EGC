@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/dart-build-resolver.md
+../../agents/dart-build-resolver.md

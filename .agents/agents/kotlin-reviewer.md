@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/kotlin-reviewer.md
+../../agents/kotlin-reviewer.md

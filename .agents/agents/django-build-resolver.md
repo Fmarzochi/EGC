@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/django-build-resolver.md
+../../agents/django-build-resolver.md

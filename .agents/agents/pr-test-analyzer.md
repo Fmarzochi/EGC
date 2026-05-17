@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/pr-test-analyzer.md
+../../agents/pr-test-analyzer.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/swift-build-resolver.md
+../../agents/swift-build-resolver.md

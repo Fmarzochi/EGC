@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/csharp-reviewer.md
+../../agents/csharp-reviewer.md

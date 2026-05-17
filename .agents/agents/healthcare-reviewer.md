@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/healthcare-reviewer.md
+../../agents/healthcare-reviewer.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/python-reviewer.md
+../../agents/python-reviewer.md

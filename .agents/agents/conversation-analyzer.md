@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/conversation-analyzer.md
+../../agents/conversation-analyzer.md

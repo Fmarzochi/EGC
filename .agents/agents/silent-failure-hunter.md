@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/silent-failure-hunter.md
+../../agents/silent-failure-hunter.md

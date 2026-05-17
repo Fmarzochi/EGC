@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/code-explorer.md
+../../agents/code-explorer.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/network-config-reviewer.md
+../../agents/network-config-reviewer.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/loop-operator.md
+../../agents/loop-operator.md

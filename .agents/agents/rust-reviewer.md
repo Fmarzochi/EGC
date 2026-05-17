@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/rust-reviewer.md
+../../agents/rust-reviewer.md

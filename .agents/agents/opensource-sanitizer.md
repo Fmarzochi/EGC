@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/opensource-sanitizer.md
+../../agents/opensource-sanitizer.md

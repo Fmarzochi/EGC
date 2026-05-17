@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/code-simplifier.md
+../../agents/code-simplifier.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/build-error-resolver.md
+../../agents/build-error-resolver.md

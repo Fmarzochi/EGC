@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/harmonyos-app-resolver.md
+../../agents/harmonyos-app-resolver.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/a11y-architect.md
+../../agents/a11y-architect.md

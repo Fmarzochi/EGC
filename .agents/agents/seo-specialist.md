@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/seo-specialist.md
+../../agents/seo-specialist.md

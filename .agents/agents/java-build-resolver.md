@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/java-build-resolver.md
+../../agents/java-build-resolver.md

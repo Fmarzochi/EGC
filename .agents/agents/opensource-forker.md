@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/opensource-forker.md
+../../agents/opensource-forker.md

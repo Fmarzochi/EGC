@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/code-architect.md
+../../agents/code-architect.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/refactor-cleaner.md
+../../agents/refactor-cleaner.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/gan-evaluator.md
+../../agents/gan-evaluator.md

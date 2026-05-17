@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/java-reviewer.md
+../../agents/java-reviewer.md

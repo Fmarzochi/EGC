@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/pytorch-build-resolver.md
+../../agents/pytorch-build-resolver.md

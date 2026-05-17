@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/cpp-build-resolver.md
+../../agents/cpp-build-resolver.md

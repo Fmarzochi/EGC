@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/go-build-resolver.md
+../../agents/go-build-resolver.md

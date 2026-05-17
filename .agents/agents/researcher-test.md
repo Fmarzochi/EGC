@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/researcher-test.md
+../../agents/researcher-test.md

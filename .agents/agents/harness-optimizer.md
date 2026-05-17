@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/harness-optimizer.md
+../../agents/harness-optimizer.md

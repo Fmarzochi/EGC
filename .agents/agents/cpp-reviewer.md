@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/cpp-reviewer.md
+../../agents/cpp-reviewer.md

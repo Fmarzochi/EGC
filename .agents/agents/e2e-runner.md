@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/e2e-runner.md
+../../agents/e2e-runner.md

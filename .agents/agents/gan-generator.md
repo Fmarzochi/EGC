@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/gan-generator.md
+../../agents/gan-generator.md

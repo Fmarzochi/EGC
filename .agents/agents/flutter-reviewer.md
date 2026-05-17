@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/flutter-reviewer.md
+../../agents/flutter-reviewer.md

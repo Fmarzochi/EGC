@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/planner.md
+../../agents/planner.md

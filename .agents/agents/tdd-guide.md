@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/tdd-guide.md
+../../agents/tdd-guide.md

@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/mle-reviewer.md
+../../agents/mle-reviewer.md

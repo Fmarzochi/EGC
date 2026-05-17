@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/performance-optimizer.md
+../../agents/performance-optimizer.md

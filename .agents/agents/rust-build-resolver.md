@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/rust-build-resolver.md
+../../agents/rust-build-resolver.md

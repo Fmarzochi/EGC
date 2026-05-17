@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/comment-analyzer.md
+../../agents/comment-analyzer.md

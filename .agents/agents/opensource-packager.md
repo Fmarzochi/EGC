@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/opensource-packager.md
+../../agents/opensource-packager.md

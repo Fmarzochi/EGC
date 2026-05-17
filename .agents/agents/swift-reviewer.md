@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/swift-reviewer.md
+../../agents/swift-reviewer.md

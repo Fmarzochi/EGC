@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/network-architect.md
+../../agents/network-architect.md

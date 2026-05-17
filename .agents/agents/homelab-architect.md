@@ -1,1 +1,1 @@
-/home/fmarzochi/Projects/everything-gemini/agents/homelab-architect.md
+../../agents/homelab-architect.md
