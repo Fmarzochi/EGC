@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional
 import subprocess
 
 # Logging setup for local execution
@@ -22,27 +22,27 @@ ALLOWED_COMMANDS = {
     "npm": ["npm", "yarn"]
 }
 
-async def run_command(cmd: List[str], timeout: int = 30) -> ExecutionResult:
+async def run_command(cmd: List[str], timeout: int = 30, env: Optional[Dict[str, str]] = None) -> ExecutionResult:
     """Safely executes a command as a subprocess."""
-    
-    # Validation
+
     base_cmd = cmd[0]
     is_allowed = False
     for group in ALLOWED_COMMANDS.values():
         if base_cmd in group:
             is_allowed = True
             break
-            
+
     if not is_allowed:
         logger.error(f"Command blocked: {base_cmd}")
         return ExecutionResult("", f"Command blocked: {base_cmd}", 1)
 
     logger.info(f"Executing: {' '.join(cmd)}")
-    
+
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
     )
 
     try:

@@ -87,3 +87,6 @@ class ExecutionOrchestrator:
             return {"status": "cancelled"}
 
         return await task
+
+
+ORCHESTRATOR = ExecutionOrchestrator
