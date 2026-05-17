@@ -1,12 +1,12 @@
 {
   "name": "everything-gemini",
   "version": "1.0.0",
-  "description": "Battle-tested Gemini Code plugin for engineering teams — 48 agents, 182 skills, 68 legacy command shims, production-ready hooks, and selective install workflows evolved through continuous real-world use",
+  "description": "Battle-tested Gemini Code plugin for engineering teams — 62 agents, 228 skills, 74 commands, production-ready hooks, and selective install workflows evolved through continuous real-world use",
   "author": {
     "name": "Felipe Marzochi",
     "url": "https://www.linkedin.com/in/felipemarzochi/"
   },
-  "homepage": "https://egc.tools",
+  "homepage": "https://github.com/Fmarzochi/everything-gemini",
   "repository": "https://github.com/Fmarzochi/everything-gemini",
   "license": "MIT",
   "keywords": [
