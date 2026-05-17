@@ -31,7 +31,7 @@ From simplest to most sophisticated:
 | [Sequential Pipeline](#1-sequential-pipeline-egc--p) | Low | Daily dev steps, scripted workflows |
 | [NanoClaw REPL](#2-nanoclaw-repl) | Low | Interactive persistent sessions |
 | [Infinite Agentic Loop](#3-infinite-agentic-loop) | Medium | Parallel content generation, spec-driven work |
-| [Continuous Gemini PR Loop](#4-continuous-egc-pr-loop) | Medium | Multi-day iterative projects with CI gates |
+| [Continuous Gemini PR Loop](#4-continuous-gemini-pr-loop) | Medium | Multi-day iterative projects with CI gates |
 | [De-Sloppify Pattern](#5-the-de-sloppify-pattern) | Add-on | Quality cleanup after any Implementer step |
 | [Ralphinho / RFC-Driven DAG](#6-ralphinho--rfc-driven-dag-orchestration) | High | Large features, multi-unit parallel work with merge queue |
 
