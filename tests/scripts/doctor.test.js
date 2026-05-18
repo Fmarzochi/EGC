@@ -46,7 +46,7 @@ function run(args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 10000,
+      timeout: process.platform === 'win32' ? 30000 : 10000,
     });
 
     return { code: 0, stdout, stderr: '' };
