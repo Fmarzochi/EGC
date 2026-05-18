@@ -1,0 +1,33 @@
+{
+  "$schema": "internal/registry/agent-affinity-map.schema.json",
+  "version": 1,
+  "description": "Maps task domains (as detected by AGENT_ROUTER._detect_domain) to ordered lists of candidate agent ids. The first agent in each list is the default dispatch target.",
+  "domains": {
+    "backend_python_api": [
+      "python-reviewer",
+      "fastapi-reviewer",
+      "django-reviewer",
+      "code-architect",
+      "architect"
+    ],
+    "frontend_flutter": [
+      "flutter-reviewer",
+      "dart-build-resolver",
+      "code-architect",
+      "architect"
+    ],
+    "system_rust": [
+      "rust-reviewer",
+      "code-architect",
+      "architect"
+    ],
+    "ml_pipeline": [
+      "code-architect",
+      "architect"
+    ],
+    "general": [
+      "code-architect",
+      "architect"
+    ]
+  }
+}

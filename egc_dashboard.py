@@ -1617,24 +1617,46 @@ Content:
         if not prompt or self._execute_thread is not None:
             return
         self.execute_run_button.configure(state=tk.DISABLED)
-        self._append_execute_output(f"[orchestrator] submitting: {prompt!r}\n")
+        self._append_execute_output(f"\n──── prompt: {prompt!r}\n")
         self._ensure_orch_loop()
         result_q = queue.Queue()
         self._execute_queue = result_q
+        session_id = f"dashboard-{int(time.time())}"
 
         async def _run():
             try:
-                task_id = await self._orchestrator.submit_task(prompt, "dashboard-agent", prompt, f"dashboard-{int(time.time())}")
-                result_q.put(f"[orchestrator] task_id={task_id}\n")
+                result_q.put("[1/3] routing — resolving agent via AGENT_ROUTER\n")
+                routing = await self._orchestrator.dispatch(prompt)
+                if routing.get("status") != "success":
+                    domain = routing.get("domain", "?")
+                    err = routing.get("error", "unknown")
+                    result_q.put(
+                        f"[error] no agent registered for domain '{domain}': {err}\n"
+                        f"        edit AGENT_AFFINITY_MAP.json to map this domain to an agent.\n"
+                    )
+                    return
+
+                agent = routing["agent"]
+                domain = routing.get("domain", "?")
+                result_q.put(f"      → domain={domain}  agent={agent}\n")
+
+                result_q.put("[2/3] enqueue — submitting to ExecutionOrchestrator queue\n")
+                task_id = await self._orchestrator.submit_task(prompt, agent, prompt, session_id)
+                result_q.put(f"      → task_id={task_id[:8]}…  session={session_id}\n")
+
+                result_q.put("[3/3] execute — awaiting agent runtime\n")
                 res = await self._orchestrator.await_task(task_id, timeout=300.0)
-                result_q.put(f"[orchestrator] status={res.get('status')}\n")
-                if res.get('stdout'):
-                    result_q.put(res['stdout'][:5000] + "\n")
-                if res.get('stderr'):
-                    result_q.put(f"[stderr] {res['stderr'][:1000]}\n")
-                result_q.put(f"[orchestrator] complete\n")
+                status = res.get("status", "?")
+                result_q.put(f"      → status={status}\n")
+                if status == "completed" and res.get("stdout"):
+                    result_q.put("\n──── stdout\n" + str(res["stdout"])[:5000] + "\n")
+                if status == "failed":
+                    err = res.get("error") or res.get("stderr") or "no error message"
+                    result_q.put(f"\n──── error\n{str(err)[:1500]}\n")
+                if status == "blocked":
+                    result_q.put(f"\n──── sandbox blocked\n{res.get('error', '')}\n")
             except Exception as exc:
-                result_q.put(f"[orchestrator error] {exc}\n")
+                result_q.put(f"[error] orchestrator raised: {exc}\n")
             finally:
                 result_q.put(None)
 
