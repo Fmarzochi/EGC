@@ -1,3 +1,7 @@
+if (require.main === module) {
+    console.error('[EGC] scripts/runtime/' + require('path').basename(__filename) + ' is DORMANT. See scripts/runtime/README.md.');
+    process.exit(2);
+}
 /**
  * mount-all.js
  * Registry-driven orchestrator for visibility mounts.

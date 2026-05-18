@@ -120,6 +120,17 @@
         ],
         "description": "Load previous context and detect package manager on new session",
         "id": "session:start"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js sessionstart:egc-session-bridge scripts/hooks/egc-session-bridge.js standard,strict"
+          }
+        ],
+        "description": "EGC cross-runtime session lifecycle bridge (SessionStart)",
+        "id": "sessionstart:egc-session-bridge"
       }
     ],
     "PostToolUse": [
@@ -244,7 +255,7 @@
             "timeout": 300
           }
         ],
-        "description": "Batch format (Biome/Prettier) and typecheck (tsc) all JS/TS files edited this response — runs once at Stop instead of after every Edit",
+        "description": "Batch format (Biome/Prettier) and typecheck (tsc) all JS/TS files edited this response \u2014 runs once at Stop instead of after every Edit",
         "id": "stop:format-typecheck"
       },
       {
@@ -324,6 +335,17 @@
         ],
         "description": "Session end lifecycle marker (non-blocking)",
         "id": "session:end:marker"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js sessionend:egc-session-bridge scripts/hooks/egc-session-bridge.js standard,strict"
+          }
+        ],
+        "description": "EGC cross-runtime session lifecycle bridge (SessionEnd)",
+        "id": "sessionend:egc-session-bridge"
       }
     ]
   }

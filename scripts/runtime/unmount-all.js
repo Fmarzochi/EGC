@@ -1,3 +1,7 @@
+if (require.main === module) {
+    console.error('[EGC] scripts/runtime/' + require('path').basename(__filename) + ' is DORMANT. See scripts/runtime/README.md.');
+    process.exit(2);
+}
 /**
  * unmount-all.js
  * Removes all visibility mounts (symlinks/junctions) from .agents/skills/ and .agents/agents/.
