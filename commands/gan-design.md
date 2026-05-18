@@ -11,7 +11,7 @@ Parse the following from $ARGUMENTS:
 
 A two-agent loop (Generator + Evaluator) focused on frontend design quality. No planner — the brief IS the spec.
 
-This is the same mode Anthropic used for their frontend design experiments, where they saw creative breakthroughs like the 3D Dutch art museum with CSS perspective and doorway navigation.
+This mode emphasises rapid creative iteration on visual design quality.
 
 ### Setup
 1. Create `gan-harness/` directory

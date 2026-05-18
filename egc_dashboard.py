@@ -705,21 +705,19 @@ class EGCDashboard(tk.Tk):
         self.deiconify()
 
     def _load_logo(self, header_frame: tk.Frame):
-        """Load EGC logo with fallback to legacy ECC logo or skip if none exist."""
-        logo_candidates = [
-            os.path.join(self.project_path, "assets", "images", "egc-logo.png"),
-            os.path.join(self.project_path, "assets", "images", "ecc-logo.png")
-        ]
+        """Load the official EGC logo from assets/images/egc-logo.png."""
+        logo_path = os.path.join(self.project_path, "assets", "images", "egc-logo.png")
         self.logo_image = None
-        for path in logo_candidates:
-            if os.path.exists(path):
-                try:
-                    img = tk.PhotoImage(file=path)
-                    self.logo_image = img.subsample(4, 4)
-                    ttk.Label(header_frame, image=self.logo_image).pack(side=tk.LEFT, padx=(0, 10))
-                    return
-                except Exception as e:
-                    logging.warning(f"Failed to load logo %s: %s", path, e)
+        
+        if os.path.exists(logo_path):
+            try:
+                img = tk.PhotoImage(file=logo_path)
+                self.logo_image = img.subsample(5, 5)
+                ttk.Label(header_frame, image=self.logo_image).pack(side=tk.LEFT, padx=(0, 10))
+                return
+            except Exception as e:
+                logging.warning(f"Failed to load logo %s: %s", logo_path, e)
+        
         logging.info("Dashboard initialized without branding asset.")
 
     def create_widgets(self):

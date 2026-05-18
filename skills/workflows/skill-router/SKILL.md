@@ -7,7 +7,7 @@ The **Skill Router** describes how skills and agents from the EGC library
 
 - When you need to discover which skills and agents EGC ships.
 - When you want to install a curated profile or specific modules into a target
-  harness (Cursor, Codex, Gemini, Claude Code, etc.).
+  harness (Cursor, Codex, Gemini, compatible harness, etc.).
 - When you want to understand how the runtime composes the active skill set.
 
 ## Status
