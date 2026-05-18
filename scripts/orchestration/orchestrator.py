@@ -1,7 +1,10 @@
 import asyncio
+import json
+import os
 import uuid
 import time
 import signal
+from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
@@ -211,6 +214,36 @@ class ExecutionOrchestrator:
         if self._workers:
             await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers = []
+
+    def get_recent_traces(self, limit: int = 50) -> List[Dict[str, Any]]:
+        if not os.path.exists(self.tracer.log_file):
+            return []
+        try:
+            with open(self.tracer.log_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except OSError:
+            return []
+        events: List[Dict[str, Any]] = []
+        for line in lines[-limit:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except (ValueError, TypeError):
+                continue
+        return events
+
+    def get_session_traces(self, task_id: str) -> List[Dict[str, Any]]:
+        return [e for e in self.get_recent_traces(limit=5000) if e.get("execution_id") == task_id]
+
+    def snapshot(self) -> Dict[str, Any]:
+        return {
+            "health": self.health(),
+            "sessions": self.get_active_sessions(),
+            "recent_traces": self.get_recent_traces(25),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     async def run(self, task_description: str, agent_id: str, prompt: str, session_id: str):
         loop = asyncio.get_running_loop()
