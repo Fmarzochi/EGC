@@ -14,6 +14,7 @@ import logging
 import subprocess
 import threading
 import queue
+import asyncio
 import webbrowser
 from typing import Dict, List, Optional
 
@@ -1503,6 +1504,11 @@ Content:
         self.execute_prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.execute_run_button = ttk.Button(entry_frame, text="Run", command=self._on_execute_run)
         self.execute_run_button.pack(side=tk.LEFT)
+        self.execute_use_orch = tk.BooleanVar(value=False)
+        ttk.Checkbutton(entry_frame, text="Use orchestrator queue (experimental)", variable=self.execute_use_orch).pack(side=tk.LEFT, padx=5)
+
+        self.execute_health_label = ttk.Label(frame, text="", foreground='gray', font=('Open Sans', 9))
+        self.execute_health_label.pack(fill=tk.X, padx=10, pady=2)
 
         output_frame = ttk.LabelFrame(frame, text="Runtime output", padding=10)
         output_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -1511,6 +1517,10 @@ Content:
 
         self._execute_queue = None
         self._execute_thread = None
+        self._orch_loop = None
+        self._orch_loop_thread = None
+        self._orchestrator = None
+        self._orch_health_polling = False
 
     def _append_execute_output(self, text: str) -> None:
         if not hasattr(self, 'execute_output'):
@@ -1521,6 +1531,8 @@ Content:
         self.execute_output.configure(state=tk.DISABLED)
 
     def _on_execute_run(self) -> None:
+        if self.execute_use_orch.get():
+            return self._on_execute_run_orchestrated()
         prompt = self.execute_prompt_entry.get().strip()
         if not prompt or self._execute_thread is not None:
             return
@@ -1576,6 +1588,88 @@ Content:
         except queue.Empty:
             pass
         self.after(100, self._poll_execute_output)
+
+    def _ensure_orch_loop(self) -> None:
+        if self._orch_loop is not None:
+            return
+        self._orch_loop = asyncio.new_event_loop()
+
+        def runner():
+            asyncio.set_event_loop(self._orch_loop)
+            self._orch_loop.run_forever()
+
+        self._orch_loop_thread = threading.Thread(target=runner, daemon=True)
+        self._orch_loop_thread.start()
+
+        async def _create():
+            sys.path.insert(0, os.path.join(self.project_path, 'scripts'))
+            from orchestration.orchestrator import ExecutionOrchestrator
+            return ExecutionOrchestrator(self.project_path, max_concurrent=3, worker_count=3)
+
+        fut = asyncio.run_coroutine_threadsafe(_create(), self._orch_loop)
+        self._orchestrator = fut.result(timeout=5.0)
+        if not self._orch_health_polling:
+            self._orch_health_polling = True
+            self.after(1000, self._poll_orch_health)
+
+    def _on_execute_run_orchestrated(self) -> None:
+        prompt = self.execute_prompt_entry.get().strip()
+        if not prompt or self._execute_thread is not None:
+            return
+        self.execute_run_button.configure(state=tk.DISABLED)
+        self._append_execute_output(f"[orchestrator] submitting: {prompt!r}\n")
+        self._ensure_orch_loop()
+        result_q = queue.Queue()
+        self._execute_queue = result_q
+
+        async def _run():
+            try:
+                task_id = await self._orchestrator.submit_task(prompt, "dashboard-agent", prompt, f"dashboard-{int(time.time())}")
+                result_q.put(f"[orchestrator] task_id={task_id}\n")
+                res = await self._orchestrator.await_task(task_id, timeout=300.0)
+                result_q.put(f"[orchestrator] status={res.get('status')}\n")
+                if res.get('stdout'):
+                    result_q.put(res['stdout'][:5000] + "\n")
+                if res.get('stderr'):
+                    result_q.put(f"[stderr] {res['stderr'][:1000]}\n")
+                result_q.put(f"[orchestrator] complete\n")
+            except Exception as exc:
+                result_q.put(f"[orchestrator error] {exc}\n")
+            finally:
+                result_q.put(None)
+
+        asyncio.run_coroutine_threadsafe(_run(), self._orch_loop)
+        self._execute_thread = True
+        self.after(100, self._poll_execute_output_orchestrated)
+
+    def _poll_execute_output_orchestrated(self) -> None:
+        if self._execute_queue is None:
+            return
+        try:
+            while True:
+                item = self._execute_queue.get_nowait()
+                if item is None:
+                    self._execute_queue = None
+                    self._execute_thread = None
+                    self.execute_run_button.configure(state=tk.NORMAL)
+                    return
+                self._append_execute_output(item)
+        except queue.Empty:
+            pass
+        self.after(100, self._poll_execute_output_orchestrated)
+
+    def _poll_orch_health(self) -> None:
+        if not self._orch_health_polling or self._orchestrator is None:
+            return
+        try:
+            h = self._orchestrator.health()
+            q = h.get('queue', {})
+            self.execute_health_label.configure(
+                text=f"queue: max_concurrent={q.get('max_concurrent','?')}  active={q.get('active','?')}  pending={q.get('pending','?')}  workers={q.get('workers','?')}  awaiting={q.get('awaiting_results','?')}"
+            )
+        except Exception:
+            pass
+        self.after(1000, self._poll_orch_health)
 
     def create_settings_tab(self):
         """Create Settings tab"""

@@ -19,7 +19,9 @@ class AGENT_ROUTER:
     def __init__(self, project_root: str = "."):
         self.project_root = project_root
         self.affinity_map_path = os.path.join(project_root, "AGENT_AFFINITY_MAP.json")
-        self.runtime_map_path = os.path.join(project_root, "registry", "runtime-map.json")
+        canonical = os.path.join(project_root, "internal", "registry", "runtime-map.json")
+        legacy = os.path.join(project_root, "registry", "runtime-map.json")
+        self.runtime_map_path = canonical if os.path.exists(canonical) else legacy
         self.affinity_map = self._load_json(self.affinity_map_path)
         self.runtime_map = self._load_json(self.runtime_map_path)
         
