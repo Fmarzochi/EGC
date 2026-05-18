@@ -12,6 +12,8 @@ import json
 import time
 import logging
 import subprocess
+import threading
+import queue
 import webbrowser
 from typing import Dict, List, Optional
 
@@ -772,6 +774,7 @@ class EGCDashboard(tk.Tk):
         self.create_rules_tab()
         self.create_live_tab()
         self.create_runtime_tab()
+        self.create_execute_tab()
         self.create_settings_tab()
 
         # Pack notebook after hydration
@@ -1483,6 +1486,98 @@ Content:
     # =========================================================================
     # SETTINGS TAB
     # =========================================================================
+
+    def create_execute_tab(self):
+        """Execute tab — minimal control plane that runs the Python ReAct runtime."""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Execute")
+
+        ttk.Label(
+            frame,
+            text="Run a prompt through the Python ReAct runtime (python -m llm.cli.prompt). Requires a provider key (e.g. GEMINI_API_KEY).",
+            font=('Open Sans', 10), foreground='gray', wraplength=900, justify=tk.LEFT,
+        ).pack(fill=tk.X, padx=10, pady=(10, 5))
+
+        entry_frame = ttk.Frame(frame)
+        entry_frame.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Label(entry_frame, text="Prompt:").pack(side=tk.LEFT, padx=(0, 5))
+        self.execute_prompt_entry = ttk.Entry(entry_frame)
+        self.execute_prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        self.execute_run_button = ttk.Button(entry_frame, text="Run", command=self._on_execute_run)
+        self.execute_run_button.pack(side=tk.LEFT)
+
+        output_frame = ttk.LabelFrame(frame, text="Runtime output", padding=10)
+        output_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.execute_output = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, height=20, state=tk.DISABLED)
+        self.execute_output.pack(fill=tk.BOTH, expand=True)
+
+        self._execute_queue = None
+        self._execute_thread = None
+
+    def _append_execute_output(self, text: str) -> None:
+        if not hasattr(self, 'execute_output'):
+            return
+        self.execute_output.configure(state=tk.NORMAL)
+        self.execute_output.insert(tk.END, text)
+        self.execute_output.see(tk.END)
+        self.execute_output.configure(state=tk.DISABLED)
+
+    def _on_execute_run(self) -> None:
+        prompt = self.execute_prompt_entry.get().strip()
+        if not prompt or self._execute_thread is not None:
+            return
+        self.execute_run_button.configure(state=tk.DISABLED)
+        self._append_execute_output(f"$ python -m llm.cli.prompt -p {prompt!r}\n")
+
+        env = os.environ.copy()
+        src_path = os.path.join(self.project_path, "src")
+        existing_pp = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = src_path + (os.pathsep + existing_pp if existing_pp else "")
+        env.setdefault("EGC_SESSION_ID", f"dashboard-{int(time.time())}")
+        env.setdefault("EGC_PLUGIN_ROOT", self.project_path)
+        env.setdefault("PROJECT_ROOT", self.project_path)
+
+        self._execute_queue = queue.Queue()
+
+        def runner():
+            try:
+                proc = subprocess.Popen(
+                    [sys.executable, "-m", "llm.cli.prompt", "-p", prompt],
+                    cwd=self.project_path,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+                for line in proc.stdout:
+                    self._execute_queue.put(line)
+                proc.wait()
+                self._execute_queue.put(f"\n[exit code: {proc.returncode}]\n")
+            except Exception as exc:
+                self._execute_queue.put(f"[error] {exc}\n")
+            finally:
+                self._execute_queue.put(None)
+
+        self._execute_thread = threading.Thread(target=runner, daemon=True)
+        self._execute_thread.start()
+        self.after(100, self._poll_execute_output)
+
+    def _poll_execute_output(self) -> None:
+        if self._execute_queue is None:
+            return
+        try:
+            while True:
+                item = self._execute_queue.get_nowait()
+                if item is None:
+                    self._execute_queue = None
+                    self._execute_thread = None
+                    self.execute_run_button.configure(state=tk.NORMAL)
+                    return
+                self._append_execute_output(item)
+        except queue.Empty:
+            pass
+        self.after(100, self._poll_execute_output)
 
     def create_settings_tab(self):
         """Create Settings tab"""

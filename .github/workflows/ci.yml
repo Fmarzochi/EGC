@@ -284,5 +284,14 @@ jobs:
       - name: Run Python tests (continue-on-error)
         continue-on-error: true
         env:
-          PYTHONPATH: src:scripts
-        run: python -m pytest tests/test_types.py tests/test_dag_validator.py tests/test_concurrency.py tests/test_router.py -v --tb=short
+          PYTHONPATH: .:src:scripts
+        run: |
+          python -m pytest -v --tb=short \
+            tests/test_types.py \
+            tests/test_dag_validator.py \
+            tests/test_concurrency.py \
+            tests/test_router.py \
+            tests/test_orchestrator.py \
+            tests/test_fallback.py \
+            tests/test_session_isolation.py \
+            tests/test_deadlock_protection.py

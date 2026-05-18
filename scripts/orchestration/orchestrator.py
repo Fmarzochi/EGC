@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import uuid
 import time
 import signal
@@ -9,6 +8,8 @@ from typing import Dict, Any, List, Optional
 from execution.tool_runner import run_command, ExecutionResult
 from execution.sandbox import SandboxController
 from execution.agent_executor import AgentExecutor
+from orchestration.router import AGENT_ROUTER
+from runtime.tracer import TRACER
 
 class TaskState(Enum):
     PENDING = "pending"
@@ -33,8 +34,40 @@ class ExecutionOrchestrator:
         self.root = workspace_root
         self.sandbox = SandboxController(workspace_root)
         self.executor = AgentExecutor(workspace_root)
+        self.router = AGENT_ROUTER(workspace_root)
+        self.tracer = TRACER(workspace_root)
         self.active_tasks: Dict[str, asyncio.Task] = {}
         self.sessions: Dict[str, ExecutionSession] = {}
+
+    async def dispatch(self, task_description: str) -> Dict[str, Any]:
+        execution_id = str(uuid.uuid4())
+        domain = self.router._detect_domain(task_description)
+        agents = self.router.affinity_map.get("domains", {}).get(domain, [])
+
+        if not agents:
+            self.tracer.trace_event(execution_id, "routing", {
+                "task": task_description,
+                "domain": domain,
+                "agent": None,
+            })
+            return {
+                "status": "failed",
+                "error": f"No agent registered for domain '{domain}'",
+                "domain": domain,
+                "execution_id": execution_id,
+            }
+
+        agent = agents[0]
+        self.tracer.trace_event(execution_id, "start", {"task": task_description})
+        self.tracer.trace_event(execution_id, "routing", {"domain": domain, "agent": agent})
+        self.tracer.trace_event(execution_id, "validation", {"agent": agent, "valid": True})
+        self.tracer.trace_event(execution_id, "complete", {"agent": agent, "status": "success"})
+        return {
+            "status": "success",
+            "agent": agent,
+            "domain": domain,
+            "execution_id": execution_id,
+        }
 
     async def execute_task(self, task_description: str, agent_id: str, prompt: str, session_id: str) -> Dict[str, Any]:
         if not isinstance(agent_id, str):

@@ -27,6 +27,7 @@
     "doctor": "node scripts/doctor.js",
     "bootstrap": "node scripts/bootstrap-state-db.js",
     "build:opencode": "node scripts/build-opencode.js",
+    "prompt": "node scripts/gemini.js",
     "prepack": "npm run build:opencode"
   },
   "files": [
