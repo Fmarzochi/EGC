@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+if (require.main === module) {
+    console.error('[EGC] scripts/generate-plugin-manifest.js is DORMANT. See docs/governance/SUBSYSTEM-MAP.md.');
+    process.exit(2);
+}
 const fs = require('fs');
 const path = require('path');
 

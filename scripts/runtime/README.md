@@ -31,3 +31,7 @@ npx egc-install --target <harness> [modules...]
 This subsystem is preserved for design reference. Do not revive
 opportunistically. See `docs/governance/SUBSYSTEM-MAP.md` for the full
 classification.
+
+Direct invocation of these scripts now exits with code 2 and a DORMANT
+notice. The source is preserved for architectural reference per
+`docs/governance/SUBSYSTEM-MAP.md`.

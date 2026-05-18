@@ -242,6 +242,24 @@ list of supported targets.
 
 ---
 
+## 🧪 Python ReAct Bridge
+
+EGC exposes a thin Node-to-Python bridge so the multi-provider ReAct
+runtime in `src/llm/` is reachable from the Node ecosystem and from npm.
+
+```bash
+# Run a prompt through the Python ReAct runtime (requires a provider key
+# such as GEMINI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY,
+# or an Ollama instance at OLLAMA_BASE_URL).
+npm run prompt -- -p "Summarise the agents/code-architect.md spec"
+```
+
+The bridge propagates `EGC_SESSION_ID` and writes a structured
+JSONL trace to `.sessions/execution_log.jsonl` for the dashboard and
+for `node scripts/ci/runtime-snapshot.js`.
+
+---
+
 ## ⚡ CLI Execution
 
 Once you are comfortable with the Dashboard, you can start using EGC in your terminal.
@@ -322,6 +340,31 @@ Contributions are welcome! Please check our `docs/` folder for architectural gui
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
 4. Push to the branch (`git push origin feature/AmazingFeature`).
 5. Open a Pull Request.
+
+---
+
+## 📡 Telemetry & Local State
+
+EGC stores all runtime state on your local machine. Nothing is sent
+to a third party unless you explicitly call a model provider.
+
+| Surface | Path | Written by | Format |
+|---|---|---|---|
+| Session trace | `.sessions/execution_log.jsonl` | `scripts/runtime/tracer.py` | JSONL (one event per line) |
+| Shared state store | `~/.gemini/egc/state.db` | `scripts/lib/state-store/`, `scripts/memory/persistent_memory.py` | SQLite |
+| Workflow records | `.sessions/workflows/<workflow_id>.json` | `scripts/workflows/workflow_engine.py` | JSON |
+| Install-state per harness | `<target>/egc-install-state.json` | `scripts/install-apply.js` | JSON |
+
+Inspect the live state with:
+
+```bash
+node scripts/ci/runtime-snapshot.js          # cross-runtime view
+node scripts/ci/runtime-topology.js          # subsystem graph
+node scripts/ci/capability-graph.js          # agents/skills/commands graph
+```
+
+None of these files are shipped or transmitted. Delete the
+`.sessions/` directory at any time to reset local telemetry.
 
 ---
 

@@ -263,6 +263,11 @@ jobs:
       - name: Run markdownlint
         run: npx markdownlint "agents/**/*.md" "skills/**/*.md" "commands/**/*.md" "rules/**/*.md"
 
+      - name: Verify npm pack surface
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack.log
+          test -s /tmp/pack.log
+
   python-runtime:
     name: Python Runtime (informational)
     runs-on: ubuntu-latest
