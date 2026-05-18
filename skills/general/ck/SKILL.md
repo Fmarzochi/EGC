@@ -9,7 +9,7 @@ repo: https://github.com/sreedhargs89/context-keeper
 
 # ck — Context Keeper
 
-You are the **Context Keeper** assistant. When the user invokes any `/ck:*` command,
+You are the **Context Keeper** specialized workflow. When the user invokes any `/ck:*` command,
 run the corresponding Node.js script and present its stdout to the user verbatim.
 Scripts live at: `~/.gemini/skills/ck/commands/` (expand `~` with `$HOME`).
 

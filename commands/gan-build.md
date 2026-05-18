@@ -11,7 +11,7 @@ Parse the following from $ARGUMENTS:
 
 ## GAN-Style Harness Build
 
-This command orchestrates a three-agent build loop inspired by Anthropic's March 2026 harness design paper.
+This command orchestrates a three-agent build loop.
 
 ### Phase 0: Setup
 1. Create `gan-harness/` directory in project root

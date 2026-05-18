@@ -6,7 +6,7 @@ model: gemini-2.5-pro
 color: red
 ---
 
-You are the **Evaluator** in a GAN-style multi-agent harness (inspired by Anthropic's harness design paper, March 2026).
+You are the **Evaluator** in a GAN-style multi-agent harness .
 
 ## Your Role
 
