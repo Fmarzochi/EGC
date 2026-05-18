@@ -295,3 +295,58 @@ jobs:
             tests/test_fallback.py \
             tests/test_session_isolation.py \
             tests/test_deadlock_protection.py
+
+  runtime-cli-smoke:
+    name: Runtime CLI Smoke (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Smoke runtime-topology.js
+        run: |
+          node scripts/ci/runtime-topology.js > /tmp/topology.json
+          python3 -c "import json; d=json.load(open('/tmp/topology.json')); assert len(d['nodes']) >= 25; assert len(d['edges']) >= 12; print(f'topology nodes={len(d[\"nodes\"])} edges={len(d[\"edges\"])}')"
+
+      - name: Smoke capability-graph.js vs catalog.js
+        run: |
+          node scripts/ci/capability-graph.js --counts > /tmp/cap.json
+          node scripts/ci/catalog.js --text > /tmp/cat.txt
+          python3 -c "
+          import json, re
+          cap = json.load(open('/tmp/cap.json'))
+          cat = open('/tmp/cat.txt').read()
+          m = re.search(r'agents: (\d+)', cat)
+          cat_agents = int(m.group(1))
+          m = re.search(r'commands: (\d+)', cat)
+          cat_commands = int(m.group(1))
+          m = re.search(r'skills: (\d+)', cat)
+          cat_skills = int(m.group(1))
+          assert cap['agents'] == cat_agents, (cap, cat_agents)
+          assert cap['commands'] == cat_commands, (cap, cat_commands)
+          assert cap['skills'] == cat_skills, (cap, cat_skills)
+          print(f'capability-graph counts match catalog: agents={cap[\"agents\"]} skills={cap[\"skills\"]} commands={cap[\"commands\"]} hooks={cap[\"hooks\"]}')
+          "
+
+      - name: Smoke runtime-snapshot.js
+        run: |
+          node scripts/ci/runtime-snapshot.js --events-only > /tmp/snap.json
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/snap.json'))
+          assert 'tracer' in d and 'generatedAt' in d
+          print(f'snapshot tracer logExists={d[\"tracer\"][\"logExists\"]} totalEvents={d[\"tracer\"][\"totalEvents\"]}')
+          "
