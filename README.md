@@ -72,15 +72,15 @@ npm run egc-install -- --target cursor --profile developer typescript
 
 ## 📊 Ecosystem Inventory & Cross-Tool Parity
 
-EGC ships with a massive, continuously validated catalog of cognitive payloads, ensuring that your AI harness has the right context for the job. These surfaces are strictly validated by the CI catalog gate (`scripts/ci/catalog.js`).
+EGC ships with a massive, continuously validated catalog of cognitive payloads, ensuring that your AI harness has the right context for the job. Out of the box you get access to 62 agents, 228 skills, and 74 commands, strictly validated by the CI catalog gate (`scripts/ci/catalog.js`).
 
 ### Catalog Snapshot
 
 | Surface | Inventory | Description |
 |---------|-----------|-------------|
-| **Agents** | 62 | Specialized personas (e.g., `security-reviewer`) that handle distinct domains. |
-| **Skills** | 228 | Standardized operating procedures organized in 14 categories. |
-| **Commands** | 74 | CLI slash-command entrypoints for terminal execution. |
+| **Agents** | 62 agents | Specialized personas (e.g., `security-reviewer`) that handle distinct domains. |
+| **Skills** | 228 skills | Standardized operating procedures organized in 14 categories. |
+| **Commands** | 74 commands | CLI slash-command entrypoints for terminal execution. |
 
 ### Cross-Harness Parity
 
@@ -88,7 +88,7 @@ How the EGC native inventory compares to the same surfaces in other major AI cod
 
 | Surface | Gemini Code (EGC) | Claude Code | Codex CLI | OpenCode |
 |---------|------------------:|-------------|-----------|---------:|
-| **Agents** | 62 | Shared (`AGENTS.md`) | Shared (`AGENTS.md`) | 12 |
+| **Agents** | 62 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
 | **Commands** | 74 | Shared | Instruction-based | 31 |
 | **Skills** | 228 | Shared | 10 (native format) | 37 |
 
