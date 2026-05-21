@@ -1,7 +1,3 @@
-if (require.main === module) {
-    console.error('[EGC] scripts/runtime/' + require('path').basename(__filename) + ' is DORMANT. See scripts/runtime/README.md.');
-    process.exit(2);
-}
 /**
  * discovery.js
  * Version 3.0: Hybrid Discovery for Skills & Agents
@@ -17,7 +13,7 @@ const SKILLS_ROOT = path.join(PROJECT_ROOT, 'skills');
 const AGENTS_ROOT = path.join(PROJECT_ROOT, 'agents');
 const HOT_SKILLS_ROOT = path.join(PROJECT_ROOT, '.agents/skills');
 const HOT_AGENTS_ROOT = path.join(PROJECT_ROOT, '.agents/agents');
-const REGISTRY_FILE = path.join(PROJECT_ROOT, 'registry/runtime-map.json');
+const REGISTRY_FILE = path.join(PROJECT_ROOT, 'internal/registry/runtime-map.json');
 
 function normalizePortablePath(p) {
   return path.relative(PROJECT_ROOT, p).split(path.sep).join('/');
@@ -40,15 +36,23 @@ function discover() {
   const registry = {
     generatedAt: new Date().toISOString(),
     os: os.platform(),
-    projectRoot: PROJECT_ROOT.split(path.sep).join('/'),
+    projectRoot: '.',
     stats: {
       hotSkills: hotSkills.size,
       coldSkills: 0,
       hotAgents: hotAgents.size,
-      coldAgents: 0
+      coldAgents: 0,
+      commands: 0,
+      rules: 0,
+      hooks: 0,
+      overlays: 0
     },
     skills: [],
-    agents: []
+    agents: [],
+    commands: [],
+    rules: [],
+    hooks: [],
+    overlays: []
   };
 
   // 1. Map Skills
@@ -95,12 +99,72 @@ function discover() {
     }
   }
 
+  // 3. Map Commands
+  const commandsRoot = path.join(PROJECT_ROOT, 'commands');
+  const hotCommandsRoot = path.join(PROJECT_ROOT, '.gemini/commands');
+  const hotCommands = new Set(fs.existsSync(hotCommandsRoot) ? fs.readdirSync(hotCommandsRoot) : []);
+  if (fs.existsSync(commandsRoot)) {
+    const cmdFiles = fs.readdirSync(commandsRoot).filter(f => f.endsWith('.md'));
+    for (const file of cmdFiles) {
+      const isShadowed = hotCommands.has(file);
+      registry.commands.push({
+        name: file,
+        physicalPath: normalizePortablePath(path.join(commandsRoot, file)),
+        status: isShadowed ? 'shadowed' : 'cold'
+      });
+      registry.stats.commands++;
+    }
+  }
+
+  // 4. Map Rules
+  const rulesRoot = path.join(PROJECT_ROOT, 'rules');
+  const hotRulesRoot = path.join(PROJECT_ROOT, '.gemini/rules');
+  const hotRules = new Set(fs.existsSync(hotRulesRoot) ? fs.readdirSync(hotRulesRoot) : []);
+  const cursorRulesExists = fs.existsSync(path.join(PROJECT_ROOT, '.cursorrules'));
+  if (fs.existsSync(rulesRoot)) {
+    const ruleItems = fs.readdirSync(rulesRoot, { withFileTypes: true });
+    for (const item of ruleItems) {
+      const isShadowed = hotRules.has(item.name) || (item.name === '.cursorrules' && cursorRulesExists);
+      registry.rules.push({
+        name: item.name,
+        physicalPath: normalizePortablePath(path.join(rulesRoot, item.name)),
+        status: isShadowed ? 'shadowed' : 'cold'
+      });
+      registry.stats.rules++;
+    }
+  }
+
+  // 5. Map Hooks
+  const hooksRoot = path.join(PROJECT_ROOT, 'scripts/hooks');
+  if (fs.existsSync(hooksRoot)) {
+    const hookFiles = fs.readdirSync(hooksRoot).filter(f => f.endsWith('.js') || f.endsWith('.sh'));
+    for (const file of hookFiles) {
+      registry.hooks.push({
+        name: file,
+        physicalPath: normalizePortablePath(path.join(hooksRoot, file))
+      });
+      registry.stats.hooks++;
+    }
+  }
+
+  // 6. Map Overlays
+  const overlayFiles = ['AGENTS.md', 'RULES.md', 'CONTRIBUTING.md'];
+  for (const file of overlayFiles) {
+    if (fs.existsSync(path.join(PROJECT_ROOT, file))) {
+      registry.overlays.push({
+        name: file,
+        physicalPath: file
+      });
+      registry.stats.overlays++;
+    }
+  }
+
   if (!fs.existsSync(path.dirname(REGISTRY_FILE))) {
     fs.mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true });
   }
 
   fs.writeFileSync(REGISTRY_FILE, JSON.stringify(registry, null, 2));
-  console.log(`Successfully indexed ${registry.stats.coldSkills} skills and ${registry.stats.coldAgents} agents.`);
+  console.log(`Successfully indexed ${registry.stats.coldSkills} skills, ${registry.stats.coldAgents} agents, ${registry.stats.commands} commands, ${registry.stats.rules} rules, ${registry.stats.hooks} hooks, and ${registry.stats.overlays} overlays.`);
   console.log(`Registry saved to: ${REGISTRY_FILE}`);
 }
 
@@ -113,4 +177,8 @@ function detectRuntime(dir) {
   return runtime;
 }
 
-discover();
+if (require.main === module) {
+  discover();
+}
+
+module.exports = { discover };

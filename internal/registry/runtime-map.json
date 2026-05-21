@@ -1,13 +1,16 @@
 {
-  "$schema": "../../schemas/runtime-map.schema.json",
-  "generatedAt": "2026-05-14T06:39:55.422Z",
+  "generatedAt": "2026-05-21T22:31:04.749Z",
   "os": "linux",
   "projectRoot": ".",
   "stats": {
-    "hotSkills": 32,
+    "hotSkills": 229,
     "coldSkills": 228,
-    "hotAgents": 1,
-    "coldAgents": 62
+    "hotAgents": 62,
+    "coldAgents": 62,
+    "commands": 74,
+    "rules": 20,
+    "hooks": 43,
+    "overlays": 2
   },
   "skills": [
     {
@@ -16,7 +19,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/agent-eval",
       "targetLink": ".agents/skills/ai-agent-eval",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -25,7 +28,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/agent-harness-construction",
       "targetLink": ".agents/skills/ai-agent-harness-construction",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -52,7 +55,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/agentic-engineering",
       "targetLink": ".agents/skills/ai-agentic-engineering",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -61,7 +64,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/ai-first-engineering",
       "targetLink": ".agents/skills/ai-ai-first-engineering",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -70,7 +73,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/autonomous-agent-harness",
       "targetLink": ".agents/skills/ai-autonomous-agent-harness",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -79,7 +82,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/autonomous-loops",
       "targetLink": ".agents/skills/ai-autonomous-loops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -88,7 +91,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/continuous-learning",
       "targetLink": ".agents/skills/ai-continuous-learning",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "shell"
       ]
@@ -99,7 +102,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/continuous-learning-v2",
       "targetLink": ".agents/skills/ai-continuous-learning-v2",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "python",
         "shell"
@@ -111,7 +114,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/cost-aware-llm-pipeline",
       "targetLink": ".agents/skills/ai-cost-aware-llm-pipeline",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -147,7 +150,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/prompt-optimizer",
       "targetLink": ".agents/skills/ai-prompt-optimizer",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -156,7 +159,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/regex-vs-llm-structured-text",
       "targetLink": ".agents/skills/ai-regex-vs-llm-structured-text",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -165,7 +168,7 @@
       "namespace": "ai",
       "physicalPath": "skills/ai/token-budget-advisor",
       "targetLink": ".agents/skills/ai-token-budget-advisor",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -174,7 +177,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/agent-architecture-audit",
       "targetLink": ".agents/skills/architecture-agent-architecture-audit",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -183,7 +186,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/agentic-os",
       "targetLink": ".agents/skills/architecture-agentic-os",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -192,7 +195,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/android-clean-architecture",
       "targetLink": ".agents/skills/architecture-android-clean-architecture",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -201,7 +204,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/architecture-decision-records",
       "targetLink": ".agents/skills/architecture-architecture-decision-records",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -210,7 +213,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/blueprint",
       "targetLink": ".agents/skills/architecture-blueprint",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -219,7 +222,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/compose-multiplatform-patterns",
       "targetLink": ".agents/skills/architecture-compose-multiplatform-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -228,7 +231,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/foundation-models-on-device",
       "targetLink": ".agents/skills/architecture-foundation-models-on-device",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -237,7 +240,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/jpa-patterns",
       "targetLink": ".agents/skills/architecture-jpa-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -246,7 +249,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/liquid-glass-design",
       "targetLink": ".agents/skills/architecture-liquid-glass-design",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -255,7 +258,7 @@
       "namespace": "architecture",
       "physicalPath": "skills/architecture/swiftui-patterns",
       "targetLink": ".agents/skills/architecture-swiftui-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -264,7 +267,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/carrier-relationship-management",
       "targetLink": ".agents/skills/automation-carrier-relationship-management",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -273,7 +276,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/customer-billing-ops",
       "targetLink": ".agents/skills/automation-customer-billing-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -282,7 +285,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/energy-procurement",
       "targetLink": ".agents/skills/automation-energy-procurement",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -291,7 +294,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/finance-billing-ops",
       "targetLink": ".agents/skills/automation-finance-billing-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -300,7 +303,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/inventory-demand-planning",
       "targetLink": ".agents/skills/automation-inventory-demand-planning",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -309,7 +312,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/lead-intelligence",
       "targetLink": ".agents/skills/automation-lead-intelligence",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -318,7 +321,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/logistics-exception-management",
       "targetLink": ".agents/skills/automation-logistics-exception-management",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -327,7 +330,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/nutrient-document-processing",
       "targetLink": ".agents/skills/automation-nutrient-document-processing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -336,7 +339,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/production-scheduling",
       "targetLink": ".agents/skills/automation-production-scheduling",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -345,7 +348,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/quality-nonconformance",
       "targetLink": ".agents/skills/automation-quality-nonconformance",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -354,7 +357,7 @@
       "namespace": "automation",
       "physicalPath": "skills/automation/returns-reverse-logistics",
       "targetLink": ".agents/skills/automation-returns-reverse-logistics",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -381,7 +384,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/clickhouse-io",
       "targetLink": ".agents/skills/backend-clickhouse-io",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -390,7 +393,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/database-migrations",
       "targetLink": ".agents/skills/backend-database-migrations",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -399,7 +402,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/django-celery",
       "targetLink": ".agents/skills/backend-django-celery",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -408,7 +411,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/django-patterns",
       "targetLink": ".agents/skills/backend-django-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -417,7 +420,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/django-security",
       "targetLink": ".agents/skills/backend-django-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -426,7 +429,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/dotnet-patterns",
       "targetLink": ".agents/skills/backend-dotnet-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -435,7 +438,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/evm-token-decimals",
       "targetLink": ".agents/skills/backend-evm-token-decimals",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -444,7 +447,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/fastapi-patterns",
       "targetLink": ".agents/skills/backend-fastapi-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -453,7 +456,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/golang-patterns",
       "targetLink": ".agents/skills/backend-golang-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -462,7 +465,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/java-coding-standards",
       "targetLink": ".agents/skills/backend-java-coding-standards",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -471,7 +474,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/laravel-patterns",
       "targetLink": ".agents/skills/backend-laravel-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -480,7 +483,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/laravel-security",
       "targetLink": ".agents/skills/backend-laravel-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -489,7 +492,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/mysql-patterns",
       "targetLink": ".agents/skills/backend-mysql-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -498,7 +501,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/nestjs-patterns",
       "targetLink": ".agents/skills/backend-nestjs-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -507,7 +510,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/nodejs-keccak256",
       "targetLink": ".agents/skills/backend-nodejs-keccak256",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -516,7 +519,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/perl-patterns",
       "targetLink": ".agents/skills/backend-perl-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -525,7 +528,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/postgres-patterns",
       "targetLink": ".agents/skills/backend-postgres-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -534,7 +537,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/python-patterns",
       "targetLink": ".agents/skills/backend-python-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -543,7 +546,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/quarkus-patterns",
       "targetLink": ".agents/skills/backend-quarkus-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -552,7 +555,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/quarkus-security",
       "targetLink": ".agents/skills/backend-quarkus-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -561,7 +564,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/quarkus-tdd",
       "targetLink": ".agents/skills/backend-quarkus-tdd",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -570,7 +573,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/quarkus-verification",
       "targetLink": ".agents/skills/backend-quarkus-verification",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -579,7 +582,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/redis-patterns",
       "targetLink": ".agents/skills/backend-redis-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -588,7 +591,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/rust-patterns",
       "targetLink": ".agents/skills/backend-rust-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -597,7 +600,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/springboot-patterns",
       "targetLink": ".agents/skills/backend-springboot-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -606,7 +609,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/springboot-security",
       "targetLink": ".agents/skills/backend-springboot-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -615,7 +618,7 @@
       "namespace": "backend",
       "physicalPath": "skills/backend/tinystruct-patterns",
       "targetLink": ".agents/skills/backend-tinystruct-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -624,7 +627,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/automation-audit-ops",
       "targetLink": ".agents/skills/devops-automation-audit-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -642,7 +645,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/context-budget",
       "targetLink": ".agents/skills/devops-context-budget",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -651,7 +654,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/continuous-agent-loop",
       "targetLink": ".agents/skills/devops-continuous-agent-loop",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -660,7 +663,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/cost-tracking",
       "targetLink": ".agents/skills/devops-cost-tracking",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -669,7 +672,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/deployment-patterns",
       "targetLink": ".agents/skills/devops-deployment-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -678,7 +681,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/docker-patterns",
       "targetLink": ".agents/skills/devops-docker-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -687,7 +690,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/error-handling",
       "targetLink": ".agents/skills/devops-error-handling",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -696,7 +699,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/flox-environments",
       "targetLink": ".agents/skills/devops-flox-environments",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -705,7 +708,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/github-ops",
       "targetLink": ".agents/skills/devops-github-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -714,7 +717,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/google-workspace-ops",
       "targetLink": ".agents/skills/devops-google-workspace-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -723,7 +726,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/plan-orchestrate",
       "targetLink": ".agents/skills/devops-plan-orchestrate",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -732,7 +735,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/production-audit",
       "targetLink": ".agents/skills/devops-production-audit",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -741,7 +744,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/search-first",
       "targetLink": ".agents/skills/devops-search-first",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -750,7 +753,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/skill-scout",
       "targetLink": ".agents/skills/devops-skill-scout",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -759,7 +762,7 @@
       "namespace": "devops",
       "physicalPath": "skills/devops/terminal-ops",
       "targetLink": ".agents/skills/devops-terminal-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -831,7 +834,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/mle-workflow",
       "targetLink": ".agents/skills/docs-mle-workflow",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -840,7 +843,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/scientific-db-pubmed-database",
       "targetLink": ".agents/skills/docs-scientific-db-pubmed-database",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -849,7 +852,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/scientific-db-uspto-database",
       "targetLink": ".agents/skills/docs-scientific-db-uspto-database",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -858,7 +861,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/scientific-pkg-gget",
       "targetLink": ".agents/skills/docs-scientific-pkg-gget",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -867,7 +870,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/scientific-thinking-literature-review",
       "targetLink": ".agents/skills/docs-scientific-thinking-literature-review",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -876,7 +879,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/scientific-thinking-scholar-evaluation",
       "targetLink": ".agents/skills/docs-scientific-thinking-scholar-evaluation",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -885,7 +888,7 @@
       "namespace": "docs",
       "physicalPath": "skills/docs/seo",
       "targetLink": ".agents/skills/docs-seo",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -894,7 +897,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/accessibility",
       "targetLink": ".agents/skills/frontend-accessibility",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -903,7 +906,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/angular-developer",
       "targetLink": ".agents/skills/frontend-angular-developer",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -912,7 +915,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/frontend-design-direction",
       "targetLink": ".agents/skills/frontend-frontend-design-direction",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -939,7 +942,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/ios-icon-gen",
       "targetLink": ".agents/skills/frontend-ios-icon-gen",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -948,7 +951,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/make-interfaces-feel-better",
       "targetLink": ".agents/skills/frontend-make-interfaces-feel-better",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -957,7 +960,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/manim-video",
       "targetLink": ".agents/skills/frontend-manim-video",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "python"
       ]
@@ -968,7 +971,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/motion-advanced",
       "targetLink": ".agents/skills/frontend-motion-advanced",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -977,7 +980,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/motion-foundations",
       "targetLink": ".agents/skills/frontend-motion-foundations",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -986,7 +989,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/motion-patterns",
       "targetLink": ".agents/skills/frontend-motion-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -995,7 +998,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/motion-ui",
       "targetLink": ".agents/skills/frontend-motion-ui",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1004,7 +1007,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/remotion-video-creation",
       "targetLink": ".agents/skills/frontend-remotion-video-creation",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1013,7 +1016,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/ui-demo",
       "targetLink": ".agents/skills/frontend-ui-demo",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1022,7 +1025,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/ui-to-vue",
       "targetLink": ".agents/skills/frontend-ui-to-vue",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1040,7 +1043,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/videodb",
       "targetLink": ".agents/skills/frontend-videodb",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "python"
       ]
@@ -1051,7 +1054,7 @@
       "namespace": "frontend",
       "physicalPath": "skills/frontend/vite-patterns",
       "targetLink": ".agents/skills/frontend-vite-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1060,7 +1063,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/agent-payment-x402",
       "targetLink": ".agents/skills/general-agent-payment-x402",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1069,7 +1072,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/benchmark",
       "targetLink": ".agents/skills/general-benchmark",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1078,7 +1081,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/browser-qa",
       "targetLink": ".agents/skills/general-browser-qa",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1087,7 +1090,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/canary-watch",
       "targetLink": ".agents/skills/general-canary-watch",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1096,7 +1099,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/ck",
       "targetLink": ".agents/skills/general-ck",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1105,7 +1108,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/click-path-audit",
       "targetLink": ".agents/skills/general-click-path-audit",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1114,7 +1117,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/code-tour",
       "targetLink": ".agents/skills/general-code-tour",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1123,7 +1126,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/codebase-onboarding",
       "targetLink": ".agents/skills/general-codebase-onboarding",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1141,7 +1144,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/configure-egc",
       "targetLink": ".agents/skills/general-configure-egc",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1150,7 +1153,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/content-hash-cache-pattern",
       "targetLink": ".agents/skills/general-content-hash-cache-pattern",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1159,7 +1162,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/council",
       "targetLink": ".agents/skills/general-council",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1168,7 +1171,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/cpp-coding-standards",
       "targetLink": ".agents/skills/general-cpp-coding-standards",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1186,7 +1189,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/dashboard-builder",
       "targetLink": ".agents/skills/general-dashboard-builder",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1195,7 +1198,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/data-scraper-agent",
       "targetLink": ".agents/skills/general-data-scraper-agent",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1204,7 +1207,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/design-system",
       "targetLink": ".agents/skills/general-design-system",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1213,7 +1216,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/egc-devfleet",
       "targetLink": ".agents/skills/general-egc-devfleet",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1222,7 +1225,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/egc-tools-cost-audit",
       "targetLink": ".agents/skills/general-egc-tools-cost-audit",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1231,7 +1234,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/enterprise-agent-ops",
       "targetLink": ".agents/skills/general-enterprise-agent-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1240,7 +1243,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/flutter-dart-code-review",
       "targetLink": ".agents/skills/general-flutter-dart-code-review",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1249,7 +1252,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/gan-style-harness",
       "targetLink": ".agents/skills/general-gan-style-harness",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1258,7 +1261,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/gateguard",
       "targetLink": ".agents/skills/general-gateguard",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1267,7 +1270,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/git-workflow",
       "targetLink": ".agents/skills/general-git-workflow",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1276,7 +1279,7 @@
       "namespace": "general",
       "physicalPath": "skills/general/healthcare-cdss-patterns",
       "targetLink": ".agents/skills/general-healthcare-cdss-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1285,7 +1288,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/healthcare-emr-patterns",
       "targetLink": ".agents/skills/general_part2-healthcare-emr-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1294,7 +1297,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/healthcare-eval-harness",
       "targetLink": ".agents/skills/general_part2-healthcare-eval-harness",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1303,7 +1306,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/hermes-imports",
       "targetLink": ".agents/skills/general_part2-hermes-imports",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1312,7 +1315,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/hexagonal-architecture",
       "targetLink": ".agents/skills/general_part2-hexagonal-architecture",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1321,7 +1324,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/laravel-plugin-discovery",
       "targetLink": ".agents/skills/general_part2-laravel-plugin-discovery",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1339,7 +1342,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/nanoclaw-repl",
       "targetLink": ".agents/skills/general_part2-nanoclaw-repl",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1357,7 +1360,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/nuxt4-patterns",
       "targetLink": ".agents/skills/general_part2-nuxt4-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1366,7 +1369,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/openclaw-persona-forge",
       "targetLink": ".agents/skills/general_part2-openclaw-persona-forge",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "python",
         "shell"
@@ -1378,7 +1381,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/opensource-pipeline",
       "targetLink": ".agents/skills/general_part2-opensource-pipeline",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1387,7 +1390,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/perl-security",
       "targetLink": ".agents/skills/general_part2-perl-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1396,7 +1399,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/plankton-code-quality",
       "targetLink": ".agents/skills/general_part2-plankton-code-quality",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1414,7 +1417,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/product-lens",
       "targetLink": ".agents/skills/general_part2-product-lens",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1423,7 +1426,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/pytorch-patterns",
       "targetLink": ".agents/skills/general_part2-pytorch-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1432,7 +1435,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/ralphinho-rfc-pipeline",
       "targetLink": ".agents/skills/general_part2-ralphinho-rfc-pipeline",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1441,7 +1444,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/repo-scan",
       "targetLink": ".agents/skills/general_part2-repo-scan",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1450,7 +1453,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/rules-distill",
       "targetLink": ".agents/skills/general_part2-rules-distill",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "shell"
       ]
@@ -1461,7 +1464,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/safety-guard",
       "targetLink": ".agents/skills/general_part2-safety-guard",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1470,7 +1473,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/santa-method",
       "targetLink": ".agents/skills/general_part2-santa-method",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1479,7 +1482,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/skill-comply",
       "targetLink": ".agents/skills/general_part2-skill-comply",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "python"
       ]
@@ -1490,7 +1493,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/team-builder",
       "targetLink": ".agents/skills/general_part2-team-builder",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1499,7 +1502,7 @@
       "namespace": "general_part2",
       "physicalPath": "skills/general_part2/workspace-surface-audit",
       "targetLink": ".agents/skills/general_part2-workspace-surface-audit",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1508,7 +1511,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/api-connector-builder",
       "targetLink": ".agents/skills/integrations-api-connector-builder",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1517,7 +1520,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/connections-optimizer",
       "targetLink": ".agents/skills/integrations-connections-optimizer",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1526,7 +1529,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/email-ops",
       "targetLink": ".agents/skills/integrations-email-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1535,7 +1538,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/jira-integration",
       "targetLink": ".agents/skills/integrations-jira-integration",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1544,7 +1547,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/messages-ops",
       "targetLink": ".agents/skills/integrations-messages-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1553,7 +1556,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/social-graph-ranker",
       "targetLink": ".agents/skills/integrations-social-graph-ranker",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1562,7 +1565,7 @@
       "namespace": "integrations",
       "physicalPath": "skills/integrations/unified-notifications-ops",
       "targetLink": ".agents/skills/integrations-unified-notifications-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1580,7 +1583,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/dart-flutter-patterns",
       "targetLink": ".agents/skills/language-dart-flutter-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1589,7 +1592,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/kotlin-coroutines-flows",
       "targetLink": ".agents/skills/language-kotlin-coroutines-flows",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1598,7 +1601,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/kotlin-exposed-patterns",
       "targetLink": ".agents/skills/language-kotlin-exposed-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1607,7 +1610,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/kotlin-ktor-patterns",
       "targetLink": ".agents/skills/language-kotlin-ktor-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1616,7 +1619,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/kotlin-patterns",
       "targetLink": ".agents/skills/language-kotlin-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1625,7 +1628,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/swift-actor-persistence",
       "targetLink": ".agents/skills/language-swift-actor-persistence",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1634,7 +1637,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/swift-concurrency-6-2",
       "targetLink": ".agents/skills/language-swift-concurrency-6-2",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1643,7 +1646,7 @@
       "namespace": "language",
       "physicalPath": "skills/language/swift-protocol-di-testing",
       "targetLink": ".agents/skills/language-swift-protocol-di-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1652,7 +1655,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/cisco-ios-patterns",
       "targetLink": ".agents/skills/security-cisco-ios-patterns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1661,7 +1664,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/customs-trade-compliance",
       "targetLink": ".agents/skills/security-customs-trade-compliance",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1670,7 +1673,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/defi-amm-security",
       "targetLink": ".agents/skills/security-defi-amm-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1679,7 +1682,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/healthcare-phi-compliance",
       "targetLink": ".agents/skills/security-healthcare-phi-compliance",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1688,7 +1691,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/hipaa-compliance",
       "targetLink": ".agents/skills/security-hipaa-compliance",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1697,7 +1700,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/homelab-network-readiness",
       "targetLink": ".agents/skills/security-homelab-network-readiness",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1706,7 +1709,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/homelab-network-setup",
       "targetLink": ".agents/skills/security-homelab-network-setup",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1715,7 +1718,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/homelab-pihole-dns",
       "targetLink": ".agents/skills/security-homelab-pihole-dns",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1724,7 +1727,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/homelab-vlan-segmentation",
       "targetLink": ".agents/skills/security-homelab-vlan-segmentation",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1733,7 +1736,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/homelab-wireguard-vpn",
       "targetLink": ".agents/skills/security-homelab-wireguard-vpn",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1742,7 +1745,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/llm-trading-agent-security",
       "targetLink": ".agents/skills/security-llm-trading-agent-security",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1751,7 +1754,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/netmiko-ssh-automation",
       "targetLink": ".agents/skills/security-netmiko-ssh-automation",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1760,7 +1763,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/network-bgp-diagnostics",
       "targetLink": ".agents/skills/security-network-bgp-diagnostics",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1769,7 +1772,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/network-config-validation",
       "targetLink": ".agents/skills/security-network-config-validation",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1778,7 +1781,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/network-interface-health",
       "targetLink": ".agents/skills/security-network-interface-health",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1787,7 +1790,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/security-bounty-hunter",
       "targetLink": ".agents/skills/security-security-bounty-hunter",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1805,7 +1808,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/security-scan",
       "targetLink": ".agents/skills/security-security-scan",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1814,7 +1817,7 @@
       "namespace": "security",
       "physicalPath": "skills/security/visa-doc-translate",
       "targetLink": ".agents/skills/security-visa-doc-translate",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1823,7 +1826,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/ai-regression-testing",
       "targetLink": ".agents/skills/testing-ai-regression-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1832,7 +1835,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/cpp-testing",
       "targetLink": ".agents/skills/testing-cpp-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1841,7 +1844,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/csharp-testing",
       "targetLink": ".agents/skills/testing-csharp-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1850,7 +1853,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/django-tdd",
       "targetLink": ".agents/skills/testing-django-tdd",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1859,7 +1862,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/django-verification",
       "targetLink": ".agents/skills/testing-django-verification",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1886,7 +1889,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/fsharp-testing",
       "targetLink": ".agents/skills/testing-fsharp-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1895,7 +1898,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/golang-testing",
       "targetLink": ".agents/skills/testing-golang-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1904,7 +1907,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/kotlin-testing",
       "targetLink": ".agents/skills/testing-kotlin-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1913,7 +1916,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/laravel-tdd",
       "targetLink": ".agents/skills/testing-laravel-tdd",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1922,7 +1925,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/laravel-verification",
       "targetLink": ".agents/skills/testing-laravel-verification",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1931,7 +1934,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/perl-testing",
       "targetLink": ".agents/skills/testing-perl-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1940,7 +1943,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/python-testing",
       "targetLink": ".agents/skills/testing-python-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1949,7 +1952,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/rust-testing",
       "targetLink": ".agents/skills/testing-rust-testing",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1958,7 +1961,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/springboot-tdd",
       "targetLink": ".agents/skills/testing-springboot-tdd",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1967,7 +1970,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/springboot-verification",
       "targetLink": ".agents/skills/testing-springboot-verification",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -1994,7 +1997,7 @@
       "namespace": "testing",
       "physicalPath": "skills/testing/windows-desktop-e2e",
       "targetLink": ".agents/skills/testing-windows-desktop-e2e",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2012,7 +2015,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/hookify-rules",
       "targetLink": ".agents/skills/workflows-hookify-rules",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2021,7 +2024,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/iterative-retrieval",
       "targetLink": ".agents/skills/workflows-iterative-retrieval",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2030,7 +2033,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/knowledge-ops",
       "targetLink": ".agents/skills/workflows-knowledge-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2039,7 +2042,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/project-flow-ops",
       "targetLink": ".agents/skills/workflows-project-flow-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2048,7 +2051,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/research-ops",
       "targetLink": ".agents/skills/workflows-research-ops",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2057,7 +2060,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/skill-router",
       "targetLink": ".agents/skills/workflows-skill-router",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": []
     },
     {
@@ -2066,7 +2069,7 @@
       "namespace": "workflows",
       "physicalPath": "skills/workflows/skill-stocktake",
       "targetLink": ".agents/skills/workflows-skill-stocktake",
-      "status": "cold",
+      "status": "shadowed",
       "runtime": [
         "shell"
       ]
@@ -2088,7 +2091,7 @@
       "name": "a11y-architect.md",
       "physicalPath": "agents/a11y-architect.md",
       "targetLink": ".agents/agents/a11y-architect.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "architect.md",
@@ -2100,361 +2103,1019 @@
       "name": "build-error-resolver.md",
       "physicalPath": "agents/build-error-resolver.md",
       "targetLink": ".agents/agents/build-error-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "chief-of-staff.md",
       "physicalPath": "agents/chief-of-staff.md",
       "targetLink": ".agents/agents/chief-of-staff.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "code-architect.md",
       "physicalPath": "agents/code-architect.md",
       "targetLink": ".agents/agents/code-architect.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "code-explorer.md",
       "physicalPath": "agents/code-explorer.md",
       "targetLink": ".agents/agents/code-explorer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "code-reviewer.md",
       "physicalPath": "agents/code-reviewer.md",
       "targetLink": ".agents/agents/code-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "code-simplifier.md",
       "physicalPath": "agents/code-simplifier.md",
       "targetLink": ".agents/agents/code-simplifier.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "comment-analyzer.md",
       "physicalPath": "agents/comment-analyzer.md",
       "targetLink": ".agents/agents/comment-analyzer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "conversation-analyzer.md",
       "physicalPath": "agents/conversation-analyzer.md",
       "targetLink": ".agents/agents/conversation-analyzer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "cpp-build-resolver.md",
       "physicalPath": "agents/cpp-build-resolver.md",
       "targetLink": ".agents/agents/cpp-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "cpp-reviewer.md",
       "physicalPath": "agents/cpp-reviewer.md",
       "targetLink": ".agents/agents/cpp-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "csharp-reviewer.md",
       "physicalPath": "agents/csharp-reviewer.md",
       "targetLink": ".agents/agents/csharp-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "dart-build-resolver.md",
       "physicalPath": "agents/dart-build-resolver.md",
       "targetLink": ".agents/agents/dart-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "database-reviewer.md",
       "physicalPath": "agents/database-reviewer.md",
       "targetLink": ".agents/agents/database-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "django-build-resolver.md",
       "physicalPath": "agents/django-build-resolver.md",
       "targetLink": ".agents/agents/django-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "django-reviewer.md",
       "physicalPath": "agents/django-reviewer.md",
       "targetLink": ".agents/agents/django-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "doc-updater.md",
       "physicalPath": "agents/doc-updater.md",
       "targetLink": ".agents/agents/doc-updater.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "docs-lookup.md",
       "physicalPath": "agents/docs-lookup.md",
       "targetLink": ".agents/agents/docs-lookup.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "e2e-runner.md",
       "physicalPath": "agents/e2e-runner.md",
       "targetLink": ".agents/agents/e2e-runner.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "fastapi-reviewer.md",
       "physicalPath": "agents/fastapi-reviewer.md",
       "targetLink": ".agents/agents/fastapi-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "flutter-reviewer.md",
       "physicalPath": "agents/flutter-reviewer.md",
       "targetLink": ".agents/agents/flutter-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "fsharp-reviewer.md",
       "physicalPath": "agents/fsharp-reviewer.md",
       "targetLink": ".agents/agents/fsharp-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "gan-evaluator.md",
       "physicalPath": "agents/gan-evaluator.md",
       "targetLink": ".agents/agents/gan-evaluator.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "gan-generator.md",
       "physicalPath": "agents/gan-generator.md",
       "targetLink": ".agents/agents/gan-generator.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "gan-planner.md",
       "physicalPath": "agents/gan-planner.md",
       "targetLink": ".agents/agents/gan-planner.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "go-build-resolver.md",
       "physicalPath": "agents/go-build-resolver.md",
       "targetLink": ".agents/agents/go-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "go-reviewer.md",
       "physicalPath": "agents/go-reviewer.md",
       "targetLink": ".agents/agents/go-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "harmonyos-app-resolver.md",
       "physicalPath": "agents/harmonyos-app-resolver.md",
       "targetLink": ".agents/agents/harmonyos-app-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "harness-optimizer.md",
       "physicalPath": "agents/harness-optimizer.md",
       "targetLink": ".agents/agents/harness-optimizer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "healthcare-reviewer.md",
       "physicalPath": "agents/healthcare-reviewer.md",
       "targetLink": ".agents/agents/healthcare-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "homelab-architect.md",
       "physicalPath": "agents/homelab-architect.md",
       "targetLink": ".agents/agents/homelab-architect.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "java-build-resolver.md",
       "physicalPath": "agents/java-build-resolver.md",
       "targetLink": ".agents/agents/java-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "java-reviewer.md",
       "physicalPath": "agents/java-reviewer.md",
       "targetLink": ".agents/agents/java-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "kotlin-build-resolver.md",
       "physicalPath": "agents/kotlin-build-resolver.md",
       "targetLink": ".agents/agents/kotlin-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "kotlin-reviewer.md",
       "physicalPath": "agents/kotlin-reviewer.md",
       "targetLink": ".agents/agents/kotlin-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "loop-operator.md",
       "physicalPath": "agents/loop-operator.md",
       "targetLink": ".agents/agents/loop-operator.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "mle-reviewer.md",
       "physicalPath": "agents/mle-reviewer.md",
       "targetLink": ".agents/agents/mle-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "network-architect.md",
       "physicalPath": "agents/network-architect.md",
       "targetLink": ".agents/agents/network-architect.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "network-config-reviewer.md",
       "physicalPath": "agents/network-config-reviewer.md",
       "targetLink": ".agents/agents/network-config-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "network-troubleshooter.md",
       "physicalPath": "agents/network-troubleshooter.md",
       "targetLink": ".agents/agents/network-troubleshooter.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "opensource-forker.md",
       "physicalPath": "agents/opensource-forker.md",
       "targetLink": ".agents/agents/opensource-forker.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "opensource-packager.md",
       "physicalPath": "agents/opensource-packager.md",
       "targetLink": ".agents/agents/opensource-packager.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "opensource-sanitizer.md",
       "physicalPath": "agents/opensource-sanitizer.md",
       "targetLink": ".agents/agents/opensource-sanitizer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "performance-optimizer.md",
       "physicalPath": "agents/performance-optimizer.md",
       "targetLink": ".agents/agents/performance-optimizer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "planner.md",
       "physicalPath": "agents/planner.md",
       "targetLink": ".agents/agents/planner.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "pr-test-analyzer.md",
       "physicalPath": "agents/pr-test-analyzer.md",
       "targetLink": ".agents/agents/pr-test-analyzer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "python-reviewer.md",
       "physicalPath": "agents/python-reviewer.md",
       "targetLink": ".agents/agents/python-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "pytorch-build-resolver.md",
       "physicalPath": "agents/pytorch-build-resolver.md",
       "targetLink": ".agents/agents/pytorch-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "refactor-cleaner.md",
       "physicalPath": "agents/refactor-cleaner.md",
       "targetLink": ".agents/agents/refactor-cleaner.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "reproduce-me.md",
       "physicalPath": "agents/reproduce-me.md",
       "targetLink": ".agents/agents/reproduce-me.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "researcher-test.md",
       "physicalPath": "agents/researcher-test.md",
       "targetLink": ".agents/agents/researcher-test.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "rust-build-resolver.md",
       "physicalPath": "agents/rust-build-resolver.md",
       "targetLink": ".agents/agents/rust-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "rust-reviewer.md",
       "physicalPath": "agents/rust-reviewer.md",
       "targetLink": ".agents/agents/rust-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "security-reviewer.md",
       "physicalPath": "agents/security-reviewer.md",
       "targetLink": ".agents/agents/security-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "seo-specialist.md",
       "physicalPath": "agents/seo-specialist.md",
       "targetLink": ".agents/agents/seo-specialist.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "silent-failure-hunter.md",
       "physicalPath": "agents/silent-failure-hunter.md",
       "targetLink": ".agents/agents/silent-failure-hunter.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "swift-build-resolver.md",
       "physicalPath": "agents/swift-build-resolver.md",
       "targetLink": ".agents/agents/swift-build-resolver.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "swift-reviewer.md",
       "physicalPath": "agents/swift-reviewer.md",
       "targetLink": ".agents/agents/swift-reviewer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "tdd-guide.md",
       "physicalPath": "agents/tdd-guide.md",
       "targetLink": ".agents/agents/tdd-guide.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "type-design-analyzer.md",
       "physicalPath": "agents/type-design-analyzer.md",
       "targetLink": ".agents/agents/type-design-analyzer.md",
-      "status": "cold"
+      "status": "shadowed"
     },
     {
       "name": "typescript-reviewer.md",
       "physicalPath": "agents/typescript-reviewer.md",
       "targetLink": ".agents/agents/typescript-reviewer.md",
+      "status": "shadowed"
+    }
+  ],
+  "commands": [
+    {
+      "name": "aside.md",
+      "physicalPath": "commands/aside.md",
       "status": "cold"
+    },
+    {
+      "name": "auto-update.md",
+      "physicalPath": "commands/auto-update.md",
+      "status": "cold"
+    },
+    {
+      "name": "build-fix.md",
+      "physicalPath": "commands/build-fix.md",
+      "status": "cold"
+    },
+    {
+      "name": "checkpoint.md",
+      "physicalPath": "commands/checkpoint.md",
+      "status": "cold"
+    },
+    {
+      "name": "code-review.md",
+      "physicalPath": "commands/code-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "cost-report.md",
+      "physicalPath": "commands/cost-report.md",
+      "status": "cold"
+    },
+    {
+      "name": "cpp-build.md",
+      "physicalPath": "commands/cpp-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "cpp-review.md",
+      "physicalPath": "commands/cpp-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "cpp-test.md",
+      "physicalPath": "commands/cpp-test.md",
+      "status": "cold"
+    },
+    {
+      "name": "evolve.md",
+      "physicalPath": "commands/evolve.md",
+      "status": "cold"
+    },
+    {
+      "name": "fastapi-review.md",
+      "physicalPath": "commands/fastapi-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "feature-dev.md",
+      "physicalPath": "commands/feature-dev.md",
+      "status": "cold"
+    },
+    {
+      "name": "flutter-build.md",
+      "physicalPath": "commands/flutter-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "flutter-review.md",
+      "physicalPath": "commands/flutter-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "flutter-test.md",
+      "physicalPath": "commands/flutter-test.md",
+      "status": "cold"
+    },
+    {
+      "name": "gan-build.md",
+      "physicalPath": "commands/gan-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "gan-design.md",
+      "physicalPath": "commands/gan-design.md",
+      "status": "cold"
+    },
+    {
+      "name": "go-build.md",
+      "physicalPath": "commands/go-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "go-review.md",
+      "physicalPath": "commands/go-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "go-test.md",
+      "physicalPath": "commands/go-test.md",
+      "status": "cold"
+    },
+    {
+      "name": "gradle-build.md",
+      "physicalPath": "commands/gradle-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "harness-audit.md",
+      "physicalPath": "commands/harness-audit.md",
+      "status": "cold"
+    },
+    {
+      "name": "hookify-configure.md",
+      "physicalPath": "commands/hookify-configure.md",
+      "status": "cold"
+    },
+    {
+      "name": "hookify-help.md",
+      "physicalPath": "commands/hookify-help.md",
+      "status": "cold"
+    },
+    {
+      "name": "hookify-list.md",
+      "physicalPath": "commands/hookify-list.md",
+      "status": "cold"
+    },
+    {
+      "name": "hookify.md",
+      "physicalPath": "commands/hookify.md",
+      "status": "cold"
+    },
+    {
+      "name": "instinct-export.md",
+      "physicalPath": "commands/instinct-export.md",
+      "status": "cold"
+    },
+    {
+      "name": "instinct-import.md",
+      "physicalPath": "commands/instinct-import.md",
+      "status": "cold"
+    },
+    {
+      "name": "instinct-status.md",
+      "physicalPath": "commands/instinct-status.md",
+      "status": "cold"
+    },
+    {
+      "name": "jira.md",
+      "physicalPath": "commands/jira.md",
+      "status": "cold"
+    },
+    {
+      "name": "kotlin-build.md",
+      "physicalPath": "commands/kotlin-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "kotlin-review.md",
+      "physicalPath": "commands/kotlin-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "kotlin-test.md",
+      "physicalPath": "commands/kotlin-test.md",
+      "status": "cold"
+    },
+    {
+      "name": "learn-eval.md",
+      "physicalPath": "commands/learn-eval.md",
+      "status": "cold"
+    },
+    {
+      "name": "learn.md",
+      "physicalPath": "commands/learn.md",
+      "status": "cold"
+    },
+    {
+      "name": "loop-start.md",
+      "physicalPath": "commands/loop-start.md",
+      "status": "cold"
+    },
+    {
+      "name": "loop-status.md",
+      "physicalPath": "commands/loop-status.md",
+      "status": "cold"
+    },
+    {
+      "name": "model-route.md",
+      "physicalPath": "commands/model-route.md",
+      "status": "cold"
+    },
+    {
+      "name": "multi-backend.md",
+      "physicalPath": "commands/multi-backend.md",
+      "status": "cold"
+    },
+    {
+      "name": "multi-execute.md",
+      "physicalPath": "commands/multi-execute.md",
+      "status": "cold"
+    },
+    {
+      "name": "multi-frontend.md",
+      "physicalPath": "commands/multi-frontend.md",
+      "status": "cold"
+    },
+    {
+      "name": "multi-plan.md",
+      "physicalPath": "commands/multi-plan.md",
+      "status": "cold"
+    },
+    {
+      "name": "multi-workflow.md",
+      "physicalPath": "commands/multi-workflow.md",
+      "status": "cold"
+    },
+    {
+      "name": "plan-prd.md",
+      "physicalPath": "commands/plan-prd.md",
+      "status": "cold"
+    },
+    {
+      "name": "plan.md",
+      "physicalPath": "commands/plan.md",
+      "status": "cold"
+    },
+    {
+      "name": "pm2.md",
+      "physicalPath": "commands/pm2.md",
+      "status": "cold"
+    },
+    {
+      "name": "pr.md",
+      "physicalPath": "commands/pr.md",
+      "status": "cold"
+    },
+    {
+      "name": "project-init.md",
+      "physicalPath": "commands/project-init.md",
+      "status": "cold"
+    },
+    {
+      "name": "projects.md",
+      "physicalPath": "commands/projects.md",
+      "status": "cold"
+    },
+    {
+      "name": "promote.md",
+      "physicalPath": "commands/promote.md",
+      "status": "cold"
+    },
+    {
+      "name": "prp-commit.md",
+      "physicalPath": "commands/prp-commit.md",
+      "status": "cold"
+    },
+    {
+      "name": "prp-implement.md",
+      "physicalPath": "commands/prp-implement.md",
+      "status": "cold"
+    },
+    {
+      "name": "prp-plan.md",
+      "physicalPath": "commands/prp-plan.md",
+      "status": "cold"
+    },
+    {
+      "name": "prp-pr.md",
+      "physicalPath": "commands/prp-pr.md",
+      "status": "cold"
+    },
+    {
+      "name": "prp-prd.md",
+      "physicalPath": "commands/prp-prd.md",
+      "status": "cold"
+    },
+    {
+      "name": "prune.md",
+      "physicalPath": "commands/prune.md",
+      "status": "cold"
+    },
+    {
+      "name": "python-review.md",
+      "physicalPath": "commands/python-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "quality-gate.md",
+      "physicalPath": "commands/quality-gate.md",
+      "status": "cold"
+    },
+    {
+      "name": "refactor-clean.md",
+      "physicalPath": "commands/refactor-clean.md",
+      "status": "cold"
+    },
+    {
+      "name": "resume-session.md",
+      "physicalPath": "commands/resume-session.md",
+      "status": "cold"
+    },
+    {
+      "name": "review-pr.md",
+      "physicalPath": "commands/review-pr.md",
+      "status": "cold"
+    },
+    {
+      "name": "rust-build.md",
+      "physicalPath": "commands/rust-build.md",
+      "status": "cold"
+    },
+    {
+      "name": "rust-review.md",
+      "physicalPath": "commands/rust-review.md",
+      "status": "cold"
+    },
+    {
+      "name": "rust-test.md",
+      "physicalPath": "commands/rust-test.md",
+      "status": "cold"
+    },
+    {
+      "name": "santa-loop.md",
+      "physicalPath": "commands/santa-loop.md",
+      "status": "cold"
+    },
+    {
+      "name": "save-session.md",
+      "physicalPath": "commands/save-session.md",
+      "status": "cold"
+    },
+    {
+      "name": "security-scan.md",
+      "physicalPath": "commands/security-scan.md",
+      "status": "cold"
+    },
+    {
+      "name": "sessions.md",
+      "physicalPath": "commands/sessions.md",
+      "status": "cold"
+    },
+    {
+      "name": "setup-pm.md",
+      "physicalPath": "commands/setup-pm.md",
+      "status": "cold"
+    },
+    {
+      "name": "skill-create.md",
+      "physicalPath": "commands/skill-create.md",
+      "status": "cold"
+    },
+    {
+      "name": "skill-health.md",
+      "physicalPath": "commands/skill-health.md",
+      "status": "cold"
+    },
+    {
+      "name": "test-coverage.md",
+      "physicalPath": "commands/test-coverage.md",
+      "status": "cold"
+    },
+    {
+      "name": "update-codemaps.md",
+      "physicalPath": "commands/update-codemaps.md",
+      "status": "cold"
+    },
+    {
+      "name": "update-docs.md",
+      "physicalPath": "commands/update-docs.md",
+      "status": "cold"
+    }
+  ],
+  "rules": [
+    {
+      "name": "README.md",
+      "physicalPath": "rules/README.md",
+      "status": "cold"
+    },
+    {
+      "name": "angular",
+      "physicalPath": "rules/angular",
+      "status": "cold"
+    },
+    {
+      "name": "arkts",
+      "physicalPath": "rules/arkts",
+      "status": "cold"
+    },
+    {
+      "name": "common",
+      "physicalPath": "rules/common",
+      "status": "cold"
+    },
+    {
+      "name": "cpp",
+      "physicalPath": "rules/cpp",
+      "status": "cold"
+    },
+    {
+      "name": "csharp",
+      "physicalPath": "rules/csharp",
+      "status": "cold"
+    },
+    {
+      "name": "dart",
+      "physicalPath": "rules/dart",
+      "status": "cold"
+    },
+    {
+      "name": "fsharp",
+      "physicalPath": "rules/fsharp",
+      "status": "cold"
+    },
+    {
+      "name": "golang",
+      "physicalPath": "rules/golang",
+      "status": "cold"
+    },
+    {
+      "name": "java",
+      "physicalPath": "rules/java",
+      "status": "cold"
+    },
+    {
+      "name": "kotlin",
+      "physicalPath": "rules/kotlin",
+      "status": "cold"
+    },
+    {
+      "name": "perl",
+      "physicalPath": "rules/perl",
+      "status": "cold"
+    },
+    {
+      "name": "php",
+      "physicalPath": "rules/php",
+      "status": "cold"
+    },
+    {
+      "name": "python",
+      "physicalPath": "rules/python",
+      "status": "cold"
+    },
+    {
+      "name": "ruby",
+      "physicalPath": "rules/ruby",
+      "status": "cold"
+    },
+    {
+      "name": "rust",
+      "physicalPath": "rules/rust",
+      "status": "cold"
+    },
+    {
+      "name": "swift",
+      "physicalPath": "rules/swift",
+      "status": "cold"
+    },
+    {
+      "name": "typescript",
+      "physicalPath": "rules/typescript",
+      "status": "cold"
+    },
+    {
+      "name": "web",
+      "physicalPath": "rules/web",
+      "status": "cold"
+    },
+    {
+      "name": "zh",
+      "physicalPath": "rules/zh",
+      "status": "cold"
+    }
+  ],
+  "hooks": [
+    {
+      "name": "auto-tmux-dev.js",
+      "physicalPath": "scripts/hooks/auto-tmux-dev.js"
+    },
+    {
+      "name": "bash-hook-dispatcher.js",
+      "physicalPath": "scripts/hooks/bash-hook-dispatcher.js"
+    },
+    {
+      "name": "block-no-verify.js",
+      "physicalPath": "scripts/hooks/block-no-verify.js"
+    },
+    {
+      "name": "check-console-log.js",
+      "physicalPath": "scripts/hooks/check-console-log.js"
+    },
+    {
+      "name": "check-hook-enabled.js",
+      "physicalPath": "scripts/hooks/check-hook-enabled.js"
+    },
+    {
+      "name": "config-protection.js",
+      "physicalPath": "scripts/hooks/config-protection.js"
+    },
+    {
+      "name": "cost-tracker.js",
+      "physicalPath": "scripts/hooks/cost-tracker.js"
+    },
+    {
+      "name": "design-quality-check.js",
+      "physicalPath": "scripts/hooks/design-quality-check.js"
+    },
+    {
+      "name": "desktop-notify.js",
+      "physicalPath": "scripts/hooks/desktop-notify.js"
+    },
+    {
+      "name": "doc-file-warning.js",
+      "physicalPath": "scripts/hooks/doc-file-warning.js"
+    },
+    {
+      "name": "egc-session-bridge.js",
+      "physicalPath": "scripts/hooks/egc-session-bridge.js"
+    },
+    {
+      "name": "evaluate-session.js",
+      "physicalPath": "scripts/hooks/evaluate-session.js"
+    },
+    {
+      "name": "gateguard-fact-force.js",
+      "physicalPath": "scripts/hooks/gateguard-fact-force.js"
+    },
+    {
+      "name": "governance-capture.js",
+      "physicalPath": "scripts/hooks/governance-capture.js"
+    },
+    {
+      "name": "insaits-security-wrapper.js",
+      "physicalPath": "scripts/hooks/insaits-security-wrapper.js"
+    },
+    {
+      "name": "mcp-health-check.js",
+      "physicalPath": "scripts/hooks/mcp-health-check.js"
+    },
+    {
+      "name": "observe-runner.js",
+      "physicalPath": "scripts/hooks/observe-runner.js"
+    },
+    {
+      "name": "plugin-hook-bootstrap.js",
+      "physicalPath": "scripts/hooks/plugin-hook-bootstrap.js"
+    },
+    {
+      "name": "post-bash-build-complete.js",
+      "physicalPath": "scripts/hooks/post-bash-build-complete.js"
+    },
+    {
+      "name": "post-bash-command-log.js",
+      "physicalPath": "scripts/hooks/post-bash-command-log.js"
+    },
+    {
+      "name": "post-bash-dispatcher.js",
+      "physicalPath": "scripts/hooks/post-bash-dispatcher.js"
+    },
+    {
+      "name": "post-bash-pr-created.js",
+      "physicalPath": "scripts/hooks/post-bash-pr-created.js"
+    },
+    {
+      "name": "post-edit-accumulator.js",
+      "physicalPath": "scripts/hooks/post-edit-accumulator.js"
+    },
+    {
+      "name": "post-edit-console-warn.js",
+      "physicalPath": "scripts/hooks/post-edit-console-warn.js"
+    },
+    {
+      "name": "post-edit-format.js",
+      "physicalPath": "scripts/hooks/post-edit-format.js"
+    },
+    {
+      "name": "post-edit-typecheck.js",
+      "physicalPath": "scripts/hooks/post-edit-typecheck.js"
+    },
+    {
+      "name": "pre-bash-commit-quality.js",
+      "physicalPath": "scripts/hooks/pre-bash-commit-quality.js"
+    },
+    {
+      "name": "pre-bash-dev-server-block.js",
+      "physicalPath": "scripts/hooks/pre-bash-dev-server-block.js"
+    },
+    {
+      "name": "pre-bash-dispatcher.js",
+      "physicalPath": "scripts/hooks/pre-bash-dispatcher.js"
+    },
+    {
+      "name": "pre-bash-git-push-reminder.js",
+      "physicalPath": "scripts/hooks/pre-bash-git-push-reminder.js"
+    },
+    {
+      "name": "pre-bash-tmux-reminder.js",
+      "physicalPath": "scripts/hooks/pre-bash-tmux-reminder.js"
+    },
+    {
+      "name": "pre-compact.js",
+      "physicalPath": "scripts/hooks/pre-compact.js"
+    },
+    {
+      "name": "quality-gate.js",
+      "physicalPath": "scripts/hooks/quality-gate.js"
+    },
+    {
+      "name": "run-with-flags-shell.sh",
+      "physicalPath": "scripts/hooks/run-with-flags-shell.sh"
+    },
+    {
+      "name": "run-with-flags.js",
+      "physicalPath": "scripts/hooks/run-with-flags.js"
+    },
+    {
+      "name": "session-activity-tracker.js",
+      "physicalPath": "scripts/hooks/session-activity-tracker.js"
+    },
+    {
+      "name": "session-end-marker.js",
+      "physicalPath": "scripts/hooks/session-end-marker.js"
+    },
+    {
+      "name": "session-end.js",
+      "physicalPath": "scripts/hooks/session-end.js"
+    },
+    {
+      "name": "session-start-bootstrap.js",
+      "physicalPath": "scripts/hooks/session-start-bootstrap.js"
+    },
+    {
+      "name": "session-start.js",
+      "physicalPath": "scripts/hooks/session-start.js"
+    },
+    {
+      "name": "state-db-writer.js",
+      "physicalPath": "scripts/hooks/state-db-writer.js"
+    },
+    {
+      "name": "stop-format-typecheck.js",
+      "physicalPath": "scripts/hooks/stop-format-typecheck.js"
+    },
+    {
+      "name": "suggest-compact.js",
+      "physicalPath": "scripts/hooks/suggest-compact.js"
+    }
+  ],
+  "overlays": [
+    {
+      "name": "RULES.md",
+      "physicalPath": "RULES.md"
+    },
+    {
+      "name": "CONTRIBUTING.md",
+      "physicalPath": "CONTRIBUTING.md"
     }
   ]
 }

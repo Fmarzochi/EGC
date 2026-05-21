@@ -47,7 +47,7 @@ dormant.
 | `src/everything_gemini.egg-info/` | GENERATED | Produced by `pip install -e .` / setuptools; safe to regenerate |
 | `.opencode/dist/` | GENERATED | Built by `npm run build:opencode`; gitignored |
 | `node_modules/` | GENERATED | Standard npm |
-| `internal/registry/runtime-map.json` | GENERATED | Snapshot from `scripts/runtime/discovery.js` (now dormant); see `internal/registry/README.md` |
+| `internal/registry/runtime-map.json` | ACTIVE | Generated hot cache of the operational topology; updated by `scripts/runtime/discovery.js` |
 
 ### Archival
 
@@ -62,7 +62,7 @@ dormant.
 
 | Path | Class | Notes |
 |---|---|---|
-| `scripts/runtime/` (router, discovery, mount-all, unmount-all, activator) | DORMANT | Resolve a `registry/` path that does not exist (real: `internal/registry/`); no callers in CI/runtime/bin; see `scripts/runtime/README.md` |
+| `scripts/runtime/` (router, mount-all, unmount-all, activator) | DORMANT | `discovery.js` is ACTIVE, but routing/mounting scripts are dormant. See `scripts/runtime/README.md` |
 | `scripts/orchestration/router.py` | DORMANT | Same registry path drift |
 | `scripts/health-check.js` | DORMANT | Same registry path drift |
 | `scripts/generate-plugin-manifest.js` | DORMANT | Same registry path drift |

@@ -117,7 +117,15 @@ We believe in technical honesty. EGC contains preserved architectural substrates
 | **Dashboard UI** | **ACTIVE** | `egc_dashboard.py` proporciona visibilidade do plano de controle e descoberta de inventário. |
 | **Cognitive Memory** | **ACTIVE** | `src/llm/memory/` provides local-first persistence with Obsidian and MCP providers. |
 | **Provider Bridge** | **ACTIVE** | `src/llm/cli/prompt.py` provides the canonical Python CLI forwarder. |
-| **Registry Snapshots** | **DORMANT BUT INTENTIONAL** | `runtime-map.json` is preserved as a legacy/cache surface; discovery gracefully falls back to deep physical disk search. |
+| **Registry Snapshots** | **ACTIVE (HOT CACHE)** | `runtime-map.json` acts as the Full Operational Topology Cache, auto-regenerated on install. Discovery falls back to physical disk search only on drift. |
+
+### Operational Surfaces & Topology
+
+EGC execution is governed by both **Cognitive** and **Behavioral** topology, indexed centrally to ensure structural observability:
+
+- **Cognitive Topology (`agents/`, `skills/`)**: Expertise, roles, and instructions.
+- **Behavioral Topology (`commands/`, `rules/`, `scripts/hooks/`)**: Operational entrypoints (Slash Commands), runtime directives, and event interceptors.
+- **Governance Overlays (`AGENTS.md`)**: Shared constitutional rules loaded by the host harness to influence semantic routing and behavior.
 | **Execution Orchestrator** | **ORPHAN-BY-TESTS** | Simulated Python event loop preserved for structural topology continuity. |
 | **Execution Queue** | **ORPHAN-BY-TESTS** | Python task queues exist primarily as an architectural mockup in tests. |
 | **Workflow Engine** | **ORPHAN-BY-TESTS** | Experimental workflow parser kept alive by topology CI constraints. |

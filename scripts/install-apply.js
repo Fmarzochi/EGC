@@ -136,6 +136,15 @@ function main() {
     }
 
     const result = applyInstallPlan(plan);
+
+    // Regenerate the topology hot cache (runtime-map.json)
+    try {
+      const { discover } = require('./runtime/discovery');
+      discover();
+    } catch (err) {
+      console.error(`Warning: Failed to regenerate topology cache: ${err.message}`);
+    }
+
     if (options.json) {
       console.log(JSON.stringify({ dryRun: false, result }, null, 2));
     } else {

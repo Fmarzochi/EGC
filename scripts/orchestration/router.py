@@ -116,6 +116,7 @@ class AGENT_ROUTER:
             search_path = os.path.join(self.project_root, base_dir, "**", filename)
             matches = glob.glob(search_path, recursive=True)
             if matches:
+                logger.warning(f"Agent '{filename}' resolved via glob fallback. Registry cache may need regeneration.")
                 # Return the first match relative to project_root
                 rel_path = os.path.relpath(matches[0], self.project_root)
                 return {

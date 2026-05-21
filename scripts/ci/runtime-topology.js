@@ -197,11 +197,11 @@ const NODES = [
         summary: 'Dormant JS router; reads registry/runtime-map.json.'
     },
     {
-        id: 'runtime:dormant:discovery-js',
-        class: 'DORMANT',
+        id: 'runtime:active:discovery-js',
+        class: 'ACTIVE',
         kind: 'loader',
         path: 'scripts/runtime/discovery.js',
-        summary: 'Dormant JS discovery engine for COLD/HOT skill mapping.'
+        summary: 'Active JS discovery engine compiling the topology hot cache.'
     },
     {
         id: 'runtime:dormant:mount-all-js',
@@ -323,10 +323,10 @@ const STATIC_EDGES = [
         evidence: 'scripts/runtime/router.js reads registry/runtime-map.json (dormant; not invoked in active runtime)'
     },
     {
-        from: 'runtime:dormant:discovery-js',
+        from: 'runtime:active:discovery-js',
         to: 'registry:internal',
         relation: 'writes',
-        evidence: 'scripts/runtime/discovery.js generates registry/runtime-map.json (dormant)'
+        evidence: 'scripts/runtime/discovery.js generates internal/registry/runtime-map.json (active hot cache)'
     },
     {
         from: 'runtime:dormant:mount-all-js',
