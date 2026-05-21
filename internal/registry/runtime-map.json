@@ -2,7 +2,7 @@
   "$schema": "../../schemas/runtime-map.schema.json",
   "generatedAt": "2026-05-14T06:39:55.422Z",
   "os": "linux",
-  "projectRoot": "/home/fmarzochi/Projects/everything-gemini",
+  "projectRoot": ".",
   "stats": {
     "hotSkills": 32,
     "coldSkills": 228,

@@ -299,7 +299,7 @@ GET /api/v1/orders?fields=id,total,status&include=customer.name
 ```
 # Bearer token in Authorization header
 GET /api/v1/users
-Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+Authorization: Bearer <PLACEHOLDER_JWT>
 
 # API key (for server-to-server)
 GET /api/v1/data
