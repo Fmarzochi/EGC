@@ -1,1 +1,0 @@
-../../agents/csharp-reviewer.md

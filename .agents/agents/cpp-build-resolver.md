@@ -1,1 +1,0 @@
-../../agents/cpp-build-resolver.md

@@ -1,1 +1,0 @@
-../../agents/network-config-reviewer.md

@@ -1,1 +1,0 @@
-../../agents/researcher-test.md

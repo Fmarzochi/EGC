@@ -1,1 +1,0 @@
-../../agents/go-reviewer.md

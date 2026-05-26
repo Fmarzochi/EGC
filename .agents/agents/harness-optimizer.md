@@ -1,1 +1,0 @@
-../../agents/harness-optimizer.md

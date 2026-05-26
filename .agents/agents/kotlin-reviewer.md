@@ -1,1 +1,0 @@
-../../agents/kotlin-reviewer.md

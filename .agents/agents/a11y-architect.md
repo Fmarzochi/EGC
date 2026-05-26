@@ -1,1 +1,0 @@
-../../agents/a11y-architect.md

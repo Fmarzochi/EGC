@@ -1,1 +1,0 @@
-../../agents/django-reviewer.md

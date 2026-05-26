@@ -1,1 +1,0 @@
-../../agents/homelab-architect.md

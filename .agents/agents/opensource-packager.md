@@ -1,1 +1,0 @@
-../../agents/opensource-packager.md

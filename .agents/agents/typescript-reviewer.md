@@ -1,1 +1,0 @@
-../../agents/typescript-reviewer.md

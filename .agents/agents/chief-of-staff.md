@@ -1,1 +1,0 @@
-../../agents/chief-of-staff.md

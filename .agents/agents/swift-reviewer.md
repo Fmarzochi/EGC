@@ -1,1 +1,0 @@
-../../agents/swift-reviewer.md

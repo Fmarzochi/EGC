@@ -1,1 +1,0 @@
-../../agents/database-reviewer.md

@@ -1,1 +1,0 @@
-../../agents/harmonyos-app-resolver.md

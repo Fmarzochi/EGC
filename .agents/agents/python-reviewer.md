@@ -1,1 +1,0 @@
-../../agents/python-reviewer.md

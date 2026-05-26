@@ -40,7 +40,6 @@
     "rules/",
     "schemas/",
     "manifests/",
-    "internal/",
     "plugins/",
     "mcp-configs/",
     "legacy-command-shims/",

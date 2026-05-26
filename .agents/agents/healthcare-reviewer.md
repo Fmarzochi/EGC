@@ -1,1 +1,0 @@
-../../agents/healthcare-reviewer.md

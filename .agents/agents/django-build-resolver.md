@@ -1,1 +1,0 @@
-../../agents/django-build-resolver.md

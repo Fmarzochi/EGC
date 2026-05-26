@@ -1,1 +1,0 @@
-../../agents/seo-specialist.md

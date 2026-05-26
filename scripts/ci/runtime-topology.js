@@ -155,13 +155,6 @@ const NODES = [
         summary: 'Node bridge that spawns the Python llm.cli.prompt backend.'
     },
     {
-        id: 'registry:internal',
-        class: 'GENERATED',
-        kind: 'registry',
-        path: 'internal/registry/',
-        summary: 'Generated/archival registry of agents, skills, runtime maps.'
-    },
-    {
         id: 'manifest:gemini-plugin',
         class: 'ACTIVE',
         kind: 'manifest',
@@ -182,34 +175,6 @@ const NODES = [
         path: '~/.gemini/egc/state.db',
         summary: 'Shared SQLite state database for instincts and runtime metadata.'
     },
-    {
-        id: 'runtime:dormant:router-js',
-        class: 'DORMANT',
-        kind: 'loader',
-        path: 'scripts/runtime/router.js',
-        summary: 'Dormant JS router; reads registry/runtime-map.json.'
-    },
-    {
-        id: 'runtime:active:discovery-js',
-        class: 'ACTIVE',
-        kind: 'loader',
-        path: 'scripts/runtime/discovery.js',
-        summary: 'Active JS discovery engine compiling the topology hot cache.'
-    },
-    {
-        id: 'runtime:dormant:mount-all-js',
-        class: 'DORMANT',
-        kind: 'loader',
-        path: 'scripts/runtime/mount-all.js',
-        summary: 'Dormant JS mounter that activates skills into HOT runtime.'
-    },
-    {
-        id: 'runtime:dormant:unmount-all-js',
-        class: 'DORMANT',
-        kind: 'loader',
-        path: 'scripts/runtime/unmount-all.js',
-        summary: 'Dormant JS unmounter for HOT runtime cleanup.'
-    }
 ];
 
 const IMPORT_RULES = [
@@ -296,24 +261,6 @@ const STATIC_EDGES = [
         to: 'node:install-targets',
         relation: 'loads',
         evidence: "scripts/install-apply.js: require('./lib/install-targets/...')"
-    },
-    {
-        from: 'runtime:dormant:router-js',
-        to: 'registry:internal',
-        relation: 'reads',
-        evidence: 'scripts/runtime/router.js reads registry/runtime-map.json (dormant; not invoked in active runtime)'
-    },
-    {
-        from: 'runtime:active:discovery-js',
-        to: 'registry:internal',
-        relation: 'writes',
-        evidence: 'scripts/runtime/discovery.js generates internal/registry/runtime-map.json (active hot cache)'
-    },
-    {
-        from: 'runtime:dormant:mount-all-js',
-        to: 'registry:internal',
-        relation: 'reads',
-        evidence: 'scripts/runtime/mount-all.js consumes registry/runtime-map.json (dormant)'
     },
     {
         from: 'node:hooks-dispatcher',

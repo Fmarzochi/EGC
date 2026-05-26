@@ -301,7 +301,7 @@ jobs:
       - name: Smoke runtime-topology.js
         run: |
           node scripts/ci/runtime-topology.js > /tmp/topology.json
-          python3 -c "import json; d=json.load(open('/tmp/topology.json')); assert len(d['nodes']) >= 25; assert len(d['edges']) >= 12; print(f'topology nodes={len(d[\"nodes\"])} edges={len(d[\"edges\"])}')"
+          python3 -c "import json; d=json.load(open('/tmp/topology.json')); assert len(d['nodes']) >= 20; assert len(d['edges']) >= 12; print(f'topology nodes={len(d[\"nodes\"])} edges={len(d[\"edges\"])}')"
 
       - name: Smoke capability-graph.js vs catalog.js
         run: |
