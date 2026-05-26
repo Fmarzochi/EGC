@@ -249,8 +249,7 @@
         "skills/security/security-scan",
         "skills/security/security-bounty-hunter",
         "skills/backend/springboot-security",
-        "skills/backend/evm-token-decimals",
-        "the-security-guide.md"
+        "skills/backend/evm-token-decimals"
       ],
       "targets": [
         "egc",

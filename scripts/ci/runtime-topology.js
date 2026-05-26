@@ -127,13 +127,6 @@ const NODES = [
         summary: 'Python ReAct prompt CLI entrypoint (python -m llm.cli.prompt).'
     },
     {
-        id: 'dashboard:EGCDashboard',
-        class: 'ACTIVE',
-        kind: 'dashboard',
-        path: 'egc_dashboard.py',
-        summary: 'TkInter dashboard with orchestrated and legacy execution modes.'
-    },
-    {
         id: 'node:install-apply',
         class: 'ACTIVE',
         kind: 'loader',
@@ -273,18 +266,6 @@ const STATIC_EDGES = [
         to: 'state:sqlite',
         relation: 'writes',
         evidence: 'TRACER writes .sessions/execution_log.jsonl alongside SQLite state'
-    },
-    {
-        from: 'dashboard:EGCDashboard',
-        to: 'orchestration:ExecutionOrchestrator',
-        relation: 'imports',
-        evidence: 'egc_dashboard.py: from orchestration.orchestrator import ExecutionOrchestrator (lazy)'
-    },
-    {
-        from: 'dashboard:EGCDashboard',
-        to: 'llm:cli:prompt',
-        relation: 'spawns',
-        evidence: 'egc_dashboard.py: subprocess.Popen([sys.executable, "-m", "llm.cli.prompt", ...])'
     },
     {
         from: 'node:gemini-bridge',
