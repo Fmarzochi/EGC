@@ -1,13 +1,13 @@
 # EGC Architecture
 
-EGC ships as two coexisting production runtimes, alongside an
-exploratory kernel direction kept under `architecture/` for research
-and ecosystem-evolution work. This page is the index — read it first,
+EGC ships one production runtime alongside an exploratory kernel
+direction kept under `architecture/` for research and
+ecosystem-evolution work. This page is the index — read it first,
 then drill into the specific documents below.
 
-## Runtimes
+## Runtime
 
-### Node.js plugin runtime (CI-covered)
+### Node.js + MCP runtime (CI-covered)
 
 The production surface that powers the Gemini Code, Codex, Cursor,
 Antigravity, OpenCode, Kiro, Trae, and Codebuddy harnesses.
@@ -20,31 +20,10 @@ Antigravity, OpenCode, Kiro, Trae, and Codebuddy harnesses.
 | Hooks pipeline | `hooks/hooks.json` + `scripts/hooks/*` | Pre/Post-tool, session, governance hooks |
 | CI gates | `scripts/ci/validate-*.js`, `scripts/ci/catalog.js` | Workflow validation |
 
-The Node runtime is fully exercised by the CI matrix
+The Node/MCP runtime is fully exercised by the CI matrix
 (`.github/workflows/ci.yml`, `reusable-test.yml`,
 `reusable-validate.yml`) across Linux/macOS/Windows × Node 18/20/22 ×
 npm/pnpm/yarn/bun.
-
-### Python autonomous-platform runtime (CI-isolated)
-
-The persistent orchestration substrate explored in the EGC 2.0
-architectural notes. Importable and functionally tested in
-`tests/test_*.py`, but not driven by the JS-based CI matrix.
-
-| Layer | Path | Role |
-|---|---|---|
-| LLM provider abstraction | `src/llm/{providers,core,prompt,cli,tools}` | Multi-provider dispatch (Gemini, Claude, OpenAI, OpenRouter, Ollama) |
-| Execution | `scripts/execution/` | Execution queue, agent executor, sandbox, tool runner |
-| Orchestration | `scripts/orchestration/` | DAG validator, router, orchestrator, fallback |
-| Workflows | `scripts/workflows/` | Task planner, workflow engine, workflow state |
-| Memory | `scripts/memory/` | Experience store, persistent memory |
-| Runtime primitives | `scripts/runtime/*.py` | Async task queue, event bus, memory mesh, profiler, runtime context, session manager, tracer |
-| Dashboard | `egc_dashboard.py` | Tkinter control plane |
-
-The Python tests under `tests/test_*.py` are functional (e.g.
-`test_orchestrator.py`, `test_concurrency.py`, `test_deadlock_protection.py`)
-but the JS test runner glob excludes them. See
-`governance/SUBSYSTEM-MAP.md` for the formal status.
 
 ### Dormant scaffolding (preserved)
 

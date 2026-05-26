@@ -16,7 +16,6 @@ Because EGC operates as a structured engineering platform, contributions must al
 
 - [Governance Philosophy](#governance-philosophy)
 - [Quick Start](#quick-start)
-- [Control Plane & Dashboard Context](#control-plane--dashboard-context)
 - [Orchestrators & Runtime Core](#orchestrators--runtime-core)
 - [Contributing Skills](#contributing-skills)
 - [Skill Adaptation Policy](#skill-adaptation-policy)
@@ -33,7 +32,7 @@ EGC operates under a philosophy of **Stability over Expansion** and **Passive Ma
 
 1. **Runtime Hardening:** EGC is a production-grade orchestration engine. We prioritize making the existing system more resilient over adding unstructured novelty.
 2. **Passive Maintenance:** EGC is designed to require minimal upkeep. Contributions must not introduce brittle dependencies, external APIs that frequently break, or obscure hacks.
-3. **Cross-Platform Integrity:** EGC supports Linux, Windows, and macOS. Contributions, especially to the Control Plane (GUI) and execution shell scripts, must validate safely across these environments without platform-specific hardcoding.
+3. **Cross-Platform Integrity:** EGC supports Linux, Windows, and macOS. Contributions, especially to install scripts and hooks, must validate safely across these environments without platform-specific hardcoding.
 4. **Runtime Protection:** The core engine (Execution Queue, ModelResolver, JSON Registry) is locked down. Changes to the orchestration layer require exponentially higher validation standards than adding a new skill.
 
 ---
@@ -50,24 +49,12 @@ git checkout -b feat/my-contribution
 
 # 3. Add your contribution following the architectural standards below
 
-# 4. Test locally using the Control Plane
-python3 egc_dashboard.py
+# 4. Verify locally
+sh install.sh && egc doctor
 
 # 5. Submit PR
 git add . && git commit -m "feat: add my-feature" && git push -u origin feat/my-contribution
 ```
-
----
-
-## Control Plane & Dashboard Context
-
-EGC’s primary differentiator is its visual observability interface: the **Control Plane Dashboard** (`egc_dashboard.py`), built on a zero-dependency Tkinter architecture.
-
-When contributing to the dashboard or any visual surface:
-- **Dashboard-Safe Contributions:** Do not introduce heavy third-party UI frameworks (e.g., PyQt, Kivy) or external CSS/JS dependencies. Tkinter ensures cross-platform resilience out-of-the-box.
-- **Tkinter Lifecycle Care:** Always respect the main event loop (`mainloop()`). Never introduce blocking synchronous network calls or heavy computations directly on the UI thread. Use threading or the `Execution Queue` safely to maintain responsiveness.
-- **UI Stability Expectations:** Maintain the professional, compact visual hierarchy. Do not introduce massive empty spaces, hardcoded absolute pixel sizing (prefer grid/pack weights), or unhandled exceptions that fail silently.
-- **Validation:** You must test your GUI changes on at least two platforms (e.g., Windows and Linux) before opening a PR.
 
 ---
 
@@ -78,7 +65,7 @@ While adding Agents and Skills is the most common contribution, EGC's true power
 If you are proposing changes to `scripts/`, `src/llm/`, or the underlying orchestrator logic:
 - **Execution Queue Stability:** Modifications must not introduce race conditions or break the deterministic sequencing of agent tasks.
 - **Runtime-Map Integrity:** EGC uses a JSON registry (`registry/runtime-map.json`) to link the cognitive layer to the physical filesystem. Any new core capability must map correctly to the registry.
-- **Registry Synchronization:** Ensure that the Control Plane can still successfully read and parse the registry after your modifications.
+- **Registry Synchronization:** Ensure that the catalog and CI validators can still parse the registry after your modifications.
 - **Orchestration Layer Modifications:** These are strictly reviewed. If you add a new orchestrator (e.g., a new DAG parser or parallel execution loop), it must include fallback safety mechanisms and graceful degradation if a task fails.
 
 ---
@@ -100,7 +87,7 @@ skills/
 ```markdown
 ---
 name: your-skill-name
-description: Brief description shown in the Control Plane and used for auto-activation.
+description: Brief description used for auto-activation.
 origin: EGC
 ---
 
@@ -155,7 +142,7 @@ Link to complementary EGC skills (e.g., `related-skill-1`).
 If porting an idea from another system:
 - Copy the underlying logic, not the external product identity.
 - Rename the skill when EGC materially changes or expands the surface.
-- Prefer EGC-native rules, skills, and Python scripts over unvetted third-party npm/pip dependencies.
+- Prefer EGC-native rules and skills over unvetted third-party npm/pip dependencies.
 
 ### Skill Checklist
 
@@ -164,7 +151,7 @@ If porting an idea from another system:
 - [ ] Includes practical, copy-pasteable code examples.
 - [ ] Shows anti-patterns.
 - [ ] Under 500 lines (800 max).
-- [ ] Tested via the EGC CLI or Control Plane.
+- [ ] Tested via the EGC CLI.
 - [ ] No sensitive data (API keys, paths).
 
 ---
@@ -287,7 +274,7 @@ commands/your-command.md
 
 ```markdown
 ---
-description: Brief description shown in the EGC Control Plane and /help
+description: Brief description shown in /help
 ---
 
 # Command Name
@@ -322,10 +309,10 @@ Expected deterministic outcome.
 Follow standard conventional commits, prefixed appropriately:
 
 ```
-feat(runtime): optimize Execution Queue parallelization
-feat(dashboard): add skill density map to Control Plane
+feat(runtime): optimize install adapter for Kiro
+feat(mcp): extend egc-guardian validation rules
 feat(skills): add rust-patterns skill
-fix(orchestrators): resolve silent Tkinter exception on boot
+fix(hooks): resolve session-start hook on Windows
 docs(governance): update EGC contribution guidelines
 ```
 
@@ -337,7 +324,7 @@ What architectural gap this fills or what capability this adds to EGC.
 
 ## Component Type
 - [ ] Core Engine / Orchestrator
-- [ ] Control Plane / Dashboard
+- [ ] MCP Server (egc-guardian / egc-memory)
 - [ ] Agent
 - [ ] Skill
 - [ ] Hook
@@ -355,7 +342,7 @@ How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 ### 3. Review Process
 
-1. Changes touching the Control Plane, Orchestrators, or Runtime Core will undergo strict architecture review.
+1. Changes touching the MCP servers or Runtime Core will undergo strict architecture review.
 2. Skill and Agent additions are typically merged faster.
 3. Maintainers will review, request adjustments, and merge once the system stability is assured.
 

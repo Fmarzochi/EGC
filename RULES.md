@@ -21,12 +21,7 @@ These rules govern the **Everything Gemini Code (EGC)** AI operating system and 
 - **Registry Synchronization:** Any structural addition must map correctly to the `registry/runtime-map.json`. Never break the JSON registry.
 - **No Silent Failures:** Never swallow exceptions silently using bare `except:` blocks. Always preserve observability and deterministic logs so the control plane can track failures.
 
-## 3. Control Plane & Dashboard Safety
-- **Tkinter Lifecycle:** The `egc_dashboard.py` Control Plane relies on the `mainloop()`. Never introduce blocking synchronous network calls or heavy computations directly on the UI thread.
-- **Visual Stability:** Do not introduce giant UI regressions, massive empty spaces, or unhandled exceptions that cause the dashboard to render blank.
-- **No GUI Hacks:** Avoid platform-specific GUI hacks or heavy third-party UI frameworks (e.g., PyQt, Kivy). Preserve Tkinter's native cross-platform rendering.
-
-## 4. Cross-Platform Enforcement
+## 3. Cross-Platform Enforcement
 - EGC must execute flawlessly across **Linux**, **Windows**, and **macOS**.
 - **No OS Assumptions:** Never use hardcoded absolute system paths. Always use EGC's internal path normalization utilities.
 - **Shell Compatibility:** Execution scripts and hooks must not rely on shell features exclusive to one operating system. Validate command execution across platforms.
@@ -52,4 +47,4 @@ These rules govern the **Everything Gemini Code (EGC)** AI operating system and 
 - **Immutable Updates:** Prefer immutable updates over mutating shared state.
 - **Test Before Execution:** Write tests and verify critical paths before submitting changes to the Runtime Engine.
 - **Security:** Never include sensitive data (API keys, tokens, secrets) in output or commit history.
-- **Commits:** Use conventional commits (`feat(runtime):`, `fix(dashboard):`, `docs(governance):`). Keep changes modular and clearly explain the architectural impact in the PR.
+- **Commits:** Use conventional commits (`feat(runtime):`, `fix(mcp):`, `docs(governance):`). Keep changes modular and clearly explain the architectural impact in the PR.

@@ -33,17 +33,16 @@ This policy covers the official `everything-gemini` repository, specifically:
 
 - **Core Runtime**: Orchestrator, Execution Engine, Memory Mesh, and Event Bus.
 - **Agent Lifecycle**: Loader, Executor, and Identity Resolver modules.
-- **Installation**: `install.sh`, `install.ps1`, `bootstrap.py`, and `egc.py` CLI.
+- **Installation**: `install.sh` and `install.ps1`.
 - **Governance**: Rules, Hooks, and Skill definitions.
 
 ## Runtime Security Model
 
-EGC is a local-first, Python-native runtime. Security is managed via:
+EGC is a local-first, MCP-native runtime. Security is managed via:
 
-- **Execution Validation**: Commands are validated against an allowlist and executed within a directory-restricted environment.
-- **Workflow Isolation**: Context propagation is handled through `MemoryMesh` and `RuntimeContext`, minimizing state leakage between workflows.
-- **Tooling Discipline**: The `ToolRunner` applies runtime-controlled subprocess execution boundaries.
-- **Persistence**: Session data (`.sessions/`) is stored locally. EGC does not transmit execution states to external servers.
+- **Execution Validation**: Shell commands are validated against an allowlist by `egc-guardian` (`validate_command` tool) before execution.
+- **Write Protection**: Writes to sensitive paths (`~/.ssh`, `/etc`, and similar) are blocked by `egc-guardian` (`validate_write` tool).
+- **Persistence**: Session memory (`~/.egc/state/`) is stored locally via `egc-memory`. EGC does not transmit session data to external servers.
 
 ## Security Hardening Philosophy
 
@@ -56,8 +55,7 @@ EGC adheres to the principle of **Defensive Execution**:
 
 ## Operational Best Practices
 
-- **Dependency Management**: Maintain the project via `pip install -e .` to ensure environment consistency.
-- **Diagnostic Validation**: Run `python3 egc.py doctor` to validate system permissions, Python versions, and runtime constraints.
+- **Diagnostic Validation**: Run `egc doctor` to verify MCP server health and configuration.
 - **Git Hygiene**: Keep sensitive session data (`.sessions/`) excluded via `.gitignore`.
 - **Privilege**: Run the runtime with the least privilege required by the host OS.
 
