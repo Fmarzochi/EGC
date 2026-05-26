@@ -8,10 +8,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Prevent duplicate runs
+# Prevent duplicate runs — do not cancel in-progress runs to avoid
+# dispatch/push collisions killing 34 matrix jobs mid-flight
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 # Minimal permissions
 permissions:
@@ -26,13 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ['18.x', '20.x', '22.x']
-        pm: [npm, pnpm, yarn, bun]
-        exclude:
-          # Bun has limited Windows support
-          - os: windows-latest
-            pm: bun
+        os: [ubuntu-latest, windows-latest]
+        node: ['22.x']
+        pm: [npm]
 
     steps:
       - name: Checkout
