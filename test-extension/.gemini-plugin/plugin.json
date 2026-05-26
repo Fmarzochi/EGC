@@ -1,9 +1,0 @@
-{
-  "name": "test-extension",
-  "version": "1.0.0",
-  "description": "Universal EGC Test Extension",
-  "author": "Felipe Marzochi",
-  "agents": {
-    "test-agent": "agents/test.md"
-  }
-}

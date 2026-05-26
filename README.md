@@ -104,16 +104,24 @@ cd everything-gemini
 
 ## Prompt library
 
-228 skills, 62 agents, 74 commands, and 110 rules — written from real experience, not generated.
+Install once to get access to 62 agents, 228 skills, and 74 commands — written from real experience, not generated.
 
 | Type | Count | What it is |
 |---|---|---|
-| Skills | 228 | Domain-specific workflow runbooks |
-| Agents | 62 | Persona and behavior definitions |
-| Commands | 74 | Command definitions and lifecycle hooks |
+| Agents | 62 agents | Persona and behavior definitions |
+| Skills | 228 skills | Domain-specific workflow runbooks |
+| Commands | 74 commands | Command definitions and lifecycle hooks |
 | Rules | 110 | Constraints and governance directives |
 
 Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and four others. Switch tools and the same workflows follow you.
+
+### Cross-harness distribution
+
+| Component | Total | Claude Code | Gemini CLI | Claude Code native |
+|---|---|---|---|---|
+| Agents | 62 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
+| Commands | 74 | Shared | Instruction-based | 31 |
+| Skills | 228 | Shared | 10 (native format) | 37 |
 
 ---
 
