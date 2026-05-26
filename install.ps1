@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $RootDir = $PSScriptRoot
-$EgcScript = Join-Path $RootDir "scripts" "egc.js"
-$EgcInstall = Join-Path $RootDir "scripts" "install-apply.js"
+$EgcScript  = Join-Path (Join-Path $RootDir "scripts") "egc.js"
+$EgcInstall = Join-Path (Join-Path $RootDir "scripts") "install-apply.js"
 
 # Forward --help directly to the Node installer
 if ($args -contains '--help') {
