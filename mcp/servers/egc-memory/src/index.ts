@@ -123,6 +123,20 @@ const writeArbitrator = new SQLiteArbitrationQueue();
 // ============================================================================
 async function runMigrations(db: Database, dbDir: string) {
   const lockFile = path.join(dbDir, 'migration.lock');
+
+  // Remove stale lock from a previous crashed process
+  if (fs.existsSync(lockFile)) {
+    try {
+      const storedPid = parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
+      if (!isNaN(storedPid) && storedPid !== process.pid) {
+        // Check if the PID is still alive (POSIX: signal 0 = probe only)
+        let alive = false;
+        try { process.kill(storedPid, 0); alive = true; } catch (_) {}
+        if (!alive) fs.unlinkSync(lockFile);
+      }
+    } catch (_) {}
+  }
+
   let locked = false;
   let retries = 50;
   while (!locked && retries > 0) {
@@ -134,7 +148,7 @@ async function runMigrations(db: Database, dbDir: string) {
       await new Promise(r => setTimeout(r, 100));
     }
   }
-  
+
   if (!locked) throw new Error('Timeout acquiring migration lock');
 
   try {
@@ -384,6 +398,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 let transport: StdioServerTransport | null = null;
 
 async function run() {
+  // Pre-warm: open DB and run migrations before accepting MCP requests.
+  // Eliminates first-call latency that caused first-run failures in AGY.
+  await getDb();
   transport = new StdioServerTransport();
   await server.connect(transport);
   log('INFO', 'egc-memory-orchestrator initialized with Write Arbitration');
