@@ -3,13 +3,23 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const Database = require('better-sqlite3');
 
 const { applyMigrations, getAppliedMigrations } = require('./migrations');
 const { createQueryApi } = require('./queries');
 const { assertValidEntity, validateEntity } = require('./schema');
 
 const DEFAULT_STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
+
+// Try to load better-sqlite3. On Windows without Build Tools the native
+// module may not compile — in that case we fall back to a null/amnesiac
+// store so the installer and CLI degrade gracefully instead of crashing.
+let Database = null;
+let _nativeUnavailable = false;
+try {
+  Database = require('better-sqlite3');
+} catch (_err) {
+  _nativeUnavailable = true;
+}
 
 function resolveStateStorePath(options = {}) {
   if (options.dbPath) {
@@ -86,14 +96,60 @@ function openDatabase(dbPath) {
   const rawDb = new Database(dbPath);
   rawDb.pragma('foreign_keys = ON');
   if (dbPath !== ':memory:') {
-    // WAL is not supported for in-memory databases.
     rawDb.pragma('journal_mode = WAL');
   }
   return wrapDatabase(rawDb);
 }
 
+// Null store: implements the full createStateStore return shape with
+// no-op/empty responses. Used when better-sqlite3 cannot be loaded.
+function createNullQueryApi() {
+  const emptyStatus = {
+    generatedAt: new Date().toISOString(),
+    activeSessions: { activeCount: 0, sessions: [] },
+    skillRuns: { windowSize: 20, summary: { successCount: 0, failureCount: 0, unknownCount: 0, successRate: null, failureRate: null, recentRuns: [] }, recent: [] },
+    installHealth: { targetCount: 0, healthyCount: 0, warningCount: 0, installations: [] },
+    governance: { pendingCount: 0, events: [] },
+  };
+  return {
+    getSessionById: () => null,
+    getSessionDetail: () => null,
+    getStatus: () => emptyStatus,
+    insertDecision: () => {},
+    insertGovernanceEvent: () => {},
+    insertSkillRun: () => {},
+    upsertInstallState: () => {},
+    upsertSession: () => {},
+    upsertSkillVersion: () => {},
+    upsertInstinct: () => {},
+    listInstincts: () => ({ totalCount: 0, instincts: [] }),
+    insertRuntimeEvent: () => {},
+    listRecentEvents: () => [],
+  };
+}
+
 async function createStateStore(options = {}) {
   const dbPath = resolveStateStorePath(options);
+
+  if (_nativeUnavailable) {
+    process.stderr.write(
+      '[egc-state-store] WARNING: better-sqlite3 native module unavailable.\n' +
+      '  SQLite persistence is disabled. Memory features via egc-memory MCP server are unaffected.\n' +
+      '  To enable full SQLite on Windows: install Visual Studio Build Tools, then re-run install.ps1\n' +
+      '  See: https://github.com/Fmarzochi/everything-gemini#installation\n'
+    );
+    return {
+      dbPath,
+      close() {},
+      getAppliedMigrations() { return []; },
+      validateEntity,
+      assertValidEntity,
+      _database: null,
+      _migrations: [],
+      ...createNullQueryApi(),
+    };
+  }
+
   const db = openDatabase(dbPath);
   const appliedMigrations = applyMigrations(db);
   const queryApi = createQueryApi(db);
