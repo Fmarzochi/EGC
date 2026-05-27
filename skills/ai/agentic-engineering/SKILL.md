@@ -41,7 +41,7 @@ Apply the 15-minute unit rule:
 - Start fresh session after major phase transitions.
 - Compact after milestone completion, not during active debugging.
 
-## Review Focus for Generated Code
+## Review Focus for AI-Generated Code
 
 Prioritize:
 - invariants and edge cases

@@ -40,14 +40,14 @@ Combine existing video with generative AI:
 ### Screen + Audio Recording with AI
 Capture screen, microphone, and system audio simultaneously. Get real-time:
 - **Live transcription** - Speech to text as it happens
-- **Audio summaries** - Periodic automated summaries of discussions
+- **Audio summaries** - Periodic AI-generated summaries of discussions
 - **Visual indexing** - AI descriptions of screen activity
 
 ### Meeting Capture with Summarization
 Record meetings with live transcription of all participants. Get periodic summaries with key discussion points, decisions, and action items delivered in real-time.
 
 ### Screen Activity Tracking
-Track what's happening on screen with automated descriptions:
+Track what's happening on screen with AI-generated descriptions:
 - "User is browsing a spreadsheet in Google Sheets"
 - "User switched to a code editor with a Python file"
 - "Video call with screen sharing enabled"

@@ -104,7 +104,7 @@ The Evaluator will specifically penalize these patterns. **Avoid them:**
 - Avoid default Material UI / Shadcn themes without customization
 - Avoid placeholder images from unsplash/placeholder services
 - Avoid generic card grids with identical layouts
-- Avoid "generic generated" decorative SVG patterns
+- Avoid "AI-generated" decorative SVG patterns
 
 **Instead, aim for:**
 - Use a specific, opinionated color palette (follow the spec)

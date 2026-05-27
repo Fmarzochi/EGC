@@ -52,7 +52,7 @@ Each dimension gets a score, specific examples, and a fix with exact file:line.
 
 ### Mode 3: AI Slop Detection
 
-Identifies generic generated design patterns:
+Identifies generic AI-generated design patterns:
 
 ```
 - Gratuitous gradients on everything

@@ -48,7 +48,7 @@ Treat HIPAA as an overlay on top of the broader healthcare privacy skill:
 
 User request:
 
-> Add automated visit summaries to our clinician dashboard. We serve US clinics and need to stay HIPAA compliant.
+> Add AI-generated visit summaries to our clinician dashboard. We serve US clinics and need to stay HIPAA compliant.
 
 Response pattern:
 

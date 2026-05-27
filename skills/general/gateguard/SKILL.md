@@ -12,7 +12,7 @@ A PreToolUse hook that forces Gemini to investigate before editing. Instead of s
 
 - Working on any codebase where file edits affect multiple modules
 - Projects with data files that have specific schemas or date formats
-- Teams where generated code must match existing patterns
+- Teams where AI-generated code must match existing patterns
 - Any workflow where Gemini tends to guess instead of investigating
 
 ## Core Concept

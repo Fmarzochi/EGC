@@ -223,9 +223,9 @@ When available, also check project-specific conventions from `GEMINI.md` or proj
 
 Adapt your review to the project's established patterns. When in doubt, match what the rest of the codebase does.
 
-## v1.8 Generated Code Review Addendum
+## v1.8 AI-Generated Code Review Addendum
 
-When reviewing generated code changes, prioritize:
+When reviewing AI-generated changes, prioritize:
 
 1. Behavioral regressions and edge-case handling
 2. Security assumptions and trust boundaries

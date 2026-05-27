@@ -99,7 +99,7 @@ Score each criterion on a 1-10 scale. Use the rubric in `gan-harness/eval-rubric
 
 **Scoring calibration:**
 - 1-3: Broken, embarrassing, would not show to anyone
-- 4-5: Functional but clearly generated, tutorial-quality
+- 4-5: Functional but clearly AI-generated, tutorial-quality
 - 6: Decent but unremarkable, missing polish
 - 7: Good — a junior developer's solid work
 - 8: Very good — professional quality, some rough edges
