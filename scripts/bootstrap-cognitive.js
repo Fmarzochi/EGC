@@ -83,12 +83,12 @@ try {
         return;
       }
       const existing = obj['cursor.rules'] || '';
-      if (existing.includes('egc-memory-protocol')) {
+      if (existing.includes('[egc-memory-protocol]')) {
         console.log('  [cognitive] Cursor: already configured');
         return;
       }
       const separator = existing.trim() ? '\n\n' : '';
-      obj['cursor.rules'] = existing + separator + 'At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md.';
+      obj['cursor.rules'] = existing + separator + '[egc-memory-protocol] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md.';
       fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
       fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
       console.log(`  [cognitive] Cursor: memory protocol installed (${settingsFile.replace(HOME, '~')})`);

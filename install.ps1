@@ -186,6 +186,12 @@ if (-not $DryRun) {
         Register-McpJson -Target $claudeConfig -Label "Claude Code"
     }
 
+    # Claude Code — project .mcp.json (if present)
+    $projectMcp = Join-Path $RootDir ".mcp.json"
+    if (Test-Path $projectMcp) {
+        Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
+    }
+
     # Cursor (Windows path)
     $cursorConfig = Join-Path (Join-Path $env:USERPROFILE ".cursor") "mcp.json"
     if ((Get-Command cursor -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".cursor"))) {
@@ -202,6 +208,90 @@ if (-not $DryRun) {
     $opencodeConfig = Join-Path (Join-Path $env:APPDATA "opencode") "config.json"
     if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path (Split-Path $opencodeConfig -Parent))) {
         Register-McpJson -Target $opencodeConfig -Label "OpenCode"
+    }
+
+    # AGY (Antigravity CLI)
+    $agyDir    = Join-Path (Join-Path $env:USERPROFILE ".gemini") "antigravity-cli"
+    $agyConfig = Join-Path $agyDir "mcp_config.json"
+    if (Test-Path $agyDir) {
+        Register-McpJson -Target $agyConfig -Label "Antigravity CLI"
+    }
+
+    # Gemini CLI (only when AGY is absent)
+    $geminiConfigDir = Join-Path (Join-Path $env:USERPROFILE ".gemini") "config"
+    $geminiConfig    = Join-Path $geminiConfigDir "mcp_config.json"
+    if ((Test-Path $geminiConfigDir) -and -not (Test-Path $agyDir)) {
+        Register-McpJson -Target $geminiConfig -Label "Gemini CLI"
+    }
+
+    # Codex CLI (TOML — delegated to Node)
+    $codexToml = Join-Path (Join-Path $env:USERPROFILE ".codex") "config.toml"
+    if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path $codexToml)) {
+        $tmpCodexJs = Join-Path $env:TEMP ("egc_codex_" + [System.Guid]::NewGuid().ToString("N") + ".js")
+        Set-Content -Path $tmpCodexJs -Encoding UTF8 -Value @'
+const fs=require("fs"),path=require("path");
+const[,,t,g,m]=process.argv;
+const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+g+'"]\n';
+const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+m+'"]\n';
+let c=fs.existsSync(t)?fs.readFileSync(t,"utf8"):"";
+let ch=false;
+if(!c.includes("egc-guardian")){c+=ge;ch=true;}
+if(!c.includes("egc-memory")){c+=me;ch=true;}
+if(!ch)process.exit(0);
+const d=path.dirname(t);if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});
+fs.writeFileSync(t,c);
+'@
+        try {
+            node $tmpCodexJs $codexToml $GuardianBin $MemoryBin 2>$null
+            if ($LASTEXITCODE -eq 0) { Write-Host "  v registered in Codex CLI ($codexToml)" }
+        } catch {}
+        Remove-Item $tmpCodexJs -ErrorAction SilentlyContinue
+    }
+
+    # Obsidian propagation (delegated to Node)
+    $obsidianSources = @($agyConfig, $geminiConfig, $claudeConfig, $cursorConfig)
+    $findObsTmp = Join-Path $env:TEMP ("egc_obs_find_" + [System.Guid]::NewGuid().ToString("N") + ".js")
+    Set-Content -Path $findObsTmp -Encoding UTF8 -Value @'
+const fs=require("fs");
+const srcs=process.argv.slice(2);
+for(const s of srcs){try{const o=JSON.parse(fs.readFileSync(s,"utf8"));if(o.mcpServers&&o.mcpServers.obsidian){process.stdout.write(JSON.stringify(o.mcpServers.obsidian));process.exit(0);}}catch(_){}}
+'@
+    $existingSources = $obsidianSources | Where-Object { Test-Path $_ }
+    $obsBlock = $null
+    if ($existingSources) {
+        try { $obsBlock = & node $findObsTmp @existingSources 2>$null } catch {}
+    }
+    Remove-Item $findObsTmp -ErrorAction SilentlyContinue
+
+    if ($obsBlock) {
+        $propObsTmp = Join-Path $env:TEMP ("egc_obs_prop_" + [System.Guid]::NewGuid().ToString("N") + ".js")
+        Set-Content -Path $propObsTmp -Encoding UTF8 -Value @'
+const fs=require("fs"),path=require("path");
+const[,,t,b]=process.argv;
+let obs;try{obs=JSON.parse(b);}catch(_){process.exit(0);}
+let obj={mcpServers:{}};
+if(fs.existsSync(t)){try{obj=JSON.parse(fs.readFileSync(t,"utf8"));}catch(_){process.exit(0);}}
+if(!obj.mcpServers)obj.mcpServers={};
+if(obj.mcpServers.obsidian)process.exit(0);
+obj.mcpServers.obsidian=obs;
+const d=path.dirname(t);if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});
+fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
+'@
+        $propagateTargets = @(
+            @{ P = $agyConfig;     L = "Antigravity CLI" }
+            @{ P = $geminiConfig;  L = "Gemini CLI" }
+            @{ P = $claudeConfig;  L = "Claude Code" }
+            @{ P = $cursorConfig;  L = "Cursor" }
+            @{ P = $kiroConfig;    L = "Kiro" }
+            @{ P = $opencodeConfig; L = "OpenCode" }
+        )
+        foreach ($pt in $propagateTargets) {
+            try {
+                node $propObsTmp $pt.P $obsBlock 2>$null
+                if ($LASTEXITCODE -eq 0) { Write-Host "  v obsidian synced to $($pt.L)" }
+            } catch {}
+        }
+        Remove-Item $propObsTmp -ErrorAction SilentlyContinue
     }
 
     Write-Host ""

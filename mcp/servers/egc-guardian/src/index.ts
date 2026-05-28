@@ -105,7 +105,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "orchestrate_task",
-        description: "Adaptive Cognitive Load Balancer. Analyzes prompt complexity and payload to select optimal agents and LLM providers.",
+        description: "Routes a prompt with optional agent/skill lists and file payloads. Returns routing context and context-reduction metrics. Agent/skill selection is pass-through; provide explicit lists for deterministic routing.",
         inputSchema: {
           type: "object",
           properties: {

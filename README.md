@@ -32,7 +32,7 @@ Ready to pick up the next items:
 
 The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. You didn't type anything. You just started working.
 
-This works automatically for Claude Code and AGY/Gemini CLI after running `sh install.sh`. For other tools (Cursor, Kiro, Codex, OpenCode), the MCP servers are registered but you need to add the memory protocol to each project's instruction file manually.
+After `sh install.sh`, the memory protocol is injected into the global instruction files for Claude Code, AGY/Gemini CLI, Cursor, Codex, OpenCode, Kiro, Trae, and CodeBuddy — so the AI reads state at the start of each session and saves it at the end. For tools where the AI instruction file isn't read automatically (varies by tool version), you may need to add the project's `CLAUDE.md` or equivalent to the session context manually.
 
 ---
 
@@ -48,14 +48,14 @@ It gets worse when you switch tools. Move from Cursor to Claude Code and you sta
 
 One install. Every tool. Permanent memory.
 
-`sh install.sh` detects which AI tools you have installed — Cursor, Claude Code, AGY, Kiro, Codex, OpenCode — and registers the MCP servers in all of them. For Claude Code and AGY, it also runs a cognitive bootstrap that writes the memory protocol into the global instruction files (`~/.claude/CLAUDE.md` and `~/.gemini/GEMINI.md`), so the AI picks up state automatically on every new session.
+`sh install.sh` detects which AI tools you have installed — Claude Code, AGY, Cursor, Kiro, Codex, OpenCode, Trae, CodeBuddy — and registers the MCP servers in all of them. It also runs a cognitive bootstrap that writes the memory protocol into the global instruction files for each tool, so the AI is instructed to call `get_state({})` at the start of every session and `update_state({...})` at the end.
 
-For Claude Code and AGY:
+For every supported tool:
 - **Open any session** → AI reads your project state → picks up where you left off
 - **Close any session** → AI saves decisions, preferences, next steps
 - **Switch tools** → same state file → same context → no re-explaining
 
-For Cursor, Kiro, Codex, and OpenCode, the MCP servers are registered but the memory protocol is not injected automatically. Add it to each project's instruction file following the instructions in `CLAUDE.md`.
+The memory protocol requires the AI to call `get_state` and `update_state` via the egc-memory MCP tool. The bootstrap injects the instruction; the tool must support MCP to execute it.
 
 The memory lives at `~/.egc/state/` on your machine, not inside any tool. It follows the project, not the IDE.
 
@@ -136,7 +136,7 @@ The prompt library is optional. During `sh install.sh`, you'll be asked whether 
 | Agents | 62 agents | Persona and behavior definitions |
 | Skills | 228 skills | Domain-specific workflow runbooks |
 | Commands | 74 commands | Command definitions and lifecycle hooks |
-| Rules | 110 | Constraints and governance directives |
+| Rules | 111 | Constraints and governance directives |
 
 Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and four others. Switch tools and the same workflows follow you.
 
@@ -154,15 +154,15 @@ Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and fo
 
 | Tool | MCP registered | Cognitive bootstrap |
 |---|---|---|
-| Claude Code | Yes | Yes — memory protocol written to `~/.claude/CLAUDE.md` |
-| Antigravity CLI (AGY) | Yes | Yes — memory protocol written to `~/.gemini/GEMINI.md` |
-| Cursor | Yes | No — add protocol to each project's instruction file manually |
-| Kiro | Yes | No — add protocol to each project's instruction file manually |
-| Codex CLI | Yes | No — add protocol to each project's instruction file manually |
-| OpenCode | Yes | No — add protocol to each project's instruction file manually |
-| Gemini CLI | Yes | No — add protocol to each project's instruction file manually |
-| CodeBuddy | Context injection | No |
-| Trae | Context injection | No |
+| Claude Code | Yes | Yes — protocol injected into `~/.claude/CLAUDE.md` |
+| Antigravity CLI (AGY) | Yes | Yes — protocol injected into `~/.gemini/GEMINI.md` |
+| Gemini CLI | Yes | Yes — protocol injected into `~/.gemini/GEMINI.md` |
+| Cursor | Yes | Yes — protocol injected into global `cursor.rules` setting |
+| Codex CLI | Yes | Yes — `persistent_instructions` appended to `~/.codex/config.toml` |
+| OpenCode | Yes | Yes — protocol written to `~/.opencode/instructions/EGC_MEMORY.md` |
+| Kiro | Yes | Yes — session hooks installed to `~/.kiro/hooks/` |
+| Trae | Context injection | Yes — protocol written to `~/.trae/MEMORY.md` |
+| CodeBuddy | Context injection | Yes — protocol written to `~/.codebuddy/MEMORY.md` |
 | Obsidian | Yes — if already configured, synced to all tools | N/A |
 
 If you use Obsidian and have the [Obsidian MCP server](https://github.com/MarkusPfundstein/mcp-obsidian) configured, the installer detects it automatically and gives every AI tool in your setup direct access to your vault — read notes, search, write — without any extra configuration.
@@ -196,10 +196,12 @@ EGC runs two local MCP servers over stdio.
 ## CLI
 
 ```bash
-egc doctor    # verify both servers are built and working
-egc status    # show the last 5 decisions in memory
-egc init      # reinitialize ~/.egc/ if needed
-egc config    # print the MCP server configuration
+egc doctor         # verify both servers are built and working
+egc status         # show the last 5 decisions in memory
+egc install        # install prompt library to a target harness
+egc catalog        # list available profiles and components
+egc repair         # restore drifted or missing managed files
+egc auto-update    # pull latest changes and reinstall managed targets
 ```
 
 ---
