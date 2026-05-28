@@ -129,7 +129,7 @@ cd everything-gemini
 
 ## Prompt library
 
-The prompt library is optional. During `sh install.sh`, you'll be asked whether to install it. In CI or non-interactive shells, this step is skipped. It includes 62 agents, 228 skills, and 74 commands — written from real experience, not generated.
+The prompt library is optional. During `sh install.sh`, you'll be asked whether to install it. In CI or non-interactive shells, this step is skipped. Install once to get access to 62 agents, 228 skills, and 74 commands — written from real experience, not generated.
 
 | Type | Count | What it is |
 |---|---|---|
