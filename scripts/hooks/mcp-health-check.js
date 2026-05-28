@@ -468,9 +468,15 @@ function reconnectCommand(serverName) {
     return null;
   }
 
-  return command.includes('{server}')
-    ? command.replace(/\{server\}/g, serverName)
-    : command;
+  if (!command.includes('{server}')) {
+    return command;
+  }
+
+  if (!/^[a-zA-Z0-9_\-.:]+$/.test(serverName)) {
+    return null;
+  }
+
+  return command.replace(/\{server\}/g, serverName);
 }
 
 function attemptReconnect(serverName) {
