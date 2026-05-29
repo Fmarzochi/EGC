@@ -298,14 +298,14 @@ function buildSummarySection(summary) {
   if (summary.filesModified.length > 0) {
     section += '### Files Modified\n';
     for (const f of summary.filesModified) {
-      section += `- ${f}\n`;
+      section += `- ${f.replace(/`/g, '\\`')}\n`;
     }
     section += '\n';
   }
 
   // Tools used
   if (summary.toolsUsed.length > 0) {
-    section += `### Tools Used\n${summary.toolsUsed.join(', ')}\n\n`;
+    section += `### Tools Used\n${summary.toolsUsed.map(t => t.replace(/`/g, '\\`')).join(', ')}\n\n`;
   }
 
   section += `### Stats\n- Total user messages: ${summary.totalMessages}\n`;
