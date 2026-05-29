@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -92,6 +93,17 @@ jobs:
           - Gemini marketplace/plugin identifier: \`everything-gemini@everything-gemini\`
           - For migration tips and compatibility notes, see README and CHANGELOG.
           EOF
+
+      - name: Pack npm tarball
+        id: pack
+        run: |
+          TARBALL=$(npm pack --json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'))[0].filename")
+          echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
