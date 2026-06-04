@@ -232,16 +232,14 @@ The branch `legacy-runtime` preserves the full historical architecture for anyon
 
 <br/>
 
-<a href="https://www.bestpractices.dev/projects/13099">
-  <img src="assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices Badge" width="110" />
-</a>
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<img src="assets/images/egc-logo.png" alt="EGC Logo" width="80" />
+<a href="https://bestpractices.dev/projects/13099"><img src="assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+<a href="https://github.com/Fmarzochi"><img src="assets/images/egc-logo.png" alt="EGC" width="80" /></a>
 
 <br/>
 
-<sub><a href="https://www.bestpractices.dev/projects/13099">OpenSSF Best Practices</a></sub>
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<sub>Desenvolvido por <a href="https://linkedin.com/in/felipemarzochi">Felipe Marzochi</a></sub>
+<a href="https://bestpractices.dev/projects/13099">OpenSSF Best Practices</a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+<a href="https://github.com/Fmarzochi">Desenvolvido por Felipe Marzochi</a>
 
 </div>
