@@ -10,7 +10,7 @@
 
 ---
 
-<img src="assets/hero.png" alt="EGC — Everything Gemini Code" width="100%" />
+<img src="assets/hero.png" alt="EGC - Everything Gemini Code" width="100%" />
 
 ---
 
@@ -32,13 +32,13 @@ Ready to pick up the next items:
 
 The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. You didn't type anything. You just started working.
 
-After `sh install.sh`, the memory protocol is injected into the global instruction files for Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Kiro, Trae, and CodeBuddy — so the AI reads state at the start of each session and saves it at the end. For tools where the AI instruction file isn't read automatically (varies by tool version), you may need to add the project's `CLAUDE.md` or equivalent to the session context manually.
+After `sh install.sh`, the memory protocol is injected into the global instruction files for Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Kiro, Trae, and CodeBuddy, so the AI reads state at the start of each session and saves it at the end. For tools where the AI instruction file isn't read automatically (varies by tool version), you may need to add the project's `CLAUDE.md` or equivalent to the session context manually.
 
 ---
 
 ## The problem
 
-Every AI coding session starts from zero. Close the window and the context is gone — your stack preferences, the architectural decisions you made last week, the approach that failed after three attempts. Next session you spend the first ten minutes re-explaining ground you already covered.
+Every AI coding session starts from zero. Close the window and the context is gone. Your stack preferences, the architectural decisions you made last week, the approach that failed after three attempts. Next session you spend the first ten minutes re-explaining ground you already covered.
 
 It gets worse when you switch tools. Move from Cursor to Claude Code and you start over again. The AI doesn't know you. It never did.
 
@@ -48,7 +48,7 @@ It gets worse when you switch tools. Move from Cursor to Claude Code and you sta
 
 One install. Every tool. Permanent memory.
 
-`sh install.sh` detects which AI tools you have installed — Claude Code, Cursor, Codex, Gemini CLI, Kiro, OpenCode, Trae, CodeBuddy — and registers the MCP servers in all of them. It also runs a cognitive bootstrap that writes the memory protocol into the global instruction files for each tool, so the AI is instructed to call `get_state({})` at the start of every session and `update_state({...})` at the end.
+`sh install.sh` detects which AI tools you have installed (Claude Code, Cursor, Codex, Gemini CLI, Kiro, OpenCode, Trae, CodeBuddy) and registers the MCP servers in all of them. It also runs a cognitive bootstrap that writes the memory protocol into the global instruction files for each tool, so the AI is instructed to call `get_state({})` at the start of every session and `update_state({...})` at the end.
 
 For every supported tool:
 - **Open any session** → AI reads your project state → picks up where you left off
@@ -91,9 +91,9 @@ The installer runs these steps:
 
 1. Compiles the MCP servers (`egc-guardian`, `egc-memory`)
 2. Initializes the local SQLite database
-3. Runs the cognitive bootstrap — writes the memory protocol into `~/.claude/CLAUDE.md` (Claude Code) and `~/.gemini/GEMINI.md` (AGY), creating the files if they don't exist, idempotent
+3. Runs the cognitive bootstrap: writes the memory protocol into `~/.claude/CLAUDE.md` (Claude Code) and `~/.gemini/GEMINI.md` (AGY), creating the files if they don't exist, idempotent
 4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (62 agents, 228 skills, 74 commands) — skipped automatically in CI
+5. Asks interactively whether to install the prompt library (62 agents, 228 skills, 74 commands), skipped automatically in CI
 
 The installer will print which tools it found and registered:
 
@@ -129,7 +129,7 @@ cd everything-gemini
 
 ## Prompt library
 
-The prompt library is optional. During `sh install.sh`, you'll be asked whether to install it. In CI or non-interactive shells, this step is skipped. Install once to get access to 62 agents, 228 skills, and 74 commands — written from real experience, not generated.
+The prompt library is optional. During `sh install.sh`, you'll be asked whether to install it. In CI or non-interactive shells, this step is skipped. Install once to get access to 62 agents, 228 skills, and 74 commands written from real experience, not generated.
 
 | Type | Count | What it is |
 |---|---|---|
@@ -154,18 +154,18 @@ Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and fo
 
 | Tool | MCP registered | Cognitive bootstrap |
 |---|---|---|
-| Claude Code | Yes | Yes — protocol injected into `~/.claude/CLAUDE.md` |
-| Antigravity CLI (AGY) | Yes | Yes — protocol injected into `~/.gemini/GEMINI.md` |
-| Gemini CLI | Yes | Yes — protocol injected into `~/.gemini/GEMINI.md` |
-| Cursor | Yes | Yes — protocol injected into global `cursor.rules` setting |
-| Codex CLI | Yes | Yes — `persistent_instructions` appended to `~/.codex/config.toml` |
-| OpenCode | Yes | Yes — protocol written to `~/.opencode/instructions/EGC_MEMORY.md` |
-| Kiro | Yes | Yes — session hooks installed to `~/.kiro/hooks/` |
-| Trae | Context injection | Yes — protocol written to `~/.trae/MEMORY.md` |
-| CodeBuddy | Context injection | Yes — protocol written to `~/.codebuddy/MEMORY.md` |
-| Obsidian | Yes — if already configured, synced to all tools | N/A |
+| Claude Code | Yes | Yes: protocol injected into `~/.claude/CLAUDE.md` |
+| Antigravity CLI (AGY) | Yes | Yes: protocol injected into `~/.gemini/GEMINI.md` |
+| Gemini CLI | Yes | Yes: protocol injected into `~/.gemini/GEMINI.md` |
+| Cursor | Yes | Yes: protocol injected into global `cursor.rules` setting |
+| Codex CLI | Yes | Yes: `persistent_instructions` appended to `~/.codex/config.toml` |
+| OpenCode | Yes | Yes: protocol written to `~/.opencode/instructions/EGC_MEMORY.md` |
+| Kiro | Yes | Yes: session hooks installed to `~/.kiro/hooks/` |
+| Trae | Context injection | Yes: protocol written to `~/.trae/MEMORY.md` |
+| CodeBuddy | Context injection | Yes: protocol written to `~/.codebuddy/MEMORY.md` |
+| Obsidian | Yes, if already configured, synced to all tools | N/A |
 
-If you use Obsidian and have the [Obsidian MCP server](https://github.com/MarkusPfundstein/mcp-obsidian) configured, the installer detects it automatically and gives every AI tool in your setup direct access to your vault — read notes, search, write — without any extra configuration.
+If you use Obsidian and have the [Obsidian MCP server](https://github.com/MarkusPfundstein/mcp-obsidian) configured, the installer detects it automatically and gives every AI tool in your setup direct access to your vault: read notes, search, and write without any extra configuration.
 
 ---
 
@@ -173,7 +173,7 @@ If you use Obsidian and have the [Obsidian MCP server](https://github.com/Markus
 
 EGC runs two local MCP servers over stdio.
 
-**egc-memory** — the one you'll use every session
+**egc-memory**: the one you'll use every session
 
 | Tool | What it does |
 |---|---|
@@ -182,7 +182,7 @@ EGC runs two local MCP servers over stdio.
 | `store_decision` | Persists a decision to SQLite |
 | `query_history` | Returns past decisions by timestamp |
 
-**egc-guardian** — runs in the background
+**egc-guardian**: runs in the background
 
 | Tool | What it does |
 |---|---|
@@ -208,7 +208,7 @@ egc auto-update    # pull latest changes and reinstall managed targets
 
 ## Architectural consolidation
 
-Earlier versions of EGC explored distributed runtime concepts — FederationManager, ReplayEngine, cognitive orchestration layers, multi-provider dispatching. Those experiments were real explorations, not deception. They helped define what the project actually needed to be.
+Earlier versions of EGC explored distributed runtime concepts: FederationManager, ReplayEngine, cognitive orchestration layers, multi-provider dispatching. Those experiments were real explorations, not deception. They helped define what the project actually needed to be.
 
 What the project actually needed was simpler and more useful: persistent memory across sessions, a validation layer, and a prompt library that works in every tool without reconfiguration.
 
