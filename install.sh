@@ -48,7 +48,7 @@ if [ "$DRY_RUN" = false ]; then
   # Root dependencies (better-sqlite3 etc.)
   echo "  installing root dependencies..."
   cd "$ROOT_DIR"
-  npm install --silent
+  npm ci --silent
 
   # egc-guardian
   echo "  building egc-guardian..."
@@ -58,7 +58,7 @@ if [ "$DRY_RUN" = false ]; then
     exit 1
   fi
   cd "$GUARDIAN_DIR"
-  npm install --silent
+  npm ci --silent
   npm run build
 
   # egc-memory
@@ -69,7 +69,7 @@ if [ "$DRY_RUN" = false ]; then
     exit 1
   fi
   cd "$MEMORY_DIR"
-  npm install --silent
+  npm ci --silent
   npm run build
 
   # Initialize database and local directories

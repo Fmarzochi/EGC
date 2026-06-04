@@ -500,7 +500,7 @@ function replaceInFile(filePath, search, replace, options = {}) {
     writeFile(filePath, newContent);
     return true;
   } catch (err) {
-    log(`[Utils] replaceInFile failed for ${filePath}: ${err.message}`);
+    log(`[Utils] replaceInFile failed for ${path.basename(filePath)}: ${err.name || 'write error'}`);
     return false;
   }
 }

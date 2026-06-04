@@ -74,6 +74,6 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('[StrategicCompact] Error:', err.message);
+  console.error('[StrategicCompact] Unexpected error:', err.name || 'Error');
   process.exit(0);
 });

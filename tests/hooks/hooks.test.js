@@ -5104,7 +5104,7 @@ async function runTests() {
         USERPROFILE: '/dev/null'
       });
       assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
-      assert.ok(result.stderr.includes('[SessionEnd] Error:'), `stderr should contain [SessionEnd] Error:, got: ${result.stderr}`);
+      assert.ok(result.stderr.includes('[SessionEnd] Unexpected error:'), `stderr should contain [SessionEnd] Unexpected error:, got: ${result.stderr}`);
     })
   )
     passed++;
@@ -5147,7 +5147,7 @@ async function runTests() {
         TMPDIR: '/dev/null'
       });
       assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
-      assert.ok(result.stderr.includes('[StrategicCompact] Error:'), `stderr should contain [StrategicCompact] Error:, got: ${result.stderr}`);
+      assert.ok(result.stderr.includes('[StrategicCompact] Unexpected error:'), `stderr should contain [StrategicCompact] Unexpected error:, got: ${result.stderr}`);
     })
   )
     passed++;

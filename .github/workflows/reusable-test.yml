@@ -141,7 +141,7 @@ jobs:
               # (notably Node 20.x), so its install script falls back to
               # `node-gyp rebuild`. pnpm 10 does not vendor node-gyp, so it
               # must be on PATH for the source-compile fallback to succeed.
-              npm install -g node-gyp
+              npm install -g node-gyp@12.3.0
               pnpm install --config.strict-dep-builds=false --no-frozen-lockfile
               ;;
             # Yarn Berry (v4+) removed --ignore-engines; engine checking is no longer a core feature

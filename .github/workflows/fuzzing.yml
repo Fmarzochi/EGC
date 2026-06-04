@@ -32,7 +32,7 @@ jobs:
         run: npm ci && npm run build
 
       - name: Install jsfuzz
-        run: npm install --no-save jsfuzz
+        run: npm install --no-save jsfuzz@1.0.15
 
       - name: Run fuzzer (60-second time-box)
         run: |
