@@ -5,5 +5,8 @@
   "description": "Fuzzing harness for egc-guardian validator",
   "dependencies": {
     "jsfuzz": "1.0.15"
+  },
+  "overrides": {
+    "cross-spawn": "^7.0.6"
   }
 }
