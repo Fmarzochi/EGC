@@ -6,6 +6,24 @@
 
 **Your AI remembers what you decided, how you work, and where you left off. Across every session. Across every tool.**
 
+<br>
+
+<a href="https://www.bestpractices.dev/projects/13099">
+  <img src="https://www.bestpractices.dev/projects/13099/badge" alt="OpenSSF Best Practices" height="50">
+</a>
+&nbsp;
+<a href="https://www.bestpractices.dev/projects/13099?level=baseline-1">
+  <img src="https://www.bestpractices.dev/projects/13099/badge?level=baseline-1" alt="OpenSSF Baseline Level 1" height="50">
+</a>
+&nbsp;
+<a href="https://www.bestpractices.dev/projects/13099?level=baseline-2">
+  <img src="https://www.bestpractices.dev/projects/13099/badge?level=baseline-2" alt="OpenSSF Baseline Level 2" height="50">
+</a>
+&nbsp;
+<a href="https://www.bestpractices.dev/projects/13099?level=baseline-3">
+  <img src="https://www.bestpractices.dev/projects/13099/badge?level=baseline-3" alt="OpenSSF Baseline Level 3" height="50">
+</a>
+
 </div>
 
 ---
