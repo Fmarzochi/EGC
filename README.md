@@ -232,6 +232,14 @@ The branch `legacy-runtime` preserves the full historical architecture for anyon
 
 <br/>
 
-<img src="assets/images/footer-logos.svg" alt="OpenSSF Best Practices e EGC Logo" width="460" />
+<a href="https://bestpractices.dev/projects/13099"><img src="assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+<a href="https://github.com/Fmarzochi"><img src="assets/images/egc-logo.png" alt="EGC" width="80" /></a>
+
+<br/>
+
+<a href="https://bestpractices.dev/projects/13099">OpenSSF Best Practices</a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+<a href="https://github.com/Fmarzochi">Desenvolvido por Felipe Marzochi</a>
 
 </div>
