@@ -1,0 +1,19 @@
+name: DCO
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco:
+    name: Developer Certificate of Origin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check DCO sign-off
+        uses: christophebedard/dco-check@d42b2a1a2c68e8fc4734b7d64c78fb83461e4e44 # v0.0.6
+        with:
+          exclude-members: ''

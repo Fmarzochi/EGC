@@ -101,6 +101,20 @@ jobs:
           TARBALL=$(npm pack --json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'))[0].filename")
           echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e8d2a6937ecead383dfe75190d104edd1f9c5751 # v0.17.0
+        with:
+          path: .
+          artifact-name: sbom.spdx.json
+          output-file: sbom.spdx.json
+          format: spdx-json
+
+      - name: Attest SBOM
+        uses: actions/attest-sbom@115c3be05ff3974bcbd596578934b3f9ce39bf68 # v2.2.0
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+          sbom-path: sbom.spdx.json
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:

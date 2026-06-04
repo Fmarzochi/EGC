@@ -348,4 +348,61 @@ How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 ---
 
+---
+
+## Dependencies
+
+### How Dependencies Are Selected
+
+EGC selects dependencies based on:
+
+1. **Necessity** — a dependency is only added if it provides functionality that cannot reasonably be implemented in-project without significant maintenance cost
+2. **License compatibility** — must be MIT, ISC, BSD, Apache-2.0, or equivalent permissive license
+3. **Maintenance status** — preferred packages must have active maintenance and a responsive security process
+
+### Obtaining Dependencies
+
+Dependencies are obtained exclusively through npm. All dependencies are listed in `package.json` and locked in `package-lock.json`. To install:
+
+```bash
+npm ci
+```
+
+This installs the exact versions from the lock file, ensuring reproducible builds.
+
+### Tracking Dependencies
+
+- Dependabot is configured to automatically open PRs for outdated or vulnerable dependencies
+- `npm audit` runs on every CI build and fails on high/critical severity findings
+- The `dependency-review.yml` workflow blocks PRs that introduce new high-severity dependencies
+- SCA policy details are documented at `docs/security/SCA-POLICY.md`
+
+---
+
+## Build Instructions
+
+### Requirements
+
+- Node.js 18 or later
+- npm (bundled with Node.js) or yarn or bun
+
+### Building
+
+```bash
+# Install dependencies
+npm ci
+
+# Build MCP servers (TypeScript -> JavaScript)
+npm run build
+
+# Run tests
+npm test
+```
+
+The MCP servers (`egc-guardian`, `egc-memory`) are TypeScript projects compiled with `tsc`. Build output goes to `dist/` inside each server directory.
+
+See the [installation guide](docs/installation/) for platform-specific instructions.
+
+---
+
 **Thank you for elevating AI orchestration from chatboxes to engineering systems.**
