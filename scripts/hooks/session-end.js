@@ -230,7 +230,7 @@ async function main() {
     if (fs.existsSync(transcriptPath)) {
       summary = extractSessionSummary(transcriptPath);
     } else {
-      log(`[SessionEnd] Transcript not found: ${transcriptPath}`);
+      log('[SessionEnd] Transcript not found');
     }
   }
 
@@ -243,7 +243,7 @@ async function main() {
       if (merged) {
         updatedContent = merged;
       } else {
-        log(`[SessionEnd] Failed to normalize header in ${sessionFile}`);
+        log('[SessionEnd] Failed to normalize session file header');
       }
     }
 
@@ -268,7 +268,7 @@ async function main() {
       writeFile(sessionFile, updatedContent);
     }
 
-    log(`[SessionEnd] Updated session file: ${sessionFile}`);
+    log('[SessionEnd] Updated session file');
   } else {
     const summarySection = summary
       ? `${buildSummaryBlock(summary)}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``
@@ -278,7 +278,7 @@ async function main() {
 `;
 
     writeFile(sessionFile, template);
-    log(`[SessionEnd] Created session file: ${sessionFile}`);
+    log('[SessionEnd] Created session file');
   }
 
   process.exit(0);
