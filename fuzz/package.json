@@ -7,6 +7,7 @@
     "jsfuzz": "1.0.15"
   },
   "overrides": {
-    "cross-spawn": "^7.0.6"
+    "cross-spawn": "^7.0.6",
+    "uuid": "^11.1.1"
   }
 }
