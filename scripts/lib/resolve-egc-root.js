@@ -117,6 +117,10 @@ function resolveEccRoot(options) {
  * Usage in commands:
  *   const _r = <paste INLINE_RESOLVE>;
  *   const sm = require(_r + '/scripts/lib/session-manager');
+ *
+ * MAINTENANCE: The plugin path arrays inside this string are the serialised
+ * forms of PLUGIN_ROOT_SEGMENTS and PLUGIN_CACHE_SLUGS defined above.
+ * If those constants change, update the corresponding literals here too.
  */
 const INLINE_RESOLVE = '(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require(\'path\'),f=require(\'fs\'),h=require(\'os\').homedir(),d=p.join(h,\'.gemini\'),q=p.join(\'scripts\',\'lib\',\'utils.js\');if(f.existsSync(p.join(d,q)))return d;for(var s of [["egc"],["egc@egc"],["marketplace","egc"],["everything-gemini"],["everything-gemini@everything-gemini"],["marketplace","everything-gemini"]]){var l=p.join(d,\'plugins\',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ["egc","everything-gemini"]){var b=p.join(d,\'plugins\',\'cache\',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})()';
 
