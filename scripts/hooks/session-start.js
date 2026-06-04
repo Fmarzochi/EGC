@@ -522,7 +522,7 @@ async function main() {
       hook: 'SessionStart',
       projectRoot: observerContext.projectRoot
     });
-    log(`[SessionStart] Registered observer lease for ${observerSessionId}`);
+    log('[SessionStart] Registered observer lease');
   } else {
     log('[SessionStart] No EGC_SESSION_ID available; skipping observer lease registration');
   }
