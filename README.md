@@ -6,24 +6,6 @@
 
 **Your AI remembers what you decided, how you work, and where you left off. Across every session. Across every tool.**
 
-<br>
-
-<a href="https://www.bestpractices.dev/projects/13099">
-  <img src="https://www.bestpractices.dev/projects/13099/badge" alt="OpenSSF Best Practices" height="50">
-</a>
-&nbsp;
-<a href="https://www.bestpractices.dev/projects/13099?level=baseline-1">
-  <img src="https://www.bestpractices.dev/projects/13099/badge?level=baseline-1" alt="OpenSSF Baseline Level 1" height="50">
-</a>
-&nbsp;
-<a href="https://www.bestpractices.dev/projects/13099?level=baseline-2">
-  <img src="https://www.bestpractices.dev/projects/13099/badge?level=baseline-2" alt="OpenSSF Baseline Level 2" height="50">
-</a>
-&nbsp;
-<a href="https://www.bestpractices.dev/projects/13099?level=baseline-3">
-  <img src="https://www.bestpractices.dev/projects/13099/badge?level=baseline-3" alt="OpenSSF Baseline Level 3" height="50">
-</a>
-
 </div>
 
 ---
@@ -236,11 +218,21 @@ The branch `legacy-runtime` preserves the full historical architecture for anyon
 
 ---
 
-## License [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+<div align="center">
 
----
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+&nbsp;
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099)
+&nbsp;
+[![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)](https://www.bestpractices.dev/projects/13099?level=baseline-1)
+&nbsp;
+[![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2)
+&nbsp;
+[![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3)
 
-<p align="center">
-  <img src="assets/images/egc-logo.png" alt="EGC Logo" width="80" /><br/>
-  Desenvolvido por <a href="https://linkedin.com/in/felipemarzochi">Felipe Marzochi</a>
-</p>
+<br/>
+
+<img src="assets/images/egc-logo.png" alt="EGC Logo" width="80" /><br/>
+Desenvolvido por <a href="https://linkedin.com/in/felipemarzochi">Felipe Marzochi</a>
+
+</div>
