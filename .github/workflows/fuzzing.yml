@@ -32,12 +32,13 @@ jobs:
         run: npm ci && npm run build
 
       - name: Install jsfuzz
-        run: npm install --no-save jsfuzz@1.0.15
+        working-directory: fuzz
+        run: npm ci
 
       - name: Run fuzzer (60-second time-box)
         run: |
           mkdir -p fuzz/artifacts fuzz/corpus
-          timeout 65 npx jsfuzz fuzz/fuzz-validator.js fuzz/corpus \
+          timeout 65 fuzz/node_modules/.bin/jsfuzz fuzz/fuzz-validator.js fuzz/corpus \
             --exact-artifact-path fuzz/artifacts/crash \
             || FUZZ_EXIT=$?
           if [ "${FUZZ_EXIT:-0}" -ne 0 ] && [ "${FUZZ_EXIT:-0}" -ne 124 ]; then

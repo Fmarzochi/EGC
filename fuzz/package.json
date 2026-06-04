@@ -1,0 +1,9 @@
+{
+  "name": "egc-fuzz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fuzzing harness for egc-guardian validator",
+  "dependencies": {
+    "jsfuzz": "1.0.15"
+  }
+}

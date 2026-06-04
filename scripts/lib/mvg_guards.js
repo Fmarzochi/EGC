@@ -25,7 +25,7 @@ function checkRecursion(sessionId) {
     }
 
     if (depth >= MAX_ACTIVATION_DEPTH) {
-      log(`[MVG] Recursion detected in session ${sessionId}. Depth: ${depth}. FREEZING.`);
+      log(`[MVG] Recursion detected. Depth: ${depth}. FREEZING.`);
       throw new Error(`CRITICAL: Activation depth limit reached (${MAX_ACTIVATION_DEPTH}).`);
     }
 
