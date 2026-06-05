@@ -152,7 +152,7 @@ test('docs/SELECTIVE-INSTALL-ARCHITECTURE.md repoVersion example matches package
 
 test('.opencode/plugins/egc-hooks.ts active plugin banner matches package.json', () => {
   const source = fs.readFileSync(opencodeHooksPluginPath, 'utf8');
-  const match = source.match(new RegExp(`## Active Plugin: Everything Gemini Code v(${semverPattern})`));
+  const match = source.match(new RegExp(`## Active Plugin: EGC - Extended Global Context v(${semverPattern})`));
   assert.ok(match, 'Expected .opencode/plugins/egc-hooks.ts to declare an active plugin banner');
   assert.strictEqual(match[1], expectedVersion);
 });

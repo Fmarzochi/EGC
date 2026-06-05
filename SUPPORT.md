@@ -4,8 +4,8 @@
 
 | Version | Status | Security Updates |
 |---------|--------|-----------------|
-| 0.9.x (latest) | Active | Yes |
-| 0.8.x and earlier | End of Life | No |
+| 1.0.x (latest) | Active | Yes |
+| 0.9.x and earlier | End of Life | No |
 
 Only the latest stable release receives security updates. Users are encouraged to upgrade to the latest version promptly.
 
