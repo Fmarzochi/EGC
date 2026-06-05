@@ -210,7 +210,7 @@ test('egc plugin.json version matches package.json', () => {
 });
 
 test('egc plugin.json uses published plugin name', () => {
-  assert.strictEqual(claudePlugin.name, 'everything-gemini');
+  assert.strictEqual(claudePlugin.name, 'egc');
 });
 
 test('egc plugin.json does NOT have agents field (unsupported by Gemini Code validator)', () => {
@@ -229,12 +229,6 @@ test('egc plugin.json commands is an array', () => {
 });
 
 test('egc plugin.json disables bundled MCP servers for provider tool-name compatibility', () => {
-  const reportedOverlongToolName = `mcp__plugin_${claudePlugin.name}_github__create_pull_request_review`;
-
-  assert.ok(
-    reportedOverlongToolName.length >= 64,
-    'Expected the reported GitHub MCP tool name to exceed strict provider limits without the MCP opt-out',
-  );
   assert.ok(
     Object.prototype.hasOwnProperty.call(claudePlugin, 'mcpServers'),
     'Expected mcpServers to be explicitly declared so Gemini Code does not auto-load root .mcp.json',
@@ -273,8 +267,8 @@ test('egc marketplace.json keeps only Gemini-supported top-level keys', () => {
 
 test('egc marketplace.json has plugins array with the published plugin entry', () => {
   assert.ok(Array.isArray(claudeMarketplace.plugins) && claudeMarketplace.plugins.length > 0, 'Expected plugins array');
-  assert.strictEqual(claudeMarketplace.name, 'everything-gemini');
-  assert.strictEqual(claudeMarketplace.plugins[0].name, 'everything-gemini');
+  assert.strictEqual(claudeMarketplace.name, 'egc');
+  assert.strictEqual(claudeMarketplace.plugins[0].name, 'egc');
 });
 
 test('egc marketplace.json plugin version matches package.json', () => {

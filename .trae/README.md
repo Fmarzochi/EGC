@@ -1,6 +1,6 @@
-# Everything Gemini Code for Trae
+# EGC - Extended Global Context for Trae
 
-Bring Everything Gemini Code (EGC) workflows to Trae IDE. This repository provides custom commands, agents, skills, and rules that can be installed into any Trae project with a single command.
+Bring Extended Global Context (EGC) workflows to Trae IDE. This repository provides custom commands, agents, skills, and rules that can be installed into any Trae project with a single command.
 
 ## Quick Start
 

@@ -1,7 +1,7 @@
 {
   "name": "egc-universal",
   "version": "0.9.0",
-  "description": "Everything Gemini Code (EGC) plugin for OpenCode - agents, commands, hooks, and skills",
+  "description": "Extended Global Context (EGC) plugin for OpenCode - agents, commands, hooks, and skills",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -35,10 +35,11 @@
   "keywords": [
     "opencode",
     "plugin",
-    "everything-gemini",
-    "agents",
     "egc",
+    "extended-global-context",
+    "agents",
     "ai-coding",
+    "persistent-memory",
     "developer-tools",
     "hooks",
     "automation"
@@ -47,12 +48,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Fmarzochi/everything-gemini.git"
+    "url": "git+https://github.com/Fmarzochi/EGC.git"
   },
   "bugs": {
-    "url": "https://github.com/Fmarzochi/everything-gemini/issues"
+    "url": "https://github.com/Fmarzochi/EGC/issues"
   },
-  "homepage": "https://github.com/Fmarzochi/everything-gemini#readme",
+  "homepage": "https://github.com/Fmarzochi/EGC#readme",
   "publishConfig": {
     "access": "public"
   },

@@ -145,7 +145,7 @@ egc /schedule-reply "Reply to Sarah about the board meeting"
 
 ## Prerequisites
 
-- [Gemini Code / EGC](https://github.com/Fmarzochi/everything-gemini)
+- [EGC - Extended Global Context](https://github.com/Fmarzochi/EGC)
 - Gmail CLI (e.g., gog by @pterm)
 - Node.js 18+ (for calendar-suggest.js)
 - Optional: Slack MCP server, Matrix bridge (LINE), Chrome + Playwright (Messenger)

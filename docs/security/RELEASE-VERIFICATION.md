@@ -29,17 +29,17 @@ To verify a release tarball:
 ```bash
 gh attestation verify egc-universal-<version>.tgz \
   --owner Fmarzochi \
-  --repo everything-gemini
+  --repo EGC
 ```
 
-Expected output confirms that the artifact was produced by the `release.yml` workflow in the `Fmarzochi/everything-gemini` repository.
+Expected output confirms that the artifact was produced by the `release.yml` workflow in the `Fmarzochi/EGC` repository.
 
 ## Verifying the Author Identity
 
 The attestation certificate contains the workflow identity:
 
 - **Issuer:** `https://token.actions.githubusercontent.com`
-- **Subject:** `https://github.com/Fmarzochi/everything-gemini/.github/workflows/release.yml@refs/tags/vX.Y.Z`
+- **Subject:** `https://github.com/Fmarzochi/EGC/.github/workflows/release.yml@refs/tags/vX.Y.Z`
 
 This confirms that the release was built by the official GitHub Actions workflow from the official repository, not from an arbitrary machine or actor.
 

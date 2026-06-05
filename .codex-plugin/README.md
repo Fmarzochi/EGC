@@ -1,6 +1,6 @@
 # .codex-plugin — Codex Native Plugin for EGC
 
-This directory contains the **Codex plugin manifest** for Everything Gemini Code.
+This directory contains the **Codex plugin manifest** for Extended Global Context (EGC).
 
 ## Structure
 
@@ -22,7 +22,7 @@ Codex plugin support is currently in preview. Once generally available:
 
 ```bash
 # Install from Codex CLI
-codex plugin install Fmarzochi/everything-gemini
+codex plugin install Fmarzochi/EGC
 
 # Or reference locally during development
 codex plugin install ./
@@ -46,8 +46,7 @@ stay below provider length limits.
 
 ## Notes
 
-- The `skills/` directory at the repo root is shared between Gemini Code (`.gemini-plugin/`)
-  and Codex (`.codex-plugin/`) — same source of truth, no duplication
+- The `skills/` directory at the repo root is shared between all tool adapters (`.gemini-plugin/`, `.codex-plugin/`, etc.) — same source of truth, no duplication
 - EGC is moving to a skills-first workflow surface. Legacy `commands/` remain for
   compatibility on harnesses that still expect slash-entry shims.
 - MCP server credentials are inherited from the launching environment (env vars)

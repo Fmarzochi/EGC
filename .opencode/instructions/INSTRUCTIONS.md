@@ -1,4 +1,4 @@
-# Everything Gemini Code - OpenCode Instructions
+# EGC - Extended Global Context - OpenCode Instructions
 
 This document consolidates the core rules and guidelines from the Gemini Code configuration for use with OpenCode.
 

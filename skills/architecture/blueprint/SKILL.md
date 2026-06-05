@@ -72,7 +72,7 @@ Produces a plan with parallel steps where possible (e.g., "implement Anthropic p
 
 ## Installation
 
-This skill ships with Everything Gemini Code. No separate installation is needed when EGC is installed.
+This skill ships with EGC - Extended Global Context. No separate installation is needed when EGC is installed.
 
 ### Full EGC install
 

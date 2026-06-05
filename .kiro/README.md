@@ -1,6 +1,6 @@
-# Everything Gemini Code for Kiro
+# EGC - Extended Global Context for Kiro
 
-Bring [Everything Gemini Code](https://github.com/Fmarzochi/everything-gemini) (EGC) workflows to [Kiro](https://kiro.dev). This repository provides custom agents, skills, hooks, steering files, and scripts that can be installed into any Kiro project with a single command.
+Bring [EGC - Extended Global Context](https://github.com/Fmarzochi/EGC) workflows to [Kiro](https://kiro.dev). This repository provides custom agents, skills, hooks, steering files, and scripts that can be installed into any Kiro project with a single command.
 
 ## Quick Start
 

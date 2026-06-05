@@ -1,6 +1,6 @@
 # EGC — Agent Catalog
 
-Everything Gemini CLI (EGC) is a production-grade, multi-agent system providing 62 specialized agents, 228+ skills, 74 commands to any compatible AI coding environment.
+Extended Global Context (EGC) is a production-grade, multi-agent system providing 62 specialized agents, 228+ skills, 74 commands to any compatible AI coding environment.
 
 ## Quick Start
 

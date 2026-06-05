@@ -1,4 +1,4 @@
-# Security Assessment — Everything Gemini Code (EGC)
+# Security Assessment — Extended Global Context (EGC)
 
 ## Scope
 

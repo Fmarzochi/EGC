@@ -1,16 +1,16 @@
-[![version](https://img.shields.io/github/package-json/v/Fmarzochi/everything-gemini?color=cb3837&logo=npm&logoColor=white)](https://github.com/Fmarzochi/everything-gemini) [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md) [![Stars](https://img.shields.io/github/stars/Fmarzochi/everything-gemini?style=flat)](https://github.com/Fmarzochi/everything-gemini/stargazers) [![Forks](https://img.shields.io/github/forks/Fmarzochi/everything-gemini?style=flat)](https://github.com/Fmarzochi/everything-gemini/network/members) [![Issues](https://img.shields.io/github/issues/Fmarzochi/everything-gemini)](https://github.com/Fmarzochi/everything-gemini/issues) [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen)](https://github.com/Fmarzochi/everything-gemini/commits/main) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Fmarzochi/everything-gemini/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/everything-gemini)
+[![version](https://img.shields.io/github/package-json/v/Fmarzochi/EGC?color=cb3837&logo=npm&logoColor=white)](https://github.com/Fmarzochi/EGC) [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md) [![Stars](https://img.shields.io/github/stars/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/stargazers) [![Forks](https://img.shields.io/github/forks/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/network/members) [![Issues](https://img.shields.io/github/issues/Fmarzochi/EGC)](https://github.com/Fmarzochi/EGC/issues) [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen)](https://github.com/Fmarzochi/EGC/commits/main) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Fmarzochi/EGC/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC)
 
 <div align="center">
 
-# EGC - Everything Gemini Code
+# EGC - Extended Global Context
 
-**Your AI remembers what you decided, how you work, and where you left off. Across every session. Across every tool.**
+**Your AI remembers your project across sessions and tools.**
 
 </div>
 
 ---
 
-<img src="assets/hero.png" alt="EGC - Everything Gemini Code" width="100%" />
+<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 
 ---
 
@@ -82,8 +82,8 @@ The money saved is small. The time and interrupted flow are not.
 You need [Node.js 18 or later](https://nodejs.org/en/download). Not sure if you have it? Open a terminal and run `node --version`. If it shows 18 or higher, you're ready.
 
 ```bash
-git clone https://github.com/Fmarzochi/everything-gemini.git
-cd everything-gemini
+git clone https://github.com/Fmarzochi/EGC.git
+cd EGC
 sh install.sh
 ```
 
@@ -120,8 +120,8 @@ Run 'egc doctor' to verify.
 ### Windows
 
 ```powershell
-git clone https://github.com/Fmarzochi/everything-gemini.git
-cd everything-gemini
+git clone https://github.com/Fmarzochi/EGC.git
+cd EGC
 .\install.ps1
 ```
 

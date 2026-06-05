@@ -1,6 +1,6 @@
-# Everything Gemini Code for CodeBuddy
+# EGC - Extended Global Context for CodeBuddy
 
-为 CodeBuddy IDE 带来 Everything Gemini Code (EGC) 工作流。此仓库提供自定义命令、智能体、技能和规则，可以通过统一的 Target Adapter 架构安装到任何 CodeBuddy 项目中。
+为 CodeBuddy IDE 带来 EGC - Extended Global Context (EGC) 工作流。此仓库提供自定义命令、智能体、技能和规则，可以通过统一的 Target Adapter 架构安装到任何 CodeBuddy 项目中。
 
 ## 快速开始（推荐）
 

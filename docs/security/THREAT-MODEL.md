@@ -1,4 +1,4 @@
-# Threat Model — Everything Gemini Code (EGC)
+# Threat Model — Extended Global Context (EGC)
 
 ## System Overview
 

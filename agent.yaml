@@ -1,7 +1,7 @@
 spec_version: "0.1.0"
-name: everything-gemini
+name: egc
 version: 0.9.0
-description: "EGC — Everything Gemini Code. Desenvolvido por Felipe Marzochi. @MarzochiFelipe. © Todos os direitos reservados. https://github.com/Fmarzochi/everything-gemini"
+description: "EGC - Extended Global Context. Persistent memory and shared context for AI coding tools. Desenvolvido por Felipe Marzochi. @MarzochiFelipe. https://github.com/Fmarzochi/EGC"
 author: fmarzochi
 license: MIT
 model:

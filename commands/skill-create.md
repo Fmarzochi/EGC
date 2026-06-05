@@ -171,4 +171,4 @@ For advanced features (10k+ commits, team sharing, auto-PRs), use the [Skill Cre
 
 ---
 
-*Part of [Everything Gemini Code](https://github.com/Fmarzochi/everything-gemini)*
+*Part of [EGC - Extended Global Context](https://github.com/Fmarzochi/EGC)*

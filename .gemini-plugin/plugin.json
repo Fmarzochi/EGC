@@ -1,16 +1,18 @@
 {
-  "name": "everything-gemini",
+  "name": "egc",
   "version": "0.9.0",
-  "description": "Battle-tested Gemini Code plugin for engineering teams — 62 agents, 228 skills, 74 commands, production-ready hooks, and selective install workflows evolved through continuous real-world use",
+  "description": "EGC - Extended Global Context: persistent memory and shared context for AI coding tools. 62 agents, 228 skills, 74 commands, production-ready hooks, and selective install workflows evolved through continuous real-world use",
   "author": {
     "name": "Felipe Marzochi",
     "url": "https://www.linkedin.com/in/felipemarzochi/"
   },
-  "homepage": "https://github.com/Fmarzochi/everything-gemini",
-  "repository": "https://github.com/Fmarzochi/everything-gemini",
+  "homepage": "https://github.com/Fmarzochi/EGC",
+  "repository": "https://github.com/Fmarzochi/EGC",
   "license": "MIT",
   "keywords": [
-    "everything-gemini",
+    "egc",
+    "extended-global-context",
+    "persistent-memory",
     "agents",
     "skills",
     "hooks",

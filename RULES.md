@@ -1,11 +1,11 @@
 # EGC Governance Rules
 
-These rules govern contributions to **Everything Gemini Code (EGC)** — a local-first MCP runtime with persistent memory, shared workflows, and plug-and-play integration for AI coding tools.
+These rules govern contributions to **Extended Global Context (EGC)** — a local-first MCP runtime with persistent memory, shared context, and plug-and-play integration for AI coding tools.
 
-> **EGC — Everything Gemini Code**  
+> **EGC - Extended Global Context**  
 > **Desenvolvido por Felipe Marzochi**  
 > **@MarzochiFelipe**  
-> **https://github.com/Fmarzochi/everything-gemini**  
+> **https://github.com/Fmarzochi/EGC**  
 > **© Todos os direitos reservados**
 
 ---

@@ -1,0 +1,7 @@
+interface:
+  display_name: "EGC - Extended Global Context"
+  short_description: "Repo conventions and workflows for EGC"
+  brand_color: "#0EA5E9"
+  default_prompt: "Use $egc to follow this repository's conventions and workflows."
+policy:
+  allow_implicit_invocation: true

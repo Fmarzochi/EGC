@@ -1,16 +1,16 @@
 {
-  "name": "everything-gemini",
+  "name": "egc",
   "version": "0.9.0",
-  "description": "EGC \u2014 Everything Gemini Code. Multi-harness AI coding plugin ecosystem.",
+  "description": "EGC - Extended Global Context. Persistent memory and shared context for AI coding tools.",
   "author": "Felipe Marzochi <fmarzochi@gmail.com> (https://github.com/Fmarzochi)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Fmarzochi/everything-gemini.git"
+    "url": "git+https://github.com/Fmarzochi/EGC.git"
   },
-  "homepage": "https://github.com/Fmarzochi/everything-gemini",
+  "homepage": "https://github.com/Fmarzochi/EGC",
   "bugs": {
-    "url": "https://github.com/Fmarzochi/everything-gemini/issues"
+    "url": "https://github.com/Fmarzochi/EGC/issues"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -69,15 +69,18 @@
   },
   "keywords": [
     "egc",
-    "everything-gemini",
+    "extended-global-context",
     "ai",
     "coding",
     "agent",
-    "gemini",
+    "persistent-memory",
+    "context-sharing",
     "claude",
-    "openai",
+    "cursor",
+    "codex",
     "hooks",
-    "orchestration"
+    "orchestration",
+    "mcp"
   ],
   "devDependencies": {
     "@eslint/js": "^10.0.1",

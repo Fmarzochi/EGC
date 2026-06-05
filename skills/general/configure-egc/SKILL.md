@@ -1,12 +1,12 @@
 ---
 name: configure-egc
-description: Interactive installer for Everything Gemini Code — guides users through selecting and installing skills and rules to user-level or project-level directories, verifies paths, and optionally optimizes installed files.
+description: Interactive installer for EGC - Extended Global Context — guides users through selecting and installing skills and rules to user-level or project-level directories, verifies paths, and optionally optimizes installed files.
 origin: EGC
 ---
 
-# Configure Everything Gemini Code (EGC)
+# Configure EGC - Extended Global Context
 
-An interactive, step-by-step installation wizard for the Everything Gemini Code project. Uses `AskUserQuestion` to guide users through selective installation of skills and rules, then verifies correctness and offers optimization.
+An interactive, step-by-step installation wizard for the EGC project. Uses `AskUserQuestion` to guide users through selective installation of skills and rules, then verifies correctness and offers optimization.
 
 ## When to Activate
 

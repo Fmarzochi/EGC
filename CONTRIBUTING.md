@@ -1,13 +1,13 @@
-# Contributing to Everything Gemini Code (EGC)
+# Contributing to EGC - Extended Global Context
 
-Welcome to the engineering governance guide for **Everything Gemini Code (EGC)**. This is not just a collection of prompts or scripts; it is a cross-platform AI operating system and runtime orchestration fabric.
+Welcome to the engineering governance guide for **Extended Global Context (EGC)**. This is not just a collection of prompts or scripts; it is a cross-platform AI operating system and runtime orchestration fabric.
 
 Because EGC operates as a structured engineering platform, contributions must align with our core architecture, ensuring the stability, observability, and deterministic execution of the cognitive ecosystem.
 
-> **EGC — Everything Gemini Code**  
+> **EGC - Extended Global Context**  
 > **Desenvolvido por Felipe Marzochi**  
 > **@MarzochiFelipe**  
-> **https://github.com/Fmarzochi/everything-gemini**  
+> **https://github.com/Fmarzochi/EGC**  
 > **© Todos os direitos reservados**
 
 ---
@@ -41,8 +41,8 @@ EGC operates under a philosophy of **Stability over Expansion** and **Passive Ma
 
 ```bash
 # 1. Fork and clone the EGC OS
-gh repo fork Fmarzochi/everything-gemini --clone
-cd everything-gemini
+gh repo fork Fmarzochi/EGC --clone
+cd EGC
 
 # 2. Create a feature branch
 git checkout -b feat/my-contribution

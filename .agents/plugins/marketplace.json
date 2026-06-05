@@ -1,7 +1,7 @@
 {
   "name": "egc",
   "interface": {
-    "displayName": "Everything Gemini Code"
+    "displayName": "EGC - Extended Global Context"
   },
   "plugins": [
     {

@@ -3,13 +3,13 @@
 > WARNING: This README is specific to OpenCode usage.
 > If you installed EGC via npm (e.g. `npm install opencode-egc`), refer to the root README instead.
 
-Everything Gemini Code (EGC) plugin for OpenCode - agents, commands, hooks, and skills.
+Extended Global Context (EGC) plugin for OpenCode - agents, commands, hooks, and skills.
 
 ## Installation
 
 ## Installation Overview
 
-There are two ways to use Everything Gemini Code (EGC):
+There are two ways to use Extended Global Context (EGC):
 
 1. **npm package (recommended for most users)**
    Install via npm/bun/yarn and use the `egc-install` CLI to set up rules and agents.
@@ -52,8 +52,8 @@ npx egc-install typescript
 Clone and run OpenCode in the repository:
 
 ```bash
-git clone https://github.com/Fmarzochi/everything-gemini
-cd everything-gemini
+git clone https://github.com/Fmarzochi/EGC
+cd EGC
 opencode
 ```
 

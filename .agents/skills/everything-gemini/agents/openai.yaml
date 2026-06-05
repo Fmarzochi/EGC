@@ -1,7 +1,0 @@
-interface:
-  display_name: "Everything Gemini Code"
-  short_description: "Repo workflows for everything-gemini"
-  brand_color: "#0EA5E9"
-  default_prompt: "Use $everything-gemini to follow this repository's conventions and workflows."
-policy:
-  allow_implicit_invocation: true

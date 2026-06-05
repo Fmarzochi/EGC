@@ -21,7 +21,7 @@ End-of-life versions do not receive security backports. If you are running an un
 
 ## Support Scope
 
-Community support is provided through [GitHub Issues](https://github.com/Fmarzochi/everything-gemini/issues).
+Community support is provided through [GitHub Issues](https://github.com/Fmarzochi/EGC/issues).
 
 For security vulnerabilities, use the private reporting channel described in [SECURITY.md](SECURITY.md).
 

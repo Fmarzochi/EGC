@@ -1,6 +1,6 @@
 # Migration Guide: Gemini Code to OpenCode
 
-This guide helps you migrate from Gemini Code to OpenCode while using the Everything Gemini Code (EGC) configuration.
+This guide helps you migrate from Gemini Code to OpenCode while using the Extended Global Context (EGC) configuration.
 
 ## Overview
 
