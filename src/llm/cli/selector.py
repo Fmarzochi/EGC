@@ -26,7 +26,7 @@ def print_banner() -> None:
 ╔════════════════════════════════════════════════════════════╗
 ║   EGC — Everything Gemini Code                             ║
 ║   Desenvolvido por Felipe Marzochi  -  @FEMARZOCHI         ║
-║   https://github.com/Fmarzochi/everything-gemini           ║
+║   https://github.com/Fmarzochi/EGC           ║
 ║   © Todos os direitos reservados                           ║
 ╚════════════════════════════════════════════════════════════╝{Color.RESET}"""
     print(banner)

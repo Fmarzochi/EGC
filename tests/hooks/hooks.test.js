@@ -2317,7 +2317,7 @@ async function runTests() {
     test('plugin.json does NOT have explicit hooks declaration', () => {
       // Gemini Code automatically loads hooks/hooks.json by convention.
       // Explicitly declaring it in plugin.json causes a duplicate detection error.
-      // See: https://github.com/Fmarzochi/everything-gemini/issues/103
+      // See: https://github.com/Fmarzochi/EGC/issues/103
       const pluginPath = path.join(__dirname, '..', '..', '.gemini-plugin', 'plugin.json');
       const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
 

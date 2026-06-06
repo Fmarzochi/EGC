@@ -2,11 +2,11 @@
   "mcpServers": {
     "egc-guardian": {
       "command": "node",
-      "args": ["/absolute/path/to/everything-gemini/mcp/servers/egc-guardian/build/index.js"]
+      "args": ["/absolute/path/to/EGC/mcp/servers/egc-guardian/build/index.js"]
     },
     "egc-memory": {
       "command": "node",
-      "args": ["/absolute/path/to/everything-gemini/mcp/servers/egc-memory/build/index.js"]
+      "args": ["/absolute/path/to/EGC/mcp/servers/egc-memory/build/index.js"]
     }
   }
 }

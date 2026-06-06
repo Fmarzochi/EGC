@@ -1,6 +1,6 @@
 ---
 description: Run verification loop to validate implementation
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Verify Command

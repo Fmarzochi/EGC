@@ -1,6 +1,6 @@
 ---
 description: Rust code review for ownership, safety, and idiomatic patterns
-agent: everything-gemini:rust-reviewer
+agent: egc:rust-reviewer
 subtask: true
 ---
 

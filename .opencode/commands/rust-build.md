@@ -1,6 +1,6 @@
 ---
 description: Fix Rust build errors and borrow checker issues
-agent: everything-gemini:rust-build-resolver
+agent: egc:rust-build-resolver
 subtask: true
 ---
 

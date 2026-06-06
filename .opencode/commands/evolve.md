@@ -1,6 +1,6 @@
 ---
 description: Analyze instincts and suggest or generate evolved structures
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Evolve Command

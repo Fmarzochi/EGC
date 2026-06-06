@@ -18,7 +18,7 @@ An interactive, step-by-step installation wizard for the EGC project. Uses `AskU
 ## Prerequisites
 
 This skill must be accessible to Gemini Code before activation. Two ways to bootstrap:
-1. **Via Plugin**: `/plugin install everything-gemini` — the plugin loads this skill automatically
+1. **Via Plugin**: `/plugin install egc` — the plugin loads this skill automatically
 2. **Manual**: Copy only this skill to `~/.gemini/skills/configure-egc/SKILL.md`, then activate by saying "configure egc"
 
 ---
@@ -28,11 +28,11 @@ This skill must be accessible to Gemini Code before activation. Two ways to boot
 Before any installation, clone the latest EGC source to `/tmp`:
 
 ```bash
-rm -rf /tmp/everything-gemini
-git clone https://github.com/Fmarzochi/everything-gemini.git /tmp/everything-gemini
+rm -rf /tmp/egc
+git clone https://github.com/Fmarzochi/EGC.git /tmp/egc
 ```
 
-Set `EGC_ROOT=/tmp/everything-gemini` as the source for all subsequent copy operations.
+Set `EGC_ROOT=/tmp/egc` as the source for all subsequent copy operations.
 
 If the clone fails (network issues, etc.), use `AskUserQuestion` to ask the user to provide a local path to an existing EGC clone.
 
@@ -332,7 +332,7 @@ Options:
 Clean up the cloned repository from `/tmp`:
 
 ```bash
-rm -rf /tmp/everything-gemini
+rm -rf /tmp/egc
 ```
 
 Then print a summary report:

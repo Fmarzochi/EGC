@@ -1,6 +1,6 @@
 ---
 description: Extract patterns and learnings from current session
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Learn Command

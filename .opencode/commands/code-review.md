@@ -1,6 +1,6 @@
 ---
 description: Review code for quality, security, and maintainability
-agent: everything-gemini:code-reviewer
+agent: egc:code-reviewer
 subtask: true
 ---
 

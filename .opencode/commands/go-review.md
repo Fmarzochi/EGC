@@ -1,6 +1,6 @@
 ---
 description: Go code review for idiomatic patterns
-agent: everything-gemini:go-reviewer
+agent: egc:go-reviewer
 subtask: true
 ---
 

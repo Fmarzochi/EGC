@@ -85,7 +85,7 @@ test -f skills/blueprint/SKILL.md
 To update later, review the EGC diff before updating:
 
 ```bash
-cd /path/to/everything-gemini
+cd /path/to/EGC
 git fetch origin main
 git log --oneline HEAD..origin/main       # review new commits before updating
 git checkout <reviewed-full-sha>          # pin to a specific reviewed commit

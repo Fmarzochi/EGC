@@ -1,6 +1,6 @@
 ---
 description: Run evaluation against acceptance criteria
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Eval Command

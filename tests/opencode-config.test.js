@@ -89,7 +89,7 @@ if (
       }
 
       assert.ok(
-        match[1].startsWith('everything-gemini:'),
+        match[1].startsWith('egc:'),
         `Expected plugin-scoped agent id in ${entry}, got: ${match[1]}`
       );
     }

@@ -14,7 +14,7 @@ Agents and processes operating within this repository **MUST NEVER** modify:
 
 ### 2. Strict Project Locality
 All behaviors, scripts, and executions must be:
-- **Repo-scoped:** Confined entirely within the `everything-gemini` repository boundaries.
+- **Repo-scoped:** Confined entirely within the `EGC` repository boundaries.
 - **Project-local:** All file reads, writes, and execution paths must be relative to the project root.
 - **Self-contained:** The project must not rely on external, non-standard system dependencies that aren't explicitly declared in the package manager.
 

@@ -632,8 +632,8 @@ go build ./examples/...
 ### 1. Fork and Clone
 
 ```bash
-gh repo fork Fmarzochi/everything-gemini-code --clone
-cd everything-gemini-code
+gh repo fork Fmarzochi/EGC-code --clone
+cd EGC
 ```
 
 ### 2. Create Branch

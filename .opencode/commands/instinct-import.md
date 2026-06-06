@@ -1,6 +1,6 @@
 ---
 description: Import instincts from external sources
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Instinct Import Command

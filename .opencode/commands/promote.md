@@ -1,6 +1,6 @@
 ---
 description: Promote project instincts to global scope
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Promote Command

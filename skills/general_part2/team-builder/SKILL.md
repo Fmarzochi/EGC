@@ -49,7 +49,7 @@ agents/
 
 Agents are discovered via two methods, merged and deduplicated by agent name:
 
-1. **`egc agents` command** (primary) — run `egc agents` to get all agents known to the CLI, including user agents, plugin agents (e.g. `everything-gemini:architect`), and built-in agents. This automatically covers EGC marketplace installs without any path configuration.
+1. **`egc agents` command** (primary) — run `egc agents` to get all agents known to the CLI, including user agents, plugin agents (e.g. `egc:architect`), and built-in agents. This automatically covers EGC marketplace installs without any path configuration.
 2. **File glob** (fallback, for reading agent content) — agent markdown files are read from:
    - `./agents/**/*.md` + `./agents/*.md` — project-local agents
    - `~/.gemini/agents/**/*.md` + `~/.gemini/agents/*.md` — global user agents
@@ -61,7 +61,7 @@ Earlier sources take precedence when names collide: user agents > plugin agents 
 ### Step 1: Discover Available Agents
 
 Run `egc agents` to get the full agent list. Parse each line:
-- **Plugin agents** are prefixed with `plugin-name:` (e.g., `everything-gemini:security-reviewer`). Use the part after `:` as the agent name and the plugin name as the domain.
+- **Plugin agents** are prefixed with `plugin-name:` (e.g., `egc:security-reviewer`). Use the part after `:` as the agent name and the plugin name as the domain.
 - **User agents** have no prefix. Read the corresponding markdown file from `~/.gemini/agents/` or `./agents/` to extract the name and description.
 - **Built-in agents** (e.g., `Explore`, `Plan`) are skipped unless the user explicitly asks to include them.
 

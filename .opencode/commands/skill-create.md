@@ -1,6 +1,6 @@
 ---
 description: Generate skills from git history analysis
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Skill Create Command

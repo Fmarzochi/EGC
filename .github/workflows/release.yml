@@ -91,7 +91,7 @@ jobs:
 
           ### Notes
           - npm package: \`egc-universal\`
-          - Gemini marketplace/plugin identifier: \`everything-gemini@everything-gemini\`
+          - Gemini marketplace/plugin identifier: \`egc@egc\`
           - For migration tips and compatibility notes, see README and CHANGELOG.
           EOF
 

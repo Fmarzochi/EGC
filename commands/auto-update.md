@@ -18,7 +18,7 @@ node "$ECC_ROOT/scripts/auto-update.js" --dry-run
 node "$ECC_ROOT/scripts/auto-update.js" --target cursor
 
 # Override the EGC repo root explicitly
-node "$ECC_ROOT/scripts/auto-update.js" --repo-root /path/to/everything-gemini
+node "$ECC_ROOT/scripts/auto-update.js" --repo-root /path/to/EGC
 ```
 
 ## Notes

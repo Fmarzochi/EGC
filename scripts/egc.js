@@ -89,7 +89,7 @@ function showHelp(exitCode = 0) {
 EGC — Everything Gemini Code
 Desenvolvido por Felipe Marzochi
 @FEMARZOCHI
-${formatOSC8('https://github.com/Fmarzochi/everything-gemini', 'https://github.com/Fmarzochi/everything-gemini')}
+${formatOSC8('https://github.com/Fmarzochi/EGC', 'https://github.com/Fmarzochi/EGC')}
 © Todos os direitos reservados
 
 EGC selective-install CLI

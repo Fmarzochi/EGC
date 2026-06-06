@@ -1,6 +1,6 @@
 ---
 description: Update documentation for recent changes
-agent: everything-gemini:doc-updater
+agent: egc:doc-updater
 subtask: true
 ---
 

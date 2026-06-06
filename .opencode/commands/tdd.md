@@ -1,6 +1,6 @@
 ---
 description: Enforce TDD workflow with 80%+ coverage
-agent: everything-gemini:tdd-guide
+agent: egc:tdd-guide
 subtask: true
 ---
 

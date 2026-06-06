@@ -1,6 +1,6 @@
 ---
 description: Remove dead code and consolidate duplicates
-agent: everything-gemini:refactor-cleaner
+agent: egc:refactor-cleaner
 subtask: true
 ---
 

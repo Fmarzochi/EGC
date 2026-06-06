@@ -147,10 +147,10 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('finds exact legacy plugin install at ~/.gemini/plugins/everything-gemini@everything-gemini', () => {
+  if (test('finds exact legacy plugin install at ~/.gemini/plugins/egc@egc', () => {
     const homeDir = createTempDir();
     try {
-      const expected = setupLegacyPluginInstall(homeDir, ['everything-gemini@everything-gemini']);
+      const expected = setupLegacyPluginInstall(homeDir, ['egc@egc']);
       const result = resolveEccRoot({ envRoot: '', homeDir });
       assert.strictEqual(result, expected);
     } finally {

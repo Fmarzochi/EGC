@@ -1,6 +1,6 @@
 ---
 description: Go TDD workflow with table-driven tests
-agent: everything-gemini:tdd-guide
+agent: egc:tdd-guide
 subtask: true
 ---
 

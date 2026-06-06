@@ -1,6 +1,6 @@
 ---
 description: Analyze and improve test coverage
-agent: everything-gemini:tdd-guide
+agent: egc:tdd-guide
 subtask: true
 ---
 

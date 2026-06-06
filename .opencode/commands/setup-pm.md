@@ -1,6 +1,6 @@
 ---
 description: Configure package manager preference
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Setup Package Manager Command
