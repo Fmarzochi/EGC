@@ -230,6 +230,59 @@ function commandOutput(result) {
 }
 
 /**
+ * Report per-file lint issues to stderr, returning issue counts.
+ * @param {string[]} filesToCheck
+ * @returns {{ totalIssues: number, errorCount: number, warningCount: number, infoCount: number }}
+ */
+function reportLintResults(filesToCheck) {
+  let totalIssues = 0;
+  let errorCount = 0;
+  let warningCount = 0;
+  let infoCount = 0;
+
+  for (const file of filesToCheck) {
+    const fileIssues = findFileIssues(file);
+    if (fileIssues.length > 0) {
+      console.error(`\n[FILE] ${file}`);
+      for (const issue of fileIssues) {
+        const label = issue.severity === 'error' ? 'ERROR' : issue.severity === 'warning' ? 'WARNING' : 'INFO';
+        console.error(`  ${label} Line ${issue.line}: ${issue.message}`);
+        totalIssues++;
+        if (issue.severity === 'error') errorCount++;
+        if (issue.severity === 'warning') warningCount++;
+        if (issue.severity === 'info') infoCount++;
+      }
+    }
+  }
+
+  return { totalIssues, errorCount, warningCount, infoCount };
+}
+
+/**
+ * Report commit message validation issues to stderr, returning issue counts.
+ * @param {object} messageValidation - Result from validateCommitMessage
+ * @returns {{ totalIssues: number, warningCount: number }}
+ */
+function reportCommitMessageIssues(messageValidation) {
+  let totalIssues = 0;
+  let warningCount = 0;
+
+  if (messageValidation && messageValidation.issues.length > 0) {
+    console.error('\nCommit Message Issues:');
+    for (const issue of messageValidation.issues) {
+      console.error(`  WARNING ${issue.message}`);
+      if (issue.suggestion) {
+        console.error(`     TIP ${issue.suggestion}`);
+      }
+      totalIssues++;
+      warningCount++;
+    }
+  }
+
+  return { totalIssues, warningCount };
+}
+
+/**
  * Run linter on staged files
  * @param {string[]} files 
  * @returns {object} Lint results
@@ -323,38 +376,17 @@ function evaluate(rawInput) {
     console.error(`[Hook] Checking ${stagedFiles.length} staged file(s)...`);
     
     const filesToCheck = stagedFiles.filter(shouldCheckFile);
-    let totalIssues = 0;
-    let errorCount = 0;
-    let warningCount = 0;
-    let infoCount = 0;
-    
-    for (const file of filesToCheck) {
-      const fileIssues = findFileIssues(file);
-      if (fileIssues.length > 0) {
-        console.error(`\n[FILE] ${file}`);
-        for (const issue of fileIssues) {
-          const label = issue.severity === 'error' ? 'ERROR' : issue.severity === 'warning' ? 'WARNING' : 'INFO';
-          console.error(`  ${label} Line ${issue.line}: ${issue.message}`);
-          totalIssues++;
-          if (issue.severity === 'error') errorCount++;
-          if (issue.severity === 'warning') warningCount++;
-          if (issue.severity === 'info') infoCount++;
-        }
-      }
-    }
-    
+
+    const lintCounts = reportLintResults(filesToCheck);
+    let totalIssues = lintCounts.totalIssues;
+    let errorCount = lintCounts.errorCount;
+    let warningCount = lintCounts.warningCount;
+    let infoCount = lintCounts.infoCount;
+
     const messageValidation = validateCommitMessage(command);
-    if (messageValidation && messageValidation.issues.length > 0) {
-      console.error('\nCommit Message Issues:');
-      for (const issue of messageValidation.issues) {
-        console.error(`  WARNING ${issue.message}`);
-        if (issue.suggestion) {
-          console.error(`     TIP ${issue.suggestion}`);
-        }
-        totalIssues++;
-        warningCount++;
-      }
-    }
+    const msgCounts = reportCommitMessageIssues(messageValidation);
+    totalIssues += msgCounts.totalIssues;
+    warningCount += msgCounts.warningCount;
     
     const lintResults = runLinter(filesToCheck);
     

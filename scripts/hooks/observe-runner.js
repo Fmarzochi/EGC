@@ -90,17 +90,14 @@ function combineStderr(stderr, message) {
   return `${prefix}${message}\n`;
 }
 
-function run(raw, options = {}) {
-  const input = typeof raw === 'string' ? raw : String(raw ?? '');
-  const phase = getPhaseFromHookId(options.hookId);
-  if (!phase) {
-    return {
-      stderr: '[Hook] observe runner received an unsupported hook id; skipping observation',
-      exitCode: 0
-    };
-  }
-
-  const pluginRoot = getPluginRoot(options);
+/**
+ * Resolve and validate the observe script path within the plugin root.
+ * Returns the resolved path string on success, or an error result object on failure.
+ *
+ * @param {string} pluginRoot - Absolute path to the plugin root
+ * @returns {string | { stderr: string, exitCode: number }}
+ */
+function resolveObservePath(pluginRoot) {
   let observePath;
   try {
     observePath = resolveTarget(pluginRoot, OBSERVE_RELATIVE_PATH);
@@ -135,28 +132,16 @@ function run(raw, options = {}) {
     };
   }
 
-  const shell = findShellBinary();
-  if (!shell) {
-    return {
-      stderr: '[Hook] shell runtime unavailable; skipping continuous-learning observation',
-      exitCode: 0
-    };
-  }
+  return observePath;
+}
 
-  const result = spawnSync(shell, [toShellPath(observePath), phase], {
-    input,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      GEMINI_PLUGIN_ROOT: pluginRoot,
-      EGC_PLUGIN_ROOT: pluginRoot,
-      ECC_PLUGIN_ROOT: pluginRoot
-    },
-    cwd: process.cwd(),
-    timeout: getTimeoutMs(),
-    windowsHide: true
-  });
-
+/**
+ * Build a normalized output object from a spawnSync result.
+ *
+ * @param {import('child_process').SpawnSyncReturns<string>} result
+ * @returns {{ exitCode: number, stdout?: string, stderr?: string }}
+ */
+function buildSpawnResult(result) {
   const output = {
     exitCode: Number.isInteger(result.status) ? result.status : 0
   };
@@ -179,6 +164,48 @@ function run(raw, options = {}) {
   }
 
   return output;
+}
+
+function run(raw, options = {}) {
+  const input = typeof raw === 'string' ? raw : String(raw ?? '');
+  const phase = getPhaseFromHookId(options.hookId);
+  if (!phase) {
+    return {
+      stderr: '[Hook] observe runner received an unsupported hook id; skipping observation',
+      exitCode: 0
+    };
+  }
+
+  const pluginRoot = getPluginRoot(options);
+  const resolvedPathOrError = resolveObservePath(pluginRoot);
+  if (typeof resolvedPathOrError !== 'string') {
+    return resolvedPathOrError;
+  }
+  const observePath = resolvedPathOrError;
+
+  const shell = findShellBinary();
+  if (!shell) {
+    return {
+      stderr: '[Hook] shell runtime unavailable; skipping continuous-learning observation',
+      exitCode: 0
+    };
+  }
+
+  const result = spawnSync(shell, [toShellPath(observePath), phase], {
+    input,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GEMINI_PLUGIN_ROOT: pluginRoot,
+      EGC_PLUGIN_ROOT: pluginRoot,
+      ECC_PLUGIN_ROOT: pluginRoot
+    },
+    cwd: process.cwd(),
+    timeout: getTimeoutMs(),
+    windowsHide: true
+  });
+
+  return buildSpawnResult(result);
 }
 
 function emitHookResult(raw, output) {

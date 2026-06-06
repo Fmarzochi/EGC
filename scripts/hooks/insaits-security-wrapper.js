@@ -21,29 +21,19 @@ function isEnabled(value) {
   return ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
 }
 
-let raw = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    raw += chunk.substring(0, MAX_STDIN - raw.length);
-  }
-});
-
-process.stdin.on('end', () => {
-  // EGC_ENABLE_INSAITS is canonical; ECC_ENABLE_INSAITS is the legacy bridge.
-  if (!isEnabled(process.env.EGC_ENABLE_INSAITS || process.env.ECC_ENABLE_INSAITS)) {
-    process.stdout.write(raw);
-    process.exit(0);
-  }
-
-  const scriptDir = __dirname;
-  const pyScript = path.join(scriptDir, 'insaits-security-monitor.py');
-
-  // Prefer real Windows executables before .cmd shims so shell execution is
-  // only used for wrapper scripts such as pyenv/npm-style shims.
+/**
+ * Try each Python candidate in order and return the first successful spawnSync result.
+ * Returns null if no Python binary was found (ENOENT on all candidates).
+ *
+ * @param {string} pyScript - Absolute path to the Python monitor script
+ * @param {string} input - stdin data to pass to the process
+ * @returns {import('child_process').SpawnSyncReturns<string> | null}
+ */
+function spawnPythonMonitor(pyScript, input) {
   const pythonCandidates = process.platform === 'win32'
     ? ['python3.exe', 'python.exe', 'python3.cmd', 'python.cmd', 'python3', 'python']
     : ['python3', 'python'];
+
   let result;
 
   for (const pythonBin of pythonCandidates) {
@@ -59,7 +49,7 @@ process.stdin.on('end', () => {
     }
 
     result = spawnSync(pythonBin, [pyScript], {
-      input: raw,
+      input,
       encoding: 'utf8',
       env: process.env,
       cwd: process.cwd(),
@@ -76,11 +66,20 @@ process.stdin.on('end', () => {
   }
 
   if (!result || (result.error && result.error.code === 'ENOENT')) {
-    process.stderr.write('[InsAIts] python3/python not found. Install Python 3.9+ and: pip install insa-its\n');
-    process.stdout.write(raw);
-    process.exit(0);
+    return null;
   }
 
+  return result;
+}
+
+/**
+ * Process the spawnSync result from the Python monitor and exit the process
+ * with the appropriate stdout/stderr output and exit code.
+ *
+ * @param {import('child_process').SpawnSyncReturns<string>} result
+ * @param {string} raw - Original stdin data for pass-through on failure
+ */
+function handleMonitorResult(result, raw) {
   // Log non-ENOENT spawn errors (timeout, signal kill, etc.) so users
   // know the security monitor did not run - fail-open with a warning.
   if (result.error) {
@@ -117,4 +116,33 @@ process.stdin.on('end', () => {
   if (result.stderr) process.stderr.write(result.stderr);
 
   process.exit(result.status);
+}
+
+let raw = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => {
+  if (raw.length < MAX_STDIN) {
+    raw += chunk.substring(0, MAX_STDIN - raw.length);
+  }
+});
+
+process.stdin.on('end', () => {
+  // EGC_ENABLE_INSAITS is canonical; ECC_ENABLE_INSAITS is the legacy bridge.
+  if (!isEnabled(process.env.EGC_ENABLE_INSAITS || process.env.ECC_ENABLE_INSAITS)) {
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
+  const scriptDir = __dirname;
+  const pyScript = path.join(scriptDir, 'insaits-security-monitor.py');
+
+  const result = spawnPythonMonitor(pyScript, raw);
+
+  if (!result) {
+    process.stderr.write('[InsAIts] python3/python not found. Install Python 3.9+ and: pip install insa-its\n');
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
+  handleMonitorResult(result, raw);
 });

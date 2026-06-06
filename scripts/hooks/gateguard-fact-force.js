@@ -402,6 +402,103 @@ function allowWithStateWarning() {
 
 const { trace } = require('../lib/utils');
 
+// --- Per-tool gate handlers ---
+
+/**
+ * Handle the Edit or Write tool gate.
+ *
+ * @param {string} rawInput
+ * @param {string} toolName
+ * @param {object} toolInput
+ * @returns {*}
+ */
+function handleEditWrite(rawInput, toolName, toolInput) {
+  const filePath = toolInput.file_path || '';
+  if (!filePath || isClaudeSettingsPath(filePath)) {
+    trace('governance:allowed:settings', { toolName, filePath });
+    return rawInput;
+  }
+
+  if (!isChecked(filePath)) {
+    if (!markChecked(filePath)) {
+      trace('governance:allowed:state_error', { toolName, filePath });
+      return allowWithStateWarning();
+    }
+    trace('governance:denied:fact_force', { toolName, filePath });
+    return denyResult(toolName === 'Edit' ? editGateMsg(filePath) : writeGateMsg(filePath));
+  }
+
+  trace('governance:allowed:checked', { toolName, filePath });
+  return rawInput;
+}
+
+/**
+ * Handle the MultiEdit tool gate.
+ *
+ * @param {string} rawInput
+ * @param {string} toolName
+ * @param {object} toolInput
+ * @returns {*}
+ */
+function handleMultiEdit(rawInput, toolName, toolInput) {
+  const edits = toolInput.edits || [];
+  for (const edit of edits) {
+    const filePath = edit.file_path || '';
+    if (filePath && !isClaudeSettingsPath(filePath) && !isChecked(filePath)) {
+      if (!markChecked(filePath)) {
+        trace('governance:allowed:state_error', { toolName, filePath });
+        return allowWithStateWarning();
+      }
+      trace('governance:denied:fact_force', { toolName, filePath });
+      return denyResult(editGateMsg(filePath));
+    }
+  }
+  trace('governance:allowed:multiedit');
+  return rawInput;
+}
+
+/**
+ * Handle the Bash tool gate.
+ *
+ * @param {string} rawInput
+ * @param {string} toolName
+ * @param {object} toolInput
+ * @returns {*}
+ */
+function handleBash(rawInput, toolName, toolInput) {
+  const command = toolInput.command || '';
+  if (isReadOnlyGitIntrospection(command)) {
+    trace('governance:allowed:git_intro', { command });
+    return rawInput;
+  }
+
+  if (DESTRUCTIVE_BASH.test(command)) {
+    const key = '__destructive__' + crypto.createHash('sha256').update(command).digest('hex').slice(0, 16);
+    if (!isChecked(key)) {
+      if (!markChecked(key)) {
+        trace('governance:allowed:state_error', { toolName, command });
+        return allowWithStateWarning();
+      }
+      trace('governance:denied:destructive', { command });
+      return denyResult(destructiveBashMsg(), { includeRecoveryHint: false });
+    }
+    trace('governance:allowed:destructive_retry', { command });
+    return rawInput;
+  }
+
+  if (!isChecked(ROUTINE_BASH_SESSION_KEY)) {
+    if (!markChecked(ROUTINE_BASH_SESSION_KEY)) {
+      trace('governance:allowed:state_error', { toolName, command });
+      return allowWithStateWarning();
+    }
+    trace('governance:denied:routine_bash', { command });
+    return denyResult(routineBashMsg(), { hookIds: [BASH_HOOK_ID] });
+  }
+
+  trace('governance:allowed:bash', { command });
+  return rawInput;
+}
+
 // --- Core logic (exported for run-with-flags.js) ---
 
 function run(rawInput) {
@@ -427,75 +524,15 @@ function run(rawInput) {
   const toolName = TOOL_MAP[rawToolName.toLowerCase()] || rawToolName;
 
   if (toolName === 'Edit' || toolName === 'Write') {
-    const filePath = toolInput.file_path || '';
-    if (!filePath || isClaudeSettingsPath(filePath)) {
-      trace('governance:allowed:settings', { toolName, filePath });
-      return rawInput; // allow
-    }
-
-    if (!isChecked(filePath)) {
-      if (!markChecked(filePath)) {
-        trace('governance:allowed:state_error', { toolName, filePath });
-        return allowWithStateWarning();
-      }
-      trace('governance:denied:fact_force', { toolName, filePath });
-      return denyResult(toolName === 'Edit' ? editGateMsg(filePath) : writeGateMsg(filePath));
-    }
-
-    trace('governance:allowed:checked', { toolName, filePath });
-    return rawInput; // allow
+    return handleEditWrite(rawInput, toolName, toolInput);
   }
 
   if (toolName === 'MultiEdit') {
-    const edits = toolInput.edits || [];
-    for (const edit of edits) {
-      const filePath = edit.file_path || '';
-      if (filePath && !isClaudeSettingsPath(filePath) && !isChecked(filePath)) {
-        if (!markChecked(filePath)) {
-          trace('governance:allowed:state_error', { toolName, filePath });
-          return allowWithStateWarning();
-        }
-        trace('governance:denied:fact_force', { toolName, filePath });
-        return denyResult(editGateMsg(filePath));
-      }
-    }
-    trace('governance:allowed:multiedit');
-    return rawInput; // allow
+    return handleMultiEdit(rawInput, toolName, toolInput);
   }
 
   if (toolName === 'Bash') {
-    const command = toolInput.command || '';
-    if (isReadOnlyGitIntrospection(command)) {
-      trace('governance:allowed:git_intro', { command });
-      return rawInput;
-    }
-
-    if (DESTRUCTIVE_BASH.test(command)) {
-      // Gate destructive commands on first attempt; allow retry after facts presented
-      const key = '__destructive__' + crypto.createHash('sha256').update(command).digest('hex').slice(0, 16);
-      if (!isChecked(key)) {
-        if (!markChecked(key)) {
-          trace('governance:allowed:state_error', { toolName, command });
-          return allowWithStateWarning();
-        }
-        trace('governance:denied:destructive', { command });
-        return denyResult(destructiveBashMsg(), { includeRecoveryHint: false });
-      }
-      trace('governance:allowed:destructive_retry', { command });
-      return rawInput; // allow retry after facts presented
-    }
-
-    if (!isChecked(ROUTINE_BASH_SESSION_KEY)) {
-      if (!markChecked(ROUTINE_BASH_SESSION_KEY)) {
-        trace('governance:allowed:state_error', { toolName, command });
-        return allowWithStateWarning();
-      }
-      trace('governance:denied:routine_bash', { command });
-      return denyResult(routineBashMsg(), { hookIds: [BASH_HOOK_ID] });
-    }
-
-    trace('governance:allowed:bash', { command });
-    return rawInput; // allow
+    return handleBash(rawInput, toolName, toolInput);
   }
 
   return rawInput; // allow

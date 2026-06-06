@@ -49,6 +49,87 @@ function log(msg) {
 }
 
 /**
+ * Run Biome check on a .json or .md file (JS/TS already handled by post-edit-format).
+ *
+ * @param {string} filePath - Absolute path to the file
+ * @param {string} projectRoot - Project root directory
+ * @param {boolean} fix - Whether to auto-fix
+ * @param {boolean} strict - Whether to log failures
+ */
+function runBiome(filePath, projectRoot, fix, strict) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
+    return;
+  }
+  const resolved = resolveFormatterBin(projectRoot, 'biome');
+  if (!resolved) return;
+  const args = [...resolved.prefix, 'check', filePath];
+  if (fix) args.push('--write');
+  const result = exec(resolved.bin, args, projectRoot);
+  if (result.status !== 0 && strict) {
+    log(`[QualityGate] Biome check failed for ${filePath}`);
+  }
+}
+
+/**
+ * Run Prettier check on a supported file.
+ *
+ * @param {string} filePath - Absolute path to the file
+ * @param {string} projectRoot - Project root directory
+ * @param {boolean} fix - Whether to auto-fix
+ * @param {boolean} strict - Whether to log failures
+ */
+function runPrettier(filePath, projectRoot, fix, strict) {
+  const resolved = resolveFormatterBin(projectRoot, 'prettier');
+  if (!resolved) return;
+  const args = [...resolved.prefix, fix ? '--write' : '--check', filePath];
+  const result = exec(resolved.bin, args, projectRoot);
+  if (result.status !== 0 && strict) {
+    log(`[QualityGate] Prettier check failed for ${filePath}`);
+  }
+}
+
+/**
+ * Run gofmt on a .go file.
+ *
+ * @param {string} filePath - Absolute path to the file
+ * @param {boolean} fix - Whether to auto-fix
+ * @param {boolean} strict - Whether to log failures
+ */
+function runGoFmt(filePath, fix, strict) {
+  if (fix) {
+    const r = exec('gofmt', ['-w', filePath]);
+    if (r.status !== 0 && strict) {
+      log(`[QualityGate] gofmt failed for ${filePath}`);
+    }
+  } else if (strict) {
+    const r = exec('gofmt', ['-l', filePath]);
+    if (r.status !== 0) {
+      log(`[QualityGate] gofmt failed for ${filePath}`);
+    } else if (r.stdout && r.stdout.trim()) {
+      log(`[QualityGate] gofmt check failed for ${filePath}`);
+    }
+  }
+}
+
+/**
+ * Run ruff on a .py file.
+ *
+ * @param {string} filePath - Absolute path to the file
+ * @param {boolean} fix - Whether to auto-fix
+ * @param {boolean} strict - Whether to log failures
+ */
+function runPython(filePath, fix, strict) {
+  const args = ['format'];
+  if (!fix) args.push('--check');
+  args.push(filePath);
+  const r = exec('ruff', args);
+  if (r.status !== 0 && strict) {
+    log(`[QualityGate] Ruff check failed for ${filePath}`);
+  }
+}
+
+/**
  * Run quality-gate checks for a single file based on its extension.
  * Skips JS/TS files when Biome is configured (handled by post-edit-format).
  *
@@ -71,31 +152,12 @@ function maybeRunQualityGate(filePath) {
     const formatter = detectFormatter(projectRoot);
 
     if (formatter === 'biome') {
-      // JS/TS already handled by post-edit-format via `biome check --write`
-      if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
-        return;
-      }
-
-      // .json / .md — still need quality gate
-      const resolved = resolveFormatterBin(projectRoot, 'biome');
-      if (!resolved) return;
-      const args = [...resolved.prefix, 'check', filePath];
-      if (fix) args.push('--write');
-      const result = exec(resolved.bin, args, projectRoot);
-      if (result.status !== 0 && strict) {
-        log(`[QualityGate] Biome check failed for ${filePath}`);
-      }
+      runBiome(filePath, projectRoot, fix, strict);
       return;
     }
 
     if (formatter === 'prettier') {
-      const resolved = resolveFormatterBin(projectRoot, 'prettier');
-      if (!resolved) return;
-      const args = [...resolved.prefix, fix ? '--write' : '--check', filePath];
-      const result = exec(resolved.bin, args, projectRoot);
-      if (result.status !== 0 && strict) {
-        log(`[QualityGate] Prettier check failed for ${filePath}`);
-      }
+      runPrettier(filePath, projectRoot, fix, strict);
       return;
     }
 
@@ -104,30 +166,12 @@ function maybeRunQualityGate(filePath) {
   }
 
   if (ext === '.go') {
-    if (fix) {
-      const r = exec('gofmt', ['-w', filePath]);
-      if (r.status !== 0 && strict) {
-        log(`[QualityGate] gofmt failed for ${filePath}`);
-      }
-    } else if (strict) {
-      const r = exec('gofmt', ['-l', filePath]);
-      if (r.status !== 0) {
-        log(`[QualityGate] gofmt failed for ${filePath}`);
-      } else if (r.stdout && r.stdout.trim()) {
-        log(`[QualityGate] gofmt check failed for ${filePath}`);
-      }
-    }
+    runGoFmt(filePath, fix, strict);
     return;
   }
 
   if (ext === '.py') {
-    const args = ['format'];
-    if (!fix) args.push('--check');
-    args.push(filePath);
-    const r = exec('ruff', args);
-    if (r.status !== 0 && strict) {
-      log(`[QualityGate] Ruff check failed for ${filePath}`);
-    }
+    runPython(filePath, fix, strict);
   }
 }
 
