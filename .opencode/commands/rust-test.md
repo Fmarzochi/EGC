@@ -1,6 +1,6 @@
 ---
 description: Rust TDD workflow with unit and property tests
-agent: everything-gemini:tdd-guide
+agent: egc:tdd-guide
 subtask: true
 ---
 

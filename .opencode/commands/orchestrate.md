@@ -1,6 +1,6 @@
 ---
 description: Orchestrate multiple agents for complex tasks
-agent: everything-gemini:planner
+agent: egc:planner
 subtask: true
 ---
 

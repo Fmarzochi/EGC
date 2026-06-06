@@ -136,7 +136,7 @@ async function createStateStore(options = {}) {
       '[egc-state-store] WARNING: better-sqlite3 native module unavailable.\n' +
       '  SQLite persistence is disabled. Memory features via egc-memory MCP server are unaffected.\n' +
       '  To enable full SQLite on Windows: install Visual Studio Build Tools, then re-run install.ps1\n' +
-      '  See: https://github.com/Fmarzochi/everything-gemini#installation\n'
+      '  See: https://github.com/Fmarzochi/EGC#installation\n'
     );
     return {
       dbPath,

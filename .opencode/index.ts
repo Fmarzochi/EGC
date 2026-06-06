@@ -26,8 +26,8 @@
  *
  * Option 2: Clone and use directly
  * ```bash
- * git clone https://github.com/Fmarzochi/everything-gemini
- * cd everything-gemini
+ * git clone https://github.com/Fmarzochi/EGC
+ * cd EGC
  * opencode
  * ```
  *

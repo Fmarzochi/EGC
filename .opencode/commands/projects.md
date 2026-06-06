@@ -1,6 +1,6 @@
 ---
 description: List registered projects and instinct counts
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Projects Command

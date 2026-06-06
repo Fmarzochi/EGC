@@ -73,7 +73,7 @@ mkdir tasks
 Execute agents against your tasks:
 
 ```bash
-agent-eval run --task tasks/add-retry-logic.yaml --agent everything-gemini --agent aider --runs 3
+agent-eval run --task tasks/add-retry-logic.yaml --agent egc --agent aider --runs 3
 ```
 
 Each run:
@@ -95,7 +95,7 @@ Task: add-retry-logic (3 runs each)
 ┌──────────────┬───────────┬────────┬────────┬─────────────┐
 │ Agent        │ Pass Rate │ Cost   │ Time   │ Consistency │
 ├──────────────┼───────────┼────────┼────────┼─────────────┤
-│ everything-gemini  │ 3/3       │ $0.12  │ 45s    │ 100%        │
+│ egc                │ 3/3       │ $0.12  │ 45s    │ 100%        │
 │ aider        │ 2/3       │ $0.08  │ 38s    │  67%        │
 └──────────────┴───────────┴────────┴────────┴─────────────┘
 ```

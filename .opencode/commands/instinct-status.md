@@ -1,6 +1,6 @@
 ---
 description: Show learned instincts (project + global) with confidence
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Instinct Status Command

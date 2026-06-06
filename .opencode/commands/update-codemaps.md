@@ -1,6 +1,6 @@
 ---
 description: Update codemaps for codebase navigation
-agent: everything-gemini:doc-updater
+agent: egc:doc-updater
 subtask: true
 ---
 

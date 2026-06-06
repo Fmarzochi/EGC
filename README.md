@@ -19,7 +19,7 @@
 You open Claude Code on a project you haven't touched in two weeks. Without typing anything:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projetos--everything-gemini.md
+State loaded from egc-memory via ~/.egc/state/Projetos--EGC.md
 
 Context and preferences acknowledged (terse responses).
 

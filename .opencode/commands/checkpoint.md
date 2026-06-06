@@ -1,6 +1,6 @@
 ---
 description: Save verification state and progress checkpoint
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Checkpoint Command

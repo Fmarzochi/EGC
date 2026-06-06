@@ -496,7 +496,7 @@ test('user-facing docs do not use the legacy non-URL marketplace add form', () =
   const offenders = [];
   for (const filePath of markdownFiles) {
     const source = fs.readFileSync(filePath, 'utf8');
-    if (source.includes('/plugin marketplace add Fmarzochi/everything-gemini')) {
+    if (source.includes('/plugin marketplace add Fmarzochi/EGC')) {
       offenders.push(path.relative(repoRoot, filePath));
     }
   }

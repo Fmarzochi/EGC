@@ -1,6 +1,6 @@
 ---
 description: Fix Go build and vet errors
-agent: everything-gemini:go-build-resolver
+agent: egc:go-build-resolver
 subtask: true
 ---
 

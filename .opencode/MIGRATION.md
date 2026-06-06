@@ -184,7 +184,7 @@ Create a detailed implementation plan for: {input}
 ```markdown
 ---
 description: Create implementation plan
-agent: everything-gemini:planner
+agent: egc:planner
 ---
 
 Create a detailed implementation plan for: $ARGUMENTS
@@ -365,4 +365,4 @@ If you need to switch back:
 
 For issues specific to:
 - **OpenCode CLI**: Report to OpenCode's issue tracker
-- **EGC Configuration**: Report to [github.com/Fmarzochi/everything-gemini](https://github.com/Fmarzochi/everything-gemini)
+- **EGC Configuration**: Report to [github.com/Fmarzochi/EGC](https://github.com/Fmarzochi/EGC)

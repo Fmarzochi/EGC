@@ -108,7 +108,7 @@ jobs:
 
           ### Package Notes
           - npm package: \`egc-universal\`
-          - Gemini marketplace/plugin identifier: \`everything-gemini@everything-gemini\`
+          - Gemini marketplace/plugin identifier: \`egc@egc\`
           EOF
 
       - name: Create GitHub Release

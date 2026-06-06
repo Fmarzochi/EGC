@@ -1,6 +1,6 @@
 ---
 description: Create implementation plan with risk assessment
-agent: everything-gemini:planner
+agent: egc:planner
 subtask: true
 ---
 

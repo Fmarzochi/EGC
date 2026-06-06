@@ -45,7 +45,7 @@ for (const relativePath of publicInstallDocs) {
   });
 
   test(`${relativePath} documents the canonical marketplace plugin identifier`, () => {
-    assert.ok(content.includes('everything-gemini@everything-gemini'));
+    assert.ok(content.includes('egc@egc'));
   });
 }
 
@@ -99,7 +99,7 @@ for (const relativePath of publicCommandNamespaceDocs) {
       'Expected docs not to advertise the unsupported /egc: plugin alias'
     );
     assert.ok(
-      content.includes('/everything-gemini:plan'),
+      content.includes('/egc:plan'),
       'Expected docs to show the canonical plugin command namespace'
     );
   });

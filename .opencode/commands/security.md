@@ -1,6 +1,6 @@
 ---
 description: Run comprehensive security review
-agent: everything-gemini:security-reviewer
+agent: egc:security-reviewer
 subtask: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: Export instincts for sharing
-agent: everything-gemini:build
+agent: egc:build
 ---
 
 # Instinct Export Command

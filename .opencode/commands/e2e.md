@@ -1,6 +1,6 @@
 ---
 description: Generate and run E2E tests with Playwright
-agent: everything-gemini:e2e-runner
+agent: egc:e2e-runner
 subtask: true
 ---
 

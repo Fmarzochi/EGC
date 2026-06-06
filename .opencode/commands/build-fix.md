@@ -1,6 +1,6 @@
 ---
 description: Fix build and TypeScript errors with minimal changes
-agent: everything-gemini:build-error-resolver
+agent: egc:build-error-resolver
 subtask: true
 ---
 
