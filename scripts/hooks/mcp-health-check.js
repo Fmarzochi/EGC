@@ -518,6 +518,33 @@ function emitLogs(logs) {
   }
 }
 
+/**
+ * Attempts to reconnect a server and re-probe it. Returns an object with:
+ * - restored: true if the server is confirmed healthy after reconnect
+ * - reconnect: the result from attemptReconnect (attempted, success, reason)
+ * - reprobeReason: set when reconnect succeeded but the reprobe still failed
+ *
+ * On success, marks the server healthy and persists state before returning.
+ */
+async function attemptRecovery(serverName, resolvedConfig, state, statePathValue, now) {
+  const reconnect = attemptReconnect(serverName);
+  if (!reconnect.success) {
+    return { restored: false, reconnect, reprobeReason: null };
+  }
+
+  const reprobe = await probeServer(serverName, resolvedConfig);
+  if (reprobe.ok) {
+    markHealthy(state, serverName, now, {
+      source: resolvedConfig.source,
+      restoredBy: 'reconnect-command'
+    });
+    saveState(statePathValue, state);
+    return { restored: true, reconnect, reprobeReason: null };
+  }
+
+  return { restored: false, reconnect, reprobeReason: reprobe.reason };
+}
+
 async function handlePreToolUse(rawInput, input, target, statePathValue, now) {
   const logs = [];
   const state = loadState(statePathValue);
@@ -554,19 +581,14 @@ async function handlePreToolUse(rawInput, input, target, statePathValue, now) {
 
   let reconnect = { attempted: false, success: false, reason: 'probe failed' };
   if (probe.failureCode || previous.status === 'unhealthy') {
-    reconnect = attemptReconnect(target.server);
-    if (reconnect.success) {
-      const reprobe = await probeServer(target.server, resolvedConfig);
-      if (reprobe.ok) {
-        markHealthy(state, target.server, now, {
-          source: resolvedConfig.source,
-          restoredBy: 'reconnect-command'
-        });
-        saveState(statePathValue, state);
-        logs.push(`[MCPHealthCheck] ${target.server} connection restored after reconnect`);
-        return { rawInput, exitCode: 0, logs };
-      }
-      probe.reason = `${probe.reason}; reconnect reprobe failed: ${reprobe.reason}`;
+    const recovery = await attemptRecovery(target.server, resolvedConfig, state, statePathValue, now);
+    if (recovery.restored) {
+      logs.push(`[MCPHealthCheck] ${target.server} connection restored after reconnect`);
+      return { rawInput, exitCode: 0, logs };
+    }
+    reconnect = recovery.reconnect;
+    if (recovery.reprobeReason) {
+      probe.reason = `${probe.reason}; reconnect reprobe failed: ${recovery.reprobeReason}`;
     }
   }
 

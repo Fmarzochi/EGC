@@ -281,6 +281,78 @@ function findGit(input, start) {
 }
 
 /**
+ * Returns true when `arg` is a valid subcommand candidate token immediately
+ * after "git": it must be preceded by whitespace and followed by whitespace or
+ * a shell metacharacter, and must not be separated from "git" by a pipeline or
+ * semicolon, and must not sit inside a comment.
+ */
+function isValidSubcommandCandidate(input, cmd, cmdIdx, gitEnd) {
+  const before = cmdIdx > 0 ? input[cmdIdx - 1] : ' ';
+  const after = input[cmdIdx + cmd.length] || ' ';
+  if (!/\s/.test(before)) return false;
+  if (!/[\s;&#|>)\]}"']/.test(after) && after !== '') return false;
+  if (/[;|]/.test(input.slice(gitEnd, cmdIdx))) return false;
+  if (isInComment(input, cmdIdx)) return false;
+  return true;
+}
+
+/**
+ * Returns true when all tokens in the gap between "git" and the candidate
+ * subcommand are flags or flag arguments (i.e. the candidate is the first
+ * non-flag word after "git").
+ */
+function onlyFlagsBeforeCandidate(tokens) {
+  let expectFlagArg = false;
+  for (const t of tokens) {
+    if (expectFlagArg) { expectFlagArg = false; continue; }
+    if (t.startsWith('-')) {
+      if (t === '-c' || t === '-C' || t === '--work-tree' || t === '--git-dir' ||
+          t === '--namespace' || t === '--super-prefix') {
+        expectFlagArg = true;
+      }
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Scans `input` for all known git subcommands that appear after the "git"
+ * token described by `git`, and returns the one closest to "git" that is a
+ * valid subcommand (not a flag value or argument to another subcommand).
+ */
+function findBestSubcommand(input, git) {
+  let bestCmd = null;
+  let bestIdx = Infinity;
+
+  for (const cmd of GIT_COMMANDS_WITH_NO_VERIFY) {
+    let searchPos = git.idx + git.len;
+    while (searchPos < input.length) {
+      const cmdIdx = input.indexOf(cmd, searchPos);
+      if (cmdIdx === -1) break;
+
+      if (!isValidSubcommandCandidate(input, cmd, cmdIdx, git.idx + git.len)) {
+        searchPos = cmdIdx + 1;
+        continue;
+      }
+
+      const gap = input.slice(git.idx + git.len, cmdIdx);
+      const tokens = gap.trim().split(/\s+/).filter(Boolean);
+      if (!onlyFlagsBeforeCandidate(tokens)) { searchPos = cmdIdx + 1; continue; }
+
+      if (cmdIdx < bestIdx) {
+        bestIdx = cmdIdx;
+        bestCmd = cmd;
+      }
+      break;
+    }
+  }
+
+  return { bestCmd, bestIdx };
+}
+
+/**
  * Detect which git subcommand (commit, push, etc.) is being invoked.
  * Returns { command, offset } where offset is the position right after the
  * subcommand keyword, so callers can scope flag checks to only that portion.
@@ -298,52 +370,7 @@ function detectGitCommand(input, start = 0) {
     // Find the first matching subcommand token after "git".
     // We pick the one closest to "git" so that argument values like
     // "git push origin commit" don't misclassify "commit" as the subcommand.
-    let bestCmd = null;
-    let bestIdx = Infinity;
-
-    for (const cmd of GIT_COMMANDS_WITH_NO_VERIFY) {
-      let searchPos = git.idx + git.len;
-      while (searchPos < input.length) {
-        const cmdIdx = input.indexOf(cmd, searchPos);
-        if (cmdIdx === -1) break;
-
-        const before = cmdIdx > 0 ? input[cmdIdx - 1] : ' ';
-        const after = input[cmdIdx + cmd.length] || ' ';
-        if (!/\s/.test(before)) { searchPos = cmdIdx + 1; continue; }
-        if (!/[\s;&#|>)\]}"']/.test(after) && after !== '') { searchPos = cmdIdx + 1; continue; }
-        if (/[;|]/.test(input.slice(git.idx + git.len, cmdIdx))) break;
-        if (isInComment(input, cmdIdx)) { searchPos = cmdIdx + 1; continue; }
-
-        // Verify this token is the first non-flag word after "git" — i.e. the
-        // actual subcommand, not an argument value to a different subcommand.
-        const gap = input.slice(git.idx + git.len, cmdIdx);
-        const tokens = gap.trim().split(/\s+/).filter(Boolean);
-        // Every token before the candidate must be a flag or a flag argument.
-        // Git global flags like -c take a value argument (e.g. -c key=value).
-        let onlyFlagsAndArgs = true;
-        let expectFlagArg = false;
-        for (const t of tokens) {
-          if (expectFlagArg) { expectFlagArg = false; continue; }
-          if (t.startsWith('-')) {
-            // -c is a git global flag that takes the next token as its argument
-            if (t === '-c' || t === '-C' || t === '--work-tree' || t === '--git-dir' ||
-                t === '--namespace' || t === '--super-prefix') {
-              expectFlagArg = true;
-            }
-            continue;
-          }
-          onlyFlagsAndArgs = false;
-          break;
-        }
-        if (!onlyFlagsAndArgs) { searchPos = cmdIdx + 1; continue; }
-
-        if (cmdIdx < bestIdx) {
-          bestIdx = cmdIdx;
-          bestCmd = cmd;
-        }
-        break;
-      }
-    }
+    const { bestCmd, bestIdx } = findBestSubcommand(input, git);
 
     if (bestCmd) {
       return {

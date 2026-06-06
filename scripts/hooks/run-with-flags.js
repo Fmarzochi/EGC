@@ -86,54 +86,41 @@ function getPluginRoot() {
   return path.resolve(__dirname, '..', '..');
 }
 
-async function main() {
-  const [, , hookId, relScriptPath, profilesCsv] = process.argv;
-  const { raw, truncated } = await readStdinRaw();
-
-  if (!hookId || !relScriptPath) {
-    process.stdout.write(raw);
-    process.exit(0);
-  }
-
-  if (!isHookEnabled(hookId, { profiles: profilesCsv })) {
-    process.stdout.write(raw);
-    process.exit(0);
-  }
-
-  const pluginRoot = getPluginRoot();
-  const resolvedRoot = path.resolve(pluginRoot);
-  const scriptPath = path.resolve(pluginRoot, relScriptPath);
-
-  // Prevent path traversal outside the plugin root
+/**
+ * Validates that `scriptPath` is safely contained within `resolvedRoot`,
+ * checks existence, and re-validates after resolving symlinks to prevent
+ * symlink escape attacks. Throws an Error with a descriptive message if any
+ * check fails; callers must handle the error and allow the hook to pass through.
+ */
+function assertSafeScriptPath(hookId, scriptPath, resolvedRoot) {
   const relPath = path.relative(resolvedRoot, scriptPath);
   if (!relPath || relPath.startsWith('..') || path.isAbsolute(relPath)) {
-    process.stderr.write(`[Hook] Path traversal rejected for ${hookId}: ${scriptPath}\n`);
-    process.stdout.write(raw);
-    process.exit(0);
+    throw new Error(`[Hook] Path traversal rejected for ${hookId}: ${scriptPath}`);
   }
 
   if (!fs.existsSync(scriptPath)) {
-    process.stderr.write(`[Hook] Script not found for ${hookId}: ${scriptPath}\n`);
-    process.stdout.write(raw);
-    process.exit(0);
+    throw new Error(`[Hook] Script not found for ${hookId}: ${scriptPath}`);
   }
 
-  // Resolve symlinks and re-verify containment to prevent symlink escape
   try {
     const realScript = fs.realpathSync(scriptPath);
     const realRoot = fs.realpathSync(resolvedRoot);
     const realRel = path.relative(realRoot, realScript);
     if (!realRel || realRel.startsWith('..') || path.isAbsolute(realRel)) {
-      process.stderr.write(`[Hook] Symlink traversal rejected for ${hookId}: ${scriptPath}\n`);
-      process.stdout.write(raw);
-      process.exit(0);
+      throw new Error(`[Hook] Symlink traversal rejected for ${hookId}: ${scriptPath}`);
     }
-  } catch (_) {
-    process.stderr.write(`[Hook] Path resolution failed for ${hookId}: ${scriptPath}\n`);
-    process.stdout.write(raw);
-    process.exit(0);
+  } catch (err) {
+    if (err.message && err.message.startsWith('[Hook]')) throw err;
+    throw new Error(`[Hook] Path resolution failed for ${hookId}: ${scriptPath}`);
   }
+}
 
+/**
+ * Executes the hook at `scriptPath`. Prefers direct require() when the hook
+ * exports run(); falls back to a legacy spawnSync child process otherwise.
+ * Handles output emission and process.exit on all code paths.
+ */
+async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
   // Prefer direct require() when the hook exports a run(rawInput) function.
   // This eliminates one Node.js process spawn (~50-100ms savings per hook).
   //
@@ -149,7 +136,6 @@ async function main() {
       hookModule = require(scriptPath);
     } catch (requireErr) {
       process.stderr.write(`[Hook] require() failed for ${hookId}: ${requireErr.message}\n`);
-      // Fall through to legacy spawnSync path
     }
   }
 
@@ -204,6 +190,35 @@ async function main() {
   }
 
   process.exit(Number.isInteger(result.status) ? result.status : 0);
+}
+
+async function main() {
+  const [, , hookId, relScriptPath, profilesCsv] = process.argv;
+  const { raw, truncated } = await readStdinRaw();
+
+  if (!hookId || !relScriptPath) {
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
+  if (!isHookEnabled(hookId, { profiles: profilesCsv })) {
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
+  const pluginRoot = getPluginRoot();
+  const resolvedRoot = path.resolve(pluginRoot);
+  const scriptPath = path.resolve(pluginRoot, relScriptPath);
+
+  try {
+    assertSafeScriptPath(hookId, scriptPath, resolvedRoot);
+  } catch (pathErr) {
+    process.stderr.write(`${pathErr.message}\n`);
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
+  await executeHook(hookId, scriptPath, pluginRoot, raw, truncated);
 }
 
 main().catch(err => {
