@@ -31,6 +31,147 @@ function readJson(filePath, label) {
   }
 }
 
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function validateNoAdditionalProperties(value, instancePath, allowedKeys, pushError) {
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.includes(key)) {
+      pushError(`${instancePath}/${key}`, 'must NOT have additional properties');
+    }
+  }
+}
+
+function validateStringArray(value, instancePath, pushError) {
+  if (!Array.isArray(value)) {
+    pushError(instancePath, 'must be array');
+    return;
+  }
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (!isNonEmptyString(value[index])) {
+      pushError(`${instancePath}/${index}`, 'must be non-empty string');
+    }
+  }
+}
+
+function validateOptionalString(value, instancePath, pushError) {
+  if (value !== undefined && value !== null && !isNonEmptyString(value)) {
+    pushError(instancePath, 'must be string or null');
+  }
+}
+
+function validateStateTarget(target, pushError) {
+  if (!target || typeof target !== 'object' || Array.isArray(target)) {
+    pushError('/target', 'must be object');
+    return;
+  }
+
+  validateNoAdditionalProperties(target, '/target', ['id', 'target', 'kind', 'root', 'installStatePath'], pushError);
+  if (!isNonEmptyString(target.id)) {
+    pushError('/target/id', 'must be non-empty string');
+  }
+  validateOptionalString(target.target, '/target/target', pushError);
+  if (target.kind !== undefined && !['home', 'project'].includes(target.kind)) {
+    pushError('/target/kind', 'must be equal to one of the allowed values');
+  }
+  if (!isNonEmptyString(target.root)) {
+    pushError('/target/root', 'must be non-empty string');
+  }
+  if (!isNonEmptyString(target.installStatePath)) {
+    pushError('/target/installStatePath', 'must be non-empty string');
+  }
+}
+
+function validateStateRequest(request, pushError) {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    pushError('/request', 'must be object');
+    return;
+  }
+
+  validateNoAdditionalProperties(
+    request,
+    '/request',
+    ['profile', 'modules', 'includeComponents', 'excludeComponents', 'legacyLanguages', 'legacyMode'],
+    pushError
+  );
+  if (!(Object.prototype.hasOwnProperty.call(request, 'profile') && (request.profile === null || typeof request.profile === 'string'))) {
+    pushError('/request/profile', 'must be string or null');
+  }
+  validateStringArray(request.modules, '/request/modules', pushError);
+  validateStringArray(request.includeComponents, '/request/includeComponents', pushError);
+  validateStringArray(request.excludeComponents, '/request/excludeComponents', pushError);
+  validateStringArray(request.legacyLanguages, '/request/legacyLanguages', pushError);
+  if (typeof request.legacyMode !== 'boolean') {
+    pushError('/request/legacyMode', 'must be boolean');
+  }
+}
+
+function validateStateResolution(resolution, pushError) {
+  if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) {
+    pushError('/resolution', 'must be object');
+    return;
+  }
+
+  validateNoAdditionalProperties(resolution, '/resolution', ['selectedModules', 'skippedModules'], pushError);
+  validateStringArray(resolution.selectedModules, '/resolution/selectedModules', pushError);
+  validateStringArray(resolution.skippedModules, '/resolution/skippedModules', pushError);
+}
+
+function validateStateSource(source, pushError) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    pushError('/source', 'must be object');
+    return;
+  }
+
+  validateNoAdditionalProperties(source, '/source', ['repoVersion', 'repoCommit', 'manifestVersion'], pushError);
+  validateOptionalString(source.repoVersion, '/source/repoVersion', pushError);
+  validateOptionalString(source.repoCommit, '/source/repoCommit', pushError);
+  if (!Number.isInteger(source.manifestVersion) || source.manifestVersion < 1) {
+    pushError('/source/manifestVersion', 'must be integer >= 1');
+  }
+}
+
+function validateStateOperations(operations, pushError) {
+  if (!Array.isArray(operations)) {
+    pushError('/operations', 'must be array');
+    return;
+  }
+
+  for (let index = 0; index < operations.length; index += 1) {
+    const operation = operations[index];
+    const instancePath = `/operations/${index}`;
+
+    if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
+      pushError(instancePath, 'must be object');
+      continue;
+    }
+
+    if (!isNonEmptyString(operation.kind)) {
+      pushError(`${instancePath}/kind`, 'must be non-empty string');
+    }
+    if (!isNonEmptyString(operation.moduleId)) {
+      pushError(`${instancePath}/moduleId`, 'must be non-empty string');
+    }
+    if (!isNonEmptyString(operation.sourceRelativePath)) {
+      pushError(`${instancePath}/sourceRelativePath`, 'must be non-empty string');
+    }
+    if (!isNonEmptyString(operation.destinationPath)) {
+      pushError(`${instancePath}/destinationPath`, 'must be non-empty string');
+    }
+    if (!isNonEmptyString(operation.strategy)) {
+      pushError(`${instancePath}/strategy`, 'must be non-empty string');
+    }
+    if (!isNonEmptyString(operation.ownership)) {
+      pushError(`${instancePath}/ownership`, 'must be non-empty string');
+    }
+    if (typeof operation.scaffoldOnly !== 'boolean') {
+      pushError(`${instancePath}/scaffoldOnly`, 'must be boolean');
+    }
+  }
+}
+
 function getValidator() {
   if (cachedValidator) {
     return cachedValidator;
@@ -53,41 +194,7 @@ function createFallbackValidator() {
     validate.errors = errors;
 
     function pushError(instancePath, message) {
-      errors.push({
-        instancePath,
-        message,
-      });
-    }
-
-    function isNonEmptyString(value) {
-      return typeof value === 'string' && value.length > 0;
-    }
-
-    function validateNoAdditionalProperties(value, instancePath, allowedKeys) {
-      for (const key of Object.keys(value)) {
-        if (!allowedKeys.includes(key)) {
-          pushError(`${instancePath}/${key}`, 'must NOT have additional properties');
-        }
-      }
-    }
-
-    function validateStringArray(value, instancePath) {
-      if (!Array.isArray(value)) {
-        pushError(instancePath, 'must be array');
-        return;
-      }
-
-      for (let index = 0; index < value.length; index += 1) {
-        if (!isNonEmptyString(value[index])) {
-          pushError(`${instancePath}/${index}`, 'must be non-empty string');
-        }
-      }
-    }
-
-    function validateOptionalString(value, instancePath) {
-      if (value !== undefined && value !== null && !isNonEmptyString(value)) {
-        pushError(instancePath, 'must be string or null');
-      }
+      errors.push({ instancePath, message });
     }
 
     if (!state || typeof state !== 'object' || Array.isArray(state)) {
@@ -98,7 +205,8 @@ function createFallbackValidator() {
     validateNoAdditionalProperties(
       state,
       '',
-      ['schemaVersion', 'installedAt', 'lastValidatedAt', 'target', 'request', 'resolution', 'source', 'operations']
+      ['schemaVersion', 'installedAt', 'lastValidatedAt', 'target', 'request', 'resolution', 'source', 'operations'],
+      pushError
     );
 
     if (state.schemaVersion !== 'egc.install.v1') {
@@ -113,103 +221,11 @@ function createFallbackValidator() {
       pushError('/lastValidatedAt', 'must be non-empty string');
     }
 
-    const target = state.target;
-    if (!target || typeof target !== 'object' || Array.isArray(target)) {
-      pushError('/target', 'must be object');
-    } else {
-      validateNoAdditionalProperties(target, '/target', ['id', 'target', 'kind', 'root', 'installStatePath']);
-      if (!isNonEmptyString(target.id)) {
-        pushError('/target/id', 'must be non-empty string');
-      }
-      validateOptionalString(target.target, '/target/target');
-      if (target.kind !== undefined && !['home', 'project'].includes(target.kind)) {
-        pushError('/target/kind', 'must be equal to one of the allowed values');
-      }
-      if (!isNonEmptyString(target.root)) {
-        pushError('/target/root', 'must be non-empty string');
-      }
-      if (!isNonEmptyString(target.installStatePath)) {
-        pushError('/target/installStatePath', 'must be non-empty string');
-      }
-    }
-
-    const request = state.request;
-    if (!request || typeof request !== 'object' || Array.isArray(request)) {
-      pushError('/request', 'must be object');
-    } else {
-      validateNoAdditionalProperties(
-        request,
-        '/request',
-        ['profile', 'modules', 'includeComponents', 'excludeComponents', 'legacyLanguages', 'legacyMode']
-      );
-      if (!(Object.prototype.hasOwnProperty.call(request, 'profile') && (request.profile === null || typeof request.profile === 'string'))) {
-        pushError('/request/profile', 'must be string or null');
-      }
-      validateStringArray(request.modules, '/request/modules');
-      validateStringArray(request.includeComponents, '/request/includeComponents');
-      validateStringArray(request.excludeComponents, '/request/excludeComponents');
-      validateStringArray(request.legacyLanguages, '/request/legacyLanguages');
-      if (typeof request.legacyMode !== 'boolean') {
-        pushError('/request/legacyMode', 'must be boolean');
-      }
-    }
-
-    const resolution = state.resolution;
-    if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) {
-      pushError('/resolution', 'must be object');
-    } else {
-      validateNoAdditionalProperties(resolution, '/resolution', ['selectedModules', 'skippedModules']);
-      validateStringArray(resolution.selectedModules, '/resolution/selectedModules');
-      validateStringArray(resolution.skippedModules, '/resolution/skippedModules');
-    }
-
-    const source = state.source;
-    if (!source || typeof source !== 'object' || Array.isArray(source)) {
-      pushError('/source', 'must be object');
-    } else {
-      validateNoAdditionalProperties(source, '/source', ['repoVersion', 'repoCommit', 'manifestVersion']);
-      validateOptionalString(source.repoVersion, '/source/repoVersion');
-      validateOptionalString(source.repoCommit, '/source/repoCommit');
-      if (!Number.isInteger(source.manifestVersion) || source.manifestVersion < 1) {
-        pushError('/source/manifestVersion', 'must be integer >= 1');
-      }
-    }
-
-    if (!Array.isArray(state.operations)) {
-      pushError('/operations', 'must be array');
-    } else {
-      for (let index = 0; index < state.operations.length; index += 1) {
-        const operation = state.operations[index];
-        const instancePath = `/operations/${index}`;
-
-        if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
-          pushError(instancePath, 'must be object');
-          continue;
-        }
-
-        if (!isNonEmptyString(operation.kind)) {
-          pushError(`${instancePath}/kind`, 'must be non-empty string');
-        }
-        if (!isNonEmptyString(operation.moduleId)) {
-          pushError(`${instancePath}/moduleId`, 'must be non-empty string');
-        }
-        if (!isNonEmptyString(operation.sourceRelativePath)) {
-          pushError(`${instancePath}/sourceRelativePath`, 'must be non-empty string');
-        }
-        if (!isNonEmptyString(operation.destinationPath)) {
-          pushError(`${instancePath}/destinationPath`, 'must be non-empty string');
-        }
-        if (!isNonEmptyString(operation.strategy)) {
-          pushError(`${instancePath}/strategy`, 'must be non-empty string');
-        }
-        if (!isNonEmptyString(operation.ownership)) {
-          pushError(`${instancePath}/ownership`, 'must be non-empty string');
-        }
-        if (typeof operation.scaffoldOnly !== 'boolean') {
-          pushError(`${instancePath}/scaffoldOnly`, 'must be boolean');
-        }
-      }
-    }
+    validateStateTarget(state.target, pushError);
+    validateStateRequest(state.request, pushError);
+    validateStateResolution(state.resolution, pushError);
+    validateStateSource(state.source, pushError);
+    validateStateOperations(state.operations, pushError);
 
     return errors.length === 0;
   };

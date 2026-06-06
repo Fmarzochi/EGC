@@ -30,6 +30,42 @@ const SUMMARY_START_MARKER = '<!-- EGC:SUMMARY:START -->';
 const SUMMARY_END_MARKER = '<!-- EGC:SUMMARY:END -->';
 const SESSION_SEPARATOR = '\n---\n';
 
+function extractUserMessage(entry) {
+  if (entry.type !== 'user' && entry.role !== 'user' && entry.message?.role !== 'user') {
+    return '';
+  }
+  const rawContent = entry.message?.content ?? entry.content;
+  const text = typeof rawContent === 'string'
+    ? rawContent
+    : Array.isArray(rawContent)
+      ? rawContent.map(c => (c && c.text) || '').join(' ')
+      : '';
+  return stripAnsi(text).trim();
+}
+
+function extractDirectToolUse(entry, toolsUsed, filesModified) {
+  if (entry.type !== 'tool_use' && !entry.tool_name) return;
+  const toolName = entry.tool_name || entry.name || '';
+  if (toolName) toolsUsed.add(toolName);
+  const filePath = entry.tool_input?.file_path || entry.input?.file_path || '';
+  if (filePath && (toolName === 'Edit' || toolName === 'Write')) {
+    filesModified.add(filePath);
+  }
+}
+
+function extractAssistantBlockToolUse(entry, toolsUsed, filesModified) {
+  if (entry.type !== 'assistant' || !Array.isArray(entry.message?.content)) return;
+  for (const block of entry.message.content) {
+    if (block.type !== 'tool_use') continue;
+    const toolName = block.name || '';
+    if (toolName) toolsUsed.add(toolName);
+    const filePath = block.input?.file_path || '';
+    if (filePath && (toolName === 'Edit' || toolName === 'Write')) {
+      filesModified.add(filePath);
+    }
+  }
+}
+
 /**
  * Extract a meaningful summary from the session transcript.
  * Reads the JSONL transcript and pulls out key information:
@@ -51,46 +87,13 @@ function extractSessionSummary(transcriptPath) {
     try {
       const entry = JSON.parse(line);
 
-      // Collect user messages (first 200 chars each)
-      if (entry.type === 'user' || entry.role === 'user' || entry.message?.role === 'user') {
-        // Support both direct content and nested message.content (Gemini Code JSONL format)
-        const rawContent = entry.message?.content ?? entry.content;
-        const text = typeof rawContent === 'string'
-          ? rawContent
-          : Array.isArray(rawContent)
-            ? rawContent.map(c => (c && c.text) || '').join(' ')
-            : '';
-        const cleaned = stripAnsi(text).trim();
-        if (cleaned) {
-          userMessages.push(cleaned.slice(0, 200));
-        }
+      const userText = extractUserMessage(entry);
+      if (userText) {
+        userMessages.push(userText.slice(0, 200));
       }
 
-      // Collect tool names and modified files (direct tool_use entries)
-      if (entry.type === 'tool_use' || entry.tool_name) {
-        const toolName = entry.tool_name || entry.name || '';
-        if (toolName) toolsUsed.add(toolName);
-
-        const filePath = entry.tool_input?.file_path || entry.input?.file_path || '';
-        if (filePath && (toolName === 'Edit' || toolName === 'Write')) {
-          filesModified.add(filePath);
-        }
-      }
-
-      // Extract tool uses from assistant message content blocks (Gemini Code JSONL format)
-      if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
-        for (const block of entry.message.content) {
-          if (block.type === 'tool_use') {
-            const toolName = block.name || '';
-            if (toolName) toolsUsed.add(toolName);
-
-            const filePath = block.input?.file_path || '';
-            if (filePath && (toolName === 'Edit' || toolName === 'Write')) {
-              filesModified.add(filePath);
-            }
-          }
-        }
-      }
+      extractDirectToolUse(entry, toolsUsed, filesModified);
+      extractAssistantBlockToolUse(entry, toolsUsed, filesModified);
     } catch {
       parseErrors++;
     }
@@ -103,7 +106,7 @@ function extractSessionSummary(transcriptPath) {
   if (userMessages.length === 0) return null;
 
   return {
-    userMessages: userMessages.slice(-10), // Last 10 user messages
+    userMessages: userMessages.slice(-10),
     toolsUsed: Array.from(toolsUsed).slice(0, 20),
     filesModified: Array.from(filesModified).slice(0, 30),
     totalMessages: userMessages.length

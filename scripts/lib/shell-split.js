@@ -1,5 +1,9 @@
 'use strict';
 
+function pushSegment(current, segments) {
+  if (current.trim()) segments.push(current.trim());
+}
+
 /**
  * Split a shell command into segments by operators (&&, ||, ;, &)
  * while respecting quoting (single/double) and escaped characters.
@@ -44,7 +48,7 @@ function splitShellSegments(command) {
 
     // && operator
     if (ch === '&' && next === '&') {
-      if (current.trim()) segments.push(current.trim());
+      pushSegment(current, segments);
       current = '';
       i++;
       continue;
@@ -52,7 +56,7 @@ function splitShellSegments(command) {
 
     // || operator
     if (ch === '|' && next === '|') {
-      if (current.trim()) segments.push(current.trim());
+      pushSegment(current, segments);
       current = '';
       i++;
       continue;
@@ -60,7 +64,7 @@ function splitShellSegments(command) {
 
     // ; separator
     if (ch === ';') {
-      if (current.trim()) segments.push(current.trim());
+      pushSegment(current, segments);
       current = '';
       continue;
     }
@@ -71,7 +75,7 @@ function splitShellSegments(command) {
         current += ch;
         continue;
       }
-      if (current.trim()) segments.push(current.trim());
+      pushSegment(current, segments);
       current = '';
       continue;
     }
@@ -79,7 +83,7 @@ function splitShellSegments(command) {
     current += ch;
   }
 
-  if (current.trim()) segments.push(current.trim());
+  pushSegment(current, segments);
   return segments;
 }
 

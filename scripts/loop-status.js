@@ -382,6 +382,59 @@ function toIso(date) {
   return date ? date.toISOString() : null;
 }
 
+function buildSignals(latestWake, latestAssistantProgressAt, pendingToolList, parseErrors, nowMs, normalizedOptions) {
+  const signals = [];
+  if (latestWake) {
+    const scheduledAt = parseTimestamp(latestWake.scheduledAt);
+    const dueAt = parseTimestamp(latestWake.dueAt);
+    const thresholdMs = scheduledAt
+      ? scheduledAt.getTime() + latestWake.delaySeconds * normalizedOptions.wakeGraceMultiplier * 1000
+      : null;
+    const hasAssistantProgressAfterDue = Boolean(
+      dueAt
+      && latestAssistantProgressAt
+      && latestAssistantProgressAt.getTime() >= dueAt.getTime()
+    );
+
+    if (thresholdMs && nowMs >= thresholdMs && !hasAssistantProgressAfterDue) {
+      signals.push({
+        delaySeconds: latestWake.delaySeconds,
+        dueAt: latestWake.dueAt,
+        overdueSeconds: dueAt ? Math.max(0, Math.floor((nowMs - dueAt.getTime()) / 1000)) : null,
+        scheduledAt: latestWake.scheduledAt,
+        toolUseId: latestWake.toolUseId,
+        type: 'schedule_wakeup_overdue',
+      });
+    }
+  }
+
+  for (const tool of pendingToolList) {
+    if (
+      tool.name === 'Bash'
+      && tool.ageSeconds !== null
+      && tool.ageSeconds >= normalizedOptions.bashTimeoutSeconds
+    ) {
+      signals.push({
+        ageSeconds: tool.ageSeconds,
+        command: tool.command,
+        startedAt: tool.startedAt,
+        thresholdSeconds: normalizedOptions.bashTimeoutSeconds,
+        toolUseId: tool.toolUseId,
+        type: 'pending_bash_tool_result',
+      });
+    }
+  }
+
+  if (parseErrors > 0) {
+    signals.push({
+      count: parseErrors,
+      type: 'transcript_parse_errors',
+    });
+  }
+
+  return signals;
+}
+
 function buildRecommendation(signals) {
   if (signals.some(signal => signal.type === 'pending_bash_tool_result')) {
     return 'Open the transcript or interrupt the parked session; the Bash result appears stale.';
@@ -462,54 +515,7 @@ function analyzeTranscript(transcriptPath, options = {}) {
     };
   });
 
-  const signals = [];
-  if (latestWake) {
-    const scheduledAt = parseTimestamp(latestWake.scheduledAt);
-    const dueAt = parseTimestamp(latestWake.dueAt);
-    const thresholdMs = scheduledAt
-      ? scheduledAt.getTime() + latestWake.delaySeconds * normalizedOptions.wakeGraceMultiplier * 1000
-      : null;
-    const hasAssistantProgressAfterDue = Boolean(
-      dueAt
-      && latestAssistantProgressAt
-      && latestAssistantProgressAt.getTime() >= dueAt.getTime()
-    );
-
-    if (thresholdMs && nowMs >= thresholdMs && !hasAssistantProgressAfterDue) {
-      signals.push({
-        delaySeconds: latestWake.delaySeconds,
-        dueAt: latestWake.dueAt,
-        overdueSeconds: dueAt ? Math.max(0, Math.floor((nowMs - dueAt.getTime()) / 1000)) : null,
-        scheduledAt: latestWake.scheduledAt,
-        toolUseId: latestWake.toolUseId,
-        type: 'schedule_wakeup_overdue',
-      });
-    }
-  }
-
-  for (const tool of pendingToolList) {
-    if (
-      tool.name === 'Bash'
-      && tool.ageSeconds !== null
-      && tool.ageSeconds >= normalizedOptions.bashTimeoutSeconds
-    ) {
-      signals.push({
-        ageSeconds: tool.ageSeconds,
-        command: tool.command,
-        startedAt: tool.startedAt,
-        thresholdSeconds: normalizedOptions.bashTimeoutSeconds,
-        toolUseId: tool.toolUseId,
-        type: 'pending_bash_tool_result',
-      });
-    }
-  }
-
-  if (parseErrors > 0) {
-    signals.push({
-      count: parseErrors,
-      type: 'transcript_parse_errors',
-    });
-  }
+  const signals = buildSignals(latestWake, latestAssistantProgressAt, pendingToolList, parseErrors, nowMs, normalizedOptions);
 
   return {
     eventCount: entries.length,
