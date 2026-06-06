@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # EGC Trae Installer
-# Installs Everything Gemini Code workflows into a Trae project.
+# Installs EGC (Extended Global Context) workflows into a Trae project.
 #
 # Usage:
 #   ./install.sh              # Install to current directory
