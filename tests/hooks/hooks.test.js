@@ -4763,7 +4763,7 @@ async function runTests() {
   console.log('\nRound 59: pre-compact.js (read-only session file — appendFile error):');
 
   if (
-    await asyncTest('exits 0 when session file is read-only (appendFile fails)', async () => {
+    await asyncTest('exits 1 when session file is read-only (appendFile fails)', async () => {
       if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
         console.log('    (skipped — not supported on this platform)');
         return;
@@ -4781,8 +4781,8 @@ async function runTests() {
           HOME: isoHome,
           USERPROFILE: isoHome
         });
-        // Should exit 0 — hooks must not block the user (catch at lines 45-47)
-        assert.strictEqual(result.code, 0, 'Should exit 0 even when append fails');
+        // Should exit 1 — unhandled errors are now reported with exit 1
+        assert.strictEqual(result.code, 1, 'Should exit 1 when append fails');
         // Session file should remain unchanged (write was blocked)
         const content = fs.readFileSync(sessionFile, 'utf8');
         assert.strictEqual(content, '# Active session\n', 'Read-only session file should remain unchanged');
@@ -5048,7 +5048,7 @@ async function runTests() {
   console.log('\nRound 74: session-start.js (main catch — unrecoverable error):');
 
   if (
-    await asyncTest('session-start exits 0 with error message when HOME is non-directory', async () => {
+    await asyncTest('session-start exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped — /dev/null not available on Windows)');
         return;
@@ -5059,7 +5059,7 @@ async function runTests() {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
       });
-      assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
+      assert.strictEqual(result.code, 1, `Should exit 1 (report errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[SessionStart] Error:'), `stderr should contain [SessionStart] Error:, got: ${result.stderr}`);
     })
   )
@@ -5070,7 +5070,7 @@ async function runTests() {
   console.log('\nRound 75: pre-compact.js (main catch — unrecoverable error):');
 
   if (
-    await asyncTest('pre-compact exits 0 with error message when HOME is non-directory', async () => {
+    await asyncTest('pre-compact exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped — /dev/null not available on Windows)');
         return;
@@ -5081,7 +5081,7 @@ async function runTests() {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
       });
-      assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
+      assert.strictEqual(result.code, 1, `Should exit 1 (report errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[PreCompact] Error:'), `stderr should contain [PreCompact] Error:, got: ${result.stderr}`);
     })
   )
@@ -5092,7 +5092,7 @@ async function runTests() {
   console.log('\nRound 75: session-end.js (main catch — unrecoverable error):');
 
   if (
-    await asyncTest('session-end exits 0 with error message when HOME is non-directory', async () => {
+    await asyncTest('session-end exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped — /dev/null not available on Windows)');
         return;
@@ -5103,7 +5103,7 @@ async function runTests() {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
       });
-      assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
+      assert.strictEqual(result.code, 1, `Should exit 1 (report errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[SessionEnd] Unexpected error'), `stderr should contain [SessionEnd] Unexpected error, got: ${result.stderr}`);
     })
   )

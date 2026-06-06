@@ -94,5 +94,5 @@ async function main() {
 
 main().catch(err => {
   console.error('[PreCompact] Error:', err.message);
-  process.exit(0);
+  process.exit(1);
 });

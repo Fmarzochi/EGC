@@ -35,14 +35,16 @@ async function main() {
   let createStateStore;
   try {
     ({ createStateStore } = require(path.join(__dirname, '..', 'lib', 'state-store', 'index.js')));
-  } catch (_) {
+  } catch (e) {
+    console.error(e);
     return;
   }
 
   let store;
   try {
     store = await createStateStore({ dbPath });
-  } catch (_) {
+  } catch (e) {
+    console.error(e);
     return;
   }
 
@@ -54,13 +56,13 @@ async function main() {
       payload,
       timestamp: new Date().toISOString(),
     });
-  } catch (_) {
-    // Intentional: event insertion is best-effort observability; hook must not fail caller.
+  } catch (e) {
+    console.error(e);
   } finally {
-    try { store.close(); } catch (_) {
-      // Intentional: close errors are non-actionable in a fire-and-forget writer.
+    try { store.close(); } catch (e) {
+      console.error(e);
     }
   }
 }
 
-main().catch(() => {}).finally(() => process.exit(0));
+main().catch((e) => { console.error(e); }).finally(() => process.exit(0));
