@@ -18,20 +18,20 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 
 | Surface | Specified by | Validated by |
 |---------|--------------|--------------|
-| Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` (planned) |
-| Install state | `schemas/install-state.schema.json` | `tests/install-apply.test.js` |
+| Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` |
 | Hooks contract | `schemas/hooks.schema.json` | `tests/hooks/hooks.test.js` |
 | Plugin manifest | `schemas/plugin.schema.json` | `tests/plugin-manifest.test.js` |
-| Runtime map | `schemas/runtime-map.schema.json` | `tests/codemaps/*.test.js` |
-| Install profiles | `schemas/install-profiles.schema.json` | `tests/install-profiles.test.js` |
-| Install modules | `schemas/install-modules.schema.json` | `tests/install-modules.test.js` |
-| Install components | `schemas/install-components.schema.json` | `tests/install-components.test.js` |
-| Agents registry | `schemas/agents-registry.schema.json` | `tests/agents-registry.test.js` |
-| Skills registry | `schemas/skills-registry.schema.json` | `tests/skills-registry.test.js` |
-| Package manager detection | `schemas/package-manager.schema.json` | `tests/package-manager.test.js` |
-| Provenance metadata | `schemas/provenance.schema.json` | `tests/provenance.test.js` |
+| Runtime map | `schemas/runtime-map.schema.json` | `tests/test_orchestrator.py` |
+| Install profiles | `schemas/install-profiles.schema.json` | `tests/lib/install-manifests.test.js` |
+| Install modules | `schemas/install-modules.schema.json` | `tests/scripts/doctor.test.js` |
+| Install components | `schemas/install-components.schema.json` | `tests/lib/install-manifests.test.js` |
+| Package manager detection | `schemas/package-manager.schema.json` | `tests/scripts/auto-update.test.js` |
+| Provenance metadata | `schemas/provenance.schema.json` | `tests/lib/skill-dashboard.test.js` |
 | State store | `schemas/state-store.schema.json` | `tests/lib/state-store.test.js` |
-| EGC install config | `schemas/egc-install-config.schema.json` | `tests/scripts/install.test.js` |
+| EGC install config | `schemas/egc-install-config.schema.json` | `tests/lib/install-targets.test.js` |
+| Install state | `schemas/install-state.schema.json` | gap — no dedicated test (validated indirectly via install-apply flow) |
+| Agents registry | `schemas/agents-registry.schema.json` | gap — no dedicated validator |
+| Skills registry | `schemas/skills-registry.schema.json` | gap — no dedicated validator |
 
 ## Entry points by audience
 

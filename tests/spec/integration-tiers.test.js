@@ -45,17 +45,24 @@ function testDocListsAll9Harnesses() {
 }
 
 function testTier1TargetsMatchSupportedInstallTargets() {
-  const manifestsSrc = fs.readFileSync(
+  const { SUPPORTED_INSTALL_TARGETS } = require(
     path.join(REPO_ROOT, 'scripts', 'lib', 'install-manifests.js'),
-    'utf8',
   );
-  for (const target of EXPECTED_TIER1_TARGETS) {
-    assert.ok(
-      manifestsSrc.includes(`'${target}'`),
-      `SUPPORTED_INSTALL_TARGETS in install-manifests.js must contain "${target}"`,
-    );
-  }
-  console.log(`  ✓ SUPPORTED_INSTALL_TARGETS matches Tier 1 list (${EXPECTED_TIER1_TARGETS.length} targets)`);
+  const expectedSet = new Set(EXPECTED_TIER1_TARGETS);
+  const actualSet = new Set(SUPPORTED_INSTALL_TARGETS);
+  const missingInActual = [...expectedSet].filter(x => !actualSet.has(x));
+  const extraInActual = [...actualSet].filter(x => !expectedSet.has(x));
+  assert.deepStrictEqual(
+    missingInActual,
+    [],
+    `Targets documented but missing in SUPPORTED_INSTALL_TARGETS: ${missingInActual.join(', ')}`,
+  );
+  assert.deepStrictEqual(
+    extraInActual,
+    [],
+    `Targets in SUPPORTED_INSTALL_TARGETS but not in integration-tiers.md: ${extraInActual.join(', ')}. Update the doc.`,
+  );
+  console.log(`  ✓ SUPPORTED_INSTALL_TARGETS exactly matches Tier 1 list (${EXPECTED_TIER1_TARGETS.length} targets, bidirectional)`);
 }
 
 function testTier2InstallersExist() {
