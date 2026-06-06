@@ -59,12 +59,15 @@ function testTier1TargetsMatchSupportedInstallTargets() {
 }
 
 function testTier2InstallersExist() {
+  const isWindows = process.platform === 'win32';
   for (const rel of EXPECTED_TIER2_INSTALLERS) {
     const full = path.join(REPO_ROOT, rel);
     assert.ok(fs.existsSync(full), `Tier 2 installer ${rel} must exist`);
-    assert.ok(fs.statSync(full).mode & 0o111, `Tier 2 installer ${rel} must be executable`);
+    if (!isWindows) {
+      assert.ok(fs.statSync(full).mode & 0o111, `Tier 2 installer ${rel} must be executable`);
+    }
   }
-  console.log(`  ✓ Tier 2 installers exist and are executable`);
+  console.log(`  ✓ Tier 2 installers exist${isWindows ? '' : ' and are executable'}`);
 }
 
 function testClaudeCodeProtocolInjectionExists() {
