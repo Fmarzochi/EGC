@@ -6,6 +6,10 @@ const { listAvailableLanguages } = require('./lib/install-executor');
 const { formatOSC8 } = require('./lib/utils');
 
 const COMMANDS = {
+  init: {
+    script: 'init.js',
+    description: 'First-run bootstrap (cognitive protocol + MCP registration + doctor)',
+  },
   install: {
     script: 'install-apply.js',
     description: 'Install EGC content into a supported target',
@@ -69,6 +73,7 @@ const COMMANDS = {
 };
 
 const PRIMARY_COMMANDS = [
+  'init',
   'install',
   'plan',
   'catalog',
@@ -86,7 +91,7 @@ const PRIMARY_COMMANDS = [
 
 function showHelp(exitCode = 0) {
   console.log(`
-EGC — Everything Gemini Code
+EGC — Extended Global Context
 Desenvolvido por Felipe Marzochi
 @FEMARZOCHI
 ${formatOSC8('https://github.com/Fmarzochi/EGC', 'https://github.com/Fmarzochi/EGC')}
