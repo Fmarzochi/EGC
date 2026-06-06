@@ -111,7 +111,7 @@ function assertSafeScriptPath(hookId, scriptPath, resolvedRoot) {
     }
   } catch (err) {
     if (err.message && err.message.startsWith('[Hook]')) throw err;
-    throw new Error(`[Hook] Path resolution failed for ${hookId}: ${scriptPath}`);
+    throw new Error(`[Hook] Path resolution failed for ${hookId}: ${scriptPath}`, { cause: err });
   }
 }
 
