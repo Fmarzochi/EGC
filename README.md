@@ -1,3 +1,5 @@
+<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+
 [![npm version](https://img.shields.io/npm/v/@fmarzochi/egc?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@fmarzochi/egc) [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md) [![Stars](https://img.shields.io/github/stars/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/stargazers) [![Forks](https://img.shields.io/github/forks/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/network/members) [![Issues](https://img.shields.io/github/issues/Fmarzochi/EGC)](https://github.com/Fmarzochi/EGC/issues) [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen)](https://github.com/Fmarzochi/EGC/commits/main) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Fmarzochi/EGC/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC)
 
 <div align="center">
@@ -7,10 +9,6 @@
 **Your AI remembers your project across sessions and tools.**
 
 </div>
-
----
-
-<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 
 ---
 
