@@ -235,11 +235,11 @@ That's not a feature. It's a shift in how AI-assisted engineering works.
 
 EGC is built by one developer, maintained in the open, and used by people who are done re-explaining context every session. If it saves you time, consider giving back:
 
-- **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)** — for GitHub users, any amount
-- **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)** — no GitHub account needed
-- **Star the repository** — helps other developers find it
-- **Contribute** — agents, skills, commands, bug fixes, docs ([CONTRIBUTING.md](CONTRIBUTING.md))
-- **Share** — if EGC changed how you work, tell someone
+- **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)** (for GitHub users, any amount)
+- **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)** (no GitHub account needed)
+- **Star the repository** (helps other developers find it)
+- **Contribute** (agents, skills, commands, bug fixes, docs via [CONTRIBUTING.md](CONTRIBUTING.md))
+- **Share** (if EGC changed how you work, tell someone)
 
 Every contribution, financial or otherwise, goes toward keeping this maintained, documented, and free.
 
