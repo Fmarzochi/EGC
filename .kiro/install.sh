@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # EGC Kiro Installer
-# Installs Everything Gemini Code workflows into a Kiro project.
+# Installs EGC (Extended Global Context) workflows into a Kiro project.
 #
 # Usage:
 #   ./install.sh              # Install to current directory

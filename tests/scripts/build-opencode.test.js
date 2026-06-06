@@ -36,7 +36,10 @@ function main() {
   const tests = [
     ["package.json exposes the OpenCode build and prepack hooks", () => {
       assert.strictEqual(packageJson.scripts["build:opencode"], "node scripts/build-opencode.js")
-      assert.strictEqual(packageJson.scripts.prepack, "npm run build:opencode")
+      assert.ok(
+        packageJson.scripts.prepack.includes("npm run build:opencode"),
+        `prepack must invoke build:opencode (got: ${packageJson.scripts.prepack})`,
+      )
       assert.ok(packageJson.files.includes(".opencode/"))
     }],
     ["build script generates .opencode/dist", () => {

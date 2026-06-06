@@ -1,5 +1,5 @@
 {
-  "name": "egc",
+  "name": "@fmarzochi/egc",
   "version": "1.0.0",
   "description": "EGC - Extended Global Context. Persistent memory and shared context for AI coding tools.",
   "author": "Felipe Marzochi <fmarzochi@gmail.com> (https://github.com/Fmarzochi)",
@@ -27,8 +27,9 @@
     "doctor": "node scripts/doctor.js",
     "bootstrap": "node scripts/bootstrap-state-db.js",
     "build:opencode": "node scripts/build-opencode.js",
+    "build:mcp": "cd mcp/servers/egc-guardian && npm ci --silent && npm run build && cd ../egc-memory && npm ci --silent && npm run build",
     "prompt": "node scripts/gemini.js",
-    "prepack": "npm run build:opencode"
+    "prepack": "npm run build:opencode && npm run build:mcp"
   },
   "files": [
     "scripts/",
@@ -50,6 +51,10 @@
     ".kiro/",
     ".trae/",
     ".agents/",
+    "mcp/servers/egc-guardian/build/",
+    "mcp/servers/egc-guardian/package.json",
+    "mcp/servers/egc-memory/build/",
+    "mcp/servers/egc-memory/package.json",
     ".mcp.json",
     "agent.yaml",
     "VERSION",
