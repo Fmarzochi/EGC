@@ -225,6 +225,25 @@ The branch `legacy-runtime` preserves the full historical architecture for anyon
 
 ---
 
+## Support EGC
+
+EGC solves a problem that no company has solved: **AI memory that persists across sessions, across tools, and across CLIs.**
+
+Close Claude Code and open Cursor. The AI already knows your project. Switch to Codex. Same context. No re-explaining. No lost decisions. No starting from zero.
+
+That's not a feature. It's a shift in how AI-assisted engineering works.
+
+EGC is built by one developer, maintained in the open, and used by people who are done re-explaining context every session. If it saves you time — consider giving back:
+
+- **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)** — direct support, any amount
+- **Star the repository** — helps other developers find it
+- **Contribute** — agents, skills, commands, bug fixes, docs ([CONTRIBUTING.md](CONTRIBUTING.md))
+- **Share** — if EGC changed how you work, tell someone
+
+Every contribution — financial or otherwise — goes toward keeping this maintained, documented, and free.
+
+---
+
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
