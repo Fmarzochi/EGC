@@ -49,7 +49,7 @@ class PersistentLogger {
     this.logPath = path.join(logDir, `${serviceName}.log`);
   }
 
-  async log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', action: string, status?: string, meta: any = {}) {
+  async log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', action: string, status?: string, meta: Record<string, unknown> = {}) {
     const payload = JSON.stringify({ timestamp: new Date().toISOString(), level, type: 'AUDIT', action, status, ...meta });
     console.error(payload); // MCP strict requirement
     try {
@@ -68,7 +68,7 @@ class PersistentLogger {
 
 const sysLogger = new PersistentLogger('egc-guardian-router');
 
-function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: any = {}) {
+function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: Record<string, unknown> = {}) {
   const level = (status === 'FATAL' || status === 'DENIED') ? 'ERROR' : (status === 'ONLINE' || status === 'SHUTDOWN' ? 'INFO' : 'AUDIT');
   sysLogger.log(level, action, status, details);
 }
@@ -182,8 +182,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
              const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
              rawPayloads.push(...chunks);
              totalBytesLoaded += Buffer.byteLength(content, 'utf8');
-           } catch(e: any) {
-             auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: e.message });
+           } catch(e: unknown) {
+             const reason = e instanceof Error ? e.message : String(e);
+             auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
            }
         }
         

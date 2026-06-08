@@ -30,7 +30,7 @@ class PersistentLogger {
     this.logPath = path.join(logDir, `${serviceName}.log`);
   }
 
-  log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: any = {}) {
+  log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: Record<string, unknown> = {}) {
     const payload = JSON.stringify({ timestamp: new Date().toISOString(), level, msg, ...meta });
     // STDERR used to prevent JSON-RPC corruption on STDOUT
     console.error(payload);
@@ -51,7 +51,7 @@ class PersistentLogger {
 
 const sysLogger = new PersistentLogger('egc-memory-orchestrator');
 
-function log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: any = {}) {
+function log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: Record<string, unknown> = {}) {
   sysLogger.log(level, msg, meta);
 }
 
@@ -64,12 +64,12 @@ let dbInstance: Database | null = null;
 interface QueueTask<T> {
   operation: () => Promise<T>;
   resolve: (value: T) => void;
-  reject: (reason?: any) => void;
+  reject: (reason?: unknown) => void;
   retries: number;
 }
 
 class SQLiteArbitrationQueue {
-  private queue: QueueTask<any>[] = [];
+  private queue: QueueTask<unknown>[] = [];
   private isProcessing = false;
   private readonly MAX_RETRIES = 5;
   private readonly BASE_BACKOFF_MS = 50;
@@ -95,28 +95,29 @@ class SQLiteArbitrationQueue {
     try {
       const result = await task.operation();
       task.resolve(result);
-    } catch (err: any) {
-      if (err.message && (err.message.includes('SQLITE_BUSY') || err.message.includes('database is locked'))) {
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      if (error.message && (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked'))) {
         if (task.retries < this.MAX_RETRIES) {
           task.retries++;
           let backoff = Math.pow(2, task.retries) * this.BASE_BACKOFF_MS;
           if (backoff > this.MAX_BACKOFF_MS) backoff = this.MAX_BACKOFF_MS;
-          log('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, { 
-            queue_depth: this.queue.length, 
-            retry_count: task.retries, 
-            backoff_ms: backoff 
+          log('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, {
+            queue_depth: this.queue.length,
+            retry_count: task.retries,
+            backoff_ms: backoff
           });
-          
+
           setTimeout(() => {
             this.queue.push(task); // Requeue at the end instead of unshift to prevent queue poisoning
             this.processNext();
           }, backoff);
-          
+
           this.isProcessing = false;
           return;
         } else {
           log('ERROR', `Arbitration Failed. Write lock unrecoverable. Dead-lettering task.`, { retries: task.retries });
-          task.reject(new Error(`Arbitration Failed after ${this.MAX_RETRIES} retries: ` + err.message));
+          task.reject(new Error(`Arbitration Failed after ${this.MAX_RETRIES} retries: ` + error.message));
         }
       } else {
         task.reject(err);
