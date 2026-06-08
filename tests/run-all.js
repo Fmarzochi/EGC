@@ -49,7 +49,7 @@ const BOX_W = 58; // inner width between ║ delimiters
 const boxLine = s => `║${s.padEnd(BOX_W)}║`;
 
 console.log('╔' + '═'.repeat(BOX_W) + '╗');
-console.log(boxLine('           Everything Gemini Code - Test Suite'));
+console.log(boxLine('                    EGC - Test Suite'));
 console.log('╚' + '═'.repeat(BOX_W) + '╝');
 console.log();
 

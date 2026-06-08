@@ -167,7 +167,7 @@ ${chalk.yellow('4.')} Evolve into skills: ${chalk.cyan('/evolve')}
 
   footer() {
     console.log(chalk.gray('─'.repeat(60)));
-    console.log(chalk.dim(`  Powered by Everything Gemini Code • egc.tools`));
+    console.log(chalk.dim(`  Powered by EGC • egc.tools`));
     console.log(chalk.dim(`  GitHub App: github.com/apps/skill-creator`));
     console.log('\n');
   }
