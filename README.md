@@ -241,6 +241,16 @@ EGC is built by one developer, maintained in the open, and used by people who ar
 
 Every contribution, financial or otherwise, goes toward keeping this maintained, documented, and free.
 
+### Sponsors
+
+Support from the community keeps this project alive and independent.
+
+**Backers**
+
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+
+**Monthly sponsors** · _be the first_
+
 ---
 
 <div align="center">
