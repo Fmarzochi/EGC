@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * NanoClaw v2 — Barebones Agent REPL for Everything Gemini Code
+ * NanoClaw v2 — Barebones Agent REPL for EGC
  *
  * Zero external dependencies. Session-aware REPL around `egc -p`.
  */

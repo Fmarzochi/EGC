@@ -1,6 +1,6 @@
 # Architecture Improvement Recommendations
 
-This document captures architect-level improvements for the Everything gemini Code (egc) project. It is written from the perspective of a gemini Code coding architect aiming to improve maintainability, consistency, and long-term quality.
+This document captures architect-level improvements for the EGC - Extended Global Context project. It is written from the perspective of a EGC coding architect aiming to improve maintainability, consistency, and long-term quality.
 
 ---
 

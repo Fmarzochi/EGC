@@ -437,7 +437,7 @@ if (
       assert.strictEqual(syncResult.status, 0, `${syncResult.stdout}\n${syncResult.stderr}`);
 
       const syncedAgents = fs.readFileSync(agentsPath, 'utf8');
-      assert.match(syncedAgents, /^# Everything Gemini Code \(EGC\) — Agent Instructions/m);
+      assert.match(syncedAgents, /^# EGC/m);
       assert.match(syncedAgents, /^# Codex Supplement \(From EGC \.codex\/AGENTS\.md\)/m);
 
       const syncedConfig = fs.readFileSync(configPath, 'utf8');

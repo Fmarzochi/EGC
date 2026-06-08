@@ -1,7 +1,7 @@
 # EGC Subsystem Map
 
 This page classifies the top-level subsystems and notable subtrees of the
-Everything Gemini repository so contributors can tell at a glance what is
+EGC repository so contributors can tell at a glance what is
 alive, what is generated, what is preserved for history, and what is
 dormant.
 

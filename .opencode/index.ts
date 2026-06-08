@@ -1,5 +1,5 @@
 /**
- * Everything Gemini Code (EGC) Plugin for OpenCode
+ * EGC - Extended Global Context plugin for OpenCode
  *
  * This package provides the published EGC OpenCode plugin module:
  * - Plugin hooks (auto-format, TypeScript check, console.log warning, env injection, etc.)
@@ -47,7 +47,7 @@ export const VERSION = "1.0.0"
 export const metadata = {
   name: "egc-universal",
   version: VERSION,
-  description: "Everything Gemini Code plugin for OpenCode",
+  description: "EGC plugin for OpenCode",
   author: "Fmarzochi",
   features: {
     agents: 13,

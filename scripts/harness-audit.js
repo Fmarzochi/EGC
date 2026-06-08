@@ -494,7 +494,7 @@ function getConsumerChecks(rootDir) {
       points: 4,
       scopes: ['repo'],
       path: '~/.gemini/plugins/egc/ (legacy everything-gemini paths also supported)',
-      description: 'Everything Gemini Code is installed for the active user or project',
+      description: 'EGC is installed for the active user or project',
       pass: Boolean(pluginInstall),
       fix: 'Install the EGC plugin for this user or project before auditing project-specific harness quality.',
     },

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # EGC Trae Uninstaller
-# Uninstalls Everything Gemini Code workflows from a Trae project.
+# Uninstalls EGC workflows from a Trae project.
 #
 # Usage:
 #   ./uninstall.sh              # Uninstall from current directory

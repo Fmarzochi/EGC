@@ -1,5 +1,5 @@
 /**
- * Everything Gemini Code (EGC) Plugin Hooks for OpenCode
+ * EGC - Extended Global Context plugin hooks for OpenCode
  *
  * This plugin translates Gemini Code hooks to OpenCode's plugin system.
  * OpenCode's plugin system is MORE sophisticated than Gemini Code with 20+ events

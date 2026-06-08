@@ -81,7 +81,7 @@ require_file "$CONFIG_FILE" "Global config.toml"
 require_file "$AGENTS_FILE" "Global AGENTS.md"
 
 if [[ -f "$AGENTS_FILE" ]]; then
-  if search_file '^# Everything Gemini Code \(EGC\)' "$AGENTS_FILE"; then
+  if search_file '^# EGC' "$AGENTS_FILE"; then
     ok "AGENTS contains EGC root instructions"
   else
     fail "AGENTS missing EGC root instructions"

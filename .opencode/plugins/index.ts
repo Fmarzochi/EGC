@@ -1,5 +1,5 @@
 /**
- * Everything Gemini Code (EGC) Plugins for OpenCode
+ * EGC - Extended Global Context plugins for OpenCode
  *
  * This module exports all EGC plugins for OpenCode integration.
  * Plugins provide hook-based automation that mirrors Gemini Code's hook system

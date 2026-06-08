@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * EGC CodeBuddy Installer (Cross-platform Node.js version)
- * Installs Everything Gemini Code workflows into a CodeBuddy project.
+ * Installs EGC workflows into a CodeBuddy project.
  *
  * Usage:
  *   node install.js              # Install to current directory

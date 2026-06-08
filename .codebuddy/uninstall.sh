@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # EGC CodeBuddy Uninstaller
-# Uninstalls Everything Gemini Code workflows from a CodeBuddy project.
+# Uninstalls EGC workflows from a CodeBuddy project.
 #
 # Usage:
 #   ./uninstall.sh              # Uninstall from current directory

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * EGC CodeBuddy Uninstaller (Cross-platform Node.js version)
- * Uninstalls Everything Gemini Code workflows from a CodeBuddy project.
+ * Uninstalls EGC workflows from a CodeBuddy project.
  *
  * Usage:
  *   node uninstall.js              # Uninstall from current directory

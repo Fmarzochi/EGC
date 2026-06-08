@@ -1,6 +1,6 @@
 # Skill Development Guide
 
-A comprehensive guide to creating effective skills for Everything gemini Code (egc).
+A comprehensive guide to creating effective skills for EGC - Extended Global Context.
 
 ## Table of Contents
 

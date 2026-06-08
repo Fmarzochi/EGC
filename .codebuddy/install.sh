@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # EGC CodeBuddy Installer
-# Installs Everything Gemini Code workflows into a CodeBuddy project.
+# Installs EGC workflows into a CodeBuddy project.
 #
 # Usage:
 #   ./install.sh              # Install to current directory

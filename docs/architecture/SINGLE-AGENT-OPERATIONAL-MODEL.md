@@ -1,6 +1,6 @@
 # Single-Agent Operational Model
 
-This document establishes the official and permanent operational governance for the Everything Gemini (EGC) project. It strictly enforces a single-agent execution paradigm, explicitly prohibiting automatic orchestration, recursive delegation, and any modification of the host system's global state.
+This document establishes the official and permanent operational governance for the EGC - Extended Global Context project. It strictly enforces a single-agent execution paradigm, explicitly prohibiting automatic orchestration, recursive delegation, and any modification of the host system's global state.
 
 ## Core Directives
 
