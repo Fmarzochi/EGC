@@ -4,7 +4,7 @@
  *
  * Runs the same steps as install.sh but in Node so the flow works
  * identically on Windows, macOS, and Linux. Designed to be the entry
- * point invoked by `npx @fmarzochi/egc init`.
+ * point invoked by `npx @egc/cli init`.
  *
  * Steps:
  *   1. Verify Node >= 18
@@ -45,7 +45,7 @@ egc init — first-run bootstrap
 
 Usage:
   egc init [options]
-  npx @fmarzochi/egc init [options]
+  npx @egc/cli init [options]
 
 Options:
   --dry-run     Print the install plan without writing files
@@ -54,9 +54,9 @@ Options:
   --help, -h    Show this help
 
 Examples:
-  npx @fmarzochi/egc init                  # interactive install
-  npx @fmarzochi/egc init --dry-run        # preview only
-  npx @fmarzochi/egc init --mcp-only --yes # CI-friendly MCP-only setup
+  npx @egc/cli init                  # interactive install
+  npx @egc/cli init --dry-run        # preview only
+  npx @egc/cli init --mcp-only --yes # CI-friendly MCP-only setup
 `);
   process.exit(0);
 }
