@@ -677,6 +677,31 @@
       "defaultInstall": false,
       "cost": "heavy",
       "stability": "beta"
+    },
+    {
+      "id": "engineering-auditor",
+      "kind": "agents",
+      "description": "Full-spectrum engineering health auditor: CC, security, coverage, architecture, docs, lint, type safety, and build health.",
+      "paths": [
+        "agents/engineering-auditor.md",
+        "commands/engineering-audit.md",
+        "commands/engineering-fix.md",
+        "skills/general/engineering-audit"
+      ],
+      "targets": [
+        "egc",
+        "cursor",
+        "antigravity",
+        "codebuddy",
+        "opencode"
+      ],
+      "dependencies": [
+        "agents-core",
+        "commands-core"
+      ],
+      "defaultInstall": false,
+      "cost": "light",
+      "stability": "stable"
     }
   ]
 }

@@ -434,6 +434,14 @@
       "modules": [
         "skills-extended"
       ]
+    },
+    {
+      "id": "capability:engineering-auditor",
+      "family": "capability",
+      "description": "Engineering health auditor: scores, ranks issues, and produces remediation plans across 8 quality dimensions.",
+      "modules": [
+        "engineering-auditor"
+      ]
     }
   ]
 }
