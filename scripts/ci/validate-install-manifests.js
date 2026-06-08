@@ -52,6 +52,180 @@ function validateSchema(ajv, schemaPath, data, label) {
   return false;
 }
 
+function validateModulePaths(module, claimedPaths) {
+  let hasErrors = false;
+
+  for (const relativePath of module.paths) {
+    const normalizedPath = normalizeRelativePath(relativePath);
+    const absolutePath = path.join(REPO_ROOT, normalizedPath);
+
+    if (!fs.existsSync(absolutePath)) {
+      const strict = process.env.EGC_MANIFEST_STRICT === '1';
+      const level = strict ? 'ERROR' : 'WARN';
+      console[strict ? 'error' : 'warn'](
+        `${level}: Module ${module.id} references missing path: ${normalizedPath}`
+      );
+      if (strict) hasErrors = true;
+    }
+
+    if (claimedPaths.has(normalizedPath)) {
+      console.error(
+        `ERROR: Install path ${normalizedPath} is claimed by both ${claimedPaths.get(normalizedPath)} and ${module.id}`
+      );
+      hasErrors = true;
+    } else {
+      claimedPaths.set(normalizedPath, module.id);
+    }
+  }
+
+  return hasErrors;
+}
+
+function validateModuleDependencies(module, modules) {
+  let hasErrors = false;
+
+  for (const dependency of module.dependencies) {
+    if (!modules.some(candidate => candidate.id === dependency)) {
+      console.error(`ERROR: Module ${module.id} depends on unknown module ${dependency}`);
+      hasErrors = true;
+    }
+    if (dependency === module.id) {
+      console.error(`ERROR: Module ${module.id} cannot depend on itself`);
+      hasErrors = true;
+    }
+  }
+
+  return hasErrors;
+}
+
+function validateModules(modules) {
+  let hasErrors = false;
+  const moduleIds = new Set();
+  const claimedPaths = new Map();
+
+  for (const module of modules) {
+    if (moduleIds.has(module.id)) {
+      console.error(`ERROR: Duplicate install module id: ${module.id}`);
+      hasErrors = true;
+    }
+    moduleIds.add(module.id);
+
+    if (validateModuleDependencies(module, modules)) hasErrors = true;
+    if (validateModulePaths(module, claimedPaths)) hasErrors = true;
+  }
+
+  return { hasErrors, moduleIds };
+}
+
+function validateRequiredProfiles(profiles) {
+  let hasErrors = false;
+  const expectedProfileIds = ['core', 'developer', 'security', 'research', 'full'];
+
+  for (const profileId of expectedProfileIds) {
+    if (!profiles[profileId]) {
+      console.error(`ERROR: Missing required install profile: ${profileId}`);
+      hasErrors = true;
+    }
+  }
+
+  return hasErrors;
+}
+
+function validateProfileModules(profileId, profile, moduleIds) {
+  let hasErrors = false;
+  const seenModules = new Set();
+
+  for (const moduleId of profile.modules) {
+    if (!moduleIds.has(moduleId)) {
+      console.error(`ERROR: Profile ${profileId} references unknown module ${moduleId}`);
+      hasErrors = true;
+    }
+
+    if (seenModules.has(moduleId)) {
+      console.error(`ERROR: Profile ${profileId} contains duplicate module ${moduleId}`);
+      hasErrors = true;
+    }
+    seenModules.add(moduleId);
+  }
+
+  return hasErrors;
+}
+
+function validateFullProfileCoverage(profiles, moduleIds) {
+  let hasErrors = false;
+
+  if (!profiles.full) return hasErrors;
+
+  const fullModules = new Set(profiles.full.modules);
+  for (const moduleId of moduleIds) {
+    if (!fullModules.has(moduleId)) {
+      console.error(`ERROR: full profile is missing module ${moduleId}`);
+      hasErrors = true;
+    }
+  }
+
+  return hasErrors;
+}
+
+function validateProfiles(profiles, moduleIds) {
+  let hasErrors = false;
+
+  if (validateRequiredProfiles(profiles)) hasErrors = true;
+
+  for (const [profileId, profile] of Object.entries(profiles)) {
+    if (validateProfileModules(profileId, profile, moduleIds)) hasErrors = true;
+  }
+
+  if (validateFullProfileCoverage(profiles, moduleIds)) hasErrors = true;
+
+  return hasErrors;
+}
+
+function validateComponentModules(component, moduleIds) {
+  let hasErrors = false;
+  const seenModules = new Set();
+
+  for (const moduleId of component.modules) {
+    if (!moduleIds.has(moduleId)) {
+      console.error(`ERROR: Component ${component.id} references unknown module ${moduleId}`);
+      hasErrors = true;
+    }
+
+    if (seenModules.has(moduleId)) {
+      console.error(`ERROR: Component ${component.id} contains duplicate module ${moduleId}`);
+      hasErrors = true;
+    }
+    seenModules.add(moduleId);
+  }
+
+  return hasErrors;
+}
+
+function validateComponents(components, moduleIds) {
+  let hasErrors = false;
+  const componentIds = new Set();
+
+  for (const component of components) {
+    if (componentIds.has(component.id)) {
+      console.error(`ERROR: Duplicate install component id: ${component.id}`);
+      hasErrors = true;
+    }
+    componentIds.add(component.id);
+
+    const expectedPrefix = COMPONENT_FAMILY_PREFIXES[component.family];
+    if (expectedPrefix && !component.id.startsWith(expectedPrefix)) {
+      console.error(
+        `ERROR: Component ${component.id} does not match expected ${component.family} prefix ${expectedPrefix}`
+      );
+      hasErrors = true;
+    }
+
+    if (validateComponentModules(component, moduleIds)) hasErrors = true;
+  }
+
+  return hasErrors;
+}
+
 function validateInstallManifests() {
   if (!fs.existsSync(MODULES_MANIFEST_PATH) || !fs.existsSync(PROFILES_MANIFEST_PATH)) {
     console.log('Install manifests not found, skipping validation');
@@ -86,126 +260,14 @@ function validateInstallManifests() {
   }
 
   const modules = Array.isArray(modulesData.modules) ? modulesData.modules : [];
-  const moduleIds = new Set();
-  const claimedPaths = new Map();
-
-  for (const module of modules) {
-    if (moduleIds.has(module.id)) {
-      console.error(`ERROR: Duplicate install module id: ${module.id}`);
-      hasErrors = true;
-    }
-    moduleIds.add(module.id);
-
-    for (const dependency of module.dependencies) {
-      if (!moduleIds.has(dependency) && !modules.some(candidate => candidate.id === dependency)) {
-        console.error(`ERROR: Module ${module.id} depends on unknown module ${dependency}`);
-        hasErrors = true;
-      }
-      if (dependency === module.id) {
-        console.error(`ERROR: Module ${module.id} cannot depend on itself`);
-        hasErrors = true;
-      }
-    }
-
-    for (const relativePath of module.paths) {
-      const normalizedPath = normalizeRelativePath(relativePath);
-      const absolutePath = path.join(REPO_ROOT, normalizedPath);
-
-      // Module paths absent from the public baseline are emitted as warnings
-      // (governance: still surfaced and counted, but non-blocking) so the
-      // gate remains green when optional/downstream content has not yet
-      // shipped publicly. Strict mode: set EGC_MANIFEST_STRICT=1 to fail.
-      if (!fs.existsSync(absolutePath)) {
-        const strict = process.env.EGC_MANIFEST_STRICT === '1';
-        const level = strict ? 'ERROR' : 'WARN';
-        console[strict ? 'error' : 'warn'](
-          `${level}: Module ${module.id} references missing path: ${normalizedPath}`
-        );
-        if (strict) hasErrors = true;
-      }
-
-      if (claimedPaths.has(normalizedPath)) {
-        console.error(
-          `ERROR: Install path ${normalizedPath} is claimed by both ${claimedPaths.get(normalizedPath)} and ${module.id}`
-        );
-        hasErrors = true;
-      } else {
-        claimedPaths.set(normalizedPath, module.id);
-      }
-    }
-  }
+  const { hasErrors: moduleErrors, moduleIds } = validateModules(modules);
+  if (moduleErrors) hasErrors = true;
 
   const profiles = profilesData.profiles || {};
+  if (validateProfiles(profiles, moduleIds)) hasErrors = true;
+
   const components = Array.isArray(componentsData.components) ? componentsData.components : [];
-  const expectedProfileIds = ['core', 'developer', 'security', 'research', 'full'];
-
-  for (const profileId of expectedProfileIds) {
-    if (!profiles[profileId]) {
-      console.error(`ERROR: Missing required install profile: ${profileId}`);
-      hasErrors = true;
-    }
-  }
-
-  for (const [profileId, profile] of Object.entries(profiles)) {
-    const seenModules = new Set();
-    for (const moduleId of profile.modules) {
-      if (!moduleIds.has(moduleId)) {
-        console.error(
-          `ERROR: Profile ${profileId} references unknown module ${moduleId}`
-        );
-        hasErrors = true;
-      }
-
-      if (seenModules.has(moduleId)) {
-        console.error(
-          `ERROR: Profile ${profileId} contains duplicate module ${moduleId}`
-        );
-        hasErrors = true;
-      }
-      seenModules.add(moduleId);
-    }
-  }
-
-  if (profiles.full) {
-    const fullModules = new Set(profiles.full.modules);
-    for (const moduleId of moduleIds) {
-      if (!fullModules.has(moduleId)) {
-        console.error(`ERROR: full profile is missing module ${moduleId}`);
-        hasErrors = true;
-      }
-    }
-  }
-
-  const componentIds = new Set();
-  for (const component of components) {
-    if (componentIds.has(component.id)) {
-      console.error(`ERROR: Duplicate install component id: ${component.id}`);
-      hasErrors = true;
-    }
-    componentIds.add(component.id);
-
-    const expectedPrefix = COMPONENT_FAMILY_PREFIXES[component.family];
-    if (expectedPrefix && !component.id.startsWith(expectedPrefix)) {
-      console.error(
-        `ERROR: Component ${component.id} does not match expected ${component.family} prefix ${expectedPrefix}`
-      );
-      hasErrors = true;
-    }
-
-    const seenModules = new Set();
-    for (const moduleId of component.modules) {
-      if (!moduleIds.has(moduleId)) {
-        console.error(`ERROR: Component ${component.id} references unknown module ${moduleId}`);
-        hasErrors = true;
-      }
-
-      if (seenModules.has(moduleId)) {
-        console.error(`ERROR: Component ${component.id} contains duplicate module ${moduleId}`);
-        hasErrors = true;
-      }
-      seenModules.add(moduleId);
-    }
-  }
+  if (validateComponents(components, moduleIds)) hasErrors = true;
 
   if (hasErrors) {
     process.exit(1);

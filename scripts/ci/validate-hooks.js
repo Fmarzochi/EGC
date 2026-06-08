@@ -41,6 +41,92 @@ function isNonEmptyStringArray(value) {
   return Array.isArray(value) && value.length > 0 && value.every(item => isNonEmptyString(item));
 }
 
+function validateInlineJs(command, label) {
+  const nodeEMatch = command.match(/^node -e "((?:[^"\\]|\\.)*)"(?:\s|$)/s);
+  if (!nodeEMatch) return false;
+
+  const unescaped = nodeEMatch[1].replace(/\\(.)/g, (_match, char) => {
+    if (char === 'n') return '\n';
+    if (char === 't') return '\t';
+    if (char === '\\') return '\\';
+    if (char === '"') return '"';
+    return char;
+  });
+
+  try {
+    new vm.Script(unescaped);
+    return false;
+  } catch (syntaxErr) {
+    console.error(`ERROR: ${label} has invalid inline JS: ${syntaxErr.message}`);
+    return true;
+  }
+}
+
+function validateCommandHook(hook, label) {
+  let hasErrors = false;
+
+  if ('async' in hook && typeof hook.async !== 'boolean') {
+    console.error(`ERROR: ${label} 'async' must be a boolean`);
+    hasErrors = true;
+  }
+
+  if (!isNonEmptyString(hook.command) && !isNonEmptyStringArray(hook.command)) {
+    console.error(`ERROR: ${label} missing or invalid 'command' field`);
+    hasErrors = true;
+  } else if (typeof hook.command === 'string') {
+    if (validateInlineJs(hook.command, label)) hasErrors = true;
+  }
+
+  return hasErrors;
+}
+
+function validateHttpHook(hook, label) {
+  let hasErrors = false;
+
+  if (!isNonEmptyString(hook.url)) {
+    console.error(`ERROR: ${label} missing or invalid 'url' field`);
+    hasErrors = true;
+  }
+
+  const invalidHeaders = 'headers' in hook && (
+    typeof hook.headers !== 'object' ||
+    hook.headers === null ||
+    Array.isArray(hook.headers) ||
+    !Object.values(hook.headers).every(value => typeof value === 'string')
+  );
+  if (invalidHeaders) {
+    console.error(`ERROR: ${label} 'headers' must be an object with string values`);
+    hasErrors = true;
+  }
+
+  const invalidAllowedEnvVars = 'allowedEnvVars' in hook && (
+    !Array.isArray(hook.allowedEnvVars) ||
+    !hook.allowedEnvVars.every(value => isNonEmptyString(value))
+  );
+  if (invalidAllowedEnvVars) {
+    console.error(`ERROR: ${label} 'allowedEnvVars' must be an array of strings`);
+    hasErrors = true;
+  }
+
+  return hasErrors;
+}
+
+function validatePromptOrAgentHook(hook, label) {
+  let hasErrors = false;
+
+  if (!isNonEmptyString(hook.prompt)) {
+    console.error(`ERROR: ${label} missing or invalid 'prompt' field`);
+    hasErrors = true;
+  }
+
+  if ('model' in hook && !isNonEmptyString(hook.model)) {
+    console.error(`ERROR: ${label} 'model' must be a non-empty string`);
+    hasErrors = true;
+  }
+
+  return hasErrors;
+}
+
 /**
  * Validate a single hook entry has required fields and valid inline JS
  * @param {object} hook - Hook object with type and command fields
@@ -64,34 +150,7 @@ function validateHookEntry(hook, label) {
   }
 
   if (hook.type === 'command') {
-    if ('async' in hook && typeof hook.async !== 'boolean') {
-      console.error(`ERROR: ${label} 'async' must be a boolean`);
-      hasErrors = true;
-    }
-
-    if (!isNonEmptyString(hook.command) && !isNonEmptyStringArray(hook.command)) {
-      console.error(`ERROR: ${label} missing or invalid 'command' field`);
-      hasErrors = true;
-    } else if (typeof hook.command === 'string') {
-      const nodeEMatch = hook.command.match(/^node -e "((?:[^"\\]|\\.)*)"(?:\s|$)/s);
-      if (nodeEMatch) {
-        try {
-          const unescaped = nodeEMatch[1].replace(/\\(.)/g, (match, char) => {
-            if (char === 'n') return '\n';
-            if (char === 't') return '\t';
-            if (char === '\\') return '\\';
-            if (char === '"') return '"';
-            return char;
-          });
-          new vm.Script(unescaped);
-        } catch (syntaxErr) {
-          console.error(`ERROR: ${label} has invalid inline JS: ${syntaxErr.message}`);
-          hasErrors = true;
-        }
-      }
-    }
-
-    return hasErrors;
+    return hasErrors || validateCommandHook(hook, label);
   }
 
   if ('async' in hook) {
@@ -100,35 +159,98 @@ function validateHookEntry(hook, label) {
   }
 
   if (hook.type === 'http') {
-    if (!isNonEmptyString(hook.url)) {
-      console.error(`ERROR: ${label} missing or invalid 'url' field`);
+    return hasErrors || validateHttpHook(hook, label);
+  }
+
+  return hasErrors || validatePromptOrAgentHook(hook, label);
+}
+
+function validateMatcher(matcher, eventType, i, hasErrors) {
+  let errors = hasErrors;
+
+  if (!('matcher' in matcher) && !EVENTS_WITHOUT_MATCHER.has(eventType)) {
+    console.error(`ERROR: ${eventType}[${i}] missing 'matcher' field`);
+    errors = true;
+  } else if ('matcher' in matcher && typeof matcher.matcher !== 'string' && (typeof matcher.matcher !== 'object' || matcher.matcher === null)) {
+    console.error(`ERROR: ${eventType}[${i}] has invalid 'matcher' field`);
+    errors = true;
+  }
+
+  if (!matcher.hooks || !Array.isArray(matcher.hooks)) {
+    console.error(`ERROR: ${eventType}[${i}] missing 'hooks' array`);
+    errors = true;
+  } else {
+    for (let j = 0; j < matcher.hooks.length; j++) {
+      if (validateHookEntry(matcher.hooks[j], `${eventType}[${i}].hooks[${j}]`)) {
+        errors = true;
+      }
+    }
+  }
+
+  return errors;
+}
+
+function validateObjectFormat(hooks) {
+  let hasErrors = false;
+  let totalMatchers = 0;
+
+  for (const [eventType, matchers] of Object.entries(hooks)) {
+    if (!VALID_EVENTS.includes(eventType)) {
+      console.error(`ERROR: Invalid event type: ${eventType}`);
+      hasErrors = true;
+      continue;
+    }
+
+    if (!Array.isArray(matchers)) {
+      console.error(`ERROR: ${eventType} must be an array`);
+      hasErrors = true;
+      continue;
+    }
+
+    for (let i = 0; i < matchers.length; i++) {
+      const matcher = matchers[i];
+      if (typeof matcher !== 'object' || matcher === null) {
+        console.error(`ERROR: ${eventType}[${i}] is not an object`);
+        hasErrors = true;
+        continue;
+      }
+      hasErrors = validateMatcher(matcher, eventType, i, hasErrors);
+      totalMatchers++;
+    }
+  }
+
+  return { hasErrors, totalMatchers };
+}
+
+function validateArrayFormat(hooks) {
+  let hasErrors = false;
+  let totalMatchers = 0;
+
+  for (let i = 0; i < hooks.length; i++) {
+    const hook = hooks[i];
+
+    if (!('matcher' in hook)) {
+      console.error(`ERROR: Hook ${i} missing 'matcher' field`);
+      hasErrors = true;
+    } else if (typeof hook.matcher !== 'string' && (typeof hook.matcher !== 'object' || hook.matcher === null)) {
+      console.error(`ERROR: Hook ${i} has invalid 'matcher' field`);
       hasErrors = true;
     }
 
-    if ('headers' in hook && (typeof hook.headers !== 'object' || hook.headers === null || Array.isArray(hook.headers) || !Object.values(hook.headers).every(value => typeof value === 'string'))) {
-      console.error(`ERROR: ${label} 'headers' must be an object with string values`);
+    if (!hook.hooks || !Array.isArray(hook.hooks)) {
+      console.error(`ERROR: Hook ${i} missing 'hooks' array`);
       hasErrors = true;
+    } else {
+      for (let j = 0; j < hook.hooks.length; j++) {
+        if (validateHookEntry(hook.hooks[j], `Hook ${i}.hooks[${j}]`)) {
+          hasErrors = true;
+        }
+      }
     }
-
-    if ('allowedEnvVars' in hook && (!Array.isArray(hook.allowedEnvVars) || !hook.allowedEnvVars.every(value => isNonEmptyString(value)))) {
-      console.error(`ERROR: ${label} 'allowedEnvVars' must be an array of strings`);
-      hasErrors = true;
-    }
-
-    return hasErrors;
+    totalMatchers++;
   }
 
-  if (!isNonEmptyString(hook.prompt)) {
-    console.error(`ERROR: ${label} missing or invalid 'prompt' field`);
-    hasErrors = true;
-  }
-
-  if ('model' in hook && !isNonEmptyString(hook.model)) {
-    console.error(`ERROR: ${label} 'model' must be a non-empty string`);
-    hasErrors = true;
-  }
-
-  return hasErrors;
+  return { hasErrors, totalMatchers };
 }
 
 function validateHooks() {
@@ -158,86 +280,23 @@ function validateHooks() {
     }
   }
 
-  // Support both object format { hooks: {...} } and array format
   const hooks = data.hooks || data;
-  let hasErrors = false;
-  let totalMatchers = 0;
+  let result;
 
   if (typeof hooks === 'object' && !Array.isArray(hooks)) {
-    // Object format: { EventType: [matchers] }
-    for (const [eventType, matchers] of Object.entries(hooks)) {
-      if (!VALID_EVENTS.includes(eventType)) {
-        console.error(`ERROR: Invalid event type: ${eventType}`);
-        hasErrors = true;
-        continue;
-      }
-
-      if (!Array.isArray(matchers)) {
-        console.error(`ERROR: ${eventType} must be an array`);
-        hasErrors = true;
-        continue;
-      }
-
-      for (let i = 0; i < matchers.length; i++) {
-        const matcher = matchers[i];
-        if (typeof matcher !== 'object' || matcher === null) {
-          console.error(`ERROR: ${eventType}[${i}] is not an object`);
-          hasErrors = true;
-          continue;
-        }
-        if (!('matcher' in matcher) && !EVENTS_WITHOUT_MATCHER.has(eventType)) {
-          console.error(`ERROR: ${eventType}[${i}] missing 'matcher' field`);
-          hasErrors = true;
-        } else if ('matcher' in matcher && typeof matcher.matcher !== 'string' && (typeof matcher.matcher !== 'object' || matcher.matcher === null)) {
-          console.error(`ERROR: ${eventType}[${i}] has invalid 'matcher' field`);
-          hasErrors = true;
-        }
-        if (!matcher.hooks || !Array.isArray(matcher.hooks)) {
-          console.error(`ERROR: ${eventType}[${i}] missing 'hooks' array`);
-          hasErrors = true;
-        } else {
-          for (let j = 0; j < matcher.hooks.length; j++) {
-            if (validateHookEntry(matcher.hooks[j], `${eventType}[${i}].hooks[${j}]`)) {
-              hasErrors = true;
-            }
-          }
-        }
-        totalMatchers++;
-      }
-    }
+    result = validateObjectFormat(hooks);
   } else if (Array.isArray(hooks)) {
-    // Array format (legacy)
-    for (let i = 0; i < hooks.length; i++) {
-      const hook = hooks[i];
-      if (!('matcher' in hook)) {
-        console.error(`ERROR: Hook ${i} missing 'matcher' field`);
-        hasErrors = true;
-      } else if (typeof hook.matcher !== 'string' && (typeof hook.matcher !== 'object' || hook.matcher === null)) {
-        console.error(`ERROR: Hook ${i} has invalid 'matcher' field`);
-        hasErrors = true;
-      }
-      if (!hook.hooks || !Array.isArray(hook.hooks)) {
-        console.error(`ERROR: Hook ${i} missing 'hooks' array`);
-        hasErrors = true;
-      } else {
-        for (let j = 0; j < hook.hooks.length; j++) {
-          if (validateHookEntry(hook.hooks[j], `Hook ${i}.hooks[${j}]`)) {
-            hasErrors = true;
-          }
-        }
-      }
-      totalMatchers++;
-    }
+    result = validateArrayFormat(hooks);
   } else {
     console.error('ERROR: hooks.json must be an object or array');
     process.exit(1);
   }
 
-  if (hasErrors) {
+  if (result.hasErrors) {
     process.exit(1);
   }
 
-  console.log(`Validated ${totalMatchers} hook matchers`);
+  console.log(`Validated ${result.totalMatchers} hook matchers`);
 }
 
 validateHooks();

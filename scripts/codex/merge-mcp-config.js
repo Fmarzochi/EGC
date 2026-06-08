@@ -204,6 +204,117 @@ function removeServerFromText(raw, serverName, existing) {
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 
+function resolveServerEntry(name, existing) {
+  const entry = existing[name];
+  const aliases = LEGACY_ALIASES[name] || [];
+  const legacyName = aliases.find(a => existing[a] && typeof existing[a].command === 'string');
+  const hasCanonical = entry && typeof entry.command === 'string';
+  const resolvedEntry = hasCanonical ? entry : legacyName ? existing[legacyName] : null;
+  const urlEntry = !resolvedEntry && entry && typeof entry.url === 'string' ? entry : null;
+  return {
+    finalEntry: resolvedEntry || urlEntry,
+    resolvedLabel: hasCanonical ? name : legacyName || name,
+    legacyName,
+    hasCanonical,
+  };
+}
+
+function processDisabledServer(name, resolved, raw, existing, toRemoveLog) {
+  let updatedRaw = raw;
+  if (resolved.finalEntry) {
+    toRemoveLog.push(`mcp_servers.${resolved.resolvedLabel} (disabled)`);
+    updatedRaw = removeServerFromText(updatedRaw, resolved.resolvedLabel, existing);
+    if (resolved.resolvedLabel !== name) {
+      updatedRaw = removeServerFromText(updatedRaw, name, existing);
+    }
+  }
+  log(`  [skip] mcp_servers.${name} (disabled)`);
+  return updatedRaw;
+}
+
+function processExistingServer(name, spec, resolved, updateMcp, raw, existing, toRemoveLog, toAppend) {
+  let updatedRaw = raw;
+  if (updateMcp) {
+    toRemoveLog.push(`mcp_servers.${resolved.resolvedLabel}`);
+    updatedRaw = removeServerFromText(updatedRaw, resolved.resolvedLabel, existing);
+    if (resolved.resolvedLabel !== name) {
+      updatedRaw = removeServerFromText(updatedRaw, name, existing);
+    }
+    if (resolved.legacyName && resolved.hasCanonical) {
+      toRemoveLog.push(`mcp_servers.${resolved.legacyName}`);
+      updatedRaw = removeServerFromText(updatedRaw, resolved.legacyName, existing);
+    }
+    toAppend.push(spec.toml);
+  } else if (resolved.legacyName && !resolved.hasCanonical) {
+    warn(`mcp_servers.${resolved.legacyName} is a legacy name for ${name} (run with --update-mcp to migrate)`);
+  } else if (configDiffers(resolved.finalEntry, spec.fields)) {
+    warn(`mcp_servers.${name} differs from EGC recommendation (run with --update-mcp to refresh)`);
+  } else {
+    log(`  [ok] mcp_servers.${name}`);
+  }
+  return updatedRaw;
+}
+
+function processServers(existing, disabledServers, updateMcp, rawInit) {
+  let raw = rawInit;
+  const toAppend = [];
+  const toRemoveLog = [];
+
+  for (const [name, spec] of Object.entries(EGC_SERVERS)) {
+    const resolved = resolveServerEntry(name, existing);
+
+    if (disabledServers.has(name)) {
+      raw = processDisabledServer(name, resolved, raw, existing, toRemoveLog);
+      continue;
+    }
+
+    if (resolved.finalEntry) {
+      raw = processExistingServer(name, spec, resolved, updateMcp, raw, existing, toRemoveLog, toAppend);
+    } else {
+      log(`  [add] mcp_servers.${name}`);
+      toAppend.push(spec.toml);
+    }
+  }
+
+  return { raw, toAppend, toRemoveLog };
+}
+
+function applyChanges(configPath, raw, toAppend, toRemoveLog, dryRun, updateMcp) {
+  const hasRemovals = toRemoveLog.length > 0;
+
+  if (toAppend.length === 0 && !hasRemovals) {
+    log('All EGC MCP servers already present. Nothing to do.');
+    return;
+  }
+
+  const appendText = '\n' + toAppend.join('\n\n') + '\n';
+
+  if (dryRun) {
+    if (toRemoveLog.length > 0) {
+      log('Dry run - would remove and re-add:');
+      for (const label of toRemoveLog) log(`  [remove] ${label}`);
+    }
+    log('Dry run - would append:');
+    console.log(appendText);
+    return;
+  }
+
+  if (updateMcp || hasRemovals) {
+    for (const label of toRemoveLog) log(`  [update] ${label}`);
+    const cleaned = raw.replace(/\n+$/, '\n');
+    fs.writeFileSync(configPath, cleaned + (toAppend.length > 0 ? appendText : ''), 'utf8');
+  } else {
+    fs.appendFileSync(configPath, appendText, 'utf8');
+  }
+
+  if (hasRemovals && toAppend.length === 0) {
+    log(`Done. Removed ${toRemoveLog.length} disabled server(s).`);
+    return;
+  }
+
+  log(`Done. ${toAppend.length} server(s) ${updateMcp ? 'updated' : 'added'}.`);
+}
+
 function main() {
   const args = process.argv.slice(2);
   const configPath = args.find(a => !a.startsWith('-'));
@@ -237,96 +348,8 @@ function main() {
   }
 
   const existing = parsed.mcp_servers || {};
-  const toAppend = [];
-  const toRemoveLog = [];
-
-  for (const [name, spec] of Object.entries(EGC_SERVERS)) {
-    const entry = existing[name];
-    const aliases = LEGACY_ALIASES[name] || [];
-    const legacyName = aliases.find(a => existing[a] && typeof existing[a].command === 'string');
-
-    // Prefer canonical entry over legacy alias
-    const hasCanonical = entry && typeof entry.command === 'string';
-    const resolvedEntry = hasCanonical ? entry : legacyName ? existing[legacyName] : null;
-    const urlEntry = !resolvedEntry && entry && typeof entry.url === 'string' ? entry : null;
-    const finalEntry = resolvedEntry || urlEntry;
-    const resolvedLabel = hasCanonical ? name : legacyName || name;
-
-    if (disabledServers.has(name)) {
-      if (finalEntry) {
-        toRemoveLog.push(`mcp_servers.${resolvedLabel} (disabled)`);
-        raw = removeServerFromText(raw, resolvedLabel, existing);
-        if (resolvedLabel !== name) {
-          raw = removeServerFromText(raw, name, existing);
-        }
-      }
-      log(`  [skip] mcp_servers.${name} (disabled)`);
-      continue;
-    }
-
-    if (finalEntry) {
-      if (updateMcp) {
-        // --update-mcp: remove existing section (and legacy alias), will re-add below
-        toRemoveLog.push(`mcp_servers.${resolvedLabel}`);
-        raw = removeServerFromText(raw, resolvedLabel, existing);
-        if (resolvedLabel !== name) {
-          raw = removeServerFromText(raw, name, existing);
-        }
-        if (legacyName && hasCanonical) {
-          toRemoveLog.push(`mcp_servers.${legacyName}`);
-          raw = removeServerFromText(raw, legacyName, existing);
-        }
-        toAppend.push(spec.toml);
-      } else {
-        if (legacyName && !hasCanonical) {
-          warn(`mcp_servers.${legacyName} is a legacy name for ${name} (run with --update-mcp to migrate)`);
-        } else if (configDiffers(finalEntry, spec.fields)) {
-          warn(`mcp_servers.${name} differs from EGC recommendation (run with --update-mcp to refresh)`);
-        } else {
-          log(`  [ok] mcp_servers.${name}`);
-        }
-      }
-    } else {
-      log(`  [add] mcp_servers.${name}`);
-      toAppend.push(spec.toml);
-    }
-  }
-
-  const hasRemovals = toRemoveLog.length > 0;
-
-  if (toAppend.length === 0 && !hasRemovals) {
-    log('All EGC MCP servers already present. Nothing to do.');
-    return;
-  }
-
-  const appendText = '\n' + toAppend.join('\n\n') + '\n';
-
-  if (dryRun) {
-    if (toRemoveLog.length > 0) {
-      log('Dry run — would remove and re-add:');
-      for (const label of toRemoveLog) log(`  [remove] ${label}`);
-    }
-    log('Dry run — would append:');
-    console.log(appendText);
-    return;
-  }
-
-  // Write: for add-only, append to preserve existing content byte-for-byte.
-  // For --update-mcp, we modified `raw` above, so write the full file + appended sections.
-  if (updateMcp || hasRemovals) {
-    for (const label of toRemoveLog) log(`  [update] ${label}`);
-    const cleaned = raw.replace(/\n+$/, '\n');
-    fs.writeFileSync(configPath, cleaned + (toAppend.length > 0 ? appendText : ''), 'utf8');
-  } else {
-    fs.appendFileSync(configPath, appendText, 'utf8');
-  }
-
-  if (hasRemovals && toAppend.length === 0) {
-    log(`Done. Removed ${toRemoveLog.length} disabled server(s).`);
-    return;
-  }
-
-  log(`Done. ${toAppend.length} server(s) ${updateMcp ? 'updated' : 'added'}.`);
+  const result = processServers(existing, disabledServers, updateMcp, raw);
+  applyChanges(configPath, result.raw, result.toAppend, result.toRemoveLog, dryRun, updateMcp);
 }
 
 main();

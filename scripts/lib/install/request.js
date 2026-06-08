@@ -8,6 +8,46 @@ function dedupeStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(value => String(value).trim()).filter(Boolean))];
 }
 
+function applyNextArg(parsed, key, args, index) {
+  parsed[key] = args[index + 1] || null;
+  return 1;
+}
+
+function applyModules(parsed, args, index) {
+  const raw = args[index + 1] || '';
+  parsed.moduleIds = dedupeStrings(raw.split(','));
+  return 1;
+}
+
+function applyWithComponent(parsed, args, index) {
+  const componentId = args[index + 1] || '';
+  if (componentId.trim()) {
+    parsed.includeComponentIds.push(componentId.trim());
+  }
+  return 1;
+}
+
+function applyWithoutComponent(parsed, args, index) {
+  const componentId = args[index + 1] || '';
+  if (componentId.trim()) {
+    parsed.excludeComponentIds.push(componentId.trim());
+  }
+  return 1;
+}
+
+const ARG_HANDLERS = {
+  '--target':   (parsed, args, i) => applyNextArg(parsed, 'target', args, i),
+  '--config':   (parsed, args, i) => applyNextArg(parsed, 'configPath', args, i),
+  '--profile':  (parsed, args, i) => applyNextArg(parsed, 'profileId', args, i),
+  '--modules':  (parsed, args, i) => applyModules(parsed, args, i),
+  '--with':     (parsed, args, i) => applyWithComponent(parsed, args, i),
+  '--without':  (parsed, args, i) => applyWithoutComponent(parsed, args, i),
+  '--dry-run':  (parsed) => { parsed.dryRun = true; return 0; },
+  '--json':     (parsed) => { parsed.json = true; return 0; },
+  '--help':     (parsed) => { parsed.help = true; return 0; },
+  '-h':         (parsed) => { parsed.help = true; return 0; },
+};
+
 function parseInstallArgs(argv) {
   const args = argv.slice(2);
   const parsed = {
@@ -25,38 +65,10 @@ function parseInstallArgs(argv) {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    const handler = ARG_HANDLERS[arg];
 
-    if (arg === '--target') {
-      parsed.target = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--config') {
-      parsed.configPath = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--profile') {
-      parsed.profileId = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--modules') {
-      const raw = args[index + 1] || '';
-      parsed.moduleIds = dedupeStrings(raw.split(','));
-      index += 1;
-    } else if (arg === '--with') {
-      const componentId = args[index + 1] || '';
-      if (componentId.trim()) {
-        parsed.includeComponentIds.push(componentId.trim());
-      }
-      index += 1;
-    } else if (arg === '--without') {
-      const componentId = args[index + 1] || '';
-      if (componentId.trim()) {
-        parsed.excludeComponentIds.push(componentId.trim());
-      }
-      index += 1;
-    } else if (arg === '--dry-run') {
-      parsed.dryRun = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
+    if (handler) {
+      index += handler(parsed, args, index);
     } else if (arg.startsWith('--')) {
       throw new Error(`Unknown argument: ${arg}`);
     } else {
