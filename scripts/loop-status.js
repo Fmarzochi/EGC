@@ -61,6 +61,23 @@ function readPositiveInteger(value, flagName) {
   return number;
 }
 
+const PARSE_ARGS_HANDLERS = {
+  '--help':                  (opts) => { opts.showHelp = true; return 0; },
+  '-h':                      (opts) => { opts.showHelp = true; return 0; },
+  '--json':                  (opts) => { opts.json = true; return 0; },
+  '--exit-code':             (opts) => { opts.exitCode = true; return 0; },
+  '--watch':                 (opts) => { opts.watch = true; return 0; },
+  '--home':                  (opts, args, i) => { opts.home = readValue(args, i, '--home'); return 1; },
+  '--now':                   (opts, args, i) => { opts.now = readValue(args, i, '--now'); return 1; },
+  '--write-dir':             (opts, args, i) => { opts.writeDir = readValue(args, i, '--write-dir'); return 1; },
+  '--transcript':            (opts, args, i) => { opts.transcriptPaths.push(readValue(args, i, '--transcript')); return 1; },
+  '--limit':                 (opts, args, i) => { opts.limit = readPositiveInteger(readValue(args, i, '--limit'), '--limit'); return 1; },
+  '--watch-count':           (opts, args, i) => { opts.watchCount = readPositiveInteger(readValue(args, i, '--watch-count'), '--watch-count'); return 1; },
+  '--bash-timeout-seconds':  (opts, args, i) => { opts.bashTimeoutSeconds = readPositiveNumber(readValue(args, i, '--bash-timeout-seconds'), '--bash-timeout-seconds'); return 1; },
+  '--wake-grace-multiplier': (opts, args, i) => { opts.wakeGraceMultiplier = readPositiveNumber(readValue(args, i, '--wake-grace-multiplier'), '--wake-grace-multiplier'); return 1; },
+  '--watch-interval-seconds':(opts, args, i) => { opts.watchIntervalSeconds = readPositiveNumber(readValue(args, i, '--watch-interval-seconds'), '--watch-interval-seconds'); return 1; },
+};
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   const options = {
@@ -81,42 +98,9 @@ function parseArgs(argv) {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-
-    if (arg === '--help' || arg === '-h') {
-      options.showHelp = true;
-    } else if (arg === '--json') {
-      options.json = true;
-    } else if (arg === '--home') {
-      options.home = readValue(args, index, arg);
-      index += 1;
-    } else if (arg === '--transcript') {
-      options.transcriptPaths.push(readValue(args, index, arg));
-      index += 1;
-    } else if (arg === '--limit') {
-      options.limit = readPositiveInteger(readValue(args, index, arg), arg);
-      index += 1;
-    } else if (arg === '--bash-timeout-seconds') {
-      options.bashTimeoutSeconds = readPositiveNumber(readValue(args, index, arg), arg);
-      index += 1;
-    } else if (arg === '--wake-grace-multiplier') {
-      options.wakeGraceMultiplier = readPositiveNumber(readValue(args, index, arg), arg);
-      index += 1;
-    } else if (arg === '--now') {
-      options.now = readValue(args, index, arg);
-      index += 1;
-    } else if (arg === '--exit-code') {
-      options.exitCode = true;
-    } else if (arg === '--watch') {
-      options.watch = true;
-    } else if (arg === '--watch-count') {
-      options.watchCount = readPositiveInteger(readValue(args, index, arg), arg);
-      index += 1;
-    } else if (arg === '--watch-interval-seconds') {
-      options.watchIntervalSeconds = readPositiveNumber(readValue(args, index, arg), arg);
-      index += 1;
-    } else if (arg === '--write-dir') {
-      options.writeDir = readValue(args, index, arg);
-      index += 1;
+    const handler = PARSE_ARGS_HANDLERS[arg];
+    if (handler) {
+      index += handler(options, args, index);
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
