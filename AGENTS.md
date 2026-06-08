@@ -1,6 +1,6 @@
 # EGC — Agent Catalog
 
-Extended Global Context (EGC) is a production-grade, multi-agent system providing 62 specialized agents, 228+ skills, 74 commands to any compatible AI coding environment.
+Extended Global Context (EGC) is a production-grade, multi-agent system providing 63 specialized agents, 229+ skills, 76 commands to any compatible AI coding environment.
 
 ## Quick Start
 
@@ -13,9 +13,9 @@ node scripts/install-apply.js --target egc
 ## Project Structure
 
 ```
-agents/     — 62 specialized subagents
-skills/     — 228+ workflow skills and domain knowledge
-commands/   — 74 slash commands
+agents/     — 63 specialized subagents
+skills/     — 229+ workflow skills and domain knowledge
+commands/   — 76 slash commands
 ```
 
 ## Agents

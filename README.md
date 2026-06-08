@@ -98,7 +98,7 @@ The installer runs these steps:
 2. Initializes the local SQLite database
 3. Runs the cognitive bootstrap: writes the memory protocol into `~/.claude/CLAUDE.md` (Claude Code) and `~/.gemini/GEMINI.md` (AGY), creating the files if they don't exist, idempotent
 4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (62 agents, 228 skills, 74 commands), skipped automatically in CI
+5. Asks interactively whether to install the prompt library (63 agents, 229 skills, 76 commands), skipped automatically in CI
 
 The installer will print which tools it found and registered:
 
@@ -116,7 +116,7 @@ EGC install
   ✓ registered in Claude Code (global)
   ✓ registered in Cursor
 
-Install prompt library? (62 agents, 228 skills, 74 commands) [y/N]:
+Install prompt library? (63 agents, 229 skills, 76 commands) [y/N]:
 
 Installation complete.
 Run 'egc doctor' to verify.
@@ -134,13 +134,13 @@ cd EGC
 
 ## Prompt library
 
-The prompt library is optional. During `sh install.sh`, you'll be asked whether to install it. In CI or non-interactive shells, this step is skipped. Install once to get access to 62 agents, 228 skills, and 74 commands written from real experience, not generated.
+The prompt library is optional. During `sh install.sh`, you'll be asked whether to install it. In CI or non-interactive shells, this step is skipped. Install once to get access to 63 agents, 229 skills, and 76 commands written from real experience, not generated.
 
 | Type | Count | What it is |
 |---|---|---|
-| Agents | 62 agents | Persona and behavior definitions |
-| Skills | 228 skills | Domain-specific workflow runbooks |
-| Commands | 74 commands | Command definitions and lifecycle hooks |
+| Agents | 63 agents | Persona and behavior definitions |
+| Skills | 229 skills | Domain-specific workflow runbooks |
+| Commands | 76 commands | Command definitions and lifecycle hooks |
 | Rules | 111 | Constraints and governance directives |
 
 Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and four others. Switch tools and the same workflows follow you.
@@ -149,9 +149,9 @@ Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and fo
 
 | Component | Total | Claude Code | Gemini CLI | Claude Code native |
 |---|---|---|---|---|
-| Agents | 62 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
-| Commands | 74 | Shared | Instruction-based | 31 |
-| Skills | 228 | Shared | 10 (native format) | 37 |
+| Agents | 63 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
+| Commands | 76 | Shared | Instruction-based | 31 |
+| Skills | 229 | Shared | 10 (native format) | 37 |
 
 ---
 

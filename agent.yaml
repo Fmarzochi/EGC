@@ -152,6 +152,8 @@ commands:
   - cpp-build
   - cpp-review
   - cpp-test
+  - engineering-audit
+  - engineering-fix
   - evolve
   - fastapi-review
   - feature-dev
