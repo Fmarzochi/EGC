@@ -28,6 +28,8 @@
     "build": "npm run build:opencode && npm run build:mcp",
     "doctor": "node scripts/doctor.js",
     "bootstrap": "node scripts/bootstrap-state-db.js",
+    "lint": "eslint .",
+    "build": "npm run build:opencode && npm run build:mcp",
     "build:opencode": "node scripts/build-opencode.js",
     "build:mcp": "cd mcp/servers/egc-guardian && npm ci --silent && npm run build && cd ../egc-memory && npm ci --silent && npm run build",
     "prompt": "node scripts/gemini.js",
