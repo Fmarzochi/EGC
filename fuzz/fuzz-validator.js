@@ -15,11 +15,11 @@ module.exports.fuzz = async function (data) {
 
   const input = data.toString('utf-8');
 
-  try { validateCommand(input); } catch (_) {}
-  try { validateWrite(input); } catch (_) {}
-  try { isProtectedPath(input); } catch (_) {}
+  try { validateCommand(input); } catch (_) { /* fuzz: expected throw */ }
+  try { validateWrite(input); } catch (_) { /* fuzz: expected throw */ }
+  try { isProtectedPath(input); } catch (_) { /* fuzz: expected throw */ }
 
-  try { validateCommand('\x00' + input); } catch (_) {}
-  try { validateWrite('../../../etc/passwd' + input); } catch (_) {}
-  try { validateCommand('cat ~/' + input); } catch (_) {}
+  try { validateCommand('\x00' + input); } catch (_) { /* fuzz: expected throw */ }
+  try { validateWrite('../../../etc/passwd' + input); } catch (_) { /* fuzz: expected throw */ }
+  try { validateCommand('cat ~/' + input); } catch (_) { /* fuzz: expected throw */ }
 };

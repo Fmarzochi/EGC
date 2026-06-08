@@ -82,9 +82,11 @@ function findEmptyDirs(dirPath) {
         if (remaining.length === 0 && currentPath !== dirPath) {
           emptyDirs.push(currentPath);
         }
-      } catch {
+      } catch (_) {
+        /* skip unreadable directory */
       }
-    } catch {
+    } catch (_) {
+      /* skip permission-denied directory tree */
     }
   }
 
@@ -243,7 +245,8 @@ async function doUninstall() {
       const relativePath = path.relative(codebuddyFullPath, emptyDir);
       console.log(`Removed: ${relativePath}/`);
       removed += 1;
-    } catch {
+    } catch (_) {
+      /* skip failure to remove empty directory */
     }
   }
 
@@ -254,7 +257,8 @@ async function doUninstall() {
       console.log(`Removed: ${codebuddyDirName}/`);
       removed += 1;
     }
-  } catch {
+  } catch (_) {
+    /* skip failure to remove install directory */
   }
 
   console.log('');

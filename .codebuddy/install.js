@@ -124,12 +124,14 @@ function findFiles(dir, extension = '') {
             results.push(fullPath);
           }
         }
-      } catch {
+      } catch (_) {
+        /* skip unreadable subdirectory */
       }
     }
 
     walk(dir);
-  } catch {
+  } catch (_) {
+    /* skip unreadable top-level directory */
   }
   return results.sort();
 }
