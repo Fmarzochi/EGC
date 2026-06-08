@@ -4,6 +4,17 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { execSync } from 'child_process';
+
+function hideEgcRootOnWindows(): void {
+  if (process.platform !== 'win32') return;
+  const egcRoot = path.join(os.homedir(), '.egc');
+  try {
+    execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
+  } catch (_) {
+    // non-critical: folder works even if attribute fails
+  }
+}
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
 
@@ -34,6 +45,7 @@ class PersistentLogger {
   constructor(serviceName: string) {
     const logDir = path.join(os.homedir(), '.egc', 'logs');
     if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    hideEgcRootOnWindows();
     this.logPath = path.join(logDir, `${serviceName}.log`);
   }
 

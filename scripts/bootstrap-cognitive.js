@@ -49,7 +49,7 @@ try {
     injectProtocol(path.join(HOME, '.claude', 'CLAUDE.md'), 'Claude Code');
   }
 } catch (e) {
-  console.log(`  [cognitive] Claude Code: erro inesperado — ${e.message}`);
+  console.log(`  [cognitive] Claude Code: unexpected error — ${e.message}`);
 }
 
 // ── Gemini CLI / AGY ──────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ try {
     injectProtocol(path.join(HOME, '.gemini', 'GEMINI.md'), 'Gemini CLI');
   }
 } catch (e) {
-  console.log(`  [cognitive] Gemini CLI: erro inesperado — ${e.message}`);
+  console.log(`  [cognitive] Gemini CLI: unexpected error — ${e.message}`);
 }
 
 // ── Cursor (global User Rules via settings.json) ──────────────────────────────
@@ -79,7 +79,7 @@ try {
       try {
         obj = JSON.parse(rawContent);
       } catch (_) {
-        console.log('  [cognitive] Cursor: settings.json não é JSON válido (JSONC?) — pulando');
+        console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?) — skipping');
         return;
       }
       const existing = obj['cursor.rules'] || '';
@@ -96,7 +96,7 @@ try {
       injectProtocol(path.join(HOME, '.cursor', 'rules'), 'Cursor');
     }
   } catch (e) {
-    console.log(`  [cognitive] Cursor: erro inesperado — ${e.message}`);
+    console.log(`  [cognitive] Cursor: unexpected error — ${e.message}`);
   }
 })();
 
@@ -121,7 +121,7 @@ try {
       const hasKey      = /^persistent_instructions\s*=/m.test(originalContent);
 
       if (RE_TRIPLE_D.test(originalContent) || RE_TRIPLE_S.test(originalContent)) {
-        console.log('  [cognitive] Codex: persistent_instructions multiline — pulando');
+        console.log('  [cognitive] Codex: persistent_instructions multiline — skipping');
         return;
       }
 
@@ -137,7 +137,7 @@ try {
           (_, _pre, val, _post) => `persistent_instructions = "${val}${CODEX_PROTOCOL_SUFFIX}"`
         );
       } else if (hasKey) {
-        console.log('  [cognitive] Codex: persistent_instructions em formato não reconhecido — pulando');
+        console.log('  [cognitive] Codex: persistent_instructions in unrecognized format — skipping');
         return;
       } else {
         newContent = originalContent + '\n' + CODEX_PROTOCOL_FULL;
@@ -152,7 +152,7 @@ try {
     }
     console.log(`  [cognitive] Codex: memory protocol installed (${tomlPath.replace(HOME, '~')})`);
   } catch (e) {
-    console.log(`  [cognitive] Codex: erro inesperado — ${e.message}`);
+    console.log(`  [cognitive] Codex: unexpected error — ${e.message}`);
   }
 })();
 
@@ -176,7 +176,7 @@ try {
     }
     console.log(`  [cognitive] OpenCode: memory protocol installed (${target.replace(HOME, '~')})`);
   } catch (e) {
-    console.log(`  [cognitive] OpenCode: erro inesperado — ${e.message}`);
+    console.log(`  [cognitive] OpenCode: unexpected error — ${e.message}`);
   }
 })();
 
@@ -197,7 +197,7 @@ try {
       console.log(`  [cognitive] Trae (${dir}): memory protocol installed (~/${dir}/MEMORY.md)`);
     }
   } catch (e) {
-    console.log(`  [cognitive] Trae: erro inesperado — ${e.message}`);
+    console.log(`  [cognitive] Trae: unexpected error — ${e.message}`);
   }
 })();
 
@@ -219,7 +219,7 @@ try {
     }
     console.log('  [cognitive] CodeBuddy: memory protocol installed (~/.codebuddy/MEMORY.md)');
   } catch (e) {
-    console.log(`  [cognitive] CodeBuddy: erro inesperado — ${e.message}`);
+    console.log(`  [cognitive] CodeBuddy: unexpected error — ${e.message}`);
   }
 })();
 
@@ -247,6 +247,6 @@ try {
       console.log('  [cognitive] Kiro: already configured');
     }
   } catch (e) {
-    console.log(`  [cognitive] Kiro: erro inesperado — ${e.message}`);
+    console.log(`  [cognitive] Kiro: unexpected error — ${e.message}`);
   }
 })();

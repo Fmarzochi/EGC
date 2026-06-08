@@ -17,7 +17,7 @@
 You open Claude Code on a project you haven't touched in two weeks. Without typing anything:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projetos--EGC.md
+State loaded from egc-memory via ~/.egc/state/Projects--MyApp.md
 
 Context and preferences acknowledged (terse responses).
 
@@ -75,7 +75,7 @@ The money saved is small. The time and interrupted flow are not.
 
 ## Installation
 
-### Via npm (recomendado)
+### Via npm (recommended)
 
 ```bash
 npm install -g @fmarzochi/egc

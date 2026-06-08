@@ -6,7 +6,18 @@ import { open, Database } from 'sqlite';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { z } from 'zod';
+
+function hideEgcRootOnWindows(): void {
+  if (process.platform !== 'win32') return;
+  const egcRoot = path.join(os.homedir(), '.egc');
+  try {
+    execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
+  } catch (_) {
+    // non-critical: folder works even if attribute fails
+  }
+}
 
 class PersistentLogger {
   private logPath: string;
@@ -15,6 +26,7 @@ class PersistentLogger {
   constructor(serviceName: string) {
     const logDir = path.join(os.homedir(), '.egc', 'logs');
     if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    hideEgcRootOnWindows();
     this.logPath = path.join(logDir, `${serviceName}.log`);
   }
 
@@ -168,6 +180,7 @@ async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
   const dbDir = path.join(os.homedir(), '.egc', 'memory');
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  hideEgcRootOnWindows();
   
   const dbPath = path.join(dbDir, 'state.db');
   dbInstance = await open({ filename: dbPath, driver: sqlite3.Database });
@@ -186,6 +199,7 @@ const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" },
 function getStateDir(): string {
   const dir = path.join(os.homedir(), '.egc', 'state');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  hideEgcRootOnWindows();
   return dir;
 }
 
