@@ -22,7 +22,8 @@ module.exports = [
                 caughtErrorsIgnorePattern: '^_'
             }],
             'no-undef': 'error',
-            'eqeqeq': 'warn'
+            'eqeqeq': 'warn',
+            'complexity': ['warn', { max: 20 }]
         }
     },
     {
