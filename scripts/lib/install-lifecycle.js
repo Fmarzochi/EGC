@@ -360,263 +360,174 @@ function executeRepairOperation(repoRoot, operation) {
   throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
 }
 
-function executeUninstallOperation(operation) {
-  if (operation.kind === 'copy-file') {
-    if (!fs.existsSync(operation.destinationPath)) {
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    fs.rmSync(operation.destinationPath, { force: true });
-    return {
-      removedPaths: [operation.destinationPath],
-      cleanupTargets: [operation.destinationPath],
-    };
-  }
-
-  if (operation.kind === 'render-template') {
-    const previousContent = getOperationPreviousContent(operation);
-    if (previousContent !== null) {
-      ensureParentDir(operation.destinationPath);
-      fs.writeFileSync(operation.destinationPath, previousContent);
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    const previousJson = getOperationPreviousJson(operation);
-    if (previousJson !== undefined) {
-      ensureParentDir(operation.destinationPath);
-      fs.writeFileSync(operation.destinationPath, formatJson(previousJson));
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    if (!fs.existsSync(operation.destinationPath)) {
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    fs.rmSync(operation.destinationPath, { force: true });
-    return {
-      removedPaths: [operation.destinationPath],
-      cleanupTargets: [operation.destinationPath],
-    };
-  }
-
-  if (operation.kind === 'merge-json') {
-    const previousContent = getOperationPreviousContent(operation);
-    if (previousContent !== null) {
-      ensureParentDir(operation.destinationPath);
-      fs.writeFileSync(operation.destinationPath, previousContent);
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    const previousJson = getOperationPreviousJson(operation);
-    if (previousJson !== undefined) {
-      ensureParentDir(operation.destinationPath);
-      fs.writeFileSync(operation.destinationPath, formatJson(previousJson));
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    if (!fs.existsSync(operation.destinationPath)) {
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
-
-    const payload = getOperationJsonPayload(operation);
-    if (payload === undefined) {
-      throw new Error(`Missing merge payload for uninstall: ${operation.destinationPath}`);
-    }
-
-    const currentValue = readJsonFile(operation.destinationPath);
-    const nextValue = deepRemoveJsonSubset(currentValue, payload);
-    if (nextValue === JSON_REMOVE_SENTINEL) {
-      fs.rmSync(operation.destinationPath, { force: true });
-      return {
-        removedPaths: [operation.destinationPath],
-        cleanupTargets: [operation.destinationPath],
-      };
-    }
-
+function restorePreviousContent(operation) {
+  const previousContent = getOperationPreviousContent(operation);
+  if (previousContent !== null) {
     ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, formatJson(nextValue));
+    fs.writeFileSync(operation.destinationPath, previousContent);
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+
+  const previousJson = getOperationPreviousJson(operation);
+  if (previousJson !== undefined) {
+    ensureParentDir(operation.destinationPath);
+    fs.writeFileSync(operation.destinationPath, formatJson(previousJson));
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+
+  return null;
+}
+
+function uninstallCopyFile(operation) {
+  if (!fs.existsSync(operation.destinationPath)) {
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+  fs.rmSync(operation.destinationPath, { force: true });
+  return {
+    removedPaths: [operation.destinationPath],
+    cleanupTargets: [operation.destinationPath],
+  };
+}
+
+function uninstallRenderTemplate(operation) {
+  const restored = restorePreviousContent(operation);
+  if (restored) return restored;
+
+  if (!fs.existsSync(operation.destinationPath)) {
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+  fs.rmSync(operation.destinationPath, { force: true });
+  return {
+    removedPaths: [operation.destinationPath],
+    cleanupTargets: [operation.destinationPath],
+  };
+}
+
+function uninstallMergeJson(operation) {
+  const restored = restorePreviousContent(operation);
+  if (restored) return restored;
+
+  if (!fs.existsSync(operation.destinationPath)) {
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+
+  const payload = getOperationJsonPayload(operation);
+  if (payload === undefined) {
+    throw new Error(`Missing merge payload for uninstall: ${operation.destinationPath}`);
+  }
+
+  const currentValue = readJsonFile(operation.destinationPath);
+  const nextValue = deepRemoveJsonSubset(currentValue, payload);
+  if (nextValue === JSON_REMOVE_SENTINEL) {
+    fs.rmSync(operation.destinationPath, { force: true });
     return {
-      removedPaths: [],
-      cleanupTargets: [],
+      removedPaths: [operation.destinationPath],
+      cleanupTargets: [operation.destinationPath],
     };
   }
 
-  if (operation.kind === 'remove') {
-    const previousContent = getOperationPreviousContent(operation);
-    if (previousContent !== null) {
-      ensureParentDir(operation.destinationPath);
-      fs.writeFileSync(operation.destinationPath, previousContent);
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
+  ensureParentDir(operation.destinationPath);
+  fs.writeFileSync(operation.destinationPath, formatJson(nextValue));
+  return { removedPaths: [], cleanupTargets: [] };
+}
 
-    const previousJson = getOperationPreviousJson(operation);
-    if (previousJson !== undefined) {
-      ensureParentDir(operation.destinationPath);
-      fs.writeFileSync(operation.destinationPath, formatJson(previousJson));
-      return {
-        removedPaths: [],
-        cleanupTargets: [],
-      };
-    }
+function uninstallRemove(operation) {
+  const restored = restorePreviousContent(operation);
+  if (restored) return restored;
+  return { removedPaths: [], cleanupTargets: [] };
+}
 
-    return {
-      removedPaths: [],
-      cleanupTargets: [],
-    };
+const UNINSTALL_HANDLERS = {
+  'copy-file': uninstallCopyFile,
+  'render-template': uninstallRenderTemplate,
+  'merge-json': uninstallMergeJson,
+  'remove': uninstallRemove,
+};
+
+function executeUninstallOperation(operation) {
+  const handler = UNINSTALL_HANDLERS[operation.kind];
+  if (!handler) {
+    throw new Error(`Unsupported uninstall operation kind: ${operation.kind}`);
   }
+  return handler(operation);
+}
 
-  throw new Error(`Unsupported uninstall operation kind: ${operation.kind}`);
+function inspectResult(status, operation, destinationPath, extra = {}) {
+  return { status, operation, destinationPath, ...extra };
+}
+
+function inspectRemoveOperation(operation, destinationPath) {
+  if (fs.existsSync(destinationPath)) {
+    return inspectResult('drifted', operation, destinationPath);
+  }
+  return inspectResult('ok', operation, destinationPath);
+}
+
+function inspectCopyFileOperation(repoRoot, operation, destinationPath) {
+  const sourcePath = resolveOperationSourcePath(repoRoot, operation);
+  if (!sourcePath || !fs.existsSync(sourcePath)) {
+    return inspectResult('missing-source', operation, destinationPath, { sourcePath });
+  }
+  if (!areFilesEqual(sourcePath, destinationPath)) {
+    return inspectResult('drifted', operation, destinationPath, { sourcePath });
+  }
+  return inspectResult('ok', operation, destinationPath, { sourcePath });
+}
+
+function inspectRenderTemplateOperation(operation, destinationPath) {
+  const renderedContent = getOperationTextContent(operation);
+  if (renderedContent === null) {
+    return inspectResult('unverified', operation, destinationPath);
+  }
+  if (readFileUtf8(destinationPath) !== renderedContent) {
+    return inspectResult('drifted', operation, destinationPath);
+  }
+  return inspectResult('ok', operation, destinationPath);
+}
+
+function inspectMergeJsonOperation(operation, destinationPath) {
+  const payload = getOperationJsonPayload(operation);
+  if (payload === undefined) {
+    return inspectResult('unverified', operation, destinationPath);
+  }
+  try {
+    const currentValue = readJsonFile(destinationPath);
+    if (!jsonContainsSubset(currentValue, payload)) {
+      return inspectResult('drifted', operation, destinationPath);
+    }
+  } catch (_error) {
+    return inspectResult('drifted', operation, destinationPath);
+  }
+  return inspectResult('ok', operation, destinationPath);
 }
 
 function inspectManagedOperation(repoRoot, operation) {
   const destinationPath = operation.destinationPath;
   if (!destinationPath) {
-    return {
-      status: 'invalid-destination',
-      operation,
-    };
+    return { status: 'invalid-destination', operation };
   }
 
   if (operation.kind === 'remove') {
-    if (fs.existsSync(destinationPath)) {
-      return {
-        status: 'drifted',
-        operation,
-        destinationPath,
-      };
-    }
-
-    return {
-      status: 'ok',
-      operation,
-      destinationPath,
-    };
+    return inspectRemoveOperation(operation, destinationPath);
   }
 
   if (!fs.existsSync(destinationPath)) {
-    return {
-      status: 'missing',
-      operation,
-      destinationPath,
-    };
+    return inspectResult('missing', operation, destinationPath);
   }
 
   if (operation.kind === 'copy-file') {
-    const sourcePath = resolveOperationSourcePath(repoRoot, operation);
-    if (!sourcePath || !fs.existsSync(sourcePath)) {
-      return {
-        status: 'missing-source',
-        operation,
-        destinationPath,
-        sourcePath,
-      };
-    }
-
-    if (!areFilesEqual(sourcePath, destinationPath)) {
-      return {
-        status: 'drifted',
-        operation,
-        destinationPath,
-        sourcePath,
-      };
-    }
-
-    return {
-      status: 'ok',
-      operation,
-      destinationPath,
-      sourcePath,
-    };
+    return inspectCopyFileOperation(repoRoot, operation, destinationPath);
   }
 
   if (operation.kind === 'render-template') {
-    const renderedContent = getOperationTextContent(operation);
-    if (renderedContent === null) {
-      return {
-        status: 'unverified',
-        operation,
-        destinationPath,
-      };
-    }
-
-    if (readFileUtf8(destinationPath) !== renderedContent) {
-      return {
-        status: 'drifted',
-        operation,
-        destinationPath,
-      };
-    }
-
-    return {
-      status: 'ok',
-      operation,
-      destinationPath,
-    };
+    return inspectRenderTemplateOperation(operation, destinationPath);
   }
 
   if (operation.kind === 'merge-json') {
-    const payload = getOperationJsonPayload(operation);
-    if (payload === undefined) {
-      return {
-        status: 'unverified',
-        operation,
-        destinationPath,
-      };
-    }
-
-    try {
-      const currentValue = readJsonFile(destinationPath);
-      if (!jsonContainsSubset(currentValue, payload)) {
-        return {
-          status: 'drifted',
-          operation,
-          destinationPath,
-        };
-      }
-    } catch (_error) {
-      return {
-        status: 'drifted',
-        operation,
-        destinationPath,
-      };
-    }
-
-    return {
-      status: 'ok',
-      operation,
-      destinationPath,
-    };
+    return inspectMergeJsonOperation(operation, destinationPath);
   }
 
-  return {
-    status: 'unverified',
-    operation,
-    destinationPath,
-  };
+  return inspectResult('unverified', operation, destinationPath);
 }
 
 function summarizeManagedOperationHealth(repoRoot, operations) {
