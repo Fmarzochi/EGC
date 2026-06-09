@@ -147,6 +147,8 @@ jobs:
           Add-Content $env:GITHUB_ENV "npm_config_python=${{ steps.python-win.outputs.python-path }}"
           $vcs = @(Get-Item "C:\Program Files\Microsoft Visual Studio\*\*\VC" -ErrorAction SilentlyContinue)
           if ($vcs) { Add-Content $env:GITHUB_ENV "VCINSTALLDIR=$(($vcs | Sort-Object FullName -Descending)[0].FullName)\" }
+          npm install -g node-gyp@12
+          Add-Content $env:GITHUB_ENV "npm_config_node_gyp=$(npm -g root)\node-gyp\bin\node-gyp.js"
 
       # Install dependencies
       # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
