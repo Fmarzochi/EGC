@@ -145,9 +145,11 @@ jobs:
         shell: pwsh
         run: |
           Add-Content $env:GITHUB_ENV "npm_config_python=${{ steps.python-win.outputs.python-path }}"
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = (& $vswhere -latest -version "[16,18)" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>&1).Trim()
-          if ($vsPath) { Add-Content $env:GITHUB_ENV "VCINSTALLDIR=$vsPath\VC\" }
+          $vcDir = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\17" -Directory -ErrorAction SilentlyContinue |
+                   ForEach-Object { Join-Path $_.FullName "VC" } |
+                   Where-Object { Test-Path $_ } |
+                   Select-Object -First 1
+          if ($vcDir) { Add-Content $env:GITHUB_ENV "VCINSTALLDIR=$vcDir\" }
 
       # Install dependencies
       # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
