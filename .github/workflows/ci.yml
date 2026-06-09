@@ -143,7 +143,7 @@ jobs:
       - name: Pin Python for node-gyp (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: npm config set python "${{ steps.python-win.outputs.python-path }}"
+        run: echo "npm_config_python=${{ steps.python-win.outputs.python-path }}" >> "$GITHUB_ENV"
 
       # Install dependencies
       # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
