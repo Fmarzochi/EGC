@@ -148,12 +148,15 @@ jobs:
           $vcs = @(Get-Item "C:\Program Files\Microsoft Visual Studio\*\*\VC" -ErrorAction SilentlyContinue)
           if ($vcs) { Add-Content $env:GITHUB_ENV "VCINSTALLDIR=$(($vcs | Sort-Object FullName -Descending)[0].FullName)\" }
           npm install -g node-gyp@12
-          $nmRoot = npm -g root
-          $v12 = Join-Path $nmRoot "node-gyp"
-          $bundled = Join-Path (npm prefix -g) "node_modules\npm\node_modules\node-gyp"
+          $v12 = Join-Path (npm -g root) "node-gyp"
+          $nodeDir = Split-Path (Get-Command node).Source -Parent
+          $bundled = Join-Path $nodeDir "node_modules\npm\node_modules\node-gyp"
+          Write-Host "v12=$v12 exists=$(Test-Path $v12)"
+          Write-Host "bundled=$bundled exists=$(Test-Path $bundled)"
           if ((Test-Path $v12) -and (Test-Path $bundled)) {
             Remove-Item $bundled -Recurse -Force
             Copy-Item $v12 $bundled -Recurse -Force
+            Write-Host "node-gyp bundled replaced"
           }
 
       # Install dependencies
