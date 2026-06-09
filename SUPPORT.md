@@ -21,8 +21,11 @@ End-of-life versions do not receive security backports. If you are running an un
 
 ## Support Scope
 
-Community support is provided through [GitHub Issues](https://github.com/Fmarzochi/EGC/issues).
+Community support is available through:
+
+- **[Discord](https://discord.gg/AtazrtxJ)** — fastest way to get help. Use `#help` for general questions and `#installation` for setup issues.
+- **[GitHub Issues](https://github.com/Fmarzochi/EGC/issues)** — for bug reports and feature requests that need tracking.
 
 For security vulnerabilities, use the private reporting channel described in [SECURITY.md](SECURITY.md).
 
-Feature requests and bug reports are welcome via GitHub Issues. Response times are best-effort for community contributions.
+Response times are best-effort for community contributions.

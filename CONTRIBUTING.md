@@ -8,6 +8,7 @@ Because EGC operates as a structured engineering platform, contributions must al
 > **Desenvolvido por Felipe Marzochi**  
 > **@MarzochiFelipe**  
 > **https://github.com/Fmarzochi/EGC**  
+> **Discord: https://discord.gg/AtazrtxJ**  
 > **© Todos os direitos reservados**
 
 ---

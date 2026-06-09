@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Discord Community
+    url: https://discord.gg/AtazrtxJ
+    about: Ask questions, get help with installation, and discuss EGC on Discord.
+  - name: Support Policy
+    url: https://github.com/Fmarzochi/EGC/blob/main/SUPPORT.md
+    about: Read the support policy before opening an issue.
