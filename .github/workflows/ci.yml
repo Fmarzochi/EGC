@@ -140,10 +140,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Pin Python for node-gyp (Windows)
+      - name: Pin Python and MSVS for node-gyp (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        run: echo "npm_config_python=${{ steps.python-win.outputs.python-path }}" >> "$GITHUB_ENV"
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV "npm_config_python=${{ steps.python-win.outputs.python-path }}"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = (& $vswhere -latest -version "[16,18)" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>&1).Trim()
+          if ($vsPath) { Add-Content $env:GITHUB_ENV "VCINSTALLDIR=$vsPath\VC\" }
 
       # Install dependencies
       # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
