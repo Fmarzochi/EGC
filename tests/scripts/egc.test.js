@@ -197,7 +197,7 @@ function main() {
     ['supports help for the catalog subcommand', () => {
       const result = runCli(['help', 'catalog']);
       assert.strictEqual(result.status, 0, result.stderr);
-      assert.match(result.stdout, /node scripts\/catalog\.js show <component-id>/);
+      assert.match(result.stdout, /egc catalog show <component-id>/);
     }],
     ['supports help for the consult subcommand', () => {
       const result = runCli(['help', 'consult']);

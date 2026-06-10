@@ -53,7 +53,7 @@ function runTests() {
     const result = run(['--help']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Usage:'));
-    assert.ok(result.stdout.includes('node scripts/catalog.js show <component-id>'));
+    assert.ok(result.stdout.includes('egc catalog show <component-id>'));
   })) passed++; else failed++;
 
   if (test('lists install profiles', () => {

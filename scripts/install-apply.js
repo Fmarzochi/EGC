@@ -27,7 +27,7 @@ Usage: install.sh [--target <${LEGACY_INSTALL_TARGETS.join('|')}>] [--dry-run] [
        install.sh [--dry-run] [--json] --config <path>
 
 Targets (legacy language install):
-  egc         (default) - Install EGC into ~/.gemini/
+  egc       (default) - Install EGC into ~/.gemini/
   cursor      - Install into ./.cursor/
   antigravity - Install into ./.agents/
 
