@@ -1,0 +1,66 @@
+{
+  "$schema": "https://glama.ai/mcp/servers/schema.json",
+  "name": "EGC",
+  "description": "Local MCP runtime that gives persistent cross-session memory to 12 AI coding agents (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, and more). SQLite-backed state survives context resets. Install: npm install -g @egchq/egc",
+  "license": "MIT",
+  "homepage": "https://github.com/Fmarzochi/EGC",
+  "repository": "https://github.com/Fmarzochi/EGC",
+  "install": {
+    "npm": "@egchq/egc"
+  },
+  "tools": [
+    {
+      "name": "get_state",
+      "description": "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. Call this at the START of every session to restore context."
+    },
+    {
+      "name": "update_state",
+      "description": "Updates the project memory with decisions made this session. Call this at the END of every session. Merges with existing state — does not erase previous memory."
+    },
+    {
+      "name": "store_decision",
+      "description": "Store a decision with lock arbitration. Records a significant decision with its context for future reference."
+    },
+    {
+      "name": "query_history",
+      "description": "Query past decisions. Returns a paginated list of decisions stored in the session memory."
+    },
+    {
+      "name": "get_project_state",
+      "description": "Get current state for the active project. Returns server status metadata including storage engine and arbitration mode."
+    },
+    {
+      "name": "validate_command",
+      "description": "Validate command execution safety. Checks whether a shell command is safe to run before execution."
+    },
+    {
+      "name": "validate_write",
+      "description": "Validate write path safety. Checks whether a file path is safe to write before creating or modifying files."
+    },
+    {
+      "name": "reduce_context",
+      "description": "Adaptive Context Routing: Loads files and mutates payloads to save IDE token budget. Reduces context window usage by intelligently compressing file payloads."
+    },
+    {
+      "name": "orchestrate_task",
+      "description": "Routes a prompt with optional agent/skill lists and file payloads. Returns routing context and context-reduction metrics. Agent/skill selection is pass-through; provide explicit lists for deterministic routing."
+    }
+  ],
+  "tags": [
+    "memory",
+    "persistent-context",
+    "mcp",
+    "claude-code",
+    "cursor",
+    "gemini-cli",
+    "codex",
+    "windsurf",
+    "coding-assistant"
+  ],
+  "authors": [
+    {
+      "name": "Felipe Marzochi",
+      "url": "https://github.com/Fmarzochi"
+    }
+  ]
+}
