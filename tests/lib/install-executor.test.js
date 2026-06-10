@@ -361,6 +361,10 @@ function runTests() {
         operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
         && operation.destinationPath === path.join(homeDir, '.gemini', 'skills', 'egc', 'demo', 'SKILL.md')
       )));
+      assert.ok(plan.operations.some(operation => (
+        operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')
+      )));
       assert.deepStrictEqual(plan.warnings, ['fixture warning']);
       assert.strictEqual(plan.statePreview.request.profile, 'minimal');
       assert.deepStrictEqual(plan.statePreview.request.includeComponents, ['capability:fixture']);
@@ -414,6 +418,7 @@ function runTests() {
       assert.strictEqual(applied.applied, true);
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'skills', 'egc', 'demo', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'src', 'app.js')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'standalone.txt')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'plugin.json')));

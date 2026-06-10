@@ -99,6 +99,13 @@ function runTests() {
       )),
       'Should install bundled Gemini skills under skills/egc'
     );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow')
+      )),
+      'Should also install bundled Gemini skills under antigravity-cli/skills for AGY'
+    );
   })) passed++; else failed++;
 
   if (test('plans scaffold operations and flattens native target roots', () => {
