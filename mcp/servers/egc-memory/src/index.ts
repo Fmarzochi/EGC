@@ -317,9 +317,9 @@ const UpdateStateSchema = z.object({
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      { name: "get_project_state", description: "Get current state.", inputSchema: { type: "object", properties: {} } },
-      { name: "store_decision", description: "Store a decision with lock arbitration.", inputSchema: { type: "object", properties: { context: { type: "string" }, decision: { type: "string" } }, required: ["context", "decision"] } },
-      { name: "query_history", description: "Query past decisions.", inputSchema: { type: "object", properties: { limit: { type: "number" }, offset: { type: "number" } } } },
+      { name: "get_project_state", description: "Returns server health metadata for the active project: storage engine (sqlite-wal) and write arbitration mode (MessageQueue). Use this to verify the egc-memory server is running and responsive before calling get_state or update_state.", inputSchema: { type: "object", properties: {} } },
+      { name: "store_decision", description: "Persist a single decision to the SQLite store with write-lock arbitration to prevent concurrent conflicts. Provide a short context label and the decision text. Decisions stored here are queryable via query_history and surfaced in get_state.", inputSchema: { type: "object", properties: { context: { type: "string", description: "Short label for the decision context, e.g. 'architecture' or 'dependencies'." }, decision: { type: "string", description: "The decision text to persist." } }, required: ["context", "decision"] } },
+      { name: "query_history", description: "Return a paginated list of past decisions stored in the SQLite state. Each entry includes the decision text, context label, and timestamp. Use limit and offset for pagination. Useful for auditing what was decided without loading the full project state.", inputSchema: { type: "object", properties: { limit: { type: "number", description: "Maximum number of decisions to return. Defaults to 20." }, offset: { type: "number", description: "Number of decisions to skip for pagination. Defaults to 0." } } } },
       {
         name: "get_state",
         description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. Call this at the START of every session to restore context.",
