@@ -27,14 +27,14 @@ function showHelp(exitCode = 0) {
 Discover EGC install components and profiles
 
 Usage:
-  node scripts/catalog.js profiles [--json]
-  node scripts/catalog.js components [--family <family>] [--target <target>] [--json]
-  node scripts/catalog.js show <component-id> [--json]
+  egc catalog profiles [--json]
+  egc catalog components [--family <family>] [--target <target>] [--json]
+  egc catalog show <component-id> [--json]
 
 Examples:
-  node scripts/catalog.js profiles
-  node scripts/catalog.js components --family language
-  node scripts/catalog.js show framework:nextjs
+  egc catalog profiles
+  egc catalog components --family language
+  egc catalog show framework:nextjs
 `);
 
   process.exit(exitCode);

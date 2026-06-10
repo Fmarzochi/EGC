@@ -26,10 +26,13 @@ Usage: install.sh [--target <${LEGACY_INSTALL_TARGETS.join('|')}>] [--dry-run] [
        install.sh [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json] --modules <id,id,...> [--with <component>]... [--without <component>]...
        install.sh [--dry-run] [--json] --config <path>
 
-Targets:
-  egc       (default) - Install EGC into ~/.gemini/ with managed rules/skills under rules/egc and skills/egc
-  cursor       - Install rules, hooks, and bundled Cursor configs to ./.cursor/
-  antigravity  - Install rules, workflows, skills, and agents to ./.agent/
+Targets (legacy language install):
+  egc         (default) - Install EGC into ~/.gemini/
+  cursor      - Install into ./.cursor/
+  antigravity - Install into ./.agents/
+
+Targets (profile / modules install — all supported targets):
+  ${SUPPORTED_INSTALL_TARGETS.join(', ')}
 
 Options:
   --profile <name>    Resolve and install a manifest profile
