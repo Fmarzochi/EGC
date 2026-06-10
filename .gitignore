@@ -231,3 +231,6 @@ journals/
 # LEGACY RUNTIME — uncompiled, not imported
 # =========================================================
 mcp/servers/egc-guardian/src/cognitive-orchestrator/
+
+# Generated topology cache
+internal/

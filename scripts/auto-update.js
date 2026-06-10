@@ -235,7 +235,19 @@ function runAutoUpdate(options = {}, dependencies = {}) {
 
   if (!options.dryRun) {
     execute('git', ['fetch', '--all', '--prune'], { cwd: repoRoot, env });
-    execute('git', ['pull', '--ff-only'], { cwd: repoRoot, env });
+    try {
+      execute('git', ['pull', '--ff-only'], { cwd: repoRoot, env });
+    } catch (pullError) {
+      const msg = String(pullError.message || '');
+      if (msg.includes('no tracking information') || msg.includes('set-upstream')) {
+        throw new Error(
+          'git pull failed: no upstream tracking branch configured.\n' +
+          'If installed via npm, update with: npm install -g @egchq/egc@latest\n' +
+          'Otherwise: git branch --set-upstream-to=origin/<branch>'
+        );
+      }
+      throw pullError;
+    }
   }
 
   for (const entry of validRecords) {
