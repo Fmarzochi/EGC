@@ -210,12 +210,12 @@ function runTests() {
       const result = run(['--target', 'antigravity', 'typescript'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'common-coding-style.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'typescript-testing.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'workflows', 'plan.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'skills', 'architect.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'common-coding-style.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'typescript-testing.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'workflows', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'architect.md')));
 
-      const statePath = path.join(projectDir, '.agent', 'egc-install-state.json');
+      const statePath = path.join(projectDir, '.agents', 'egc-install-state.json');
       const state = readJson(statePath);
       assert.strictEqual(state.target.id, 'antigravity-project');
       assert.deepStrictEqual(state.request.legacyLanguages, ['typescript']);
@@ -223,7 +223,7 @@ function runTests() {
       assert.deepStrictEqual(state.resolution.selectedModules, ['rules-core', 'agents-core', 'commands-core']);
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath.endsWith(path.join('.agent', 'workflows', 'plan.md'))
+          operation.destinationPath.endsWith(path.join('.agents', 'workflows', 'plan.md'))
         )),
         'Should record manifest command file copy operation'
       );
@@ -358,12 +358,12 @@ function runTests() {
       const result = run(['--target', 'antigravity', '--profile', 'core'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'rules', 'common-coding-style.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'skills', 'architect.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'workflows', 'plan.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agent', 'skills', 'testing', 'tdd-workflow', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'common-coding-style.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'architect.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'workflows', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'tdd-workflow', 'SKILL.md')));
 
-      const state = readJson(path.join(projectDir, '.agent', 'egc-install-state.json'));
+      const state = readJson(path.join(projectDir, '.agents', 'egc-install-state.json'));
       assert.strictEqual(state.request.profile, 'core');
       assert.strictEqual(state.request.legacyMode, false);
       assert.deepStrictEqual(

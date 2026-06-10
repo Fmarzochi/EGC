@@ -43,6 +43,7 @@ function runTests() {
     assert.ok(targets.includes('gemini'), 'Should include gemini target');
     assert.ok(targets.includes('opencode'), 'Should include opencode target');
     assert.ok(targets.includes('codebuddy'), 'Should include codebuddy target');
+    assert.ok(targets.includes('claude'), 'Should include claude target');
   })) passed++; else failed++;
 
   if (test('resolves cursor adapter root and install-state path from project root', () => {
@@ -426,21 +427,21 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         operation.sourceRelativePath === 'commands'
-        && operation.destinationPath === path.join(projectRoot, '.agent', 'workflows')
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'workflows')
       )),
       'Should remap commands into workflows'
     );
     assert.ok(
       plan.operations.some(operation => (
         operation.sourceRelativePath === 'agents'
-        && operation.destinationPath === path.join(projectRoot, '.agent', 'skills')
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'skills')
       )),
       'Should remap agents into skills'
     );
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'rules/common/coding-style.md'
-        && operation.destinationPath === path.join(projectRoot, '.agent', 'rules', 'common-coding-style.md')
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'rules', 'common-coding-style.md')
       )),
       'Should flatten common rules for antigravity'
     );
@@ -552,6 +553,156 @@ function runTests() {
       codebuddyAdapter.validate({ projectRoot: '/workspace/app', repoRoot: '/repo/egc' }),
       []
     );
+  })) passed++; else failed++;
+
+  if (test('resolves claude adapter root and install-state path from home dir', () => {
+    const adapter = getInstallTargetAdapter('claude');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'claude-home');
+    assert.strictEqual(adapter.target, 'claude');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.claude'));
+    assert.strictEqual(statePath, path.join(homeDir, '.claude', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('claude adapter strips category from skill paths and installs flat', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'claude-home');
+    assert.strictEqual(plan.targetRoot, path.join(homeDir, '.claude'));
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.claude', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.claude/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
+    const adapter = getInstallTargetAdapter('codex');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'codex-home');
+    assert.strictEqual(adapter.target, 'codex');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.agents'));
+    assert.strictEqual(statePath, path.join(homeDir, '.agents', 'egc', 'codex-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('codex adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.agents/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('resolves opencode adapter root to ~/.config/opencode and install-state path', () => {
+    const adapter = getInstallTargetAdapter('opencode');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'opencode-home');
+    assert.strictEqual(adapter.target, 'opencode');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.config', 'opencode'));
+    assert.strictEqual(statePath, path.join(homeDir, '.config', 'opencode', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('opencode adapter strips category from skill paths and installs flat under ~/.config/opencode/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'opencode',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.config', 'opencode', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.config/opencode/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('codebuddy adapter strips category from skill paths and installs flat', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under .codebuddy/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('antigravity-project adapter uses .agents (plural) as root directory', () => {
+    const adapter = getInstallTargetAdapter('antigravity');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+
+    assert.strictEqual(root, path.join(projectRoot, '.agents'));
   })) passed++; else failed++;
 
   if (test('every schema target enum value has a matching adapter (regression guard)', () => {

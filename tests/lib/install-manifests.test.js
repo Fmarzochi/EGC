@@ -210,7 +210,7 @@ function runTests() {
     assert.ok(!plan.skippedModuleIds.includes('platform-configs'));
     assert.ok(!plan.skippedModuleIds.includes('workflow-quality'));
     assert.strictEqual(plan.targetAdapterId, 'antigravity-project');
-    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.agent'));
+    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.agents'));
   })) passed++; else failed++;
 
   if (test('resolves minimal profile without the hook runtime', () => {

@@ -1,7 +1,6 @@
 const path = require('path');
 
 const {
-  createFlatRuleOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
@@ -9,25 +8,20 @@ const {
 } = require('./helpers');
 
 module.exports = createInstallTargetAdapter({
-  id: 'codebuddy-project',
-  target: 'codebuddy',
-  kind: 'project',
-  rootSegments: ['.codebuddy'],
-  installStatePathSegments: ['egc-install-state.json'],
-  nativeRootRelativePath: '.codebuddy',
+  id: 'claude-home',
+  target: 'claude',
+  kind: 'home',
+  rootSegments: ['.claude'],
+  installStatePathSegments: ['egc', 'install-state.json'],
+  nativeRootRelativePath: '.claude',
   planOperations(input, adapter) {
     const modules = Array.isArray(input.modules)
       ? input.modules
       : (input.module ? [input.module] : []);
-    const {
-      repoRoot,
-      projectRoot,
-      homeDir,
-    } = input;
     const planningInput = {
-      repoRoot,
-      projectRoot,
-      homeDir,
+      repoRoot: input.repoRoot,
+      projectRoot: input.projectRoot,
+      homeDir: input.homeDir,
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
@@ -38,16 +32,7 @@ module.exports = createInstallTargetAdapter({
         .flatMap(sourceRelativePath => {
           const normalizedPath = normalizeRelativePath(sourceRelativePath);
 
-          if (sourceRelativePath === 'rules') {
-            return createFlatRuleOperations({
-              moduleId: module.id,
-              repoRoot,
-              sourceRelativePath,
-              destinationDir: path.join(targetRoot, 'rules'),
-            });
-          }
-
-          // CodeBuddy discovers skills at .codebuddy/skills/<name>/ (flat).
+          // Claude Code discovers skills at ~/.claude/skills/<name>/ (flat).
           // Strip the leading category segment to match the expected structure.
           if (normalizedPath.startsWith('skills/')) {
             const parts = normalizedPath.slice('skills/'.length).split('/');

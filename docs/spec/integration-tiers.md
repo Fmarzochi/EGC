@@ -16,7 +16,7 @@ EGC supports 9 AI coding tools through 3 distinct integration mechanisms. This d
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
-| 1 | **Claude Code** | 3 | (none) | `~/.claude/CLAUDE.md` + `~/.claude/claude_desktop_config.json` | MCP-only + cognitive bootstrap. No skill/agent copy |
+| 1 | **Claude Code** | 1 | `claude` | `~/.claude/skills/<name>/SKILL.md` | Skills installed flat; MCP + cognitive bootstrap via `~/.claude/CLAUDE.md` |
 | 2 | **Antigravity (AGY)** | 1 | `antigravity` | `~/.gemini/` (shared with Gemini CLI) | Reuses GEMINI.md from Gemini CLI |
 | 3 | **Gemini CLI** | 1 | `gemini` | `~/.gemini/` | Cognitive bootstrap into `GEMINI.md` |
 | 4 | **Cursor** | 1 | `cursor` | `~/.cursor/` | Rules injected into global cursor.rules |
@@ -32,7 +32,7 @@ Tier 1 (unified) is the canonical pipeline. It is the result of `install-plan.js
 
 Tier 2 (custom-script) exists because Kiro and Trae landed in EGC before the unified pipeline was stable. Their installers do roughly the same work as the unified pipeline, but the shape of the assets they ship differs enough that retrofitting them is non-trivial. They are first-class but technically isolated.
 
-Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude Code sits here because the use case is "AI tool reads `CLAUDE.md` and connects to MCP servers" - copying skills into Claude Code's filesystem would not be useful since Claude Code does not run them. The protocol bootstrap is enough.
+Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude Code was previously Tier 3, but now supports `~/.claude/skills/<name>/SKILL.md` as a skill discovery path, so it has been promoted to Tier 1 with target id `claude`.
 
 ## What "supported" guarantees
 
