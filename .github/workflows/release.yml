@@ -110,7 +110,7 @@ jobs:
           format: spdx-json
 
       - name: Attest SBOM
-        uses: actions/attest-sbom@115c3be05ff3974bcbd596578934b3f9ce39bf68 # v2.2.0
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: ${{ steps.pack.outputs.tarball }}
           sbom-path: sbom.spdx.json
