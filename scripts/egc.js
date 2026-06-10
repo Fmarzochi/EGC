@@ -93,10 +93,10 @@ const PRIMARY_COMMANDS = [
 function showHelp(exitCode = 0) {
   console.log(`
 EGC — Extended Global Context
-Desenvolvido por Felipe Marzochi
+Developed by Felipe Marzochi
 @FEMARZOCHI
 ${formatOSC8('https://github.com/Fmarzochi/EGC', 'https://github.com/Fmarzochi/EGC')}
-© Todos os direitos reservados
+© All rights reserved
 
 EGC selective-install CLI
 
