@@ -24,7 +24,7 @@ Context and preferences acknowledged (terse responses).
 Ready to pick up the next items:
 • Test full install on a clean machine
 • Add GEMINI.md with session memory protocol
-• Tag v1.0.0 after clean install test passes
+• Publish v1.0.1 fix to npm after clean install test passes
 • Add mcp_server_count to audit.js
 ```
 
