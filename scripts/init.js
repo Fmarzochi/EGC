@@ -115,7 +115,7 @@ function registerMcpServers() {
 
   const targets = [
     { name: 'Antigravity CLI', path: path.join(HOME, '.gemini', 'antigravity-cli', 'mcp_config.json'), gate: () => fs.existsSync(path.join(HOME, '.gemini', 'antigravity-cli')), format: 'json' },
-    { name: 'Gemini CLI', path: path.join(HOME, '.gemini', 'config', 'mcp_config.json'), gate: () => fs.existsSync(path.join(HOME, '.gemini', 'config')) && !fs.existsSync(path.join(HOME, '.gemini', 'antigravity-cli')), format: 'json' },
+    { name: 'Gemini CLI', path: path.join(HOME, '.gemini', 'config', 'mcp_config.json'), gate: () => fs.existsSync(path.join(HOME, '.gemini', 'config')), format: 'json' },
     { name: 'Claude Code (global)', path: path.join(HOME, '.claude', 'claude_desktop_config.json'), gate: () => fs.existsSync(path.join(HOME, '.claude')), format: 'json' },
     { name: 'Cursor', path: path.join(HOME, '.cursor', 'mcp.json'), gate: () => fs.existsSync(path.join(HOME, '.cursor')), format: 'json' },
     { name: 'Kiro', path: path.join(HOME, '.kiro', 'settings', 'mcp.json'), gate: () => fs.existsSync(path.join(HOME, '.kiro')), format: 'json' },
