@@ -25,7 +25,7 @@ const EXPECTED_HARNESSES = [
   'Trae',
 ];
 
-const EXPECTED_TIER1_TARGETS = ['egc', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy'];
+const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy'];
 const EXPECTED_TIER2_INSTALLERS = ['.kiro/install.sh', '.trae/install.sh'];
 
 function loadDoc() {

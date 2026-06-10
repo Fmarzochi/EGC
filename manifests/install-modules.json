@@ -153,6 +153,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -181,6 +182,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -219,6 +221,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -253,6 +256,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -277,6 +281,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -308,6 +313,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -346,6 +352,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -369,6 +376,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -396,6 +404,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "codex",
         "opencode",
@@ -449,6 +458,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -488,6 +498,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -511,6 +522,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -540,6 +552,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -563,6 +576,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",
@@ -665,6 +679,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",

@@ -19,6 +19,7 @@
       "type": "string",
       "enum": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",

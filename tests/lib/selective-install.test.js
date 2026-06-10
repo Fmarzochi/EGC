@@ -578,6 +578,8 @@ function runTests() {
       // Security skill should be installed (from --with)
       assert.ok(fs.existsSync(path.join(geminiRoot, 'skills', 'egc', 'security-review', 'SKILL.md')),
         'Should install security-review skill from --with');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'security-review', 'SKILL.md')),
+        'Should also install security-review skill under antigravity-cli/skills for AGY');
       // Core profile modules should be installed
       assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
         'Should install core rules');
@@ -617,11 +619,15 @@ function runTests() {
       // Orchestration skills should NOT be installed (from --without)
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc', 'dmux-workflows', 'SKILL.md')),
         'Should not install orchestration skills');
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'dmux-workflows', 'SKILL.md')),
+        'Should not install orchestration skills under antigravity-cli/skills either');
       // Developer profile base modules should be installed
       assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
         'Should install core rules');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'skills', 'egc', 'tdd-workflow', 'SKILL.md')),
         'Should install workflow skills');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')),
+        'Should also install tdd-workflow skill under antigravity-cli/skills for AGY');
 
       const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
       const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
@@ -655,6 +661,8 @@ function runTests() {
       // framework-language skill (from lang:typescript) should be installed
       assert.ok(fs.existsSync(path.join(geminiRoot, 'skills', 'egc', 'coding-standards', 'SKILL.md')),
         'Should install framework-language skills');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'coding-standards', 'SKILL.md')),
+        'Should also install coding-standards skill under antigravity-cli/skills for AGY');
       // Its dependencies should be installed
       assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
         'Should install dependency rules-core');

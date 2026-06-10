@@ -292,7 +292,7 @@ function runTests() {
     const homeDir = createTempDir('install-executor-home-');
     try {
       writeLegacySourceFixture(sourceRoot);
-      writeFile(projectRoot, path.join('.agent', 'rules', 'existing.md'), '# Existing\n');
+      writeFile(projectRoot, path.join('.agents', 'rules', 'existing.md'), '# Existing\n');
 
       const plan = createLegacyInstallPlan({
         sourceRoot,
@@ -302,15 +302,15 @@ function runTests() {
         languages: ['typescript', 'missing-lang', 'bad/name'],
       });
 
-      assert.strictEqual(plan.installRoot, path.join(projectRoot, '.agent'));
+      assert.strictEqual(plan.installRoot, path.join(projectRoot, '.agents'));
       assert.ok(plan.warnings.some(warning => warning.includes('files may be overwritten')));
       assert.ok(plan.warnings.some(warning => warning.includes("rules/missing-lang/ does not exist")));
       assert.ok(plan.warnings.some(warning => warning.includes("Invalid language name 'bad/name'")));
-      assert.ok(operationFor(plan, path.join('.agent', 'rules', 'common-coding-style.md')));
-      assert.ok(operationFor(plan, path.join('.agent', 'rules', 'typescript-testing.md')));
-      assert.ok(operationFor(plan, path.join('.agent', 'workflows', 'plan.md')));
-      assert.ok(operationFor(plan, path.join('.agent', 'skills', 'architect.md')));
-      assert.ok(operationFor(plan, path.join('.agent', 'skills', 'demo', 'SKILL.md')));
+      assert.ok(operationFor(plan, path.join('.agents', 'rules', 'common-coding-style.md')));
+      assert.ok(operationFor(plan, path.join('.agents', 'rules', 'typescript-testing.md')));
+      assert.ok(operationFor(plan, path.join('.agents', 'workflows', 'plan.md')));
+      assert.ok(operationFor(plan, path.join('.agents', 'skills', 'architect.md')));
+      assert.ok(operationFor(plan, path.join('.agents', 'skills', 'demo', 'SKILL.md')));
       assert.strictEqual(plan.statePreview.target.id, 'antigravity-project');
     } finally {
       cleanup(sourceRoot);
@@ -360,6 +360,10 @@ function runTests() {
       assert.ok(plan.operations.some(operation => (
         operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
         && operation.destinationPath === path.join(homeDir, '.gemini', 'skills', 'egc', 'demo', 'SKILL.md')
+      )));
+      assert.ok(plan.operations.some(operation => (
+        operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')
       )));
       assert.deepStrictEqual(plan.warnings, ['fixture warning']);
       assert.strictEqual(plan.statePreview.request.profile, 'minimal');
@@ -414,6 +418,7 @@ function runTests() {
       assert.strictEqual(applied.applied, true);
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'skills', 'egc', 'demo', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'src', 'app.js')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'standalone.txt')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'plugin.json')));
