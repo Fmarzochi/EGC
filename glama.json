@@ -27,7 +27,7 @@
     },
     {
       "name": "get_project_state",
-      "description": "Get current state for the active project. Returns the full state document for the project in the current working directory."
+      "description": "Get current state for the active project. Returns server status metadata including storage engine and arbitration mode."
     },
     {
       "name": "validate_command",
