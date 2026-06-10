@@ -3,7 +3,7 @@
   "name": "EGC",
   "description": "Local MCP runtime that gives persistent cross-session memory to 12 AI coding agents (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, and more). SQLite-backed state survives context resets. Install: npm install -g @egchq/egc",
   "license": "MIT",
-  "homepage": "https://egcsite.vercel.app",
+  "homepage": "https://github.com/Fmarzochi/EGC",
   "repository": "https://github.com/Fmarzochi/EGC",
   "install": {
     "npm": "@egchq/egc"
