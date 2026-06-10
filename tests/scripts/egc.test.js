@@ -11,6 +11,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'egc.js');
+const PACKAGE_VERSION = require('../../package.json').version;
 
 function runCli(args, options = {}) {
   const envOverrides = {
@@ -74,6 +75,18 @@ function main() {
       assert.match(result.stdout, /auto-update/);
       assert.match(result.stdout, /consult/);
       assert.match(result.stdout, /loop-status/);
+    }],
+    ['prints package version with --version', () => {
+      const result = runCli(['--version']);
+      assert.strictEqual(result.status, 0);
+      assert.strictEqual(result.stdout.trim(), PACKAGE_VERSION);
+      assert.strictEqual(result.stderr, '');
+    }],
+    ['prints package version with -v alias', () => {
+      const result = runCli(['-v']);
+      assert.strictEqual(result.status, 0);
+      assert.strictEqual(result.stdout.trim(), PACKAGE_VERSION);
+      assert.strictEqual(result.stderr, '');
     }],
     ['delegates explicit install command', () => {
       const result = runCli(['install', '--dry-run', '--json', 'typescript']);

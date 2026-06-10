@@ -2,6 +2,7 @@
 
 const { spawnSync } = require('child_process');
 const path = require('path');
+const { version: PACKAGE_VERSION } = require('../package.json');
 const { listAvailableLanguages } = require('./lib/install-executor');
 const { formatOSC8 } = require('./lib/utils');
 
@@ -147,6 +148,10 @@ function resolveCommand(argv) {
     return { mode: 'help' };
   }
 
+  if (firstArg === '--version' || firstArg === '-v') {
+    return { mode: 'version' };
+  }
+
   if (firstArg === 'help') {
     return {
       mode: 'help-command',
@@ -233,6 +238,11 @@ function main() {
 
     if (resolution.mode === 'help') {
       showHelp(0);
+    }
+
+    if (resolution.mode === 'version') {
+      console.log(PACKAGE_VERSION);
+      process.exit(0);
     }
 
     if (resolution.mode === 'help-command') {
