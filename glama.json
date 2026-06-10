@@ -63,5 +63,10 @@
       "url": "https://github.com/Fmarzochi"
     }
   ],
-  "maintainers": ["Fmarzochi"]
+  "maintainers": ["Fmarzochi"],
+  "relatedServers": [
+    "shaneholloman/mcp-knowledge-graph",
+    "CheMiguel23/MemoryMesh",
+    "DeusData/codebase-memory-mcp"
+  ]
 }
