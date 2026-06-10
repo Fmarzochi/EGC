@@ -6,6 +6,11 @@ const codexHome = require('./codex-home');
 const cursorProject = require('./cursor-project');
 const geminiProject = require('./gemini-project');
 const opencodeHome = require('./opencode-home');
+const windsurfHome = require('./windsurf-home');
+const windsurfProject = require('./windsurf-project');
+const ampHome = require('./amp-home');
+const ampProject = require('./amp-project');
+const copilotHome = require('./copilot-home');
 
 const ADAPTERS = Object.freeze([
   egcHome,
@@ -16,6 +21,11 @@ const ADAPTERS = Object.freeze([
   geminiProject,
   opencodeHome,
   codebuddyProject,
+  windsurfHome,
+  windsurfProject,
+  ampHome,
+  ampProject,
+  copilotHome,
 ]);
 
 function listInstallTargetAdapters() {

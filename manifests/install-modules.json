@@ -158,7 +158,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "rules-core",
@@ -187,7 +190,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -226,7 +232,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -261,7 +270,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "workflow-quality"
@@ -286,7 +298,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -318,7 +333,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -357,7 +375,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -381,7 +402,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "business-content"
@@ -408,7 +432,10 @@
         "cursor",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -463,7 +490,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -503,7 +533,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -527,7 +560,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -557,7 +593,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -581,7 +620,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"
@@ -684,7 +726,10 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot"
       ],
       "dependencies": [
         "platform-configs"

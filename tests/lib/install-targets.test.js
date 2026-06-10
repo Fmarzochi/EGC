@@ -705,6 +705,131 @@ function runTests() {
     assert.strictEqual(root, path.join(projectRoot, '.agents'));
   })) passed++; else failed++;
 
+  if (test('resolves windsurf home adapter root to ~/.codeium/windsurf and install-state path', () => {
+    const adapter = getInstallTargetAdapter('windsurf');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'windsurf-home');
+    assert.strictEqual(adapter.target, 'windsurf');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.codeium', 'windsurf'));
+    assert.strictEqual(statePath, path.join(homeDir, '.codeium', 'windsurf', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('windsurf adapter strips category from skill paths and installs flat', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'windsurf',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'windsurf-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.codeium', 'windsurf', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.codeium/windsurf/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('resolves amp home adapter root to ~/.amp and install-state path', () => {
+    const adapter = getInstallTargetAdapter('amp');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'amp-home');
+    assert.strictEqual(adapter.target, 'amp');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.amp'));
+    assert.strictEqual(statePath, path.join(homeDir, '.amp', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('amp adapter strips category from skill paths and installs flat', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'amp',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'amp-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.amp', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.amp/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('resolves copilot home adapter root to ~/.github and install-state path', () => {
+    const adapter = getInstallTargetAdapter('copilot');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'copilot-home');
+    assert.strictEqual(adapter.target, 'copilot');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.github'));
+    assert.strictEqual(statePath, path.join(homeDir, '.github', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('copilot adapter strips category from skill paths and installs flat', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'copilot',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'copilot-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.github', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.github/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('lists all 3 new IDE targets in adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(adapter => adapter.target);
+    assert.ok(targets.includes('windsurf'), 'Should include windsurf target');
+    assert.ok(targets.includes('amp'), 'Should include amp target');
+    assert.ok(targets.includes('copilot'), 'Should include copilot target');
+  })) passed++; else failed++;
+
   if (test('every schema target enum value has a matching adapter (regression guard)', () => {
     const schemaPath = path.join(__dirname, '..', '..', 'schemas', 'egc-install-config.schema.json');
     const schema = JSON.parse(require('fs').readFileSync(schemaPath, 'utf8'));

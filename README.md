@@ -30,7 +30,7 @@ Ready to pick up the next items:
 
 The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. You didn't type anything. You just started working.
 
-After `sh install.sh`, the memory protocol is injected into the global instruction files for Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Kiro, Trae, and CodeBuddy, so the AI reads state at the start of each session and saves it at the end. For tools where the AI instruction file isn't read automatically (varies by tool version), you may need to add the project's `CLAUDE.md` or equivalent to the session context manually.
+After `sh install.sh`, the memory protocol is injected into the global instruction files for Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Windsurf, Amp, VS Code Copilot, Kiro, Trae, and CodeBuddy, so the AI reads state at the start of each session and saves it at the end. For tools where the AI instruction file isn't read automatically (varies by tool version), you may need to add the project's `CLAUDE.md` or equivalent to the session context manually.
 
 ---
 
@@ -46,7 +46,7 @@ It gets worse when you switch tools. Move from Cursor to Claude Code and you sta
 
 One install. Every tool. Permanent memory.
 
-`sh install.sh` detects which AI tools you have installed (Claude Code, Cursor, Codex, Gemini CLI, Kiro, OpenCode, Trae, CodeBuddy) and registers the MCP servers in all of them. It also runs a cognitive bootstrap that writes the memory protocol into the global instruction files for each tool, so the AI is instructed to call `get_state({})` at the start of every session and `update_state({...})` at the end.
+`sh install.sh` detects which AI tools you have installed (Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Windsurf, Amp, VS Code Copilot, Kiro, Trae, CodeBuddy) and registers the MCP servers in all of them. It also runs a cognitive bootstrap that writes the memory protocol into the global instruction files for each tool, so the AI is instructed to call `get_state({})` at the start of every session and `update_state({...})` at the end.
 
 For every supported tool:
 - **Open any session** → AI reads your project state → picks up where you left off
@@ -157,18 +157,21 @@ Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and fo
 
 ## Supported tools
 
-| Tool | MCP registered | Cognitive bootstrap |
-|---|---|---|
-| Claude Code | Yes | Yes: protocol injected into `~/.claude/CLAUDE.md` |
-| Antigravity CLI (AGY) | Yes | Yes: protocol injected into `~/.gemini/GEMINI.md` |
-| Gemini CLI | Yes | Yes: protocol injected into `~/.gemini/GEMINI.md` |
-| Cursor | Yes | Yes: protocol injected into global `cursor.rules` setting |
-| Codex CLI | Yes | Yes: `persistent_instructions` appended to `~/.codex/config.toml` |
-| OpenCode | Yes | Yes: protocol written to `~/.opencode/instructions/EGC_MEMORY.md` |
-| Kiro | Yes | Yes: session hooks installed to `~/.kiro/hooks/` |
-| Trae | Context injection | Yes: protocol written to `~/.trae/MEMORY.md` |
-| CodeBuddy | Context injection | Yes: protocol written to `~/.codebuddy/MEMORY.md` |
-| Obsidian | Yes, if already configured, synced to all tools | N/A |
+| Tool | Skills | MCP registered | Cognitive bootstrap |
+|---|---|---|---|
+| Claude Code | `~/.claude/skills/<name>/` | Yes | Yes: protocol injected into `~/.claude/CLAUDE.md` |
+| Antigravity CLI (AGY) | `.agents/skills/<name>/` | Yes | Yes: protocol injected into `~/.gemini/GEMINI.md` |
+| Gemini CLI | `~/.gemini/` | Yes | Yes: protocol injected into `~/.gemini/GEMINI.md` |
+| Cursor | `~/.cursor/` | Yes | Yes: protocol injected into global `cursor.rules` setting |
+| Codex CLI | `~/.agents/skills/<name>/` | Yes | Yes: `persistent_instructions` appended to `~/.codex/config.toml` |
+| OpenCode | `~/.config/opencode/skills/<name>/` | Yes | Yes: protocol written to `~/.opencode/instructions/EGC_MEMORY.md` |
+| Windsurf | `~/.codeium/windsurf/skills/<name>/` | Yes | Yes: protocol injected into `~/.codeium/windsurf/` |
+| Amp | `~/.amp/skills/<name>/` | Yes | Yes: protocol injected into `~/.amp/` |
+| VS Code Copilot | `~/.github/skills/<name>/` | Yes | Yes: protocol injected into `~/.github/` |
+| CodeBuddy | `.codebuddy/skills/<name>/` | Context injection | Yes: protocol written to `~/.codebuddy/MEMORY.md` |
+| Kiro | `~/.kiro/hooks/` | Yes | Yes: session hooks installed to `~/.kiro/hooks/` |
+| Trae | `~/.trae/` | Context injection | Yes: protocol written to `~/.trae/MEMORY.md` |
+| Obsidian | Yes, if already configured, synced to all tools | N/A | N/A |
 
 If you use Obsidian and have the [Obsidian MCP server](https://github.com/MarkusPfundstein/mcp-obsidian) configured, the installer detects it automatically and gives every AI tool in your setup direct access to your vault: read notes, search, and write without any extra configuration.
 
