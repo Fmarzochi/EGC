@@ -34,7 +34,8 @@ async function loadPlugin() {
     cwd: repoRoot,
     encoding: "utf8",
   })
-  if (buildResult.status !== 0 || /SKIP: build-opencode/.test(buildResult.stdout || "")) {
+  const buildOutput = (buildResult.stdout || "") + (buildResult.stderr || "")
+  if (buildResult.status !== 0 || /SKIP: build-opencode/.test(buildOutput)) {
     const error = new Error(`OpenCode build unavailable: .opencode/dist (${buildResult.stderr || buildResult.stdout || "no output"})`)
     throw error
   }
