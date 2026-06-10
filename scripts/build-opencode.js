@@ -25,7 +25,7 @@ function hasOpencodePeer() {
 const requireBuild = process.env.EGC_OPENCODE_BUILD === "required"
 
 if (!hasOpencodePeer() && !requireBuild) {
-  console.log("SKIP: build-opencode (@opencode-ai/plugin not installed; set EGC_OPENCODE_BUILD=required to force)")
+  process.stderr.write("SKIP: build-opencode (@opencode-ai/plugin not installed; set EGC_OPENCODE_BUILD=required to force)\n")
   process.exit(0)
 }
 
