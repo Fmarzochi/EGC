@@ -1,6 +1,6 @@
 {
   "name": "@egchq/egc",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "EGC - Extended Global Context. Persistent memory and shared context for AI coding tools.",
   "author": "Felipe Marzochi <fmarzochi@gmail.com> (https://github.com/Fmarzochi)",
   "license": "MIT",
@@ -18,7 +18,9 @@
   "main": "scripts/egc.js",
   "bin": {
     "egc": "scripts/egc.js",
-    "egc-install": "scripts/install-apply.js"
+    "egc-install": "scripts/install-apply.js",
+    "egc-memory": "mcp/servers/egc-memory/build/index.js",
+    "egc-guardian": "mcp/servers/egc-guardian/build/index.js"
   },
   "scripts": {
     "preinstall": "node scripts/preinstall.js",

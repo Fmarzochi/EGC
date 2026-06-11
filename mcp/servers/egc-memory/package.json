@@ -4,7 +4,7 @@
   "description": "EGC Memory MCP Server — persistent cross-session project state and decision history",
   "main": "build/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x build/index.js",
     "start": "node build/index.js"
   },
   "dependencies": {

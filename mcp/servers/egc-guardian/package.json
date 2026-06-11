@@ -5,7 +5,7 @@
   "description": "EGC Guardian MCP Server — validation, context reduction, and task orchestration",
   "main": "build/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x build/index.js",
     "start": "node build/index.js"
   },
   "dependencies": {
