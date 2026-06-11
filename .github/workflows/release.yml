@@ -129,16 +129,5 @@ jobs:
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
 
       - name: Publish npm package
-        if: steps.npm_publish_state.outputs.already_published != 'true' && env.NPM_TOKEN != ''
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: steps.npm_publish_state.outputs.already_published != 'true'
         run: npm publish --access public --provenance --tag "${{ steps.npm_publish_state.outputs.dist_tag }}"
-
-      - name: Skip npm publish (no NPM_TOKEN configured)
-        if: steps.npm_publish_state.outputs.already_published != 'true' && env.NPM_TOKEN == ''
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          echo "::notice::npm publish skipped — secrets.NPM_TOKEN is not configured."
-          echo "::notice::Set NPM_TOKEN in repository secrets to enable automated publishing."
