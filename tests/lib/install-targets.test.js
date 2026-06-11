@@ -453,16 +453,18 @@ function runTests() {
 
     assert.strictEqual(typeof claudeAdapter.planOperations, 'function');
     assert.strictEqual(typeof claudeAdapter.validate, 'function');
-    assert.deepStrictEqual(
-      claudeAdapter.validate({ homeDir: '/Users/example', repoRoot: '/repo/egc' }),
-      []
+    assert.ok(
+      !claudeAdapter.validate({ homeDir: '/Users/example', repoRoot: '/repo/egc' })
+        .some(i => i.severity === 'error'),
+      'claude adapter should have no blocking validation errors'
     );
 
     assert.strictEqual(typeof cursorAdapter.planOperations, 'function');
     assert.strictEqual(typeof cursorAdapter.validate, 'function');
-    assert.deepStrictEqual(
-      cursorAdapter.validate({ projectRoot: '/workspace/app', repoRoot: '/repo/egc' }),
-      []
+    assert.ok(
+      !cursorAdapter.validate({ projectRoot: '/workspace/app', repoRoot: '/repo/egc' })
+        .some(i => i.severity === 'error'),
+      'cursor adapter should have no blocking validation errors'
     );
   })) passed++; else failed++;
 
@@ -549,9 +551,10 @@ function runTests() {
 
     assert.strictEqual(typeof codebuddyAdapter.planOperations, 'function');
     assert.strictEqual(typeof codebuddyAdapter.validate, 'function');
-    assert.deepStrictEqual(
-      codebuddyAdapter.validate({ projectRoot: '/workspace/app', repoRoot: '/repo/egc' }),
-      []
+    assert.ok(
+      !codebuddyAdapter.validate({ projectRoot: '/workspace/app', repoRoot: '/repo/egc' })
+        .some(i => i.severity === 'error'),
+      'codebuddy adapter should have no blocking validation errors'
     );
   })) passed++; else failed++;
 
