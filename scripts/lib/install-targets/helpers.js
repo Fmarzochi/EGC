@@ -112,6 +112,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   windsurf:     { name: 'Windsurf',           url: 'https://windsurf.ai' },
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
+  zed:          { name: 'Zed',               url: 'https://zed.dev' },
 });
 
 function defaultValidateAdapterInput(config, input = {}) {

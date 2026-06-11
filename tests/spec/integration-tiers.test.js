@@ -28,7 +28,7 @@ const EXPECTED_HARNESSES = [
   'VS Code Copilot',
 ];
 
-const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot'];
+const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed'];
 const EXPECTED_TIER2_INSTALLERS = ['.kiro/install.sh', '.trae/install.sh'];
 
 function loadDoc() {

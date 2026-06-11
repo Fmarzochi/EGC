@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 12 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 13 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 ## Tier definitions
 
@@ -12,7 +12,7 @@ EGC supports 12 AI coding tools through 3 distinct integration mechanisms. This 
 | **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 12 harnesses
+## The 13 harnesses
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
@@ -26,8 +26,9 @@ EGC supports 12 AI coding tools through 3 distinct integration mechanisms. This 
 | 8 | **Windsurf** | 1 | `windsurf` | `~/.codeium/windsurf/skills/<name>/SKILL.md` | Skills installed flat |
 | 9 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat |
 | 10 | **VS Code Copilot** | 1 | `copilot` | `~/.github/skills/<name>/SKILL.md` | Skills installed flat |
-| 11 | **Kiro** | 2 | (none) | `~/.kiro/` via `.kiro/install.sh` | Session hooks installed to `~/.kiro/hooks/` |
-| 12 | **Trae** | 2 | (none) | `~/.trae/` (or `~/.trae-cn/` with `TRAE_ENV=cn`) via `.trae/install.sh` | Memory protocol written to `~/.trae/MEMORY.md` |
+| 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); MCP via `context_servers` in `settings.json`; cognitive bootstrap into `~/.config/zed/AGENTS.md` |
+| 12 | **Kiro** | 2 | (none) | `~/.kiro/` via `.kiro/install.sh` | Session hooks installed to `~/.kiro/hooks/` |
+| 13 | **Trae** | 2 | (none) | `~/.trae/` (or `~/.trae-cn/` with `TRAE_ENV=cn`) via `.trae/install.sh` | Memory protocol written to `~/.trae/MEMORY.md` |
 
 ## Why three tiers (history, not aspiration)
 

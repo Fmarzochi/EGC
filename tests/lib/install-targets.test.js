@@ -833,6 +833,90 @@ function runTests() {
     assert.ok(targets.includes('copilot'), 'Should include copilot target');
   })) passed++; else failed++;
 
+  if (test('resolves zed home adapter root to ~/.config/zed and install-state path', () => {
+    const adapter = getInstallTargetAdapter('zed');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'zed-home');
+    assert.strictEqual(adapter.target, 'zed');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.config', 'zed'));
+    assert.strictEqual(statePath, path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('zed adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('zed');
+    const byId = getInstallTargetAdapter('zed-home');
+
+    assert.strictEqual(byTarget.id, 'zed-home');
+    assert.strictEqual(byId.id, 'zed-home');
+    assert.ok(byTarget.supports('zed'));
+    assert.ok(byTarget.supports('zed-home'));
+  })) passed++; else failed++;
+
+  if (test('zed adapter strips category from skill paths and installs flat under ~/.config/zed/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'zed',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'zed-home');
+    assert.strictEqual(plan.targetRoot, path.join(homeDir, '.config', 'zed'));
+    assert.strictEqual(plan.installStatePath, path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json'));
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && op.destinationPath === path.join(homeDir, '.config', 'zed', 'skills', 'tdd-workflow')
+      ),
+      'Should strip category and install skill flat under ~/.config/zed/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('zed adapter handles already-flat skill paths without double-stripping', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'zed',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'skills/tdd-workflow'
+        && op.destinationPath === path.join(homeDir, '.config', 'zed', 'skills', 'tdd-workflow')
+      ),
+      'Should handle already-flat skill path without stripping anything'
+    );
+  })) passed++; else failed++;
+
+  if (test('exposes validate and planOperations on zed adapter', () => {
+    const zedAdapter = getInstallTargetAdapter('zed');
+
+    assert.strictEqual(typeof zedAdapter.planOperations, 'function');
+    assert.strictEqual(typeof zedAdapter.validate, 'function');
+    assert.ok(
+      !zedAdapter.validate({ homeDir: '/Users/example', repoRoot: '/repo/egc' })
+        .some(i => i.severity === 'error'),
+      'zed adapter should have no blocking validation errors'
+    );
+  })) passed++; else failed++;
+
+  if (test('zed adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('zed'), 'Should include zed target');
+  })) passed++; else failed++;
+
   if (test('every schema target enum value has a matching adapter (regression guard)', () => {
     const schemaPath = path.join(__dirname, '..', '..', 'schemas', 'egc-install-config.schema.json');
     const schema = JSON.parse(require('fs').readFileSync(schemaPath, 'utf8'));

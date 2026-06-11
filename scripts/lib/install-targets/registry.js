@@ -11,6 +11,7 @@ const windsurfProject = require('./windsurf-project');
 const ampHome = require('./amp-home');
 const ampProject = require('./amp-project');
 const copilotHome = require('./copilot-home');
+const zedHome = require('./zed-home');
 
 const ADAPTERS = Object.freeze([
   egcHome,
@@ -26,6 +27,7 @@ const ADAPTERS = Object.freeze([
   ampHome,
   ampProject,
   copilotHome,
+  zedHome,
 ]);
 
 function listInstallTargetAdapters() {

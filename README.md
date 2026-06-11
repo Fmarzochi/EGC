@@ -168,6 +168,7 @@ Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and fo
 | Windsurf | `~/.codeium/windsurf/skills/<name>/` | Yes | Yes: protocol injected into `~/.codeium/windsurf/` |
 | Amp | `~/.amp/skills/<name>/` | Yes | Yes: protocol injected into `~/.amp/` |
 | VS Code Copilot | `~/.github/skills/<name>/` | Yes | Yes: protocol injected into `~/.github/` |
+| Zed | `~/.config/zed/skills/<name>/` | Yes (MCP via `context_servers` in `settings.json`) | Yes: protocol injected into `~/.config/zed/AGENTS.md` |
 | CodeBuddy | `.codebuddy/skills/<name>/` | Context injection | Yes: protocol written to `~/.codebuddy/MEMORY.md` |
 | Kiro | `~/.kiro/hooks/` | Yes | Yes: session hooks installed to `~/.kiro/hooks/` |
 | Trae | `~/.trae/` | Context injection | Yes: protocol written to `~/.trae/MEMORY.md` |
