@@ -1,0 +1,18 @@
+name: egc
+
+npx:
+  command: |
+    npx -y --package @egchq/egc egc-memory
+  config: |
+    {
+      "mcpServers": {
+        "egc-memory": {
+          "command": "npx",
+          "args": ["-y", "--package", "@egchq/egc", "egc-memory"]
+        },
+        "egc-guardian": {
+          "command": "npx",
+          "args": ["-y", "--package", "@egchq/egc", "egc-guardian"]
+        }
+      }
+    }
