@@ -703,7 +703,14 @@ function createManifestInstallPlan(options = {}) {
     targetRoot: plan.targetRoot,
     installRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
-    warnings: Array.isArray(options.warnings) ? [...options.warnings] : [],
+    warnings: [
+      ...(Array.isArray(options.warnings) ? options.warnings : []),
+      ...(Array.isArray(plan.validationIssues)
+        ? plan.validationIssues
+            .filter(issue => issue.severity === 'warning')
+            .map(issue => issue.message)
+        : []),
+    ],
     languages: legacyLanguages,
     legacyLanguages,
     profileId: plan.profileId,
