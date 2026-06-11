@@ -73,62 +73,15 @@ The money saved is small. The time and interrupted flow are not.
 
 ---
 
-## Installation
-
-### Via npm (recommended)
+## Install with one command
 
 ```bash
-npm install -g @egchq/egc
-egc install
+npm install -g @egchq/egc && egc install
 ```
 
-### Linux / macOS
+Works on Linux, macOS, and Windows. Requires [Node.js 20+](https://nodejs.org/en/download).
 
-You need [Node.js 20 or later](https://nodejs.org/en/download). Not sure if you have it? Open a terminal and run `node --version`. If it shows 20 or higher, you're ready.
-
-```bash
-git clone https://github.com/Fmarzochi/EGC.git
-cd EGC
-sh install.sh
-```
-
-The installer runs these steps:
-
-1. Compiles the MCP servers (`egc-guardian`, `egc-memory`)
-2. Initializes the local SQLite database
-3. Runs the cognitive bootstrap: writes the memory protocol into `~/.claude/CLAUDE.md` (Claude Code) and `~/.gemini/GEMINI.md` (AGY), creating the files if they don't exist, idempotent
-4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (63 agents, 229 skills, 76 commands), skipped automatically in CI
-
-The installer will print which tools it found and registered:
-
-```
-EGC install
-  node v22.0.0
-  building egc-guardian...
-  building egc-memory...
-  initializing database...
-  bootstrapping cognitive protocol...
-  ✓ ~/.claude/CLAUDE.md updated
-  ✓ ~/.gemini/GEMINI.md updated
-  registering MCP servers...
-  ✓ registered in Antigravity CLI
-  ✓ registered in Claude Code (global)
-  ✓ registered in Cursor
-
-Install prompt library? (63 agents, 229 skills, 76 commands) [y/N]:
-
-Installation complete.
-Run 'egc doctor' to verify.
-```
-
-### Windows
-
-```powershell
-git clone https://github.com/Fmarzochi/EGC.git
-cd EGC
-.\install.ps1
-```
+[Full installation guide](docs/installation.md) — git clone, manual steps, Windows PowerShell, troubleshooting.
 
 ---
 
