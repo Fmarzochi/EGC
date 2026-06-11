@@ -1,6 +1,20 @@
 #!/usr/bin/env node
 'use strict';
 
+const _nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+if (_nodeMajor < 20) {
+  process.stderr.write(
+    '\n' +
+    '  Error: EGC requires Node.js 20 or later (found: ' + process.version + ').\n' +
+    (_nodeMajor === 18
+      ? '  Node 18 reached end-of-life in March 2025 and is no longer supported.\n'
+      : '') +
+    '  Update Node.js: https://nodejs.org/en/download\n' +
+    '\n'
+  );
+  process.exit(1);
+}
+
 if (process.platform === 'win32') process.exit(0);
 
 const fs = require('fs');

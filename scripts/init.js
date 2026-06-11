@@ -69,9 +69,12 @@ function logAction(msg) { console.log(`  ${flags.dryRun ? '[dry-run] ' : ''}${ms
 
 function checkNode() {
   const major = parseInt(process.versions.node.split('.')[0], 10);
-  if (major < 18) {
-    console.error(`Error: Node.js >= 18 is required (found: ${process.version})`);
-    console.error('Install or upgrade Node.js: https://nodejs.org');
+  if (major < 20) {
+    console.error(`Error: Node.js 20 or later is required (found: ${process.version}).`);
+    if (major === 18) {
+      console.error('Node 18 reached end-of-life in March 2025 and is no longer supported.');
+    }
+    console.error('Update Node.js: https://nodejs.org/en/download');
     process.exit(1);
   }
   log(`  ✓ node ${process.version}`);
