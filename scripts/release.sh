@@ -64,7 +64,7 @@ sed -i "s/Extended Global Context v${CURRENT}/Extended Global Context v${VERSION
 
 update_latest_release_heading "$ROOT_ZH_CN_README_FILE"
 
-npm install --package-lock-only --ignore-scripts --silent
+sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${VERSION}\"/g" package-lock.json
 sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${VERSION}\"/g" .opencode/package-lock.json
 
 echo "Verifying npm pack payload..."
