@@ -87,13 +87,13 @@ Works on Linux, macOS, and Windows. Requires [Node.js 20+](https://nodejs.org/en
 
 ## Prompt library
 
-**479 components. Ready to use. Written from real experience, not generated.**
+**479 components included.** Install once to get access to 63 agents, 229 skills, and 76 commands written from real experience, not generated.
 
 | Type | Count | What it is |
 |---|---|---|
-| Agents | 63 | Persona and behavior definitions |
-| Skills | 229 | Domain-specific workflow runbooks |
-| Commands | 76 | Command definitions and lifecycle hooks |
+| Agents | 63 agents | Persona and behavior definitions |
+| Skills | 229 skills | Domain-specific workflow runbooks |
+| Commands | 76 commands | Command definitions and lifecycle hooks |
 | Rules | 111 | Constraints and governance directives |
 
 Organized per harness under `.cursor/`, `.claude/`, `.gemini/`, `.kiro/`, and four others. Switch tools and the same workflows follow you.
