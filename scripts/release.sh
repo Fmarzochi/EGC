@@ -64,8 +64,17 @@ sed -i "s/Extended Global Context v${CURRENT}/Extended Global Context v${VERSION
 
 update_latest_release_heading "$ROOT_ZH_CN_README_FILE"
 
-sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${VERSION}\"/g" package-lock.json
-sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${VERSION}\"/g" .opencode/package-lock.json
+VERSION="${VERSION}" node -e "
+const fs = require('fs');
+const v = process.env.VERSION;
+for (const f of ['package-lock.json', '.opencode/package-lock.json']) {
+  if (!fs.existsSync(f)) continue;
+  const pkg = JSON.parse(fs.readFileSync(f, 'utf8'));
+  pkg.version = v;
+  if (pkg.packages && pkg.packages['']) pkg.packages[''].version = v;
+  fs.writeFileSync(f, JSON.stringify(pkg, null, 2) + '\n');
+}
+"
 
 echo "Verifying npm pack payload..."
 node tests/scripts/build-opencode.test.js

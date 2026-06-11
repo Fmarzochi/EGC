@@ -29,6 +29,8 @@ With [fnm](https://github.com/Schniz/fnm) (faster):
 
 ```bash
 brew install fnm
+# Add to ~/.zshrc or ~/.bash_profile, then restart your terminal:
+eval "$(fnm env --use-on-cd)"
 fnm install --lts
 fnm use lts-latest
 npm install -g @egchq/egc

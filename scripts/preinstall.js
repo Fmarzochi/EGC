@@ -6,6 +6,8 @@ if (process.platform === 'win32') process.exit(0);
 const fs = require('fs');
 const path = require('path');
 
+if (process.env.npm_config_global !== 'true') process.exit(0);
+
 const prefix = process.env.npm_config_prefix;
 if (!prefix) process.exit(0);
 
@@ -32,7 +34,7 @@ try {
       '    # restart terminal, then:\n' +
       '    nvm install --lts && nvm use --lts\n' +
       '\n' +
-      '  or with fnm:\n' +
+      '  or with fnm (add eval "$(fnm env --use-on-cd)" to your shell profile first):\n' +
       '    brew install fnm && fnm install --lts && fnm use lts-latest\n' +
       '\n' +
       '  See: https://github.com/Fmarzochi/EGC/blob/main/TROUBLESHOOTING.md\n' +
