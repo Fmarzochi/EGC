@@ -28,18 +28,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ['18.x', '20.x', '22.x']
+        node: ['20.x', '22.x']
         pm: [npm, yarn, bun]
-        exclude:
-          # Bun has limited Windows support
-          - os: windows-latest
-            pm: bun
-          # better-sqlite3 v12.10.0 has no prebuilt binary for Node 18 (ABI 108) on Windows.
-          # Node 18 is EOL (Apr 2025). Yarn Berry adds migration overhead that pushes install
-          # past the job limit. Windows+Node 18 coverage is maintained via the npm lane.
-          - os: windows-latest
-            pm: yarn
-            node: '18.x'
 
     steps:
       - name: Checkout
@@ -51,20 +41,6 @@ jobs:
           node-version: ${{ matrix.node }}
 
       # Package manager setup
-      - name: Setup pnpm
-        if: matrix.pm == 'pnpm' && matrix.node != '18.x'
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-        with:
-          # Keep an explicit pnpm major because this repo's packageManager is Yarn.
-          version: 10
-
-      - name: Setup pnpm (via Corepack)
-        if: matrix.pm == 'pnpm' && matrix.node == '18.x'
-        shell: bash
-        run: |
-          corepack enable
-          corepack prepare pnpm@9 --activate
-
       - name: Setup Yarn (via Corepack)
         if: matrix.pm == 'yarn'
         shell: bash
@@ -91,23 +67,6 @@ jobs:
           key: ${{ runner.os }}-node-${{ matrix.node }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-${{ matrix.node }}-npm-
-
-      - name: Get pnpm store directory
-        if: matrix.pm == 'pnpm'
-        id: pnpm-cache-dir
-        shell: bash
-        env:
-          COREPACK_ENABLE_STRICT: '0'
-        run: echo "dir=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Cache pnpm
-        if: matrix.pm == 'pnpm'
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: ${{ steps.pnpm-cache-dir.outputs.dir }}
-          key: ${{ runner.os }}-node-${{ matrix.node }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-node-${{ matrix.node }}-pnpm-
 
       - name: Get yarn cache directory
         if: matrix.pm == 'yarn'
@@ -166,8 +125,6 @@ jobs:
           }
 
       # Install dependencies
-      # COREPACK_ENABLE_STRICT=0 allows pnpm to install even though
-      # package.json declares "packageManager": "yarn@..."
       - name: Install dependencies
         shell: bash
         env:
@@ -175,19 +132,6 @@ jobs:
         run: |
           case "${{ matrix.pm }}" in
             npm) npm ci ;;
-            # pnpm v10 can fail CI on ignored native build scripts
-            # (for example msgpackr-extract) even though this repo is Yarn-native
-            # and pnpm is only exercised here as a compatibility lane.
-            pnpm)
-              # better-sqlite3 has no prebuilt binary for every Node ABI
-              # (notably Node 20.x), so its install script falls back to
-              # `node-gyp rebuild`. The GitHub Actions runner ships node-gyp
-              # globally via npm, so no explicit install is needed.
-              pnpm install --config.strict-dep-builds=false --no-frozen-lockfile
-              ;;
-            # Yarn Berry (v4+) removed --ignore-engines; engine checking is no longer a core feature.
-            # --no-immutable: this is a compat lane (repo is npm-native, yarn.lock is legacy v1
-            # auto-migrated by Berry); CI must not assert lockfile-format equality across PM lanes.
             yarn) yarn install --no-immutable ;;
             bun) bun install ;;
             *) echo "Unsupported package manager: ${{ matrix.pm }}" && exit 1 ;;
