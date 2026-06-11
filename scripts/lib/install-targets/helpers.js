@@ -101,6 +101,19 @@ function createManagedOperation({
   };
 }
 
+const IDE_INSTALL_URLS = Object.freeze({
+  claude:       { name: 'Claude Code',        url: 'https://claude.ai/download' },
+  cursor:       { name: 'Cursor',             url: 'https://cursor.sh' },
+  gemini:       { name: 'Gemini CLI',         url: 'https://github.com/google-gemini/gemini-cli' },
+  antigravity:  { name: 'Antigravity CLI',    url: 'https://github.com/google-gemini/gemini-cli' },
+  codex:        { name: 'Codex CLI',          url: 'https://github.com/openai/codex' },
+  opencode:     { name: 'OpenCode',           url: 'https://opencode.ai' },
+  codebuddy:    { name: 'CodeBuddy',          url: 'https://copilot.tencent.com' },
+  windsurf:     { name: 'Windsurf',           url: 'https://windsurf.ai' },
+  amp:          { name: 'Amp',                url: 'https://ampcode.com' },
+  copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
+});
+
 function defaultValidateAdapterInput(config, input = {}) {
   if (config.kind === 'project' && !input.projectRoot && !input.repoRoot) {
     return [
@@ -122,7 +135,28 @@ function defaultValidateAdapterInput(config, input = {}) {
     ];
   }
 
-  return [];
+  const issues = [];
+  const baseRoot = config.kind === 'home'
+    ? (input.homeDir || os.homedir())
+    : (input.projectRoot || input.repoRoot);
+
+  if (baseRoot && config.rootSegments && config.rootSegments.length > 0) {
+    const rootDir = path.join(baseRoot, config.rootSegments[0]);
+    if (!fs.existsSync(rootDir)) {
+      const ide = IDE_INSTALL_URLS[config.target];
+      if (ide) {
+        issues.push(buildValidationIssue(
+          'warning',
+          'ide-not-detected',
+          `${ide.name} does not appear to be installed on this machine.\n` +
+          `  Expected config directory not found: ${rootDir}\n` +
+          `  To install ${ide.name}, visit: ${ide.url}`
+        ));
+      }
+    }
+  }
+
+  return issues;
 }
 
 function createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options = {}) {

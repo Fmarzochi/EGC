@@ -533,6 +533,7 @@ function resolveInstallPlan(options = {}) {
     targetAdapterId: scaffoldPlan ? scaffoldPlan.adapter.id : null,
     targetRoot: scaffoldPlan ? scaffoldPlan.targetRoot : null,
     installStatePath: scaffoldPlan ? scaffoldPlan.installStatePath : null,
+    validationIssues: scaffoldPlan ? scaffoldPlan.validationIssues : [],
     operations: scaffoldPlan ? scaffoldPlan.operations : [],
   };
 }
