@@ -186,7 +186,12 @@ function runDoctor() {
     logDry(`would run: node scripts/doctor.js`);
     return;
   }
-  spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
+  const doctorResult = spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
+  if (doctorResult.status !== 0) {
+    const repairScript = path.join(ROOT_DIR, 'scripts', 'repair.js');
+    log(`\n  auto-repairing drift detected by doctor...`);
+    spawnSync(process.execPath, [repairScript], { stdio: 'inherit' });
+  }
 }
 
 console.log('EGC init');
