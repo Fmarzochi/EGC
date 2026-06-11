@@ -77,4 +77,4 @@ This checks that both MCP servers are built, registered, and reachable in every 
 
 ## Troubleshooting
 
-See [TROUBLESHOOTING.md](guides/TROUBLESHOOTING.md) for common issues including permission errors, Node.js version mismatches, and manual MCP registration steps.
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues including permission errors, Node.js version mismatches, and manual MCP registration steps.

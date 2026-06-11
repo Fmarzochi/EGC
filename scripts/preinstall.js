@@ -51,7 +51,7 @@ try {
       '  or with fnm (add eval "$(fnm env --use-on-cd)" to your shell profile first):\n' +
       '    brew install fnm && fnm install --lts && fnm use lts-latest\n' +
       '\n' +
-      '  See: https://github.com/Fmarzochi/EGC/blob/main/TROUBLESHOOTING.md\n' +
+      '  See: https://github.com/Fmarzochi/EGC/blob/main/docs/TROUBLESHOOTING.md\n' +
       '\n'
     );
     process.exit(1);

@@ -67,9 +67,9 @@
     "install.ps1",
     "README.md",
     "LICENSE",
-    "CONTRIBUTING.md",
-    "RULES.md",
-    "SECURITY.md"
+    ".github/CONTRIBUTING.md",
+    "docs/RULES.md",
+    ".github/SECURITY.md"
   ],
   "dependencies": {
     "ajv": "^8.12.0",

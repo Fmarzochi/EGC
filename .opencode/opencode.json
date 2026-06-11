@@ -5,7 +5,7 @@
   "default_agent": "build",
   "instructions": [
     "AGENTS.md",
-    "CONTRIBUTING.md",
+    ".github/CONTRIBUTING.md",
     "instructions/INSTRUCTIONS.md",
     "skills/tdd-workflow/SKILL.md",
     "skills/security-review/SKILL.md",

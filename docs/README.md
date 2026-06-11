@@ -19,15 +19,15 @@ for the formal classification of every subsystem.
 ## Cross-references
 
 - Root `README.md` — user-facing project overview and quickstart.
-- Root `CONTRIBUTING.md` — engineering governance and contribution workflow.
-- Root `RULES.md` — engine governance rules.
-- Root `SECURITY.md` — vulnerability disclosure.
+- `.github/CONTRIBUTING.md` — engineering governance and contribution workflow.
+- `docs/RULES.md` — engine governance rules.
+- `.github/SECURITY.md` — vulnerability disclosure.
 
 ## Reading order for a new contributor
 
 1. Root `README.md` — what EGC is and how to install it.
 2. `governance/SUBSYSTEM-MAP.md` — what every directory is for.
 3. `architecture/README.md` — the layered runtime model.
-4. Root `CONTRIBUTING.md` — how to propose changes.
+4. `.github/CONTRIBUTING.md` — how to propose changes.
 5. `guides/SKILL-DEVELOPMENT-GUIDE.md` if authoring a skill, or
    `guides/ANTIGRAVITY-GUIDE.md` for a worked installer example.

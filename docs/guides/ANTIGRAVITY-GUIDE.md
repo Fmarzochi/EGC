@@ -117,7 +117,7 @@ If you're contributing a new skill and want it available on Antigravity:
 
 > **Key distinction**: The installer deploys `agents/` (no dot) → `.agent/skills/` — this is what makes skills available at runtime. The `.agents/` (dot-prefixed) directory is a separate static layout for Codex `openai.yaml` configs and is not auto-deployed by the installer.
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contribution guide.
+See [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) for the full contribution guide.
 
 ## Comparison with Other Targets
 
@@ -153,4 +153,4 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contribution guide.
 
 - [Selective Install Architecture](./SELECTIVE-INSTALL-ARCHITECTURE.md) — how the install system works under the hood
 - [Selective Install Design](./SELECTIVE-INSTALL-DESIGN.md) — design decisions and target adapter contracts
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — how to contribute skills, agents, and commands
+- [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) — how to contribute skills, agents, and commands
