@@ -13,7 +13,7 @@
     "url": "https://github.com/Fmarzochi/EGC/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "main": "scripts/egc.js",
   "bin": {

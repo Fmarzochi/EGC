@@ -384,7 +384,7 @@ This installs the exact versions from the lock file, ensuring reproducible build
 
 ### Requirements
 
-- Node.js 18 or later
+- Node.js 20 or later
 - npm (bundled with Node.js) or yarn or bun
 
 ### Building
