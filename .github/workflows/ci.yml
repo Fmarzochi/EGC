@@ -34,6 +34,12 @@ jobs:
           # Bun has limited Windows support
           - os: windows-latest
             pm: bun
+          # better-sqlite3 v12.10.0 has no prebuilt binary for Node 18 (ABI 108) on Windows.
+          # Node 18 is EOL (Apr 2025). Yarn Berry adds migration overhead that pushes install
+          # past the job limit. Windows+Node 18 coverage is maintained via the npm lane.
+          - os: windows-latest
+            pm: yarn
+            node: '18.x'
 
     steps:
       - name: Checkout
