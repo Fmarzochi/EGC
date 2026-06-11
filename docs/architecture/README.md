@@ -22,8 +22,8 @@ Antigravity, OpenCode, Kiro, Trae, and Codebuddy harnesses.
 
 The Node/MCP runtime is fully exercised by the CI matrix
 (`.github/workflows/ci.yml`, `reusable-test.yml`,
-`reusable-validate.yml`) across Linux/macOS/Windows × Node 18/20/22 ×
-npm/pnpm/yarn/bun.
+`reusable-validate.yml`) across Linux/macOS/Windows × Node 20/22 ×
+npm/yarn/bun.
 
 ### Dormant scaffolding (preserved)
 
