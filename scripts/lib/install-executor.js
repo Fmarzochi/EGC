@@ -67,7 +67,7 @@ function readDirectoryNames(dirPath) {
   return fs.readdirSync(dirPath, { withFileTypes: true })
     .filter(entry => entry.isDirectory())
     .map(entry => entry.name)
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function listAvailableLanguages(sourceRoot = getSourceRoot()) {
@@ -75,7 +75,7 @@ function listAvailableLanguages(sourceRoot = getSourceRoot()) {
     ...listLegacyCompatibilityLanguages(),
     ...readDirectoryNames(path.join(sourceRoot, 'rules'))
       .filter(name => name !== 'common'),
-  ])].sort();
+  ])].sort((a, b) => a.localeCompare(b));
 }
 
 function validateLegacyTarget(target) {
@@ -114,7 +114,7 @@ function listFilesRecursive(dirPath) {
     }
   }
 
-  return files.sort();
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 function isGeneratedRuntimeSourcePath(sourceRelativePath) {
@@ -236,7 +236,7 @@ function addMatchingRuleOperations(operations, options) {
   const files = fs.readdirSync(sourceDir, { withFileTypes: true })
     .filter(entry => entry.isFile() && options.matcher(entry.name))
     .map(entry => entry.name)
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 
   for (const fileName of files) {
     const sourceRelativePath = path.join(options.sourceRelativeDir, fileName);

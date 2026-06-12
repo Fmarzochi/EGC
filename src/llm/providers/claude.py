@@ -7,8 +7,9 @@ from typing import Any
 
 try:
     from anthropic import Anthropic
+    _ANTHROPIC_AVAILABLE = True
 except ImportError:
-    Anthropic = None  # type: ignore[assignment]
+    _ANTHROPIC_AVAILABLE = False
 
 from llm.core.interface import (
     AuthenticationError,
@@ -24,11 +25,12 @@ class ClaudeProvider(LLMProvider):
     provider_type = ProviderType.CLAUDE
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
-        if Anthropic is None:
+        if not _ANTHROPIC_AVAILABLE:
             raise ImportError(
                 "anthropic package is required to use ClaudeProvider. "
                 "Install with: pip install everything-gemini[claude]"
             )
+        from anthropic import Anthropic
         self.client = Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"), base_url=base_url)
         self._models = [
             ModelInfo(

@@ -126,7 +126,7 @@ function classifyFiles(allFiles: string[]): Record<string, AreaInfo> {
   // Derive unique directories and entry points per area
   for (const area of Object.values(areas)) {
     const dirs = new Set(area.files.map((f) => path.dirname(f)));
-    area.directories = [...dirs].sort();
+    area.directories = [...dirs].sort((a, b) => a.localeCompare(b));
 
     area.entryPoints = area.files
       .filter((f) => /index\.(ts|tsx|js|jsx)$/.test(f) || /main\.(ts|tsx|js|jsx)$/.test(f))

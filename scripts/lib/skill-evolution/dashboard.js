@@ -132,7 +132,7 @@ function renderSuccessRatePanel(records, skills, options = {}) {
   const skillIds = Array.from(new Set([
     ...Array.from(recordsBySkill.keys()),
     ...skills.map(s => s.skill_id),
-  ])).sort();
+  ])).sort((a, b) => a.localeCompare(b));
 
   for (const skillId of skillIds) {
     const skillRecords = recordsBySkill.get(skillId) || [];
@@ -191,7 +191,7 @@ function renderFailureClusterPanel(records, options = {}) {
     .map(([pattern, data]) => ({
       pattern,
       count: data.count,
-      skill_ids: Array.from(data.skill_ids).sort(),
+      skill_ids: Array.from(data.skill_ids).sort((a, b) => a.localeCompare(b)),
       percentage: failures.length > 0
         ? Math.round((data.count / failures.length) * 100)
         : 0,

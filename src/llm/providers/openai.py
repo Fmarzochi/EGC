@@ -8,8 +8,9 @@ from typing import Any
 
 try:
     from openai import OpenAI
+    _OPENAI_AVAILABLE = True
 except ImportError:
-    OpenAI = None  # type: ignore[assignment]
+    _OPENAI_AVAILABLE = False
 
 from llm.core.interface import (
     AuthenticationError,
@@ -25,11 +26,12 @@ class OpenAIProvider(LLMProvider):
     provider_type = ProviderType.OPENAI
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
-        if OpenAI is None:
+        if not _OPENAI_AVAILABLE:
             raise ImportError(
                 "openai package is required to use OpenAIProvider. "
                 "Install with: pip install everything-gemini[openai]"
             )
+        from openai import OpenAI
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"), base_url=base_url)
         self._models = [
             ModelInfo(

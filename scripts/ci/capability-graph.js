@@ -126,7 +126,7 @@ function collectReferences(body, knownNames) {
     if (knownNames.has(candidate)) found.add(candidate);
   }
 
-  return Array.from(found).sort();
+  return Array.from(found).sort((a, b) => a.localeCompare(b));
 }
 
 function collectPlainReferences(body, knownNames) {
@@ -138,7 +138,7 @@ function collectPlainReferences(body, knownNames) {
     const candidate = m[1];
     if (knownNames.has(candidate)) found.add(candidate);
   }
-  return Array.from(found).sort();
+  return Array.from(found).sort((a, b) => a.localeCompare(b));
 }
 
 function buildAgents(skillNames) {

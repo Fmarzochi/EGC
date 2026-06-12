@@ -5,7 +5,7 @@ Ensures clean boundaries between the repository and external memory stores.
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 @dataclass
@@ -15,7 +15,7 @@ class MemoryEntry:
     category: str  # e.g., 'Sessions', 'Archaeology', 'Governance'
     tags: List[str]
     metadata: Dict[str, Any]
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = field(default_factory=datetime.now)
 
 class CognitiveMemoryProvider(ABC):
     """

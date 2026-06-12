@@ -217,7 +217,7 @@ function listInstallModules(options = {}) {
 }
 
 function listLegacyCompatibilityLanguages() {
-  return Object.keys(LEGACY_LANGUAGE_ALIAS_TO_CANONICAL).sort();
+  return Object.keys(LEGACY_LANGUAGE_ALIAS_TO_CANONICAL).sort((a, b) => a.localeCompare(b));
 }
 
 function validateInstallModuleIds(moduleIds, options = {}) {

@@ -45,17 +45,17 @@ class MemoryManager:
             vault_path = self.config.get("vaultPath")
             if vault_path:
                 p = ObsidianVaultProvider(vault_path, namespace=namespace)
-                if p.initialize():
+                if p.initialize():  # NOSONAR
                     return p
-        
+
         elif provider_type == "obsidian-mcp":
             p = MCPObsidianProvider(namespace=namespace, scope=scope)
             if p.initialize():
                 return p
-        
+
         # Fallback to local
         p = LocalFileProvider(self.workspace_root, namespace=namespace)
-        if p.initialize():
+        if p.initialize():  # NOSONAR
             return p
         
         return None

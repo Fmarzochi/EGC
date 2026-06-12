@@ -33,7 +33,7 @@ function generateManifest() {
 
   // 2. Validate Overflow and Paths
   const skillSources = [];
-  const sortedNamespaces = Object.keys(namespaces).sort();
+  const sortedNamespaces = Object.keys(namespaces).sort((a, b) => a.localeCompare(b));
   
   sortedNamespaces.forEach(ns => {
     const count = namespaces[ns].length;

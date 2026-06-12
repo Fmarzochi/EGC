@@ -394,19 +394,18 @@ function getSessionById(sessionId, includeContent = false) {
   }
 
   const sessions = getMatchingSessionCandidates(normalizedSessionId);
+  const session = sessions[0];
+  if (!session) return null;
 
-  for (const session of sessions) {
-    const sessionRecord = { ...session };
+  const sessionRecord = { ...session };
 
-    if (includeContent) {
-      sessionRecord.content = getSessionContent(sessionRecord.sessionPath);
-      sessionRecord.metadata = parseSessionMetadata(sessionRecord.content);
-      // Pass pre-read content to avoid a redundant disk read
-      sessionRecord.stats = getSessionStats(sessionRecord.content || '');
-    }
-
-    return sessionRecord;
+  if (includeContent) {
+    sessionRecord.content = getSessionContent(sessionRecord.sessionPath);
+    sessionRecord.metadata = parseSessionMetadata(sessionRecord.content);
+    sessionRecord.stats = getSessionStats(sessionRecord.content || '');
   }
+
+  return sessionRecord;
 
   return null;
 }

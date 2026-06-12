@@ -42,7 +42,7 @@ function listMatchingFiles(root, relativeDir, matcher) {
   return fs.readdirSync(directory, { withFileTypes: true })
     .filter(entry => matcher(entry))
     .map(entry => normalizePathSegments(path.join(relativeDir, entry.name)))
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function listSkillsRecursive(skillsRoot) {
@@ -77,7 +77,7 @@ function listSkillsRecursive(skillsRoot) {
     }
   }
 
-  return found.sort();
+  return found.sort((a, b) => a.localeCompare(b));
 }
 
 function buildCatalog(root = ROOT) {
