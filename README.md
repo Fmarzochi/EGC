@@ -14,6 +14,10 @@
 
 ---
 
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, the AI saves what it learned about your project: the decisions you made, what failed, your preferences, what comes next. At the start of the next session, it loads that state back. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more.
+
+---
+
 ## This is what EGC looks like in practice
 
 You open Claude Code on a project you haven't touched in two weeks. Without typing anything:
@@ -30,7 +34,7 @@ Ready to pick up the next items:
 • Add mcp_server_count to audit.js
 ```
 
-The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. You didn't type anything. You just started working.
+The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started. You didn't type anything. You just started working.
 
 <div align="center">
   <img src="assets/egc-terminal.gif" alt="EGC demo" width="700" />
@@ -77,12 +81,12 @@ npx @egchq/egc install
 
 EGC is built by one developer, maintained in the open, and free.
 
-- **[Join the Discord](https://discord.gg/AtazrtxJ)** — ask questions, share feedback
-- **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)** — any amount
-- **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)** — no GitHub account needed
-- **Star the repository** — helps other developers find it
-- **[Contribute](.github/CONTRIBUTING.md)** — agents, skills, commands, bug fixes, docs
-- **Share** — if EGC changed how you work, tell someone
+- **[Join the Discord](https://discord.gg/AtazrtxJ)**: ask questions, share feedback
+- **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)**: any amount
+- **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: no GitHub account needed
+- **Star the repository**: helps other developers find it
+- **[Contribute](.github/CONTRIBUTING.md)**: agents, skills, commands, bug fixes, docs
+- **Share**: if EGC changed how you work, tell someone
 
 ### Sponsors
 
