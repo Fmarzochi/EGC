@@ -70,7 +70,7 @@ Rebuilding context from scratch costs ~1,500 tokens per session. EGC's state fil
 | | Without EGC | With EGC |
 |---|---|---|
 | Context overhead per session | ~1,500 tokens | ~200 tokens |
-| 20 sessions/month | ~$0.08–$0.09 | ~$0.011–$0.012 |
+| 20 sessions/month | ~$0.08-$0.09 | ~$0.011-$0.012 |
 | Time re-explaining context | 10 min/session | 0 |
 
 The money saved is small. The time and interrupted flow are not.
