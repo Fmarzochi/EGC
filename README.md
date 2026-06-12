@@ -56,13 +56,13 @@ npx @egchq/egc install
 
 ## Prompt library
 
-**479 components included** and optional: install them when prompted or skip entirely. EGC works without them.
+**479 components included** and optional. Install once to get access to 63 agents, 229 skills, and 76 commands written from real experience. Skip them and EGC still gives you persistent memory.
 
 | Type | Count |
 |---|---|
-| Agents | 63 |
-| Skills | 229 |
-| Commands | 76 |
+| Agents | 63 agents |
+| Skills | 229 skills |
+| Commands | 76 commands |
 | Rules | 111 |
 
 ---
