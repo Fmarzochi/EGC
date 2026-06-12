@@ -406,8 +406,6 @@ function getSessionById(sessionId, includeContent = false) {
   }
 
   return sessionRecord;
-
-  return null;
 }
 
 /**
