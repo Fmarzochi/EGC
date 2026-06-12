@@ -65,6 +65,12 @@ npx @egchq/egc install
 | Commands | 76 commands |
 | Rules | 111 |
 
+| Component | Total | Claude Code | Gemini CLI | Claude Code native |
+|---|---|---|---|---|
+| Agents | 63 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
+| Commands | 76 | Shared | Instruction-based | 31 |
+| Skills | 229 | Shared | 10 (native format) | 37 |
+
 ---
 
 ## Support EGC
