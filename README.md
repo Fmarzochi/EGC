@@ -30,6 +30,10 @@ Ready to pick up the next items:
 
 The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. You didn't type anything. You just started working.
 
+<div align="center">
+  <img src="assets/egc-terminal.gif" alt="EGC demo" width="700" />
+</div>
+
 After `sh install.sh`, the memory protocol is injected into the global instruction files for Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Windsurf, Amp, VS Code Copilot, Zed, Kiro, Trae, and CodeBuddy, so the AI reads state at the start of each session and saves it at the end. For tools where the AI instruction file isn't read automatically (varies by tool version), you may need to add the project's `CLAUDE.md` or equivalent to the session context manually.
 
 ---
