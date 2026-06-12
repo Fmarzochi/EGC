@@ -348,6 +348,33 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('getGoDeps reads multiple require blocks in go.mod', () => {
+    const dir = createTempDir();
+    try {
+      const gomod = [
+        'module test',
+        '',
+        'go 1.22',
+        '',
+        'require (',
+        '\tgithub.com/gin-gonic/gin v1.9.1',
+        ')',
+        '',
+        'require (',
+        '\tgithub.com/lib/pq v1.10.9 // indirect',
+        '\tgolang.org/x/net v0.21.0 // indirect',
+        ')'
+      ].join('\n');
+      writeTestFile(dir, 'go.mod', gomod);
+      const deps = getGoDeps(dir);
+      assert.ok(deps.some(d => d.includes('gin-gonic/gin')), 'should include direct dep');
+      assert.ok(deps.some(d => d.includes('lib/pq')), 'should include indirect dep from second block');
+      assert.ok(deps.some(d => d.includes('golang.org/x/net')), 'should include all entries from second block');
+    } finally {
+      cleanupDir(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('getRustDeps reads Cargo.toml', () => {
     const dir = createTempDir();
     try {

@@ -240,9 +240,8 @@ function getGoDeps(projectDir) {
     if (!fs.existsSync(modPath)) return [];
     const content = fs.readFileSync(modPath, 'utf8');
     const deps = [];
-    const requireBlock = content.match(/require\s*\(([\s\S]*?)\)/);
-    if (requireBlock) {
-      requireBlock[1].split('\n').forEach(line => {
+    for (const block of content.matchAll(/require\s*\(([\s\S]*?)\)/g)) {
+      block[1].split('\n').forEach(line => {
         const trimmed = line.trim();
         if (trimmed && !trimmed.startsWith('//')) {
           const parts = trimmed.split(/\s+/);
