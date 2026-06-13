@@ -85,8 +85,8 @@ function formatDate(date) {
 const TRAILING_PUNCTUATION = new Set(['.', ',', ';', ':', '!', '?']);
 const EDGE_FILLER = new Set([' ', '\t', ':', ',', '-']);
 
-// Character-by-character trimming avoids the anchored +$ regexes that
-// SonarCloud flags as vulnerable to super-linear backtracking.
+// Trimming scans characters instead of using anchored +$ regexes,
+// which backtrack super-linearly on crafted input.
 function trimTrailingChars(text, chars) {
   let end = text.length;
   while (end > 0 && chars.has(text[end - 1])) end -= 1;
@@ -108,8 +108,9 @@ function normalizeKey(text) {
 
 function stripDateTokens(text) {
   const withoutDates = text
-    .replace(/[([]?\d{4}-\d{2}-\d{2}[)\]]?/g, ' ')
-    .replace(/[([]?\d{2}\/\d{2}\/\d{4}[)\]]?/g, ' ')
+    .replace(/\d{4}-\d{2}-\d{2}/g, ' ')
+    .replace(/\d{2}\/\d{2}\/\d{4}/g, ' ')
+    .replace(/[([] *[)\]]/g, ' ')
     .replace(/\s+/g, ' ');
   return trimEdgeChars(withoutDates, EDGE_FILLER).trim();
 }

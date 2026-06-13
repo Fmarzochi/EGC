@@ -311,6 +311,22 @@ function runTests() {
     assert.ok(result.stderr.includes('Invalid threshold'));
   })) passed++; else failed++;
 
+  if (test('rejects --project without a value', () => {
+    const result = run(['--project']);
+    assert.strictEqual(result.code, 1);
+    assert.ok(result.stderr.includes('Missing value for --project'));
+
+    const followedByFlag = run(['--project', '--dry-run']);
+    assert.strictEqual(followedByFlag.code, 1);
+    assert.ok(followedByFlag.stderr.includes('Missing value for --project'));
+  })) passed++; else failed++;
+
+  if (test('strips bracketed dates with surrounding spaces', () => {
+    assert.strictEqual(coreFact('Chose SQLite ( 2026-01-15 ) for storage'), 'Chose SQLite for storage');
+    assert.strictEqual(coreFact('Chose SQLite [ 12/01/2026 ] for storage'), 'Chose SQLite for storage');
+    assert.strictEqual(coreFact('Chose SQLite (2026-01-15) for storage'), 'Chose SQLite for storage');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

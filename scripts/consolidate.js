@@ -62,7 +62,11 @@ function parseArgs(argv) {
     } else if (arg === '--json') {
       parsed.json = true;
     } else if (arg === '--project') {
-      parsed.project = args[index + 1] || null;
+      const value = args[index + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error('Missing value for --project');
+      }
+      parsed.project = value;
       index += 1;
     } else if (arg === '--threshold') {
       parsed.threshold = Number.parseInt(args[index + 1], 10);
