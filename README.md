@@ -58,6 +58,30 @@ npx @egchq/egc install
 
 ---
 
+## What the MCP server gives your AI
+
+EGC ships `egc-memory`, an MCP server that exposes 13 tools your AI can call during a session:
+
+| Tool | What it does |
+|---|---|
+| `get_state` | Loads project memory at session start |
+| `update_state` | Saves decisions, preferences, and next steps |
+| `store_decision` | Persists a single decision to SQLite |
+| `query_history` | Returns past decisions by timestamp |
+| `search_history` | Full-text search with BM25 ranking |
+| `set_working_memory` | Stores transient context with a TTL |
+| `get_working_memory` | Reads a transient key |
+| `delete_working_memory` | Removes a transient key |
+| `add_lesson` | Records cross-session knowledge with confidence decay |
+| `list_lessons` | Retrieves active lessons above a confidence threshold |
+| `forget_lesson` | Removes a lesson permanently |
+| `detect_patterns` | Surfaces repeated commands and recurring errors from hook events |
+| `compress_observations` | Compresses raw hook observations into typed summaries to reduce token usage |
+
+State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
+
+---
+
 ## Prompt library
 
 **479 components included** and optional. Install once to get access to 63 agents, 229 skills, and 76 commands written from real experience. Skip them and EGC still gives you persistent memory.
