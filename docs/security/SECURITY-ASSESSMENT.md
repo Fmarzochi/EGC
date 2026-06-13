@@ -1,4 +1,4 @@
-# Security Assessment — Extended Global Context (EGC)
+# Security Assessment: Extended Global Context (EGC)
 
 ## Scope
 

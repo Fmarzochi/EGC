@@ -34,7 +34,7 @@ conn = videodb.connect(
 
 ### Transcode
 
-Transcode a video from a URL with custom resolution, quality, and audio settings. Processing happens server-side — no local ffmpeg required.
+Transcode a video from a URL with custom resolution, quality, and audio settings. Processing happens server-side: no local ffmpeg required.
 
 ```python
 from videodb import TranscodeMode, VideoConfig, AudioConfig
@@ -121,7 +121,7 @@ coll = conn.get_collection()
 | `coll.generate_music(prompt, duration=5)` | `Audio` | Generate music with AI |
 | `coll.generate_sound_effect(prompt, duration=2)` | `Audio` | Generate sound effect |
 | `coll.generate_voice(text, voice_name="Default")` | `Audio` | Generate speech from text |
-| `coll.generate_text(prompt, model_name="basic", response_type="text")` | `dict` | LLM text generation — access result via `["output"]` |
+| `coll.generate_text(prompt, model_name="basic", response_type="text")` | `dict` | LLM text generation: access result via `["output"]` |
 | `coll.dub_video(video_id, language_code)` | `Video` | Dub video into another language |
 | `coll.record_meeting(meeting_url, bot_name, ...)` | `Meeting` | Record a live meeting |
 | `coll.create_capture_session(...)` | `CaptureSession` | Create a capture session (see [capture-reference.md](capture-reference.md)) |
@@ -260,7 +260,7 @@ image = coll.get_image(image_id)
 | `image.id` | `str` | Unique image ID |
 | `image.collection_id` | `str` | Parent collection ID |
 | `image.name` | `str` | Image name |
-| `image.url` | `str\|None` | Image URL (may be `None` for generated images — use `generate_url()` instead) |
+| `image.url` | `str\|None` | Image URL (may be `None` for generated images: use `generate_url()` instead) |
 
 ### Image Methods
 

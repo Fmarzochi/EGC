@@ -20,7 +20,7 @@ Agent files must be markdown files containing a persona prompt (identity, rules,
 
 Both flat and subdirectory layouts are supported:
 
-**Subdirectory layout** — domain is inferred from the folder name:
+**Subdirectory layout**: domain is inferred from the folder name:
 
 ```
 agents/
@@ -33,7 +33,7 @@ agents/
     └── discovery-coach.md
 ```
 
-**Flat layout** — domain inferred from shared filename prefixes. A prefix counts as a domain when 2+ files share it. Files with unique prefixes go to "General". Note: the algorithm splits at the first `-`, so multi-word domains (e.g., `product-management`) should use the subdirectory layout instead:
+**Flat layout**: domain inferred from shared filename prefixes. A prefix counts as a domain when 2+ files share it. Files with unique prefixes go to "General". Note: the algorithm splits at the first `-`, so multi-word domains (e.g., `product-management`) should use the subdirectory layout instead:
 
 ```
 agents/
@@ -49,10 +49,10 @@ agents/
 
 Agents are discovered via two methods, merged and deduplicated by agent name:
 
-1. **`egc agents` command** (primary) — run `egc agents` to get all agents known to the CLI, including user agents, plugin agents (e.g. `egc:architect`), and built-in agents. This automatically covers EGC marketplace installs without any path configuration.
-2. **File glob** (fallback, for reading agent content) — agent markdown files are read from:
-   - `./agents/**/*.md` + `./agents/*.md` — project-local agents
-   - `~/.gemini/agents/**/*.md` + `~/.gemini/agents/*.md` — global user agents
+1. **`egc agents` command** (primary): run `egc agents` to get all agents known to the CLI, including user agents, plugin agents (e.g. `egc:architect`), and built-in agents. This automatically covers EGC marketplace installs without any path configuration.
+2. **File glob** (fallback, for reading agent content): agent markdown files are read from:
+   - `./agents/**/*.md` + `./agents/*.md`: project-local agents
+   - `~/.gemini/agents/**/*.md` + `~/.gemini/agents/*.md`: global user agents
 
 Earlier sources take precedence when names collide: user agents > plugin agents > built-in agents. A custom path can be used instead if the user specifies one.
 
@@ -77,9 +77,9 @@ If no agents are found after running `egc agents` and probing file locations, in
 
 ```
 Available agent domains:
-1. Engineering — Software Architect, Security Engineer
-2. Marketing — SEO Specialist
-3. Sales — Discovery Coach, Outbound Strategist
+1. Engineering: Software Architect, Security Engineer
+2. Marketing: SEO Specialist
+3. Sales: Discovery Coach, Outbound Strategist
 
 Pick domains or name specific agents (e.g., "1,3" or "security + seo"):
 ```
@@ -109,8 +109,8 @@ What should they work on? (describe the task):
 3. Spawn all agents in parallel using the Agent tool:
    - `subagent_type: "general-purpose"`
    - `prompt: "{agent file content}\n\nTask: {task description}"`
-   - Each agent runs independently — no inter-agent communication needed
-4. If an agent fails (error, timeout, or empty output), note the failure inline (e.g., "Security Engineer: failed — [reason]") and continue with results from agents that succeeded
+   - Each agent runs independently: no inter-agent communication needed
+4. If an agent fails (error, timeout, or empty output), note the failure inline (e.g., "Security Engineer: failed: [reason]") and continue with results from agents that succeeded
 
 ### Step 5: Synthesize Results
 
@@ -127,7 +127,7 @@ If only 1 agent was selected, skip synthesis and present the output directly.
 
 - **Dynamic discovery only.** Never hardcode agent lists. New files in the directory auto-appear in the menu.
 - **Max 5 agents per team.** More than 5 produces diminishing returns and excessive token usage. Enforce at selection time.
-- **Parallel dispatch.** All agents run simultaneously — use the Agent tool's parallel invocation pattern.
+- **Parallel dispatch.** All agents run simultaneously: use the Agent tool's parallel invocation pattern.
 - **Parallel Agent calls, not TeamCreate.** This skill uses parallel Agent tool calls for independent work. TeamCreate (a Gemini Code tool for multi-agent dialogue) is only needed when agents must debate or respond to each other.
 
 ## Examples
@@ -137,10 +137,10 @@ User: team builder
 
 Gemini:
 Available agent domains:
-1. Engineering (2) — Software Architect, Security Engineer
-2. Marketing (1) — SEO Specialist
-3. Sales (4) — Discovery Coach, Outbound Strategist, Proposal Strategist, Sales Engineer
-4. Support (1) — Executive Summary
+1. Engineering (2): Software Architect, Security Engineer
+2. Marketing (1): SEO Specialist
+3. Sales (4): Discovery Coach, Outbound Strategist, Proposal Strategist, Sales Engineer
+4. Support (1): Executive Summary
 
 Pick domains or name specific agents:
 

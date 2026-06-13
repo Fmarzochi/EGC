@@ -392,12 +392,12 @@ function probeCommandServer(serverName, config) {
       // The process appears alive at timeout. On loaded machines or with slow-starting
       // runtimes (e.g. Node.js on cold CI), the process may still be in its startup
       // phase and about to exit with a non-zero code. Allow an additional grace window
-      // equal to timeoutMs before declaring healthy — any non-zero exit during the
+      // equal to timeoutMs before declaring healthy: any non-zero exit during the
       // grace period is treated as an early failure, preserving correct classification
       // without blocking indefinitely.
       const graceTimer = setTimeout(() => {
         if (done) return;
-        // Process survived the full grace window — healthy stdio server.
+        // Process survived the full grace window: healthy stdio server.
         try {
           child.kill('SIGTERM');
         } catch {

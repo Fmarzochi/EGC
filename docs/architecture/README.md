@@ -2,7 +2,7 @@
 
 EGC ships one production runtime alongside an exploratory kernel
 direction kept under `architecture/` for research and
-ecosystem-evolution work. This page is the index — read it first,
+ecosystem-evolution work. This page is the index: read it first,
 then drill into the specific documents below.
 
 ## Runtime

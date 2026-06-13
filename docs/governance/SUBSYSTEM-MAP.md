@@ -7,12 +7,12 @@ dormant.
 
 ## Taxonomy
 
-- **ACTIVE** — invoked by CI, runtime, or supported user flows.
-- **GENERATED** — produced by tooling; safe to regenerate.
-- **ARCHIVAL** — historical snapshot, intentionally preserved.
-- **DORMANT** — code present but not currently wired into any execution path.
-- **LEGACY** — superseded; kept for migration compatibility.
-- **DEPRECATED** — slated for removal once consumers migrate.
+- **ACTIVE**: invoked by CI, runtime, or supported user flows.
+- **GENERATED**: produced by tooling; safe to regenerate.
+- **ARCHIVAL**: historical snapshot, intentionally preserved.
+- **DORMANT**: code present but not currently wired into any execution path.
+- **LEGACY**: superseded; kept for migration compatibility.
+- **DEPRECATED**: slated for removal once consumers migrate.
 
 ## Map
 

@@ -22,7 +22,7 @@ func userCreationValidatesEmail() throws {
 
 ## Test Isolation
 
-Each test gets a fresh instance — set up in `init`, tear down in `deinit`. No shared mutable state between tests.
+Each test gets a fresh instance: set up in `init`, tear down in `deinit`. No shared mutable state between tests.
 
 ## Parameterized Tests
 

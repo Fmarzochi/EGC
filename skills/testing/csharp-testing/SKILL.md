@@ -140,7 +140,7 @@ public async Task PlaceOrderAsync_PersistsOrder()
     // Act
     await _sut.PlaceOrderAsync(request, CancellationToken.None);
 
-    // Assert — verify the repository was called
+    // Assert: verify the repository was called
     await _repository.Received(1).AddAsync(
         Arg.Is<Order>(o => o.CustomerId == request.CustomerId),
         Arg.Any<CancellationToken>());

@@ -1,6 +1,6 @@
 ---
 name: swift-protocol-di-testing
-description: Protocol-based dependency injection for testable Swift code — mock file system, network, and external APIs using focused protocols and Swift Testing.
+description: Protocol-based dependency injection for testable Swift code: mock file system, network, and external APIs using focused protocols and Swift Testing.
 origin: EGC
 ---
 
@@ -168,7 +168,7 @@ func testReadError() async {
 
 ## Best Practices
 
-- **Single Responsibility**: Each protocol should handle one concern — don't create "god protocols" with many methods
+- **Single Responsibility**: Each protocol should handle one concern: don't create "god protocols" with many methods
 - **Sendable conformance**: Required when protocols are used across actor boundaries
 - **Default parameters**: Let production code use real implementations by default; only tests need to specify mocks
 - **Error simulation**: Design mocks with configurable error properties for testing failure paths

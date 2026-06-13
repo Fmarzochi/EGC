@@ -633,7 +633,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             since: {
               type: "string",
-              description: "ISO 8601 timestamp — only compress observations newer than this. Optional."
+              description: "ISO 8601 timestamp: only compress observations newer than this. Optional."
             },
             limit: {
               type: "number",

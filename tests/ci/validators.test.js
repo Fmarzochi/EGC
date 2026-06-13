@@ -190,9 +190,9 @@ function writeCatalogFixture(testDir, options = {}) {
     readmeUnrelatedSkillsCount = 16,
     summaryCounts = { agents: 1, skills: 1, commands: 1 },
     structureLines = [
-      'agents/          — 1 specialized subagents',
-      'skills/          — 1 workflow skills and domain knowledge',
-      'commands/        — 1 slash commands',
+      'agents/         : 1 specialized subagents',
+      'skills/         : 1 workflow skills and domain knowledge',
+      'commands/       : 1 slash commands',
     ],
     zhRootReadmeCounts = { agents: 1, skills: 1, commands: 1 },
     zhDocsReadmeCounts = { agents: 1, skills: 1, commands: 1 },
@@ -201,9 +201,9 @@ function writeCatalogFixture(testDir, options = {}) {
     zhDocsUnrelatedSkillsCount = 16,
     zhAgentsSummaryCounts = { agents: 1, skills: 1, commands: 1 },
     zhAgentsStructureLines = [
-      'agents/          — 1 个专业子代理',
-      'skills/          — 1 个工作流技能和领域知识',
-      'commands/        — 1 个斜杠命令',
+      'agents/         : 1 个专业子代理',
+      'skills/         : 1 个工作流技能和领域知识',
+      'commands/       : 1 个斜杠命令',
     ],
   } = options;
 
@@ -381,9 +381,9 @@ function runTests() {
       readmeParityCounts: { agents: 99, skills: 99, commands: 99 },
       summaryCounts: { agents: 99, skills: 99, commands: 99 },
       structureLines: [
-        'agents/          — 99 specialized subagents',
-        'skills/          — 99 workflow skills and domain knowledge',
-        'commands/        — 99 slash commands',
+        'agents/         : 99 specialized subagents',
+        'skills/         : 99 workflow skills and domain knowledge',
+        'commands/       : 99 slash commands',
       ],
       zhRootReadmeCounts: { agents: 99, skills: 99, commands: 99 },
       zhDocsReadmeCounts: { agents: 99, skills: 99, commands: 99 },
@@ -391,9 +391,9 @@ function runTests() {
       zhDocsParityCounts: { agents: 99, skills: 99, commands: 99 },
       zhAgentsSummaryCounts: { agents: 99, skills: 99, commands: 99 },
       zhAgentsStructureLines: [
-        'agents/          — 99 个专业子代理',
-        'skills/          — 99 个工作流技能和领域知识',
-        'commands/        — 99 个斜杠命令',
+        'agents/         : 99 个专业子代理',
+        'skills/         : 99 个工作流技能和领域知识',
+        'commands/       : 99 个斜杠命令',
       ],
     });
 
@@ -493,9 +493,9 @@ function runTests() {
       zhDocsParityCounts: { agents: 13, skills: 13, commands: 13 },
       zhAgentsSummaryCounts: { agents: 14, skills: 14, commands: 14 },
       zhAgentsStructureLines: [
-        'agents/          — 15 个专业子代理',
-        'skills/          — 16 个工作流技能和领域知识',
-        'commands/        — 17 个斜杠命令',
+        'agents/         : 15 个专业子代理',
+        'skills/         : 16 个工作流技能和领域知识',
+        'commands/       : 17 个斜杠命令',
       ],
     });
 
@@ -522,14 +522,14 @@ function runTests() {
     assert.ok(readme.includes('| Skills | 16 | .agents/skills/ |'), 'Should not rewrite unrelated README tables');
     assert.ok(readme.includes('| **Agents** | 1 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |'), 'Should sync README parity table');
     assert.ok(agentsDoc.includes('providing 1 specialized agents, 1 skills, 1 commands'), 'Should sync AGENTS summary');
-    assert.ok(agentsDoc.includes('skills/          — 1 workflow skills and domain knowledge'), 'Should sync AGENTS structure');
+    assert.ok(agentsDoc.includes('skills/         : 1 workflow skills and domain knowledge'), 'Should sync AGENTS structure');
     assert.ok(zhRootReadme.includes('你现在可以使用 1 个代理、1 个技能和 1 个命令'), 'Should sync README.zh-CN quick-start summary');
     assert.ok(zhDocsReadme.includes('你现在可以使用 1 个智能体、1 项技能和 1 个命令了'), 'Should sync docs/zh-CN/README quick-start summary');
     assert.ok(zhDocsReadme.includes('| 智能体 | \u2705 1 个 |'), 'Should sync docs/zh-CN/README comparison table');
     assert.ok(zhDocsReadme.includes('| 技能 | 16 | .agents/skills/ |'), 'Should not rewrite unrelated docs/zh-CN/README tables');
     assert.ok(zhDocsReadme.includes('| **智能体** | 1 | 共享 (AGENTS.md) | 共享 (AGENTS.md) | 12 |'), 'Should sync docs/zh-CN/README parity table');
     assert.ok(zhAgentsDoc.includes('提供 1 个专业代理、1 项技能、1 条命令'), 'Should sync docs/zh-CN/AGENTS summary');
-    assert.ok(zhAgentsDoc.includes('commands/        — 1 个斜杠命令'), 'Should sync docs/zh-CN/AGENTS structure');
+    assert.ok(zhAgentsDoc.includes('commands/       : 1 个斜杠命令'), 'Should sync docs/zh-CN/AGENTS structure');
 
     cleanupTestDir(testDir);
   })) passed++; else failed++;
@@ -546,12 +546,12 @@ function runTests() {
       structureLines: [
         '  agents/   -   1 specialized subagents   ',
         '\tskills/\t–\t1+ workflow skills and domain knowledge\t',
-        ' commands/ — 1 slash commands ',
+        ' commands/: 1 slash commands ',
       ],
       zhAgentsStructureLines: [
         '  agents/   -   1 个专业子代理   ',
         '\tskills/\t–\t1+ 个工作流技能和领域知识\t',
-        ' commands/ — 1 个斜杠命令 ',
+        ' commands/: 1 个斜杠命令 ',
       ],
     });
 
@@ -958,7 +958,7 @@ function runTests() {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
-    // Line with two command references — both should be detected
+    // Line with two command references: both should be detected
     fs.writeFileSync(path.join(testDir, 'multi.md'),
       '# Multi\nUse `/ghost-a` and `/ghost-b` together.');
 
@@ -1681,14 +1681,14 @@ function runTests() {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
-    // but the skill doesn't exist — should warn, not error
+    // but the skill doesn't exist: should warn, not error
     fs.writeFileSync(path.join(testDir, 'cmd-a.md'),
       '# Command A\nSee skills/nonexistent-skill/ for details.');
 
     const result = runValidatorWithDirs('validate-commands', {
       COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
     });
-    // Skill directory references produce warnings, not errors — exit 0
+    // Skill directory references produce warnings, not errors: exit 0
     assert.strictEqual(result.code, 0, 'Skill path references should warn, not error');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
   })) passed++; else failed++;
@@ -1859,7 +1859,7 @@ function runTests() {
 
   if (test('handles space before colon in frontmatter key', () => {
     const testDir = createTestDir();
-    // "model : sonnet" — space before colon. extractFrontmatter uses indexOf(':') + trim()
+    // "model : sonnet": space before colon. extractFrontmatter uses indexOf(':') + trim()
     fs.writeFileSync(path.join(testDir, 'space.md'), '---\nmodel : sonnet\ntools : Read, Write\n---\n# Agent with space-colon');
 
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
@@ -1908,7 +1908,7 @@ function runTests() {
     const hooksFile = path.join(testDir, 'hooks.json');
     // Command value after JSON parse: node -e "var a = \"ok\"\nconsole.log(a)"
     // Regex captures: var a = \"ok\"\nconsole.log(a)
-    // After unescape chain: var a = "ok"\nconsole.log(a) (real newline) — valid JS
+    // After unescape chain: var a = "ok"\nconsole.log(a) (real newline): valid JS
     fs.writeFileSync(hooksFile, JSON.stringify({
       hooks: {
         PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command',
@@ -1924,7 +1924,7 @@ function runTests() {
   if (test('rejects inline JS with syntax error after unescaping', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
-    // After unescape this becomes: var x = { — missing closing brace
+    // After unescape this becomes: var x = {: missing closing brace
     fs.writeFileSync(hooksFile, JSON.stringify({
       hooks: {
         PreToolUse: [{ matcher: 'test', hooks: [{ type: 'command',
@@ -1942,7 +1942,7 @@ function runTests() {
 
   if (test('silently ignores frontmatter line without colon', () => {
     const testDir = createTestDir();
-    // Line "just some text" has no colon — should be skipped, not cause crash
+    // Line "just some text" has no colon: should be skipped, not cause crash
     fs.writeFileSync(path.join(testDir, 'mixed.md'),
       '---\nmodel: sonnet\njust some text without colon\ntools: Read\n---\n# Agent');
 
@@ -2003,7 +2003,7 @@ function runTests() {
   })) passed++; else failed++;
 
   // ── Round 57: readFileSync error path, statSync catch block, adjacent code blocks ──
-  console.log('\nRound 57: validate-skills.js (SKILL.md is a directory — readFileSync error):');
+  console.log('\nRound 57: validate-skills.js (SKILL.md is a directory: readFileSync error):');
 
   if (test('fails gracefully when SKILL.md is a directory instead of a file', () => {
     const testDir = createTestDir();
@@ -2018,7 +2018,7 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
-  console.log('\nRound 57: validate-rules.js (broken symlink — statSync catch block):');
+  console.log('\nRound 57: validate-rules.js (broken symlink: statSync catch block):');
 
   if (test('reports error for broken symlink .md file in rules directory', () => {
     const testDir = createTestDir();
@@ -2028,7 +2028,7 @@ function runTests() {
       fs.symlinkSync('/nonexistent/target.md', path.join(testDir, 'broken.md'));
     } catch {
       // Skip on systems that don't support symlinks
-      console.log('    (skipped — symlinks not supported)');
+      console.log('    (skipped: symlinks not supported)');
       cleanupTestDir(testDir);
       return;
     }
@@ -2045,7 +2045,7 @@ function runTests() {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
-    // Two adjacent code blocks, each with broken refs — BOTH must be stripped
+    // Two adjacent code blocks, each with broken refs: BOTH must be stripped
     fs.writeFileSync(path.join(testDir, 'multi-blocks.md'),
       '# Multi Block\n\n' +
       '```\n`/phantom-a` in first block\n```\n\n' +
@@ -2057,7 +2057,7 @@ function runTests() {
       COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
     });
     assert.strictEqual(result.code, 0,
-      'Both code blocks should be stripped — no broken refs reported');
+      'Both code blocks should be stripped: no broken refs reported');
     assert.ok(!result.stderr.includes('phantom-a'), 'First block ref should be stripped');
     assert.ok(!result.stderr.includes('phantom-b'), 'Second block ref should be stripped');
     assert.ok(!result.stderr.includes('ghost-agent'), 'Agent ref in second block should be stripped');
@@ -2065,12 +2065,12 @@ function runTests() {
   })) passed++; else failed++;
 
   // ── Round 58: readFileSync catch block, colonIdx edge case, command-as-object ──
-  console.log('\nRound 58: validate-agents.js (unreadable agent file — readFileSync catch):');
+  console.log('\nRound 58: validate-agents.js (unreadable agent file: readFileSync catch):');
 
   if (test('reports error when agent .md file is unreadable (chmod 000)', () => {
     // Skip on Windows or when running as root (permissions won't work)
     if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
-      console.log('    (skipped — not supported on this platform)');
+      console.log('    (skipped: not supported on this platform)');
       return;
     }
     const testDir = createTestDir();
@@ -2096,12 +2096,12 @@ function runTests() {
       '---\n:sonnet\ntools: Read\n---\n# Agent with leading colon');
 
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
-    assert.strictEqual(result.code, 1, 'Should fail — model field is missing (colon at idx 0 skipped)');
+    assert.strictEqual(result.code, 1, 'Should fail: model field is missing (colon at idx 0 skipped)');
     assert.ok(result.stderr.includes('model'), 'Should report missing model field');
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
-  console.log('\nRound 58: validate-hooks.js (command is a plain object — not string or array):');
+  console.log('\nRound 58: validate-hooks.js (command is a plain object: not string or array):');
 
   if (test('rejects hook entry where command is a plain object', () => {
     const testDir = createTestDir();
@@ -2141,7 +2141,7 @@ function runTests() {
 
   if (test('reports error when command .md file is unreadable (chmod 000)', () => {
     if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
-      console.log('    (skipped — not supported on this platform)');
+      console.log('    (skipped: not supported on this platform)');
       return;
     }
     const testDir = createTestDir();
@@ -2165,7 +2165,7 @@ function runTests() {
 
   if (test('passes on empty commands directory (no .md files)', () => {
     const testDir = createTestDir();
-    // Only non-.md files — no .md files to validate
+    // Only non-.md files: no .md files to validate
     fs.writeFileSync(path.join(testDir, 'readme.txt'), 'not a command');
 
     const result = runValidatorWithDirs('validate-commands', {
@@ -2177,11 +2177,11 @@ function runTests() {
   })) passed++; else failed++;
 
   // ── Round 65: empty directories for rules and skills ──
-  console.log('\nRound 65: validate-rules.js (empty directory — no .md files):');
+  console.log('\nRound 65: validate-rules.js (empty directory: no .md files):');
 
   if (test('passes on rules directory with no .md files (Validated 0)', () => {
     const testDir = createTestDir();
-    // Only non-.md files — readdirSync filter yields empty array
+    // Only non-.md files: readdirSync filter yields empty array
     fs.writeFileSync(path.join(testDir, 'notes.txt'), 'not a rule');
     fs.writeFileSync(path.join(testDir, 'config.json'), '{}');
 
@@ -2191,11 +2191,11 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
-  console.log('\nRound 65: validate-skills.js (empty directory — no subdirectories):');
+  console.log('\nRound 65: validate-skills.js (empty directory: no subdirectories):');
 
   if (test('passes on skills directory with only files, no subdirectories (Validated 0)', () => {
     const testDir = createTestDir();
-    // Only files, no subdirectories — isDirectory filter yields empty array
+    // Only files, no subdirectories: isDirectory filter yields empty array
     fs.writeFileSync(path.join(testDir, 'README.md'), '# Skills');
     fs.writeFileSync(path.join(testDir, '.gitkeep'), '');
 
@@ -2271,7 +2271,7 @@ function runTests() {
   })) passed++; else failed++;
 
   // ── Round 73: validate-commands.js skill directory statSync catch ──
-  console.log('\nRound 73: validate-commands.js (unreadable skill entry — statSync catch):');
+  console.log('\nRound 73: validate-commands.js (unreadable skill entry: statSync catch):');
 
   if (test('skips unreadable skill directory entries without error (broken symlink)', () => {
     const testDir = createTestDir();
@@ -2280,7 +2280,7 @@ function runTests() {
 
     const validSkill = path.join(skillsDir, 'valid-skill');
     fs.mkdirSync(validSkill, { recursive: true });
-    // Broken symlink: target does not exist — statSync will throw ENOENT
+    // Broken symlink: target does not exist: statSync will throw ENOENT
     const brokenLink = path.join(skillsDir, 'broken-skill');
     fs.symlinkSync('/nonexistent/target/path', brokenLink);
 
@@ -2292,7 +2292,7 @@ function runTests() {
       COMMANDS_DIR: testDir, AGENTS_DIR: agentsDir, SKILLS_DIR: skillsDir
     });
     assert.strictEqual(result.code, 0,
-      'Should pass — broken symlink in skills dir should be skipped silently');
+      'Should pass: broken symlink in skills dir should be skipped silently');
     // The broken-skill should NOT be in validSkills, so referencing it would warn
     // but the valid-skill reference should resolve fine
     cleanupTestDir(testDir);
@@ -2322,7 +2322,7 @@ function runTests() {
   if (test('validates wrapped format { hooks: { PreToolUse: [...] } }', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
-    // The production hooks.json uses this wrapped format — { hooks: { ... } }
+    // The production hooks.json uses this wrapped format: { hooks: { ... } }
     // data.hooks is the object with event types, not data itself
     fs.writeFileSync(hooksFile, JSON.stringify({
       "$schema": "https://json.schemastore.org/everything-gemini-settings.json",
@@ -2347,7 +2347,7 @@ function runTests() {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
-    // Each triggers a WARN (not error) — warnCount should be 2
+    // Each triggers a WARN (not error): warnCount should be 2
     fs.writeFileSync(path.join(testDir, 'cmd-warn.md'),
       '# Command\nSee skills/fake-skill-a/ and skills/fake-skill-b/ for details.');
 
@@ -2444,7 +2444,7 @@ function runTests() {
 
   if (test('rejects agent with whitespace-only model field (trim guard)', () => {
     const testDir = createTestDir();
-    // model has only whitespace — extractFrontmatter produces { model: '   ', tools: 'Read' }
+    // model has only whitespace: extractFrontmatter produces { model: '   ', tools: 'Read' }
     // The condition: typeof frontmatter[field] === 'string' && !frontmatter[field].trim()
     // evaluates to true for model → "Missing required field: model"
     fs.writeFileSync(path.join(testDir, 'ws.md'), '---\nmodel:   \ntools: Read\n---\n# Whitespace model');

@@ -70,14 +70,14 @@ PASS: Working: [count] items confirmed
  Not Started: [list planned but untouched]
 
 WHAT NOT TO RETRY:
-[list every failed approach with its reason — this is critical]
+[list every failed approach with its reason: this is critical]
 
 OPEN QUESTIONS / BLOCKERS:
 [list any blockers or unanswered questions]
 
 NEXT STEP:
 [exact next step if defined in the file]
-[if not defined: "No next step defined — recommend reviewing 'What Has NOT Been Tried Yet' together before starting"]
+[if not defined: "No next step defined: recommend reviewing 'What Has NOT Been Tried Yet' together before starting"]
 
 ════════════════════════════════════════════════
 Ready to continue. What would you like to do?
@@ -87,9 +87,9 @@ Ready to continue. What would you like to do?
 
 Do NOT start working automatically. Do NOT touch any files. Wait for the user to say what to do next.
 
-If the next step is clearly defined in the session file and the user says "continue" or "yes" or similar — proceed with that exact next step.
+If the next step is clearly defined in the session file and the user says "continue" or "yes" or similar: proceed with that exact next step.
 
-If no next step is defined — ask the user where to start, and optionally suggest an approach from the "What Has NOT Been Tried Yet" section.
+If no next step is defined: ask the user where to start, and optionally suggest an approach from the "What Has NOT Been Tried Yet" section.
 
 ---
 
@@ -99,13 +99,13 @@ If no next step is defined — ask the user where to start, and optionally sugge
 Load the most recently modified matching file for that date, regardless of whether it uses the legacy no-id format or the current short-id format.
 
 **Session file references files that no longer exist:**
-Note this during the briefing — "WARNING: `path/to/file.ts` referenced in session but not found on disk."
+Note this during the briefing: "WARNING: `path/to/file.ts` referenced in session but not found on disk."
 
 **Session file is from more than 7 days ago:**
-Note the gap — "WARNING: This session is from N days ago (threshold: 7 days). Things may have changed." — then proceed normally.
+Note the gap: "WARNING: This session is from N days ago (threshold: 7 days). Things may have changed.": then proceed normally.
 
 **User provides a file path directly (e.g., forwarded from a teammate):**
-Read it and follow the same briefing process — the format is the same regardless of source.
+Read it and follow the same briefing process: the format is the same regardless of source.
 
 **Session file is empty or malformed:**
 Report: "Session file found but appears empty or unreadable. You may need to create a new one with /save-session."
@@ -118,7 +118,7 @@ Report: "Session file found but appears empty or unreadable. You may need to cre
 SESSION LOADED: /Users/you/.gemini/session-data/2024-01-15-abc123de-session.tmp
 ════════════════════════════════════════════════
 
-PROJECT: my-app — JWT Authentication
+PROJECT: my-app: JWT Authentication
 
 WHAT WE'RE BUILDING:
 User authentication with JWT tokens stored in httpOnly cookies.
@@ -131,14 +131,14 @@ PASS: Working: 3 items (register endpoint, JWT generation, password hashing)
  Not Started: middleware.ts, app/login/page.tsx
 
 WHAT NOT TO RETRY:
-FAIL: Next-Auth — conflicts with custom Prisma adapter, threw adapter error on every request
-FAIL: localStorage for JWT — causes SSR hydration mismatch, incompatible with Next.js
+FAIL: Next-Auth: conflicts with custom Prisma adapter, threw adapter error on every request
+FAIL: localStorage for JWT: causes SSR hydration mismatch, incompatible with Next.js
 
 OPEN QUESTIONS / BLOCKERS:
 - Does cookies().set() work inside a Route Handler or only Server Actions?
 
 NEXT STEP:
-In app/api/auth/login/route.ts — set the JWT as an httpOnly cookie using
+In app/api/auth/login/route.ts: set the JWT as an httpOnly cookie using
 cookies().set('token', jwt, { httpOnly: true, secure: true, sameSite: 'strict' })
 then test with Postman for a Set-Cookie header in the response.
 
@@ -150,7 +150,7 @@ Ready to continue. What would you like to do?
 
 ## Notes
 
-- Never modify the session file when loading it — it's a read-only historical record
-- The briefing format is fixed — do not skip sections even if they are empty
-- "What Not To Retry" must always be shown, even if it just says "None" — it's too important to miss
+- Never modify the session file when loading it: it's a read-only historical record
+- The briefing format is fixed: do not skip sections even if they are empty
+- "What Not To Retry" must always be shown, even if it just says "None": it's too important to miss
 - After resuming, the user may want to run `/save-session` again at the end of the new session to create a new dated file

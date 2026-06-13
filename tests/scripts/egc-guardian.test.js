@@ -21,7 +21,7 @@ const VALIDATOR_PATH = path.join(
 let validateCommand, validateWrite, isProtectedPath;
 
 try {
-  // ESM build — we use dynamic import wrapped in an async IIFE then run tests
+  // ESM build: we use dynamic import wrapped in an async IIFE then run tests
   runTests();
 } catch (e) {
   console.error('Failed to load validator:', e.message);

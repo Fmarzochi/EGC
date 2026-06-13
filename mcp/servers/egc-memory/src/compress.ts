@@ -79,7 +79,7 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
     dir = path.dirname(dir);
   }
 
-  // Read remote URL from .git/config — no child_process spawn needed
+  // Read remote URL from .git/config: no child_process spawn needed
   const gitConfigPath = path.join(projectRoot, ".git", "config");
   if (fs.existsSync(gitConfigPath)) {
     try {
@@ -97,7 +97,7 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
   const hashInput = remoteUrl || projectRoot;
   let projectId = "global";
   if (hashInput) {
-    // non-security hash — used for dedup/identity only
+    // non-security hash: used for dedup/identity only
     projectId = crypto.createHash("sha256").update(hashInput, "utf8").digest("hex").slice(0, 12);
   }
 
@@ -144,7 +144,7 @@ function readObsFile(filePath: string, limit: number, since?: string): RawObserv
           if (time < sinceTime) continue;
         }
 
-        // non-security hash — used for dedup/identity only
+        // non-security hash: used for dedup/identity only
         const id = parsed.id || `obs-${i}-${crypto.createHash("sha256").update(lines[i]).digest("hex").slice(0, 8)}`;
         observations.push({
           id,
@@ -185,7 +185,7 @@ export async function replaceObservation(projectPath: string, id: string, compre
     if (!lines[i]) continue;
     try {
       const parsed = JSON.parse(lines[i]);
-      // non-security hash — used for dedup/identity only
+      // non-security hash: used for dedup/identity only
       const lineId = parsed.id || `obs-${i}-${crypto.createHash("sha256").update(lines[i]).digest("hex").slice(0, 8)}`;
       if (lineId === id) {
         lines[i] = JSON.stringify({
@@ -302,7 +302,7 @@ Respond with ONLY valid JSON. No markdown, no explanation, no backticks.`;
     };
   } catch {
     // LLM unavailable, returned bad JSON, or failed Zod validation → safe fallback
-    console.error("[EGC compress] LLM compression failed — using rule-based fallback");
+    console.error("[EGC compress] LLM compression failed: using rule-based fallback");
     return ruleBasedCompress(raw);
   }
 }

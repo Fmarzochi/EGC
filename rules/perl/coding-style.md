@@ -13,13 +13,13 @@ paths:
 ## Standards
 
 - Always `use v5.36` (enables `strict`, `warnings`, `say`, subroutine signatures)
-- Use subroutine signatures — never unpack `@_` manually
+- Use subroutine signatures: never unpack `@_` manually
 - Prefer `say` over `print` with explicit newlines
 
 ## Immutability
 
 - Use **Moo** with `is => 'ro'` and `Types::Standard` for all attributes
-- Never use blessed hashrefs directly — always use Moo/Moose accessors
+- Never use blessed hashrefs directly: always use Moo/Moose accessors
 - **OO override note**: Moo `has` attributes with `builder` or `default` are acceptable for computed read-only values
 
 ## Formatting

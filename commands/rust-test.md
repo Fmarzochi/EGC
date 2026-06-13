@@ -121,7 +121,7 @@ mod tests {
 }
 ```
 
-## Step 3: Run Tests — Verify FAIL
+## Step 3: Run Tests: Verify FAIL
 
 ```bash
 $ cargo test
@@ -158,7 +158,7 @@ pub fn validate_registration(request: &RegistrationRequest) -> ValidationResult 
 }
 ```
 
-## Step 5: Run Tests — Verify PASS
+## Step 5: Run Tests: Verify PASS
 
 ```bash
 $ cargo test
@@ -293,8 +293,8 @@ cargo test --no-fail-fast
 - Write implementation before tests
 - Skip the RED phase
 - Use `#[should_panic]` when `Result::is_err()` works
-- Use `sleep()` in tests — use channels or `tokio::time::pause()`
-- Mock everything — prefer integration tests when feasible
+- Use `sleep()` in tests: use channels or `tokio::time::pause()`
+- Mock everything: prefer integration tests when feasible
 
 ## Related Commands
 

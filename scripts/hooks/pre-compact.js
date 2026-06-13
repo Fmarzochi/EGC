@@ -74,7 +74,7 @@ async function main() {
     if (!shouldSkipDuplicate(activeSession, markerLine)) {
       appendFile(activeSession, markerLine);
     } else {
-      log('[PreCompact] Duplicate compaction marker — skipped');
+      log('[PreCompact] Duplicate compaction marker: skipped');
     }
 
     let stats;

@@ -64,7 +64,7 @@ function formatBatch(projectRoot, files, timeoutMs) {
   try {
     if (process.platform === 'win32' && resolved.bin.endsWith('.cmd')) {
       if (existingFiles.some(f => UNSAFE_PATH_CHARS.test(f))) {
-        process.stderr.write('[Hook] stop-format-typecheck: skipping batch — unsafe path chars\n');
+        process.stderr.write('[Hook] stop-format-typecheck: skipping batch: unsafe path chars\n');
         return;
       }
       const result = spawnSync(resolved.bin, fileArgs, { cwd: projectRoot, shell: true, stdio: 'pipe', timeout: timeoutMs });
@@ -73,7 +73,7 @@ function formatBatch(projectRoot, files, timeoutMs) {
       execFileSync(resolved.bin, fileArgs, { cwd: projectRoot, stdio: ['pipe', 'pipe', 'pipe'], timeout: timeoutMs });
     }
   } catch {
-    // Formatter not installed or failed — non-blocking
+    // Formatter not installed or failed: non-blocking
   }
 }
 
@@ -103,7 +103,7 @@ function typecheckBatch(tsConfigDir, editedFiles, timeoutMs) {
     if (isWin) {
       // .cmd files require shell: true on Windows
       const result = spawnSync(npxBin, args, { ...opts, shell: true });
-      if (result.error) return; // timed out or not found — non-blocking
+      if (result.error) return; // timed out or not found: non-blocking
       if (result.status !== 0) {
         stdout = result.stdout || '';
         stderr = result.stderr || '';

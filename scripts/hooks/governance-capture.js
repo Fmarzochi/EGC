@@ -296,7 +296,7 @@ function analyzeForGovernanceEvents(input, context = {}) {
 }
 
 /**
- * Core hook logic — exported so run-with-flags.js can call directly.
+ * Core hook logic: exported so run-with-flags.js can call directly.
  *
  * @param {string} rawInput - Raw JSON string from stdin
  * @returns {string} The original input (pass-through)
@@ -340,7 +340,7 @@ function run(rawInput, options = {}) {
       }
     }
   } catch {
-    // Silently ignore parse errors — never block the tool pipeline.
+    // Silently ignore parse errors: never block the tool pipeline.
   }
 
   return rawInput;

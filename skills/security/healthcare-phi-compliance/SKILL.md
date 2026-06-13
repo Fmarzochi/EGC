@@ -1,7 +1,7 @@
 ---
 name: healthcare-phi-compliance
 description: Protected Health Information (PHI) and Personally Identifiable Information (PII) compliance patterns for healthcare applications. Covers data classification, access control, audit trails, encryption, and common leak vectors.
-origin: Health1 Super Speciality Hospitals — contributed by Dr. Keyur Patel
+origin: Health1 Super Speciality Hospitals: contributed by Dr. Keyur Patel
 version: "1.0.0"
 ---
 
@@ -25,7 +25,7 @@ Healthcare data protection operates on three layers: **classification** (what is
 
 ### Data Classification
 
-**PHI (Protected Health Information)** — any data that can identify a patient AND relates to their health: patient name, date of birth, address, phone, email, national ID numbers (SSN, Aadhaar, NHS number), medical record numbers, diagnoses, medications, lab results, imaging, insurance policy and claim details, appointment and admission records, or any combination of the above.
+**PHI (Protected Health Information)**: any data that can identify a patient AND relates to their health: patient name, date of birth, address, phone, email, national ID numbers (SSN, Aadhaar, NHS number), medical record numbers, diagnoses, medications, lab results, imaging, insurance policy and claim details, appointment and admission records, or any combination of the above.
 
 **PII (Non-patient-sensitive data)** in healthcare systems: clinician/staff personal details, doctor fee structures and payout amounts, employee salary and bank details, vendor payment information.
 
@@ -71,7 +71,7 @@ interface AuditEntry {
 
 **Error messages:** Never include patient-identifying data in error messages thrown to the client. Log details server-side only.
 
-**Console output:** Never log full patient objects. Use opaque internal record IDs (UUIDs) — not medical record numbers, national IDs, or names.
+**Console output:** Never log full patient objects. Use opaque internal record IDs (UUIDs): not medical record numbers, national IDs, or names.
 
 **URL parameters:** Never put patient-identifying data in query strings or path segments that could appear in logs or browser history. Use opaque UUIDs only.
 
@@ -111,10 +111,10 @@ Before every deployment:
 ### Example 1: Safe vs Unsafe Error Handling
 
 ```typescript
-// BAD — leaks PHI in error
+// BAD: leaks PHI in error
 throw new Error(`Patient ${patient.name} not found in ${patient.facility}`);
 
-// GOOD — generic error, details logged server-side with opaque IDs only
+// GOOD: generic error, details logged server-side with opaque IDs only
 logger.error('Patient lookup failed', { recordId: patient.id, facilityId });
 throw new Error('Record not found');
 ```
@@ -136,10 +136,10 @@ CREATE POLICY "facility_isolation"
 ### Example 3: Safe Logging
 
 ```typescript
-// BAD — logs identifiable patient data
+// BAD: logs identifiable patient data
 console.log('Processing patient:', patient);
 
-// GOOD — logs only opaque internal record ID
+// GOOD: logs only opaque internal record ID
 console.log('Processing record:', patient.id);
 // Note: even patient.id should be an opaque UUID, not a medical record number
 ```

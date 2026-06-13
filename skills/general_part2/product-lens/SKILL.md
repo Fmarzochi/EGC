@@ -4,7 +4,7 @@ description: Use this skill to validate the "why" before building, run product d
 origin: EGC
 ---
 
-# Product Lens — Think Before You Build
+# Product Lens: Think Before You Build
 
 This lane owns product diagnosis, not implementation-ready specification writing.
 
@@ -12,10 +12,10 @@ If the user needs a durable PRD-to-SRS or capability-contract artifact, hand off
 
 ## When to Use
 
-- Before starting any feature — validate the "why"
-- Weekly product review — are we building the right thing?
+- Before starting any feature: validate the "why"
+- Weekly product review: are we building the right thing?
 - When stuck choosing between features
-- Before a launch — sanity check the user journey
+- Before a launch: sanity check the user journey
 - When converting a vague idea into a product brief before engineering planning starts
 
 ## How It Works

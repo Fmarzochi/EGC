@@ -1,4 +1,4 @@
-# SaaS Application — Project GEMINI.md
+# SaaS Application: Project GEMINI.md
 
 > Real-world example for a Next.js + Supabase + Stripe SaaS application.
 > Copy this to your project root and customize for your stack.
@@ -13,8 +13,8 @@
 
 ### Database
 
-- All queries use Supabase client with RLS enabled — never bypass RLS
-- Migrations in `supabase/migrations/` — never modify the database directly
+- All queries use Supabase client with RLS enabled: never bypass RLS
+- Migrations in `supabase/migrations/`: never modify the database directly
 - Use `select()` with explicit column lists, not `select('*')`
 - All user-facing queries must include `.limit()` to prevent unbounded results
 
@@ -22,22 +22,22 @@
 
 - Use `createServerClient()` from `@supabase/ssr` in Server Components
 - Use `createBrowserClient()` from `@supabase/ssr` in Client Components
-- Protected routes check `getUser()` — never trust `getSession()` alone for auth
+- Protected routes check `getUser()`: never trust `getSession()` alone for auth
 - Middleware in `middleware.ts` refreshes auth tokens on every request
 
 ### Billing
 
 - Stripe webhook handler in `app/api/webhooks/stripe/route.ts`
-- Never trust client-side price data — always fetch from Stripe server-side
+- Never trust client-side price data: always fetch from Stripe server-side
 - Subscription status checked via `subscription_status` column, synced by webhook
 - Free tier users: 3 projects, 100 API calls/day
 
 ### Code Style
 
 - No emojis in code or comments
-- Immutable patterns only — spread operator, never mutate
+- Immutable patterns only: spread operator, never mutate
 - Server Components: no `'use client'` directive, no `useState`/`useEffect`
-- Client Components: `'use client'` at top, minimal — extract logic to hooks
+- Client Components: `'use client'` at top, minimal: extract logic to hooks
 - Prefer Zod schemas for all input validation (API routes, forms, env vars)
 
 ## File Structure

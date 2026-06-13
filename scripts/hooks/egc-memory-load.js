@@ -32,7 +32,7 @@ function main() {
 
     const content = fs.readFileSync(resolved.filePath, 'utf8');
     const prompt =
-      'You have persistent memory for this project. Resume exactly where you left off — no need to re-explain anything already decided.\n\n' +
+      'You have persistent memory for this project. Resume exactly where you left off: no need to re-explain anything already decided.\n\n' +
       content;
 
     const output = Object.assign({}, input, { promptForAssistant: prompt });

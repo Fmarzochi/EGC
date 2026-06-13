@@ -29,4 +29,4 @@ update_state({
 })
 ```
 
-Only include fields that changed this session. `update_state` merges with existing state — it does not erase previous memory.
+Only include fields that changed this session. `update_state` merges with existing state: it does not erase previous memory.

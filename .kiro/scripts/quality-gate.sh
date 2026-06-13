@@ -1,6 +1,6 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────
-# Quality Gate — full project quality check
+# Quality Gate: full project quality check
 # Runs: build, type check, lint, tests
 # Used by: .kiro/hooks/quality-gate.json (userTriggered)
 # ─────────────────────────────────────────────────────────────

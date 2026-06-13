@@ -216,7 +216,7 @@ test('egc plugin.json uses published plugin name', () => {
 test('egc plugin.json does NOT have agents field (unsupported by Gemini Code validator)', () => {
   assert.ok(
     !('agents' in claudePlugin),
-    'agents field must NOT be declared — Gemini Code plugin validator rejects it',
+    'agents field must NOT be declared: Gemini Code plugin validator rejects it',
   );
 });
 
@@ -243,7 +243,7 @@ test('egc plugin.json disables bundled MCP servers for provider tool-name compat
 test('egc plugin.json does NOT have explicit hooks declaration', () => {
   assert.ok(
     !('hooks' in claudePlugin),
-    'hooks field must NOT be declared — Gemini Code v2.1+ auto-loads hooks/hooks.json by convention',
+    'hooks field must NOT be declared: Gemini Code v2.1+ auto-loads hooks/hooks.json by convention',
   );
 });
 
@@ -352,7 +352,7 @@ test('.mcp.json exists at plugin root (not inside .codex-plugin/)', () => {
   assert.ok(fs.existsSync(mcpJsonPath), 'Expected .mcp.json at repo root (plugin root)');
   assert.ok(
     !fs.existsSync(path.join(repoRoot, '.codex-plugin', '.mcp.json')),
-    '.mcp.json must NOT be inside .codex-plugin/ — only plugin.json belongs there',
+    '.mcp.json must NOT be inside .codex-plugin/: only plugin.json belongs there',
   );
 });
 

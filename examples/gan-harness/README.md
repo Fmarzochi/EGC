@@ -53,7 +53,7 @@ Iteration 1. Read gan-harness/eval-rubric.md.
 Test http://localhost:3000. Write feedback to gan-harness/feedback/feedback-001.md.
 Be ruthlessly strict."
 
-# Step 4: Generate (iteration 2 — reads feedback)
+# Step 4: Generate (iteration 2: reads feedback)
 egc -p --model gemini-2.5-pro "$(cat agents/gan-generator.md)
 
 Iteration 2. Read gan-harness/feedback/feedback-001.md FIRST.
@@ -112,15 +112,15 @@ GAN_SKIP_PLANNER=true GAN_EVAL_MODE=code-only ./scripts/gan-harness.sh "Build a 
 
 After each run, check:
 
-1. **`gan-harness/build-report.md`** — Final summary with score progression
-2. **`gan-harness/feedback/`** — All evaluation feedback (useful for understanding quality evolution)
-3. **`gan-harness/spec.md`** — The full spec (useful if you want to continue manually)
-4. **Score progression** — Should show steady improvement. Plateaus indicate the model has hit its ceiling.
+1. **`gan-harness/build-report.md`**: Final summary with score progression
+2. **`gan-harness/feedback/`**: All evaluation feedback (useful for understanding quality evolution)
+3. **`gan-harness/spec.md`**: The full spec (useful if you want to continue manually)
+4. **Score progression**: Should show steady improvement. Plateaus indicate the model has hit its ceiling.
 
 ## Tips
 
-1. **Start with a clear brief** — "Build X with Y and Z" beats "make something cool"
-2. **Don't go below 5 iterations** — The first 2-3 iterations are usually below threshold
-3. **Use `playwright` mode for UI projects** — Screenshot-only misses interaction bugs
-4. **Review feedback files** — Even if the final score passes, the feedback contains valuable insights
-5. **Iterate on the spec** — If results are disappointing, improve `spec.md` and run again with `--skip-planner`
+1. **Start with a clear brief**: "Build X with Y and Z" beats "make something cool"
+2. **Don't go below 5 iterations**: The first 2-3 iterations are usually below threshold
+3. **Use `playwright` mode for UI projects**: Screenshot-only misses interaction bugs
+4. **Review feedback files**: Even if the final score passes, the feedback contains valuable insights
+5. **Iterate on the spec**: If results are disappointing, improve `spec.md` and run again with `--skip-planner`

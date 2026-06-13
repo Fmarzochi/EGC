@@ -32,7 +32,7 @@ Choose the simplest wrapper that fits:
 
 ### @Observable ViewModel
 
-Use `@Observable` (not `ObservableObject`) — it tracks property-level changes so SwiftUI only re-renders views that read the changed property:
+Use `@Observable` (not `ObservableObject`): it tracks property-level changes so SwiftUI only re-renders views that read the changed property:
 
 ```swift
 @Observable
@@ -197,7 +197,7 @@ ScrollView {
 
 ### Stable Identifiers
 
-Always use stable, unique IDs in `ForEach` — avoid using array indices:
+Always use stable, unique IDs in `ForEach`: avoid using array indices:
 
 ```swift
 // Use Identifiable conformance or explicit id
@@ -209,9 +209,9 @@ ForEach(items, id: \.stableID) { item in
 ### Avoid Expensive Work in body
 
 - Never perform I/O, network calls, or heavy computation inside `body`
-- Use `.task {}` for async work — it cancels automatically when the view disappears
+- Use `.task {}` for async work: it cancels automatically when the view disappears
 - Use `.sensoryFeedback()` and `.geometryGroup()` sparingly in scroll views
-- Minimize `.shadow()`, `.blur()`, and `.mask()` in lists — they trigger offscreen rendering
+- Minimize `.shadow()`, `.blur()`, and `.mask()` in lists: they trigger offscreen rendering
 
 ### Equatable Conformance
 
@@ -247,10 +247,10 @@ Use `#Preview` macro with inline mock data for fast iteration:
 
 ## Anti-Patterns to Avoid
 
-- Using `ObservableObject` / `@Published` / `@StateObject` / `@EnvironmentObject` in new code — migrate to `@Observable`
-- Putting async work directly in `body` or `init` — use `.task {}` or explicit load methods
-- Creating view models as `@State` inside child views that don't own the data — pass from parent instead
-- Using `AnyView` type erasure — prefer `@ViewBuilder` or `Group` for conditional views
+- Using `ObservableObject` / `@Published` / `@StateObject` / `@EnvironmentObject` in new code: migrate to `@Observable`
+- Putting async work directly in `body` or `init`: use `.task {}` or explicit load methods
+- Creating view models as `@State` inside child views that don't own the data: pass from parent instead
+- Using `AnyView` type erasure: prefer `@ViewBuilder` or `Group` for conditional views
 - Ignoring `Sendable` requirements when passing data to/from actors
 
 ## References

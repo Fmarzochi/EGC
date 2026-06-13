@@ -1,4 +1,4 @@
-# Rust API Service — Project GEMINI.md
+# Rust API Service: Project GEMINI.md
 
 > Real-world example for a Rust API service with Axum, PostgreSQL, and Docker.
 > Copy this to your project root and customize for your service.
@@ -14,18 +14,18 @@
 ### Rust Conventions
 
 - Use `thiserror` for library errors, `anyhow` only in binary crates or tests
-- No `.unwrap()` or `.expect()` in production code — propagate errors with `?`
+- No `.unwrap()` or `.expect()` in production code: propagate errors with `?`
 - Prefer `&str` over `String` in function parameters; return `String` when ownership transfers
-- Use `clippy` with `#![deny(clippy::all, clippy::pedantic)]` — fix all warnings
+- Use `clippy` with `#![deny(clippy::all, clippy::pedantic)]`: fix all warnings
 - Derive `Debug` on all public types; derive `Clone`, `PartialEq` only when needed
 - No `unsafe` blocks unless justified with a `// SAFETY:` comment
 
 ### Database
 
-- All queries use SQLx `query!` or `query_as!` macros — compile-time verified against the schema
-- Migrations in `migrations/` using `sqlx migrate` — never alter the database directly
-- Use `sqlx::Pool<Postgres>` as shared state — never create connections per request
-- All queries use parameterized placeholders (`$1`, `$2`) — never string formatting
+- All queries use SQLx `query!` or `query_as!` macros: compile-time verified against the schema
+- Migrations in `migrations/` using `sqlx migrate`: never alter the database directly
+- Use `sqlx::Pool<Postgres>` as shared state: never create connections per request
+- All queries use parameterized placeholders (`$1`, `$2`): never string formatting
 
 ```rust
 // BAD: String interpolation (SQL injection risk)
@@ -40,8 +40,8 @@ let user = sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id)
 ### Error Handling
 
 - Define a domain error enum per module with `thiserror`
-- Map errors to HTTP responses via `IntoResponse` — never expose internal details
-- Use `tracing` for structured logging — never `println!` or `eprintln!`
+- Map errors to HTTP responses via `IntoResponse`: never expose internal details
+- Use `tracing` for structured logging: never `println!` or `eprintln!`
 
 ```rust
 use thiserror::Error;
@@ -84,7 +84,7 @@ impl IntoResponse for AppError {
 ### Code Style
 
 - Max line length: 100 characters (enforced by rustfmt)
-- Group imports: `std`, external crates, `crate`/`super` — separated by blank lines
+- Group imports: `std`, external crates, `crate`/`super`: separated by blank lines
 - Modules: one file per module, `mod.rs` only for re-exports
 - Types: PascalCase, functions/variables: snake_case, constants: UPPER_SNAKE_CASE
 
@@ -100,7 +100,7 @@ src/
     auth.rs            # JWT extraction and validation
     logging.rs         # Request/response tracing
   handlers/
-    mod.rs             # Route handlers (thin — delegate to services)
+    mod.rs             # Route handlers (thin: delegate to services)
     users.rs
     orders.rs
   services/

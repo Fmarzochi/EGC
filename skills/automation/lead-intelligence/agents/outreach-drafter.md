@@ -21,8 +21,8 @@ Given enriched prospect profiles and warm path data, draft outreach messages tha
 
 Template structure:
 - Greeting (first name, casual)
-- The ask (1 sentence — can you intro me to [target])
-- Why it's relevant (1 sentence — what you're building and why target cares)
+- The ask (1 sentence: can you intro me to [target])
+- Why it's relevant (1 sentence: what you're building and why target cares)
 - Offer to send forwardable blurb
 - Sign off
 

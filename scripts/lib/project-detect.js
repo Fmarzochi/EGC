@@ -204,7 +204,7 @@ function getPythonDeps(projectDir) {
     /* ignore */
   }
 
-  // pyproject.toml — simple extraction of dependency names
+  // pyproject.toml: simple extraction of dependency names
   try {
     const tomlPath = path.join(projectDir, 'pyproject.toml');
     if (fs.existsSync(tomlPath)) {

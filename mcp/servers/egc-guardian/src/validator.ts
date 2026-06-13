@@ -228,7 +228,7 @@ export function validateCommand(command: string): ValidationResult {
   const baseCommand = parts[0];
   const args = parts.slice(1);
 
-  // 2. Dangerous commands — denied regardless of args
+  // 2. Dangerous commands: denied regardless of args
   if (DANGEROUS.includes(baseCommand)) {
     return {
       allowed: false,
@@ -237,7 +237,7 @@ export function validateCommand(command: string): ValidationResult {
     };
   }
 
-  // 3. Not in any allowlist — blocked
+  // 3. Not in any allowlist: blocked
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
     return {
       allowed: false,
@@ -246,7 +246,7 @@ export function validateCommand(command: string): ValidationResult {
     };
   }
 
-  // 4. In allowlist — validate args
+  // 4. In allowlist: validate args
   return validateCommandArgs(baseCommand, args);
 }
 

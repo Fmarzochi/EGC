@@ -302,7 +302,7 @@ test('wallet connection', async ({ page, context }) => {
 
 ```typescript
 test('trade execution', async ({ page }) => {
-  // Skip on production — real money
+  // Skip on production: real money
   test.skip(process.env.NODE_ENV === 'production', 'Skip on production')
 
   await page.goto('/markets/test-market')

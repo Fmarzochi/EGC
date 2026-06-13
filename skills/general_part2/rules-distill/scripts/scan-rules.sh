@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scan-rules.sh — enumerate rule files and extract H2 heading index
+# scan-rules.sh: enumerate rule files and extract H2 heading index
 # Usage: scan-rules.sh [RULES_DIR]
 # Output: JSON to stdout
 #

@@ -242,7 +242,7 @@ Only use forwarded headers when:
 
 When `ForwardedHeaderFilter` is properly configured, `request.getRemoteAddr()` will automatically
 return the correct client IP from the forwarded headers. Without this configuration, use
-`request.getRemoteAddr()` directly—it returns the immediate connection IP, which is the only
+`request.getRemoteAddr()` directly,it returns the immediate connection IP, which is the only
 trustworthy value.
 
 ```java
@@ -269,7 +269,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
    * 4. Configure server.tomcat.remoteip.trusted-proxies or equivalent for your container
    *
    * Without this configuration, request.getRemoteAddr() returns the proxy IP, not the client IP.
-   * Do NOT read X-Forwarded-For directly—it is trivially spoofable without trusted proxy handling.
+   * Do NOT read X-Forwarded-For directly,it is trivially spoofable without trusted proxy handling.
    */
   @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,

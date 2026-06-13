@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# session-guardian.sh — Observer session guard
+# session-guardian.sh: Observer session guard
 # Exit 0 = proceed. Exit 1 = skip this observer cycle.
 # Called by observer-loop.sh before spawning any Gemini session.
 #
@@ -55,7 +55,7 @@ fi
 # Prevent the same project being observed faster than OBSERVER_INTERVAL_SECONDS.
 # Key: PROJECT_DIR when provided by the observer, otherwise git root path.
 # Uses mkdir-based lock for safe concurrent access. Skips the cycle on lock contention.
-# stderr uses basename only — never prints the full absolute path.
+# stderr uses basename only: never prints the full absolute path.
 
 project_root="${PROJECT_DIR:-}"
 if [ -z "$project_root" ] || [ ! -d "$project_root" ]; then
@@ -71,7 +71,7 @@ mkdir -p "$(dirname "$LOG_PATH")" || {
 
 _lock_dir="${LOG_PATH}.lock"
 if ! mkdir "$_lock_dir" 2>/dev/null; then
-  # Another observer holds the lock — skip this cycle to avoid double-spawns
+  # Another observer holds the lock: skip this cycle to avoid double-spawns
   echo "session-guardian: log locked by concurrent process, skipping cycle" >&2
   exit 1
 else

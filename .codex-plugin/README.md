@@ -1,4 +1,4 @@
-# .codex-plugin — Codex Native Plugin for EGC
+# .codex-plugin: Codex Native Plugin for EGC
 
 This directory contains the **Codex plugin manifest** for Extended Global Context (EGC).
 
@@ -6,15 +6,15 @@ This directory contains the **Codex plugin manifest** for Extended Global Contex
 
 ```
 .codex-plugin/
-└── plugin.json   — Codex plugin manifest (name, version, skills ref, MCP ref)
-.mcp.json         — MCP server configurations at plugin root (NOT inside .codex-plugin/)
+└── plugin.json  : Codex plugin manifest (name, version, skills ref, MCP ref)
+.mcp.json        : MCP server configurations at plugin root (NOT inside .codex-plugin/)
 ```
 
 ## What This Provides
 
-- **182 skills** from `./skills/` — reusable Codex workflows for TDD, security,
+- **182 skills** from `./skills/`: reusable Codex workflows for TDD, security,
   code review, architecture, and more
-- **6 MCP servers** — GitHub, Context7, Exa, Memory, Playwright, Sequential Thinking
+- **6 MCP servers**: GitHub, Context7, Exa, Memory, Playwright, Sequential Thinking
 
 ## Installation
 
@@ -46,7 +46,7 @@ stay below provider length limits.
 
 ## Notes
 
-- The `skills/` directory at the repo root is shared between all tool adapters (`.gemini-plugin/`, `.codex-plugin/`, etc.) — same source of truth, no duplication
+- The `skills/` directory at the repo root is shared between all tool adapters (`.gemini-plugin/`, `.codex-plugin/`, etc.): same source of truth, no duplication
 - EGC is moving to a skills-first workflow surface. Legacy `commands/` remain for
   compatibility on harnesses that still expect slash-entry shims.
 - MCP server credentials are inherited from the launching environment (env vars)

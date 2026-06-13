@@ -38,7 +38,7 @@ fn store(data: Vec<u8>) -> Record {
 
 // Bad: Cloning unnecessarily to avoid borrow checker
 fn process_bad(data: &Vec<u8>) -> usize {
-    let cloned = data.clone(); // Wasteful — just borrow
+    let cloned = data.clone(); // Wasteful: just borrow
     cloned.len()
 }
 ```
@@ -59,7 +59,7 @@ fn normalize(input: &str) -> Cow<'_, str> {
 
 ## Error Handling
 
-### Use `Result` and `?` — Never `unwrap()` in Production
+### Use `Result` and `?`: Never `unwrap()` in Production
 
 ```rust
 // Good: Propagate errors with context
@@ -154,7 +154,7 @@ fn handle(state: &ConnectionState) {
 }
 ```
 
-### Exhaustive Matching — No Catch-All for Business Logic
+### Exhaustive Matching: No Catch-All for Business Logic
 
 ```rust
 // Good: Handle every variant explicitly
@@ -283,7 +283,7 @@ let names: Vec<_> = items.iter().map(|i| &i.name).collect();
 let lookup: HashMap<_, _> = items.iter().map(|i| (i.id, i)).collect();
 let combined: String = parts.iter().copied().collect();
 
-// Collect Results — short-circuits on first error
+// Collect Results: short-circuits on first error
 let parsed: Result<Vec<i32>, _> = strings.iter().map(|s| s.parse()).collect();
 ```
 
@@ -413,7 +413,7 @@ my_app/
 └── Cargo.toml
 ```
 
-### Visibility — Expose Minimally
+### Visibility: Expose Minimally
 
 ```rust
 // Good: pub(crate) for internal sharing
@@ -496,4 +496,4 @@ async fn bad_async() {
 }
 ```
 
-**Remember**: If it compiles, it's probably correct — but only if you avoid `unwrap()`, minimize `unsafe`, and let the type system work for you.
+**Remember**: If it compiles, it's probably correct: but only if you avoid `unwrap()`, minimize `unsafe`, and let the type system work for you.

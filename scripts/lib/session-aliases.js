@@ -105,7 +105,7 @@ function saveAliases(aliases) {
     fs.writeFileSync(tempPath, content, 'utf8');
 
     // On Windows, rename fails with EEXIST if destination exists, so delete first.
-    // On Unix/macOS, rename(2) atomically replaces the destination — skip the
+    // On Unix/macOS, rename(2) atomically replaces the destination: skip the
     // delete to avoid an unnecessary non-atomic window between unlink and rename.
     if (process.platform === 'win32' && fs.existsSync(aliasesPath)) {
       fs.unlinkSync(aliasesPath);
@@ -338,7 +338,7 @@ function renameAlias(oldAlias, newAlias) {
   delete data.aliases[newAlias];
   // Attempt to persist the rollback
   saveAliases(data);
-  return { success: false, error: 'Failed to save renamed alias — rolled back to original' };
+  return { success: false, error: 'Failed to save renamed alias: rolled back to original' };
 }
 
 /**

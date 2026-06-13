@@ -18,7 +18,7 @@ cd .kiro
 ./install.sh ~
 ```
 
-The installer uses non-destructive copy — it will not overwrite your existing files.
+The installer uses non-destructive copy: it will not overwrite your existing files.
 
 ## Component Inventory
 
@@ -132,7 +132,7 @@ Steering files provide always-on rules and context that shape how the agent work
 | `review-mode.md` | manual | Code review context mode. Invoke with `#review-mode` for thorough reviews. |
 | `research-mode.md` | manual | Research context mode. Invoke with `#research-mode` for exploration and learning. |
 
-Steering files with `auto` inclusion are loaded automatically. No action needed — they apply as soon as you install them.
+Steering files with `auto` inclusion are loaded automatically. No action needed: they apply as soon as you install them.
 
 To create your own, add a markdown file to `.kiro/steering/` with YAML frontmatter:
 
@@ -604,4 +604,4 @@ For more detailed information, see the `docs/` directory:
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT: see [LICENSE](LICENSE) for details.

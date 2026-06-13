@@ -133,7 +133,7 @@ describe('UserService', () => {
 
 - **Services**: All public methods, error paths, HTTP interactions
 - **Components**: Input/output bindings, rendered output for key states, user interactions via harnesses
-- **Pipes**: Pure transformation — plain unit tests, no TestBed needed
+- **Pipes**: Pure transformation: plain unit tests, no TestBed needed
 - **Guards/Resolvers**: Return values for allowed and denied states using `RouterTestingHarness`
 
 ## E2E Testing

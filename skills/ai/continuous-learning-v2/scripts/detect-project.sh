@@ -69,7 +69,7 @@ _clv2_detect_project() {
     fi
   fi
 
-  # 3. No project detected — fall back to global
+  # 3. No project detected: fall back to global
   if [ -z "$project_root" ]; then
     _CLV2_PROJECT_ID="global"
     _CLV2_PROJECT_NAME="global"

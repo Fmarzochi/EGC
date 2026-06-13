@@ -132,7 +132,7 @@ When creating instincts, determine scope based on these heuristics:
 | Tool workflow preferences | **global** | "Grep before Edit", "Read before Write" |
 | Git practices | **global** | "Conventional commits", "Small focused commits" |
 
-**When in doubt, default to `scope: project`** — it's safer to be project-specific and promote later than to contaminate the global space.
+**When in doubt, default to `scope: project`**: it's safer to be project-specific and promote later than to contaminate the global space.
 
 ## Confidence Calculation
 

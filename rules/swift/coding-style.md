@@ -14,14 +14,14 @@ paths:
 
 ## Immutability
 
-- Prefer `let` over `var` — define everything as `let` and only change to `var` if the compiler requires it
+- Prefer `let` over `var`: define everything as `let` and only change to `var` if the compiler requires it
 - Use `struct` with value semantics by default; use `class` only when identity or reference semantics are needed
 
 ## Naming
 
 Follow [Apple API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/):
 
-- Clarity at the point of use — omit needless words
+- Clarity at the point of use: omit needless words
 - Name methods and properties for their roles, not their types
 - Use `static let` for constants over global constants
 

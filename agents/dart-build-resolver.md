@@ -54,7 +54,7 @@ flutter build web 2>&1           # Web
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `The name 'X' isn't defined` | Missing import or typo | Add correct `import` or fix name |
-| `A value of type 'X?' can't be assigned to type 'X'` | Null safety — nullable not handled | Add `!`, `?? default`, or null check |
+| `A value of type 'X?' can't be assigned to type 'X'` | Null safety: nullable not handled | Add `!`, `?? default`, or null check |
 | `The argument type 'X' can't be assigned to 'Y'` | Type mismatch | Fix type, add explicit cast, or correct API call |
 | `Non-nullable instance field 'x' must be initialized` | Missing initializer | Add initializer, mark `late`, or make nullable |
 | `The method 'X' isn't defined for type 'Y'` | Wrong type or wrong import | Check type and imports |
@@ -92,17 +92,17 @@ flutter pub get --enforce-lockfile
 
 ```dart
 // Error: A value of type 'String?' can't be assigned to type 'String'
-// BAD — force unwrap
+// BAD: force unwrap
 final name = user.name!;
 
-// GOOD — provide fallback
+// GOOD: provide fallback
 final name = user.name ?? 'Unknown';
 
-// GOOD — guard and return early
+// GOOD: guard and return early
 if (user.name == null) return;
 final name = user.name!; // safe after null check
 
-// GOOD — Dart 3 pattern matching
+// GOOD: Dart 3 pattern matching
 final name = switch (user.name) {
   final n? => n,
   null => 'Unknown',
@@ -167,7 +167,7 @@ flutter clean && cd ios && pod deintegrate && pod install && cd ..
 
 ## Key Principles
 
-- **Surgical fixes only** — don't refactor, just fix the error
+- **Surgical fixes only**: don't refactor, just fix the error
 - **Never** add `// ignore:` suppressions without approval
 - **Never** use `dynamic` to silence type errors
 - **Always** run `flutter analyze` after each fix to verify
@@ -191,7 +191,7 @@ Fix: Changed `final id = response.id` to `final id = response.id ?? ''`
 Remaining errors: 2
 
 [FIXED] pubspec.yaml
-Error: Version solving failed — http >=0.13.0 required by dio and <0.13.0 required by retrofit
+Error: Version solving failed: http >=0.13.0 required by dio and <0.13.0 required by retrofit
 Fix: Upgraded dio to ^5.3.0 which allows http >=0.13.0
 Remaining errors: 0
 ```

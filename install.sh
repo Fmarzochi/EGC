@@ -38,10 +38,10 @@ fi
 
 # Optional dependency hints (non-blocking)
 if ! command -v uv >/dev/null 2>&1; then
-  echo "  note: uv not found — jira and omega-memory MCP servers require it (https://docs.astral.sh/uv/)"
+  echo "  note: uv not found: jira and omega-memory MCP servers require it (https://docs.astral.sh/uv/)"
 fi
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "  note: python3 not found — evalview MCP server requires it"
+  echo "  note: python3 not found: evalview MCP server requires it"
 fi
 
 if [ "$DRY_RUN" = false ]; then
@@ -115,13 +115,13 @@ echo "  harness config written to .mcp.egc.json"
 
 # Verify MCP server builds exist
 if [ ! -f "$ROOT_DIR/mcp/servers/egc-guardian/build/index.js" ]; then
-  echo "Error: egc-guardian build missing — run 'cd mcp/servers/egc-guardian && npm run build'"
+  echo "Error: egc-guardian build missing: run 'cd mcp/servers/egc-guardian && npm run build'"
   exit 1
 fi
 echo "  ✓ egc-guardian build verified"
 
 if [ ! -f "$ROOT_DIR/mcp/servers/egc-memory/build/index.js" ]; then
-  echo "Error: egc-memory build missing — run 'cd mcp/servers/egc-memory && npm run build'"
+  echo "Error: egc-memory build missing: run 'cd mcp/servers/egc-memory && npm run build'"
   exit 1
 fi
 echo "  ✓ egc-memory build verified"
@@ -259,7 +259,7 @@ if [ -d "$HOME/.gemini/config" ] && ! [ -d "$HOME/.gemini/antigravity-cli" ]; th
   register_mcp_json "$HOME/.gemini/config/mcp_config.json" "Gemini CLI"
 fi
 
-# Claude Code — global config
+# Claude Code: global config
 if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
   register_mcp_json "$HOME/.claude/claude_desktop_config.json" "Claude Code (global)"
   if [ -f "$ROOT_DIR/.mcp.json" ]; then

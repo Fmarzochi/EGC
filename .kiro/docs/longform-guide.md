@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This guide explores the philosophy and practice of agentic workflows—a development methodology where AI agents become active collaborators in the software development process. Rather than treating AI as a code completion tool, agentic workflows position AI as a thinking partner that can plan, execute, review, and iterate on complex tasks.
+This guide explores the philosophy and practice of agentic workflows,a development methodology where AI agents become active collaborators in the software development process. Rather than treating AI as a code completion tool, agentic workflows position AI as a thinking partner that can plan, execute, review, and iterate on complex tasks.
 
 ## What Are Agentic Workflows?
 

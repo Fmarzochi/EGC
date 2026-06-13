@@ -61,16 +61,16 @@ npx egc-agentshield scan --min-severity medium
 ### Output Formats
 
 ```bash
-# Terminal output (default) — colored report with grade
+# Terminal output (default): colored report with grade
 npx egc-agentshield scan
 
-# JSON — for CI/CD integration
+# JSON: for CI/CD integration
 npx egc-agentshield scan --format json
 
-# Markdown — for documentation
+# Markdown: for documentation
 npx egc-agentshield scan --format markdown
 
-# HTML — self-contained dark-theme report
+# HTML: self-contained dark-theme report
 npx egc-agentshield scan --format html > security-report.html
 ```
 
@@ -98,9 +98,9 @@ npx egc-agentshield scan --gemini-2.5-pro --stream
 ```
 
 This runs:
-1. **Attacker (Red Team)** — finds attack vectors
-2. **Defender (Blue Team)** — recommends hardening
-3. **Auditor (Final Verdict)** — synthesizes both perspectives
+1. **Attacker (Red Team)**: finds attack vectors
+2. **Defender (Blue Team)**: recommends hardening
+3. **Auditor (Final Verdict)**: synthesizes both perspectives
 
 ### Initialize Secure Config
 

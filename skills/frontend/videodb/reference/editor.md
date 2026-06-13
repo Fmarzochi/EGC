@@ -1,6 +1,6 @@
 # Timeline Editing Guide
 
-VideoDB provides a non-destructive timeline editor for composing videos from multiple assets, adding text and image overlays, mixing audio tracks, and trimming clips — all server-side without re-encoding or local tools. Use this for trimming, combining clips, overlaying audio/music on video, adding subtitles, and layering text or images.
+VideoDB provides a non-destructive timeline editor for composing videos from multiple assets, adding text and image overlays, mixing audio tracks, and trimming clips: all server-side without re-encoding or local tools. Use this for trimming, combining clips, overlaying audio/music on video, adding subtitles, and layering text or images.
 
 ## Prerequisites
 
@@ -339,7 +339,7 @@ timeline = Timeline(conn)
 # Main video track
 timeline.add_inline(VideoAsset(asset_id=main_video.id))
 
-# Background music — disable_other_tracks=False to mix with video audio
+# Background music: disable_other_tracks=False to mix with video audio
 timeline.add_overlay(
     0,
     AudioAsset(asset_id=music.id, disable_other_tracks=False, fade_in_duration=3),

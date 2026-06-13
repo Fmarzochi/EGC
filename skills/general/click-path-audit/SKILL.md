@@ -4,7 +4,7 @@ description: "Trace every user-facing button/touchpoint through its full state c
 origin: community
 ---
 
-# /click-path-audit — Behavioural Flow Audit
+# /click-path-audit: Behavioural Flow Audit
 
 Find bugs that static code reading misses: state interaction side effects, race conditions between sequential calls, and handlers that silently undo each other.
 
@@ -20,7 +20,7 @@ But it does NOT check:
 - **Does function B silently undo what function A just did?**
 - **Does shared state (Zustand/Redux/context) have side effects that cancel the intended action?**
 
-Real example: A "New Email" button called `setComposeMode(true)` then `selectThread(null)`. Both worked individually. But `selectThread` had a side effect resetting `composeMode: false`. The button did nothing. 54 bugs were found by systematic debugging — this one was missed.
+Real example: A "New Email" button called `setComposeMode(true)` then `selectThread(null)`. Both worked individually. But `selectThread` had a side effect resetting `composeMode: false`. The button did nothing. 54 bugs were found by systematic debugging: this one was missed.
 
 ---
 
@@ -84,7 +84,7 @@ TOUCHPOINT: [Button label] in [Component:line]
   }
   EXPECTED: User sees [description of what button label promises]
   ACTUAL: X is false because functionB reset it
-  VERDICT: BUG — [description]
+  VERDICT: BUG: [description]
 ```
 
 **Check each of these bug patterns:**
@@ -112,7 +112,7 @@ handler() {
 const [count, setCount] = useState(0)
 const handler = useCallback(() => {
   setCount(count + 1)  // captures stale count
-  setCount(count + 1)  // same stale count — increments by 1, not 2
+  setCount(count + 1)  // same stale count: increments by 1, not 2
 }, [count])
 ```
 
@@ -164,12 +164,12 @@ This audit is expensive. Scope it appropriately:
 
 - **Full app audit:** Use when launching or after major refactor. Launch parallel agents per page.
 - **Single page audit:** Use after building a new page or after a user reports a broken button.
-- **Store-focused audit:** Use after modifying a Zustand store — audit all consumers of the changed actions.
+- **Store-focused audit:** Use after modifying a Zustand store: audit all consumers of the changed actions.
 
 ### Recommended agent split for full app:
 
 ```
-Agent 1: Map ALL state stores (Step 1) — this is shared context for all other agents
+Agent 1: Map ALL state stores (Step 1): this is shared context for all other agents
 Agent 2: Dashboard (Tasks, Notes, Journal, Ideas)
 Agent 3: Chat (DanteChatColumn, JustChatPage)
 Agent 4: Emails (ThreadList, DraftArea, EmailsPage)
@@ -189,13 +189,13 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 - After modifying any Zustand store action (check all callers)
 - After any refactor that touches shared state
 - Before release, on critical user flows
-- When a button "does nothing" — this is THE tool for that
+- When a button "does nothing": this is THE tool for that
 
 ## When NOT to Use
 
-- For API-level bugs (wrong response shape, missing endpoint) — use systematic-debugging
-- For styling/layout issues — visual inspection
-- For performance issues — profiling tools
+- For API-level bugs (wrong response shape, missing endpoint): use systematic-debugging
+- For styling/layout issues: visual inspection
+- For performance issues: profiling tools
 
 ---
 
@@ -203,7 +203,7 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 
 - Run AFTER `/superpowers:systematic-debugging` (which finds the other 54 bug types)
 - Run BEFORE `/superpowers:verification-before-completion` (which verifies fixes work)
-- Feeds into `/superpowers:test-driven-development` — every bug found here should get a test
+- Feeds into `/superpowers:test-driven-development`: every bug found here should get a test
 
 ---
 
@@ -241,4 +241,4 @@ selectThread: (thread) => set({
 **Click-path audit catches it** because:
 - Step 1 maps `selectThread` resets `composeMode`
 - Step 2 traces the handler: call 1 sets true, call 2 resets false
-- Verdict: Sequential Undo — final state contradicts button intent
+- Verdict: Sequential Undo: final state contradicts button intent

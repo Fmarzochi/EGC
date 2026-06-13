@@ -10,7 +10,7 @@ paths:
 
 ## Formatting
 
-- **dart format** for all `.dart` files — enforced in CI (`dart format --set-exit-if-changed .`)
+- **dart format** for all `.dart` files: enforced in CI (`dart format --set-exit-if-changed .`)
 - Line length: 80 characters (dart format default)
 - Trailing commas on multi-line argument/parameter lists to improve diffs and formatting
 
@@ -43,24 +43,24 @@ Follow Dart conventions:
 
 ## Null Safety
 
-- Avoid `!` (bang operator) — prefer `?.`, `??`, `if (x != null)`, or Dart 3 pattern matching; reserve `!` only where a null value is a programming error and crashing is the right behaviour
+- Avoid `!` (bang operator): prefer `?.`, `??`, `if (x != null)`, or Dart 3 pattern matching; reserve `!` only where a null value is a programming error and crashing is the right behaviour
 - Avoid `late` unless initialization is guaranteed before first use (prefer nullable or constructor init)
 - Use `required` for constructor parameters that must always be provided
 
 ```dart
-// BAD — crashes at runtime if user is null
+// BAD: crashes at runtime if user is null
 final name = user!.name;
 
-// GOOD — null-aware operators
+// GOOD: null-aware operators
 final name = user?.name ?? 'Unknown';
 
-// GOOD — Dart 3 pattern matching (exhaustive, compiler-checked)
+// GOOD: Dart 3 pattern matching (exhaustive, compiler-checked)
 final name = switch (user) {
   User(:final name) => name,
   null => 'Unknown',
 };
 
-// GOOD — early-return null guard
+// GOOD: early-return null guard
 String getUserName(User? user) {
   if (user == null) return 'Unknown';
   return user.name; // promoted to non-null after the guard
@@ -91,7 +91,7 @@ final class Failure<T> extends AsyncState<T> {
 }
 ```
 
-Always use exhaustive `switch` with sealed types — no default/wildcard:
+Always use exhaustive `switch` with sealed types: no default/wildcard:
 
 ```dart
 // BAD
@@ -107,8 +107,8 @@ return switch (state) {
 
 ## Error Handling
 
-- Specify exception types in `on` clauses — never use bare `catch (e)`
-- Never catch `Error` subtypes — they indicate programming bugs
+- Specify exception types in `on` clauses: never use bare `catch (e)`
+- Never catch `Error` subtypes: they indicate programming bugs
 - Use `Result`-style types or sealed classes for recoverable errors
 - Avoid using exceptions for control flow
 
@@ -138,7 +138,7 @@ try {
 - Check `context.mounted` before using `BuildContext` after any `await` (Flutter 3.7+)
 
 ```dart
-// BAD — ignoring Future
+// BAD: ignoring Future
 fetchData(); // fire-and-forget without marking intent
 
 // GOOD
@@ -148,12 +148,12 @@ await fetchData();      // or properly awaited
 
 ## Imports
 
-- Use `package:` imports throughout — never relative imports (`../`) for cross-feature or cross-layer code
+- Use `package:` imports throughout: never relative imports (`../`) for cross-feature or cross-layer code
 - Order: `dart:` → external `package:` → internal `package:` (same package)
-- No unused imports — `dart analyze` enforces this with `unused_import`
+- No unused imports: `dart analyze` enforces this with `unused_import`
 
 ## Code Generation
 
-- Generated files (`.g.dart`, `.freezed.dart`, `.gr.dart`) must be committed or gitignored consistently — pick one strategy per project
+- Generated files (`.g.dart`, `.freezed.dart`, `.gr.dart`) must be committed or gitignored consistently: pick one strategy per project
 - Never manually edit generated files
 - Keep generator annotations (`@JsonSerializable`, `@freezed`, `@riverpod`, etc.) on the canonical source file only

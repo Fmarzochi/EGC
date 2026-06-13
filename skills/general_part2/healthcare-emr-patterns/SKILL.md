@@ -1,7 +1,7 @@
 ---
 name: healthcare-emr-patterns
 description: EMR/EHR development patterns for healthcare applications. Clinical safety, encounter workflows, prescription generation, clinical decision support integration, and accessibility-first UI for medical data entry.
-origin: Health1 Super Speciality Hospitals — contributed by Dr. Keyur Patel
+origin: Health1 Super Speciality Hospitals: contributed by Dr. Keyur Patel
 version: "1.0.0"
 ---
 
@@ -32,10 +32,10 @@ Every design decision must be evaluated against: "Could this harm a patient?"
 
 ### Single-Page Encounter Flow
 
-Clinical encounters should flow vertically on a single page — no tab switching:
+Clinical encounters should flow vertically on a single page: no tab switching:
 
 ```
-Patient Header (sticky — always visible)
+Patient Header (sticky: always visible)
 ├── Demographics, allergies, active medications
 │
 Encounter Flow (vertical scroll)
@@ -63,7 +63,7 @@ interface ClinicalTemplate {
 }
 ```
 
-Red flags in any template must trigger a visible, non-dismissable alert — NOT a toast notification.
+Red flags in any template must trigger a visible, non-dismissable alert: NOT a toast notification.
 
 ### Medication Safety Pattern
 
@@ -84,7 +84,7 @@ Critical interactions **block prescribing by default**. The clinician must expli
 ### Locked Encounter Pattern
 
 Once a clinical encounter is signed:
-- No edits allowed — only an addendum (a separate linked record)
+- No edits allowed: only an addendum (a separate linked record)
 - Both original and addendum appear in the patient timeline
 - Audit trail captures who signed, when, and any addendum records
 
@@ -99,12 +99,12 @@ Once a clinical encounter is signed:
 ### Accessibility for Healthcare
 
 Healthcare UIs have stricter requirements than typical web apps:
-- 4.5:1 minimum contrast (WCAG AA) — clinicians work in varied lighting
-- Large touch targets (44x44px minimum) — for gloved/rushed interaction
-- Keyboard navigation — for power users entering data rapidly
-- No color-only indicators — always pair color with text/icon (colorblind clinicians)
+- 4.5:1 minimum contrast (WCAG AA): clinicians work in varied lighting
+- Large touch targets (44x44px minimum): for gloved/rushed interaction
+- Keyboard navigation: for power users entering data rapidly
+- No color-only indicators: always pair color with text/icon (colorblind clinicians)
 - Screen reader labels on all form fields
-- No auto-dismissing toasts for clinical alerts — clinician must actively acknowledge
+- No auto-dismissing toasts for clinical alerts: clinician must actively acknowledge
 
 ### Anti-Patterns
 
@@ -126,7 +126,7 @@ Doctor opens encounter for Patient #4521
   → Chief Complaint: selects "Chest Pain" template
     → Clicks chips: "substernal", "radiating to left arm", "crushing"
     → Red flag "crushing substernal chest pain" triggers non-dismissable alert
-  → Examination: CVS system — "S1 S2 normal, no murmur"
+  → Examination: CVS system: "S1 S2 normal, no murmur"
   → Vitals: HR 110, BP 90/60, SpO2 94%
     → NEWS2 auto-calculates: score 8, risk HIGH, escalation alert shown
   → Diagnosis: searches "ACS" → selects ICD-10 I21.9
@@ -142,7 +142,7 @@ Doctor prescribes Warfarin for Patient #4521
   → CDSS detects: Warfarin + Aspirin = CRITICAL interaction
   → UI: red non-dismissable modal blocks prescribing
   → Doctor clicks "Override with reason"
-  → Types: "Benefits outweigh risks — monitored INR protocol"
+  → Types: "Benefits outweigh risks: monitored INR protocol"
   → Override reason + alert stored in audit trail
   → Prescription proceeds with documented override
 ```
@@ -151,9 +151,9 @@ Doctor prescribes Warfarin for Patient #4521
 
 ```
 Encounter #E-2024-0891 signed by Dr. Shah at 14:30
-  → All fields locked — no edit buttons visible
+  → All fields locked: no edit buttons visible
   → "Add Addendum" button available
-  → Dr. Shah clicks addendum, adds: "Lab results received — Troponin elevated"
+  → Dr. Shah clicks addendum, adds: "Lab results received: Troponin elevated"
   → New record E-2024-0891-A1 linked to original
   → Timeline shows both: original encounter + addendum with timestamps
 ```

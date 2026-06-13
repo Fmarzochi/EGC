@@ -5,7 +5,7 @@
 
 ## 风格参考
 
-亚当（Adam）—— 龙虾族创世神，本 Skill 的首个作品。
+亚当（Adam）,, 龙虾族创世神，本 Skill 的首个作品。
 
 所有新生成的龙虾头像应与这一风格保持一致：复古未来主义、街机 UI 包边、强轮廓、可在 64x64 下辨识。
 
@@ -33,8 +33,8 @@ arcade cabinet trim with atomic-age starburst rivets.
 Pose: references classic Gil Elvgren pin-up compositions, confident and
 charismatic with a slight theatrical tilt.
 
-Color system: vintage NASA poster palette as base — deep navy, teal, dusty coral,
-cream — viewed through arcade CRT monitor with slight RGB fringing at edges.
+Color system: vintage NASA poster palette as base: deep navy, teal, dusty coral,
+cream: viewed through arcade CRT monitor with slight RGB fringing at edges.
 Overall aesthetic combines Googie architecture curves, Raygun Gothic design
 language, mid-century advertising illustration, modern 3D inflatable character
 rendering, and 80s-90s arcade game UI. Chrome and pastel accent details on

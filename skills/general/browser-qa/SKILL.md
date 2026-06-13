@@ -4,13 +4,13 @@ description: Use this skill to automate visual testing and UI interaction verifi
 origin: EGC
 ---
 
-# Browser QA — Automated Visual Testing & Interaction
+# Browser QA: Automated Visual Testing & Interaction
 
 ## When to Use
 
 - After deploying a feature to staging/preview
 - When you need to verify UI behavior across pages
-- Before shipping — confirm layouts, forms, interactions actually work
+- Before shipping: confirm layouts, forms, interactions actually work
 - When reviewing PRs that touch frontend code
 - Accessibility audits and responsive testing
 
@@ -29,9 +29,9 @@ Uses the browser automation MCP (egc-in-chrome, Playwright, or Puppeteer) to int
 
 ### Phase 2: Interaction Test
 ```
-1. Click every nav link — verify no dead links
-2. Submit forms with valid data — verify success state
-3. Submit forms with invalid data — verify error state
+1. Click every nav link: verify no dead links
+2. Submit forms with valid data: verify success state
+3. Submit forms with invalid data: verify error state
 4. Test auth flow: login → protected page → logout
 5. Test critical user journeys (checkout, onboarding, search)
 ```
@@ -55,7 +55,7 @@ Uses the browser automation MCP (egc-in-chrome, Playwright, or Puppeteer) to int
 ## Output Format
 
 ```markdown
-## QA Report — [URL] — [timestamp]
+## QA Report: [URL]: [timestamp]
 
 ### Smoke Test
 - Console errors: 0 critical, 2 warnings (analytics noise)
@@ -80,7 +80,7 @@ Uses the browser automation MCP (egc-in-chrome, Playwright, or Puppeteer) to int
 ## Integration
 
 Works with any browser MCP:
-- `mChild__claude-in-chrome__*` tools (preferred — uses your actual Chrome)
+- `mChild__claude-in-chrome__*` tools (preferred: uses your actual Chrome)
 - Playwright via `mcp__browserbase__*`
 - Direct Puppeteer scripts
 

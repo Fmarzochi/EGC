@@ -1,5 +1,5 @@
 /**
- * Tests for inspection logic — pattern detection from failures.
+ * Tests for inspection logic: pattern detection from failures.
  */
 
 const assert = require('assert');

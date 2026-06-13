@@ -66,10 +66,10 @@ fn get_name() -> String {
 
 ## Key Principles
 
-- **Surgical fixes only** — don't refactor, just fix the error
+- **Surgical fixes only**: don't refactor, just fix the error
 - **Never** add `#[allow(unused)]` without explicit approval
 - **Never** use `unsafe` to work around borrow checker errors
-- **Never** add `.unwrap()` to silence type errors — propagate with `?`
+- **Never** add `.unwrap()` to silence type errors: propagate with `?`
 - **Always** run `cargo check` after every fix attempt
 - Fix root cause over suppressing symptoms
 
@@ -85,7 +85,7 @@ Stop and report if:
 
 ```text
 [FIXED] src/handler/user.rs:42
-Error: E0502 — cannot borrow `map` as mutable because it is also borrowed as immutable
+Error: E0502: cannot borrow `map` as mutable because it is also borrowed as immutable
 Fix: Cloned value from immutable borrow before mutable insert
 Remaining errors: 3
 ```

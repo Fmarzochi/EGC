@@ -59,7 +59,7 @@ class UserRepositoryImpl implements UserRepository {
 ## State Management: BLoC/Cubit
 
 ```dart
-// Cubit — simple state transitions
+// Cubit: simple state transitions
 class CounterCubit extends Cubit<int> {
   CounterCubit() : super(0);
 
@@ -67,7 +67,7 @@ class CounterCubit extends Cubit<int> {
   void decrement() => emit(state - 1);
 }
 
-// BLoC — event-driven
+// BLoC: event-driven
 @immutable
 sealed class CartEvent {}
 class CartItemAdded extends CartEvent { CartItemAdded(this.item); final Item item; }
@@ -181,7 +181,7 @@ class GetUserUseCase {
 class CreateUserUseCase {
   const CreateUserUseCase(this._repository, this._idGenerator);
   final UserRepository _repository;
-  final IdGenerator _idGenerator; // injected — domain layer must not depend on uuid package directly
+  final IdGenerator _idGenerator; // injected: domain layer must not depend on uuid package directly
 
   Future<void> call(CreateUserInput input) async {
     // Validate, apply business rules, then persist
@@ -208,7 +208,7 @@ class UserState with _$UserState {
 
 ```
 lib/
-├── domain/              # Pure Dart — no Flutter, no external packages
+├── domain/              # Pure Dart: no Flutter, no external packages
 │   ├── entities/
 │   ├── repositories/    # Abstract interfaces
 │   └── usecases/

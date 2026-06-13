@@ -1,4 +1,4 @@
-# src/llm — Python LLM Bridge
+# src/llm: Python LLM Bridge
 
 Python bridge invoked by `egc prompt` via `scripts/gemini.js`.
 

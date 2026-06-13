@@ -117,10 +117,10 @@ Stripe Checkout, and webhook events keep subscription status in sync.
 
 ## Architecture Changes
 - New table: `subscriptions` (user_id, stripe_customer_id, stripe_subscription_id, status, tier)
-- New API route: `app/api/checkout/route.ts` — creates Stripe Checkout session
-- New API route: `app/api/webhooks/stripe/route.ts` — handles Stripe events
+- New API route: `app/api/checkout/route.ts`: creates Stripe Checkout session
+- New API route: `app/api/webhooks/stripe/route.ts`: handles Stripe events
 - New middleware: check subscription tier for gated features
-- New component: `PricingTable` — displays tiers with upgrade buttons
+- New component: `PricingTable`: displays tiers with upgrade buttons
 
 ## Implementation Steps
 
@@ -136,14 +136,14 @@ Stripe Checkout, and webhook events keep subscription status in sync.
      customer.subscription.deleted events
    - Why: Keep subscription status in sync with Stripe
    - Dependencies: Step 1 (needs subscriptions table)
-   - Risk: High — webhook signature verification is critical
+   - Risk: High: webhook signature verification is critical
 
 ### Phase 2: Checkout Flow (2 files)
 3. **Create checkout API route** (File: src/app/api/checkout/route.ts)
    - Action: Create Stripe Checkout session with price_id and success/cancel URLs
    - Why: Server-side session creation prevents price tampering
    - Dependencies: Step 1
-   - Risk: Medium — must validate user is authenticated
+   - Risk: Medium: must validate user is authenticated
 
 4. **Build pricing page** (File: src/components/PricingTable.tsx)
    - Action: Display three tiers with feature comparison and upgrade buttons
@@ -156,7 +156,7 @@ Stripe Checkout, and webhook events keep subscription status in sync.
    - Action: Check subscription tier on protected routes, redirect free users
    - Why: Enforce tier limits server-side
    - Dependencies: Steps 1-2 (needs subscription data)
-   - Risk: Medium — must handle edge cases (expired, past_due)
+   - Risk: Medium: must handle edge cases (expired, past_due)
 
 ## Testing Strategy
 - Unit tests: Webhook event parsing, tier checking logic
@@ -189,10 +189,10 @@ Stripe Checkout, and webhook events keep subscription status in sync.
 
 When the feature is large, break it into independently deliverable phases:
 
-- **Phase 1**: Minimum viable — smallest slice that provides value
-- **Phase 2**: Core experience — complete happy path
-- **Phase 3**: Edge cases — error handling, edge cases, polish
-- **Phase 4**: Optimization — performance, monitoring, analytics
+- **Phase 1**: Minimum viable: smallest slice that provides value
+- **Phase 2**: Core experience: complete happy path
+- **Phase 3**: Edge cases: error handling, edge cases, polish
+- **Phase 4**: Optimization: performance, monitoring, analytics
 
 Each phase should be mergeable independently. Avoid plans that require all phases to complete before anything works.
 

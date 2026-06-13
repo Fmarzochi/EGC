@@ -7,7 +7,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 # Agent Eval Skill
 
-A lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every "which coding agent is best?" comparison runs on vibes — this tool systematizes it.
+A lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every "which coding agent is best?" comparison runs on vibes: this tool systematizes it.
 
 ## When to Activate
 
@@ -46,7 +46,7 @@ commit: "abc1234"  # pin to specific commit for reproducibility
 
 ### Git Worktree Isolation
 
-Each agent run gets its own git worktree — no Docker required. This provides reproducibility isolation so agents cannot interfere with each other or corrupt the base repo.
+Each agent run gets its own git worktree: no Docker required. This provides reproducibility isolation so agents cannot interfere with each other or corrupt the base repo.
 
 ### Metrics Collected
 
@@ -134,11 +134,11 @@ judge:
 ## Best Practices
 
 - **Start with 3-5 tasks** that represent your real workload, not toy examples
-- **Run at least 3 trials** per agent to capture variance — agents are non-deterministic
+- **Run at least 3 trials** per agent to capture variance: agents are non-deterministic
 - **Pin the commit** in your task YAML so results are reproducible across days/weeks
-- **Include at least one deterministic judge** (tests, build) per task — LLM judges add noise
-- **Track cost alongside pass rate** — a 95% agent at 10x the cost may not be the right choice
-- **Version your task definitions** — they are test fixtures, treat them as code
+- **Include at least one deterministic judge** (tests, build) per task: LLM judges add noise
+- **Track cost alongside pass rate**: a 95% agent at 10x the cost may not be the right choice
+- **Version your task definitions**: they are test fixtures, treat them as code
 
 ## Links
 

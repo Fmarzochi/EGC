@@ -16,15 +16,15 @@ paths:
 ## Immutability
 
 - Prefer `record` for value types (Java 16+)
-- Mark fields `final` by default — use mutable state only when required
+- Mark fields `final` by default: use mutable state only when required
 - Return defensive copies from public APIs: `List.copyOf()`, `Map.copyOf()`, `Set.copyOf()`
 - Copy-on-write: return new instances rather than mutating existing ones
 
 ```java
-// GOOD — immutable value type
+// GOOD: immutable value type
 public record OrderSummary(Long id, String customerName, BigDecimal total) {}
 
-// GOOD — final fields, no setters
+// GOOD: final fields, no setters
 public class Order {
     private final Long id;
     private final List<LineItem> items;
@@ -48,10 +48,10 @@ Follow standard Java conventions:
 Use modern language features where they improve clarity:
 - **Records** for DTOs and value types (Java 16+)
 - **Sealed classes** for closed type hierarchies (Java 17+)
-- **Pattern matching** with `instanceof` — no explicit cast (Java 16+)
-- **Text blocks** for multi-line strings — SQL, JSON templates (Java 15+)
+- **Pattern matching** with `instanceof`: no explicit cast (Java 16+)
+- **Text blocks** for multi-line strings: SQL, JSON templates (Java 15+)
 - **Switch expressions** with arrow syntax (Java 14+)
-- **Pattern matching in switch** — exhaustive sealed type handling (Java 21+)
+- **Pattern matching in switch**: exhaustive sealed type handling (Java 21+)
 
 ```java
 // Pattern matching instanceof
@@ -73,7 +73,7 @@ String label = switch (status) {
 ## Optional Usage
 
 - Return `Optional<T>` from finder methods that may have no result
-- Use `map()`, `flatMap()`, `orElseThrow()` — never call `get()` without `isPresent()`
+- Use `map()`, `flatMap()`, `orElseThrow()`: never call `get()` without `isPresent()`
 - Never use `Optional` as a field type or method parameter
 
 ```java
@@ -82,7 +82,7 @@ return repository.findById(id)
     .map(ResponseDto::from)
     .orElseThrow(() -> new OrderNotFoundException(id));
 
-// BAD — Optional as parameter
+// BAD: Optional as parameter
 public void process(Optional<String> name) {}
 ```
 

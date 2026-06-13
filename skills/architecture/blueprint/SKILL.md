@@ -13,7 +13,7 @@ description: >-
 origin: community
 ---
 
-# Blueprint — Construction Plan Generator
+# Blueprint: Construction Plan Generator
 
 Turn a one-line objective into a step-by-step construction plan that any coding agent can execute cold.
 
@@ -30,11 +30,11 @@ Turn a one-line objective into a step-by-step construction plan that any coding 
 
 Blueprint runs a 5-phase pipeline:
 
-1. **Research** — Pre-flight checks (git, gh auth, remote, default branch), then reads project structure, existing plans, and memory files to gather context.
-2. **Design** — Breaks the objective into one-PR-sized steps (3–12 typical). Assigns dependency edges, parallel/serial ordering, model tier (strongest vs default), and rollback strategy per step.
-3. **Draft** — Writes a self-contained Markdown plan file to `plans/`. Every step includes a context brief, task list, verification commands, and exit criteria — so a fresh agent can execute any step without reading prior steps.
-4. **Review** — Delegates adversarial review to a strongest-model sub-agent (e.g., Opus) against a checklist and anti-pattern catalog. Fixes all critical findings before finalizing.
-5. **Register** — Saves the plan, updates memory index, and presents the step count and parallelism summary to the user.
+1. **Research**: Pre-flight checks (git, gh auth, remote, default branch), then reads project structure, existing plans, and memory files to gather context.
+2. **Design**: Breaks the objective into one-PR-sized steps (3–12 typical). Assigns dependency edges, parallel/serial ordering, model tier (strongest vs default), and rollback strategy per step.
+3. **Draft**: Writes a self-contained Markdown plan file to `plans/`. Every step includes a context brief, task list, verification commands, and exit criteria: so a fresh agent can execute any step without reading prior steps.
+4. **Review**: Delegates adversarial review to a strongest-model sub-agent (e.g., Opus) against a checklist and anti-pattern catalog. Fixes all critical findings before finalizing.
+5. **Register**: Saves the plan, updates memory index, and presents the step count and parallelism summary to the user.
 
 Blueprint detects git/gh availability automatically. With git + GitHub CLI, it generates full branch/PR/CI workflow plans. Without them, it switches to direct mode (edit-in-place, no branches).
 
@@ -63,12 +63,12 @@ Produces a plan with parallel steps where possible (e.g., "implement Anthropic p
 
 ## Key Features
 
-- **Cold-start execution** — Every step includes a self-contained context brief. No prior context needed.
-- **Adversarial review gate** — Every plan is reviewed by a strongest-model sub-agent against a checklist covering completeness, dependency correctness, and anti-pattern detection.
-- **Branch/PR/CI workflow** — Built into every step. Degrades gracefully to direct mode when git/gh is absent.
-- **Parallel step detection** — Dependency graph identifies steps with no shared files or output dependencies.
-- **Plan mutation protocol** — Steps can be split, inserted, skipped, reordered, or abandoned with formal protocols and audit trail.
-- **Zero runtime risk** — Pure Markdown skill. The entire repository contains only `.md` files — no hooks, no shell scripts, no executable code, no `package.json`, no build step. Nothing runs on install or invocation beyond Gemini Code's native Markdown skill loader.
+- **Cold-start execution**: Every step includes a self-contained context brief. No prior context needed.
+- **Adversarial review gate**: Every plan is reviewed by a strongest-model sub-agent against a checklist covering completeness, dependency correctness, and anti-pattern detection.
+- **Branch/PR/CI workflow**: Built into every step. Degrades gracefully to direct mode when git/gh is absent.
+- **Parallel step detection**: Dependency graph identifies steps with no shared files or output dependencies.
+- **Plan mutation protocol**: Steps can be split, inserted, skipped, reordered, or abandoned with formal protocols and audit trail.
+- **Zero runtime risk**: Pure Markdown skill. The entire repository contains only `.md` files: no hooks, no shell scripts, no executable code, no `package.json`, no build step. Nothing runs on install or invocation beyond Gemini Code's native Markdown skill loader.
 
 ## Installation
 
@@ -98,8 +98,8 @@ If you are vendoring only this skill outside the full EGC install, copy the revi
 ## Requirements
 
 - Gemini Code (for `/blueprint` slash command)
-- Git + GitHub CLI (optional — enables full branch/PR/CI workflow; Blueprint detects absence and auto-switches to direct mode)
+- Git + GitHub CLI (optional: enables full branch/PR/CI workflow; Blueprint detects absence and auto-switches to direct mode)
 
 ## Source
 
-Inspired by antbotlab/blueprint — upstream project and reference design.
+Inspired by antbotlab/blueprint: upstream project and reference design.

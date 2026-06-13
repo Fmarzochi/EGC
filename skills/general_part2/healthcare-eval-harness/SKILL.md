@@ -1,15 +1,15 @@
 ---
 name: healthcare-eval-harness
 description: Patient safety evaluation harness for healthcare application deployments. Automated test suites for CDSS accuracy, PHI exposure, clinical workflow integrity, and integration compliance. Blocks deployments on safety failures.
-origin: Health1 Super Speciality Hospitals — contributed by Dr. Keyur Patel
+origin: Health1 Super Speciality Hospitals: contributed by Dr. Keyur Patel
 version: "1.0.0"
 ---
 
-# Healthcare Eval Harness — Patient Safety Verification
+# Healthcare Eval Harness: Patient Safety Verification
 
 Automated verification system for healthcare application deployments. A single CRITICAL failure blocks deployment. Patient safety is non-negotiable.
 
-> **Note:** Examples use Jest as the reference test runner. Adapt commands for your framework (Vitest, pytest, PHPUnit, etc.) — the test categories and pass thresholds are framework-agnostic.
+> **Note:** Examples use Jest as the reference test runner. Adapt commands for your framework (Vitest, pytest, PHPUnit, etc.): the test categories and pass thresholds are framework-agnostic.
 
 ## When to Use
 
@@ -22,13 +22,13 @@ Automated verification system for healthcare application deployments. A single C
 
 ## How It Works
 
-The eval harness runs five test categories in order. The first three (CDSS Accuracy, PHI Exposure, Data Integrity) are CRITICAL gates requiring 100% pass rate — a single failure blocks deployment. The remaining two (Clinical Workflow, Integration) are HIGH gates requiring 95%+ pass rate.
+The eval harness runs five test categories in order. The first three (CDSS Accuracy, PHI Exposure, Data Integrity) are CRITICAL gates requiring 100% pass rate: a single failure blocks deployment. The remaining two (Clinical Workflow, Integration) are HIGH gates requiring 95%+ pass rate.
 
 Each category maps to a Jest test path pattern. The CI pipeline runs CRITICAL gates with `--bail` (stop on first failure) and enforces coverage thresholds with `--coverage --coverageThreshold`.
 
 ### Eval Categories
 
-**1. CDSS Accuracy (CRITICAL — 100% required)**
+**1. CDSS Accuracy (CRITICAL: 100% required)**
 
 Tests all clinical decision support logic: drug interaction pairs (both directions), dose validation rules, clinical scoring vs published specs, no false negatives, no silent failures.
 
@@ -36,7 +36,7 @@ Tests all clinical decision support logic: drug interaction pairs (both directio
 npx jest --testPathPattern='tests/cdss' --bail --ci --coverage
 ```
 
-**2. PHI Exposure (CRITICAL — 100% required)**
+**2. PHI Exposure (CRITICAL: 100% required)**
 
 Tests for protected health information leaks: API error responses, console output, URL parameters, browser storage, cross-facility isolation, unauthenticated access, service role key absence.
 
@@ -44,7 +44,7 @@ Tests for protected health information leaks: API error responses, console outpu
 npx jest --testPathPattern='tests/security/phi' --bail --ci
 ```
 
-**3. Data Integrity (CRITICAL — 100% required)**
+**3. Data Integrity (CRITICAL: 100% required)**
 
 Tests clinical data safety: locked encounters, audit trail entries, cascade delete protection, concurrent edit handling, no orphaned records.
 
@@ -52,7 +52,7 @@ Tests clinical data safety: locked encounters, audit trail entries, cascade dele
 npx jest --testPathPattern='tests/data-integrity' --bail --ci
 ```
 
-**4. Clinical Workflow (HIGH — 95%+ required)**
+**4. Clinical Workflow (HIGH: 95%+ required)**
 
 Tests end-to-end flows: encounter lifecycle, template rendering, medication sets, drug/diagnosis search, prescription PDF, red flag alerts.
 
@@ -69,7 +69,7 @@ rate=$(echo "scale=2; $passed * 100 / $total" | bc)
 echo "Clinical pass rate: ${rate}% ($passed/$total)"
 ```
 
-**5. Integration Compliance (HIGH — 95%+ required)**
+**5. Integration Compliance (HIGH: 95%+ required)**
 
 Tests external systems: HL7 message parsing (v2.x), FHIR validation, lab result mapping, malformed message handling.
 
@@ -112,7 +112,7 @@ jobs:
           node-version: '20'
       - run: npm ci
 
-      # CRITICAL gates — 100% required, bail on first failure
+      # CRITICAL gates: 100% required, bail on first failure
       - name: CDSS Accuracy
         run: npx jest --testPathPattern='tests/cdss' --bail --ci --coverage --coverageThreshold='{"global":{"branches":80,"functions":80,"lines":80}}'
 
@@ -122,8 +122,8 @@ jobs:
       - name: Data Integrity
         run: npx jest --testPathPattern='tests/data-integrity' --bail --ci
 
-      # HIGH gates — 95%+ required, custom threshold check
-      # HIGH gates — 95%+ required
+      # HIGH gates: 95%+ required, custom threshold check
+      # HIGH gates: 95%+ required
       - name: Clinical Workflows
         run: |
           TMP_JSON=$(mktemp)

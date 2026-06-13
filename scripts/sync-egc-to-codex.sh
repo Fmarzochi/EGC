@@ -209,7 +209,7 @@ else
   }
 
   if [[ ! -f "$AGENTS_FILE" ]]; then
-    # No existing file — create fresh with markers
+    # No existing file: create fresh with markers
     compose_egc_block > "$AGENTS_FILE"
   elif awk -v b="$EGC_BEGIN_MARKER" -v e="$EGC_END_MARKER" '
         { gsub(/\r$/, "") }
@@ -217,7 +217,7 @@ else
         $0 == e { ec++; if (!fe) fe = NR }
         END { exit !(bc == 1 && ec == 1 && fb < fe) }
       ' "$AGENTS_FILE"; then
-    # Exactly one BEGIN/END pair in correct order — replace only the EGC section
+    # Exactly one BEGIN/END pair in correct order: replace only the EGC section
     replace_egc_section
   elif awk -v b="$EGC_BEGIN_MARKER" -v e="$EGC_END_MARKER" '
         { gsub(/\r$/, "") }
@@ -227,7 +227,7 @@ else
     # Markers present but not exactly one valid BEGIN/END pair (missing END,
     # duplicates, or out-of-order). Strip all marker lines, then append a
     # fresh marked block. This preserves user content outside markers.
-    log "WARNING: EGC markers found but not a clean pair — stripping markers and re-appending"
+    log "WARNING: EGC markers found but not a clean pair: stripping markers and re-appending"
     _fix_tmp="$(mktemp)"
     awk -v b="$EGC_BEGIN_MARKER" -v e="$EGC_END_MARKER" '
       { gsub(/\r$/, "") }
@@ -239,11 +239,11 @@ else
     rm -f "$_fix_tmp"
     { printf '\n\n'; compose_egc_block; } >> "$AGENTS_FILE"
   else
-    # Existing file without markers — append EGC block, preserving existing content.
+    # Existing file without markers: append EGC block, preserving existing content.
     # Legacy EGC-only files will have duplicate content after this first run, but
     # subsequent runs use marker-based replacement so only the marked section updates.
     # A timestamped backup was already saved above for recovery if needed.
-    log "No EGC markers found — appending managed block (backup saved)"
+    log "No EGC markers found: appending managed block (backup saved)"
     {
       printf '\n\n'
       compose_egc_block
@@ -271,7 +271,7 @@ for agent_file in "$CODEX_AGENTS_SRC"/*.toml; do
   fi
 done
 
-# Skills are NOT synced here — Codex CLI reads directly from
+# Skills are NOT synced here: Codex CLI reads directly from
 # ~/.agents/skills/ (installed by EGC installer / npx skills).
 # Copying into ~/.codex/skills/ was unnecessary.
 

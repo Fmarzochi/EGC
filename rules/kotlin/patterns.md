@@ -12,14 +12,14 @@ paths:
 Prefer constructor injection. Use Koin (KMP) or Hilt (Android-only):
 
 ```kotlin
-// Koin — declare modules
+// Koin: declare modules
 val dataModule = module {
     single<ItemRepository> { ItemRepositoryImpl(get(), get()) }
     factory { GetItemsUseCase(get()) }
     viewModelOf(::ItemListViewModel)
 }
 
-// Hilt — annotations
+// Hilt: annotations
 @HiltViewModel
 class ItemListViewModel @Inject constructor(
     private val getItems: GetItemsUseCase

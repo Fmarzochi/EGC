@@ -81,7 +81,7 @@ function run(rawInput) {
 
     return JSON.stringify(input);
   } catch {
-    // Invalid input — pass through original data unchanged
+    // Invalid input: pass through original data unchanged
     return typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput);
   }
 }

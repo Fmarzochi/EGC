@@ -48,7 +48,7 @@ node "$ECC_ROOT/scripts/skills-health.js" --dashboard --json
 
 ## Panels
 
-- **Success Rate (30d)** — Sparkline charts showing daily success rates per skill
-- **Failure Patterns** — Clustered failure reasons with horizontal bar chart
-- **Pending Amendments** — Amendment proposals awaiting review
-- **Version History** — Timeline of version snapshots per skill
+- **Success Rate (30d)**: Sparkline charts showing daily success rates per skill
+- **Failure Patterns**: Clustered failure reasons with horizontal bar chart
+- **Pending Amendments**: Amendment proposals awaiting review
+- **Version History**: Timeline of version snapshots per skill

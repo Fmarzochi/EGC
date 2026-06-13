@@ -26,7 +26,7 @@ Create or update codemaps in `docs/CODEMAPS/` (or `.reports/codemaps/`):
 
 ### Codemap Format
 
-Each codemap should be token-lean — optimized for AI context consumption:
+Each codemap should be token-lean: optimized for AI context consumption:
 
 ```markdown
 # Backend Architecture

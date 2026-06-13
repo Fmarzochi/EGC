@@ -290,7 +290,7 @@ async function main() {
 function buildSummarySection(summary) {
   let section = '## Session Summary\n\n';
 
-  // Tasks (from user messages — collapse newlines and escape backticks to prevent markdown breaks)
+  // Tasks (from user messages: collapse newlines and escape backticks to prevent markdown breaks)
   section += '### Tasks\n';
   for (const msg of summary.userMessages) {
     section += `- ${msg.replace(/\\/g, '\\\\').replace(/\n/g, ' ').replace(/`/g, '\\`')}\n`;

@@ -128,7 +128,7 @@ Based on foundation + research, ask:
 
 **If a codebase exists, perform two parallel investigations:**
 
-Investigation 1 — Explore feasibility:
+Investigation 1: Explore feasibility:
 1. Identify existing infrastructure that can be leveraged
 2. Find similar patterns already implemented
 3. Map integration points and dependencies
@@ -136,7 +136,7 @@ Investigation 1 — Explore feasibility:
 
 Record file locations, code patterns, and conventions observed.
 
-Investigation 2 — Analyze constraints:
+Investigation 2: Analyze constraints:
 1. Trace how existing related features are implemented end-to-end
 2. Map data flow through potential integration points
 3. Identify architectural patterns and boundaries

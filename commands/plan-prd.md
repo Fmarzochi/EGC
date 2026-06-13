@@ -5,7 +5,7 @@ argument-hint: "[product/feature idea] (blank = start with questions)"
 
 # PRD Command
 
-Produces a **Product Requirements Document** — the requirements-phase artifact of the SDLC. Captures *what* must be true for success and *why*, and stops before *how*. Implementation decomposition is delegated to `/plan`.
+Produces a **Product Requirements Document**: the requirements-phase artifact of the SDLC. Captures *what* must be true for success and *why*, and stops before *how*. Implementation decomposition is delegated to `/plan`.
 
 **Input**: `$ARGUMENTS`
 
@@ -16,17 +16,17 @@ Produces a **Product Requirements Document** — the requirements-phase artifact
 | Frame the problem and users | Design the architecture |
 | Capture success criteria and scope | Pick files or write patterns |
 | List open questions and risks | Enumerate implementation tasks |
-| Write `.Gemini/prds/{name}.prd.md` | Produce an implementation plan — that's `/plan` |
+| Write `.Gemini/prds/{name}.prd.md` | Produce an implementation plan: that's `/plan` |
 
 If you find yourself writing implementation detail, stop and cut it. It belongs in `/plan`.
 
-**Anti-fluff rule**: When information is missing, write `TBD — needs validation via {method}`. Never invent plausible-sounding requirements.
+**Anti-fluff rule**: When information is missing, write `TBD: needs validation via {method}`. Never invent plausible-sounding requirements.
 
 ## Workflow
 
-Four phases. Each phase is a single gate — ask the questions, wait for the user, then move on. No nested loops, no parallel research ceremony.
+Four phases. Each phase is a single gate: ask the questions, wait for the user, then move on. No nested loops, no parallel research ceremony.
 
-### Phase 1 — FRAME
+### Phase 1: FRAME
 
 If `$ARGUMENTS` is empty, ask:
 
@@ -41,30 +41,30 @@ Then ask the framing questions in a single set:
 > 1. **Who** has this problem? (specific role or segment)
 > 2. **What** is the observable pain? (describe behavior, not assumed needs)
 > 3. **Why** can't they solve it with what exists today?
-> 4. **Why now?** — what changed that makes this worth doing?
+> 4. **Why now?**: what changed that makes this worth doing?
 
 Wait for the user. Do not proceed without answers (or explicit "skip").
 
-### Phase 2 — GROUND
+### Phase 2: GROUND
 
 Ask for evidence. This is the shortest phase and the most load-bearing:
 
-> What evidence do you have that this problem is real and worth solving? (user quotes, support tickets, metrics, observed behavior, failed workarounds — anything concrete)
+> What evidence do you have that this problem is real and worth solving? (user quotes, support tickets, metrics, observed behavior, failed workarounds: anything concrete)
 
-If the user has none, record the PRD's Evidence section as `Assumption — needs validation via {user research | analytics | prototype}`. This keeps the PRD honest.
+If the user has none, record the PRD's Evidence section as `Assumption: needs validation via {user research | analytics | prototype}`. This keeps the PRD honest.
 
-### Phase 3 — DECIDE
+### Phase 3: DECIDE
 
 Scope and hypothesis in a single set:
 
-> 1. **Hypothesis** — Complete: *We believe **{capability}** will **{solve problem}** for **{users}**. We'll know we're right when **{measurable outcome}**.*
-> 2. **MVP** — The minimum needed to test the hypothesis?
-> 3. **Out of scope** — What are you explicitly **not** building (even if users ask)?
-> 4. **Open questions** — Uncertainties that could change the approach?
+> 1. **Hypothesis**: Complete: *We believe **{capability}** will **{solve problem}** for **{users}**. We'll know we're right when **{measurable outcome}**.*
+> 2. **MVP**: The minimum needed to test the hypothesis?
+> 3. **Out of scope**: What are you explicitly **not** building (even if users ask)?
+> 4. **Open questions**: Uncertainties that could change the approach?
 
 Wait for responses.
 
-### Phase 4 — GENERATE & HAND OFF
+### Phase 4: GENERATE & HAND OFF
 
 Create the directory if needed, write the PRD, and report.
 
@@ -84,7 +84,7 @@ mkdir -p .Gemini/prds
 
 ## Evidence
 - {User quote, data point, or observation}
-- {OR: "Assumption — needs validation via {method}"}
+- {OR: "Assumption: needs validation via {method}"}
 
 ## Users
 - **Primary**: {role, context, what triggers the need}
@@ -100,10 +100,10 @@ We'll know we're right when **{measurable outcome}**.
 | {primary} | {number} | {method} |
 
 ## Scope
-**MVP** — {the minimum to test the hypothesis}
+**MVP**: {the minimum to test the hypothesis}
 
 **Out of scope**
-- {item} — {why deferred}
+- {item}: {why deferred}
 
 ## Delivery Milestones
 <!-- Business outcomes, not engineering tasks. /plan turns each into a plan. -->
@@ -111,8 +111,8 @@ We'll know we're right when **{measurable outcome}**.
 
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | {name} | {user-visible change} | pending | — |
-| 2 | {name} | {user-visible change} | pending | — |
+| 1 | {name} | {user-visible change} | pending |: |
+| 2 | {name} | {user-visible change} | pending |: |
 
 ## Open Questions
 - [ ] {question that could change scope or approach}
@@ -122,7 +122,7 @@ We'll know we're right when **{measurable outcome}**.
 |---|---|---|---|
 
 ---
-*Status: DRAFT — requirements only. Implementation planning pending via /plan.*
+*Status: DRAFT: requirements only. Implementation planning pending via /plan.*
 ```
 
 #### Report to user
@@ -136,7 +136,7 @@ MVP:        {one line}
 
 Validation status:
   Problem  {validated | assumption}
-  Users    {concrete | generic — refine}
+  Users    {concrete | generic: refine}
   Metrics  {defined | TBD}
 
 Open questions: {count}
@@ -147,9 +147,9 @@ Next step: /plan .Gemini/prds/{name}.prd.md
 
 ## Integration
 
-- `/plan <prd-path>` — consume the PRD and produce an implementation plan for the next pending milestone.
-- `tdd-workflow` skill — implement the plan test-first.
-- `/pr` — open a PR that references the PRD and plan.
+- `/plan <prd-path>`: consume the PRD and produce an implementation plan for the next pending milestone.
+- `tdd-workflow` skill: implement the plan test-first.
+- `/pr`: open a PR that references the PRD and plan.
 
 ## Success criteria
 
@@ -157,4 +157,4 @@ Next step: /plan .Gemini/prds/{name}.prd.md
 - **USER_CONCRETE**: primary user is a specific role, not "users".
 - **HYPOTHESIS_TESTABLE**: measurable outcome included.
 - **SCOPE_BOUNDED**: explicit MVP and explicit out-of-scope.
-- **NO_IMPLEMENTATION_DETAIL**: file paths, libraries, or task breakdowns are absent — if they appeared, move them to the `/plan` step.
+- **NO_IMPLEMENTATION_DETAIL**: file paths, libraries, or task breakdowns are absent: if they appeared, move them to the `/plan` step.

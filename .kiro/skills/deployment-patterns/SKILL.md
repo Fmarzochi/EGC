@@ -25,7 +25,7 @@ Production deployment workflows and CI/CD best practices.
 
 ### Rolling Deployment (Default)
 
-Replace instances gradually — old and new versions run simultaneously during rollout.
+Replace instances gradually: old and new versions run simultaneously during rollout.
 
 ```
 Instance 1: v1 → v2  (update first)
@@ -42,7 +42,7 @@ Instance 3: v1 → v2  (update last)
 ```
 
 **Pros:** Zero downtime, gradual rollout
-**Cons:** Two versions run simultaneously — requires backward-compatible changes
+**Cons:** Two versions run simultaneously: requires backward-compatible changes
 **Use when:** Standard deployments, backward-compatible changes
 
 ### Blue-Green Deployment
@@ -337,7 +337,7 @@ startupProbe:
 ### Twelve-Factor App Pattern
 
 ```bash
-# All config via environment variables — never in code
+# All config via environment variables: never in code
 DATABASE_URL=postgres://user:pass@host:5432/db
 REDIS_URL=redis://host:6379/0
 API_KEY=${API_KEY}           # injected by secrets manager
@@ -363,7 +363,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 
-// Validate at startup — fail fast if config is wrong
+// Validate at startup: fail fast if config is wrong
 export const env = envSchema.parse(process.env);
 ```
 

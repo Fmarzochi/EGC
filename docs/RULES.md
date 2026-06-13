@@ -1,6 +1,6 @@
 # EGC Governance Rules
 
-These rules govern contributions to **Extended Global Context (EGC)** — a local-first MCP runtime with persistent memory, shared context, and plug-and-play integration for AI coding tools.
+These rules govern contributions to **Extended Global Context (EGC)**: a local-first MCP runtime with persistent memory, shared context, and plug-and-play integration for AI coding tools.
 
 > **EGC - Extended Global Context**  
 > **Desenvolvido por Felipe Marzochi**  
@@ -18,7 +18,7 @@ These rules govern contributions to **Extended Global Context (EGC)** — a loca
 
 ## 2. Runtime Integrity
 
-- **MCP servers are the core:** Changes to `mcp/servers/egc-guardian/` or `mcp/servers/egc-memory/` require higher validation standards — both servers must build and pass tests before merging.
+- **MCP servers are the core:** Changes to `mcp/servers/egc-guardian/` or `mcp/servers/egc-memory/` require higher validation standards: both servers must build and pass tests before merging.
 - **State schema:** Do not break the egc-memory state file format (`~/.egc/state/<slug>.md`). Existing state files must remain readable after any change.
 - **No Silent Failures:** Never swallow exceptions silently. Always preserve error observability so failures are traceable.
 
@@ -26,7 +26,7 @@ These rules govern contributions to **Extended Global Context (EGC)** — a loca
 
 - EGC must work across **Linux**, **Windows**, and **macOS**.
 - **No OS Assumptions:** Never hardcode absolute system paths. Use dynamic path resolution.
-- **Shell Compatibility:** Scripts and hooks must not rely on shell features exclusive to one OS. The CI matrix covers all three platforms — all jobs must pass.
+- **Shell Compatibility:** Scripts and hooks must not rely on shell features exclusive to one OS. The CI matrix covers all three platforms: all jobs must pass.
 
 ## 4. Cognitive Ecosystem Format
 

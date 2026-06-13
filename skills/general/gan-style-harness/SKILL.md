@@ -13,7 +13,7 @@ A multi-agent harness that separates **generation** from **evaluation**, creatin
 
 ## Core Insight
 
-> When asked to evaluate their own work, agents are pathological optimists — they praise mediocre output and talk themselves out of legitimate issues. But engineering a **separate evaluator** to be ruthlessly strict is far more tractable than teaching a generator to self-critique.
+> When asked to evaluate their own work, agents are pathological optimists: they praise mediocre output and talk themselves out of legitimate issues. But engineering a **separate evaluator** to be ruthlessly strict is far more tractable than teaching a generator to self-critique.
 
 This is the same dynamic as GANs (Generative Adversarial Networks): the Generator produces, the Evaluator critiques, and that feedback drives the next iteration.
 
@@ -68,19 +68,19 @@ This is the same dynamic as GANs (Generative Adversarial Networks): the Generato
 
 ### 1. Planner Agent
 
-**Role:** Product manager — expands a brief prompt into a full product specification.
+**Role:** Product manager: expands a brief prompt into a full product specification.
 
 **Key behaviors:**
 - Takes a one-line prompt and produces a 16-feature, multi-sprint specification
 - Defines user stories, technical requirements, and visual design direction
-- Is deliberately **ambitious** — conservative planning leads to underwhelming results
+- Is deliberately **ambitious**: conservative planning leads to underwhelming results
 - Produces evaluation criteria that the Evaluator will use later
 
 **Model:** Opus 4.6 (needs deep reasoning for spec expansion)
 
 ### 2. Generator Agent
 
-**Role:** Developer — implements features according to the spec.
+**Role:** Developer: implements features according to the spec.
 
 **Key behaviors:**
 - Works in structured sprints (or continuous mode with newer models)
@@ -93,18 +93,18 @@ This is the same dynamic as GANs (Generative Adversarial Networks): the Generato
 
 ### 3. Evaluator Agent
 
-**Role:** QA engineer — tests the live running application, not just code.
+**Role:** QA engineer: tests the live running application, not just code.
 
 **Key behaviors:**
 - Uses **Playwright MCP** to interact with the live application
 - Clicks through features, fills forms, tests API endpoints
 - Scores against four criteria (configurable):
-  1. **Design Quality** — Does it feel like a coherent whole?
-  2. **Originality** — Custom decisions vs. template/AI patterns?
-  3. **Craft** — Typography, spacing, animations, micro-interactions?
-  4. **Functionality** — Do all features actually work?
+  1. **Design Quality**: Does it feel like a coherent whole?
+  2. **Originality**: Custom decisions vs. template/AI patterns?
+  3. **Craft**: Typography, spacing, animations, micro-interactions?
+  4. **Functionality**: Do all features actually work?
 - Returns structured feedback with scores and specific issues
-- Is engineered to be **ruthlessly strict** — never praises mediocre work
+- Is engineered to be **ruthlessly strict**: never praises mediocre work
 
 **Model:** Opus 4.6 (needs strong judgment + tool use)
 
@@ -186,7 +186,7 @@ egc -p --model gemini-2.5-pro "You are a Generator. Read spec.md. Implement Spri
 # Step 3: Evaluate (iteration 1)
 egc -p --model gemini-2.5-pro --allowedTools "Read,Bash,mcp__playwright__*" "You are an Evaluator. Read EVALUATOR_PROMPT.md. Test the live app at http://localhost:3000. Score against the rubric. Write feedback to feedback-001.md"
 
-# Step 4: Generate (iteration 2 — reads feedback)
+# Step 4: Generate (iteration 2: reads feedback)
 egc -p --model gemini-2.5-pro "You are a Generator. Read spec.md and feedback-001.md. Address all issues. Improve the scores."
 
 # Repeat steps 3-4 until pass threshold met
@@ -196,19 +196,19 @@ egc -p --model gemini-2.5-pro "You are a Generator. Read spec.md and feedback-00
 
 The harness should simplify as models improve. Following Anthropic's evolution:
 
-### Stage 1 — Weaker Models (Sonnet-class)
+### Stage 1: Weaker Models (Sonnet-class)
 - Full sprint decomposition required
 - Context resets between sprints (avoid context anxiety)
 - 2-agent minimum: Initializer + Coding Agent
 - Heavy scaffolding compensates for model limitations
 
-### Stage 2 — Capable Models (Opus 4.5-class)
+### Stage 2: Capable Models (Opus 4.5-class)
 - Full 3-agent harness: Planner + Generator + Evaluator
 - Sprint contracts before each implementation phase
 - 10-sprint decomposition for complex apps
 - Context resets still useful but less critical
 
-### Stage 3 — Frontier Models (Opus 4.6-class)
+### Stage 3: Frontier Models (Opus 4.6-class)
 - Simplified harness: single planning pass, continuous generation
 - Evaluation reduced to single end-pass (model is smarter)
 - No sprint structure needed
@@ -244,17 +244,17 @@ The harness should simplify as models improve. Following Anthropic's evolution:
 
 ## Anti-Patterns
 
-1. **Evaluator too lenient** — If the evaluator passes everything on iteration 1, your rubric is too generous. Tighten scoring criteria and add explicit penalties for common AI patterns.
+1. **Evaluator too lenient**: If the evaluator passes everything on iteration 1, your rubric is too generous. Tighten scoring criteria and add explicit penalties for common AI patterns.
 
-2. **Generator ignoring feedback** — Ensure feedback is passed as a file, not inline. The generator should read `feedback-NNN.md` at the start of each iteration.
+2. **Generator ignoring feedback**: Ensure feedback is passed as a file, not inline. The generator should read `feedback-NNN.md` at the start of each iteration.
 
-3. **Infinite loops** — Always set `GAN_MAX_ITERATIONS`. If the generator can't improve past a score plateau after 3 iterations, stop and flag for human review.
+3. **Infinite loops**: Always set `GAN_MAX_ITERATIONS`. If the generator can't improve past a score plateau after 3 iterations, stop and flag for human review.
 
-4. **Evaluator testing superficially** — The evaluator must use Playwright to **interact** with the live app, not just screenshot it. Click buttons, fill forms, test error states.
+4. **Evaluator testing superficially**: The evaluator must use Playwright to **interact** with the live app, not just screenshot it. Click buttons, fill forms, test error states.
 
-5. **Evaluator praising its own fixes** — Never let the evaluator suggest fixes and then evaluate those fixes. The evaluator only critiques; the generator fixes.
+5. **Evaluator praising its own fixes**: Never let the evaluator suggest fixes and then evaluate those fixes. The evaluator only critiques; the generator fixes.
 
-6. **Context exhaustion** — For long sessions, use Gemini Agent SDK's automatic compaction or reset context between major phases.
+6. **Context exhaustion**: For long sessions, use Gemini Agent SDK's automatic compaction or reset context between major phases.
 
 ## Results: What to Expect
 
@@ -272,7 +272,7 @@ Based on Anthropic's published results:
 
 ## References
 
-- [Anthropic: Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — Original paper by Prithvi Rajasekaran
-- [Epsilla: The GAN-Style Agent Loop](https://www.epsilla.com/blogs/anthropic-harness-engineering-multi-agent-gan-architecture) — Architecture deconstruction
-- [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html) — Broader industry context
-- [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/) — OpenAI's parallel work
+- [Anthropic: Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps): Original paper by Prithvi Rajasekaran
+- [Epsilla: The GAN-Style Agent Loop](https://www.epsilla.com/blogs/anthropic-harness-engineering-multi-agent-gan-architecture): Architecture deconstruction
+- [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html): Broader industry context
+- [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/): OpenAI's parallel work

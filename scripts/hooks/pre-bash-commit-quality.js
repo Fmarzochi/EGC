@@ -348,7 +348,7 @@ function runLinter(files) {
 }
 
 /**
- * Core logic — exported for direct invocation
+ * Core logic: exported for direct invocation
  * @param {string} rawInput - Raw JSON string from stdin
  * @returns {{output:string, exitCode:number}} Pass-through output and exit code
  */

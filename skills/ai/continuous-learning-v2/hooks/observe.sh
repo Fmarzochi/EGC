@@ -4,7 +4,7 @@
 # Captures tool use events for pattern analysis.
 # Gemini Code passes hook data via stdin as JSON.
 #
-# v2.1: Project-scoped observations — detects current project context
+# v2.1: Project-scoped observations: detects current project context
 #       and writes observations to project-specific directory.
 #
 # Registered via plugin hooks/hooks.json (auto-loaded when plugin is enabled).

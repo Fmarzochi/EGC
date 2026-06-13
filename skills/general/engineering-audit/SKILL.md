@@ -27,9 +27,9 @@ Number of linearly independent paths through a function. Measured by ESLint `com
 | CC | Meaning |
 |---|---|
 | 1–5 | Simple, testable |
-| 6–10 | Moderate — acceptable |
-| 11–20 | Complex — refactor soon |
-| 21–50 | Very complex — high risk |
+| 6–10 | Moderate: acceptable |
+| 11–20 | Complex: refactor soon |
+| 21–50 | Very complex: high risk |
 | > 50 | Unmaintainable |
 
 ### Cognitive Complexity
@@ -293,7 +293,7 @@ class OrderService {
 Reports are saved at `.egc/audits/engineering-audit-<YYYY-MM-DD>.md`.
 
 ```markdown
-# Engineering Audit — <project> — <date>
+# Engineering Audit: <project>: <date>
 
 ## Engineering Score: X.X / 10
 
@@ -306,14 +306,14 @@ Reports are saved at `.egc/audits/engineering-audit-<YYYY-MM-DD>.md`.
 ## Findings
 
 ### CRITICAL (N)
-- [file:line] description — technique
+- [file:line] description: technique
 
 ### HIGH (N)
 ...
 
 ## Remediation Plan
 
-### 1. [file] — Extract Method
+### 1. [file]: Extract Method
 Root cause: ...
 Impact: ...
 Steps: ...
@@ -342,7 +342,7 @@ Every audit run appends to `.egc/audits/audit-log.jsonl`:
 
 ## Related Skills
 
-- `security-review` — deep security analysis
-- `coding-standards` — language-specific quality standards
-- `tdd-workflow` — test coverage improvement
-- `plankton-code-quality` — additional quality patterns
+- `security-review`: deep security analysis
+- `coding-standards`: language-specific quality standards
+- `tdd-workflow`: test coverage improvement
+- `plankton-code-quality`: additional quality patterns

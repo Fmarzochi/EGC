@@ -145,7 +145,7 @@ if (test('still blocks bypass flags in later chained git commands', () => {
 // --- Subcommand detection (Comment 4) ---
 
 if (test('does not misclassify "commit" as subcommand when it is an argument to push', () => {
-  // "git push origin commit" — "commit" is a refspec arg, not the subcommand
+  // "git push origin commit": "commit" is a refspec arg, not the subcommand
   const r = runHook({ tool_input: { command: 'git push origin commit' } });
   // This should detect "push" as the subcommand, not "commit"
   // Either way it should not block since there's no --no-verify

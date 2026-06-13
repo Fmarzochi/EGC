@@ -18,11 +18,11 @@ Consistent, robust error handling patterns for production applications.
 
 ## Core Principles
 
-1. **Fail fast and loudly** — surface errors at the boundary where they occur; don't bury them
-2. **Typed errors over string messages** — errors are first-class values with structure
-3. **User messages ≠ developer messages** — show friendly text to users, log full context server-side
-4. **Never swallow errors silently** — every `catch` block must either handle, re-throw, or log
-5. **Errors are part of your API contract** — document every error code a client may receive
+1. **Fail fast and loudly**: surface errors at the boundary where they occur; don't bury them
+2. **Typed errors over string messages**: errors are first-class values with structure
+3. **User messages ≠ developer messages**: show friendly text to users, log full context server-side
+4. **Never swallow errors silently**: every `catch` block must either handle, re-throw, or log
+5. **Errors are part of your API contract**: document every error code a client may receive
 
 ## TypeScript / JavaScript
 
@@ -146,7 +146,7 @@ function handleApiError(error: unknown): NextResponse {
     )
   }
 
-  // Unexpected error — log details, return generic message
+  // Unexpected error: log details, return generic message
   console.error('Unexpected error:', error)
   return NextResponse.json(
     { error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } },
@@ -266,7 +266,7 @@ var (
     ErrConflict     = errors.New("conflict")
 )
 
-// Wrap errors with context — never lose the original
+// Wrap errors with context: never lose the original
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*User, error) {
     user, err := r.db.QueryRow(ctx, "SELECT * FROM users WHERE id = $1", id)
     if errors.Is(err, sql.ErrNoRows) {
@@ -366,11 +366,11 @@ export function getUserMessage(code: string): string {
 
 Before merging any code that touches error handling:
 
-- [ ] Every `catch` block handles, re-throws, or logs — no silent swallowing
+- [ ] Every `catch` block handles, re-throws, or logs: no silent swallowing
 - [ ] API errors follow the standard envelope `{ error: { code, message } }`
 - [ ] User-facing messages contain no stack traces or internal details
 - [ ] Full error context is logged server-side
 - [ ] Custom error classes extend a base `AppError` with a `code` field
-- [ ] Async functions surface errors to callers — no fire-and-forget without fallback
+- [ ] Async functions surface errors to callers: no fire-and-forget without fallback
 - [ ] Retry logic only retries retriable errors (not 4xx client errors)
 - [ ] React components are wrapped in `ErrorBoundary` for rendering errors

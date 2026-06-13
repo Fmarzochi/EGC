@@ -18,18 +18,18 @@ paths:
 // BAD
 val apiKey = "sk-abc123..."
 
-// GOOD — from BuildConfig (generated at build time)
+// GOOD: from BuildConfig (generated at build time)
 val apiKey = BuildConfig.API_KEY
 
-// GOOD — from secure storage at runtime
+// GOOD: from secure storage at runtime
 val token = secureStorage.get("auth_token")
 ```
 
 ## Network Security
 
-- Use HTTPS exclusively — configure `network_security_config.xml` to block cleartext
+- Use HTTPS exclusively: configure `network_security_config.xml` to block cleartext
 - Pin certificates for sensitive endpoints using OkHttp `CertificatePinner` or Ktor equivalent
-- Set timeouts on all HTTP clients — never leave defaults (which may be infinite)
+- Set timeouts on all HTTP clients: never leave defaults (which may be infinite)
 - Validate and sanitize all server responses before use
 
 ```xml
@@ -42,14 +42,14 @@ val token = secureStorage.get("auth_token")
 ## Input Validation
 
 - Validate all user input before processing or sending to API
-- Use parameterized queries for Room/SQLDelight — never concatenate user input into SQL
+- Use parameterized queries for Room/SQLDelight: never concatenate user input into SQL
 - Sanitize file paths from user input to prevent path traversal
 
 ```kotlin
-// BAD — SQL injection
+// BAD: SQL injection
 @Query("SELECT * FROM items WHERE name = '$input'")
 
-// GOOD — parameterized
+// GOOD: parameterized
 @Query("SELECT * FROM items WHERE name = :input")
 fun findByName(input: String): List<ItemEntity>
 ```
@@ -57,7 +57,7 @@ fun findByName(input: String): List<ItemEntity>
 ## Data Protection
 
 - Use `EncryptedSharedPreferences` for sensitive key-value data on Android
-- Use `@Serializable` with explicit field names — don't leak internal property names
+- Use `@Serializable` with explicit field names: don't leak internal property names
 - Clear sensitive data from memory when no longer needed
 - Use `@Keep` or ProGuard rules for serialized classes to prevent name mangling
 
@@ -72,7 +72,7 @@ fun findByName(input: String): List<ItemEntity>
 
 - Keep rules for all serialized models (`@Serializable`, Gson, Moshi)
 - Keep rules for reflection-based libraries (Koin, Retrofit)
-- Test release builds — obfuscation can break serialization silently
+- Test release builds: obfuscation can break serialization silently
 
 ## WebView Security
 

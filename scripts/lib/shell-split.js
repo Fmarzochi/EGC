@@ -69,7 +69,7 @@ function splitShellSegments(command) {
       continue;
     }
 
-    // Single & — but skip redirection patterns (&>, >&, digit>&)
+    // Single &: but skip redirection patterns (&>, >&, digit>&)
     if (ch === '&' && next !== '&') {
       if (next === '>' || prev === '>') {
         current += ch;

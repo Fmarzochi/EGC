@@ -77,10 +77,10 @@ output = generate(task_spec)
 
 Spawn two review agents in parallel. Critical invariants:
 
-1. **Context isolation** — neither reviewer sees the other's assessment
-2. **Identical rubric** — both receive the same evaluation criteria
-3. **Same inputs** — both receive the original spec AND the generated output
-4. **Structured output** — each returns a typed verdict, not prose
+1. **Context isolation**: neither reviewer sees the other's assessment
+2. **Identical rubric**: both receive the same evaluation criteria
+3. **Same inputs**: both receive the original spec AND the generated output
+4. **Structured output**: each returns a typed verdict, not prose
 
 ```python
 REVIEWER_PROMPT = """
@@ -119,7 +119,7 @@ Be rigorous. Your job is to find problems, not to approve.
 review_b = Agent(prompt=REVIEWER_PROMPT.format(...), description="Santa Reviewer B")
 review_c = Agent(prompt=REVIEWER_PROMPT.format(...), description="Santa Reviewer C")
 
-# Both run concurrently — neither sees the other
+# Both run concurrently: neither sees the other
 ```
 
 ### Rubric Design
@@ -195,7 +195,7 @@ for iteration in range(MAX_ITERATIONS):
     review_b = Agent(prompt=REVIEWER_PROMPT.format(output=output, ...))
     review_c = Agent(prompt=REVIEWER_PROMPT.format(output=output, ...))
 
-# Exhausted iterations — escalate
+# Exhausted iterations: escalate
 log_santa_result(output, MAX_ITERATIONS, "escalated")
 escalate_to_human(output, issues)
 ```
@@ -236,7 +236,7 @@ When subagents aren't available, simulate isolation with explicit context resets
 5. New context: "You are Reviewer 2. Evaluate ONLY against this rubric. Find problems."
 6. Compare both reviews, fix, repeat
 
-The subagent pattern is strictly superior — inline simulation risks context bleed between reviewers.
+The subagent pattern is strictly superior: inline simulation risks context bleed between reviewers.
 
 ### Pattern C: Batch Sampling
 

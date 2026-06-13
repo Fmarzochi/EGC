@@ -47,7 +47,7 @@ Rules:
 - All 3 scenarios should test the SAME task (so results are comparable)
 - The task must be simple enough to complete in <30 tool calls
 - setup_commands should create a minimal sandbox (dirs, pyproject.toml, etc.)
-- Prompts should be realistic — something a developer would actually ask
+- Prompts should be realistic: something a developer would actually ask
 
 Skill content:
 

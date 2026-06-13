@@ -171,7 +171,7 @@ if (test('stop hook removes accumulator file after reading it', () => {
       timeout: 10000
     });
   } catch {
-    // tsc/formatter may fail for the nonexistent file — that's OK
+    // tsc/formatter may fail for the nonexistent file: that's OK
   }
 
   assert.ok(!fs.existsSync(getAccumFile()), 'accumulator file should be deleted by stop hook');

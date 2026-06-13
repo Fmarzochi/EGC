@@ -357,9 +357,9 @@ How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 EGC selects dependencies based on:
 
-1. **Necessity** — a dependency is only added if it provides functionality that cannot reasonably be implemented in-project without significant maintenance cost
-2. **License compatibility** — must be MIT, ISC, BSD, Apache-2.0, or equivalent permissive license
-3. **Maintenance status** — preferred packages must have active maintenance and a responsive security process
+1. **Necessity**: a dependency is only added if it provides functionality that cannot reasonably be implemented in-project without significant maintenance cost
+2. **License compatibility**: must be MIT, ISC, BSD, Apache-2.0, or equivalent permissive license
+3. **Maintenance status**: preferred packages must have active maintenance and a responsive security process
 
 ### Obtaining Dependencies
 

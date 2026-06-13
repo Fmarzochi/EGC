@@ -6,12 +6,12 @@ origin: EGC
 
 # AI Regression Testing
 
-Testing patterns specifically designed for AI-assisted development, where the same model writes code and reviews it — creating systematic blind spots that only automated tests can catch.
+Testing patterns specifically designed for AI-assisted development, where the same model writes code and reviews it: creating systematic blind spots that only automated tests can catch.
 
 ## When to Activate
 
 - AI agent (Gemini Code, Cursor, Codex) has modified API routes or backend logic
-- A bug was found and fixed — need to prevent re-introduction
+- A bug was found and fixed: need to prevent re-introduction
 - Project has a sandbox/mock mode that can be leveraged for DB-free testing
 - Running `/bug-check` or similar review commands after code changes
 - Multiple code paths exist (sandbox vs production, feature flags, etc.)
@@ -72,7 +72,7 @@ export default defineConfig({
 
 ```typescript
 // __tests__/setup.ts
-// Force sandbox mode — no database needed
+// Force sandbox mode: no database needed
 process.env.SANDBOX_MODE = "true";
 process.env.NEXT_PUBLIC_SUPABASE_URL = "";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "";
@@ -130,7 +130,7 @@ import { describe, it, expect } from "vitest";
 import { createTestRequest, parseResponse } from "../../helpers";
 import { GET, PATCH } from "@/app/api/user/profile/route";
 
-// Define the contract — what fields MUST be in the response
+// Define the contract: what fields MUST be in the response
 const REQUIRED_FIELDS = [
   "id",
   "email",
@@ -154,7 +154,7 @@ describe("GET /api/user/profile", () => {
     }
   });
 
-  // Regression test — this exact bug was introduced by AI 4 times
+  // Regression test: this exact bug was introduced by AI 4 times
   it("notification_settings is not undefined (BUG-R1 regression)", async () => {
     const req = createTestRequest("/api/user/profile");
     const res = await GET(req);
@@ -300,7 +300,7 @@ const { data } = await supabase
 
 ### Pattern 3: Error State Leakage
 
-**Frequency**: Moderate — when adding error handling to existing components
+**Frequency**: Moderate: when adding error handling to existing components
 
 ```typescript
 // FAIL: Error state set but old data not cleared
@@ -356,7 +356,7 @@ No bug in /api/user/notifications  → Don't write test (yet)
 1. AI tends to make the **same category of mistake** repeatedly
 2. Bugs cluster in complex areas (auth, multi-path logic, state management)
 3. Once tested, that exact regression **cannot happen again**
-4. Test count grows organically with bug fixes — no wasted effort
+4. Test count grows organically with bug fixes: no wasted effort
 
 ## Quick Reference
 
@@ -382,4 +382,4 @@ No bug in /api/user/notifications  → Don't write test (yet)
 - Trust AI self-review as a substitute for automated tests
 - Skip sandbox path testing because "it's just mock data"
 - Write integration tests when unit tests suffice
-- Aim for coverage percentage — aim for regression prevention
+- Aim for coverage percentage: aim for regression prevention

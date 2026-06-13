@@ -76,7 +76,7 @@ function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|
 
 const server = new Server({ name: "egc-guardian-router", version: "3.0.0" }, { capabilities: { tools: {} } });
 
-// Validation logic lives in validator.ts — imported above
+// Validation logic lives in validator.ts: imported above
 
 const ValidateCommandSchema = z.object({
   command: z.string().min(1)

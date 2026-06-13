@@ -11,7 +11,7 @@ const { assertValidEntity, validateEntity } = require('./schema');
 const DEFAULT_STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
 
 // Try to load better-sqlite3. On Windows without Build Tools the native
-// module may not compile — in that case we fall back to a null/amnesiac
+// module may not compile: in that case we fall back to a null/amnesiac
 // store so the installer and CLI degrade gracefully instead of crashing.
 let Database = null;
 let _nativeUnavailable = false;

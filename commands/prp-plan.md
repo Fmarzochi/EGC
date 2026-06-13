@@ -9,13 +9,13 @@ argument-hint: <feature description | path/to/prd.md>
 
 Create a detailed, self-contained implementation plan that captures all codebase patterns, conventions, and context needed to implement a feature in a single pass.
 
-**Core Philosophy**: A great plan contains everything needed to implement without asking further questions. Every pattern, every convention, every gotcha — captured once, referenced throughout.
+**Core Philosophy**: A great plan contains everything needed to implement without asking further questions. Every pattern, every convention, every gotcha: captured once, referenced throughout.
 
 **Golden Rule**: If you would need to search the codebase during implementation, capture that knowledge NOW in the plan.
 
 ---
 
-## Phase 0 — DETECT
+## Phase 0: DETECT
 
 Determine input type from `$ARGUMENTS`:
 
@@ -46,7 +46,7 @@ If no pending phases remain, report that all phases are complete.
 
 ---
 
-## Phase 1 — PARSE
+## Phase 1: PARSE
 
 Extract and clarify the feature requirements.
 
@@ -90,7 +90,7 @@ Do NOT guess. Ask. A plan built on assumptions fails during implementation.
 
 ---
 
-## Phase 2 — EXPLORE
+## Phase 2: EXPLORE
 
 Gather deep codebase intelligence. Search the codebase directly for each category below.
 
@@ -98,31 +98,31 @@ Gather deep codebase intelligence. Search the codebase directly for each categor
 
 For each category, search using grep, find, and file reading:
 
-1. **Similar Implementations** — Find existing features that resemble the planned one. Look for analogous patterns, endpoints, components, or modules.
+1. **Similar Implementations**: Find existing features that resemble the planned one. Look for analogous patterns, endpoints, components, or modules.
 
-2. **Naming Conventions** — Identify how files, functions, variables, classes, and exports are named in the relevant area of the codebase.
+2. **Naming Conventions**: Identify how files, functions, variables, classes, and exports are named in the relevant area of the codebase.
 
-3. **Error Handling** — Find how errors are caught, propagated, logged, and returned to users in similar code paths.
+3. **Error Handling**: Find how errors are caught, propagated, logged, and returned to users in similar code paths.
 
-4. **Logging Patterns** — Identify what gets logged, at what level, and in what format.
+4. **Logging Patterns**: Identify what gets logged, at what level, and in what format.
 
-5. **Type Definitions** — Find relevant types, interfaces, schemas, and how they're organized.
+5. **Type Definitions**: Find relevant types, interfaces, schemas, and how they're organized.
 
-6. **Test Patterns** — Find how similar features are tested. Note test file locations, naming, setup/teardown patterns, and assertion styles.
+6. **Test Patterns**: Find how similar features are tested. Note test file locations, naming, setup/teardown patterns, and assertion styles.
 
-7. **Configuration** — Find relevant config files, environment variables, and feature flags.
+7. **Configuration**: Find relevant config files, environment variables, and feature flags.
 
-8. **Dependencies** — Identify packages, imports, and internal modules used by similar features.
+8. **Dependencies**: Identify packages, imports, and internal modules used by similar features.
 
 ### Codebase Analysis (5 Traces)
 
 Read relevant files to trace:
 
-1. **Entry Points** — How does a request/action enter the system and reach the area you're modifying?
-2. **Data Flow** — How does data move through the relevant code paths?
-3. **State Changes** — What state is modified and where?
-4. **Contracts** — What interfaces, APIs, or protocols must be honored?
-5. **Patterns** — What architectural patterns are used (repository, service, controller, etc.)?
+1. **Entry Points**: How does a request/action enter the system and reach the area you're modifying?
+2. **Data Flow**: How does data move through the relevant code paths?
+3. **State Changes**: What state is modified and where?
+4. **Contracts**: What interfaces, APIs, or protocols must be honored?
+5. **Patterns**: What architectural patterns are used (repository, service, controller, etc.)?
 
 ### Unified Discovery Table
 
@@ -136,7 +136,7 @@ Compile findings into a single reference:
 
 ---
 
-## Phase 3 — RESEARCH
+## Phase 3: RESEARCH
 
 If the feature involves external libraries, APIs, or unfamiliar technology:
 
@@ -152,11 +152,11 @@ APPLIES_TO: [which part of the plan this affects]
 GOTCHA: [any warnings or version-specific issues]
 ```
 
-If the feature uses only well-understood internal patterns, skip this phase and note: "No external research needed — feature uses established internal patterns."
+If the feature uses only well-understood internal patterns, skip this phase and note: "No external research needed: feature uses established internal patterns."
 
 ---
 
-## Phase 4 — DESIGN
+## Phase 4: DESIGN
 
 ### UX Transformation (if applicable)
 
@@ -186,11 +186,11 @@ Document the before/after user experience:
 |---|---|---|---|
 | ... | ... | ... | ... |
 
-If the feature is purely backend/internal with no UX change, note: "Internal change — no user-facing UX transformation."
+If the feature is purely backend/internal with no UX change, note: "Internal change: no user-facing UX transformation."
 
 ---
 
-## Phase 5 — ARCHITECT
+## Phase 5: ARCHITECT
 
 ### Strategic Design
 
@@ -203,7 +203,7 @@ Define the implementation approach:
 
 ---
 
-## Phase 6 — GENERATE
+## Phase 6: GENERATE
 
 Write the full plan document using the template below. Save to `.gemini/PRPs/plans/{kebab-case-feature-name}.plan.md`.
 
@@ -237,10 +237,10 @@ As a [user], I want [capability], so that [benefit].
 ## UX Design
 
 ### Before
-[ASCII diagram or "N/A — internal change"]
+[ASCII diagram or "N/A: internal change"]
 
 ### After
-[ASCII diagram or "N/A — internal change"]
+[ASCII diagram or "N/A: internal change"]
 
 ### Interaction Changes
 | Touchpoint | Before | After | Notes |
@@ -408,7 +408,7 @@ EXPECT: Feature works as designed
 - [ ] No hardcoded values
 - [ ] Documentation updated (if needed)
 - [ ] No unnecessary scope additions
-- [ ] Self-contained — no questions needed during implementation
+- [ ] Self-contained: no questions needed during implementation
 
 ## Risks
 | Risk | Likelihood | Impact | Mitigation |
@@ -449,7 +449,7 @@ If this plan was generated from a PRD phase:
 - **Key Patterns**: [top 3 discovered patterns]
 - **External Research**: [topics researched or "none needed"]
 - **Risks**: [top risk or "none identified"]
-- **Confidence Score**: [1-10] — likelihood of single-pass implementation
+- **Confidence Score**: [1-10]: likelihood of single-pass implementation
 
 > Next step: Run `/prp-implement .gemini/PRPs/plans/{name}.plan.md` to execute this plan.
 ```

@@ -1,4 +1,4 @@
-# Go Microservice — Project GEMINI.md
+# Go Microservice: Project GEMINI.md
 
 > Real-world example for a Go microservice with PostgreSQL, gRPC, and Docker.
 > Copy this to your project root and customize for your service.
@@ -14,33 +14,33 @@
 ### Go Conventions
 
 - Follow Effective Go and the Go Code Review Comments guide
-- Use `errors.New` / `fmt.Errorf` with `%w` for wrapping — never string matching on errors
-- No `init()` functions — explicit initialization in `main()` or constructors
-- No global mutable state — pass dependencies via constructors
+- Use `errors.New` / `fmt.Errorf` with `%w` for wrapping: never string matching on errors
+- No `init()` functions: explicit initialization in `main()` or constructors
+- No global mutable state: pass dependencies via constructors
 - Context must be the first parameter and propagated through all layers
 
 ### Database
 
-- All queries in `queries/` as plain SQL — sqlc generates type-safe Go code
-- Migrations in `migrations/` using golang-migrate — never alter the database directly
+- All queries in `queries/` as plain SQL: sqlc generates type-safe Go code
+- Migrations in `migrations/` using golang-migrate: never alter the database directly
 - Use transactions for multi-step operations via `pgx.Tx`
-- All queries must use parameterized placeholders (`$1`, `$2`) — never string formatting
+- All queries must use parameterized placeholders (`$1`, `$2`): never string formatting
 
 ### Error Handling
 
-- Return errors, don't panic — panics are only for truly unrecoverable situations
+- Return errors, don't panic: panics are only for truly unrecoverable situations
 - Wrap errors with context: `fmt.Errorf("creating user: %w", err)`
 - Define sentinel errors in `domain/errors.go` for business logic
 - Map domain errors to gRPC status codes in the handler layer
 
 ```go
-// Domain layer — sentinel errors
+// Domain layer: sentinel errors
 var (
     ErrUserNotFound  = errors.New("user not found")
     ErrEmailTaken    = errors.New("email already registered")
 )
 
-// Handler layer — map to gRPC status
+// Handler layer: map to gRPC status
 func toGRPCError(err error) error {
     switch {
     case errors.Is(err, domain.ErrUserNotFound):
@@ -57,7 +57,7 @@ func toGRPCError(err error) error {
 
 - No emojis in code or comments
 - Exported types and functions must have doc comments
-- Keep functions under 50 lines — extract helpers
+- Keep functions under 50 lines: extract helpers
 - Use table-driven tests for all logic with multiple cases
 - Prefer `struct{}` for signal channels, not `bool`
 

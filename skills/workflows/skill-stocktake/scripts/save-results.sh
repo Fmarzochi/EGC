@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# save-results.sh — merge evaluated skills into results.json with correct UTC timestamp
+# save-results.sh: merge evaluated skills into results.json with correct UTC timestamp
 # Usage: save-results.sh RESULTS_JSON <<< "$EVAL_JSON"
 #
 # stdin format:

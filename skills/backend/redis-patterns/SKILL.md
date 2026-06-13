@@ -71,7 +71,7 @@ def update_product(product_id: int, data: dict):
 ### Cache Invalidation
 
 ```python
-# Tag-based invalidation — group related keys under a set
+# Tag-based invalidation: group related keys under a set
 def cache_product(product_id: int, category_id: int, data: dict):
     key = f"product:{product_id}"
     tag = f"tag:category:{category_id}"
@@ -129,7 +129,7 @@ def is_rate_limited(user_id: int, limit: int = 100, window: int = 60) -> bool:
     return count > limit
 ```
 
-### Sliding Window (Lua — Atomic)
+### Sliding Window (Lua: Atomic)
 
 ```lua
 -- sliding_window.lua
@@ -164,7 +164,7 @@ def allow_request(user_id: int) -> bool:
 
 ## Distributed Locks
 
-### Distributed Lock (Single Node — SET NX PX)
+### Distributed Lock (Single Node: SET NX PX)
 
 ```python
 import uuid
@@ -206,7 +206,7 @@ if token:
 def publish_event(channel: str, payload: dict):
     r.publish(channel, json.dumps(payload))
 
-# Subscriber (blocking — run in separate thread/process)
+# Subscriber (blocking: run in separate thread/process)
 def subscribe_events(channel: str):
     pubsub = r.pubsub()
     pubsub.subscribe(channel)
@@ -222,7 +222,7 @@ def subscribe_events(channel: str):
 def emit(stream: str, event: dict):
     r.xadd(stream, event, maxlen=10000)  # Cap stream length
 
-# Consumer group — guarantees at-least-once delivery
+# Consumer group: guarantees at-least-once delivery
 try:
     r.xgroup_create('events:orders', 'processor', id='0', mkstream=True)
 except Exception:
@@ -396,8 +396,8 @@ Use Pub/Sub for fire-and-forget. Switch to Streams if you need guaranteed delive
 
 ## Related
 
-- Skill: `postgres-patterns` — relational data patterns
-- Skill: `backend-patterns` — API and service layer patterns
-- Skill: `database-migrations` — schema versioning
-- Skill: `django-patterns` — Django cache framework integration
-- Agent: `database-reviewer` — full database review workflow
+- Skill: `postgres-patterns`: relational data patterns
+- Skill: `backend-patterns`: API and service layer patterns
+- Skill: `database-migrations`: schema versioning
+- Skill: `django-patterns`: Django cache framework integration
+- Agent: `database-reviewer`: full database review workflow

@@ -59,7 +59,7 @@ function run(rawInput) {
       for (const edit of edits) appendPath(edit?.file_path);
     }
   } catch {
-    // Invalid input — pass through
+    // Invalid input: pass through
   }
   return rawInput;
 }

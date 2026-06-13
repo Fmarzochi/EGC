@@ -31,7 +31,7 @@ Targets (legacy language install):
   cursor      - Install into ./.cursor/
   antigravity - Install into ./.agents/
 
-Targets (profile / modules install — all supported targets):
+Targets (profile / modules install: all supported targets):
   ${SUPPORTED_INSTALL_TARGETS.join(', ')}
 
 Options:

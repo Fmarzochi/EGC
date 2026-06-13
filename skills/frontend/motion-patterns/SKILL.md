@@ -1,6 +1,6 @@
 ---
 name: motion-patterns
-description: Production-ready animation patterns for React / Next.js — button, modal, toast, stagger, page transitions, exit animations, scroll, and layout — built on motion-foundations tokens and springs.
+description: Production-ready animation patterns for React / Next.js: button, modal, toast, stagger, page transitions, exit animations, scroll, and layout: built on motion-foundations tokens and springs.
 version: 1.0
 tags: [motion, animation, ui-patterns]
 category: frontend
@@ -11,7 +11,7 @@ author: jeff
 
 Copy-paste patterns for the most common UI animation needs.
 Every pattern here is built on `motion-foundations` tokens and springs.
-Do not define new duration or easing values here — import them.
+Do not define new duration or easing values here: import them.
 
 ## When to Activate
 
@@ -36,7 +36,7 @@ This skill produces:
 
 - Every pattern imports from `motion-foundations`. No raw numbers.
 - Every conditional render is wrapped in `AnimatePresence` with a `key`.
-- Exit animations are always defined alongside enter animations — never as an afterthought.
+- Exit animations are always defined alongside enter animations: never as an afterthought.
 - `layout` is used only for small, isolated shifts. Large subtrees get explicit transforms.
 
 ## Rules
@@ -86,8 +86,8 @@ Miss any one of these and the exit animation silently fails.
 
 ### layout vs layoutId
 
-- `layout` — animates the element's own size/position change in place
-- `layoutId` — links two separate elements, crossfading between them across renders
+- `layout`: animates the element's own size/position change in place
+- `layoutId`: links two separate elements, crossfading between them across renders
 
 Use `layout="position"` on text inside an expanding container to prevent text reflow from animating.
 
@@ -158,7 +158,7 @@ export function Modal({ onClose }: { onClose: () => void }) {
         onClick={onClose}
       />
 
-      {/* Panel — accessibility requirements: focus trap, Escape close,
+      {/* Panel: accessibility requirements: focus trap, Escape close,
           scroll lock, role="dialog", aria-modal="true" */}
       <motion.div
         role="dialog"
@@ -258,7 +258,7 @@ import { motionTokens, springs } from "@/lib/motion-tokens"
 <motion.div
   initial={{ opacity: 0, y: motionTokens.distance.lg }}
   whileInView={{ opacity: 1, y: 0 }}
-  viewport={{ once: true, margin: "-80px" }}   // once: true — rule 7
+  viewport={{ once: true, margin: "-80px" }}   // once: true: rule 7
   transition={{ duration: motionTokens.duration.slow, ease: motionTokens.easing.smooth }}
 />
 ```
@@ -322,7 +322,7 @@ export function ExpandingCard({ title, body }: { title: string; body: string }) 
 // Source context
 <motion.img layoutId="hero-image" src={src} className="w-16 h-16 rounded" />
 
-// Destination context (same layoutId — motion handles the transition)
+// Destination context (same layoutId: motion handles the transition)
 <motion.img layoutId="hero-image" src={src} className="w-full rounded-xl" />
 ```
 
@@ -345,7 +345,7 @@ export function ExpandingCard({ title, body }: { title: string; body: string }) 
 ## End-to-End Example
 
 A staggered list that enters on mount, handles conditional presence, and
-respects reduced motion — combining tokens, springs, AnimatePresence, and
+respects reduced motion: combining tokens, springs, AnimatePresence, and
 the accessibility hook from `motion-foundations`:
 
 ```tsx
@@ -431,5 +431,5 @@ This skill does **not** cover:
 
 ## Related Skills
 
-- **`motion-foundations`** — defines all tokens, springs, the `useSafeMotion` hook, and SSR guards that every pattern here imports. Must be set up first.
-- **`motion-advanced`** — extends these patterns with drag, gestures, SVG, text, custom hooks, and imperative sequencing. Does not redefine any patterns from this skill.
+- **`motion-foundations`**: defines all tokens, springs, the `useSafeMotion` hook, and SSR guards that every pattern here imports. Must be set up first.
+- **`motion-advanced`**: extends these patterns with drag, gestures, SVG, text, custom hooks, and imperative sequencing. Does not redefine any patterns from this skill.

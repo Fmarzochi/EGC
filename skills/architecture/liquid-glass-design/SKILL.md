@@ -1,11 +1,11 @@
 ---
 name: liquid-glass-design
-description: iOS 26 Liquid Glass design system — dynamic glass material with blur, reflection, and interactive morphing for SwiftUI, UIKit, and WidgetKit.
+description: iOS 26 Liquid Glass design system: dynamic glass material with blur, reflection, and interactive morphing for SwiftUI, UIKit, and WidgetKit.
 ---
 
 # Liquid Glass Design System (iOS 26)
 
-Patterns for implementing Apple's Liquid Glass — a dynamic material that blurs content behind it, reflects color and light from surrounding content, and reacts to touch and pointer interactions. Covers SwiftUI, UIKit, and WidgetKit integration.
+Patterns for implementing Apple's Liquid Glass: a dynamic material that blurs content behind it, reflects color and light from surrounding content, and reacts to touch and pointer interactions. Covers SwiftUI, UIKit, and WidgetKit integration.
 
 ## When to Activate
 
@@ -15,7 +15,7 @@ Patterns for implementing Apple's Liquid Glass — a dynamic material that blurs
 - Applying Liquid Glass effects to widgets
 - Migrating existing blur/material effects to the new Liquid Glass API
 
-## Core Pattern — SwiftUI
+## Core Pattern: SwiftUI
 
 ### Basic Glass Effect
 
@@ -38,9 +38,9 @@ Text("Hello, World!")
 ```
 
 Key customization options:
-- `.regular` — standard glass effect
-- `.tint(Color)` — add color tint for prominence
-- `.interactive()` — react to touch and pointer interactions
+- `.regular`: standard glass effect
+- `.tint(Color)`: add color tint for prominence
+- `.interactive()`: react to touch and pointer interactions
 - Shape: `.capsule` (default), `.rect(cornerRadius:)`, `.circle`
 
 ### Glass Button Styles
@@ -73,7 +73,7 @@ GlassEffectContainer(spacing: 40.0) {
 }
 ```
 
-The `spacing` parameter controls merge distance — closer elements blend their glass shapes together.
+The `spacing` parameter controls merge distance: closer elements blend their glass shapes together.
 
 ### Uniting Glass Effects
 
@@ -126,9 +126,9 @@ Button("Toggle") {
 
 ### Extending Horizontal Scrolling Under Sidebar
 
-To allow horizontal scroll content to extend under a sidebar or inspector, ensure the `ScrollView` content reaches the leading/trailing edges of the container. The system automatically handles the under-sidebar scrolling behavior when the layout extends to the edges — no additional modifier is needed.
+To allow horizontal scroll content to extend under a sidebar or inspector, ensure the `ScrollView` content reaches the leading/trailing edges of the container. The system automatically handles the under-sidebar scrolling behavior when the layout extends to the edges: no additional modifier is needed.
 
-## Core Pattern — UIKit
+## Core Pattern: UIKit
 
 ### Basic UIGlassEffect
 
@@ -191,7 +191,7 @@ let favoriteButton = UIBarButtonItem(image: UIImage(systemName: "heart"), style:
 favoriteButton.hidesSharedBackground = true  // Opt out of shared glass background
 ```
 
-## Core Pattern — WidgetKit
+## Core Pattern: WidgetKit
 
 ### Rendering Mode Detection
 
@@ -245,30 +245,30 @@ VStack { /* content */ }
 | Decision | Rationale |
 |----------|-----------|
 | GlassEffectContainer wrapping | Performance optimization, enables morphing between glass elements |
-| `spacing` parameter | Controls merge distance — fine-tune how close elements must be to blend |
+| `spacing` parameter | Controls merge distance: fine-tune how close elements must be to blend |
 | `@Namespace` + `glassEffectID` | Enables smooth morphing transitions on view hierarchy changes |
-| `interactive()` modifier | Explicit opt-in for touch/pointer reactions — not all glass should respond |
+| `interactive()` modifier | Explicit opt-in for touch/pointer reactions: not all glass should respond |
 | UIGlassContainerEffect in UIKit | Same container pattern as SwiftUI for consistency |
 | Accented rendering mode in widgets | System applies tinted glass when user selects tinted Home Screen |
 
 ## Best Practices
 
-- **Always use GlassEffectContainer** when applying glass to multiple sibling views — it enables morphing and improves rendering performance
+- **Always use GlassEffectContainer** when applying glass to multiple sibling views: it enables morphing and improves rendering performance
 - **Apply `.glassEffect()` after** other appearance modifiers (frame, font, padding)
 - **Use `.interactive()`** only on elements that respond to user interaction (buttons, toggleable items)
 - **Choose spacing carefully** in containers to control when glass effects merge
 - **Use `withAnimation`** when changing view hierarchies to enable smooth morphing transitions
-- **Test across appearances** — light mode, dark mode, and accented/tinted modes
-- **Ensure accessibility contrast** — text on glass must remain readable
+- **Test across appearances**: light mode, dark mode, and accented/tinted modes
+- **Ensure accessibility contrast**: text on glass must remain readable
 
 ## Anti-Patterns to Avoid
 
 - Using multiple standalone `.glassEffect()` views without a GlassEffectContainer
-- Nesting too many glass effects — degrades performance and visual clarity
-- Applying glass to every view — reserve for interactive elements, toolbars, and cards
+- Nesting too many glass effects: degrades performance and visual clarity
+- Applying glass to every view: reserve for interactive elements, toolbars, and cards
 - Forgetting `clipsToBounds = true` in UIKit when using corner radii
-- Ignoring accented rendering mode in widgets — breaks tinted Home Screen appearance
-- Using opaque backgrounds behind glass — defeats the translucency effect
+- Ignoring accented rendering mode in widgets: breaks tinted Home Screen appearance
+- Using opaque backgrounds behind glass: defeats the translucency effect
 
 ## When to Use
 

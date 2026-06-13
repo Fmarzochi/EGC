@@ -178,7 +178,7 @@ if [[ -d "$SKILLS_DIR" ]]; then
     warn "$missing_skills EGC skills missing from $SKILLS_DIR (install via EGC installer or npx skills)"
   fi
 else
-  warn "Skills directory missing ($SKILLS_DIR) — install via EGC installer or npx skills"
+  warn "Skills directory missing ($SKILLS_DIR): install via EGC installer or npx skills"
 fi
 
 if [[ -f "$PROMPTS_DIR/egc-prompts-manifest.txt" ]]; then

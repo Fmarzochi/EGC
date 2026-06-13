@@ -161,7 +161,7 @@ function maybeRunQualityGate(filePath) {
       return;
     }
 
-    // No formatter configured — skip
+    // No formatter configured: skip
     return;
   }
 
@@ -176,7 +176,7 @@ function maybeRunQualityGate(filePath) {
 }
 
 /**
- * Core logic — exported so run-with-flags.js can call directly.
+ * Core logic: exported so run-with-flags.js can call directly.
  *
  * @param {string} rawInput - Raw JSON string from stdin
  * @returns {string} The original input (pass-through)

@@ -1920,7 +1920,7 @@ async function runTests() {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
-      // 15 user messages — should keep only last 10
+      // 15 user messages: should keep only last 10
       const lines = [];
       for (let i = 1; i <= 15; i++) {
         lines.push(`{"type":"user","content":"UserMsg_${i}"}`);
@@ -1958,7 +1958,7 @@ async function runTests() {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
-      // 25 unique tools — should keep only first 20
+      // 25 unique tools: should keep only first 20
       const lines = ['{"type":"user","content":"Do stuff"}'];
       for (let i = 1; i <= 25; i++) {
         lines.push(`{"type":"tool_use","tool_name":"Tool${i}","tool_input":{}}`);
@@ -1995,7 +1995,7 @@ async function runTests() {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
-      // 35 unique files via Edit — should keep only first 30
+      // 35 unique files via Edit: should keep only first 30
       const lines = ['{"type":"user","content":"Edit all the things"}'];
       for (let i = 1; i <= 35; i++) {
         lines.push(`{"type":"tool_use","tool_name":"Edit","tool_input":{"file_path":"/src/file${i}.ts"}}`);
@@ -2353,7 +2353,7 @@ async function runTests() {
     await asyncTest('skips short sessions (< 10 user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'short.jsonl');
-      // Only 3 user messages — below the default threshold of 10
+      // Only 3 user messages: below the default threshold of 10
       const lines = ['{"type":"user","content":"msg1"}', '{"type":"user","content":"msg2"}', '{"type":"user","content":"msg3"}'];
       fs.writeFileSync(transcriptPath, lines.join('\n'));
       const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
@@ -2370,7 +2370,7 @@ async function runTests() {
     await asyncTest('evaluates long sessions (>= 10 user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'long.jsonl');
-      // 12 user messages — above the default threshold
+      // 12 user messages: above the default threshold
       const lines = [];
       for (let i = 0; i < 12; i++) {
         lines.push(`{"type":"user","content":"message ${i}"}`);
@@ -2613,7 +2613,7 @@ async function runTests() {
       const stdinData = '{"tool":"test","value":42}';
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), stdinData);
       assert.strictEqual(result.code, 0);
-      // stdout should be exactly the input — no extra newline appended
+      // stdout should be exactly the input: no extra newline appended
       assert.strictEqual(result.stdout, stdinData, 'Should not append extra newline to output');
     })
   )
@@ -3016,7 +3016,7 @@ async function runTests() {
       // This tests the ?? fix: min_session_length=0 should mean "evaluate ALL sessions"
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'short.jsonl');
-      // Only 2 user messages — normally below the default threshold of 10
+      // Only 2 user messages: normally below the default threshold of 10
       const lines = ['{"type":"user","content":"msg1"}', '{"type":"user","content":"msg2"}'];
       fs.writeFileSync(transcriptPath, lines.join('\n'));
 
@@ -3051,7 +3051,7 @@ async function runTests() {
     await asyncTest('config with min_session_length=null falls back to default 10', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'short.jsonl');
-      // 5 messages — below default 10
+      // 5 messages: below default 10
       const lines = [];
       for (let i = 0; i < 5; i++) lines.push(`{"type":"user","content":"msg${i}"}`);
       fs.writeFileSync(transcriptPath, lines.join('\n'));
@@ -3343,7 +3343,7 @@ async function runTests() {
     await asyncTest('handles transcript with only assistant messages (no user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
-      // Only assistant messages — no user messages
+      // Only assistant messages: no user messages
       const lines = ['{"type":"assistant","message":{"content":[{"type":"text","text":"response"}]}}', '{"type":"tool_use","tool_name":"Read","tool_input":{"file_path":"/src/app.ts"}}'];
       fs.writeFileSync(transcriptPath, lines.join('\n'));
 
@@ -3495,7 +3495,7 @@ async function runTests() {
       const sessionId = `test-boundary-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
-        // 1000000 is the upper clamp boundary — should still increment
+        // 1000000 is the upper clamp boundary: should still increment
         fs.writeFileSync(counterFile, '1000000');
         const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
           EGC_SESSION_ID: sessionId
@@ -3835,7 +3835,7 @@ async function runTests() {
       const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
       assert.strictEqual(result.code, 0);
-      // The regex /console\.log/ matches even in comments — this is intentional
+      // The regex /console\.log/ matches even in comments: this is intentional
       assert.ok(result.stderr.includes('console.log'), 'Should detect console.log even in comments');
       cleanupTestDir(testDir);
     })
@@ -3979,7 +3979,7 @@ async function runTests() {
       const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should not crash on shell metacharacters');
-      // execFileSync prevents shell injection — just verify no crash
+      // execFileSync prevents shell injection: just verify no crash
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data safely');
       cleanupTestDir(testDir);
     })
@@ -4096,13 +4096,13 @@ async function runTests() {
     await asyncTest('expands ~ in learned_skills_path to home directory', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
-      // 1 user message — below threshold, but we only need to verify directory creation
+      // 1 user message: below threshold, but we only need to verify directory creation
       fs.writeFileSync(transcriptPath, '{"type":"user","content":"msg"}');
 
       const skillsDir = path.join(testDir, 'skills', 'ai', 'continuous-learning');
       fs.mkdirSync(skillsDir, { recursive: true });
       const configPath = path.join(skillsDir, 'config.json');
-      // Use ~ prefix — should expand to the HOME dir we set
+      // Use ~ prefix: should expand to the HOME dir we set
       fs.writeFileSync(
         configPath,
         JSON.stringify({
@@ -4119,7 +4119,7 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 0);
       // ~ should expand to os.homedir() which during the script run is the real home
-      // The script creates the directory via ensureDir — check that it attempted to
+      // The script creates the directory via ensureDir: check that it attempted to
       assert.ok(!fs.existsSync(path.join(testDir, '~', 'test-tilde-skills')), 'Should NOT create literal ~/test-tilde-skills directory');
       cleanupTestDir(testDir);
     })
@@ -4137,7 +4137,7 @@ async function runTests() {
       const skillsDir = path.join(testDir, 'skills', 'ai', 'continuous-learning');
       fs.mkdirSync(skillsDir, { recursive: true });
       const configPath = path.join(skillsDir, 'config.json');
-      // Path with ~ in the middle — should NOT be expanded
+      // Path with ~ in the middle: should NOT be expanded
       fs.writeFileSync(
         configPath,
         JSON.stringify({
@@ -4165,7 +4165,7 @@ async function runTests() {
     await asyncTest('uses defaults when config file does not exist', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
-      // 5 user messages — below default threshold of 10
+      // 5 user messages: below default threshold of 10
       const lines = [];
       for (let i = 0; i < 5; i++) lines.push(`{"type":"user","content":"msg${i}"}`);
       fs.writeFileSync(transcriptPath, lines.join('\n'));
@@ -4338,7 +4338,7 @@ async function runTests() {
 
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
-      // Only user messages — no tool_use entries at all
+      // Only user messages: no tool_use entries at all
       const lines = ['{"type":"user","content":"How does authentication work?"}', '{"type":"assistant","message":{"content":[{"type":"text","text":"It uses JWT"}]}}'];
       fs.writeFileSync(transcriptPath, lines.join('\n'));
       const stdinJson = JSON.stringify({ transcript_path: transcriptPath });
@@ -4670,13 +4670,13 @@ async function runTests() {
     passed++;
   else failed++;
 
-  console.log('\nRound 56: suggest-compact.js (counter file as directory — fallback path):');
+  console.log('\nRound 56: suggest-compact.js (counter file as directory: fallback path):');
 
   if (
     await asyncTest('exits 0 when counter file path is occupied by a directory', async () => {
       const sessionId = `dirblock-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
-      // Create a DIRECTORY at the counter file path — openSync('a+') will fail with EISDIR
+      // Create a DIRECTORY at the counter file path: openSync('a+') will fail with EISDIR
       fs.mkdirSync(counterFile);
 
       try {
@@ -4698,13 +4698,13 @@ async function runTests() {
   else failed++;
 
   // ── Round 59: session-start unreadable file, console-log stdin overflow, pre-compact write error ──
-  console.log('\nRound 59: session-start.js (unreadable session file — readFile returns null):');
+  console.log('\nRound 59: session-start.js (unreadable session file: readFile returns null):');
 
   if (
     await asyncTest('does not inject content when session file is unreadable', async () => {
       // Skip on Windows or when running as root (permissions won't work)
       if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
-        console.log('    (skipped — not supported on this platform)');
+        console.log('    (skipped: not supported on this platform)');
         return;
       }
       const isoHome = path.join(os.tmpdir(), `egc-start-unreadable-${Date.now()}`);
@@ -4741,16 +4741,16 @@ async function runTests() {
     passed++;
   else failed++;
 
-  console.log('\nRound 59: check-console-log.js (stdin exceeding 1MB — truncation):');
+  console.log('\nRound 59: check-console-log.js (stdin exceeding 1MB: truncation):');
 
   if (
     await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
-      // Send 1.2MB of data — exceeds the 1MB MAX_STDIN limit
+      // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), payload);
 
       assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
-      // Output should be truncated — significantly less than input
+      // Output should be truncated: significantly less than input
       assert.ok(result.stdout.length < payload.length, `stdout (${result.stdout.length}) should be shorter than input (${payload.length})`);
       // Output should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
@@ -4760,12 +4760,12 @@ async function runTests() {
     passed++;
   else failed++;
 
-  console.log('\nRound 59: pre-compact.js (read-only session file — appendFile error):');
+  console.log('\nRound 59: pre-compact.js (read-only session file: appendFile error):');
 
   if (
     await asyncTest('exits 1 when session file is read-only (appendFile fails)', async () => {
       if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
-        console.log('    (skipped — not supported on this platform)');
+        console.log('    (skipped: not supported on this platform)');
         return;
       }
       const isoHome = path.join(os.tmpdir(), `egc-compact-ro-${Date.now()}`);
@@ -4781,7 +4781,7 @@ async function runTests() {
           HOME: isoHome,
           USERPROFILE: isoHome
         });
-        // Should exit 1 — unhandled errors are now reported with exit 1
+        // Should exit 1: unhandled errors are now reported with exit 1
         assert.strictEqual(result.code, 1, 'Should exit 1 when append fails');
         // Session file should remain unchanged (write was blocked)
         const content = fs.readFileSync(sessionFile, 'utf8');
@@ -4804,7 +4804,7 @@ async function runTests() {
   else failed++;
 
   // ── Round 60: replaceInFile failure, console-warn stdin overflow, format missing tool_input ──
-  console.log('\nRound 60: session-end.js (replaceInFile returns false — timestamp update warning):');
+  console.log('\nRound 60: session-end.js (replaceInFile returns false: timestamp update warning):');
 
   if (
     await asyncTest('logs warning when existing session file lacks Last Updated field', async () => {
@@ -4843,16 +4843,16 @@ async function runTests() {
     passed++;
   else failed++;
 
-  console.log('\nRound 60: post-edit-console-warn.js (stdin exceeding 1MB — truncation):');
+  console.log('\nRound 60: post-edit-console-warn.js (stdin exceeding 1MB: truncation):');
 
   if (
     await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
-      // Send 1.2MB of data — exceeds the 1MB MAX_STDIN limit
+      // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), payload);
 
       assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
-      // Data should be truncated — stdout significantly less than input
+      // Data should be truncated: stdout significantly less than input
       assert.ok(result.stdout.length < payload.length, `stdout (${result.stdout.length}) should be shorter than input (${payload.length})`);
       // Should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
@@ -5006,7 +5006,7 @@ async function runTests() {
   else failed++;
 
   // ── Round 71: session-start.js default source shows getSelectionPrompt ──
-  console.log('\nRound 71: session-start.js (default source — selection prompt):');
+  console.log('\nRound 71: session-start.js (default source: selection prompt):');
 
   if (
     await asyncTest('shows selection prompt when no package manager preference found (default source)', async () => {
@@ -5015,7 +5015,7 @@ async function runTests() {
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
       fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
       fs.mkdirSync(isoProject, { recursive: true });
-      // No package.json, no lock files, no package-manager.json — forces default source
+      // No package.json, no lock files, no package-manager.json: forces default source
 
       try {
         const result = await new Promise((resolve, reject) => {
@@ -5045,16 +5045,16 @@ async function runTests() {
   else failed++;
 
   // ── Round 74: session-start.js main().catch handler ──
-  console.log('\nRound 74: session-start.js (main catch — unrecoverable error):');
+  console.log('\nRound 74: session-start.js (main catch: unrecoverable error):');
 
   if (
     await asyncTest('session-start exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
+        console.log('    (skipped: /dev/null not available on Windows)');
         return;
       }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
-      // which propagates to main().catch — the top-level error boundary
+      // which propagates to main().catch: the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
@@ -5067,16 +5067,16 @@ async function runTests() {
   else failed++;
 
   // ── Round 75: pre-compact.js main().catch handler ──
-  console.log('\nRound 75: pre-compact.js (main catch — unrecoverable error):');
+  console.log('\nRound 75: pre-compact.js (main catch: unrecoverable error):');
 
   if (
     await asyncTest('pre-compact exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
+        console.log('    (skipped: /dev/null not available on Windows)');
         return;
       }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR,
-      // which propagates to main().catch — the top-level error boundary
+      // which propagates to main().catch: the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
@@ -5089,16 +5089,16 @@ async function runTests() {
   else failed++;
 
   // ── Round 75: session-end.js main().catch handler ──
-  console.log('\nRound 75: session-end.js (main catch — unrecoverable error):');
+  console.log('\nRound 75: session-end.js (main catch: unrecoverable error):');
 
   if (
     await asyncTest('session-end exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
+        console.log('    (skipped: /dev/null not available on Windows)');
         return;
       }
       // HOME=/dev/null makes ensureDir(sessionsDir) throw ENOTDIR inside main(),
-      // which propagates to runMain().catch — the top-level error boundary
+      // which propagates to runMain().catch: the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), '{}', {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
@@ -5111,16 +5111,16 @@ async function runTests() {
   else failed++;
 
   // ── Round 76: evaluate-session.js main().catch handler ──
-  console.log('\nRound 76: evaluate-session.js (main catch — unrecoverable error):');
+  console.log('\nRound 76: evaluate-session.js (main catch: unrecoverable error):');
 
   if (
     await asyncTest('evaluate-session exits 0 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
+        console.log('    (skipped: /dev/null not available on Windows)');
         return;
       }
       // HOME=/dev/null makes ensureDir(learnedSkillsPath) throw ENOTDIR,
-      // which propagates to main().catch — the top-level error boundary
+      // which propagates to main().catch: the top-level error boundary
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'), '{}', {
         HOME: '/dev/null',
         USERPROFILE: '/dev/null'
@@ -5133,12 +5133,12 @@ async function runTests() {
   else failed++;
 
   // ── Round 76: suggest-compact.js main().catch handler ──
-  console.log('\nRound 76: suggest-compact.js (main catch — double-failure):');
+  console.log('\nRound 76: suggest-compact.js (main catch: double-failure):');
 
   if (
     await asyncTest('suggest-compact exits 0 with error when TMPDIR is non-directory', async () => {
       if (process.platform === 'win32') {
-        console.log('    (skipped — /dev/null not available on Windows)');
+        console.log('    (skipped: /dev/null not available on Windows)');
         return;
       }
       // TMPDIR=/dev/null causes openSync to fail (ENOTDIR), then the catch
@@ -5154,7 +5154,7 @@ async function runTests() {
   else failed++;
 
   // ── Round 80: session-end.js entry.message?.role === 'user' third OR condition ──
-  console.log('\nRound 80: session-end.js (entry.message.role user — third OR condition):');
+  console.log('\nRound 80: session-end.js (entry.message.role user: third OR condition):');
 
   if (
     await asyncTest('extracts user messages from entries where only message.role is user (not type or role)', async () => {
@@ -5203,12 +5203,12 @@ async function runTests() {
     await asyncTest('COMPACT_THRESHOLD exceeding 10000 falls back to default 50', async () => {
       // suggest-compact.js line 31: rawThreshold <= 10000 ? rawThreshold : 50
       // Values > 10000 are positive and finite but fail the upper-bound check.
-      // Existing tests cover 0, negative, NaN — this covers the > 10000 boundary.
+      // Existing tests cover 0, negative, NaN: this covers the > 10000 boundary.
       const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
         COMPACT_THRESHOLD: '20000'
       });
       assert.strictEqual(result.code, 0, 'Should exit 0');
-      // The script logs the threshold it chose — should fall back to 50
+      // The script logs the threshold it chose: should fall back to 50
       // Look for the fallback value in stderr (log output)
       const compactSource = fs.readFileSync(path.join(scriptsDir, 'suggest-compact.js'), 'utf8');
       // The condition at line 31: rawThreshold <= 10000 ? rawThreshold : 50
@@ -5231,13 +5231,13 @@ async function runTests() {
       const transcriptPath = path.join(isoHome, 'transcript.jsonl');
 
       const lines = [
-        // Normal user message (string content) — should be included
+        // Normal user message (string content): should be included
         '{"type":"user","content":"Real user message"}',
-        // User message with numeric content — exercises the else: '' branch
+        // User message with numeric content: exercises the else: '' branch
         '{"type":"user","content":42}',
-        // User message with boolean content — also hits the else branch
+        // User message with boolean content: also hits the else branch
         '{"type":"user","content":true}',
-        // User message with object content (no .text) — also hits the else branch
+        // User message with object content (no .text): also hits the else branch
         '{"type":"user","content":{"type":"image","source":"data:..."}}'
       ];
       fs.writeFileSync(transcriptPath, lines.join('\n'));
@@ -5367,16 +5367,16 @@ Some random content without the expected ### Context to Load section
   else failed++;
 
   // ── Round 87: post-edit-format.js and post-edit-typecheck.js stdin overflow (1MB) ──
-  console.log('\nRound 87: post-edit-format.js (stdin exceeding 1MB — truncation):');
+  console.log('\nRound 87: post-edit-format.js (stdin exceeding 1MB: truncation):');
 
   if (
     await asyncTest('truncates stdin at 1MB limit and still passes through data (post-edit-format)', async () => {
-      // Send 1.2MB of data — exceeds the 1MB MAX_STDIN limit (lines 14-22)
+      // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit (lines 14-22)
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), payload);
 
       assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
-      // Output should be truncated — significantly less than input
+      // Output should be truncated: significantly less than input
       assert.ok(result.stdout.length < payload.length, `stdout (${result.stdout.length}) should be shorter than input (${payload.length})`);
       // Output should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
@@ -5386,16 +5386,16 @@ Some random content without the expected ### Context to Load section
     passed++;
   else failed++;
 
-  console.log('\nRound 87: post-edit-typecheck.js (stdin exceeding 1MB — truncation):');
+  console.log('\nRound 87: post-edit-typecheck.js (stdin exceeding 1MB: truncation):');
 
   if (
     await asyncTest('truncates stdin at 1MB limit and still passes through data (post-edit-typecheck)', async () => {
-      // Send 1.2MB of data — exceeds the 1MB MAX_STDIN limit (lines 16-24)
+      // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit (lines 16-24)
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), payload);
 
       assert.strictEqual(result.code, 0, 'Should exit 0 even with oversized stdin');
-      // Output should be truncated — significantly less than input
+      // Output should be truncated: significantly less than input
       assert.ok(result.stdout.length < payload.length, `stdout (${result.stdout.length}) should be shorter than input (${payload.length})`);
       // Output should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
@@ -5504,7 +5504,7 @@ Some random content without the expected ### Context to Load section
           cwd: path.resolve(__dirname, '..', '..'),
           stdio: ['pipe', 'pipe', 'pipe']
         });
-        // Don't write anything or close stdin — force the timeout to fire
+        // Don't write anything or close stdin: force the timeout to fire
         let stdout = '';
         child.stdout.on('data', d => (stdout += d));
         const timer = setTimeout(() => {
@@ -5538,7 +5538,7 @@ Some random content without the expected ### Context to Load section
           cwd: path.resolve(__dirname, '..', '..'),
           stdio: ['pipe', 'pipe', 'pipe']
         });
-        // Write partial invalid JSON but don't close stdin — timeout fires with unparseable data
+        // Write partial invalid JSON but don't close stdin: timeout fires with unparseable data
         child.stdin.write('{"incomplete":');
         let stdout = '';
         child.stdout.on('data', d => (stdout += d));

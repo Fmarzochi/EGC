@@ -29,7 +29,7 @@ const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../li
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 
 /**
- * Core logic — exported so run-with-flags.js can call directly
+ * Core logic: exported so run-with-flags.js can call directly
  * without spawning a child process.
  *
  * @param {string} rawInput - Raw JSON string from stdin
@@ -78,11 +78,11 @@ function run(rawInput) {
           });
         }
       } catch {
-        // Formatter not installed, file missing, or failed — non-blocking
+        // Formatter not installed, file missing, or failed: non-blocking
       }
     }
   } catch {
-    // Invalid input — pass through
+    // Invalid input: pass through
   }
 
   return rawInput;

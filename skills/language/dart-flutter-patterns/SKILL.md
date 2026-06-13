@@ -19,20 +19,20 @@ Use this skill when:
 ## How It Works
 
 This skill provides copy-paste-ready Dart/Flutter code patterns organized by concern:
-1. **Null safety** — avoid `!`, prefer `?.`/`??`/pattern matching
-2. **Immutable state** — sealed classes, `freezed`, `copyWith`
-3. **Async composition** — concurrent `Future.wait`, safe `BuildContext` after `await`
-4. **Widget architecture** — extract to classes (not methods), `const` propagation, scoped rebuilds
-5. **State management** — BLoC/Cubit events, Riverpod notifiers and derived providers
-6. **Navigation** — GoRouter with reactive auth guards via `refreshListenable`
-7. **Networking** — Dio with interceptors, token refresh with one-time retry guard
-8. **Error handling** — global capture, `ErrorWidget.builder`, crashlytics wiring
-9. **Testing** — unit (BLoC test), widget (ProviderScope overrides), fakes over mocks
+1. **Null safety**: avoid `!`, prefer `?.`/`??`/pattern matching
+2. **Immutable state**: sealed classes, `freezed`, `copyWith`
+3. **Async composition**: concurrent `Future.wait`, safe `BuildContext` after `await`
+4. **Widget architecture**: extract to classes (not methods), `const` propagation, scoped rebuilds
+5. **State management**: BLoC/Cubit events, Riverpod notifiers and derived providers
+6. **Navigation**: GoRouter with reactive auth guards via `refreshListenable`
+7. **Networking**: Dio with interceptors, token refresh with one-time retry guard
+8. **Error handling**: global capture, `ErrorWidget.builder`, crashlytics wiring
+9. **Testing**: unit (BLoC test), widget (ProviderScope overrides), fakes over mocks
 
 ## Examples
 
 ```dart
-// Sealed state — prevents impossible states
+// Sealed state: prevents impossible states
 sealed class AsyncState<T> {}
 final class Loading<T> extends AsyncState<T> {}
 final class Success<T> extends AsyncState<T> { final T data; const Success(this.data); }
@@ -72,19 +72,19 @@ Practical, production-ready patterns for Dart and Flutter applications. Library-
 ### Prefer Patterns Over Bang Operator
 
 ```dart
-// BAD — crashes at runtime if null
+// BAD: crashes at runtime if null
 final name = user!.name;
 
-// GOOD — provide fallback
+// GOOD: provide fallback
 final name = user?.name ?? 'Unknown';
 
-// GOOD — Dart 3 pattern matching (preferred for complex cases)
+// GOOD: Dart 3 pattern matching (preferred for complex cases)
 final display = switch (user) {
   User(:final name, :final email) => '$name <$email>',
   null => 'Guest',
 };
 
-// GOOD — guard early return
+// GOOD: guard early return
 String getUserName(User? user) {
   if (user == null) return 'Unknown';
   return user.name; // promoted to non-null after check
@@ -94,13 +94,13 @@ String getUserName(User? user) {
 ### Avoid `late` Overuse
 
 ```dart
-// BAD — defers null error to runtime
+// BAD: defers null error to runtime
 late String userId;
 
-// GOOD — nullable with explicit initialization
+// GOOD: nullable with explicit initialization
 String? userId;
 
-// OK — use late only when initialization is guaranteed before first access
+// OK: use late only when initialization is guaranteed before first access
 // (e.g., in initState() before any widget interaction)
 late final AnimationController _controller;
 
@@ -134,7 +134,7 @@ final class UserError extends UserState {
   final String message;
 }
 
-// Exhaustive switch — compiler enforces all branches
+// Exhaustive switch: compiler enforces all branches
 Widget buildFrom(UserState state) => switch (state) {
   UserInitial() => const SizedBox.shrink(),
   UserLoading() => const CircularProgressIndicator(),
@@ -178,7 +178,7 @@ final fromJson = User.fromJson(json);
 
 ```dart
 Future<DashboardData> loadDashboard(UserRepository users, OrderRepository orders) async {
-  // Run concurrently — don't await sequentially
+  // Run concurrently: don't await sequentially
   final (userList, orderList) = await (
     users.getAll(),
     orders.getRecent(),
@@ -196,7 +196,7 @@ Stream<List<Item>> watchCartItems() => _db
     .watchTable('cart_items')
     .map((rows) => rows.map(Item.fromRow).toList());
 
-// In widget layer — declarative, no manual subscription
+// In widget layer: declarative, no manual subscription
 StreamBuilder<List<Item>>(
   stream: cartRepository.watchCartItems(),
   builder: (context, snapshot) => switch (snapshot) {
@@ -212,7 +212,7 @@ StreamBuilder<List<Item>>(
 ### BuildContext After Await
 
 ```dart
-// CRITICAL — always check mounted after any await in StatefulWidget
+// CRITICAL: always check mounted after any await in StatefulWidget
 Future<void> _handleSubmit() async {
   setState(() => _isLoading = true);
   try {
@@ -235,7 +235,7 @@ Future<void> _handleSubmit() async {
 ### Extract to Classes, Not Methods
 
 ```dart
-// BAD — private method returning widget, prevents optimization
+// BAD: private method returning widget, prevents optimization
 Widget _buildHeader() {
   return Container(
     padding: const EdgeInsets.all(16),
@@ -243,7 +243,7 @@ Widget _buildHeader() {
   );
 }
 
-// GOOD — separate widget class, enables const, element reuse
+// GOOD: separate widget class, enables const, element reuse
 class _PageHeader extends StatelessWidget {
   const _PageHeader(this.title);
   final String title;
@@ -261,13 +261,13 @@ class _PageHeader extends StatelessWidget {
 ### const Propagation
 
 ```dart
-// BAD — new instances every rebuild
+// BAD: new instances every rebuild
 child: Padding(
   padding: EdgeInsets.all(16.0),       // not const
   child: Icon(Icons.home, size: 24.0), // not const
 )
 
-// GOOD — const stops rebuild propagation
+// GOOD: const stops rebuild propagation
 child: const Padding(
   padding: EdgeInsets.all(16.0),
   child: Icon(Icons.home, size: 24.0),
@@ -277,7 +277,7 @@ child: const Padding(
 ### Scoped Rebuilds
 
 ```dart
-// BAD — entire page rebuilds on every counter change
+// BAD: entire page rebuilds on every counter change
 class CounterPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -292,7 +292,7 @@ class CounterPage extends ConsumerWidget {
   }
 }
 
-// GOOD — isolate the rebuilding part
+// GOOD: isolate the rebuilding part
 class CounterPage extends StatelessWidget {
   const CounterPage({super.key});
 
@@ -324,7 +324,7 @@ class _CounterDisplay extends ConsumerWidget {
 ## 5. State Management: BLoC/Cubit
 
 ```dart
-// Cubit — synchronous or simple async state
+// Cubit: synchronous or simple async state
 class AuthCubit extends Cubit<AuthState> {
   AuthCubit(this._authService) : super(const AuthState.initial());
   final AuthService _authService;
@@ -492,7 +492,7 @@ class UserApiDataSource {
 ## 9. Error Handling Architecture
 
 ```dart
-// Global error capture — set up in main()
+// Global error capture: set up in main()
 void main() {
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -522,7 +522,7 @@ class App extends StatelessWidget {
 ## 10. Testing Quick Reference
 
 ```dart
-// Unit test — use case
+// Unit test: use case
 test('GetUserUseCase returns null for missing user', () async {
   final repo = FakeUserRepository();
   final useCase = GetUserUseCase(repo);
@@ -559,5 +559,5 @@ testWidgets('CartBadge shows item count', (tester) async {
 - [BLoC Library](https://bloclibrary.dev/)
 - [GoRouter](https://pub.dev/packages/go_router)
 - [Freezed](https://pub.dev/packages/freezed)
-- Skill: `flutter-dart-code-review` — comprehensive review checklist
-- Rules: `rules/dart/` — coding style, patterns, security, testing, hooks
+- Skill: `flutter-dart-code-review`: comprehensive review checklist
+- Rules: `rules/dart/`: coding style, patterns, security, testing, hooks

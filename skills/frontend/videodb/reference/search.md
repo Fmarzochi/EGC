@@ -15,7 +15,7 @@ Index the transcribed speech content of a video for semantic and keyword search:
 ```python
 video = coll.get_video(video_id)
 
-# force=True makes indexing idempotent — skips if already indexed
+# force=True makes indexing idempotent: skips if already indexed
 video.index_spoken_words(force=True)
 ```
 
@@ -129,7 +129,7 @@ except InvalidRequestError as e:
 
 **Important notes:**
 
-- Use `SearchType.semantic` with `index_type=IndexType.scene` — this is the most reliable combination and works on all plans.
+- Use `SearchType.semantic` with `index_type=IndexType.scene`: this is the most reliable combination and works on all plans.
 - `SearchType.scene` exists but may not be available on all plans (e.g. Free tier). Prefer `SearchType.semantic` with `IndexType.scene`.
 - The `scene_index_id` parameter is optional. If omitted, the search runs against all scene indexes on the video. Pass it to target a specific index.
 - You can create multiple scene indexes per video (with different prompts or extraction types) and search them independently using `scene_index_id`.
@@ -227,4 +227,4 @@ print(stream_url)
 - **Use keyword search for precision**: When you need exact term matches, keyword search avoids semantic drift.
 - **Handle "No results found"**: `video.search()` raises `InvalidRequestError` when no results match. Always wrap search calls in try/except and treat `"No results found"` as an empty result set.
 - **Filter scene search noise**: Semantic scene search can return low-relevance results for vague queries. Use `score_threshold=0.3` (or higher) to filter noise.
-- **Idempotent indexing**: Use `index_spoken_words(force=True)` to safely re-index. `index_scenes()` has no `force` parameter — wrap it in try/except and extract the existing `scene_index_id` from the error message with `re.search(r"id\s+([a-f0-9]+)", str(e))`.
+- **Idempotent indexing**: Use `index_spoken_words(force=True)` to safely re-index. `index_scenes()` has no `force` parameter: wrap it in try/except and extract the existing `scene_index_id` from the error message with `re.search(r"id\s+([a-f0-9]+)", str(e))`.

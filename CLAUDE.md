@@ -1,10 +1,10 @@
-# EGC — Session Memory Protocol
+# EGC: Session Memory Protocol
 
 This project has persistent cross-session memory via the `egc-memory` MCP server.
 
 ## At the start of every session
 
-Call `get_state` with no arguments — it uses the current working directory automatically:
+Call `get_state` with no arguments: it uses the current working directory automatically:
 
 ```
 get_state({})
@@ -41,17 +41,17 @@ update_state({
 })
 ```
 
-`update_state` merges with existing state — it does not erase previous memory. Only include fields that changed this session. Leave out fields with nothing new.
+`update_state` merges with existing state: it does not erase previous memory. Only include fields that changed this session. Leave out fields with nothing new.
 
 ## Where state is stored
 
-`~/.egc/state/<project-slug>.md` — one file per project, plain Markdown, human-readable.
+`~/.egc/state/<project-slug>.md`: one file per project, plain Markdown, human-readable.
 
 ## MCP servers required
 
 Both servers must be registered in your MCP config (`.mcp.json`):
 
-- `egc-guardian` — `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
+- `egc-guardian`: `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
 - `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.

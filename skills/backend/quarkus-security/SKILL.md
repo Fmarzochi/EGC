@@ -336,7 +336,7 @@ public class SecretService {
 
 ## Rate Limiting
 
-**Security Note**: Never use `X-Forwarded-For` directly — clients can spoof it.
+**Security Note**: Never use `X-Forwarded-For` directly: clients can spoof it.
 Use the actual remote address from the servlet request, or an authenticated
 identity (API key, JWT subject) when available.
 
@@ -392,7 +392,7 @@ public class SecurityHeadersFilter implements ContainerResponseFilter {
     // HSTS
     headers.putSingle("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     
-    // CSP — avoid 'unsafe-inline' for script-src as it negates XSS protection;
+    // CSP: avoid 'unsafe-inline' for script-src as it negates XSS protection;
     // use nonces or hashes instead. 'unsafe-inline' for style-src is acceptable
     // when CSS frameworks require it, but prefer nonces where possible.
     headers.putSingle("Content-Security-Policy", 

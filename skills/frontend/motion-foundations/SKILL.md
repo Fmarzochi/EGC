@@ -1,6 +1,6 @@
 ---
 name: motion-foundations
-description: Motion tokens, spring presets, performance rules, device adaptation, accessibility enforcement, and SSR safety for React / Next.js using motion/react. Foundation layer — all other motion skills depend on this.
+description: Motion tokens, spring presets, performance rules, device adaptation, accessibility enforcement, and SSR safety for React / Next.js using motion/react. Foundation layer: all other motion skills depend on this.
 version: 1.0
 tags: [motion, animation, performance, accessibility]
 category: frontend
@@ -71,11 +71,11 @@ These are non-negotiable. They apply to every component in the system.
 
 | Preset | Use when |
 | --------- | ------------------------------------------ |
-| `snappy` | Default UI — buttons, chips, nav items |
+| `snappy` | Default UI: buttons, chips, nav items |
 | `gentle` | Cards, modals, panels landing softly |
-| `bouncy` | Playful moments — empty states, onboarding |
+| `bouncy` | Playful moments: empty states, onboarding |
 | `instant` | Tooltips, popovers, dropdowns |
-| `release` | Drag release — natural physics feel |
+| `release` | Drag release: natural physics feel |
 
 ### When to disable animation entirely
 
@@ -166,9 +166,9 @@ export const motionConfig = {
 
 **Priority order (highest to lowest):**
 
-1. `prefers-reduced-motion: reduce` — disables all transforms, limits opacity transitions to ≤ 0.2s
-2. Low-end device detection — reduces duration, removes non-essential animations
-3. Design preference — everything else
+1. `prefers-reduced-motion: reduce`: disables all transforms, limits opacity transitions to ≤ 0.2s
+2. Low-end device detection: reduces duration, removes non-essential animations
+3. Design preference: everything else
 
 Motion must degrade gracefully. It must never disappear abruptly in a way
 that causes layout shift or confuses orientation.
@@ -206,10 +206,10 @@ export function useSafeMotion(fullY: number = 16) {
 **Rule: `initial` must always match what the server renders.**
 
 ```tsx
-// WRONG — server renders opacity:1 but initial says 0 → hydration mismatch
+// WRONG: server renders opacity:1 but initial says 0 → hydration mismatch
 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
 
-// CORRECT — use AnimatePresence or defer to client mount
+// CORRECT: use AnimatePresence or defer to client mount
 "use client"
 const [mounted, setMounted] = useState(false)
 useEffect(() => setMounted(true), [])
@@ -240,14 +240,14 @@ interface FadeInCardProps {
 }
 
 export function FadeInCard({ children, delay = 0 }: FadeInCardProps) {
-  // SSR guard — initial must match server output (opacity: 1)
+  // SSR guard: initial must match server output (opacity: 1)
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
-  // Accessibility — disables transform when reduced motion is preferred
+  // Accessibility: disables transform when reduced motion is preferred
   const safeMotion = useSafeMotion(motionTokens.distance.md)
 
-  // Device gate — skip animation on low-end hardware
+  // Device gate: skip animation on low-end hardware
   if (!motionConfig.shouldAnimate() || !mounted) {
     return <div>{children}</div>
   }
@@ -278,7 +278,7 @@ This skill does **not** cover:
 - Drag, gestures, SVG, text animations, custom hooks → see `motion-advanced`
 - CSS-only animations or Tailwind `animate-*` classes without `motion/react`
 - Third-party animation libraries (GSAP, anime.js, etc.)
-- Motion design decisions (when to animate, what to emphasize) — that is a design concern, not a code constraint
+- Motion design decisions (when to animate, what to emphasize): that is a design concern, not a code constraint
 
 ## Anti-Patterns
 
@@ -295,5 +295,5 @@ This skill does **not** cover:
 
 ## Related Skills
 
-- **`motion-patterns`** — consumes tokens and springs defined here to build button, modal, stagger, page transition, and scroll patterns. Does not redefine any values.
-- **`motion-advanced`** — consumes tokens and springs defined here for drag, SVG, text, and gesture patterns. Adds `useAnimate` sequences and custom hooks on top of this foundation.
+- **`motion-patterns`**: consumes tokens and springs defined here to build button, modal, stagger, page transition, and scroll patterns. Does not redefine any values.
+- **`motion-advanced`**: consumes tokens and springs defined here for drag, SVG, text, and gesture patterns. Adds `useAnimate` sequences and custom hooks on top of this foundation.

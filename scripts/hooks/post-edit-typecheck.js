@@ -58,12 +58,12 @@ process.stdin.on("end", () => {
             timeout: 30000,
           });
         } catch (err) {
-          // tsc exits non-zero when there are errors — filter to edited file
+          // tsc exits non-zero when there are errors: filter to edited file
           const output = (err.stdout || "") + (err.stderr || "");
           // Compute paths that uniquely identify the edited file.
           // tsc output uses paths relative to its cwd (the tsconfig dir),
           // so check for the relative path, absolute path, and original path.
-          // Avoid bare basename matching — it causes false positives when
+          // Avoid bare basename matching: it causes false positives when
           // multiple files share the same name (e.g., src/utils.ts vs tests/utils.ts).
           const relPath = path.relative(dir, resolvedPath);
           const candidates = new Set([filePath, resolvedPath, relPath]);
@@ -87,7 +87,7 @@ process.stdin.on("end", () => {
       }
     }
   } catch {
-    // Invalid input — pass through
+    // Invalid input: pass through
   }
 
   process.stdout.write(data);

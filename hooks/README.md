@@ -36,7 +36,7 @@ That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Ge
 
 | Hook | Matcher | Behavior | Exit Code |
 |------|---------|----------|-----------|
-| **Dev server blocker** | `Bash` | Blocks `npm run dev` etc. outside tmux — ensures log access | 2 (blocks) |
+| **Dev server blocker** | `Bash` | Blocks `npm run dev` etc. outside tmux: ensures log access | 2 (blocks) |
 | **Tmux reminder** | `Bash` | Suggests tmux for long-running commands (npm test, cargo build, docker) | 0 (warns) |
 | **Git push reminder** | `Bash` | Reminds to review changes before `git push` | 0 (warns) |
 | **Pre-commit quality check** | `Bash` | Runs quality checks before `git commit`: lints staged files, validates commit message format when provided via `-m/--message`, detects console.log/debugger/secrets | 2 (blocks critical) / 0 (warns) |
@@ -110,9 +110,9 @@ export EGC_SESSION_START_CONTEXT=off
 ```
 
 Profiles:
-- `minimal` — keep essential lifecycle and safety hooks only.
-- `standard` — default; balanced quality + safety checks.
-- `strict` — enables additional reminders and stricter guardrails.
+- `minimal`: keep essential lifecycle and safety hooks only.
+- `standard`: default; balanced quality + safety checks.
+- `strict`: enables additional reminders and stricter guardrails.
 
 ### Writing Your Own Hook
 
@@ -144,9 +144,9 @@ process.stdin.on('end', () => {
 ```
 
 **Exit codes:**
-- `0` — Success (continue execution)
-- `2` — Block the tool call (PreToolUse only)
-- Other non-zero — Error (logged but does not block)
+- `0`: Success (continue execution)
+- `2`: Block the tool call (PreToolUse only)
+- Other non-zero: Error (logged but does not block)
 
 ### Hook Input Schema
 
@@ -241,6 +241,6 @@ Hook logic is implemented in Node.js scripts for cross-platform behavior on Wind
 
 ## Related
 
-- [rules/common/hooks.md](../rules/common/hooks.md) — Hook architecture guidelines
-- [skills/workflows/strategic-compact/](../skills/workflows/strategic-compact/) — Strategic compaction skill
-- [scripts/hooks/](../scripts/hooks/) — Hook script implementations
+- [rules/common/hooks.md](../rules/common/hooks.md): Hook architecture guidelines
+- [skills/workflows/strategic-compact/](../skills/workflows/strategic-compact/): Strategic compaction skill
+- [scripts/hooks/](../scripts/hooks/): Hook script implementations

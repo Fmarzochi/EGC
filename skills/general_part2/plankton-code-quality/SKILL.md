@@ -1,6 +1,6 @@
 ---
 name: plankton-code-quality
-description: "Write-time code quality enforcement using Plankton — auto-formatting, linting, and Gemini-powered fixes on every file edit via hooks."
+description: "Write-time code quality enforcement using Plankton: auto-formatting, linting, and Gemini-powered fixes on every file edit via hooks."
 origin: community
 ---
 
@@ -35,9 +35,9 @@ Phase 2: Collect Violations (JSON)
 Phase 3: Delegate + Verify
 ├─ Spawns egc -p subprocess with violations JSON
 ├─ Routes to model tier based on violation complexity:
-│   ├─ Haiku: formatting, imports, style (E/W/F codes) — 120s timeout
-│   ├─ Sonnet: complexity, refactoring (C901, PLR codes) — 300s timeout
-│   └─ Opus: type system, deep reasoning (unresolved-attribute) — 600s timeout
+│   ├─ Haiku: formatting, imports, style (E/W/F codes): 120s timeout
+│   ├─ Sonnet: complexity, refactoring (C901, PLR codes): 300s timeout
+│   └─ Opus: type system, deep reasoning (unresolved-attribute): 600s timeout
 ├─ Re-runs Phase 1+2 to verify fixes
 └─ Exit 0 if clean, Exit 2 if violations remain (reported to main agent)
 ```
@@ -57,9 +57,9 @@ The main agent only sees issues the subprocess couldn't fix. Most quality proble
 
 LLMs will modify `.ruff.toml` or `biome.json` to disable rules rather than fix code. Plankton blocks this with three layers:
 
-1. **PreToolUse hook** — `protect_linter_configs.sh` blocks edits to all linter configs before they happen
-2. **Stop hook** — `stop_config_guardian.sh` detects config changes via `git diff` at session end
-3. **Protected files list** — `.ruff.toml`, `biome.json`, `.shellcheckrc`, `.yamllint`, `.hadolint.yaml`, and more
+1. **PreToolUse hook**: `protect_linter_configs.sh` blocks edits to all linter configs before they happen
+2. **Stop hook**: `stop_config_guardian.sh` detects config changes via `git diff` at session end
+3. **Protected files list**: `.ruff.toml`, `biome.json`, `.shellcheckrc`, `.yamllint`, `.hadolint.yaml`, and more
 
 ### Package Manager Enforcement
 
@@ -81,7 +81,7 @@ brew install jaq ruff uv
 # Install Python linters
 uv sync --all-extras
 
-# Start Gemini Code — hooks activate automatically
+# Start Gemini Code: hooks activate automatically
 egc
 ```
 
@@ -102,12 +102,12 @@ To use Plankton hooks in your own project:
 |----------|----------|----------|
 | Python | `ruff`, `uv` | `ty` (types), `vulture` (dead code), `bandit` (security) |
 | TypeScript/JS | `biome` | `oxlint`, `semgrep`, `knip` (dead exports) |
-| Shell | `shellcheck`, `shfmt` | — |
-| YAML | `yamllint` | — |
-| Markdown | `markdownlint-cli2` | — |
-| Dockerfile | `hadolint` (>= 2.12.0) | — |
-| TOML | `taplo` | — |
-| JSON | `jaq` | — |
+| Shell | `shellcheck`, `shfmt` |: |
+| YAML | `yamllint` |: |
+| Markdown | `markdownlint-cli2` |: |
+| Dockerfile | `hadolint` (>= 2.12.0) |: |
+| TOML | `taplo` |: |
+| JSON | `jaq` |: |
 
 ## Pairing with EGC
 
@@ -117,9 +117,9 @@ To use Plankton hooks in your own project:
 |---------|-----|----------|
 | Code quality enforcement | PostToolUse hooks (Prettier, tsc) | PostToolUse hooks (20+ linters + subprocess fixes) |
 | Security scanning | AgentShield, security-reviewer agent | Bandit (Python), Semgrep (TypeScript) |
-| Config protection | — | PreToolUse blocks + Stop hook detection |
+| Config protection |: | PreToolUse blocks + Stop hook detection |
 | Package manager | Detection + setup | Enforcement (blocks legacy PMs) |
-| CI integration | — | Pre-commit hooks for git |
+| CI integration |: | Pre-commit hooks for git |
 | Model routing | Manual (`/model gemini-2.5-pro`) | Automatic (violation complexity → tier) |
 
 ### Recommended Combination
@@ -174,8 +174,8 @@ Plankton's `.gemini/hooks/config.json` controls all behavior:
 
 **Key settings:**
 - Disable languages you don't use to speed up hooks
-- `volume_threshold` — violations > this count auto-escalate to a higher model tier
-- `subprocess_delegation: false` — skip Phase 3 entirely (just report violations)
+- `volume_threshold`: violations > this count auto-escalate to a higher model tier
+- `subprocess_delegation: false`: skip Phase 3 entirely (just report violations)
 
 ## Environment Overrides
 
@@ -189,8 +189,8 @@ Plankton's `.gemini/hooks/config.json` controls all behavior:
 ## References
 
 - Plankton (credit: @alxfazio)
-- Plankton REFERENCE.md — Full architecture documentation (credit: @alxfazio)
-- Plankton SETUP.md — Detailed installation guide (credit: @alxfazio)
+- Plankton REFERENCE.md: Full architecture documentation (credit: @alxfazio)
+- Plankton SETUP.md: Detailed installation guide (credit: @alxfazio)
 
 ## EGC v1.8 Additions
 

@@ -1,5 +1,5 @@
 ---
-description: Full-spectrum engineering health audit — scores Maintainability, Security, Testing, Architecture, Documentation, Lint, Type Safety, and Build Health. Produces a ranked issue list and remediation plan. Never modifies files.
+description: Full-spectrum engineering health audit: scores Maintainability, Security, Testing, Architecture, Documentation, Lint, Type Safety, and Build Health. Produces a ranked issue list and remediation plan. Never modifies files.
 argument-hint: [--threshold <score> | --focus <dimension> | blank for full audit]
 ---
 
@@ -21,14 +21,14 @@ Parse `$ARGUMENTS`:
 |---|---|
 | `--threshold <N>` | Only report issues where score < N (e.g. `--threshold 7` shows scores below 7) |
 | `--focus <dimension>` | Run only one dimension (e.g. `--focus security`, `--focus complexity`) |
-| `--quick` | Skip slow checks (coverage, duplicate detection) — fast scan only |
+| `--quick` | Skip slow checks (coverage, duplicate detection): fast scan only |
 | blank | Full audit, all dimensions |
 
 ---
 
 ## Execution
 
-### Step 1 — Detect Project
+### Step 1: Detect Project
 
 ```bash
 ls package.json tsconfig.json pyproject.toml go.mod Cargo.toml 2>/dev/null
@@ -36,7 +36,7 @@ ls package.json tsconfig.json pyproject.toml go.mod Cargo.toml 2>/dev/null
 
 Identify: Node/TypeScript, Python, Go, Rust, or mixed. Adjust tool selection accordingly.
 
-### Step 2 — Run Audit
+### Step 2: Run Audit
 
 Invoke the `engineering-auditor` agent with the project context and parsed arguments.
 
@@ -46,13 +46,13 @@ The agent will:
 3. Compute the weighted Engineering Score
 4. Rank all findings: CRITICAL → HIGH → MEDIUM → LOW
 
-### Step 3 — Display Report
+### Step 3: Display Report
 
 Print the full report:
 
 ```
 ═══════════════════════════════════════════════
-  ENGINEERING AUDIT — <project name>
+  ENGINEERING AUDIT: <project name>
   <timestamp>
 ═══════════════════════════════════════════════
 
@@ -72,7 +72,7 @@ CRITICAL  (N)
 ───────────────────────────────────────────────
   ▸ [file:line] description
     Root cause: ...
-    Fix: Extract Method — split into X and Y
+    Fix: Extract Method: split into X and Y
 
 HIGH  (N)
 ───────────────────────────────────────────────
@@ -91,7 +91,7 @@ To apply fixes: /engineering-fix
 ───────────────────────────────────────────────
 ```
 
-### Step 4 — Write Audit Report
+### Step 4: Write Audit Report
 
 Save report to `.egc/audits/engineering-audit-<YYYY-MM-DD>.md`:
 
@@ -105,12 +105,12 @@ The report includes:
 - Remediation plan
 - Timestamp and tool versions used
 
-### Step 5 — Summarize
+### Step 5: Summarize
 
 Print a one-line summary:
 
 ```
-Engineering Score: X.X/10 — N critical, N high, N medium, N low issues. Report: .egc/audits/engineering-audit-<date>.md
+Engineering Score: X.X/10: N critical, N high, N medium, N low issues. Report: .egc/audits/engineering-audit-<date>.md
 ```
 
 Then ask: "Run `/engineering-fix` to apply corrections, starting with CRITICAL issues?"

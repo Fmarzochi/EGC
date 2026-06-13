@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scan-skills.sh — enumerate skill files, extract frontmatter and UTC mtime
+# scan-skills.sh: enumerate skill files, extract frontmatter and UTC mtime
 # Usage: scan-skills.sh [CWD_SKILLS_DIR]
 # Output: JSON to stdout
 #
@@ -8,7 +8,7 @@
 #
 # Environment:
 #   RULES_DISTILL_GLOBAL_DIR   Override ~/.gemini/skills (for testing only;
-#                              do not set in production — intended for bats tests)
+#                              do not set in production: intended for bats tests)
 #   RULES_DISTILL_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
@@ -16,7 +16,7 @@ set -euo pipefail
 GLOBAL_DIR="${RULES_DISTILL_GLOBAL_DIR:-$HOME/.gemini/skills}"
 CWD_SKILLS_DIR="${RULES_DISTILL_PROJECT_DIR:-${1:-$PWD/.gemini/skills}}"
 # Validate CWD_SKILLS_DIR looks like a .gemini/skills path (defense-in-depth).
-# Only warn when the path exists — a nonexistent path poses no traversal risk.
+# Only warn when the path exists: a nonexistent path poses no traversal risk.
 if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */.gemini/skills* ]]; then
   echo "Warning: CWD_SKILLS_DIR does not look like a .gemini/skills path: $CWD_SKILLS_DIR" >&2
 fi

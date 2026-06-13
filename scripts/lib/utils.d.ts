@@ -109,7 +109,7 @@ export function appendFile(filePath: string, content: string): void;
 export interface ReplaceInFileOptions {
   /**
    * When true and search is a string, replaces ALL occurrences (uses String.replaceAll).
-   * Ignored for RegExp patterns — use the `g` flag instead.
+   * Ignored for RegExp patterns: use the `g` flag instead.
    */
   all?: boolean;
 }
@@ -154,7 +154,7 @@ export interface ReadStdinJsonOptions {
 /**
  * Read JSON from stdin (for hook input).
  * Returns an empty object if stdin is empty, times out, or contains invalid JSON.
- * Never rejects — safe to use without try-catch in hooks.
+ * Never rejects: safe to use without try-catch in hooks.
  */
 export function readStdinJson(options?: ReadStdinJsonOptions): Promise<Record<string, unknown>>;
 

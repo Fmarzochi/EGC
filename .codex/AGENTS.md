@@ -14,33 +14,33 @@ This supplements the root `AGENTS.md` with Codex-specific guidance.
 ## Skills Discovery
 
 Skills are auto-loaded from `.agents/skills/`. Each skill contains:
-- `SKILL.md` — Detailed instructions and workflow
-- `agents/openai.yaml` — Codex interface metadata
+- `SKILL.md`: Detailed instructions and workflow
+- `agents/openai.yaml`: Codex interface metadata
 
 Available skills:
-- tdd-workflow — Test-driven development with 80%+ coverage
-- security-review — Comprehensive security checklist
-- coding-standards — Universal coding standards
-- frontend-patterns — React/Next.js patterns
-- frontend-slides — Viewport-safe HTML presentations and PPTX-to-web conversion
-- article-writing — Long-form writing from notes and voice references
-- content-engine — Platform-native social content and repurposing
-- market-research — Source-attributed market and competitor research
-- investor-materials — Decks, memos, models, and one-pagers
-- investor-outreach — Personalized investor outreach and follow-ups
-- backend-patterns — API design, database, caching
-- e2e-testing — Playwright E2E tests
-- eval-harness — Eval-driven development
-- strategic-compact — Context management
-- api-design — REST API design patterns
-- verification-loop — Build, test, lint, typecheck, security
-- deep-research — Multi-source research with firecrawl and exa MCPs
-- exa-search — Neural search via Exa MCP for web, code, and companies
-- egc-api — Gemini Code API patterns and SDKs
-- x-api — X/Twitter API integration for posting, threads, and analytics
-- crosspost — Multi-platform content distribution
-- fal-ai-media — AI image/video/audio generation via fal.ai
-- dmux-workflows — Multi-agent orchestration with dmux
+- tdd-workflow: Test-driven development with 80%+ coverage
+- security-review: Comprehensive security checklist
+- coding-standards: Universal coding standards
+- frontend-patterns: React/Next.js patterns
+- frontend-slides: Viewport-safe HTML presentations and PPTX-to-web conversion
+- article-writing: Long-form writing from notes and voice references
+- content-engine: Platform-native social content and repurposing
+- market-research: Source-attributed market and competitor research
+- investor-materials: Decks, memos, models, and one-pagers
+- investor-outreach: Personalized investor outreach and follow-ups
+- backend-patterns: API design, database, caching
+- e2e-testing: Playwright E2E tests
+- eval-harness: Eval-driven development
+- strategic-compact: Context management
+- api-design: REST API design patterns
+- verification-loop: Build, test, lint, typecheck, security
+- deep-research: Multi-source research with firecrawl and exa MCPs
+- exa-search: Neural search via Exa MCP for web, code, and companies
+- egc-api: Gemini Code API patterns and SDKs
+- x-api: X/Twitter API integration for posting, threads, and analytics
+- crosspost: Multi-platform content distribution
+- fal-ai-media: AI image/video/audio generation via fal.ai
+- dmux-workflows: Multi-agent orchestration with dmux
 
 ## MCP Servers
 
@@ -52,13 +52,13 @@ EGC's canonical Codex section name is `[mcp_servers.context7]`. The launcher pac
 
 The sync script (`scripts/sync-egc-to-codex.sh`) uses a Node-based TOML parser to safely merge EGC MCP servers into `~/.codex/config.toml`:
 
-- **Add-only by default** — missing EGC servers are appended; existing servers are never modified or removed.
-- **7 managed servers** — Supabase, Playwright, Context7, Exa, GitHub, Memory, Sequential Thinking.
-- **Canonical naming** — EGC manages Context7 as `[mcp_servers.context7]`; legacy `[mcp_servers.context7-mcp]` entries are treated as aliases during updates.
-- **Package-manager aware** — uses the project's configured package manager (npm/pnpm/yarn/bun) instead of hardcoding `pnpm`.
-- **Drift warnings** — if an existing server's config differs from the EGC recommendation, the script logs a warning.
-- **`--update-mcp`** — explicitly replaces all EGC-managed servers with the latest recommended config (safely removes subtables like `[mcp_servers.supabase.env]`).
-- **User config is always preserved** — custom servers, args, env vars, and credentials outside EGC-managed sections are never touched.
+- **Add-only by default**: missing EGC servers are appended; existing servers are never modified or removed.
+- **7 managed servers**: Supabase, Playwright, Context7, Exa, GitHub, Memory, Sequential Thinking.
+- **Canonical naming**: EGC manages Context7 as `[mcp_servers.context7]`; legacy `[mcp_servers.context7-mcp]` entries are treated as aliases during updates.
+- **Package-manager aware**: uses the project's configured package manager (npm/pnpm/yarn/bun) instead of hardcoding `pnpm`.
+- **Drift warnings**: if an existing server's config differs from the EGC recommendation, the script logs a warning.
+- **`--update-mcp`**: explicitly replaces all EGC-managed servers with the latest recommended config (safely removes subtables like `[mcp_servers.supabase.env]`).
+- **User config is always preserved**: custom servers, args, env vars, and credentials outside EGC-managed sections are never touched.
 
 ## External Action Boundaries
 
@@ -76,9 +76,9 @@ Codex now supports multi-agent workflows behind the experimental `features.multi
 - Use `/agent` inside Codex CLI to inspect and steer child agents
 
 Sample role configs in this repo:
-- `.codex/agents/explorer.toml` — read-only evidence gathering
-- `.codex/agents/reviewer.toml` — correctness/security review
-- `.codex/agents/docs-researcher.toml` — API and release-note verification
+- `.codex/agents/explorer.toml`: read-only evidence gathering
+- `.codex/agents/reviewer.toml`: correctness/security review
+- `.codex/agents/docs-researcher.toml`: API and release-note verification
 
 ## Key Differences from Gemini Code
 
@@ -96,7 +96,7 @@ Sample role configs in this repo:
 
 Since Codex lacks hooks, security enforcement is instruction-based:
 1. Always validate inputs at system boundaries
-2. Never hardcode secrets — use environment variables
+2. Never hardcode secrets: use environment variables
 3. Run `npm audit` / `pip audit` before committing
 4. Review `git diff` before every push
 5. Use `sandbox_mode = "workspace-write"` in config

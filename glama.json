@@ -15,7 +15,7 @@
     },
     {
       "name": "update_state",
-      "description": "Updates the project memory with decisions made this session. Call this at the END of every session. Merges with existing state — does not erase previous memory."
+      "description": "Updates the project memory with decisions made this session. Call this at the END of every session. Merges with existing state: does not erase previous memory."
     },
     {
       "name": "store_decision",

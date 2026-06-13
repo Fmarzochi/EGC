@@ -17,7 +17,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
   - **Option B:** Maintain one `docs/catalog.json` (or YAML) that lists agents, commands, and skills with metadata; scripts and docs read from it. Requires discipline to update on add/remove.
 - **Short-term:** Manually sync AGENTS.md, README.md, and gemini.md with actual counts and list any new agents (e.g. chief-of-staff, loop-operator, harness-optimizer) in the agent table.
 
-**Impact:** High — affects first impression and contributor trust.
+**Impact:** High: affects first impression and contributor trust.
 
 ---
 
@@ -30,7 +30,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - Add a **command registry** (e.g. in `docs/` or as frontmatter in command files) that lists for each command: name, description, primary agent(s), skills referenced. Can be generated from command file content or maintained by hand.
 - Expose a "map" in docs (e.g. `docs/COMMAND-AGENT-MAP.md`) or in the generated catalog for discoverability and for tooling (e.g. "which commands use tdd-guide?").
 
-**Impact:** Medium — improves discoverability and refactoring safety.
+**Impact:** Medium: improves discoverability and refactoring safety.
 
 ---
 
@@ -45,7 +45,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - **Glob-based discovery:** Discover test files by pattern (e.g. `**/*.test.js` under `tests/`) and run them, with an optional allowlist/denylist for special cases. This makes new tests automatically part of the suite.
 - Keep a single entry point (`tests/run-all.js`) that runs discovered tests and aggregates results.
 
-**Impact:** High — prevents regression where new tests exist but are never executed.
+**Impact:** High: prevents regression where new tests exist but are never executed.
 
 ---
 
@@ -58,7 +58,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - Introduce a coverage tool for Node scripts (e.g. `c8` or `nyc`) and run it in CI. Start with a baseline (e.g. 60%) and raise over time; or at least report coverage in CI without failing so the team can see trends.
 - Focus on `scripts/` (lib + hooks + ci) as the primary target; exclude one-off scripts if needed.
 
-**Impact:** Medium — aligns the project with its own AGENTS.md guidance (80%+ coverage) and surfaces untested paths.
+**Impact:** Medium: aligns the project with its own AGENTS.md guidance (80%+ coverage) and surfaces untested paths.
 
 ---
 
@@ -73,7 +73,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - Use a JSON Schema validator (e.g. `ajv`) in `validate-hooks.js` to validate `hooks/hooks.json` against `schemas/hooks.schema.json`. Keep the validator as the single source of truth for structure; retain only hook-specific checks (e.g. inline JS syntax) in the script.
 - Ensures schema and validator stay in sync and allows IDE/editor validation via `$schema` in hooks.json.
 
-**Impact:** Medium — reduces drift and improves contributor experience when editing hooks.
+**Impact:** Medium: reduces drift and improves contributor experience when editing hooks.
 
 ---
 
@@ -88,7 +88,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - Document in CONTRIBUTING.md that adding a skill may require updating `.agents/skills` and `.cursor/skills` (and how to do it).
 - Optionally: a CI check or script that compares `skills/` to the subsets and fails or warns if a skill is in one set but not the other when it should be (e.g. by convention or by a small manifest).
 
-**Impact:** Low–Medium — reduces cross-harness drift.
+**Impact:** Low–Medium: reduces cross-harness drift.
 
 ---
 
@@ -102,7 +102,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - Consider: translation status file (e.g. `docs/i18n-status.md`) or CI that checks translation file existence/timestamps and warns if English was updated more recently than a translation.
 - Long-term: consider extraction/placeholder format (e.g. i18n keys) so translations reference the same structure as the English source.
 
-**Impact:** Medium — improves experience for non-English users and reduces confusion from outdated translations.
+**Impact:** Medium: improves experience for non-English users and reduces confusion from outdated translations.
 
 ---
 
@@ -117,7 +117,7 @@ This document captures architect-level improvements for the EGC - Extended Globa
 - Prefer Node for new hooks when possible (cross-platform, single runtime). If shell is required, document why and keep the surface small.
 - Ensure `egc_HOOK_PROFILE` and `egc_DISABLED_HOOKS` are respected in all code paths (including shell) so behavior is consistent.
 
-**Impact:** Low — maintains current design; improves if more hooks migrate to Node.
+**Impact:** Low: maintains current design; improves if more hooks migrate to Node.
 
 ---
 

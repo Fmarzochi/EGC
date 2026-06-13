@@ -32,8 +32,8 @@ ctest --test-dir build --output-on-failure
 
 ## Recommended CI Pipeline
 
-1. **clang-format** — formatting check
-2. **clang-tidy** — static analysis
-3. **cppcheck** — additional analysis
-4. **cmake build** — compilation
-5. **ctest** — test execution with sanitizers
+1. **clang-format**: formatting check
+2. **clang-tidy**: static analysis
+3. **cppcheck**: additional analysis
+4. **cmake build**: compilation
+5. **ctest**: test execution with sanitizers

@@ -15,13 +15,13 @@ paths:
 
 ## Version Awareness
 
-Always check the project's Angular version before writing code — features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.
+Always check the project's Angular version before writing code: features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.
 
 After generating or modifying Angular code, always run `ng build` to catch errors before finishing.
 
 ## File Naming
 
-Follow Angular CLI conventions — one artifact per file:
+Follow Angular CLI conventions: one artifact per file:
 
 - `user-profile.component.ts` + `user-profile.component.html` + `user-profile.component.spec.ts`
 - `user.service.ts`, `auth.guard.ts`, `date-format.pipe.ts`
@@ -87,7 +87,7 @@ increment() {
 }
 ```
 
-### `linkedSignal` — Writable Derived State
+### `linkedSignal`: Writable Derived State
 
 Use `linkedSignal` when a signal must reset or adapt when a source changes, but also be independently writable:
 
@@ -96,7 +96,7 @@ selectedOption = linkedSignal(() => this.options()[0]);
 // Resets to first option when options changes, but user can override
 ```
 
-### `resource` — Async Data into Signals
+### `resource`: Async Data into Signals
 
 Use `resource()` to fetch async data reactively without manual subscriptions:
 
@@ -111,7 +111,7 @@ userResource = resource({
 
 ### `effect` Usage
 
-Use `effect()` only for side effects that must react to signal changes (logging, third-party DOM manipulation). Never use effects to synchronize signals — use `computed` or `linkedSignal` instead. For DOM work after render, use `afterRenderEffect`.
+Use `effect()` only for side effects that must react to signal changes (logging, third-party DOM manipulation). Never use effects to synchronize signals: use `computed` or `linkedSignal` instead. For DOM work after render, use `afterRenderEffect`.
 
 ```typescript
 // CORRECT: Side effect
@@ -139,7 +139,7 @@ Use v17+ block syntax. Always provide `track` in `@for`:
 }
 ```
 
-No logic in templates beyond simple conditionals — move to component methods or pipes.
+No logic in templates beyond simple conditionals: move to component methods or pipes.
 
 ## Forms
 
@@ -150,7 +150,7 @@ Choose the form strategy that matches the project's existing approach:
 - **Template-Driven Forms**: `ngModel`. Suitable for simple forms only.
 
 ```typescript
-// Reactive Forms — standard approach for most apps
+// Reactive Forms: standard approach for most apps
 export class LoginComponent {
   private fb = inject(FormBuilder);
 
@@ -171,12 +171,12 @@ export class LoginComponent {
 
 Use component-level styles with `ViewEncapsulation.Emulated` (default). Avoid `ViewEncapsulation.None` unless building a design system that intentionally bleeds styles.
 
-- Scope styles to the component — do not use global class names inside component stylesheets
+- Scope styles to the component: do not use global class names inside component stylesheets
 - Use `:host` for host element styling
 - Prefer CSS custom properties for themeable values
 
 ## Change Detection
 
 - Default to `ChangeDetectionStrategy.OnPush` on all new components
-- Signals and `async` pipe handle detection automatically — avoid `markForCheck()` and `detectChanges()`
+- Signals and `async` pipe handle detection automatically: avoid `markForCheck()` and `detectChanges()`
 - Never mutate `@Input()` objects in place when using OnPush

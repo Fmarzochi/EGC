@@ -17,7 +17,7 @@ paths:
 
 ## Input Validation
 
-- Use allowlist regex for untainting — never `/(.*)/s`
+- Use allowlist regex for untainting: never `/(.*)/s`
 - Validate all user input with explicit patterns:
 
 ```perl
@@ -28,7 +28,7 @@ if ($input =~ /\A([a-zA-Z0-9_-]+)\z/) {
 
 ## File I/O
 
-- **Three-arg open only** — never two-arg open
+- **Three-arg open only**: never two-arg open
 - Prevent path traversal with `Cwd::realpath`:
 
 ```perl
@@ -39,7 +39,7 @@ die "Path traversal" unless $safe_path =~ m{\A/allowed/directory/};
 
 ## Process Execution
 
-- Use **list-form `system()`** — never single-string form
+- Use **list-form `system()`**: never single-string form
 - Use **IPC::Run3** for capturing output
 - Never use backticks with variable interpolation
 
@@ -49,7 +49,7 @@ system('grep', '-r', $pattern, $directory);  # safe
 
 ## SQL Injection Prevention
 
-Always use DBI placeholders — never interpolate into SQL:
+Always use DBI placeholders: never interpolate into SQL:
 
 ```perl
 my $sth = $dbh->prepare('SELECT * FROM users WHERE email = ?');

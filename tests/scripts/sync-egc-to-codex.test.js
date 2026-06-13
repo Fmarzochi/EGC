@@ -69,7 +69,7 @@ function runTests() {
 
   if (test('filesystem-changing calls use argv-form run_or_echo invocations', () => {
     assert.ok(source.includes('run_or_echo mkdir -p "$BACKUP_DIR"'), 'mkdir should use argv form');
-    // Skills sync rm/cp calls were removed — Codex reads from ~/.agents/skills/ natively
+    // Skills sync rm/cp calls were removed: Codex reads from ~/.agents/skills/ natively
     assert.ok(!source.includes('run_or_echo rm -rf "$dest"'), 'skill sync rm should be removed');
     assert.ok(!source.includes('run_or_echo cp -R "$skill_dir" "$dest"'), 'skill sync cp should be removed');
   })) passed++; else failed++;

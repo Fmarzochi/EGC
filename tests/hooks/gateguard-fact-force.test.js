@@ -533,7 +533,7 @@ function runTests() {
     };
     runHook(input2); // gates multi-b.js
 
-    // Now both files are gated — retry should allow
+    // Now both files are gated: retry should allow
     const input3 = {
       tool_name: 'MultiEdit',
       tool_input: {

@@ -17,4 +17,4 @@ Configure in `~/.gemini/settings.json`:
 
 ## Warning
 
-Flag `print()` statements — use `os.Logger` or structured logging instead for production code.
+Flag `print()` statements: use `os.Logger` or structured logging instead for production code.

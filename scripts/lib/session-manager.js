@@ -40,7 +40,7 @@ function parseSessionFilename(filename) {
 
   const [year, month, day] = dateStr.split('-').map(Number);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  // Reject impossible dates like Feb 31, Apr 31 — Date constructor rolls
+  // Reject impossible dates like Feb 31, Apr 31: Date constructor rolls
   // over invalid days (e.g., Feb 31 → Mar 3), so check month roundtrips
   const d = new Date(year, month - 1, day);
   if (d.getMonth() !== month - 1 || d.getDate() !== day) return null;
@@ -354,7 +354,7 @@ function getAllSessions(options = {}) {
   // Clamp offset and limit to safe non-negative integers.
   // Without this, negative offset causes slice() to count from the end,
   // and NaN values cause slice() to return empty or unexpected results.
-  // Note: cannot use `|| default` because 0 is falsy — use isNaN instead.
+  // Note: cannot use `|| default` because 0 is falsy: use isNaN instead.
   const offsetNum = Number(rawOffset);
   const offset = Number.isNaN(offsetNum) ? 0 : Math.max(0, Math.floor(offsetNum));
   const limitNum = Number(rawLimit);

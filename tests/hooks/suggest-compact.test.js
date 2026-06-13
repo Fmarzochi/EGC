@@ -368,7 +368,7 @@ function runTests() {
     const defaultCounterFile = getCounterFilePath('default');
     try { fs.unlinkSync(defaultCounterFile); } catch (_err) { /* ignore */ }
     try {
-      // Pass empty EGC_SESSION_ID — falsy, so script uses 'default'
+      // Pass empty EGC_SESSION_ID: falsy, so script uses 'default'
       const env = { ...process.env, EGC_SESSION_ID: '' };
       const result = spawnSync('node', [compactScript], {
         encoding: 'utf8',

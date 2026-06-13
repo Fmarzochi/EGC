@@ -1,6 +1,6 @@
 ---
 name: motion-advanced
-description: Advanced motion patterns for React / Next.js — drag & drop, gestures, text animations, SVG path drawing, custom hooks, imperative sequences (useAnimate), loaders, and the full API decision tree. Requires motion-foundations.
+description: Advanced motion patterns for React / Next.js: drag & drop, gestures, text animations, SVG path drawing, custom hooks, imperative sequences (useAnimate), loaders, and the full API decision tree. Requires motion-foundations.
 version: 1.0
 tags: [motion, animation, advanced, gestures, svg]
 category: frontend
@@ -38,7 +38,7 @@ This skill produces:
 
 - Physics-based motion (`useSpring`, `springs.*`) always feels more natural than duration-based for direct manipulation.
 - `useMotionValue` + `useTransform` computes derived values without triggering re-renders.
-- `useAnimate` sequences are imperative and interrupt-safe — calling `animate()` mid-flight cancels the previous animation automatically.
+- `useAnimate` sequences are imperative and interrupt-safe: calling `animate()` mid-flight cancels the previous animation automatically.
 - Motion values (`useMotionValue`, `useSpring`) are SSR-safe and do not cause hydration errors.
 
 ## Rules
@@ -78,7 +78,7 @@ This skill produces:
 | -------------- | ---------------------------------------- | ----------------------- |
 | Use for | Cursor follower, pointer-tracked values | Discrete state changes |
 | Updates | Continuous, on every frame | Triggered by state change |
-| Interrupt | Smooth — physics picks up from velocity | Restarts from current value |
+| Interrupt | Smooth: physics picks up from velocity | Restarts from current value |
 
 ## Core Concepts
 
@@ -89,13 +89,13 @@ Reactive computation without re-renders:
 ```tsx
 const x = useMotionValue(0)
 const opacity = useTransform(x, [-200, 0, 200], [0, 1, 0])
-// opacity updates every frame as x changes — no setState, no re-render
+// opacity updates every frame as x changes: no setState, no re-render
 ```
 
 ### useAnimate
 
 Returns `[scope, animate]`. The scope ref must be attached to a DOM element.
-`animate()` calls are interrupt-safe — calling mid-flight cancels the previous run.
+`animate()` calls are interrupt-safe: calling mid-flight cancels the previous run.
 
 ```tsx
 const [scope, animate] = useAnimate()
@@ -496,7 +496,7 @@ export function PulseDot() {
 ## End-to-End Example
 
 Drag-to-dismiss sheet with shimmer content, loading state, and reduced motion
-support — combining `useMotionValue`, `useTransform`, `useSafeMotion`,
+support: combining `useMotionValue`, `useTransform`, `useSafeMotion`,
 `AnimatePresence`, and tokens from `motion-foundations`:
 
 ```tsx
@@ -536,7 +536,7 @@ export function DismissibleSheet({
             onClick={onClose}
           />
 
-          {/* Sheet — drag-to-dismiss */}
+          {/* Sheet: drag-to-dismiss */}
           <motion.div
             key="sheet"
             className="fixed bottom-0 inset-x-0 rounded-t-2xl bg-white p-6"
@@ -592,5 +592,5 @@ This skill does **not** cover:
 
 ## Related Skills
 
-- **`motion-foundations`** — defines all tokens, springs, `useSafeMotion`, and SSR guards imported here. Must be set up before using this skill.
-- **`motion-patterns`** — handles standard UI patterns (button, modal, stagger, page transitions, scroll reveals). Use it before reaching for the advanced patterns here.
+- **`motion-foundations`**: defines all tokens, springs, `useSafeMotion`, and SSR guards imported here. Must be set up before using this skill.
+- **`motion-patterns`**: handles standard UI patterns (button, modal, stagger, page transitions, scroll reveals). Use it before reaching for the advanced patterns here.

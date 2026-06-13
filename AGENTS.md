@@ -1,4 +1,4 @@
-# EGC — Agent Catalog
+# EGC: Agent Catalog
 
 Extended Global Context (EGC) is a production-grade, multi-agent system providing 63 specialized agents, 229+ skills, 76 commands to any compatible AI coding environment.
 
@@ -13,9 +13,9 @@ node scripts/install-apply.js --target egc
 ## Project Structure
 
 ```
-agents/     — 63 specialized subagents
-skills/     — 229+ workflow skills and domain knowledge
-commands/   — 76 slash commands
+agents/    : 63 specialized subagents
+skills/    : 229+ workflow skills and domain knowledge
+commands/  : 76 slash commands
 ```
 
 ## Agents
@@ -36,7 +36,7 @@ Each agent in `agents/` is a Markdown file with YAML frontmatter declaring its n
 | code-simplifier | Refactoring and simplification guidance |
 | comment-analyzer | Code comment quality and documentation analysis |
 
-And many more — see `agents/*.md` for the full list.
+And many more: see `agents/*.md` for the full list.
 
 ## Runtime
 
@@ -44,7 +44,7 @@ The EGC runtime routes tasks to the appropriate agent using the execution orches
 
 ## MCP Servers
 
-- `egc-guardian` — `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
+- `egc-guardian`: `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
 - `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.

@@ -26,7 +26,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-// Session state — scoped per session to avoid cross-session races.
+// Session state: scoped per session to avoid cross-session races.
 const STATE_DIR = process.env.GATEGUARD_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.gateguard');
 let activeStateFile = null;
 

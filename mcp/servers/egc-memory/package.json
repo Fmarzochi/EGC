@@ -1,7 +1,7 @@
 {
   "name": "egc-memory",
   "version": "1.0.0",
-  "description": "EGC Memory MCP Server — persistent cross-session project state and decision history",
+  "description": "EGC Memory MCP Server: persistent cross-session project state and decision history",
   "main": "build/index.js",
   "scripts": {
     "build": "tsc && chmod +x build/index.js",

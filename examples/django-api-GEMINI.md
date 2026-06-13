@@ -1,4 +1,4 @@
-# Django REST API — Project GEMINI.md
+# Django REST API: Project GEMINI.md
 
 > Real-world example for a Django REST Framework API with PostgreSQL and Celery.
 > Copy this to your project root and customize for your service.
@@ -7,22 +7,22 @@
 
 **Stack:** Python 3.12+, Django 5.x, Django REST Framework, PostgreSQL, Celery + Redis, pytest, Docker Compose
 
-**Architecture:** Domain-driven design with apps per business domain. DRF for API layer, Celery for async tasks, pytest for testing. All endpoints return JSON — no template rendering.
+**Architecture:** Domain-driven design with apps per business domain. DRF for API layer, Celery for async tasks, pytest for testing. All endpoints return JSON: no template rendering.
 
 ## Critical Rules
 
 ### Python Conventions
 
-- Type hints on all function signatures — use `from __future__ import annotations`
-- No `print()` statements — use `logging.getLogger(__name__)`
+- Type hints on all function signatures: use `from __future__ import annotations`
+- No `print()` statements: use `logging.getLogger(__name__)`
 - f-strings for string formatting, never `%` or `.format()`
 - Use `pathlib.Path` not `os.path` for file operations
 - Imports sorted with isort: stdlib, third-party, local (enforced by ruff)
 
 ### Database
 
-- All queries use Django ORM — raw SQL only with `.raw()` and parameterized queries
-- Migrations committed to git — never use `--fake` in production
+- All queries use Django ORM: raw SQL only with `.raw()` and parameterized queries
+- Migrations committed to git: never use `--fake` in production
 - Use `select_related()` and `prefetch_related()` to prevent N+1 queries
 - All models must have `created_at` and `updated_at` auto-fields
 - Indexes on any field used in `filter()`, `order_by()`, or `WHERE` clauses
@@ -39,8 +39,8 @@ orders = Order.objects.select_related("customer").all()
 
 ### Authentication
 
-- JWT via `djangorestframework-simplejwt` — access token (15 min) + refresh token (7 days)
-- Permission classes on every view — never rely on default
+- JWT via `djangorestframework-simplejwt`: access token (15 min) + refresh token (7 days)
+- Permission classes on every view: never rely on default
 - Use `IsAuthenticated` as base, add custom permissions for object-level access
 - Token blacklisting enabled for logout
 
@@ -48,7 +48,7 @@ orders = Order.objects.select_related("customer").all()
 
 - Use `ModelSerializer` for simple CRUD, `Serializer` for complex validation
 - Separate read and write serializers when input/output shapes differ
-- Validate at serializer level, not in views — views should be thin
+- Validate at serializer level, not in views: views should be thin
 
 ```python
 class CreateOrderSerializer(serializers.Serializer):
@@ -90,7 +90,7 @@ class InsufficientStockError(APIException):
 - No emojis in code or comments
 - Max line length: 120 characters (enforced by ruff)
 - Classes: PascalCase, functions/variables: snake_case, constants: UPPER_SNAKE_CASE
-- Views are thin — business logic lives in service functions or model methods
+- Views are thin: business logic lives in service functions or model methods
 
 ## File Structure
 

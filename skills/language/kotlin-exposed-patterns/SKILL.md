@@ -282,7 +282,7 @@ suspend fun findUsersWithOrders(): List<UserRow> =
             .map { it.toUser() }
     }
 
-// LIKE and pattern matching — always escape user input to prevent wildcard injection
+// LIKE and pattern matching: always escape user input to prevent wildcard injection
 private fun escapeLikePattern(input: String): String =
     input.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 

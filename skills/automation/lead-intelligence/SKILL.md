@@ -20,15 +20,15 @@ Agent-powered lead intelligence pipeline that finds, scores, and reaches high-va
 ## Tool Requirements
 
 ### Required
-- **Exa MCP** — Deep web search for people, companies, and signals (`web_search_exa`)
-- **X API** — Follower/following graph, mutual analysis, recent activity (`X_BEARER_TOKEN`, plus write-context credentials such as `X_CONSUMER_KEY`, `X_CONSUMER_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`)
+- **Exa MCP**: Deep web search for people, companies, and signals (`web_search_exa`)
+- **X API**: Follower/following graph, mutual analysis, recent activity (`X_BEARER_TOKEN`, plus write-context credentials such as `X_CONSUMER_KEY`, `X_CONSUMER_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`)
 
 ### Optional (enhance results)
-- **LinkedIn** — Direct API if available, otherwise browser control for search, profile inspection, and drafting
-- **Apollo/Clay API** — For enrichment cross-reference if user has access
-- **GitHub MCP** — For developer-centric lead qualification
-- **Apple Mail / Mail.app** — Draft cold or warm email without sending automatically
-- **Browser control** — For LinkedIn and X when API coverage is missing or constrained
+- **LinkedIn**: Direct API if available, otherwise browser control for search, profile inspection, and drafting
+- **Apollo/Clay API**: For enrichment cross-reference if user has access
+- **GitHub MCP**: For developer-centric lead qualification
+- **Apple Mail / Mail.app**: Draft cold or warm email without sending automatically
+- **Browser control**: For LinkedIn and X when API coverage is missing or constrained
 
 ## Pipeline Overview
 
@@ -98,11 +98,11 @@ For each scored target, analyze the user's social graph to find the warmest path
 
 | Factor | Weight |
 |--------|--------|
-| Number of connections to targets | 40% — highest weight, most connections = highest rank |
-| Mutual's current role/company | 20% — decision maker vs individual contributor |
-| Mutual's location | 15% — same city = easier intro |
-| Industry alignment | 15% — same vertical = natural intro |
-| Mutual's X handle / LinkedIn | 10% — identifiability for outreach |
+| Number of connections to targets | 40%: highest weight, most connections = highest rank |
+| Mutual's current role/company | 20%: decision maker vs individual contributor |
+| Mutual's location | 15%: same city = easier intro |
+| Industry alignment | 15%: same vertical = natural intro |
+| Mutual's X handle / LinkedIn | 10%: identifiability for outreach |
 
 Canonical rule:
 
@@ -154,11 +154,11 @@ You ──[met at]──> Event ──[also attended]──> Target Person
 ```
 
 ### Path Types (ordered by warmth)
-1. **Direct mutual** — You both follow/know the same person
-2. **Portfolio connection** — Mutual invested in or advises target's company
-3. **Co-worker/alumni** — Mutual worked at same company or attended same school
-4. **Event overlap** — Both attended same conference/program
-5. **Content engagement** — Target engaged with mutual's content or vice versa
+1. **Direct mutual**: You both follow/know the same person
+2. **Portfolio connection**: Mutual invested in or advises target's company
+3. **Co-worker/alumni**: Mutual worked at same company or attended same school
+4. **Event overlap**: Both attended same conference/program
+5. **Content engagement**: Target engaged with mutual's content or vice versa
 
 ## Stage 4: Enrichment
 
@@ -166,7 +166,7 @@ For each qualified lead, pull:
 
 - Full name, current title, company
 - Company size, funding stage, recent news
-- Recent X posts (last 30 days) — topics, tone, interests
+- Recent X posts (last 30 days): topics, tone, interests
 - Mutual interests with user (shared follows, similar content)
 - Recent company events (product launch, funding round, hiring)
 
@@ -296,10 +296,10 @@ export APOLLO_API_KEY="..."  # For Apollo enrichment
 
 This skill includes specialized agents in the `agents/` subdirectory:
 
-- **signal-scorer** — Searches and ranks prospects by relevance signals
-- **mutual-mapper** — Maps social graph connections and finds warm paths
-- **enrichment-agent** — Pulls detailed profile and company data
-- **outreach-drafter** — Generates personalized messages
+- **signal-scorer**: Searches and ranks prospects by relevance signals
+- **mutual-mapper**: Maps social graph connections and finds warm paths
+- **enrichment-agent**: Pulls detailed profile and company data
+- **outreach-drafter**: Generates personalized messages
 
 ## Example Usage
 

@@ -38,11 +38,11 @@ Sort findings into safety tiers:
 
 For each SAFE item:
 
-1. **Run full test suite** — Establish baseline (all green)
-2. **Delete the dead code** — Use Edit tool for surgical removal
-3. **Re-run test suite** — Verify nothing broke
-4. **If tests fail** — Immediately revert with `git checkout -- <file>` and skip this item
-5. **If tests pass** — Move to next item
+1. **Run full test suite**: Establish baseline (all green)
+2. **Delete the dead code**: Use Edit tool for surgical removal
+3. **Re-run test suite**: Verify nothing broke
+4. **If tests fail**: Immediately revert with `git checkout -- <file>` and skip this item
+5. **If tests pass**: Move to next item
 
 ## Step 4: Handle CAUTION Items
 
@@ -55,10 +55,10 @@ Before deleting CAUTION items:
 ## Step 5: Consolidate Duplicates
 
 After removing dead code, look for:
-- Near-duplicate functions (>80% similar) — merge into one
-- Redundant type definitions — consolidate
-- Wrapper functions that add no value — inline them
-- Re-exports that serve no purpose — remove indirection
+- Near-duplicate functions (>80% similar): merge into one
+- Redundant type definitions: consolidate
+- Wrapper functions that add no value: inline them
+- Re-exports that serve no purpose: remove indirection
 
 ## Step 6: Summary
 
@@ -79,6 +79,6 @@ All tests passing PASS:
 ## Rules
 
 - **Never delete without running tests first**
-- **One deletion at a time** — Atomic changes make rollback easy
-- **Skip if uncertain** — Better to keep dead code than break production
-- **Don't refactor while cleaning** — Separate concerns (clean first, refactor later)
+- **One deletion at a time**: Atomic changes make rollback easy
+- **Skip if uncertain**: Better to keep dead code than break production
+- **Don't refactor while cleaning**: Separate concerns (clean first, refactor later)

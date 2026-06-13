@@ -340,12 +340,12 @@ function runTests() {
     assert.strictEqual(currentCount, 1, `Expected exactly 1 "(current)" in --list, found ${currentCount}`);
   })) passed++; else failed++;
 
-  // ── Round 74: setGlobal catch — setPreferredPackageManager throws ──
+  // ── Round 74: setGlobal catch: setPreferredPackageManager throws ──
   console.log('\nRound 74: setGlobal catch (save failure):');
 
   if (test('--global npm fails when HOME is not a directory', () => {
     if (process.platform === 'win32') {
-      console.log('    (skipped — /dev/null not available on Windows)');
+      console.log('    (skipped: /dev/null not available on Windows)');
       return;
     }
     // HOME=/dev/null causes ensureDir to throw ENOTDIR when creating ~/.gemini/
@@ -355,12 +355,12 @@ function runTests() {
       `stderr should contain Error:, got: ${result.stderr}`);
   })) passed++; else failed++;
 
-  // ── Round 74: setProject catch — setProjectPackageManager throws ──
+  // ── Round 74: setProject catch: setProjectPackageManager throws ──
   console.log('\nRound 74: setProject catch (save failure):');
 
   if (test('--project npm fails when CWD is read-only', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
-      console.log('    (skipped — chmod ineffective on Windows/root)');
+      console.log('    (skipped: chmod ineffective on Windows/root)');
       return;
     }
     const tmpDir = path.join(os.tmpdir(), `spm-test-ro-${Date.now()}`);

@@ -27,18 +27,18 @@ When invoked:
 
 ## Review Priorities
 
-### CRITICAL — Security
+### CRITICAL: Security
 
-- **SQL Injection**: Raw SQL with f-strings or `%` formatting — use `%s` parameters or ORM
+- **SQL Injection**: Raw SQL with f-strings or `%` formatting: use `%s` parameters or ORM
 - **`mark_safe` on user input**: Never without explicit `escape()` first
 - **CSRF exemption without reason**: `@csrf_exempt` on non-webhook views
 - **`DEBUG = True` in production settings**: Leaks full stack traces
 - **Hardcoded `SECRET_KEY`**: Must come from environment variable
-- **Missing `permission_classes` on DRF views**: Defaults to global — verify intent
+- **Missing `permission_classes` on DRF views**: Defaults to global: verify intent
 - **`eval()`/`exec()` on user input**: Immediate block
 - **File upload without extension/size validation**: Path traversal risk
 
-### CRITICAL — ORM Correctness
+### CRITICAL: ORM Correctness
 
 - **N+1 queries in loops**: Accessing related objects without `select_related`/`prefetch_related`
   ```python
@@ -55,14 +55,14 @@ When invoked:
 - **`get()` without `DoesNotExist` handling**: Unhandled exception risk
 - **Queryset used after `delete()`**: Stale queryset reference
 
-### CRITICAL — Migration Safety
+### CRITICAL: Migration Safety
 
 - **Model change without migration**: Run `python manage.py makemigrations --check`
 - **Backward-incompatible column drop**: Must be done in two deployments (nullable first)
 - **`RunPython` without `reverse_code`**: Migration cannot be reversed
 - **`atomic = False` without justification**: Leaves DB in partial state on failure
 
-### HIGH — DRF Patterns
+### HIGH: DRF Patterns
 
 - **Serializer without explicit `fields`**: `fields = '__all__'` exposes all columns including sensitive ones
 - **No pagination on list endpoints**: Unbounded queries can return millions of rows
@@ -71,11 +71,11 @@ When invoked:
 - **No throttling on auth endpoints**: Login/registration open to brute force
 - **Nested writable serializers without `update()`**: Default update silently ignores nested data
 
-### HIGH — Performance
+### HIGH: Performance
 
 - **Queryset evaluated in template context**: Use `.values()` or pass list; avoid lazy evaluation in templates
 - **Missing `db_index` on FK/filter fields**: Full table scan on filtered queries
-- **Synchronous external API call in view**: Blocks the request thread — offload to Celery
+- **Synchronous external API call in view**: Blocks the request thread: offload to Celery
 - **`len(queryset)` instead of `.count()`**: Forces full fetch
 - **`exists()` not used for existence checks**: `if queryset:` fetches objects unnecessarily
 
@@ -89,12 +89,12 @@ When invoked:
       ...
   ```
 
-### HIGH — Code Quality
+### HIGH: Code Quality
 
 - **Business logic in views or serializers**: Move to `services.py`
-- **Signal logic that belongs in a service**: Signals make flow hard to trace — use explicitly
-- **Mutable default in model field**: `default=[]` or `default={}` — use `default=list`
-- **`save()` called without `update_fields`**: Overwrites all columns — risk of clobbering concurrent writes
+- **Signal logic that belongs in a service**: Signals make flow hard to trace: use explicitly
+- **Mutable default in model field**: `default=[]` or `default={}`: use `default=list`
+- **`save()` called without `update_fields`**: Overwrites all columns: risk of clobbering concurrent writes
 
   ```python
   # Bad
@@ -106,7 +106,7 @@ When invoked:
   user.save(update_fields=['last_active'])
   ```
 
-### MEDIUM — Best Practices
+### MEDIUM: Best Practices
 
 - **`str(queryset)` or slicing for debug**: Use Django shell, not production code
 - **Accessing `request.user` in serializer `validate()`**: Pass via context, not direct access
@@ -117,7 +117,7 @@ When invoked:
 - **Missing `__str__` on models**: Django admin and logging are broken without it
 - **App not using `AppConfig.ready()`**: Signal receivers not connected properly
 
-### MEDIUM — Testing Gaps
+### MEDIUM: Testing Gaps
 
 - **No test for permission boundary**: Verify unauthorized access returns 403/401
 - **`force_authenticate` instead of proper token**: Tests skip auth logic entirely

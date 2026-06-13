@@ -97,7 +97,7 @@ const PRIMARY_COMMANDS = [
 
 function showHelp(exitCode = 0) {
   console.log(`
-EGC — Extended Global Context
+EGC: Extended Global Context
 Developed by Felipe Marzochi
 @FEMARZOCHI
 ${formatOSC8('https://github.com/Fmarzochi/EGC', 'https://github.com/Fmarzochi/EGC')}

@@ -128,7 +128,7 @@ function detectFromPackageJson(projectDir = process.cwd()) {
  * Get available package managers (installed on system)
  *
  * WARNING: This spawns child processes (where.exe on Windows, which on Unix)
- * for each package manager. Do NOT call this during session startup hooks —
+ * for each package manager. Do NOT call this during session startup hooks ,
  * it can exceed Bun's spawn limit on Windows and freeze the plugin.
  * Use detectFromLockFile() or detectFromPackageJson() for hot paths.
  */
@@ -401,7 +401,7 @@ function getCommandPattern(action) {
       'bun run build'
     );
   } else {
-    // Generic run command — escape regex metacharacters in action
+    // Generic run command: escape regex metacharacters in action
     const escaped = escapeRegex(trimmedAction);
     patterns.push(
       `npm run ${escaped}`,

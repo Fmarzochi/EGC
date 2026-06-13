@@ -9,7 +9,7 @@ paths:
 
 ## Test Framework
 
-- **kotlin.test** for multiplatform (KMP) — `@Test`, `assertEquals`, `assertTrue`
+- **kotlin.test** for multiplatform (KMP): `@Test`, `assertEquals`, `assertTrue`
 - **JUnit 4/5** for Android-specific tests
 - **Turbine** for testing Flows and StateFlow
 - **kotlinx-coroutines-test** for coroutine testing (`runTest`, `TestDispatcher`)
@@ -65,7 +65,7 @@ fun `parallel operations complete`() = runTest {
 }
 ```
 
-Use `runTest` — it auto-advances virtual time and provides `TestScope`.
+Use `runTest`: it auto-advances virtual time and provides `TestScope`.
 
 ## Ktor MockEngine
 

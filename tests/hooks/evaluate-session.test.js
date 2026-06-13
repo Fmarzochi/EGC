@@ -96,7 +96,7 @@ function runTests() {
     const transcript = createTranscript(testDir, 10);
     const result = runEvaluate({ transcript_path: transcript });
     assert.strictEqual(result.code, 0, 'Should exit 0');
-    // Should NOT say "too short" — should say "evaluate for extractable patterns"
+    // Should NOT say "too short": should say "evaluate for extractable patterns"
     assert.ok(!result.stderr.includes('too short'), 'Should NOT say too short at threshold');
     assert.ok(
       result.stderr.includes('10 messages') || result.stderr.includes('evaluate'),
@@ -155,7 +155,7 @@ function runTests() {
   if (test('counts only user messages (ignores assistant messages)', () => {
     const testDir = createTestDir();
     const filePath = path.join(testDir, 'mixed.jsonl');
-    // 5 user messages + 50 assistant messages — should still be "too short"
+    // 5 user messages + 50 assistant messages: should still be "too short"
     const lines = [];
     for (let i = 0; i < 5; i++) {
       lines.push(JSON.stringify({ type: 'user', content: `msg ${i}` }));
@@ -213,7 +213,7 @@ function runTests() {
 
     const result = runEvaluate({ transcript_path: filePath });
     assert.strictEqual(result.code, 0);
-    // countInFile looks for /"type"\s*:\s*"user"/ — no matches
+    // countInFile looks for /"type"\s*:\s*"user"/: no matches
     assert.ok(
       result.stderr.includes('too short') || result.stderr.includes('0 messages'),
       'Should report too short with 0 user messages'
@@ -236,7 +236,7 @@ function runTests() {
 
     const result = runEvaluate({ transcript_path: filePath });
     assert.strictEqual(result.code, 0);
-    // countInFile uses regex matching, not JSON parsing — counts all lines matching /"type"\s*:\s*"user"/
+    // countInFile uses regex matching, not JSON parsing: counts all lines matching /"type"\s*:\s*"user"/
     // 12 user messages >= 10 threshold → should evaluate
     assert.ok(
       result.stderr.includes('evaluate') && result.stderr.includes('12 messages'),
@@ -287,7 +287,7 @@ function runTests() {
   if (test('counts user messages when JSON has spaces around colon ("type" : "user")', () => {
     const testDir = createTestDir();
     const filePath = path.join(testDir, 'spaced.jsonl');
-    // Manually write JSON with spaces around the colon — NOT JSON.stringify
+    // Manually write JSON with spaces around the colon: NOT JSON.stringify
     // The regex /"type"\s*:\s*"user"/g should match these
     const lines = [];
     for (let i = 0; i < 12; i++) {
@@ -320,7 +320,7 @@ function runTests() {
     try {
       originalContent = fs.readFileSync(configPath, 'utf8');
     } catch {
-      // Config file may not exist — that's fine
+      // Config file may not exist: that's fine
     }
 
     try {
@@ -334,12 +334,12 @@ function runTests() {
       // With corrupt config, defaults apply: min_session_length = 10
       // 12 >= 10 → should evaluate (not "too short")
       assert.ok(!result.stderr.includes('too short'),
-        `Should NOT say too short — corrupt config falls back to default min=10. Got: ${result.stderr}`);
+        `Should NOT say too short: corrupt config falls back to default min=10. Got: ${result.stderr}`);
       assert.ok(
         result.stderr.includes('12 messages') || result.stderr.includes('evaluate'),
         `Should evaluate with 12 messages using default threshold. Got: ${result.stderr}`
       );
-      // The catch block logs "Failed to parse config" — verify that log message
+      // The catch block logs "Failed to parse config": verify that log message
       assert.ok(result.stderr.includes('Failed to parse config'),
         `Should log config parse error. Got: ${result.stderr}`);
 
@@ -348,7 +348,7 @@ function runTests() {
       if (originalContent !== null) {
         fs.writeFileSync(configPath, originalContent, 'utf8');
       } else {
-        // Config didn't exist before — remove the corrupt one we created
+        // Config didn't exist before: remove the corrupt one we created
         try { fs.unlinkSync(configPath); } catch { /* best-effort */ }
       }
     }
@@ -361,7 +361,7 @@ function runTests() {
     // evaluate-session.js lines 69-72:
     //     learnedSkillsPath = config.learned_skills_path.replace(/^~/, require('os').homedir());
     //   }
-    // This branch was never tested — only the parse error (Round 85) and default path.
+    // This branch was never tested: only the parse error (Round 85) and default path.
     const configPath = path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning', 'config.json');
     let originalContent = null;
     try {

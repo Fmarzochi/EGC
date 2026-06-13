@@ -12,10 +12,10 @@ paths:
 
 ## Smart / Dumb Component Split
 
-Smart (container) components own data fetching and state. Dumb (presentational) components receive inputs and emit outputs only — no service injection.
+Smart (container) components own data fetching and state. Dumb (presentational) components receive inputs and emit outputs only: no service injection.
 
 ```typescript
-// Smart — owns data
+// Smart: owns data
 @Component({ standalone: true, changeDetection: ChangeDetectionStrategy.OnPush })
 export class UserPageComponent {
   private userService = inject(UserService);
@@ -24,13 +24,13 @@ export class UserPageComponent {
 ```
 
 ```html
-<!-- Dumb — pure presentation -->
+<!-- Dumb: pure presentation -->
 <app-user-card [user]="user()" (select)="onSelect($event)" />
 ```
 
 ## Service Layer
 
-Services own all data access and business logic. Components delegate — no `HttpClient` in components.
+Services own all data access and business logic. Components delegate: no `HttpClient` in components.
 
 ```typescript
 @Injectable({ providedIn: 'root' })
@@ -77,7 +77,7 @@ selectedItem = linkedSignal(() => this.items()[0]);
 users = toSignal(this.userService.getUsers(), { initialValue: [] });
 ```
 
-Never store derived values in separate signals — use `computed`. Never use `effect` to sync signals — use `computed` or `linkedSignal`.
+Never store derived values in separate signals: use `computed`. Never use `effect` to sync signals: use `computed` or `linkedSignal`.
 
 ## Subscription Cleanup
 
@@ -199,10 +199,10 @@ provideHttpClient(withInterceptors([authInterceptor, errorInterceptor]))
 
 ## RxJS Operators
 
-- `switchMap` — search, navigation (cancels previous)
-- `mergeMap` — independent parallel requests
-- `exhaustMap` — form submissions (ignores until complete)
-- Always handle errors with `catchError` — never let streams die silently
+- `switchMap`: search, navigation (cancels previous)
+- `mergeMap`: independent parallel requests
+- `exhaustMap`: form submissions (ignores until complete)
+- Always handle errors with `catchError`: never let streams die silently
 
 ```typescript
 search$ = this.query$.pipe(
@@ -217,7 +217,7 @@ search$ = this.query$.pipe(
 Match the project's existing form strategy. For new v21+ apps, prefer signal forms.
 
 ```typescript
-// Reactive Forms — standard for complex forms
+// Reactive Forms: standard for complex forms
 export class UserFormComponent {
   private fb = inject(FormBuilder);
 
@@ -231,10 +231,10 @@ export class UserFormComponent {
 ## Rendering Strategies
 
 - **CSR** (default): Standard SPA
-- **SSR + Hydration**: `ng add @angular/ssr` — improves FCP and SEO
+- **SSR + Hydration**: `ng add @angular/ssr`: improves FCP and SEO
 - **SSG (Prerendering)**: Static pages at build time for content-heavy routes
 
-When using SSR, avoid `window`, `document`, `localStorage` directly — use `isPlatformBrowser` or `DOCUMENT` token.
+When using SSR, avoid `window`, `document`, `localStorage` directly: use `isPlatformBrowser` or `DOCUMENT` token.
 
 ## Accessibility
 

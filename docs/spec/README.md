@@ -29,9 +29,9 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 | Provenance metadata | `schemas/provenance.schema.json` | `tests/lib/skill-dashboard.test.js` |
 | State store | `schemas/state-store.schema.json` | `tests/lib/state-store.test.js` |
 | EGC install config | `schemas/egc-install-config.schema.json` | `tests/lib/install-targets.test.js` |
-| Install state | `schemas/install-state.schema.json` | gap — no dedicated test (validated indirectly via install-apply flow) |
-| Agents registry | `schemas/agents-registry.schema.json` | gap — no dedicated validator |
-| Skills registry | `schemas/skills-registry.schema.json` | gap — no dedicated validator |
+| Install state | `schemas/install-state.schema.json` | gap: no dedicated test (validated indirectly via install-apply flow) |
+| Agents registry | `schemas/agents-registry.schema.json` | gap: no dedicated validator |
+| Skills registry | `schemas/skills-registry.schema.json` | gap: no dedicated validator |
 
 ## Entry points by audience
 

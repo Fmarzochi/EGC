@@ -22,7 +22,7 @@ Given a list of qualified prospects, pull comprehensive data from available sour
 ### Person
 - Full name, current title, company
 - X handle, LinkedIn URL, personal site
-- Recent posts (last 30 days) — topics, tone, key takes
+- Recent posts (last 30 days): topics, tone, key takes
 - Speaking engagements, podcast appearances
 - Open source contributions (if developer-centric)
 - Mutual interests with user (shared follows, similar content)
@@ -43,10 +43,10 @@ Given a list of qualified prospects, pull comprehensive data from available sour
 
 ## Enrichment Sources
 
-1. **Exa** — Company data, news, blog posts, research
-2. **X API** — Recent tweets, bio, follower data
-3. **GitHub** — Open source profiles (if applicable)
-4. **Web** — Personal sites, company pages, press releases
+1. **Exa**: Company data, news, blog posts, research
+2. **X API**: Recent tweets, bio, follower data
+3. **GitHub**: Open source profiles (if applicable)
+4. **Web**: Personal sites, company pages, press releases
 
 ## Output Format
 
@@ -82,4 +82,4 @@ Personalization Hooks:
 
 - Only report verified data. Do not hallucinate company details.
 - If data is unavailable, note it as "not found" rather than guessing.
-- Prioritize recency — stale data older than 6 months should be flagged.
+- Prioritize recency: stale data older than 6 months should be flagged.

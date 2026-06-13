@@ -30,16 +30,16 @@ Also check `gradle.properties` and `local.properties` for configuration.
 
 For each error:
 
-1. **Read the file** — Full context around the error line
-2. **Diagnose** — Common categories:
+1. **Read the file**: Full context around the error line
+2. **Diagnose**: Common categories:
    - Missing import or unresolved reference
    - Type mismatch or incompatible types
    - Missing dependency in `build.gradle.kts`
    - Expect/actual mismatch (KMP)
    - Compose compiler error
-3. **Fix minimally** — Smallest change that resolves the error
-4. **Re-run build** — Verify fix and check for new errors
-5. **Continue** — Move to next error
+3. **Fix minimally**: Smallest change that resolves the error
+4. **Re-run build**: Verify fix and check for new errors
+5. **Continue**: Move to next error
 
 ## Step 4: Guardrails
 

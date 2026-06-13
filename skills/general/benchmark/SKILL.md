@@ -4,14 +4,14 @@ description: Use this skill to measure performance baselines, detect regressions
 origin: EGC
 ---
 
-# Benchmark — Performance Baseline & Regression Detection
+# Benchmark: Performance Baseline & Regression Detection
 
 ## When to Use
 
 - Before and after a PR to measure performance impact
 - Setting up performance baselines for a project
 - When users report "it feels slow"
-- Before a launch — ensure you meet performance targets
+- Before a launch: ensure you meet performance targets
 - Comparing your stack against alternatives
 
 ## How It Works
@@ -23,11 +23,11 @@ Measures real browser metrics via browser MCP:
 ```
 1. Navigate to each target URL
 2. Measure Core Web Vitals:
-   - LCP (Largest Contentful Paint) — target < 2.5s
-   - CLS (Cumulative Layout Shift) — target < 0.1
-   - INP (Interaction to Next Paint) — target < 200ms
-   - FCP (First Contentful Paint) — target < 1.8s
-   - TTFB (Time to First Byte) — target < 800ms
+   - LCP (Largest Contentful Paint): target < 2.5s
+   - CLS (Cumulative Layout Shift): target < 0.1
+   - INP (Interaction to Next Paint): target < 200ms
+   - FCP (First Contentful Paint): target < 1.8s
+   - TTFB (Time to First Byte): target < 800ms
 3. Measure resource sizes:
    - Total page weight (target < 1MB)
    - JS bundle size (target < 200KB gzipped)

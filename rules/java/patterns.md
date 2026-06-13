@@ -46,10 +46,10 @@ public class OrderService {
 
 ## Constructor Injection
 
-Always use constructor injection — never field injection:
+Always use constructor injection: never field injection:
 
 ```java
-// GOOD — constructor injection (testable, immutable)
+// GOOD: constructor injection (testable, immutable)
 public class NotificationService {
     private final EmailSender emailSender;
 
@@ -58,7 +58,7 @@ public class NotificationService {
     }
 }
 
-// BAD — field injection (untestable without reflection, requires framework magic)
+// BAD: field injection (untestable without reflection, requires framework magic)
 public class NotificationService {
     @Inject // or @Autowired
     private EmailSender emailSender;

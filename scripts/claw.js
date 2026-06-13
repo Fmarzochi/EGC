@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * NanoClaw v2 — Barebones Agent REPL for EGC
+ * NanoClaw v2: Barebones Agent REPL for EGC
  *
  * Zero external dependencies. Session-aware REPL around `egc -p`.
  */
@@ -295,7 +295,7 @@ function main() {
 
   const loadedCount = state.skills.filter(skillExists).length;
 
-  console.log(`NanoClaw v2 — Session: ${state.sessionName}`);
+  console.log(`NanoClaw v2: Session: ${state.sessionName}`);
   console.log(`Model: ${state.model}`);
   if (loadedCount > 0) {
     console.log(`Loaded ${loadedCount} skill(s) as context.`);

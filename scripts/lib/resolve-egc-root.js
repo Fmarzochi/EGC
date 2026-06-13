@@ -23,9 +23,9 @@ const PLUGIN_ROOT_SEGMENTS = [
  *
  * Tries, in order:
  *   1. EGC_PLUGIN_ROOT / ECC_PLUGIN_ROOT / GEMINI_PLUGIN_ROOT env vars
- *   2. Standard install location (~/.gemini/) — when scripts exist there
+ *   2. Standard install location (~/.gemini/): when scripts exist there
  *   3. Known plugin roots under ~/.gemini/plugins/ (current + legacy slugs)
- *   4. Plugin cache auto-detection — scans ~/.gemini/plugins/cache/{egc,everything-gemini}/
+ *   4. Plugin cache auto-detection: scans ~/.gemini/plugins/cache/{egc,everything-gemini}/
  *   5. Fallback to ~/.gemini/ (original behaviour)
  *
  * @param {object} [options]
@@ -48,7 +48,7 @@ function resolveEGCRoot(options = {}) {
   const claudeDir = path.join(homeDir, '.gemini');
   const probe = options.probe || path.join('scripts', 'lib', 'utils.js');
 
-  // Standard install — files are copied directly into ~/.gemini/
+  // Standard install: files are copied directly into ~/.gemini/
   if (fs.existsSync(path.join(claudeDir, probe))) {
     return claudeDir;
   }
@@ -65,7 +65,7 @@ function resolveEGCRoot(options = {}) {
     }
   }
 
-  // Plugin cache — Gemini Code stores marketplace plugins under
+  // Plugin cache: Gemini Code stores marketplace plugins under
   // ~/.gemini/plugins/cache/<plugin-name>/<org>/<version>/
   try {
     for (const slug of PLUGIN_CACHE_SLUGS) {
@@ -93,7 +93,7 @@ function resolveEGCRoot(options = {}) {
       }
     }
   } catch {
-    // Plugin cache doesn't exist or isn't readable — continue to fallback
+    // Plugin cache doesn't exist or isn't readable: continue to fallback
   }
 
   return claudeDir;

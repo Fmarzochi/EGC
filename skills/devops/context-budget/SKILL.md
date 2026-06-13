@@ -30,7 +30,7 @@ Scan all component directories and estimate token consumption:
 **Skills** (`skills/*/SKILL.md`)
 - Count tokens per SKILL.md
 - Flag: files >400 lines
-- Check for duplicate copies in `.agents/skills/` — skip identical copies to avoid double-counting
+- Check for duplicate copies in `.agents/skills/`: skip identical copies to avoid double-counting
 
 **Rules** (`rules/**/*.md`)
 - Count tokens per file
@@ -60,11 +60,11 @@ Sort every component into a bucket:
 
 Identify the following problem patterns:
 
-- **Bloated agent descriptions** — description >30 words in frontmatter loads into every Task tool invocation
-- **Heavy agents** — files >200 lines inflate Task tool context on every spawn
-- **Redundant components** — skills that duplicate agent logic, rules that duplicate GEMINI.md
-- **MCP over-subscription** — >10 servers, or servers wrapping CLI tools available for free
-- **GEMINI.md bloat** — verbose explanations, outdated sections, instructions that should be rules
+- **Bloated agent descriptions**: description >30 words in frontmatter loads into every Task tool invocation
+- **Heavy agents**: files >200 lines inflate Task tool context on every spawn
+- **Redundant components**: skills that duplicate agent logic, rules that duplicate GEMINI.md
+- **MCP over-subscription**: >10 servers, or servers wrapping CLI tools available for free
+- **GEMINI.md bloat**: verbose explanations, outdated sections, instructions that should be rules
 
 ### Phase 4: Report
 

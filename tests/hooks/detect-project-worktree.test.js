@@ -9,7 +9,7 @@
  */
 
 
-// Skip on Windows — these tests invoke bash scripts directly
+// Skip on Windows: these tests invoke bash scripts directly
 if (process.platform === 'win32') {
   console.log('Skipping bash-dependent worktree tests on Windows\n');
   process.exit(0);
@@ -106,7 +106,7 @@ test('uses git -C for safe directory operations', () => {
 });
 
 // ──────────────────────────────────────────────────────
-// Group 2: Behavior test — -e vs -d
+// Group 2: Behavior test: -e vs -d
 // ──────────────────────────────────────────────────────
 
 console.log('\n--- Behavior test: -e vs -d ---');
@@ -155,7 +155,7 @@ test('[ -e ] returns false when .git does not exist', () => {
 cleanupDir(behaviorDir);
 
 // ──────────────────────────────────────────────────────
-// Group 3: E2E test — detect-project.sh with worktree .git file
+// Group 3: E2E test: detect-project.sh with worktree .git file
 // ──────────────────────────────────────────────────────
 
 console.log('\n--- E2E: detect-project.sh with worktree .git file ---');

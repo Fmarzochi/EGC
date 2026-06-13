@@ -200,7 +200,7 @@ function buildOrchestrationPlan(config = {}) {
     const workerSlug = slugify(workerName, `worker-${index + 1}`);
 
     if (seenSlugs.has(workerSlug)) {
-      throw new Error(`Workers must have unique slugs — duplicate: ${workerSlug}`);
+      throw new Error(`Workers must have unique slugs: duplicate: ${workerSlug}`);
     }
     seenSlugs.add(workerSlug);
 

@@ -3,14 +3,14 @@ name: prompt-optimizer
 description: >-
   Analyze raw prompts, identify intent and gaps, match EGC components
   (skills/commands/agents/hooks), and output a ready-to-paste optimized
-  prompt. Advisory role only — never executes the task itself.
+  prompt. Advisory role only: never executes the task itself.
   TRIGGER when: user says "optimize prompt", "improve my prompt",
   "how to write a prompt for", "help me prompt", "rewrite this prompt",
   or explicitly asks to enhance prompt quality. Also triggers on Chinese
   equivalents: "优化prompt", "改进prompt", "怎么写prompt", "帮我优化这个指令".
   DO NOT TRIGGER when: user wants the task executed directly, or says
   "just do it" / "直接做". DO NOT TRIGGER when user says "优化代码",
-  "优化性能", "optimize performance", "optimize this code" — those are
+  "优化性能", "optimize performance", "optimize this code": those are
   refactoring/performance tasks, not prompt optimization.
 origin: community
 metadata:
@@ -37,14 +37,14 @@ and output a complete optimized prompt the user can paste and run.
 ### Do Not Use When
 
 - User wants the task done directly (just execute it)
-- User says "优化代码", "优化性能", "optimize this code", "optimize performance" — these are refactoring tasks, not prompt optimization
+- User says "优化代码", "优化性能", "optimize this code", "optimize performance": these are refactoring tasks, not prompt optimization
 - User is asking about EGC configuration (use `configure-egc` instead)
 - User wants a skill inventory (use `skill-stocktake` instead)
 - User says "just do it" or "直接做"
 
 ## How It Works
 
-**Advisory only — do not execute the user's task.**
+**Advisory only: do not execute the user's task.**
 
 Do NOT write code, create files, run commands, or take any implementation
 action. Your ONLY output is an analysis plus an optimized prompt.
@@ -62,7 +62,7 @@ Run this 6-phase pipeline sequentially. Present results using the Output Format 
 
 Before analyzing the prompt, detect the current project context:
 
-1. Check if a `GEMINI.md` exists in the working directory — read it for project conventions
+1. Check if a `GEMINI.md` exists in the working directory: read it for project conventions
 2. Detect tech stack from project files:
    - `package.json` → Node.js / TypeScript / React / Next.js
    - `go.mod` → Go
@@ -120,13 +120,13 @@ Map intent + scope + tech stack (from Phase 0) to specific EGC components.
 | New Feature | /plan, /tdd, /code-review, /verify | tdd-workflow, verification-loop | planner, tdd-guide, code-reviewer |
 | Bug Fix | /tdd, /build-fix, /verify | tdd-workflow | tdd-guide, build-error-resolver |
 | Refactor | /refactor-clean, /code-review, /verify | verification-loop | refactor-cleaner, code-reviewer |
-| Research | /plan | search-first, iterative-retrieval | — |
+| Research | /plan | search-first, iterative-retrieval |: |
 | Testing | /tdd, /e2e, /test-coverage | tdd-workflow, e2e-testing | tdd-guide, e2e-runner |
 | Review | /code-review | security-review | code-reviewer, security-reviewer |
-| Documentation | /update-docs, /update-codemaps | — | doc-updater |
+| Documentation | /update-docs, /update-codemaps |: | doc-updater |
 | Infrastructure | /plan, /verify | docker-patterns, deployment-patterns, database-migrations | architect |
-| Design (MEDIUM-HIGH) | /plan | — | planner, architect |
-| Design (EPIC) | — | blueprint (invoke as skill) | planner, architect |
+| Design (MEDIUM-HIGH) | /plan |: | planner, architect |
+| Design (EPIC) |: | blueprint (invoke as skill) | planner, architect |
 
 #### By Tech Stack
 
@@ -148,17 +148,17 @@ Map intent + scope + tech stack (from Phase 0) to specific EGC components.
 Scan the prompt for missing critical information. Check each item and mark
 whether Phase 0 auto-detected it or the user must supply it:
 
-- [ ] **Tech stack** — Detected in Phase 0, or must user specify?
-- [ ] **Target scope** — Files, directories, or modules mentioned?
-- [ ] **Acceptance criteria** — How to know the task is done?
-- [ ] **Error handling** — Edge cases and failure modes addressed?
-- [ ] **Security requirements** — Auth, input validation, secrets?
-- [ ] **Testing expectations** — Unit, integration, E2E?
-- [ ] **Performance constraints** — Load, latency, resource limits?
-- [ ] **UI/UX requirements** — Design specs, responsive, a11y? (if frontend)
-- [ ] **Database changes** — Schema, migrations, indexes? (if data layer)
-- [ ] **Existing patterns** — Reference files or conventions to follow?
-- [ ] **Scope boundaries** — What NOT to do?
+- [ ] **Tech stack**: Detected in Phase 0, or must user specify?
+- [ ] **Target scope**: Files, directories, or modules mentioned?
+- [ ] **Acceptance criteria**: How to know the task is done?
+- [ ] **Error handling**: Edge cases and failure modes addressed?
+- [ ] **Security requirements**: Auth, input validation, secrets?
+- [ ] **Testing expectations**: Unit, integration, E2E?
+- [ ] **Performance constraints**: Load, latency, resource limits?
+- [ ] **UI/UX requirements**: Design specs, responsive, a11y? (if frontend)
+- [ ] **Database changes**: Schema, migrations, indexes? (if data layer)
+- [ ] **Existing patterns**: Reference files or conventions to follow?
+- [ ] **Scope boundaries**: What NOT to do?
 
 **If 3+ critical items are missing**, ask the user up to 3 clarification
 questions before generating the optimized prompt. Then incorporate the
@@ -220,7 +220,7 @@ If Phase 0 auto-detected the answer, state it instead of asking.
 | Agent | code-reviewer | Post-implementation review |
 | Model | Sonnet 4.6 | Recommended for this scope |
 
-### Section 3: Optimized Prompt — Full Version
+### Section 3: Optimized Prompt: Full Version
 
 Present the complete optimized prompt inside a single fenced code block.
 The prompt must be self-contained and ready to copy-paste. Include:
@@ -234,14 +234,14 @@ The prompt must be self-contained and ready to copy-paste. Include:
 For items that reference blueprint, write: "Use the blueprint skill to..."
 (not `/blueprint`, since blueprint is a skill, not a command).
 
-### Section 4: Optimized Prompt — Quick Version
+### Section 4: Optimized Prompt: Quick Version
 
 A compact version for experienced EGC users. Vary by intent type:
 
 | Intent | Quick Pattern |
 |--------|--------------|
 | New Feature | `/plan [feature]. /tdd to implement. /code-review. /verify.` |
-| Bug Fix | `/tdd — write failing test for [bug]. Fix to green. /verify.` |
+| Bug Fix | `/tdd: write failing test for [bug]. Fix to green. /verify.` |
 | Refactor | `/refactor-clean [scope]. /code-review. /verify.` |
 | Research | `Use search-first skill for [topic]. /plan based on findings.` |
 | Testing | `/tdd [module]. /e2e for critical flows. /test-coverage.` |
@@ -330,7 +330,7 @@ Add a REST API endpoint for user profile updates (PATCH /api/users/:id).
 Tech stack: Go 1.22 + Chi router (detected from project)
 
 Requirements:
-- PATCH /api/users/:id — partial update of user profile
+- PATCH /api/users/:id: partial update of user profile
 - Input validation for fields: name, email, avatar_url, bio
 - Auth: require valid token, users can only update own profile
 - Return 200 with updated user on success
@@ -340,10 +340,10 @@ Requirements:
 
 Workflow:
 1. /plan the endpoint structure, middleware chain, and validation logic
-2. /tdd — write table-driven tests for success, validation failure, auth failure, not-found
+2. /tdd: write table-driven tests for success, validation failure, auth failure, not-found
 3. Implement following existing handler patterns
 4. /go-review
-5. /verify — run full test suite, confirm no regressions
+5. /verify: run full test suite, confirm no regressions
 
 Do not:
 - Modify existing endpoints

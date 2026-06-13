@@ -2,7 +2,7 @@
   "name": "egc-guardian",
   "version": "1.0.0",
   "type": "module",
-  "description": "EGC Guardian MCP Server — validation, context reduction, and task orchestration",
+  "description": "EGC Guardian MCP Server: validation, context reduction, and task orchestration",
   "main": "build/index.js",
   "scripts": {
     "build": "tsc && chmod +x build/index.js",

@@ -168,8 +168,8 @@ function pruneExpiredSessions(searchDirs, retentionDays) {
  * to avoid duplicate I/O in the caller.
  *
  * Priority (highest to lowest):
- *   1. Exact worktree (cwd) match — most recent
- *   2. Same project name match — most recent
+ *   1. Exact worktree (cwd) match: most recent
+ *   2. Same project name match: most recent
  *   3. Fallback to overall most recent (original behavior)
  *
  * Sessions are already sorted newest-first, so the first match in each
@@ -207,13 +207,13 @@ function selectMatchingSession(sessions, cwd, currentProject) {
     const worktreeMatch = content.match(/\*\*Worktree:\*\*\s*(.+)$/m);
     const sessionWorktree = worktreeMatch ? worktreeMatch[1].trim() : '';
 
-    // Exact worktree match — best possible, return immediately
+    // Exact worktree match: best possible, return immediately
     // Normalize both paths to handle symlinks and case-insensitive filesystems
     if (sessionWorktree && normalizePath(sessionWorktree) === normalizedCwd) {
       return { session, content, matchReason: 'worktree' };
     }
 
-    // Project name match — keep searching for a worktree match
+    // Project name match: keep searching for a worktree match
     if (!projectMatch && currentProject) {
       const projectFieldMatch = content.match(/\*\*Project:\*\*\s*(.+)$/m);
       const sessionProject = projectFieldMatch ? projectFieldMatch[1].trim() : '';

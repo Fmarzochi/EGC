@@ -535,7 +535,7 @@ function run(rawInput) {
 
 module.exports = { run };
 
-// Stdin fallback for spawnSync execution — only when invoked directly, not via require()
+// Stdin fallback for spawnSync execution: only when invoked directly, not via require()
 if (require.main === module) {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {

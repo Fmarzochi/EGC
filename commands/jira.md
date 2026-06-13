@@ -4,7 +4,7 @@ description: Retrieve a Jira ticket, analyze requirements, update status, or add
 
 # Jira Command
 
-Interact with Jira tickets directly from your workflow — fetch tickets, analyze requirements, add comments, and transition status.
+Interact with Jira tickets directly from your workflow: fetch tickets, analyze requirements, add comments, and transition status.
 
 ## Usage
 
@@ -17,10 +17,10 @@ Interact with Jira tickets directly from your workflow — fetch tickets, analyz
 
 ## What This Command Does
 
-1. **Get & Analyze** — Fetch a Jira ticket and extract requirements, acceptance criteria, test scenarios, and dependencies
-2. **Comment** — Add structured progress updates to a ticket
-3. **Transition** — Move a ticket through workflow states (To Do → In Progress → Done)
-4. **Search** — Find issues using JQL queries
+1. **Get & Analyze**: Fetch a Jira ticket and extract requirements, acceptance criteria, test scenarios, and dependencies
+2. **Comment**: Add structured progress updates to a ticket
+3. **Transition**: Move a ticket through workflow states (To Do → In Progress → Done)
+4. **Search**: Find issues using JQL queries
 
 ## How It Works
 
@@ -79,10 +79,10 @@ Recommended Next Steps:
 
 This command requires Jira credentials. Choose one:
 
-**Option A — MCP Server (recommended):**
+**Option A: MCP Server (recommended):**
 Add `jira` to your `mcpServers` config (see `mcp-configs/mcp-servers.json` for the template).
 
-**Option B — Environment variables:**
+**Option B: Environment variables:**
 ```bash
 export JIRA_URL="https://yourorg.atlassian.net"
 export JIRA_EMAIL="your.email@example.com"

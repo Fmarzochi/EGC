@@ -17,10 +17,10 @@ This command invokes the **flutter-reviewer** agent to review Flutter/Dart code 
 ## Prerequisites
 
 Before running `/flutter-review`, ensure:
-1. **Build passes** — run `/flutter-build` first; a review on broken code is incomplete
-2. **Tests pass** — run `/flutter-test` to confirm no regressions
-3. **No merge conflicts** — resolve all conflicts so the diff reflects only intentional changes
-4. **`flutter analyze` is clean** — fix analyzer warnings before review
+1. **Build passes**: run `/flutter-build` first; a review on broken code is incomplete
+2. **Tests pass**: run `/flutter-test` to confirm no regressions
+3. **No merge conflicts**: resolve all conflicts so the diff reflects only intentional changes
+4. **`flutter analyze` is clean**: fix analyzer warnings before review
 
 ## When to Use
 
@@ -83,7 +83,7 @@ Fix: Add error case to the switch expression or `when()` call to show a user-fac
 
 [MEDIUM] Hardcoded string not localized
 File: lib/features/auth/presentation/login_page.dart:89
-Issue: `Text('Login')` — user-visible string not using localization system.
+Issue: `Text('Login')`: user-visible string not using localization system.
 Fix: Use the project's l10n accessor: `Text(context.l10n.loginButton)`.
 
 ## Review Summary
@@ -95,7 +95,7 @@ Fix: Use the project's l10n accessor: `Text(context.l10n.loginButton)`.
 | MEDIUM   | 1     | info   |
 | LOW      | 0     | note   |
 
-Verdict: BLOCK — HIGH issues must be fixed before merge.
+Verdict: BLOCK: HIGH issues must be fixed before merge.
 ````
 
 ## Approval Criteria
@@ -105,9 +105,9 @@ Verdict: BLOCK — HIGH issues must be fixed before merge.
 
 ## Related Commands
 
-- `/flutter-build` — Fix build errors first
-- `/flutter-test` — Run tests before reviewing
-- `/code-review` — General code review (language-agnostic)
+- `/flutter-build`: Fix build errors first
+- `/flutter-test`: Run tests before reviewing
+- `/code-review`: General code review (language-agnostic)
 
 ## Related
 

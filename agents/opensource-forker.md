@@ -78,7 +78,7 @@ https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+
 SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}
 key-[A-Za-z0-9]{32}
 
-# Generic env file secrets (WARNING — manual review, do NOT auto-strip)
+# Generic env file secrets (WARNING: manual review, do NOT auto-strip)
 ^[A-Z_]+=((?!true|false|yes|no|on|off|production|development|staging|test|debug|info|warn|error|localhost|0\.0\.0\.0|127\.0\.0\.1|\d+$).{16,})$
 ```
 
@@ -92,9 +92,9 @@ key-[A-Za-z0-9]{32}
 - `*.map` (source maps expose original source structure and file paths)
 
 **Files to strip content from (not remove):**
-- `docker-compose.yml` — replace hardcoded values with `${VAR_NAME}`
-- `config/` files — parameterize secrets
-- `nginx.conf` — replace internal domains
+- `docker-compose.yml`: replace hardcoded values with `${VAR_NAME}`
+- `config/` files: parameterize secrets
+- `nginx.conf`: replace internal domains
 
 ### Step 4: Internal Reference Replacement
 
@@ -108,7 +108,7 @@ key-[A-Za-z0-9]{32}
 | Personal email addresses | `you@your-domain.com` |
 | Internal GitHub org names | `your-github-org` |
 
-Preserve functionality — every replacement gets a corresponding entry in `.env.example`.
+Preserve functionality: every replacement gets a corresponding entry in `.env.example`.
 
 ### Step 5: Generate .env.example
 
@@ -126,7 +126,7 @@ APP_PORT=8080
 DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 REDIS_URL=redis://localhost:6379
 
-# === Secrets (REQUIRED — generate your own) ===
+# === Secrets (REQUIRED: generate your own) ===
 SECRET_KEY=change-me-to-a-random-string
 JWT_SECRET=change-me-to-a-random-string
 ```
@@ -191,8 +191,8 @@ Output: `FORK_REPORT.md` listing all changes, staging directory ready for saniti
 ## Rules
 
 - **Never** leave any secret in output, even commented out
-- **Never** remove functionality — always parameterize, do not delete config
+- **Never** remove functionality: always parameterize, do not delete config
 - **Always** generate `.env.example` for every extracted value
 - **Always** create `FORK_REPORT.md`
 - If unsure whether something is a secret, treat it as one
-- Do not modify source code logic — only configuration and references
+- Do not modify source code logic: only configuration and references

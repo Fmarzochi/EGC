@@ -43,10 +43,10 @@ import type { User } from '@/types';
 
 ## Kiro Hooks
 
-### `install.sh` is additive-only — it won't update existing installations
+### `install.sh` is additive-only: it won't update existing installations
 The installer skips any file that already exists in the target (`if [ ! -f ... ]`). Running it against a folder that already has `.kiro/` will not overwrite or update hooks, agents, or steering files. To push updates to an existing project, manually copy the changed files or remove the target files first before re-running the installer.
 
-### README.md mirrors hook configurations — keep them in sync
+### README.md mirrors hook configurations: keep them in sync
 The hooks table and Example 5 in README.md document the action type (`runCommand` vs `askAgent`) and behavior of each hook. When changing a hook's `then.type` or behavior, update both the hook file and the corresponding README entries to avoid misleading documentation.
 
 ### Prefer `askAgent` over `runCommand` for file-event hooks

@@ -9,7 +9,7 @@ metadata:
   origin: EGC
 ---
 
-# /search-first — Research Before You Code
+# /search-first: Research Before You Code
 
 Systematizes the "search for existing solutions before implementing" workflow.
 
@@ -61,10 +61,10 @@ When a candidate requires credentials, paid services, network writes, or project
 
 | Signal | Action |
 |--------|--------|
-| Exact match, well-maintained, MIT/Apache | **Adopt** — recommend the package and request approval before install or config changes |
-| Partial match, good foundation | **Extend** — recommend the package plus a thin wrapper, then wait for approval before applying |
-| Multiple weak matches | **Compose** — propose 2-3 small packages and the integration plan before installing anything |
-| Nothing suitable found | **Build** — explain why custom code is warranted, then implement only within the approved task scope |
+| Exact match, well-maintained, MIT/Apache | **Adopt**: recommend the package and request approval before install or config changes |
+| Partial match, good foundation | **Extend**: recommend the package plus a thin wrapper, then wait for approval before applying |
+| Multiple weak matches | **Compose**: propose 2-3 small packages and the integration plan before installing anything |
+| Nothing suitable found | **Build**: explain why custom code is warranted, then implement only within the approved task scope |
 
 ## How to Use
 
@@ -141,7 +141,7 @@ Combine for progressive discovery:
 Need: Check markdown files for broken links
 Search: npm "markdown dead link checker"
 Found: textlint-rule-no-dead-link (score: 9/10)
-Action: ADOPT — recommend `textlint-rule-no-dead-link` and ask before installing it
+Action: ADOPT: recommend `textlint-rule-no-dead-link` and ask before installing it
 Result: Zero custom code if approved, battle-tested solution
 ```
 
@@ -150,7 +150,7 @@ Result: Zero custom code if approved, battle-tested solution
 Need: Resilient HTTP client with retries and timeout handling
 Search: npm "http client retry", PyPI "httpx retry"
 Found: got (Node) with retry plugin, httpx (Python) with built-in retry
-Action: ADOPT — recommend `got`/`httpx` directly with retry config and ask before changing dependencies
+Action: ADOPT: recommend `got`/`httpx` directly with retry config and ask before changing dependencies
 Result: Zero custom code if approved, production-proven libraries
 ```
 
@@ -159,7 +159,7 @@ Result: Zero custom code if approved, production-proven libraries
 Need: Validate project config files against a schema
 Search: npm "config linter schema", "json schema validator cli"
 Found: ajv-cli (score: 8/10)
-Action: ADOPT + EXTEND — recommend `ajv-cli` plus a project-specific schema, then wait for approval before install/write
+Action: ADOPT + EXTEND: recommend `ajv-cli` plus a project-specific schema, then wait for approval before install/write
 Result: 1 package + 1 schema file if approved, no custom validation logic
 ```
 

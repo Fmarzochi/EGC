@@ -39,11 +39,11 @@ Given a list of scored prospects and the user's social accounts, find mutual con
 
 Classify each path by warmth:
 
-1. **Direct mutual** (warmest) — Both user and target follow this person
-2. **Portfolio/advisory** — Mutual invested in or advises target's company
-3. **Co-worker/alumni** — Shared employer or educational institution
-4. **Event overlap** — Both attended same conference, accelerator, or program
-5. **Content engagement** — Target engaged with mutual's content recently
+1. **Direct mutual** (warmest): Both user and target follow this person
+2. **Portfolio/advisory**: Mutual invested in or advises target's company
+3. **Co-worker/alumni**: Shared employer or educational institution
+4. **Event overlap**: Both attended same conference, accelerator, or program
+5. **Content engagement**: Target engaged with mutual's content recently
 
 ## Output Format
 
@@ -64,8 +64,8 @@ Target: [prospect name] (@handle)
 
 MUTUAL LEADERBOARD
 ==================
-#1 @mutual_a — connected to 7 targets (Score: 92)
-#2 @mutual_b — connected to 5 targets (Score: 85)
+#1 @mutual_a: connected to 7 targets (Score: 92)
+#2 @mutual_b: connected to 5 targets (Score: 85)
 ```
 
 ## Constraints

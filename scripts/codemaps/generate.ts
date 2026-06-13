@@ -232,7 +232,7 @@ ${fileSection}${moreFiles}
 
 ## Related Areas
 
-- [INDEX](./INDEX.md) — Full overview
+- [INDEX](./INDEX.md): Full overview
 - [Frontend](./frontend.md)
 - [Backend/API](./backend.md)
 - [Database](./database.md)
@@ -244,12 +244,12 @@ ${fileSection}${moreFiles}
 function generateIndex(areas: Record<string, AreaInfo>, allFiles: string[]): string {
   const totalFiles = allFiles.length;
   const areaRows = Object.entries(areas)
-    .map(([key, area]) => `| [${area.name}](./${key}.md) | ${area.files.length} files | ${area.directories.slice(0, 3).map((d) => `\`${d}\``).join(', ') || '—'} |`)
+    .map(([key, area]) => `| [${area.name}](./${key}.md) | ${area.files.length} files | ${area.directories.slice(0, 3).map((d) => `\`${d}\``).join(', ') || ','} |`)
     .join('\n');
 
   const topLevelTree = buildTree(SRC_DIR);
 
-  return `# Codebase Overview — CODEMAPS Index
+  return `# Codebase Overview: CODEMAPS Index
 
 **Last Updated:** ${TODAY}
 **Root:** \`${rel(SRC_DIR) || '.'}\`
@@ -277,11 +277,11 @@ npx jsdoc2md src/**/*.ts                    # Extract JSDoc
 
 ## Related Documentation
 
-- [Frontend](./frontend.md) — UI components, pages, hooks
-- [Backend/API](./backend.md) — API routes, controllers, middleware
-- [Database](./database.md) — Models, schemas, migrations
-- [Integrations](./integrations.md) — External services & adapters
-- [Workers](./workers.md) — Background jobs, queues, cron tasks
+- [Frontend](./frontend.md): UI components, pages, hooks
+- [Backend/API](./backend.md): API routes, controllers, middleware
+- [Database](./database.md): Models, schemas, migrations
+- [Integrations](./integrations.md): External services & adapters
+- [Workers](./workers.md): Background jobs, queues, cron tasks
 `;
 }
 

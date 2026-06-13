@@ -119,7 +119,7 @@ List<User> findByEmailAndActiveTrue(String email);
 
 ## Password Encoding
 
-- Always hash passwords with BCrypt or Argon2 — never store plaintext
+- Always hash passwords with BCrypt or Argon2: never store plaintext
 - Use `PasswordEncoder` bean, not manual hashing
 
 ```java
@@ -186,7 +186,7 @@ http
 ## CORS Configuration
 
 - Configure CORS at the security filter level, not per-controller
-- Restrict allowed origins — never use `*` in production
+- Restrict allowed origins: never use `*` in production
 
 ```java
 @Bean

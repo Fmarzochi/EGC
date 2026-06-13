@@ -182,7 +182,7 @@ function runTests() {
 
   if (test('does not crash with confidence > 1.0 (percent > 100)', () => {
     const output = new SkillCreateOutput('repo');
-    // confidence 1.5 => percent 150 — previously crashed with RangeError
+    // confidence 1.5 => percent 150: previously crashed with RangeError
     const logs = captureLog(() => output.patterns([
       { name: 'Overconfident', trigger: 'always', confidence: 1.5, evidence: 'too much' },
     ]));
@@ -286,7 +286,7 @@ function runTests() {
 
   if (test('patterns renders negative confidence without crash', () => {
     const output = new SkillCreateOutput('repo');
-    // confidence -0.1 => percent -10 — Math.max(0, ...) should clamp filled to 0
+    // confidence -0.1 => percent -10: Math.max(0, ...) should clamp filled to 0
     const logs = captureLog(() => output.patterns([
       { name: 'Negative', trigger: 'never', confidence: -0.1, evidence: 'impossible' },
     ]));
@@ -383,7 +383,7 @@ function runTests() {
       return s.startsWith('\u256D') || s.startsWith('\u2502') || s.startsWith('\u2570');
     });
     assert.ok(boxLines.length >= 3, 'Should have at least 3 box lines');
-    // The box() default width is 60 — each line should be exactly 60 chars
+    // The box() default width is 60: each line should be exactly 60 chars
     boxLines.forEach((l, i) => {
       const w = stripAnsi(l).length;
       assert.strictEqual(w, 60,
@@ -403,7 +403,7 @@ function runTests() {
     });
     assert.ok(boxLines.length >= 3, 'Should have at least 3 box lines');
     // instincts() calls box() with no explicit width, so it uses the default 60
-    // regardless of this.width — verify self-consistency at least
+    // regardless of this.width: verify self-consistency at least
     const firstWidth = stripAnsi(boxLines[0]).length;
     boxLines.forEach((l, i) => {
       const w = stripAnsi(l).length;
@@ -489,7 +489,7 @@ function runTests() {
     // With || operator (bug): 0 || 0.8 = 0.8 → shows "80%"
     assert.ok(combined.includes('0%'), 'Should show 0% for zero confidence');
     assert.ok(!combined.includes('80%'),
-      'Should NOT show 80% — confidence=0 is explicitly provided, not missing');
+      'Should NOT show 80%: confidence=0 is explicitly provided, not missing');
   })) passed++; else failed++;
 
   // ── Round 87: analyzePhase() async method (untested) ──
@@ -505,7 +505,7 @@ function runTests() {
     const origWrite = process.stdout.write;
     process.stdout.write = function(str) { writes.push(String(str)); return true; };
     try {
-      // Call synchronously by accessing the returned promise — we just need to
+      // Call synchronously by accessing the returned promise: we just need to
       // verify the promise is a thenable (async function returns Promise).
       const promise = output.analyzePhase({ commits: 42 });
       assert.ok(promise && typeof promise.then === 'function',

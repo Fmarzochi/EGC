@@ -1,6 +1,6 @@
 ---
 name: repo-scan
-description: Cross-stack source code asset audit — classifies every file, detects embedded third-party libraries, and delivers actionable four-level verdicts per module with interactive HTML reports.
+description: Cross-stack source code asset audit: classifies every file, detects embedded third-party libraries, and delivers actionable four-level verdicts per module with interactive HTML reports.
 origin: community
 ---
 
@@ -11,7 +11,7 @@ origin: community
 ## When to Use
 
 - Taking over a large legacy codebase and need a structural overview
-- Before major refactoring — identify what's core, what's duplicate, what's dead
+- Before major refactoring: identify what's core, what's duplicate, what's dead
 - Auditing third-party dependencies embedded directly in source (not declared in package managers)
 - Preparing architecture decision records for monorepo reorganization
 

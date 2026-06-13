@@ -100,7 +100,7 @@ function detectFormatter(projectRoot) {
       }
     }
   } catch {
-    // Malformed package.json — continue to file-based detection
+    // Malformed package.json: continue to file-based detection
   }
 
   for (const cfg of PRETTIER_CONFIGS) {

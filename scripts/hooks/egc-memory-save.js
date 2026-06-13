@@ -20,7 +20,7 @@ function main() {
   }
 
   const prompt =
-    'Call update_state via the egc-memory MCP tool with the decisions, preferences, and next steps from this session. project_path is optional — omit it and it uses PWD automatically.';
+    'Call update_state via the egc-memory MCP tool with the decisions, preferences, and next steps from this session. project_path is optional: omit it and it uses PWD automatically.';
 
   const output = Object.assign({}, input, { promptForAssistant: prompt });
   process.stdout.write(JSON.stringify(output));

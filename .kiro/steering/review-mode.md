@@ -9,11 +9,11 @@ Use this context when conducting code reviews or quality assessments.
 
 ## Review Process
 
-1. Gather context — Check git diff to see all changes
-2. Understand scope — Identify which files changed and why
-3. Read surrounding code — Don't review in isolation
-4. Apply review checklist — Work through each category
-5. Report findings — Use severity levels
+1. Gather context: Check git diff to see all changes
+2. Understand scope: Identify which files changed and why
+3. Read surrounding code: Don't review in isolation
+4. Apply review checklist: Work through each category
+5. Report findings: Use severity levels
 
 ## Review Checklist
 

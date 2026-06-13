@@ -4,7 +4,7 @@
 # Starts the background observer agent that analyzes observations
 # and creates instincts. Uses Haiku model for cost efficiency.
 #
-# v2.1: Project-scoped — detects current project and analyzes
+# v2.1: Project-scoped: detects current project and analyzes
 #       project-specific observations into project-scoped instincts.
 #
 # Usage:

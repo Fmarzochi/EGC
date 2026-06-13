@@ -107,7 +107,7 @@ Pane 3: "Review src/api/ for test coverage gaps"
 2. **Clear boundaries.** Each pane should work on distinct files or concerns.
 3. **Merge strategically.** Review pane output before merging to avoid conflicts.
 4. **Use git worktrees.** For file-conflict-prone work, use separate worktrees per pane.
-5. **Resource awareness.** Each pane uses API tokens — keep total panes under 5-6.
+5. **Resource awareness.** Each pane uses API tokens: keep total panes under 5-6.
 
 ## Git Worktree Integration
 

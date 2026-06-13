@@ -4,7 +4,7 @@ description: Use this skill to monitor a deployed URL for regressions after depl
 origin: EGC
 ---
 
-# Canary Watch — Post-Deploy Monitoring
+# Canary Watch: Post-Deploy Monitoring
 
 ## When to Use
 
@@ -21,12 +21,12 @@ Monitors a deployed URL for regressions. Runs in a loop until stopped or until t
 ### What It Watches
 
 ```
-1. HTTP Status — is the page returning 200?
-2. Console Errors — new errors that weren't there before?
-3. Network Failures — failed API calls, 5xx responses?
-4. Performance — LCP/CLS/INP regression vs baseline?
-5. Content — did key elements disappear? (h1, nav, footer, CTA)
-6. API Health — are critical endpoints responding within SLA?
+1. HTTP Status: is the page returning 200?
+2. Console Errors: new errors that weren't there before?
+3. Network Failures: failed API calls, 5xx responses?
+4. Performance: LCP/CLS/INP regression vs baseline?
+5. Content: did key elements disappear? (h1, nav, footer, CTA)
+6. API Health: are critical endpoints responding within SLA?
 ```
 
 ### Watch Modes
@@ -76,16 +76,16 @@ When a critical threshold is crossed:
 ## Output
 
 ```markdown
-## Canary Report — myapp.com — 2026-03-23 03:15 PST
+## Canary Report: myapp.com: 2026-03-23 03:15 PST
 
 ### Status: HEALTHY ✓
 
 | Check | Result | Baseline | Delta |
 |-------|--------|----------|-------|
-| HTTP | 200 ✓ | 200 | — |
-| Console errors | 0 ✓ | 0 | — |
+| HTTP | 200 ✓ | 200 |: |
+| Console errors | 0 ✓ | 0 |: |
 | LCP | 1.8s ✓ | 1.6s | +200ms |
-| CLS | 0.01 ✓ | 0.01 | — |
+| CLS | 0.01 ✓ | 0.01 |: |
 | API /health | 145ms ✓ | 120ms | +25ms |
 
 ### No regressions detected. Deploy is clean.

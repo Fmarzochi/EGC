@@ -17,7 +17,7 @@ paths:
 // BAD
 const API_KEY: &str = "sk-abc123...";
 
-// GOOD — environment variable with early validation
+// GOOD: environment variable with early validation
 fn load_api_key() -> anyhow::Result<String> {
     std::env::var("PAYMENT_API_KEY")
         .context("PAYMENT_API_KEY must be set")
@@ -26,15 +26,15 @@ fn load_api_key() -> anyhow::Result<String> {
 
 ## SQL Injection Prevention
 
-- Always use parameterized queries — never format user input into SQL strings
+- Always use parameterized queries: never format user input into SQL strings
 - Use query builder or ORM (sqlx, diesel, sea-orm) with bind parameters
 
 ```rust
-// BAD — SQL injection via format string
+// BAD: SQL injection via format string
 let query = format!("SELECT * FROM users WHERE name = '{name}'");
 sqlx::query(&query).fetch_one(&pool).await?;
 
-// GOOD — parameterized query with sqlx
+// GOOD: parameterized query with sqlx
 // Placeholder syntax varies by backend: Postgres: $1  |  MySQL: ?  |  SQLite: $1
 sqlx::query("SELECT * FROM users WHERE name = $1")
     .bind(&name)
@@ -46,11 +46,11 @@ sqlx::query("SELECT * FROM users WHERE name = $1")
 
 - Validate all user input at system boundaries before processing
 - Use the type system to enforce invariants (newtype pattern)
-- Parse, don't validate — convert unstructured data to typed structs at the boundary
+- Parse, don't validate: convert unstructured data to typed structs at the boundary
 - Reject invalid input with clear error messages
 
 ```rust
-// Parse, don't validate — invalid states are unrepresentable
+// Parse, don't validate: invalid states are unrepresentable
 pub struct Email(String);
 
 impl Email {
@@ -75,21 +75,21 @@ impl Email {
 
 ## Unsafe Code
 
-- Minimize `unsafe` blocks — prefer safe abstractions
+- Minimize `unsafe` blocks: prefer safe abstractions
 - Every `unsafe` block must have a `// SAFETY:` comment explaining the invariant
 - Never use `unsafe` to bypass the borrow checker for convenience
-- Audit all `unsafe` code during review — it is a red flag without justification
+- Audit all `unsafe` code during review: it is a red flag without justification
 - Prefer `safe` FFI wrappers around C libraries
 
 ```rust
-// GOOD — safety comment documents ALL required invariants
+// GOOD: safety comment documents ALL required invariants
 let widget: &Widget = {
     // SAFETY: `ptr` is non-null, aligned, points to an initialized Widget,
     // and no mutable references or mutations exist for its lifetime.
     unsafe { &*ptr }
 };
 
-// BAD — no safety justification
+// BAD: no safety justification
 unsafe { &*ptr }
 ```
 
@@ -98,8 +98,8 @@ unsafe { &*ptr }
 - Run `cargo audit` to scan for known CVEs in dependencies
 - Run `cargo deny check` for license and advisory compliance
 - Use `cargo tree` to audit transitive dependencies
-- Keep dependencies updated — set up Dependabot or Renovate
-- Minimize dependency count — evaluate before adding new crates
+- Keep dependencies updated: set up Dependabot or Renovate
+- Minimize dependency count: evaluate before adding new crates
 
 ```bash
 # Security audit

@@ -48,7 +48,7 @@ actor Cache<Key: Hashable & Sendable, Value: Sendable> {
 
 ## Dependency Injection
 
-Inject protocols with default parameters — production uses defaults, tests inject mocks:
+Inject protocols with default parameters: production uses defaults, tests inject mocks:
 
 ```swift
 struct UserService {

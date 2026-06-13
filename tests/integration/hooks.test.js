@@ -534,7 +534,7 @@ async function runTests() {
       tool_input: { command: 'yarn dev' }
     });
 
-    // Hook always exits 0 — it transforms, never blocks
+    // Hook always exits 0: it transforms, never blocks
     assert.strictEqual(result.code, 0, 'Hook should exit 0 (transforms, does not block)');
     const output = result.stdout.trim();
     if (output) {

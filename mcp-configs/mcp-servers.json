@@ -8,7 +8,7 @@
         "JIRA_EMAIL": "YOUR_JIRA_EMAIL_HERE",
         "JIRA_API_TOKEN": "YOUR_JIRA_API_TOKEN_HERE"
       },
-      "description": "Jira issue tracking — search, create, update, comment, transition issues. Requires: uv (https://docs.astral.sh/uv/)."
+      "description": "Jira issue tracking: search, create, update, comment, transition issues. Requires: uv (https://docs.astral.sh/uv/)."
     },
     "github": {
       "command": "npx",
@@ -39,7 +39,7 @@
     "omega-memory": {
       "command": "uvx",
       "args": ["omega-memory", "serve"],
-      "description": "Persistent agent memory with semantic search, multi-agent coordination, and knowledge graphs — run via uvx (richer than the basic memory store). Requires: uv (https://docs.astral.sh/uv/)."
+      "description": "Persistent agent memory with semantic search, multi-agent coordination, and knowledge graphs: run via uvx (richer than the basic memory store). Requires: uv (https://docs.astral.sh/uv/)."
     },
     "sequential-thinking": {
       "command": "npx",
@@ -87,12 +87,12 @@
       "env": {
         "EXA_API_KEY": "YOUR_EXA_API_KEY_HERE"
       },
-      "description": "Web search, research, and data ingestion via Exa API (stdio transport via npm). Note: Claude Code uses the HTTP transport at mcp.exa.ai/mcp — see .mcp.json. Prefer task-scoped use for broader research after GitHub search and primary docs."
+      "description": "Web search, research, and data ingestion via Exa API (stdio transport via npm). Note: Claude Code uses the HTTP transport at mcp.exa.ai/mcp: see .mcp.json. Prefer task-scoped use for broader research after GitHub search and primary docs."
     },
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp@3.0.0"],
-      "description": "Live documentation lookup — use with /docs command and documentation-lookup skill (resolve-library-id, query-docs)."
+      "description": "Live documentation lookup: use with /docs command and documentation-lookup skill (resolve-library-id, query-docs)."
     },
     "magic": {
       "command": "npx",
@@ -144,7 +144,7 @@
     "devfleet": {
       "type": "http",
       "url": "http://localhost:18801/mcp",
-      "description": "Multi-agent orchestration — dispatch parallel Gemini Code agents in isolated worktrees. Plan projects, auto-chain missions, read structured reports. Repo: https://github.com/LEC-AI/egc-devfleet. Requires: devfleet process running on localhost:18801."
+      "description": "Multi-agent orchestration: dispatch parallel Gemini Code agents in isolated worktrees. Plan projects, auto-chain missions, read structured reports. Repo: https://github.com/LEC-AI/egc-devfleet. Requires: devfleet process running on localhost:18801."
     },
     "token-optimizer": {
       "command": "npx",
@@ -154,7 +154,7 @@
     "laraplugins": {
       "type": "http",
       "url": "https://laraplugins.io/mcp/plugins",
-      "description": "Laravel plugin discovery — search packages by keyword, health score, Laravel/PHP version compatibility. Use with laravel-plugin-discovery skill."
+      "description": "Laravel plugin discovery: search packages by keyword, health score, Laravel/PHP version compatibility. Use with laravel-plugin-discovery skill."
     },
     "confluence": {
       "command": "npx",
@@ -164,7 +164,7 @@
         "CONFLUENCE_EMAIL": "YOUR_EMAIL_HERE",
         "CONFLUENCE_API_TOKEN": "YOUR_CONFLUENCE_TOKEN_HERE"
       },
-      "description": "Confluence Cloud integration — search pages, retrieve content, explore spaces"
+      "description": "Confluence Cloud integration: search pages, retrieve content, explore spaces"
     },
     "evalview": {
       "command": "python3",
@@ -172,7 +172,7 @@
       "env": {
         "OPENAI_API_KEY": "YOUR_OPENAI_API_KEY_HERE"
       },
-      "description": "AI agent regression testing — snapshot behavior, detect regressions in tool calls and output quality. 8 tools: create_test, run_snapshot, run_check, list_tests, validate_skill, generate_skill_tests, run_skill_test, generate_visual_report. API key optional — deterministic checks (tool diff, output hash) work without it. Requires: pip install \"evalview>=0.5,<1\"."
+      "description": "AI agent regression testing: snapshot behavior, detect regressions in tool calls and output quality. 8 tools: create_test, run_snapshot, run_check, list_tests, validate_skill, generate_skill_tests, run_skill_test, generate_visual_report. API key optional: deterministic checks (tool diff, output hash) work without it. Requires: pip install \"evalview>=0.5,<1\"."
     }
   },
   "_comments": {

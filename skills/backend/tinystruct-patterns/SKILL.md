@@ -117,15 +117,15 @@ void testActionRegistration() {
 
 Detailed guides are available in the `references/` directory:
 
-- [Architecture & Config](references/architecture.md) — Abstractions, Package Map, Properties
-- [Routing & @Action](references/routing.md) — Annotation details, Modes, Parameters
-- [Data Handling](references/data-handling.md) — Using the native `Builder` for JSON
-- [System & Usage](references/system-usage.md) — Context, Sessions, Events, CLI usage
-- [Testing Patterns](references/testing.md) — JUnit 5 integration and ActionRegistry testing
+- [Architecture & Config](references/architecture.md): Abstractions, Package Map, Properties
+- [Routing & @Action](references/routing.md): Annotation details, Modes, Parameters
+- [Data Handling](references/data-handling.md): Using the native `Builder` for JSON
+- [System & Usage](references/system-usage.md): Context, Sessions, Events, CLI usage
+- [Testing Patterns](references/testing.md): JUnit 5 integration and ActionRegistry testing
 
 ## Reference Source Files (Internal)
 
-- `src/main/java/org/tinystruct/AbstractApplication.java` — Core base class
-- `src/main/java/org/tinystruct/system/annotation/Action.java` — Annotation & Modes
-- `src/main/java/org/tinystruct/application/ActionRegistry.java` — Routing Engine
-- `src/main/java/org/tinystruct/data/component/Builder.java` — JSON/Data Serializer
+- `src/main/java/org/tinystruct/AbstractApplication.java`: Core base class
+- `src/main/java/org/tinystruct/system/annotation/Action.java`: Annotation & Modes
+- `src/main/java/org/tinystruct/application/ActionRegistry.java`: Routing Engine
+- `src/main/java/org/tinystruct/data/component/Builder.java`: JSON/Data Serializer

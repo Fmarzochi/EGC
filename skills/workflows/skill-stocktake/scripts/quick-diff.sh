@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# quick-diff.sh — compare skill file mtimes against results.json evaluated_at
+# quick-diff.sh: compare skill file mtimes against results.json evaluated_at
 # Usage: quick-diff.sh RESULTS_JSON [CWD_SKILLS_DIR]
 # Output: JSON array of changed/new files to stdout (empty [] if no changes)
 #
@@ -8,7 +8,7 @@
 #
 # Environment:
 #   SKILL_STOCKTAKE_GLOBAL_DIR   Override ~/.gemini/skills (for testing only;
-#                                do not set in production — intended for bats tests)
+#                                do not set in production: intended for bats tests)
 #   SKILL_STOCKTAKE_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
@@ -23,7 +23,7 @@ if [[ -z "$RESULTS_JSON" || ! -f "$RESULTS_JSON" ]]; then
 fi
 
 # Validate CWD_SKILLS_DIR looks like a .gemini/skills path (defense-in-depth).
-# Only warn when the path exists — a nonexistent path poses no traversal risk.
+# Only warn when the path exists: a nonexistent path poses no traversal risk.
 if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */.gemini/skills* ]]; then
   echo "Warning: CWD_SKILLS_DIR does not look like a .gemini/skills path: $CWD_SKILLS_DIR" >&2
 fi
@@ -46,7 +46,7 @@ tmpdir=$(mktemp -d)
 _cleanup() { rm -rf "$tmpdir"; }
 trap _cleanup EXIT
 
-# Shared counter across process_dir calls — intentionally NOT local
+# Shared counter across process_dir calls: intentionally NOT local
 i=0
 
 process_dir() {

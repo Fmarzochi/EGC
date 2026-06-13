@@ -7,10 +7,10 @@ origin: community
 # Homelab WireGuard VPN
 
 WireGuard is a fast, modern VPN protocol. It is the right choice for remote access to a
-home network — simpler to configure than OpenVPN and faster than most alternatives.
+home network: simpler to configure than OpenVPN and faster than most alternatives.
 
-All configuration examples show common setups. Review each command — especially the
-iptables forwarding rules and key file permissions — before applying them to your
+All configuration examples show common setups. Review each command: especially the
+iptables forwarding rules and key file permissions: before applying them to your
 system, and make changes in a maintenance window.
 
 ## When to Use
@@ -29,7 +29,7 @@ Your phone (WireGuard client)
     │
     │  Encrypted UDP tunnel (port 51820)
     │
-Your home router (WireGuard server — needs a public IP or DDNS)
+Your home router (WireGuard server: needs a public IP or DDNS)
     │
     Your home network (192.168.1.0/24, NAS, Pi, etc.)
 
@@ -45,16 +45,16 @@ Traffic is encrypted end-to-end with no central server or certificate authority.
 # Install WireGuard
 sudo apt update && sudo apt install wireguard -y
 
-# Generate server keypair — create files with private permissions from the start
+# Generate server keypair: create files with private permissions from the start
 sudo mkdir -p /etc/wireguard
 sudo sh -c 'umask 077; wg genkey > /etc/wireguard/server_private.key'
 sudo sh -c 'wg pubkey < /etc/wireguard/server_private.key > /etc/wireguard/server_public.key'
 
-# Write server config — substitute the actual private key value
+# Write server config: substitute the actual private key value
 # Do not store private keys in version control or share them
 sudo tee /etc/wireguard/wg0.conf << 'EOF'
 [Interface]
-Address = 10.8.0.1/24              # VPN subnet — server gets .1
+Address = 10.8.0.1/24              # VPN subnet: server gets .1
 ListenPort = 51820
 PrivateKey = <paste_server_private_key_here>
 
@@ -67,12 +67,12 @@ PostDown = iptables -D FORWARD -i eth0 -o wg0 -m conntrack --ctstate RELATED,EST
 PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 
 [Peer]
-# Phone — replace with the actual phone public key
+# Phone: replace with the actual phone public key
 PublicKey = <phone_public_key>
 AllowedIPs = 10.8.0.2/32
 
 [Peer]
-# Laptop — replace with the actual laptop public key
+# Laptop: replace with the actual laptop public key
 PublicKey = <laptop_public_key>
 AllowedIPs = 10.8.0.3/32
 EOF
@@ -94,7 +94,7 @@ sudo systemctl enable wg-quick@wg0
 
 ```bash
 # Generate a unique keypair for each client device
-# Run on the client, or on the server and transfer the private key securely — never in plaintext
+# Run on the client, or on the server and transfer the private key securely: never in plaintext
 umask 077
 wg genkey | tee phone_private.key | wg pubkey > phone_public.key
 
@@ -118,7 +118,7 @@ PersistentKeepalive = 25              # Keep NAT hole open (required for mobile 
 ```
 # Split tunnel: AllowedIPs = 192.168.1.0/24
   Only traffic destined for your home network goes through the VPN.
-  Internet traffic (YouTube, Spotify) goes directly — better performance on mobile.
+  Internet traffic (YouTube, Spotify) goes directly: better performance on mobile.
   Best for: "I just want to reach my NAS and Pi from anywhere."
 
 # Full tunnel: AllowedIPs = 0.0.0.0/0, ::/0
@@ -210,7 +210,7 @@ Most home internet connections have a dynamic IP. Use DDNS so your VPN endpoint
 stays reachable after an IP change.
 
 ```bash
-# Option 1: Cloudflare DDNS — store credentials in a secrets file, not inline
+# Option 1: Cloudflare DDNS: store credentials in a secrets file, not inline
 # docker-compose entry using an env file:
   ddns-updater:
     image: qmcgaw/ddns-updater
@@ -270,19 +270,19 @@ sudo wg-quick down wg0 && sudo wg-quick up wg0
 
 ```
 # BAD: Storing private keys in version control or sharing them
-# Private keys are equivalent to passwords — never commit them to git
+# Private keys are equivalent to passwords: never commit them to git
 
 # BAD: Using AllowedIPs = 0.0.0.0/0 on mobile without considering the impact
-# Full tunnel routes all mobile traffic through your home upload — usually slow
+# Full tunnel routes all mobile traffic through your home upload: usually slow
 
 # BAD: Not setting PersistentKeepalive on mobile clients
 # Mobile clients behind NAT drop idle tunnels without it
 
 # BAD: Opening port 51820 in the firewall but forgetting IP forwarding on the server
-# Tunnel connects but no traffic routes — confusing to debug
+# Tunnel connects but no traffic routes: confusing to debug
 
 # BAD: Sharing a keypair across multiple client devices
-# Each device must have its own unique keypair — shared keys break the security model
+# Each device must have its own unique keypair: shared keys break the security model
 
 # BAD: Using a broad "FORWARD ACCEPT" iptables rule
 # Scope forwarding rules to the wg0 interface and direction only
@@ -290,7 +290,7 @@ sudo wg-quick down wg0 && sudo wg-quick up wg0
 
 ## Best Practices
 
-- Generate a unique keypair per client device — never reuse keys
+- Generate a unique keypair per client device: never reuse keys
 - Use split tunneling (`AllowedIPs = <home subnets>`) for mobile
 - Set `PersistentKeepalive = 25` on all mobile clients
 - Use DDNS if your ISP assigns a dynamic IP; store credentials in env files, not inline

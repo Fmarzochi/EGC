@@ -8,7 +8,7 @@ Practical settings and habits to reduce token consumption, extend session qualit
 
 ## Recommended Settings
 
-These are recommended defaults for most users. Power users can tune values further based on their workload — for example, setting `MAX_THINKING_TOKENS` lower for simple tasks or higher for complex architectural work.
+These are recommended defaults for most users. Power users can tune values further based on their workload: for example, setting `MAX_THINKING_TOKENS` lower for simple tasks or higher for complex architectural work.
 
 Add to your `~/.gemini/settings.json`:
 
@@ -36,8 +36,8 @@ Some recent Gemini Code builds have community reports that `gemini_AUTOCOMPACT_P
 
 ### Toggling extended thinking
 
-- **Alt+T** (Windows/Linux) or **Option+T** (macOS) — toggle on/off
-- **Ctrl+O** — see thinking output (verbose mode)
+- **Alt+T** (Windows/Linux) or **Option+T** (macOS): toggle on/off
+- **Ctrl+O**: see thinking output (verbose mode)
 
 ---
 
@@ -88,7 +88,7 @@ The `strategic-compact` skill (in `skills/strategic-compact/`) suggests `/compac
 
 ### Subagents protect your context
 
-Use subagents (Task tool) for exploration instead of reading many files in your main session. The subagent reads 20 files but only returns a summary — your main context stays clean.
+Use subagents (Task tool) for exploration instead of reading many files in your main session. The subagent reads 20 files but only returns a summary: your main context stays clean.
 
 ---
 
@@ -114,7 +114,7 @@ Tips:
 - Prefer CLI tools when available (`gh` instead of GitHub MCP, `aws` instead of AWS MCP)
 - Do not rely on `.gemini/settings.json` or `.gemini/settings.local.json` to disable already-loaded Gemini Code MCP servers; use `/mcp` for that.
 - `EGC_DISABLED_MCPS` only affects EGC-generated MCP config output during install/sync flows, such as `install.sh`, `npx egc-install`, and Codex MCP merging. It is not a live Gemini Code toggle.
-- The `memory` MCP server is configured by default but not used by any skill, agent, or hook — consider disabling it
+- The `memory` MCP server is configured by default but not used by any skill, agent, or hook: consider disabling it
 
 ---
 

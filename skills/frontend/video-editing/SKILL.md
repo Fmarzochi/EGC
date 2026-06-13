@@ -305,6 +305,6 @@ identify the 5 most engaging 30-second clips for social media."
 
 ## Related Skills
 
-- `fal-ai-media` — AI image, video, and audio generation
-- `videodb` — Server-side video processing, indexing, and streaming
-- `content-engine` — Platform-native content distribution
+- `fal-ai-media`: AI image, video, and audio generation
+- `videodb`: Server-side video processing, indexing, and streaming
+- `content-engine`: Platform-native content distribution

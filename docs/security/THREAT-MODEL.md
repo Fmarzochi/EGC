@@ -1,4 +1,4 @@
-# Threat Model — Extended Global Context (EGC)
+# Threat Model: Extended Global Context (EGC)
 
 ## System Overview
 
@@ -74,10 +74,10 @@ EGC is a local-first AI memory and orchestration runtime. It has no network serv
 
 | Path | Risk | Protection |
 |------|------|-----------|
-| `scripts/egc-guardian/src/validate_command.ts` | High — gates all shell execution | Reviewed on every change; blocked by branch protection |
-| `install.sh` / `install.ps1` | Medium — modifies global AI tool configs | Verified in CI across Linux, macOS, Windows |
-| `scripts/hooks/session-end.js` | Medium — reads transcript, writes to disk | Bounded stdin (1MB cap); structured error handling |
-| `mcp/servers/egc-memory/` | Low — reads/writes state files only | No shell execution; pure file I/O |
+| `scripts/egc-guardian/src/validate_command.ts` | High: gates all shell execution | Reviewed on every change; blocked by branch protection |
+| `install.sh` / `install.ps1` | Medium: modifies global AI tool configs | Verified in CI across Linux, macOS, Windows |
+| `scripts/hooks/session-end.js` | Medium: reads transcript, writes to disk | Bounded stdin (1MB cap); structured error handling |
+| `mcp/servers/egc-memory/` | Low: reads/writes state files only | No shell execution; pure file I/O |
 
 ## Residual Risk
 
@@ -85,4 +85,4 @@ EGC is a developer tool that runs with full local-user permissions by design. A 
 
 ## Review Date
 
-2026-06-04 — Felipe Marzochi
+2026-06-04: Felipe Marzochi

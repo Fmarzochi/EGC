@@ -306,7 +306,7 @@ function main() {
   }
 
   if (dryRun) {
-    log('Dry run — would write the merged Codex baseline.');
+    log('Dry run: would write the merged Codex baseline.');
     return;
   }
 

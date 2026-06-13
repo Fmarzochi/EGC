@@ -71,7 +71,7 @@ docs: add Antigravity setup and usage guide (#552)
 *Commit message example*
 
 ```text
-merge: PR #529 — feat(skills): add documentation-lookup, bun-runtime, nextjs-turbopack; feat(agents): add rust-reviewer
+merge: PR #529: feat(skills): add documentation-lookup, bun-runtime, nextjs-turbopack; feat(agents): add rust-reviewer
 ```
 
 *Commit message example*
@@ -148,7 +148,7 @@ import { useAuth } from './hooks/useAuth'
 
 ### Test Framework
 
-No specific test framework detected — use the repository's existing test patterns.
+No specific test framework detected: use the repository's existing test patterns.
 
 ### File Pattern: `*.test.js`
 
@@ -226,7 +226,7 @@ Standard feature implementation workflow
 ```
 feat(skills): add documentation-lookup, bun-runtime, nextjs-turbopack; feat(agents): add rust-reviewer
 docs(skills): align documentation-lookup with CONTRIBUTING template; add cross-harness (Codex/Cursor) skill copies
-fix: address PR review — skill template (When to use, How it works, Examples), bun.lock, next build note, rust-reviewer CI note, doc-lookup privacy/uncertainty
+fix: address PR review: skill template (When to use, How it works, Examples), bun.lock, next build note, rust-reviewer CI note, doc-lookup privacy/uncertainty
 ```
 
 ### Add Language Rules

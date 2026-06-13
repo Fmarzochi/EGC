@@ -10,10 +10,10 @@ Extends `/learn` with a quality gate, save-location decision, and knowledge-plac
 
 Look for:
 
-1. **Error Resolution Patterns** — root cause + fix + reusability
-2. **Debugging Techniques** — non-obvious steps, tool combinations
-3. **Workarounds** — library quirks, API limitations, version-specific fixes
-4. **Project-Specific Patterns** — conventions, architecture decisions, integration patterns
+1. **Error Resolution Patterns**: root cause + fix + reusability
+2. **Debugging Techniques**: non-obvious steps, tool combinations
+3. **Workarounds**: library quirks, API limitations, version-specific fixes
+4. **Project-Specific Patterns**: conventions, architecture decisions, integration patterns
 
 ## Process
 
@@ -51,7 +51,7 @@ origin: auto-extracted
 [Trigger conditions]
 ```
 
-5. **Quality gate — Checklist + Holistic verdict**
+5. **Quality gate: Checklist + Holistic verdict**
 
    ### 5a. Required checklist (verify by actually reading files)
 
@@ -105,12 +105,12 @@ origin: auto-extracted
 
 ## Design Rationale
 
-This version replaces the previous 5-dimension numeric scoring rubric (Specificity, Actionability, Scope Fit, Non-redundancy, Coverage scored 1-5) with a checklist-based holistic verdict system. Modern frontier models (Opus 4.6+) have strong contextual judgment — forcing rich qualitative signals into numeric scores loses nuance and can produce misleading totals. The holistic approach lets the model weigh all factors naturally, producing more accurate save/drop decisions while the explicit checklist ensures no critical check is skipped.
+This version replaces the previous 5-dimension numeric scoring rubric (Specificity, Actionability, Scope Fit, Non-redundancy, Coverage scored 1-5) with a checklist-based holistic verdict system. Modern frontier models (Opus 4.6+) have strong contextual judgment: forcing rich qualitative signals into numeric scores loses nuance and can produce misleading totals. The holistic approach lets the model weigh all factors naturally, producing more accurate save/drop decisions while the explicit checklist ensures no critical check is skipped.
 
 ## Notes
 
 - Don't extract trivial fixes (typos, simple syntax errors)
 - Don't extract one-time issues (specific API outages, etc.)
 - Focus on patterns that will save time in future sessions
-- Keep skills focused — one pattern per skill
+- Keep skills focused: one pattern per skill
 - When the verdict is Absorb, append to the existing skill rather than creating a new file

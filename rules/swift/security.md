@@ -9,9 +9,9 @@ paths:
 
 ## Secret Management
 
-- Use **Keychain Services** for sensitive data (tokens, passwords, keys) — never `UserDefaults`
+- Use **Keychain Services** for sensitive data (tokens, passwords, keys): never `UserDefaults`
 - Use environment variables or `.xcconfig` files for build-time secrets
-- Never hardcode secrets in source — decompilation tools extract them trivially
+- Never hardcode secrets in source: decompilation tools extract them trivially
 
 ```swift
 let apiKey = ProcessInfo.processInfo.environment["API_KEY"]
@@ -22,7 +22,7 @@ guard let apiKey, !apiKey.isEmpty else {
 
 ## Transport Security
 
-- App Transport Security (ATS) is enforced by default — do not disable it
+- App Transport Security (ATS) is enforced by default: do not disable it
 - Use certificate pinning for critical endpoints
 - Validate all server certificates
 

@@ -8,7 +8,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Prevent duplicate runs — do not cancel in-progress runs to avoid
+# Prevent duplicate runs: do not cancel in-progress runs to avoid
 # dispatch/push collisions killing 34 matrix jobs mid-flight
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}

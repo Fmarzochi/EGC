@@ -24,11 +24,11 @@ Use [scripts/ws_listener.py](../scripts/ws_listener.py) to connect and dump even
 
 | Event | Status | Key Data |
 |-------|--------|----------|
-| `capture_session.created` | `created` | — |
-| `capture_session.starting` | `starting` | — |
+| `capture_session.created` | `created` |: |
+| `capture_session.starting` | `starting` |: |
 | `capture_session.active` | `active` | `rtstreams[]` |
-| `capture_session.stopping` | `stopping` | — |
-| `capture_session.stopped` | `stopped` | — |
+| `capture_session.stopping` | `stopping` |: |
+| `capture_session.stopped` | `stopped` |: |
 | `capture_session.exported` | `exported` | `exported_video_id`, `stream_url`, `player_url` |
 | `capture_session.failed` | `failed` | `error` |
 

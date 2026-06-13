@@ -56,7 +56,7 @@ const writableExtensions = new Set([
 
 // Documentation extensions where intentional emoji-based visual hierarchy is
 // part of product UX (README pillars, doc section headers, callouts). Dangerous
-// invisible code points stay blocked everywhere — this only relaxes the emoji
+// invisible code points stay blocked everywhere: this only relaxes the emoji
 // gate, not the invisible-character gate.
 const documentationExtensions = new Set([
   '.md',

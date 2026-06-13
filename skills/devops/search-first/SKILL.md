@@ -4,7 +4,7 @@ description: Research-before-coding workflow. Search for existing tools, librari
 origin: EGC
 ---
 
-# /search-first — Research Before You Code
+# /search-first: Research Before You Code
 
 Systematizes the "search for existing solutions before implementing" workflow.
 
@@ -50,10 +50,10 @@ Use this skill when:
 
 | Signal | Action |
 |--------|--------|
-| Exact match, well-maintained, MIT/Apache | **Adopt** — install and use directly |
-| Partial match, good foundation | **Extend** — install + write thin wrapper |
-| Multiple weak matches | **Compose** — combine 2-3 small packages |
-| Nothing suitable found | **Build** — write custom, but informed by research |
+| Exact match, well-maintained, MIT/Apache | **Adopt**: install and use directly |
+| Partial match, good foundation | **Extend**: install + write thin wrapper |
+| Multiple weak matches | **Compose**: combine 2-3 small packages |
+| Nothing suitable found | **Build**: write custom, but informed by research |
 
 ## How to Use
 
@@ -131,7 +131,7 @@ Combine for progressive discovery:
 Need: Check markdown files for broken links
 Search: npm "markdown dead link checker"
 Found: textlint-rule-no-dead-link (score: 9/10)
-Action: ADOPT — npm install textlint-rule-no-dead-link
+Action: ADOPT: npm install textlint-rule-no-dead-link
 Result: Zero custom code, battle-tested solution
 ```
 
@@ -140,7 +140,7 @@ Result: Zero custom code, battle-tested solution
 Need: Resilient HTTP client with retries and timeout handling
 Search: npm "http client retry", PyPI "httpx retry"
 Found: got (Node) with retry plugin, httpx (Python) with built-in retry
-Action: ADOPT — use got/httpx directly with retry config
+Action: ADOPT: use got/httpx directly with retry config
 Result: Zero custom code, production-proven libraries
 ```
 
@@ -149,7 +149,7 @@ Result: Zero custom code, production-proven libraries
 Need: Validate project config files against a schema
 Search: npm "config linter schema", "json schema validator cli"
 Found: ajv-cli (score: 8/10)
-Action: ADOPT + EXTEND — install ajv-cli, write project-specific schema
+Action: ADOPT + EXTEND: install ajv-cli, write project-specific schema
 Result: 1 package + 1 schema file, no custom validation logic
 ```
 

@@ -26,11 +26,11 @@ A diagnostic workflow for agent systems that hide failures behind wrapper layers
 - You suspect hidden repair/retry loops silently mutating responses
 
 **Do not use for:**
-- General code debugging — use `agent-introspection-debugging`
-- Code review — use language-specific reviewer agents
-- Security scanning — use `security-review` or `security-review/scan`
-- Agent performance benchmarking — use `agent-eval`
-- Writing new features — use the appropriate workflow skill
+- General code debugging: use `agent-introspection-debugging`
+- Code review: use language-specific reviewer agents
+- Security scanning: use `security-review` or `security-review/scan`
+- Agent performance benchmarking: use `agent-eval`
+- Writing new features: use the appropriate workflow skill
 
 ## The 12-Layer Stack
 
@@ -44,7 +44,7 @@ Every agent system has these layers. Any of them can corrupt the answer:
 | 4 | Distillation | Compressed artifacts re-entering as pseudo-facts |
 | 5 | Active recall | Redundant re-summary layers wasting context |
 | 6 | Tool selection | Wrong tool routing, model skips required tools |
-| 7 | Tool execution | Hallucinated execution — claims to call but doesn't |
+| 7 | Tool execution | Hallucinated execution: claims to call but doesn't |
 | 8 | Tool interpretation | Misread or ignored tool output |
 | 9 | Answer shaping | Format corruption in final response |
 | 10 | Platform rendering | Transport-layer mutation (UI, API, CLI mutates valid answers) |
@@ -109,21 +109,21 @@ Silent repair, retry, summarization, or recall agents run without explicit contr
 
 Define what you're auditing:
 
-- **Target system** — what agent application?
-- **Entrypoints** — how do users interact with it?
-- **Model stack** — which LLM(s) and providers?
-- **Symptoms** — what does the user report?
-- **Time window** — when did it start?
-- **Layers to audit** — which of the 12 layers apply?
+- **Target system**: what agent application?
+- **Entrypoints**: how do users interact with it?
+- **Model stack**: which LLM(s) and providers?
+- **Symptoms**: what does the user report?
+- **Time window**: when did it start?
+- **Layers to audit**: which of the 12 layers apply?
 
 ### Phase 2: Evidence Collection
 
 Gather evidence from the codebase:
 
-- **Source code** — agent loop, tool router, memory admission, prompt assembly
-- **Logs** — historical session traces, tool call records
-- **Config** — prompt templates, tool schemas, provider settings
-- **Memory files** — SOPs, knowledge bases, session archives
+- **Source code**: agent loop, tool router, memory admission, prompt assembly
+- **Logs**: historical session traces, tool call records
+- **Config**: prompt templates, tool schemas, provider settings
+- **Memory files**: SOPs, knowledge bases, session archives
 
 Use `rg` to search for anti-patterns:
 
@@ -151,24 +151,24 @@ rg "mutate|rewrite.*response|transform.*output|shap" --type py --type ts
 
 For each finding, document:
 
-- **Symptom** — what the user sees
-- **Mechanism** — how the wrapper causes it
-- **Source layer** — which of the 12 layers
-- **Root cause** — the deepest cause
-- **Evidence** — file:line or log:row reference
-- **Confidence** — 0.0 to 1.0
+- **Symptom**: what the user sees
+- **Mechanism**: how the wrapper causes it
+- **Source layer**: which of the 12 layers
+- **Root cause**: the deepest cause
+- **Evidence**: file:line or log:row reference
+- **Confidence**: 0.0 to 1.0
 
 ### Phase 4: Fix Strategy
 
 Default fix order (code-first, not prompt-first):
 
-1. **Code-gate tool requirements** — enforce in code, not just prompt text
-2. **Remove or narrow hidden repair agents** — make fallback explicit with contracts
-3. **Reduce context duplication** — same info through prompt + history + memory + distillation
-4. **Tighten memory admission** — user corrections > agent assertions
-5. **Tighten distillation triggers** — don't compress what shouldn't be compressed
-6. **Reduce rendering mutation** — pass-through, don't transform
-7. **Convert to typed JSON envelopes** — structured internal flow, not freeform prose
+1. **Code-gate tool requirements**: enforce in code, not just prompt text
+2. **Remove or narrow hidden repair agents**: make fallback explicit with contracts
+3. **Reduce context duplication**: same info through prompt + history + memory + distillation
+4. **Tighten memory admission**: user corrections > agent assertions
+5. **Tighten distillation triggers**: don't compress what shouldn't be compressed
+6. **Reduce rendering mutation**: pass-through, don't transform
+7. **Convert to typed JSON envelopes**: structured internal flow, not freeform prose
 
 ## Severity Model
 
@@ -249,8 +249,8 @@ Audits should produce structured reports following this shape:
 
 ## Related Skills
 
-- `agent-introspection-debugging` — Debug agent runtime failures (loops, timeouts, state errors)
-- `agent-eval` — Benchmark agent performance head-to-head
-- `security-review` — Security audit for code and configuration
-- `autonomous-agent-harness` — Set up autonomous agent operations
-- `agent-harness-construction` — Build agent harnesses from scratch
+- `agent-introspection-debugging`: Debug agent runtime failures (loops, timeouts, state errors)
+- `agent-eval`: Benchmark agent performance head-to-head
+- `security-review`: Security audit for code and configuration
+- `autonomous-agent-harness`: Set up autonomous agent operations
+- `agent-harness-construction`: Build agent harnesses from scratch

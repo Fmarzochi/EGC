@@ -749,7 +749,7 @@ function runTests() {
   console.log('\nsetPreferredPackageManager (success):');
 
   if (test('successfully saves preferred package manager', () => {
-    // This writes to ~/.gemini/package-manager.json — read original to restore
+    // This writes to ~/.gemini/package-manager.json: read original to restore
     const utils = require('../../scripts/lib/utils');
     const configPath = path.join(utils.getEGCDir(), 'package-manager.json');
     const original = utils.readFile(configPath);
@@ -1236,7 +1236,7 @@ function runTests() {
     const tmpDir = createTestDir();
     try {
       fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ packageManager: ['pnpm@8', 'yarn@3'] }));
-      // Should not crash — try/catch in detectFromPackageJson catches TypeError
+      // Should not crash: try/catch in detectFromPackageJson catches TypeError
       const result = pm.getPackageManager({ projectDir: tmpDir });
       assert.ok(result.name, 'Should fallback to a valid package manager');
     } finally {
@@ -1374,7 +1374,7 @@ function runTests() {
 
   if (test('setPreferredPackageManager throws wrapped error when save fails', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
-      console.log(' (skipped — chmod ineffective on Windows/root)');
+      console.log(' (skipped: chmod ineffective on Windows/root)');
       return;
     }
     const isoHome = path.join(os.tmpdir(), `egc-pm-r71-${Date.now()}`);
@@ -1388,7 +1388,7 @@ function runTests() {
       delete require.cache[require.resolve('../../scripts/lib/package-manager')];
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       const freshPm = require('../../scripts/lib/package-manager');
-      // Make .gemini directory read-only — can't create new files (package-manager.json)
+      // Make .gemini directory read-only: can't create new files (package-manager.json)
       fs.chmodSync(claudeDir, 0o555);
       assert.throws(() => {
         freshPm.setPreferredPackageManager('npm');
@@ -1413,13 +1413,13 @@ function runTests() {
 
   if (test('setProjectPackageManager throws wrapped error when write fails', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
-      console.log(' (skipped — chmod ineffective on Windows/root)');
+      console.log(' (skipped: chmod ineffective on Windows/root)');
       return;
     }
     const isoProject = path.join(os.tmpdir(), `egc-pm-proj-r72-${Date.now()}`);
     const claudeDir = path.join(isoProject, '.gemini');
     fs.mkdirSync(claudeDir, { recursive: true });
-    // Make .gemini directory read-only — can't create new files
+    // Make .gemini directory read-only: can't create new files
     fs.chmodSync(claudeDir, 0o555);
     try {
       assert.throws(() => {
@@ -1505,7 +1505,7 @@ function runTests() {
   console.log('\nRound 92: detectFromPackageJson (empty string packageManager):');
 
   if (test('detectFromPackageJson returns null for empty string packageManager field', () => {
-    // package-manager.js line 114: if (pkg.packageManager) — empty string \"\" is falsy,
+    // package-manager.js line 114: if (pkg.packageManager): empty string \"\" is falsy,
     // so the if block is skipped entirely. Function returns null without attempting split.
     // This is distinct from Round 91's whitespace test (\" \" is truthy and enters the if).
     const testDir = createTestDir();
@@ -1545,7 +1545,7 @@ function runTests() {
 
   if (test('getPackageManager skips empty string GEMINI_PACKAGE_MANAGER (falsy short-circuit)', () => {
     // package-manager.js line 168: if (envPm && PACKAGE_MANAGERS[envPm])\
-    // Empty string '' is falsy — the && short-circuits before checking PACKAGE_MANAGERS.\
+    // Empty string '' is falsy: the && short-circuits before checking PACKAGE_MANAGERS.\
     // This is distinct from the 'totally-fake-pm' test (truthy but unknown PM).
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
@@ -1564,10 +1564,10 @@ function runTests() {
   else failed++;
 
   // ── Round 104: detectFromLockFile with null projectDir (no input validation) ──
-  console.log('\nRound 104: detectFromLockFile (null projectDir — throws TypeError):');
+  console.log('\nRound 104: detectFromLockFile (null projectDir: throws TypeError):');
 
   if (test('detectFromLockFile(null) throws TypeError (path.join rejects null)', () => {
-    // package-manager.js line 95: `path.join(projectDir, pm.lockFile)` — there is no\
+    // package-manager.js line 95: `path.join(projectDir, pm.lockFile)`: there is no\
     // guard checking that projectDir is a string before passing it to path.join().\
     // When projectDir is null, path.join(null, 'package-lock.json') throws a TypeError\
     // because path.join only accepts string arguments.
@@ -1580,14 +1580,14 @@ function runTests() {
   else failed++;
 
   // ── Round 105: getExecCommand with object args (bypasses SAFE_ARGS_REGEX, coerced to [object Object]) ──
-  console.log('\nRound 105: getExecCommand (object args — typeof bypass coerces to [object Object]):');
+  console.log('\nRound 105: getExecCommand (object args: typeof bypass coerces to [object Object]):');
 
   if (test('getExecCommand with args={} bypasses SAFE_ARGS validation and coerces to "[object Object]"', () => {
     // package-manager.js line 334: `if (args && typeof args === 'string' && !SAFE_ARGS_REGEX.test(args))`
     // SAFE_ARGS_REGEX check is entirely SKIPPED.\
-    // Line 339: `args ? ' ' + args : ''` — object is truthy, so it reaches\
+    // Line 339: `args ? ' ' + args : ''`: object is truthy, so it reaches\
     // string concatenation which calls {}.toString() -> \"[object Object]\"\
-    // Final command: "npx prettier [object Object]" — brackets bypass validation.
+    // Final command: "npx prettier [object Object]": brackets bypass validation.
     const cmd = pm.getExecCommand('prettier', {});
     assert.ok(cmd.includes('[object Object]'), 'Object args should be coerced to "[object Object]" via implicit toString()');
     // Verify the SAFE_ARGS regex WOULD reject this string if it were a string arg
@@ -1599,8 +1599,8 @@ function runTests() {
   })) passed++;
   else failed++;
 
-  // ── Round 109: getExecCommand with ../ path traversal in binary — SAFE_NAME_REGEX allows it ──
-  console.log('\nRound 109: getExecCommand (path traversal in binary — SAFE_NAME_REGEX permits ../ in binary name):');
+  // ── Round 109: getExecCommand with ../ path traversal in binary: SAFE_NAME_REGEX allows it ──
+  console.log('\nRound 109: getExecCommand (path traversal in binary: SAFE_NAME_REGEX permits ../ in binary name):');
 
   if (test('getExecCommand accepts ../../../etc/passwd as binary because SAFE_NAME_REGEX allows ../', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
@@ -1622,8 +1622,8 @@ function runTests() {
   })) passed++;
   else failed++;
 
-  // ── Round 108: getRunCommand with path traversal — SAFE_NAME_REGEX allows ../ sequences ──
-  console.log('\nRound 108: getRunCommand (path traversal — SAFE_NAME_REGEX permits ../ via allowed / and . chars):');
+  // ── Round 108: getRunCommand with path traversal: SAFE_NAME_REGEX allows ../ sequences ──
+  console.log('\nRound 108: getRunCommand (path traversal: SAFE_NAME_REGEX permits ../ via allowed / and . chars):');
 
   if (test('getRunCommand accepts @scope/../../evil because SAFE_NAME_REGEX allows ../', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
@@ -1647,7 +1647,7 @@ function runTests() {
   else failed++;
 
   // Round 111: getExecCommand with newline in args
-  console.log('\n' + String.raw`Round 111: getExecCommand (newline in args — SAFE_ARGS_REGEX \s matches \n):`);
+  console.log('\n' + String.raw`Round 111: getExecCommand (newline in args: SAFE_ARGS_REGEX \s matches \n):`);
 
   if (test('getExecCommand accepts newline in args because SAFE_ARGS_REGEX includes newline', () => {
     // SAFE_ARGS_REGEX = /^[@a-zA-Z0-9\\s_.\\/:=,'\"*+-\\]+$/

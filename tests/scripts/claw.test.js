@@ -1,7 +1,7 @@
 /**
  * Tests for scripts/claw.js
  *
- * Tests the NanoClaw agent REPL module — storage, context, delegation, meta.
+ * Tests the NanoClaw agent REPL module: storage, context, delegation, meta.
  *
  * Run with: node tests/scripts/claw.test.js
  */
@@ -29,7 +29,7 @@ const {
   compactSession
 } = require(path.join(__dirname, '..', '..', 'scripts', 'claw.js'));
 
-// Test helper — matches EGC's custom test pattern
+// Test helper: matches EGC's custom test pattern
 function test(name, fn) {
   try {
     fn();
@@ -132,7 +132,7 @@ function runTests() {
     // Use real skills from the EGC repo if they exist
     const skillsDir = path.join(process.cwd(), 'skills');
     if (!fs.existsSync(skillsDir)) {
-      console.log('    (skipped — no skills/ directory in CWD)');
+      console.log('    (skipped: no skills/ directory in CWD)');
       return;
     }
     const available = fs.readdirSync(skillsDir).filter(d => {
@@ -140,7 +140,7 @@ function runTests() {
       return fs.existsSync(skillFile);
     });
     if (available.length < 2) {
-      console.log('    (skipped — need 2+ skills with SKILL.md)');
+      console.log('    (skipped: need 2+ skills with SKILL.md)');
       return;
     }
     const twoSkills = available.slice(0, 2).join(',');

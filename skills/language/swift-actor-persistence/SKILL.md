@@ -1,6 +1,6 @@
 ---
 name: swift-actor-persistence
-description: Thread-safe data persistence in Swift using actors — in-memory cache with file-backed storage, eliminating data races by design.
+description: Thread-safe data persistence in Swift using actors: in-memory cache with file-backed storage, eliminating data races by design.
 origin: EGC
 ---
 
@@ -19,7 +19,7 @@ Patterns for building thread-safe data persistence layers using Swift actors. Co
 
 ### Actor-Based Repository
 
-The actor model guarantees serialized access — no data races, enforced by the compiler.
+The actor model guarantees serialized access: no data races, enforced by the compiler.
 
 ```swift
 public actor LocalRepository<T: Codable & Identifiable> where T.ID == String {
@@ -76,11 +76,11 @@ All calls are automatically async due to actor isolation:
 ```swift
 let repository = LocalRepository<Question>()
 
-// Read — fast O(1) lookup from in-memory cache
+// Read: fast O(1) lookup from in-memory cache
 let question = await repository.find(by: "q-001")
 let allQuestions = await repository.loadAll()
 
-// Write — updates cache and persists to file atomically
+// Write: updates cache and persists to file atomically
 try await repository.save(newQuestion)
 try await repository.delete("q-001")
 ```
@@ -122,9 +122,9 @@ final class QuestionListViewModel {
 ## Best Practices
 
 - **Use `Sendable` types** for all data crossing actor boundaries
-- **Keep the actor's public API minimal** — only expose domain operations, not persistence details
+- **Keep the actor's public API minimal**: only expose domain operations, not persistence details
 - **Use `.atomic` writes** to prevent data corruption if the app crashes mid-write
-- **Load synchronously in `init`** — async initializers add complexity with minimal benefit for local files
+- **Load synchronously in `init`**: async initializers add complexity with minimal benefit for local files
 - **Combine with `@Observable`** ViewModels for reactive UI updates
 
 ## Anti-Patterns to Avoid
@@ -132,7 +132,7 @@ final class QuestionListViewModel {
 - Using `DispatchQueue` or `NSLock` instead of actors for new Swift concurrency code
 - Exposing the internal cache dictionary to external callers
 - Making the file URL configurable without validation
-- Forgetting that all actor method calls are `await` — callers must handle async context
+- Forgetting that all actor method calls are `await`: callers must handle async context
 - Using `nonisolated` to bypass actor isolation (defeats the purpose)
 
 ## When to Use

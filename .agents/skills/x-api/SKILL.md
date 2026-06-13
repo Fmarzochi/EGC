@@ -48,7 +48,7 @@ tweets = resp.json()
 Required for: posting tweets, managing account, DMs, and any write flow.
 
 ```bash
-# Environment setup — source before use
+# Environment setup: source before use
 export X_CONSUMER_KEY="your-consumer-key"
 export X_CONSUMER_SECRET="your-consumer-secret"
 export X_ACCESS_TOKEN="your-access-token"
@@ -208,7 +208,7 @@ else:
 - **Never commit `.env` files.** Add to `.gitignore`.
 - **Rotate tokens** if exposed. Regenerate at developer.x.com.
 - **Use read-only tokens** when write access is not needed.
-- **Store OAuth secrets securely** — not in source code or logs.
+- **Store OAuth secrets securely**: not in source code or logs.
 
 ## Integration with Content Engine
 
@@ -223,7 +223,7 @@ Use `brand-voice` plus `content-engine` to generate platform-native content, the
 
 ## Related Skills
 
-- `brand-voice` — Build a reusable voice profile from real X and site/source material
-- `content-engine` — Generate platform-native content for X
-- `crosspost` — Distribute content across X, LinkedIn, and other platforms
-- `connections-optimizer` — Reorganize the X graph before drafting network-driven outreach
+- `brand-voice`: Build a reusable voice profile from real X and site/source material
+- `content-engine`: Generate platform-native content for X
+- `crosspost`: Distribute content across X, LinkedIn, and other platforms
+- `connections-optimizer`: Reorganize the X graph before drafting network-driven outreach

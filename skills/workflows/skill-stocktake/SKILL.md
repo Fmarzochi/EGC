@@ -55,7 +55,7 @@ Re-evaluate only skills that have changed since the last run (5–10 min).
 
 ## Full Stocktake Flow
 
-### Phase 1 — Inventory
+### Phase 1: Inventory
 
 Run: `bash ~/.gemini/skills/skill-stocktake/scripts/scan.sh`
 
@@ -66,13 +66,13 @@ Present the scan summary and inventory table from the script output:
 ```
 Scanning:
   ✓ ~/.gemini/skills/         (17 files)
-  ✗ {cwd}/.gemini/skills/    (not found — global skills only)
+  ✗ {cwd}/.gemini/skills/    (not found: global skills only)
 ```
 
 | Skill | 7d use | 30d use | Description |
 |-------|--------|---------|-------------|
 
-### Phase 2 — Quality Evaluation
+### Phase 2: Quality Evaluation
 
 Launch an Agent tool subagent (**general-purpose agent**) with the full inventory and checklist:
 
@@ -121,14 +121,14 @@ Verdict criteria:
 | Retire | Low quality, stale, or cost-asymmetric |
 | Merge into [X] | Substantial overlap with another skill; name the merge target |
 
-Evaluation is **holistic AI judgment** — not a numeric rubric. Guiding dimensions:
+Evaluation is **holistic AI judgment**: not a numeric rubric. Guiding dimensions:
 - **Actionability**: code examples, commands, or steps that let you act immediately
 - **Scope fit**: name, trigger, and content are aligned; not too broad or narrow
 - **Uniqueness**: value not replaceable by MEMORY.md / GEMINI.md / another skill
 - **Currency**: technical references work in the current environment
 
-**Reason quality requirements** — the `reason` field must be self-contained and decision-enabling:
-- Do NOT write "unchanged" alone — always restate the core evidence
+**Reason quality requirements**: the `reason` field must be self-contained and decision-enabling:
+- Do NOT write "unchanged" alone: always restate the core evidence
 - For **Retire**: state (1) what specific defect was found, (2) what covers the same need instead
   - Bad: `"Superseded"`
   - Good: `"disable-model-invocation: true already set; superseded by continuous-learning-v2 which covers all the same patterns plus confidence scoring. No unique content remains."`
@@ -142,12 +142,12 @@ Evaluation is **holistic AI judgment** — not a numeric rubric. Guiding dimensi
   - Bad: `"Unchanged"`
   - Good: `"mtime updated but content unchanged. Unique Python reference explicitly imported by rules/python/; no overlap found."`
 
-### Phase 3 — Summary Table
+### Phase 3: Summary Table
 
 | Skill | 7d use | Verdict | Reason |
 |-------|--------|---------|--------|
 
-### Phase 4 — Consolidation
+### Phase 4: Consolidation
 
 1. **Retire / Merge**: present detailed justification per file before confirming with user:
    - What specific problem was found (overlap, staleness, broken references, etc.)

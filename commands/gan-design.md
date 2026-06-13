@@ -3,13 +3,13 @@ description: Run a generator/evaluator design loop for frontend or visual work w
 ---
 
 Parse the following from $ARGUMENTS:
-1. `brief` — the user's description of the design to create
-2. `--max-iterations N` — (optional, default 10) maximum design-evaluate cycles
-3. `--pass-threshold N` — (optional, default 7.5) weighted score to pass (higher default for design)
+1. `brief`: the user's description of the design to create
+2. `--max-iterations N`: (optional, default 10) maximum design-evaluate cycles
+3. `--pass-threshold N`: (optional, default 7.5) weighted score to pass (higher default for design)
 
 ## GAN-Style Design Harness
 
-A two-agent loop (Generator + Evaluator) focused on frontend design quality. No planner — the brief IS the spec.
+A two-agent loop (Generator + Evaluator) focused on frontend design quality. No planner: the brief IS the spec.
 
 This mode emphasises rapid creative iteration on visual design quality.
 
@@ -36,4 +36,4 @@ Same as `/project:gan-build` Phase 2, but:
 - Evaluator prompt emphasizes "would this win a design award?" over "do all features work?"
 
 ### Key Difference from gan-build
-The Generator is told: "Your PRIMARY goal is visual excellence. A stunning half-finished app beats a functional ugly one. Push for creative leaps — unusual layouts, custom animations, distinctive color work."
+The Generator is told: "Your PRIMARY goal is visual excellence. A stunning half-finished app beats a functional ugly one. Push for creative leaps: unusual layouts, custom animations, distinctive color work."

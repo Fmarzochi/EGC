@@ -196,7 +196,7 @@ class BusinessRulesRouteTest {
       // ACT
       producerTemplate.sendBody("direct:business-rules-publisher", testPayload);
       
-      // ASSERT — body is a JSON String after .marshal().json(JsonLibrary.Jackson)
+      // ASSERT: body is a JSON String after .marshal().json(JsonLibrary.Jackson)
       mockRabbitMQ.assertIsSatisfied(5000);
       
       assertThat(mockRabbitMQ.getExchanges()).hasSize(1);
@@ -453,7 +453,7 @@ class FileStorageServiceTest {
     @Test
     @DisplayName("Should handle S3 upload failure")
     void givenS3Failure_whenUpload_thenCompletableFutureFails() {
-      // ARRANGE — run synchronously so exception propagates through the future
+      // ARRANGE: run synchronously so exception propagates through the future
       doAnswer(invocation -> {
         ((Runnable) invocation.getArgument(0)).run();
         return null;

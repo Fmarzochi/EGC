@@ -15,9 +15,9 @@ Comprehensive, library-agnostic checklist for reviewing Flutter/Dart application
 - [ ] Project follows consistent folder structure (feature-first or layer-first)
 - [ ] Proper separation of concerns: UI, business logic, data layers
 - [ ] No business logic in widgets; widgets are purely presentational
-- [ ] `pubspec.yaml` is clean — no unused dependencies, versions pinned appropriately
+- [ ] `pubspec.yaml` is clean: no unused dependencies, versions pinned appropriately
 - [ ] `analysis_options.yaml` includes a strict lint set with strict analyzer settings enabled
-- [ ] No `print()` statements in production code — use `dart:developer` `log()` or a logging package
+- [ ] No `print()` statements in production code: use `dart:developer` `log()` or a logging package
 - [ ] Generated files (`.g.dart`, `.freezed.dart`, `.gr.dart`) are up-to-date or in `.gitignore`
 - [ ] Platform-specific code isolated behind abstractions
 
@@ -25,12 +25,12 @@ Comprehensive, library-agnostic checklist for reviewing Flutter/Dart application
 
 ## 2. Dart Language Pitfalls
 
-- [ ] **Implicit dynamic**: Missing type annotations leading to `dynamic` — enable `strict-casts`, `strict-inference`, `strict-raw-types`
+- [ ] **Implicit dynamic**: Missing type annotations leading to `dynamic`: enable `strict-casts`, `strict-inference`, `strict-raw-types`
 - [ ] **Null safety misuse**: Excessive `!` (bang operator) instead of proper null checks or Dart 3 pattern matching (`if (value case var v?)`)
 - [ ] **Type promotion failures**: Using `this.field` where local variable promotion would work
 - [ ] **Catching too broadly**: `catch (e)` without `on` clause; always specify exception types
 - [ ] **Catching `Error`**: `Error` subtypes indicate bugs and should not be caught
-- [ ] **Unused `async`**: Functions marked `async` that never `await` — unnecessary overhead
+- [ ] **Unused `async`**: Functions marked `async` that never `await`: unnecessary overhead
 - [ ] **`late` overuse**: `late` used where nullable or constructor initialization would be safer; defers errors to runtime
 - [ ] **String concatenation in loops**: Use `StringBuffer` instead of `+` for iterative string building
 - [ ] **Mutable state in `const` contexts**: Fields in `const` constructor classes should not be mutable
@@ -54,20 +54,20 @@ Comprehensive, library-agnostic checklist for reviewing Flutter/Dart application
 - [ ] Extracted widgets are in separate files when reusable
 
 ### Const usage:
-- [ ] `const` constructors used wherever possible — prevents unnecessary rebuilds
+- [ ] `const` constructors used wherever possible: prevents unnecessary rebuilds
 - [ ] `const` literals for collections that don't change (`const []`, `const {}`)
 - [ ] Constructor is declared `const` when all fields are final
 
 ### Key usage:
 - [ ] `ValueKey` used in lists/grids to preserve state across reorders
-- [ ] `GlobalKey` used sparingly — only when accessing state across the tree is truly needed
-- [ ] `UniqueKey` avoided in `build()` — it forces rebuild every frame
+- [ ] `GlobalKey` used sparingly: only when accessing state across the tree is truly needed
+- [ ] `UniqueKey` avoided in `build()`: it forces rebuild every frame
 - [ ] `ObjectKey` used when identity is based on a data object rather than a single value
 
 ### Theming & design system:
-- [ ] Colors come from `Theme.of(context).colorScheme` — no hardcoded `Colors.red` or hex values
-- [ ] Text styles come from `Theme.of(context).textTheme` — no inline `TextStyle` with raw font sizes
-- [ ] Dark mode compatibility verified — no assumptions about light background
+- [ ] Colors come from `Theme.of(context).colorScheme`: no hardcoded `Colors.red` or hex values
+- [ ] Text styles come from `Theme.of(context).textTheme`: no inline `TextStyle` with raw font sizes
+- [ ] Dark mode compatibility verified: no assumptions about light background
 - [ ] Spacing and sizing use consistent design tokens or constants, not magic numbers
 
 ### Build method complexity:
@@ -83,42 +83,42 @@ Comprehensive, library-agnostic checklist for reviewing Flutter/Dart application
 These principles apply to all Flutter state management solutions (BLoC, Riverpod, Provider, GetX, MobX, Signals, ValueNotifier, etc.).
 
 ### Architecture:
-- [ ] Business logic lives outside the widget layer — in a state management component (BLoC, Notifier, Controller, Store, ViewModel, etc.)
+- [ ] Business logic lives outside the widget layer: in a state management component (BLoC, Notifier, Controller, Store, ViewModel, etc.)
 - [ ] State managers receive dependencies via injection, not by constructing them internally
-- [ ] A service or repository layer abstracts data sources — widgets and state managers should not call APIs or databases directly
-- [ ] State managers have a single responsibility — no "god" managers handling unrelated concerns
+- [ ] A service or repository layer abstracts data sources: widgets and state managers should not call APIs or databases directly
+- [ ] State managers have a single responsibility: no "god" managers handling unrelated concerns
 - [ ] Cross-component dependencies follow the solution's conventions:
-  - In **Riverpod**: providers depending on providers via `ref.watch` is expected — flag only circular or overly tangled chains
-  - In **BLoC**: blocs should not directly depend on other blocs — prefer shared repositories or presentation-layer coordination
+  - In **Riverpod**: providers depending on providers via `ref.watch` is expected: flag only circular or overly tangled chains
+  - In **BLoC**: blocs should not directly depend on other blocs: prefer shared repositories or presentation-layer coordination
   - In other solutions: follow the documented conventions for inter-component communication
 
 ### Immutability & value equality (for immutable-state solutions: BLoC, Riverpod, Redux):
-- [ ] State objects are immutable — new instances created via `copyWith()` or constructors, never mutated in-place
+- [ ] State objects are immutable: new instances created via `copyWith()` or constructors, never mutated in-place
 - [ ] State classes implement `==` and `hashCode` properly (all fields included in comparison)
-- [ ] Mechanism is consistent across the project — manual override, `Equatable`, `freezed`, Dart records, or other
+- [ ] Mechanism is consistent across the project: manual override, `Equatable`, `freezed`, Dart records, or other
 - [ ] Collections inside state objects are not exposed as raw mutable `List`/`Map`
 
 ### Reactivity discipline (for reactive-mutation solutions: MobX, GetX, Signals):
-- [ ] State is only mutated through the solution's reactive API (`@action` in MobX, `.value` on signals, `.obs` in GetX) — direct field mutation bypasses change tracking
+- [ ] State is only mutated through the solution's reactive API (`@action` in MobX, `.value` on signals, `.obs` in GetX): direct field mutation bypasses change tracking
 - [ ] Derived values use the solution's computed mechanism rather than being stored redundantly
 - [ ] Reactions and disposers are properly cleaned up (`ReactionDisposer` in MobX, effect cleanup in Signals)
 
 ### State shape design:
-- [ ] Mutually exclusive states use sealed types, union variants, or the solution's built-in async state type (e.g. Riverpod's `AsyncValue`) — not boolean flags (`isLoading`, `isError`, `hasData`)
+- [ ] Mutually exclusive states use sealed types, union variants, or the solution's built-in async state type (e.g. Riverpod's `AsyncValue`): not boolean flags (`isLoading`, `isError`, `hasData`)
 - [ ] Every async operation models loading, success, and error as distinct states
-- [ ] All state variants are handled exhaustively in UI — no silently ignored cases
+- [ ] All state variants are handled exhaustively in UI: no silently ignored cases
 - [ ] Error states carry error information for display; loading states don't carry stale data
-- [ ] Nullable data is not used as a loading indicator — states are explicit
+- [ ] Nullable data is not used as a loading indicator: states are explicit
 
 ```dart
-// BAD — boolean flag soup allows impossible states
+// BAD: boolean flag soup allows impossible states
 class UserState {
   bool isLoading = false;
   bool hasError = false; // isLoading && hasError is representable!
   User? user;
 }
 
-// GOOD (immutable approach) — sealed types make impossible states unrepresentable
+// GOOD (immutable approach): sealed types make impossible states unrepresentable
 sealed class UserState {}
 class UserInitial extends UserState {}
 class UserLoading extends UserState {}
@@ -131,14 +131,14 @@ class UserError extends UserState {
   const UserError(this.message);
 }
 
-// GOOD (reactive approach) — observable enum + data, mutations via reactivity API
+// GOOD (reactive approach): observable enum + data, mutations via reactivity API
 // enum UserStatus { initial, loading, loaded, error }
 // Use your solution's observable/signal to wrap status and data separately
 ```
 
 ### Rebuild optimization:
 - [ ] State consumer widgets (Builder, Consumer, Observer, Obx, Watch, etc.) scoped as narrow as possible
-- [ ] Selectors used to rebuild only when specific fields change — not on every state emission
+- [ ] Selectors used to rebuild only when specific fields change: not on every state emission
 - [ ] `const` widgets used to stop rebuild propagation through the tree
 - [ ] Computed/derived state is calculated reactively, not stored redundantly
 
@@ -148,13 +148,13 @@ class UserError extends UserState {
 - [ ] Timers are cancelled in disposal lifecycle
 - [ ] Framework-managed lifecycle is preferred over manual subscription (declarative builders over `.listen()`)
 - [ ] `mounted` check before `setState` in async callbacks
-- [ ] `BuildContext` not used after `await` without checking `context.mounted` (Flutter 3.7+) — stale context causes crashes
+- [ ] `BuildContext` not used after `await` without checking `context.mounted` (Flutter 3.7+): stale context causes crashes
 - [ ] No navigation, dialogs, or scaffold messages after async gaps without verifying the widget is still mounted
 - [ ] `BuildContext` never stored in singletons, state managers, or static fields
 
 ### Local vs global state:
 - [ ] Ephemeral UI state (checkbox, slider, animation) uses local state (`setState`, `ValueNotifier`)
-- [ ] Shared state is lifted only as high as needed — not over-globalized
+- [ ] Shared state is lifted only as high as needed: not over-globalized
 - [ ] Feature-scoped state is properly disposed when the feature is no longer active
 
 ---
@@ -162,13 +162,13 @@ class UserError extends UserState {
 ## 5. Performance
 
 ### Unnecessary rebuilds:
-- [ ] `setState()` not called at root widget level — localize state changes
+- [ ] `setState()` not called at root widget level: localize state changes
 - [ ] `const` widgets used to stop rebuild propagation
 - [ ] `RepaintBoundary` used around complex subtrees that repaint independently
 - [ ] `AnimatedBuilder` child parameter used for subtrees independent of animation
 
 ### Expensive operations in build():
-- [ ] No sorting, filtering, or mapping large collections in `build()` — compute in state management layer
+- [ ] No sorting, filtering, or mapping large collections in `build()`: compute in state management layer
 - [ ] No regex compilation in `build()`
 - [ ] `MediaQuery.of(context)` usage is specific (e.g., `MediaQuery.sizeOf(context)`)
 
@@ -184,9 +184,9 @@ class UserError extends UserState {
 - [ ] Deferred loading (`deferred as`) used for heavy libraries in web builds
 
 ### Other:
-- [ ] `Opacity` widget avoided in animations — use `AnimatedOpacity` or `FadeTransition`
-- [ ] Clipping avoided in animations — pre-clip images
-- [ ] `operator ==` not overridden on widgets — use `const` constructors instead
+- [ ] `Opacity` widget avoided in animations: use `AnimatedOpacity` or `FadeTransition`
+- [ ] Clipping avoided in animations: pre-clip images
+- [ ] `operator ==` not overridden on widgets: use `const` constructors instead
 - [ ] Intrinsic dimension widgets (`IntrinsicHeight`, `IntrinsicWidth`) used sparingly (extra layout pass)
 
 ---
@@ -214,7 +214,7 @@ class UserError extends UserState {
 ### Widget test quality:
 - [ ] `pumpWidget` and `pump` used correctly for async operations
 - [ ] `find.byType`, `find.text`, `find.byKey` used appropriately
-- [ ] No flaky tests depending on timing — use `pumpAndSettle` or explicit `pump(Duration)`
+- [ ] No flaky tests depending on timing: use `pumpAndSettle` or explicit `pump(Duration)`
 - [ ] Tests run in CI and failures block merges
 
 ---
@@ -238,7 +238,7 @@ class UserError extends UserState {
 - [ ] Text scales with system font size settings
 
 ### Interaction accessibility:
-- [ ] No no-op `onPressed` callbacks — every button does something or is disabled
+- [ ] No no-op `onPressed` callbacks: every button does something or is disabled
 - [ ] Error fields suggest corrections
 - [ ] Context does not change unexpectedly while user is inputting data
 
@@ -255,7 +255,7 @@ class UserError extends UserState {
 ### Responsive design:
 - [ ] `LayoutBuilder` or `MediaQuery` used for responsive layouts
 - [ ] Breakpoints defined consistently (phone, tablet, desktop)
-- [ ] Text doesn't overflow on small screens — use `Flexible`, `Expanded`, `FittedBox`
+- [ ] Text doesn't overflow on small screens: use `Flexible`, `Expanded`, `FittedBox`
 - [ ] Landscape orientation tested or explicitly locked
 - [ ] Web-specific: mouse/keyboard interactions supported, hover states present
 
@@ -269,8 +269,8 @@ class UserError extends UserState {
 - [ ] Biometric authentication gating considered for sensitive operations
 
 ### API key handling:
-- [ ] API keys NOT hardcoded in Dart source — use `--dart-define`, `.env` files excluded from VCS, or compile-time configuration
-- [ ] Secrets not committed to git — check `.gitignore`
+- [ ] API keys NOT hardcoded in Dart source: use `--dart-define`, `.env` files excluded from VCS, or compile-time configuration
+- [ ] Secrets not committed to git: check `.gitignore`
 - [ ] Backend proxy used for truly secret keys (client should never hold server secrets)
 
 ### Input validation:
@@ -293,20 +293,20 @@ class UserError extends UserState {
 - [ ] Check **pub points score** (aim for 130+/160)
 - [ ] Check **likes** and **popularity** as community signals
 - [ ] Verify the publisher is **verified** on pub.dev
-- [ ] Check last publish date — stale packages (>1 year) are a risk
+- [ ] Check last publish date: stale packages (>1 year) are a risk
 - [ ] Review open issues and response time from maintainers
 - [ ] Check license compatibility with your project
 - [ ] Verify platform support covers your targets
 
 ### Version constraints:
-- [ ] Use caret syntax (`^1.2.3`) for dependencies — allows compatible updates
+- [ ] Use caret syntax (`^1.2.3`) for dependencies: allows compatible updates
 - [ ] Pin exact versions only when absolutely necessary
 - [ ] Run `flutter pub outdated` regularly to track stale dependencies
-- [ ] No dependency overrides in production `pubspec.yaml` — only for temporary fixes with a comment/issue link
-- [ ] Minimize transitive dependency count — each dependency is an attack surface
+- [ ] No dependency overrides in production `pubspec.yaml`: only for temporary fixes with a comment/issue link
+- [ ] Minimize transitive dependency count: each dependency is an attack surface
 
 ### Monorepo-specific (melos/workspace):
-- [ ] Internal packages import only from public API — no `package:other/src/internal.dart` (breaks Dart package encapsulation)
+- [ ] Internal packages import only from public API: no `package:other/src/internal.dart` (breaks Dart package encapsulation)
 - [ ] Internal package dependencies use workspace resolution, not hardcoded `path: ../../` relative strings
 - [ ] All sub-packages share or inherit root `analysis_options.yaml`
 
@@ -315,13 +315,13 @@ class UserError extends UserState {
 ## 11. Navigation and Routing
 
 ### General principles (apply to any routing solution):
-- [ ] One routing approach used consistently — no mixing imperative `Navigator.push` with a declarative router
-- [ ] Route arguments are typed — no `Map<String, dynamic>` or `Object?` casting
-- [ ] Route paths defined as constants, enums, or generated — no magic strings scattered in code
-- [ ] Auth guards/redirects centralized — not duplicated across individual screens
+- [ ] One routing approach used consistently: no mixing imperative `Navigator.push` with a declarative router
+- [ ] Route arguments are typed: no `Map<String, dynamic>` or `Object?` casting
+- [ ] Route paths defined as constants, enums, or generated: no magic strings scattered in code
+- [ ] Auth guards/redirects centralized: not duplicated across individual screens
 - [ ] Deep links configured for both Android and iOS
 - [ ] Deep link URLs validated and sanitized before navigation
-- [ ] Navigation state is testable — route changes can be verified in tests
+- [ ] Navigation state is testable: route changes can be verified in tests
 - [ ] Back behavior is correct on all platforms
 
 ---
@@ -345,7 +345,7 @@ class UserError extends UserState {
 - [ ] Retry mechanisms for transient network failures
 - [ ] Offline state handled gracefully
 - [ ] Error states in state management carry error info for display
-- [ ] Raw exceptions (network, parsing) are mapped to user-friendly, localized messages before reaching the UI — never show raw exception strings to users
+- [ ] Raw exceptions (network, parsing) are mapped to user-friendly, localized messages before reaching the UI: never show raw exception strings to users
 
 ---
 
@@ -356,7 +356,7 @@ class UserError extends UserState {
 - [ ] Supported locales declared in app configuration
 
 ### Content:
-- [ ] All user-visible strings use the localization system — no hardcoded strings in widgets
+- [ ] All user-visible strings use the localization system: no hardcoded strings in widgets
 - [ ] Template file includes descriptions/context for translators
 - [ ] ICU message syntax used for plurals, genders, selects
 - [ ] Placeholders defined with types
@@ -366,7 +366,7 @@ class UserError extends UserState {
 - [ ] Localization accessor used consistently throughout the project
 - [ ] Date, time, number, and currency formatting is locale-aware
 - [ ] Text directionality (RTL) supported if targeting Arabic, Hebrew, etc.
-- [ ] No string concatenation for localized text — use parameterized messages
+- [ ] No string concatenation for localized text: use parameterized messages
 
 ---
 
@@ -374,7 +374,7 @@ class UserError extends UserState {
 
 ### Principles (apply to any DI approach):
 - [ ] Classes depend on abstractions (interfaces), not concrete implementations at layer boundaries
-- [ ] Dependencies provided externally via constructor, DI framework, or provider graph — not created internally
+- [ ] Dependencies provided externally via constructor, DI framework, or provider graph: not created internally
 - [ ] Registration distinguishes lifetime: singleton vs factory vs lazy singleton
 - [ ] Environment-specific bindings (dev/staging/prod) use configuration, not runtime `if` checks
 - [ ] No circular dependencies in the DI graph
@@ -396,13 +396,13 @@ class UserError extends UserState {
 - [ ] `flutter analyze` runs in CI and failures block merges
 
 ### Key rules to verify regardless of lint package:
-- [ ] `prefer_const_constructors` — performance in widget trees
-- [ ] `avoid_print` — use proper logging
-- [ ] `unawaited_futures` — prevent fire-and-forget async bugs
-- [ ] `prefer_final_locals` — immutability at variable level
-- [ ] `always_declare_return_types` — explicit contracts
-- [ ] `avoid_catches_without_on_clauses` — specific error handling
-- [ ] `always_use_package_imports` — consistent import style
+- [ ] `prefer_const_constructors`: performance in widget trees
+- [ ] `avoid_print`: use proper logging
+- [ ] `unawaited_futures`: prevent fire-and-forget async bugs
+- [ ] `prefer_final_locals`: immutability at variable level
+- [ ] `always_declare_return_types`: explicit contracts
+- [ ] `avoid_catches_without_on_clauses`: specific error handling
+- [ ] `always_use_package_imports`: consistent import style
 
 ---
 

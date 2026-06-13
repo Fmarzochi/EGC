@@ -27,7 +27,7 @@ LaraPlugins MCP server must be configured. Add to your `~/.gemini.json` mcpServe
 }
 ```
 
-No API key required — the server is free for the Laravel community.
+No API key required: the server is free for the Laravel community.
 
 ## MCP Tools
 
@@ -39,9 +39,9 @@ Search packages by keyword, health score, vendor, and version compatibility.
 
 **Parameters:**
 - `text_search` (string, optional): Keyword to search (e.g. "permission", "admin", "api")
-- `health_score` (string, optional): Filter by health band — `Healthy`, `Medium`, `Unhealthy`, or `Unrated`
-- `laravel_compatibility` (string, optional): Filter by Laravel version — `"5"`, `"6"`, `"7"`, `"8"`, `"9"`, `"10"`, `"11"`, `"12"`, `"13"`
-- `php_compatibility` (string, optional): Filter by PHP version — `"7.4"`, `"8.0"`, `"8.1"`, `"8.2"`, `"8.3"`, `"8.4"`, `"8.5"`
+- `health_score` (string, optional): Filter by health band: `Healthy`, `Medium`, `Unhealthy`, or `Unrated`
+- `laravel_compatibility` (string, optional): Filter by Laravel version: `"5"`, `"6"`, `"7"`, `"8"`, `"9"`, `"10"`, `"11"`, `"12"`, `"13"`
+- `php_compatibility` (string, optional): Filter by PHP version: `"7.4"`, `"8.0"`, `"8.1"`, `"8.2"`, `"8.3"`, `"8.4"`, `"8.5"`
 - `vendor_filter` (string, optional): Filter by vendor name (e.g. "spatie", "laravel")
 - `page` (number, optional): Page number for pagination
 
@@ -213,17 +213,17 @@ The detailed response includes:
 
 ## Best Practices
 
-1. **Always filter by health** — Use `health_score: "Healthy"` for production projects
-2. **Match Laravel version** — Always check `laravel_compatibility` matches the target project
-3. **Check vendor reputation** — Prefer packages from known vendors (spatie, laravel, etc.)
-4. **Review before recommending** — Use GetPluginDetailsTool for a comprehensive assessment
-5. **No API key needed** — The MCP is free, no authentication required
+1. **Always filter by health**: Use `health_score: "Healthy"` for production projects
+2. **Match Laravel version**: Always check `laravel_compatibility` matches the target project
+3. **Check vendor reputation**: Prefer packages from known vendors (spatie, laravel, etc.)
+4. **Review before recommending**: Use GetPluginDetailsTool for a comprehensive assessment
+5. **No API key needed**: The MCP is free, no authentication required
 
 ---
 
 ## Related Skills
 
-- `laravel-patterns` — Laravel architecture and patterns
-- `laravel-tdd` — Test-driven development for Laravel
-- `laravel-security` — Laravel security best practices
-- `documentation-lookup` — General library documentation lookup (Context7)
+- `laravel-patterns`: Laravel architecture and patterns
+- `laravel-tdd`: Test-driven development for Laravel
+- `laravel-security`: Laravel security best practices
+- `documentation-lookup`: General library documentation lookup (Context7)

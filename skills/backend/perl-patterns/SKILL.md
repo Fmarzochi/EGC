@@ -78,7 +78,7 @@ sub connect_db {
 
 ### 3. Context Sensitivity
 
-Understand scalar vs list context — a core Perl concept.
+Understand scalar vs list context: a core Perl concept.
 
 ```perl
 use v5.36;
@@ -116,7 +116,7 @@ my @roles = @{ $data->{users}[0]{roles} };
 
 ### 5. The `isa` Operator (5.32+)
 
-Infix type-check — replaces `blessed($o) && $o->isa('X')`.
+Infix type-check: replaces `blessed($o) && $o->isa('X')`.
 
 ```perl
 use v5.36;
@@ -345,7 +345,7 @@ sub read_file($path) {
 
 # Bad: Two-arg open (shell injection risk, see perl-security)
 open FH, $path;            # NEVER do this
-open FH, "< $path";        # Still bad — user data in mode string
+open FH, "< $path";        # Still bad: user data in mode string
 ```
 
 ### Path::Tiny for File Operations

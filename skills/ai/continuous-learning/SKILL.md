@@ -110,7 +110,7 @@ Homunculus v2 takes a more sophisticated approach:
 | Sharing | None | Export/import instincts |
 
 **Key insight from homunculus:**
-> "v1 relied on skills to observe. Skills are probabilistic—they fire ~50-80% of the time. v2 uses hooks for observation (100% reliable) and instincts as the atomic unit of learned behavior."
+> "v1 relied on skills to observe. Skills are probabilistic,they fire ~50-80% of the time. v2 uses hooks for observation (100% reliable) and instincts as the atomic unit of learned behavior."
 
 ### Potential v2 Enhancements
 

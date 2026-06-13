@@ -29,7 +29,7 @@ sh install.sh
 2. Initializes the local SQLite database
 3. Runs the cognitive bootstrap: writes the memory protocol into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, and equivalent files for each detected tool
 4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (63 agents, 229 skills, 76 commands) — skipped automatically in CI
+5. Asks interactively whether to install the prompt library (63 agents, 229 skills, 76 commands): skipped automatically in CI
 
 ### Example output
 

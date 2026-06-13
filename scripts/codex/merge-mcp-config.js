@@ -43,7 +43,7 @@ try {
   pmConfig = { name: 'npm', config: { name: 'npm', execCmd: 'npx' } };
 }
 
-// Yarn 1.x doesn't support `yarn dlx` — fall back to npx for classic Yarn.
+// Yarn 1.x doesn't support `yarn dlx`: fall back to npx for classic Yarn.
 let resolvedExecCmd = pmConfig.config.execCmd;
 if (pmConfig.name === 'yarn' && resolvedExecCmd === 'yarn dlx') {
   try {
@@ -53,7 +53,7 @@ if (pmConfig.name === 'yarn' && resolvedExecCmd === 'yarn dlx') {
       resolvedExecCmd = 'npx';
     }
   } catch {
-    // Can't detect version — keep yarn dlx and let it fail visibly
+    // Can't detect version: keep yarn dlx and let it fail visibly
   }
 }
 
@@ -65,7 +65,7 @@ const PM_EXEC_PARTS = PM_EXEC.split(/\s+/); // ["pnpm", "dlx"] or ["npx"] or ["b
 // EGC-recommended MCP servers
 // ---------------------------------------------------------------------------
 
-// GitHub bootstrap uses bash for token forwarding — this is intentionally
+// GitHub bootstrap uses bash for token forwarding: this is intentionally
 // shell-based regardless of package manager, since Codex runs on macOS/Linux.
 const GH_BOOTSTRAP = `token=$(gh auth token 2>/dev/null || true); if [ -n "$token" ]; then export GITHUB_PERSONAL_ACCESS_TOKEN="$token"; fi; exec ${PM_EXEC} @modelcontextprotocol/server-github`;
 

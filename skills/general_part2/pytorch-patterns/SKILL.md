@@ -180,7 +180,7 @@ def evaluate(
     criterion: nn.Module,
     device: torch.device,
 ) -> tuple[float, float]:
-    model.eval()  # Always set eval mode — disables dropout, uses running BN stats
+    model.eval()  # Always set eval mode: disables dropout, uses running BN stats
     total_loss = 0.0
     correct = 0
     total = 0

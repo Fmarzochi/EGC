@@ -270,7 +270,7 @@ function runTests() {
     try {
       writeCatalogFixture(testDir);
       fs.rmSync(path.join(testDir, 'docs', 'zh-CN', 'AGENTS.md'));
-      // No throw — absent optional docs are skipped, present ones still validated.
+      // No throw: absent optional docs are skipped, present ones still validated.
       const result = runCatalogCheck({ root: testDir });
       assert.ok(Array.isArray(result.checks), 'Should return checks array even with absent docs');
     } finally {

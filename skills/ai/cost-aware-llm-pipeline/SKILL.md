@@ -1,6 +1,6 @@
 ---
 name: cost-aware-llm-pipeline
-description: Cost optimization patterns for LLM API usage — model routing by task complexity, budget tracking, retry logic, and prompt caching.
+description: Cost optimization patterns for LLM API usage: model routing by task complexity, budget tracking, retry logic, and prompt caching.
 origin: EGC
 ---
 
@@ -43,7 +43,7 @@ def select_model(
 
 ### 2. Immutable Cost Tracking
 
-Track cumulative spend with frozen dataclasses. Each API call returns a new tracker — never mutates state.
+Track cumulative spend with frozen dataclasses. Each API call returns a new tracker: never mutates state.
 
 ```python
 from dataclasses import dataclass
@@ -162,10 +162,10 @@ def process(text: str, config: Config, tracker: CostTracker) -> tuple[Result, Co
 ## Best Practices
 
 - **Start with the cheapest model** and only route to expensive models when complexity thresholds are met
-- **Set explicit budget limits** before processing batches — fail early rather than overspend
+- **Set explicit budget limits** before processing batches: fail early rather than overspend
 - **Log model selection decisions** so you can tune thresholds based on real data
-- **Use prompt caching** for system prompts over 1024 tokens — saves both cost and latency
-- **Never retry on authentication or validation errors** — only transient failures (network, rate limit, server error)
+- **Use prompt caching** for system prompts over 1024 tokens: saves both cost and latency
+- **Never retry on authentication or validation errors**: only transient failures (network, rate limit, server error)
 
 ## Anti-Patterns to Avoid
 

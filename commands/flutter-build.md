@@ -99,7 +99,7 @@ To:
 ```dart
 context.read<CartCubit>().addItem(item);
 // Note: Cubit exposes named methods (addItem, removeItem);
-// .add(event) is the BLoC event API — don't mix them.
+// .add(event) is the BLoC event API: don't mix them.
 ```
 
 ```
@@ -138,11 +138,11 @@ Build Status: PASS ✓
 
 ## Fix Strategy
 
-1. **Analysis errors first** — code must be error-free
-2. **Warning triage second** — fix warnings that could cause runtime bugs
-3. **pub conflicts third** — fix dependency resolution
-4. **One fix at a time** — verify each change
-5. **Minimal changes** — don't refactor, just fix
+1. **Analysis errors first**: code must be error-free
+2. **Warning triage second**: fix warnings that could cause runtime bugs
+3. **pub conflicts third**: fix dependency resolution
+4. **One fix at a time**: verify each change
+5. **Minimal changes**: don't refactor, just fix
 
 ## Stop Conditions
 
@@ -154,9 +154,9 @@ The agent will stop and report if:
 
 ## Related Commands
 
-- `/flutter-test` — Run tests after build succeeds
-- `/flutter-review` — Review code quality
-- `verification-loop` skill — Full verification loop
+- `/flutter-test`: Run tests after build succeeds
+- `/flutter-review`: Review code quality
+- `verification-loop` skill: Full verification loop
 
 ## Related
 

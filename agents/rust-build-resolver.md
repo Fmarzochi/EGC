@@ -87,7 +87,7 @@ let item = vec.swap_remove(index); // Takes ownership
 ```bash
 # Check dependency tree for conflicts
 cargo tree -d                          # Show duplicate dependencies
-cargo tree -i some_crate               # Invert — who depends on this?
+cargo tree -i some_crate               # Invert: who depends on this?
 
 # Feature resolution
 cargo tree -f "{p} {f}"               # Show features enabled per crate
@@ -99,7 +99,7 @@ cargo check -p specific_crate         # Check single crate in workspace
 
 # Lock file issues
 cargo update -p specific_crate        # Update one dependency (preferred)
-cargo update                          # Full refresh (last resort — broad changes)
+cargo update                          # Full refresh (last resort: broad changes)
 ```
 
 ## Edition and MSRV Issues
@@ -118,10 +118,10 @@ grep "rust-version" Cargo.toml
 
 ## Key Principles
 
-- **Surgical fixes only** — don't refactor, just fix the error
+- **Surgical fixes only**: don't refactor, just fix the error
 - **Never** add `#[allow(unused)]` without explicit approval
 - **Never** use `unsafe` to work around borrow checker errors
-- **Never** add `.unwrap()` to silence type errors — propagate with `?`
+- **Never** add `.unwrap()` to silence type errors: propagate with `?`
 - **Always** run `cargo check` after every fix attempt
 - Fix root cause over suppressing symptoms
 - Prefer the simplest fix that preserves the original intent
@@ -138,7 +138,7 @@ Stop and report if:
 
 ```text
 [FIXED] src/handler/user.rs:42
-Error: E0502 — cannot borrow `map` as mutable because it is also borrowed as immutable
+Error: E0502: cannot borrow `map` as mutable because it is also borrowed as immutable
 Fix: Cloned value from immutable borrow before mutable insert
 Remaining errors: 3
 ```

@@ -78,7 +78,7 @@ File: test/unit/data/user_repository_test.dart
 Failure: `getById` returns a user when it should return null for missing ID
 
 Root cause: Test setup adds a user with ID 'test-id' but queries with 'missing-id'.
-Fix: Updated test to query with 'missing-id' — setup was correct, query was wrong.
+Fix: Updated test to query with 'missing-id': setup was correct, query was wrong.
 
 ```
 $ flutter test test/unit/data/user_repository_test.dart
@@ -132,9 +132,9 @@ Test Status: PASS ✓
 
 ## Related Commands
 
-- `/flutter-build` — Fix build errors before running tests
-- `/flutter-review` — Review code after tests pass
-- `tdd-workflow` skill — Test-driven development workflow
+- `/flutter-build`: Fix build errors before running tests
+- `/flutter-review`: Review code after tests pass
+- `tdd-workflow` skill: Test-driven development workflow
 
 ## Related
 

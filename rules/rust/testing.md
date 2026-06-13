@@ -87,7 +87,7 @@ async fn fetches_data_successfully() {
 Define traits in production code; generate mocks in test modules:
 
 ```rust
-// Production trait — pub so integration tests can import it
+// Production trait: pub so integration tests can import it
 pub trait UserRepository {
     fn find_by_id(&self, id: u64) -> Option<User>;
 }
@@ -130,7 +130,7 @@ Use descriptive names that explain the scenario:
 
 - Target 80%+ line coverage
 - Use **cargo-llvm-cov** for coverage reporting
-- Focus on business logic — exclude generated code and FFI bindings
+- Focus on business logic: exclude generated code and FFI bindings
 
 ```bash
 cargo llvm-cov                       # Summary

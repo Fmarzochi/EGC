@@ -18,8 +18,8 @@ Produce thorough, cited research reports from multiple web sources using firecra
 ## MCP Requirements
 
 At least one of:
-- **firecrawl** — `firecrawl_search`, `firecrawl_scrape`, `firecrawl_crawl`
-- **exa** — `web_search_exa`, `web_search_advanced_exa`, `crawling_exa`
+- **firecrawl**: `firecrawl_search`, `firecrawl_scrape`, `firecrawl_crawl`
+- **exa**: `web_search_exa`, `web_search_advanced_exa`, `crawling_exa`
 
 Both together give the best coverage. Configure in `~/.gemini.json` or `~/.codex/config.toml`.
 
@@ -28,10 +28,10 @@ Both together give the best coverage. Configure in `~/.gemini.json` or `~/.codex
 ### Step 1: Understand the Goal
 
 Ask 1-2 quick clarifying questions:
-- "What's your goal — learning, making a decision, or writing something?"
+- "What's your goal: learning, making a decision, or writing something?"
 - "Any specific angle or depth you want?"
 
-If the user says "just research it" — skip ahead with reasonable defaults.
+If the user says "just research it": skip ahead with reasonable defaults.
 
 ### Step 2: Plan the Research
 
@@ -108,7 +108,7 @@ Structure the report:
 - [Actionable insight 3]
 
 ## Sources
-1. [Title](url) — [one-line summary]
+1. [Title](url): [one-line summary]
 2. ...
 
 ## Methodology

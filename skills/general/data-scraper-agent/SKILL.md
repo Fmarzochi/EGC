@@ -1,6 +1,6 @@
 ---
 name: data-scraper-agent
-description: Build a fully automated AI-powered data collection agent for any public source — job boards, prices, news, GitHub, sports, anything. Scrapes on a schedule, enriches data with a free LLM (Gemini Flash), stores results in Notion/Sheets/Supabase, and learns from user feedback. Runs 100% free on GitHub Actions. Use when the user wants to monitor, collect, or track any public data automatically.
+description: Build a fully automated AI-powered data collection agent for any public source: job boards, prices, news, GitHub, sports, anything. Scrapes on a schedule, enriches data with a free LLM (Gemini Flash), stores results in Notion/Sheets/Supabase, and learns from user feedback. Runs 100% free on GitHub Actions. Use when the user wants to monitor, collect, or track any public data automatically.
 origin: community
 ---
 
@@ -40,7 +40,7 @@ schedule   summarises Sheets /
 |---|---|---|
 | **Scraping** | `requests` + `BeautifulSoup` | No cost, covers 80% of public sites |
 | **JS-rendered sites** | `playwright` (free) | When HTML scraping fails |
-| **AI enrichment** | Gemini Flash via REST API | 500 req/day, 1M tokens/day — free |
+| **AI enrichment** | Gemini Flash via REST API | 500 req/day, 1M tokens/day: free |
 | **Storage** | Notion API | Free tier, great UI for review |
 | **Schedule** | GitHub Actions cron | Free for public repos |
 | **Learning** | JSON feedback file in repo | Zero infra, persists in git |
@@ -139,7 +139,7 @@ Template for any data source:
 ```python
 # scraper/sources/my_source.py
 """
-[Source Name] — scrapes [what] from [where].
+[Source Name]: scrapes [what] from [where].
 Method: [REST API / HTML scraping / RSS feed]
 """
 import requests
@@ -405,7 +405,7 @@ def get_client():
     return _client
 
 def get_existing_urls(db_id: str) -> set[str]:
-    """Fetch all URLs already stored — used for deduplication."""
+    """Fetch all URLs already stored: used for deduplication."""
     client, seen, cursor = get_client(), set(), None
     while True:
         resp = client.databases.query(database_id=db_id, page_size=100, **{"start_cursor": cursor} if cursor else {})
@@ -524,10 +524,10 @@ def main():
         context = context_path.read_text() if context_path.exists() else ""
         deduped = analyse_batch(deduped, context=context, preference_prompt=preference)
     else:
-        print("[AI] Skipped — GEMINI_API_KEY not set")
+        print("[AI] Skipped: GEMINI_API_KEY not set")
 
     added, skipped = sync(db_id, deduped)
-    print(f"Done — {added} new, {skipped} existing")
+    print(f"Done: {added} new, {skipped} existing")
 
 if __name__ == "__main__":
     main()
@@ -543,7 +543,7 @@ name: Data Scraper Agent
 
 on:
   schedule:
-    - cron: "0 */3 * * *"  # every 3 hours — adjust to your needs
+    - cron: "0 */3 * * *"  # every 3 hours: adjust to your needs
   workflow_dispatch:        # allow manual trigger
 
 permissions:
@@ -589,14 +589,14 @@ jobs:
 ### Step 10: config.yaml Template
 
 ```yaml
-# Customise this file — no code changes needed
+# Customise this file: no code changes needed
 
 # What to collect (pre-filter before AI)
 filters:
   required_keywords: []      # item must contain at least one
   blocked_keywords: []       # item must not contain any
 
-# Your priorities — AI uses these for scoring
+# Your priorities: AI uses these for scoring
 priorities:
   - "example priority 1"
   - "example priority 2"
@@ -727,7 +727,7 @@ notion-client==2.2.1   # if using Notion
 
 Before marking the agent complete:
 
-- [ ] `config.yaml` controls all user-facing settings — no hardcoded values
+- [ ] `config.yaml` controls all user-facing settings: no hardcoded values
 - [ ] `profile/context.md` holds user-specific context for AI matching
 - [ ] Deduplication by URL before every storage push
 - [ ] Gemini client has model fallback chain (4 models)
@@ -747,12 +747,12 @@ Before marking the agent complete:
 ```
 "Build me an agent that monitors Hacker News for AI startup funding news"
 "Scrape product prices from 3 e-commerce sites and alert when they drop"
-"Track new GitHub repos tagged with 'llm' or 'agents' — summarise each one"
+"Track new GitHub repos tagged with 'llm' or 'agents': summarise each one"
 "Collect Chief of Staff job listings from LinkedIn and Cutshort into Notion"
-"Monitor a subreddit for posts mentioning my company — classify sentiment"
+"Monitor a subreddit for posts mentioning my company: classify sentiment"
 "Scrape new academic papers from arXiv on a topic I care about daily"
 "Track sports fixture results and keep a running table in Google Sheets"
-"Build a real estate listing watcher — alert on new properties under ₹1 Cr"
+"Build a real estate listing watcher: alert on new properties under ₹1 Cr"
 ```
 
 ---

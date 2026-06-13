@@ -8,7 +8,7 @@ Use the system and usage patterns described here when you need to handle statefu
 
 The framework's `Context` serves as the primary data store for request-specific state. In CLI mode, flags passed as `--key value` are automatically parsed and stored in the `Context` with the `--` prefix, allowing action methods to retrieve command parameters easily. For web applications, the system provides standard session management via the `Request` object, enabling the storage of user data across multiple HTTP requests.
 
-The internal `EventDispatcher` facilitates an asynchronous event bus. By defining custom `Event` classes and registering handlers (typically within an application's `init()` method), you can trigger background tasks—such as sending emails or logging audit trails—without blocking the main execution path.
+The internal `EventDispatcher` facilitates an asynchronous event bus. By defining custom `Event` classes and registering handlers (typically within an application's `init()` method), you can trigger background tasks,such as sending emails or logging audit trails,without blocking the main execution path.
 
 ## Examples
 

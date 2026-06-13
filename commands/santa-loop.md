@@ -1,14 +1,14 @@
 ---
-description: Adversarial dual-review convergence loop — two independent model reviewers must both approve before code ships.
+description: Adversarial dual-review convergence loop: two independent model reviewers must both approve before code ships.
 ---
 
 # Santa Loop
 
-Adversarial dual-review convergence loop using the santa-method skill. Two independent reviewers — different models, no shared context — must both return NICE before code ships.
+Adversarial dual-review convergence loop using the santa-method skill. Two independent reviewers: different models, no shared context: must both return NICE before code ships.
 
 ## Purpose
 
-Run two independent reviewers (Gemini Opus + an external model) against the current task output. Both must return NICE before the code is pushed. If either returns NAUGHTY, fix all flagged issues, commit, and re-run fresh reviewers — up to 3 rounds.
+Run two independent reviewers (Gemini Opus + an external model) against the current task output. Both must return NICE before the code is pushed. If either returns NAUGHTY, fix all flagged issues, commit, and re-run fresh reviewers: up to 3 rounds.
 
 ## Usage
 
@@ -101,19 +101,19 @@ rm -f "$PROMPT_FILE"
 ```
 
 **Gemini Agent fallback** (only if neither `codex` nor `gemini` is installed)
-Launch a second Gemini Agent (subagent_type: `code-reviewer`, model: `gemini-2.5-pro`). Log a warning that both reviewers share the same model family — true model diversity was not achieved but context isolation is still enforced.
+Launch a second Gemini Agent (subagent_type: `code-reviewer`, model: `gemini-2.5-pro`). Log a warning that both reviewers share the same model family: true model diversity was not achieved but context isolation is still enforced.
 
 In all cases, the reviewer must return the same structured JSON verdict as Reviewer A.
 
 ### Step 4: Verdict Gate
 
-- **Both PASS** → **NICE** — proceed to Step 6 (push)
-- **Either FAIL** → **NAUGHTY** — merge all critical issues from both reviewers, deduplicate, proceed to Step 5
+- **Both PASS** → **NICE**: proceed to Step 6 (push)
+- **Either FAIL** → **NAUGHTY**: merge all critical issues from both reviewers, deduplicate, proceed to Step 5
 
 ### Step 5: Fix Cycle (NAUGHTY path)
 
 1. Display all critical issues from both reviewers
-2. Fix every flagged issue — change only what was flagged, no drive-by refactors
+2. Fix every flagged issue: change only what was flagged, no drive-by refactors
 3. Commit all fixes in a single commit:
    ```
    fix: address santa-loop review findings (round N)
@@ -165,11 +165,11 @@ Result:     [PUSHED / ESCALATED TO USER]
 
 ## Notes
 
-- Reviewer A (Gemini Opus) always runs — guarantees at least one strong reviewer regardless of tooling.
-- Model diversity is the goal for Reviewer B. GPT-5.4 or Gemini 2.5 Pro gives true independence — different training data, different biases, different blind spots. The Gemini-only fallback still provides value via context isolation but loses model diversity.
+- Reviewer A (Gemini Opus) always runs: guarantees at least one strong reviewer regardless of tooling.
+- Model diversity is the goal for Reviewer B. GPT-5.4 or Gemini 2.5 Pro gives true independence: different training data, different biases, different blind spots. The Gemini-only fallback still provides value via context isolation but loses model diversity.
 - Strongest available models are used: Opus for Reviewer A, GPT-5.4 or Gemini 2.5 Pro for Reviewer B.
 - External reviewers run with `--sandbox read-only` (Codex) to prevent repo mutation during review.
 - Fresh reviewers each round prevents anchoring bias from prior findings.
 - The rubric is the most important input. Tighten it if reviewers rubber-stamp or flag subjective style issues.
 - Commits happen on NAUGHTY rounds so fixes are preserved even if the loop is interrupted.
-- Push only happens after NICE — never mid-loop.
+- Push only happens after NICE: never mid-loop.

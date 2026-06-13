@@ -46,7 +46,7 @@ process.stdin.on('end', () => {
       }
     }
   } catch {
-    // Invalid input — pass through
+    // Invalid input: pass through
   }
 
   process.stdout.write(data);

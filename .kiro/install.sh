@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # The script lives inside .kiro/, so SCRIPT_DIR *is* the source.
 # If invoked from the repo root (e.g., .kiro/install.sh), SCRIPT_DIR already
-# points to the .kiro directory — no need to append /.kiro again.
+# points to the .kiro directory: no need to append /.kiro again.
 SOURCE_KIRO="$SCRIPT_DIR"
 
 # Target directory: argument or current working directory

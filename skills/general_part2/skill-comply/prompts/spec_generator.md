@@ -17,8 +17,8 @@ steps:
     required: true|false
     detector:
       description: <natural language description of what tool call to look for>
-      after_step: <step_id this must come after, optional — omit if not needed>
-      before_step: <step_id this must come before, optional — omit if not needed>
+      after_step: <step_id this must come after, optional: omit if not needed>
+      before_step: <step_id this must come before, optional: omit if not needed>
 
 scoring:
   threshold_promote_to_hook: 0.6

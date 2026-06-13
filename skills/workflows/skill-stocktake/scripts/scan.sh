@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scan.sh — enumerate skill files, extract frontmatter and UTC mtime
+# scan.sh: enumerate skill files, extract frontmatter and UTC mtime
 # Usage: scan.sh [CWD_SKILLS_DIR]
 # Output: JSON to stdout
 #
@@ -8,7 +8,7 @@
 #
 # Environment:
 #   SKILL_STOCKTAKE_GLOBAL_DIR   Override ~/.gemini/skills (for testing only;
-#                                do not set in production — intended for bats tests)
+#                                do not set in production: intended for bats tests)
 #   SKILL_STOCKTAKE_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
@@ -20,7 +20,7 @@ CWD_SKILLS_DIR="${SKILL_STOCKTAKE_PROJECT_DIR:-${1:-$PWD/.gemini/skills}}"
 OBSERVATIONS="${SKILL_STOCKTAKE_OBSERVATIONS:-$HOME/.gemini/observations.jsonl}"
 
 # Validate CWD_SKILLS_DIR looks like a .gemini/skills path (defense-in-depth).
-# Only warn when the path exists — a nonexistent path poses no traversal risk.
+# Only warn when the path exists: a nonexistent path poses no traversal risk.
 if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */.gemini/skills* ]]; then
   echo "Warning: CWD_SKILLS_DIR does not look like a .gemini/skills path: $CWD_SKILLS_DIR" >&2
 fi
@@ -81,7 +81,7 @@ scan_dir_to_json() {
   trap _scan_cleanup RETURN
 
   # Pre-aggregate observation counts in two passes (one per window) instead of
-  # calling jq per-file — reduces from O(n*m) to O(n+m) jq invocations.
+  # calling jq per-file: reduces from O(n*m) to O(n+m) jq invocations.
   local obs_7d_counts obs_30d_counts
   obs_7d_counts=""
   obs_30d_counts=""
@@ -101,7 +101,7 @@ scan_dir_to_json() {
     desc=$(extract_field "$file" "description")
     mtime=$(date -u -r "$file" +%Y-%m-%dT%H:%M:%SZ)
     # Use awk exact field match to avoid substring false-positives from grep -F.
-    # uniq -c output format: "   N /path/to/file" — path is always field 2.
+    # uniq -c output format: "   N /path/to/file": path is always field 2.
     u7=$(echo "$obs_7d_counts" | awk -v f="$file" '$2 == f {print $1}' | head -1)
     u7="${u7:-0}"
     u30=$(echo "$obs_30d_counts" | awk -v f="$file" '$2 == f {print $1}' | head -1)

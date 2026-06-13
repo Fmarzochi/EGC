@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * egc init — first-run bootstrap for an EGC installation.
+ * egc init: first-run bootstrap for an EGC installation.
  *
  * Runs the same steps as install.sh but in Node so the flow works
  * identically on Windows, macOS, and Linux. Designed to be the entry
@@ -41,7 +41,7 @@ const flags = {
 
 function showHelp() {
   console.log(`
-egc init — first-run bootstrap
+egc init: first-run bootstrap
 
 Usage:
   egc init [options]
@@ -90,7 +90,7 @@ function checkMcpBuilds() {
       return;
     }
     console.error(`Error: MCP server build missing: ${missing.join(', ')}`);
-    console.error('If you installed via npm, this is a package bug — please report.');
+    console.error('If you installed via npm, this is a package bug: please report.');
     console.error('If you installed via git clone, run: sh install.sh');
     process.exit(1);
   }
@@ -198,8 +198,8 @@ function runDoctor() {
 }
 
 console.log('EGC init');
-if (flags.dryRun) console.log('(dry-run mode — no files will be written)');
-if (flags.mcpOnly) console.log('(mcp-only mode — cognitive bootstrap will be skipped)');
+if (flags.dryRun) console.log('(dry-run mode: no files will be written)');
+if (flags.mcpOnly) console.log('(mcp-only mode: cognitive bootstrap will be skipped)');
 console.log('');
 
 checkNode();

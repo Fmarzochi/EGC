@@ -4,7 +4,7 @@ description: Use this skill to prevent destructive operations when working on pr
 origin: EGC
 ---
 
-# Safety Guard — Prevent Destructive Operations
+# Safety Guard: Prevent Destructive Operations
 
 ## When to Use
 
