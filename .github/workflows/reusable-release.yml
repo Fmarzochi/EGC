@@ -12,9 +12,6 @@ on:
         required: false
         type: boolean
         default: true
-    secrets:
-      NPM_TOKEN:
-        required: false
   workflow_dispatch:
     inputs:
       tag:
@@ -107,7 +104,7 @@ jobs:
           - Better workflow and operator ergonomics
 
           ### Package Notes
-          - npm package: \`egc-universal\`
+          - npm package: \`@egchq/egc\`
           - Gemini marketplace/plugin identifier: \`egc@egc\`
           EOF
 
@@ -122,6 +119,4 @@ jobs:
 
       - name: Publish npm package
         if: steps.npm_publish_state.outputs.already_published != 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance --tag "${{ steps.npm_publish_state.outputs.dist_tag }}"
