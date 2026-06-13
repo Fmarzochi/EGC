@@ -5,6 +5,10 @@ const path = require('path');
 
 const { writeInstallState } = require('../install-state');
 const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
+const {
+  HOOK_OPERATION_KIND,
+  applySessionStartHookToFile,
+} = require('../claude-settings-hooks');
 
 function readJsonObject(filePath, label) {
   let parsed;
@@ -121,6 +125,11 @@ function applyInstallPlan(plan) {
 
   for (const operation of plan.operations) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
+
+    if (operation.kind === HOOK_OPERATION_KIND) {
+      applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+      continue;
+    }
 
     if (operation.kind === 'merge-json') {
       const payload = cloneJsonValue(operation.mergePayload);

@@ -599,6 +599,42 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('claude adapter always plans the SessionStart state hook operations', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hookScriptPath = path.join(
+      homeDir, '.claude', 'egc', 'hooks', 'claude-session-start.js'
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/claude-session-start.js'
+        && operation.destinationPath === hookScriptPath
+      )),
+      'Should plan the hook script copy even with no modules selected'
+    );
+
+    const mergeOperation = plan.operations.find(
+      operation => operation.kind === 'merge-claude-settings-hooks'
+    );
+    assert.ok(mergeOperation, 'Should plan the settings.json hook merge');
+    assert.strictEqual(
+      mergeOperation.destinationPath,
+      path.join(homeDir, '.claude', 'settings.json')
+    );
+    assert.strictEqual(mergeOperation.ownership, 'managed');
+    assert.strictEqual(mergeOperation.hookEvent, 'SessionStart');
+    assert.strictEqual(mergeOperation.hookScriptPath, hookScriptPath);
+    assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
+  })) passed++; else failed++;
+
   if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
     const adapter = getInstallTargetAdapter('codex');
     const homeDir = '/Users/example';

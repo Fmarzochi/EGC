@@ -6,6 +6,25 @@ const {
   isForeignPlatformPath,
   normalizeRelativePath,
 } = require('./helpers');
+const {
+  HOOK_MODULE_ID,
+  HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  createSessionStartHookMergeOperation,
+  resolveHookScriptDestination,
+} = require('../claude-settings-hooks');
+
+function createSessionStateHookOperations(adapter, targetRoot) {
+  return [
+    createRemappedOperation(
+      adapter,
+      HOOK_MODULE_ID,
+      HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    createSessionStartHookMergeOperation(targetRoot),
+  ];
+}
 
 module.exports = createInstallTargetAdapter({
   id: 'claude-home',
@@ -25,7 +44,7 @@ module.exports = createInstallTargetAdapter({
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
-    return modules.flatMap(module => {
+    const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target))
@@ -51,5 +70,12 @@ module.exports = createInstallTargetAdapter({
           return [adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput)];
         });
     });
+
+    // Deterministic memory loading: every Claude Code install registers the
+    // SessionStart state hook, even when no content modules are selected.
+    return [
+      ...moduleOperations,
+      ...createSessionStateHookOperations(adapter, targetRoot),
+    ];
   },
 });
