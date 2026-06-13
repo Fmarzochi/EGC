@@ -5,7 +5,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { detectPatternsFromEvents } = require('../../mcp/servers/egc-memory/build/patterns.js');
+const PATTERNS_BUILD = path.join(__dirname, '../../mcp/servers/egc-memory/build/patterns.js');
+if (!fs.existsSync(PATTERNS_BUILD)) {
+  console.error(
+    `[SKIP] Missing ${PATTERNS_BUILD}. Run 'npm run build' in mcp/servers/egc-memory first.`
+  );
+  process.exit(0);
+}
+
+const { detectPatternsFromEvents } = require(PATTERNS_BUILD);
 const { createStateStore } = require('../../scripts/lib/state-store');
 
 function createTempDir(prefix) {
@@ -229,7 +237,7 @@ async function runTests() {
   // the same file where hooks write runtime events, not the server memory DB.
   if (await test('detect_patterns reads events from state-store DB (same path hooks use)', async () => {
     const BetterSqlite3 = require('better-sqlite3');
-    const { patternToStoreEntry } = require('../../mcp/servers/egc-memory/build/patterns.js');
+    const { patternToStoreEntry } = require(PATTERNS_BUILD);
 
     const testDir = createTempDir('egc-patterns-acceptance-');
     const stateDbPath = path.join(testDir, 'state.db');

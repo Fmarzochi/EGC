@@ -794,8 +794,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { window_days, min_occurrences } = DetectPatternsSchema.parse(request.params.arguments || {});
         const cutoff = new Date(Date.now() - window_days * 24 * 60 * 60 * 1000).toISOString();
 
-        // Read events and persist patterns to the state-store DB where hooks write events.
-        // better-sqlite3 is synchronous; wrap in a promise to stay consistent with the async handler.
+        // Read events and persist patterns in the state-store DB where hooks write events.
+        // Uses the server's own sqlite3/sqlite driver so the build carries no extra dependency.
         const stateDbPath = resolveStateStoreDbPath();
 
         let events: Array<{
@@ -807,23 +807,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }> = [];
 
         const patterns = await writeArbitrator.enqueue(async () => {
-          // Require lazily so the server still starts if the state-store DB does not exist yet.
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-
           if (!fs.existsSync(stateDbPath)) {
             log('INFO', 'State-store DB not found; no events to analyze', { path: stateDbPath });
             return [];
           }
 
-          const ssDb = new BetterSqlite3(stateDbPath, { readonly: false });
+          const ssDb = await open({ filename: stateDbPath, driver: sqlite3.Database });
           try {
-            ssDb.pragma('journal_mode = WAL');
-            ssDb.pragma('busy_timeout = 5000');
+            await ssDb.exec('PRAGMA journal_mode = WAL;');
+            await ssDb.exec('PRAGMA busy_timeout = 5000;');
 
-            const rawEvents = ssDb.prepare(
-              'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC'
-            ).all(cutoff) as Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>;
+            const rawEvents = await ssDb.all<Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>>(
+              'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC',
+              [cutoff]
+            );
 
             events = rawEvents.map(row => ({
               id: row.id,
@@ -835,9 +832,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             const detected = detectPatternsFromEvents(events, window_days, min_occurrences);
 
-            const upsertStmt = ssDb.prepare(`
+            const upsertSql = `
               INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
-              VALUES (@id, @pattern_type, @key, @description, @occurrences, @frequency, @last_seen, @suggested_automation, @first_seen, @window_days)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET
                 pattern_type = excluded.pattern_type,
                 key = excluded.key,
@@ -847,30 +844,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 last_seen = excluded.last_seen,
                 suggested_automation = excluded.suggested_automation,
                 window_days = excluded.window_days
-            `);
+            `;
 
-            const persistAll = ssDb.transaction(() => {
+            await ssDb.exec('BEGIN');
+            try {
               for (const p of detected) {
                 const entry = patternToStoreEntry(p, window_days);
-                upsertStmt.run({
-                  id: entry.id,
-                  pattern_type: entry.patternType,
-                  key: entry.key,
-                  description: entry.description,
-                  occurrences: entry.occurrences,
-                  frequency: entry.frequency,
-                  last_seen: entry.lastSeen,
-                  suggested_automation: entry.suggestedAutomation,
-                  first_seen: entry.firstSeen,
-                  window_days: entry.windowDays,
-                });
+                await ssDb.run(upsertSql, [
+                  entry.id,
+                  entry.patternType,
+                  entry.key,
+                  entry.description,
+                  entry.occurrences,
+                  entry.frequency,
+                  entry.lastSeen,
+                  entry.suggestedAutomation,
+                  entry.firstSeen,
+                  entry.windowDays,
+                ]);
               }
-            });
-            persistAll();
+              await ssDb.exec('COMMIT');
+            } catch (txError) {
+              await ssDb.exec('ROLLBACK');
+              throw txError;
+            }
 
             return detected;
           } finally {
-            ssDb.close();
+            await ssDb.close();
           }
         });
 
