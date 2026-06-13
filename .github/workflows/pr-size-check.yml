@@ -1,0 +1,45 @@
+name: PR Size Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-pr-size:
+    name: Check PR file count
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check changed code files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --json files --jq '
+              [.files[].path | select(
+                test("^scripts/") or
+                test("^mcp/") or
+                test("^src/") or
+                test("^tests/") or
+                test("^hooks/") or
+                test("^schemas/") or
+                test("^docs/") or
+                test("^manifests/") or
+                test("^\\.github/") or
+                test("\\.(ts|js|sh|ps1|json|yaml|yml)$") or
+                test("^(README|CHANGELOG|AGENTS|CLAUDE|GEMINI)\\.md$")
+              )] | length
+            ')
+
+          echo "Code files in PR: $FILES"
+
+          if [ "$FILES" -gt 150 ]; then
+            echo "::error::This PR changes $FILES code files, exceeding the CodeRabbit 150-file review limit. Split the PR into smaller batches so all files get reviewed."
+            exit 1
+          fi
+
+          if [ "$FILES" -gt 100 ]; then
+            echo "::warning::This PR changes $FILES code files. Approaching the 150-file CodeRabbit review limit."
+          fi
+
+          echo "PR size OK: $FILES code files (limit: 150)"
