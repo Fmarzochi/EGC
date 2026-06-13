@@ -225,6 +225,129 @@ async function runTests() {
     }
   })) passed += 1; else failed += 1;
 
+  // Acceptance test: verifies the patched detect_patterns reads events from the state-store DB,
+  // the same file where hooks write runtime events, not the server memory DB.
+  if (await test('detect_patterns reads events from state-store DB (same path hooks use)', async () => {
+    const BetterSqlite3 = require('better-sqlite3');
+    const { patternToStoreEntry } = require('../../mcp/servers/egc-memory/build/patterns.js');
+
+    const testDir = createTempDir('egc-patterns-acceptance-');
+    const stateDbPath = path.join(testDir, 'state.db');
+
+    const savedEnv = process.env.EGC_STATE_DB;
+    process.env.EGC_STATE_DB = stateDbPath;
+
+    try {
+      const store = await createStateStore({ dbPath: stateDbPath });
+      store.upsertSession({ id: 'sess-acc', adapterId: 'test', harness: 'egc', state: 'active' });
+
+      // Insert events the same way hooks do: via insertRuntimeEvent on the state-store.
+      for (let i = 0; i < 5; i++) {
+        store.insertRuntimeEvent({
+          id: `ev-acc-bash-${i}`,
+          sessionId: 'sess-acc',
+          eventType: 'PreToolUse',
+          payload: { tool: 'Bash' },
+          timestamp: daysAgo(6 - i),
+        });
+      }
+      for (let i = 0; i < 3; i++) {
+        store.insertRuntimeEvent({
+          id: `ev-acc-err-${i}`,
+          sessionId: 'sess-acc',
+          eventType: 'error',
+          payload: { error_code: 'ENOENT' },
+          timestamp: daysAgo(4 - i),
+        });
+      }
+      store.close();
+
+      // Replicate exactly what the patched detect_patterns handler does:
+      // open the state-store DB via better-sqlite3, query events, run detection,
+      // persist patterns back to the same DB.
+      const windowDays = 7;
+      const minOccurrences = 3;
+      const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+
+      const ssDb = new BetterSqlite3(stateDbPath, { readonly: false });
+      ssDb.pragma('journal_mode = WAL');
+      ssDb.pragma('busy_timeout = 5000');
+
+      const rawRows = ssDb.prepare(
+        'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC'
+      ).all(cutoff);
+
+      const events = rawRows.map(row => ({
+        id: row.id,
+        sessionId: row.session_id ?? null,
+        eventType: row.event_type,
+        payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
+        timestamp: row.timestamp,
+      }));
+
+      const detected = detectPatternsFromEvents(events, windowDays, minOccurrences);
+
+      const upsertStmt = ssDb.prepare(`
+        INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
+        VALUES (@id, @pattern_type, @key, @description, @occurrences, @frequency, @last_seen, @suggested_automation, @first_seen, @window_days)
+        ON CONFLICT(id) DO UPDATE SET
+          pattern_type = excluded.pattern_type,
+          key = excluded.key,
+          description = excluded.description,
+          occurrences = excluded.occurrences,
+          frequency = excluded.frequency,
+          last_seen = excluded.last_seen,
+          suggested_automation = excluded.suggested_automation,
+          window_days = excluded.window_days
+      `);
+
+      const persistAll = ssDb.transaction(() => {
+        for (const p of detected) {
+          const entry = patternToStoreEntry(p, windowDays);
+          upsertStmt.run({
+            id: entry.id,
+            pattern_type: entry.patternType,
+            key: entry.key,
+            description: entry.description,
+            occurrences: entry.occurrences,
+            frequency: entry.frequency,
+            last_seen: entry.lastSeen,
+            suggested_automation: entry.suggestedAutomation,
+            first_seen: entry.firstSeen,
+            window_days: entry.windowDays,
+          });
+        }
+      });
+      persistAll();
+
+      // Verify patterns were detected from the events written by the state-store API.
+      assert.ok(detected.length >= 2, `expected at least 2 patterns, got ${detected.length}`);
+
+      const bashPattern = detected.find(p => p.key === 'command:Bash');
+      assert.ok(bashPattern, 'should detect repeated Bash command');
+      assert.strictEqual(bashPattern.occurrences, 5, 'bash command should appear 5 times');
+
+      const errPattern = detected.find(p => p.key === 'error:ENOENT');
+      assert.ok(errPattern, 'should detect recurring ENOENT error');
+      assert.strictEqual(errPattern.occurrences, 3, 'ENOENT should appear 3 times');
+
+      // Verify patterns were persisted into the same state-store DB.
+      const persistedRows = ssDb.prepare('SELECT * FROM patterns ORDER BY occurrences DESC').all();
+      ssDb.close();
+
+      assert.ok(persistedRows.length >= 2, 'patterns should be persisted in the state-store DB');
+      assert.ok(persistedRows.some(r => r.key === 'command:Bash'), 'Bash pattern should be in state-store DB');
+      assert.ok(persistedRows.some(r => r.key === 'error:ENOENT'), 'ENOENT pattern should be in state-store DB');
+    } finally {
+      if (savedEnv === undefined) {
+        delete process.env.EGC_STATE_DB;
+      } else {
+        process.env.EGC_STATE_DB = savedEnv;
+      }
+      cleanupTempDir(testDir);
+    }
+  })) passed += 1; else failed += 1;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

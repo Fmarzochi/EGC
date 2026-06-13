@@ -21,6 +21,18 @@ import {
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 
+// Mirrors DEFAULT_STATE_STORE_RELATIVE_PATH from scripts/lib/state-store/index.js
+const STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
+
+function resolveStateStoreDbPath(): string {
+  const envOverride = process.env.EGC_STATE_DB;
+  if (envOverride) {
+    return path.resolve(envOverride);
+  }
+  const homeDir = process.env.HOME || os.homedir();
+  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
+}
+
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
   const egcRoot = path.join(os.homedir(), '.egc');
@@ -782,47 +794,85 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { window_days, min_occurrences } = DetectPatternsSchema.parse(request.params.arguments || {});
         const cutoff = new Date(Date.now() - window_days * 24 * 60 * 60 * 1000).toISOString();
 
-        const rawEvents = await db.all<{
+        // Read events and persist patterns to the state-store DB where hooks write events.
+        // better-sqlite3 is synchronous; wrap in a promise to stay consistent with the async handler.
+        const stateDbPath = resolveStateStoreDbPath();
+
+        let events: Array<{
           id: string;
-          session_id: string | null;
-          event_type: string;
-          payload: string;
+          sessionId: string | null;
+          eventType: string;
+          payload: Record<string, unknown> | null;
           timestamp: string;
-        }[]>('SELECT * FROM events WHERE timestamp >= ? ORDER BY timestamp ASC', [cutoff]);
+        }> = [];
 
-        const events = rawEvents.map(row => ({
-          id: row.id,
-          sessionId: row.session_id ?? null,
-          eventType: row.event_type,
-          payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
-          timestamp: row.timestamp,
-        }));
+        const patterns = await writeArbitrator.enqueue(async () => {
+          // Require lazily so the server still starts if the state-store DB does not exist yet.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
 
-        const patterns = detectPatternsFromEvents(events, window_days, min_occurrences);
+          if (!fs.existsSync(stateDbPath)) {
+            log('INFO', 'State-store DB not found; no events to analyze', { path: stateDbPath });
+            return [];
+          }
 
-        for (const p of patterns) {
-          const entry = patternToStoreEntry(p, window_days);
-          await writeArbitrator.enqueue(async () => {
-            await db.run(
-              `INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                 pattern_type = excluded.pattern_type,
-                 key = excluded.key,
-                 description = excluded.description,
-                 occurrences = excluded.occurrences,
-                 frequency = excluded.frequency,
-                 last_seen = excluded.last_seen,
-                 suggested_automation = excluded.suggested_automation,
-                 window_days = excluded.window_days`,
-              [
-                entry.id, entry.patternType, entry.key, entry.description,
-                entry.occurrences, entry.frequency, entry.lastSeen,
-                entry.suggestedAutomation, entry.firstSeen, entry.windowDays
-              ]
-            );
-          });
-        }
+          const ssDb = new BetterSqlite3(stateDbPath, { readonly: false });
+          try {
+            ssDb.pragma('journal_mode = WAL');
+            ssDb.pragma('busy_timeout = 5000');
+
+            const rawEvents = ssDb.prepare(
+              'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC'
+            ).all(cutoff) as Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>;
+
+            events = rawEvents.map(row => ({
+              id: row.id,
+              sessionId: row.session_id ?? null,
+              eventType: row.event_type,
+              payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
+              timestamp: row.timestamp,
+            }));
+
+            const detected = detectPatternsFromEvents(events, window_days, min_occurrences);
+
+            const upsertStmt = ssDb.prepare(`
+              INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
+              VALUES (@id, @pattern_type, @key, @description, @occurrences, @frequency, @last_seen, @suggested_automation, @first_seen, @window_days)
+              ON CONFLICT(id) DO UPDATE SET
+                pattern_type = excluded.pattern_type,
+                key = excluded.key,
+                description = excluded.description,
+                occurrences = excluded.occurrences,
+                frequency = excluded.frequency,
+                last_seen = excluded.last_seen,
+                suggested_automation = excluded.suggested_automation,
+                window_days = excluded.window_days
+            `);
+
+            const persistAll = ssDb.transaction(() => {
+              for (const p of detected) {
+                const entry = patternToStoreEntry(p, window_days);
+                upsertStmt.run({
+                  id: entry.id,
+                  pattern_type: entry.patternType,
+                  key: entry.key,
+                  description: entry.description,
+                  occurrences: entry.occurrences,
+                  frequency: entry.frequency,
+                  last_seen: entry.lastSeen,
+                  suggested_automation: entry.suggestedAutomation,
+                  first_seen: entry.firstSeen,
+                  window_days: entry.windowDays,
+                });
+              }
+            });
+            persistAll();
+
+            return detected;
+          } finally {
+            ssDb.close();
+          }
+        });
 
         const output = patterns.map(p => ({
           type: p.type,
