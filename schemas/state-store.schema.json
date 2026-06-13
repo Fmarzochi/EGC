@@ -52,6 +52,12 @@
       "items": {
         "$ref": "#/$defs/runtimeEvent"
       }
+    },
+    "lessons": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/lesson"
+      }
     }
   },
   "$defs": {
@@ -387,6 +393,54 @@
         },
         "timestamp": {
           "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "lesson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "content",
+        "context",
+        "confidence",
+        "lastReinforced",
+        "lastRecalled",
+        "createdAt",
+        "tags",
+        "archived"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "content": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "context": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lastReinforced": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "lastRecalled": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "tags": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "archived": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
         }
       }
     }

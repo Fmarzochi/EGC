@@ -15,6 +15,7 @@ const ENTITY_DEFINITIONS = {
   governanceEvent: 'governanceEvent',
   instinct: 'instinct',
   runtimeEvent: 'runtimeEvent',
+  lesson: 'lesson',
 };
 
 let cachedSchema = null;

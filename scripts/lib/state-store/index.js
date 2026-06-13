@@ -125,6 +125,11 @@ function createNullQueryApi() {
     listInstincts: () => ({ totalCount: 0, instincts: [] }),
     insertRuntimeEvent: () => {},
     listRecentEvents: () => [],
+    upsertLesson: () => null,
+    getLessonById: () => null,
+    listLessons: () => [],
+    reinforceLesson: () => null,
+    applyDecaySweep: () => 0,
   };
 }
 

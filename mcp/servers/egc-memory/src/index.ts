@@ -207,6 +207,29 @@ async function runMigrations(db: Database, dbDir: string) {
       await createWorkingMemoryTable(db);
       await db.run('INSERT INTO schema_migrations (version) VALUES (3)');
     }
+
+    // Migration 4: lessons table with confidence decay support.
+    const hasV4 = await db.get('SELECT version FROM schema_migrations WHERE version = 4');
+    if (!hasV4) {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS lessons (
+          id TEXT PRIMARY KEY,
+          content TEXT NOT NULL,
+          context TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0.7,
+          last_reinforced TEXT,
+          last_recalled TEXT,
+          created_at TEXT NOT NULL,
+          tags TEXT,
+          archived INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_lessons_confidence_created_at
+          ON lessons (confidence DESC, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_lessons_archived_confidence
+          ON lessons (archived, confidence DESC);
+      `);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (4)');
+    }
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {}
   }
@@ -312,6 +335,72 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
   fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
 }
 
+const LESSON_REINFORCE_DELTA = 0.15;
+const LESSON_DECAY_DELTA_PER_WEEK = 0.05;
+const LESSON_DECAY_GRACE_DAYS = 30;
+const LESSON_ARCHIVE_THRESHOLD = 0.2;
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+interface LessonRow {
+  id: string;
+  content: string;
+  context: string;
+  confidence: number;
+  last_reinforced: string | null;
+  last_recalled: string | null;
+  created_at: string;
+  tags: string | null;
+  archived: number;
+}
+
+function mapLessonRow(row: LessonRow) {
+  return {
+    id: row.id,
+    content: row.content,
+    context: row.context,
+    confidence: row.confidence,
+    lastReinforced: row.last_reinforced ?? null,
+    lastRecalled: row.last_recalled ?? null,
+    createdAt: row.created_at,
+    tags: row.tags ?? null,
+    archived: row.archived === 1,
+  };
+}
+
+function computeLessonDecay(confidence: number, lastRecalledIso: string | null, createdAtIso: string, nowMs: number): number {
+  const referenceMs = lastRecalledIso
+    ? new Date(lastRecalledIso).getTime()
+    : new Date(createdAtIso).getTime();
+  const elapsedMs = nowMs - referenceMs;
+  const gracePeriodMs = LESSON_DECAY_GRACE_DAYS * MS_PER_DAY;
+  if (elapsedMs <= gracePeriodMs) {
+    return confidence;
+  }
+  const weeksOverGrace = Math.floor((elapsedMs - gracePeriodMs) / MS_PER_WEEK);
+  return Math.max(0, confidence - weeksOverGrace * LESSON_DECAY_DELTA_PER_WEEK);
+}
+
+function generateLessonId(): string {
+  return `lesson-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function runLessonDecaySweep(db: Database): Promise<number> {
+  const now = Date.now();
+  const rows = await db.all<LessonRow[]>('SELECT * FROM lessons WHERE archived = 0');
+  let affected = 0;
+  for (const row of rows) {
+    const decayed = computeLessonDecay(row.confidence, row.last_reinforced, row.created_at, now);
+    if (decayed === row.confidence) {
+      continue;
+    }
+    const archived = decayed < LESSON_ARCHIVE_THRESHOLD ? 1 : 0;
+    await db.run('UPDATE lessons SET confidence = ?, archived = ? WHERE id = ?', [decayed, archived, row.id]);
+    affected++;
+  }
+  return affected;
+}
+
 const StoreDecisionSchema = z.object({
   context: z.string().min(1).max(5000),
   decision: z.string().min(1).max(10000)
@@ -326,6 +415,23 @@ const SearchHistorySchema = z.object({
 const QueryHistorySchema = z.object({
   limit: z.number().min(1).max(100).optional().default(10),
   offset: z.number().min(0).optional().default(0)
+});
+
+const LessonSaveSchema = z.object({
+  content: z.string().min(1).max(5000),
+  context: z.string().min(1).max(2000),
+  tags: z.string().max(500).optional(),
+  initial_confidence: z.number().min(0).max(1).optional().default(0.7)
+});
+
+const LessonRecallSchema = z.object({
+  query: z.string().min(1).max(1000),
+  min_confidence: z.number().min(0).max(1).optional().default(0.2),
+  limit: z.number().min(1).max(100).optional().default(10)
+});
+
+const LessonReinforceSchema = z.object({
+  id: z.string().min(1)
 });
 
 const GetStateSchema = z.object({
@@ -430,6 +536,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." }
           }
         }
+      },
+      {
+        name: "lesson_save",
+        description: "Persist a new lesson learned during this session. Lessons are stored with a confidence score and decay over time when not reinforced. Use this to record patterns, rules, or observations the AI should remember across sessions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            content: { type: "string", description: "The lesson text to store." },
+            context: { type: "string", description: "Where this lesson applies, e.g. 'code review' or 'git workflow'." },
+            tags: { type: "string", description: "Optional comma-separated tags for categorization." },
+            initial_confidence: { type: "number", description: "Starting confidence score between 0 and 1. Defaults to 0.7." }
+          },
+          required: ["content", "context"]
+        }
+      },
+      {
+        name: "lesson_recall",
+        description: "Search active lessons above a confidence threshold. Lessons below 0.2 confidence are archived and not returned by default. Returns lessons ranked by confidence score.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Keyword or topic to filter lessons by content or context." },
+            min_confidence: { type: "number", description: "Minimum confidence threshold, 0 to 1. Defaults to 0.2." },
+            limit: { type: "number", description: "Maximum number of lessons to return. Defaults to 10." }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "lesson_reinforce",
+        description: "Reinforce an existing lesson when the same pattern is observed again. Increases confidence by 0.15, capped at 1.0. Call this when a previously stored lesson proves relevant or a mistake is repeated.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "The lesson ID returned by lesson_save or lesson_recall." }
+          },
+          required: ["id"]
+        }
       }
     ]
   };
@@ -477,6 +621,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const swept = await sweepExpired(db);
         if (swept > 0) {
           log('INFO', 'Swept expired working memory entries', { count: swept });
+        }
+
+        // Run confidence decay sweep on every get_state call.
+        try {
+          const affected = await runLessonDecaySweep(db);
+          if (affected > 0) {
+            log('INFO', 'Lesson decay sweep ran', { affected });
+          }
+        } catch (e) {
+          log('WARN', 'Lesson decay sweep failed, continuing', { error: String(e) });
         }
 
         if (resolved.source === 'none') {
@@ -533,6 +687,68 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const projPath = resolveProjectPath(args.project_path);
         const entries = await listWorkingMemory(db, projPath);
         return { content: [{ type: "text", text: JSON.stringify(entries.map(e => ({ key: e.key, value: e.value, expires_at: e.expires_at })), null, 2) }] };
+      }
+
+      case "lesson_save": {
+        const { content, context, tags, initial_confidence } = LessonSaveSchema.parse(request.params.arguments);
+        const id = generateLessonId();
+        const now = new Date().toISOString();
+        await writeArbitrator.enqueue(async () => {
+          await db.run(
+            `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived)
+             VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0)`,
+            [id, content, context, initial_confidence, now, tags ?? null]
+          );
+        });
+        log('INFO', 'Lesson saved', { id, context });
+        return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: tags ?? null, createdAt: now }, null, 2) }] };
+      }
+
+      case "lesson_recall": {
+        const { query, min_confidence, limit } = LessonRecallSchema.parse(request.params.arguments);
+        const lowerQuery = query.toLowerCase();
+        const rows = await db.all<LessonRow[]>(
+          `SELECT * FROM lessons
+           WHERE archived = 0 AND confidence >= ?
+           ORDER BY confidence DESC, created_at DESC
+           LIMIT ?`,
+          [min_confidence, limit * 3]
+        );
+        const matched = rows
+          .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
+          .slice(0, limit)
+          .map(mapLessonRow);
+
+        const now = new Date().toISOString();
+        if (matched.length > 0) {
+          await writeArbitrator.enqueue(async () => {
+            for (const lesson of matched) {
+              await db.run('UPDATE lessons SET last_recalled = ? WHERE id = ?', [now, lesson.id]);
+            }
+          });
+        }
+
+        log('INFO', 'Lessons recalled', { query, count: matched.length });
+        return { content: [{ type: "text", text: JSON.stringify({ lessons: matched, meta: { query, min_confidence, limit, count: matched.length } }, null, 2) }] };
+      }
+
+      case "lesson_reinforce": {
+        const { id } = LessonReinforceSchema.parse(request.params.arguments);
+        const row = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
+        if (!row) {
+          throw new McpError(ErrorCode.InvalidRequest, `Lesson not found: ${id}`);
+        }
+        const newConfidence = Math.min(1, row.confidence + LESSON_REINFORCE_DELTA);
+        const now = new Date().toISOString();
+        await writeArbitrator.enqueue(async () => {
+          await db.run(
+            'UPDATE lessons SET confidence = ?, last_reinforced = ?, archived = 0 WHERE id = ?',
+            [newConfidence, now, id]
+          );
+        });
+        const updated = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
+        log('INFO', 'Lesson reinforced', { id, confidence: newConfidence });
+        return { content: [{ type: "text", text: JSON.stringify(updated ? mapLessonRow(updated) : { id, confidence: newConfidence }, null, 2) }] };
       }
 
       default:

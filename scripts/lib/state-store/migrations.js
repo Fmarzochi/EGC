@@ -138,6 +138,25 @@ CREATE INDEX IF NOT EXISTS idx_events_event_type_timestamp
   ON events (event_type, timestamp DESC);
 `;
 
+const LESSONS_SQL = `
+CREATE TABLE IF NOT EXISTS lessons (
+  id TEXT PRIMARY KEY,
+  content TEXT NOT NULL,
+  context TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0.7,
+  last_reinforced TEXT,
+  last_recalled TEXT,
+  created_at TEXT NOT NULL,
+  tags TEXT,
+  archived INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_lessons_confidence_created_at
+  ON lessons (confidence DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lessons_archived_confidence
+  ON lessons (archived, confidence DESC);
+`;
+
 const MIGRATIONS = [
   {
     version: 1,
@@ -148,6 +167,11 @@ const MIGRATIONS = [
     version: 2,
     name: '002_instincts_and_events',
     sql: INSTINCTS_AND_EVENTS_SQL,
+  },
+  {
+    version: 3,
+    name: '003_lessons_confidence_decay',
+    sql: LESSONS_SQL,
   },
 ];
 
