@@ -47,7 +47,6 @@
     "schemas/",
     "manifests/",
     "mcp-configs/",
-    "legacy-command-shims/",
     "examples/",
     ".gemini-plugin/",
     ".codex-plugin/",

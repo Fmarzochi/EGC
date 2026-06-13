@@ -242,7 +242,7 @@ jobs:
         run: npm ci
 
       - name: Run ESLint
-        run: npx eslint scripts/**/*.js tests/**/*.js
+        run: npx eslint "scripts/**/*.js" "tests/**/*.js"
 
       - name: Run markdownlint
         run: npx markdownlint "agents/**/*.md" "skills/**/*.md" "commands/**/*.md" "rules/**/*.md"

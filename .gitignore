@@ -85,7 +85,9 @@ backups/
 snapshots/
 *.tar
 *.tar.gz
+*.tgz
 *.zip
+Top-AI-repos/
 
 # =========================================================
 # PRIVATE INTERNAL AUDITS & FORENSICS
