@@ -3,6 +3,7 @@
  */
 
 const assert = require('assert');
+const os = require('os');
 const path = require('path');
 
 const {
@@ -995,6 +996,38 @@ function runTests() {
         `Supported: ${SUPPORTED_INSTALL_TARGETS.join(', ')}`
       );
     }
+  })) passed++; else failed++;
+
+  if (test('claude target resolves skill modules that depend on platform-configs (issue #160)', () => {
+    const { resolveInstallPlan } = require('../../scripts/lib/install-manifests');
+
+    const plan = resolveInstallPlan({
+      moduleIds: ['workflow-quality'],
+      target: 'claude',
+      homeDir: os.tmpdir(),
+      projectRoot: os.tmpdir(),
+    });
+
+    assert.ok(
+      plan.selectedModuleIds.includes('workflow-quality'),
+      'workflow-quality must be selected for claude target'
+    );
+    assert.ok(
+      plan.selectedModuleIds.includes('platform-configs'),
+      'platform-configs must be selected as dependency for claude target'
+    );
+    assert.strictEqual(
+      plan.skippedModuleIds.length,
+      0,
+      'no modules should be silently skipped'
+    );
+
+    const platformConfigOps = plan.operations.filter(op => op.moduleId === 'platform-configs');
+    assert.strictEqual(
+      platformConfigOps.length,
+      0,
+      'platform-configs must produce zero file operations for claude (all paths are egc-platform-specific)'
+    );
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

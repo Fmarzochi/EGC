@@ -95,6 +95,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "antigravity",
         "codex",

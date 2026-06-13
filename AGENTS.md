@@ -13,9 +13,9 @@ node scripts/install-apply.js --target egc
 ## Project Structure
 
 ```
-agents/    : 63 specialized subagents
-skills/    : 229+ workflow skills and domain knowledge
-commands/  : 76 slash commands
+agents/    - 63 specialized subagents
+skills/    - 229+ workflow skills and domain knowledge
+commands/  - 76 slash commands
 ```
 
 ## Agents

@@ -9,6 +9,9 @@ const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
   '.gemini': 'gemini',
   '.opencode': 'opencode',
   '.codebuddy': 'codebuddy',
+  'mcp-configs': 'egc',
+  'scripts/auto-update.js': 'egc',
+  'scripts/setup-package-manager.js': 'egc',
 });
 
 function normalizeRelativePath(relativePath) {

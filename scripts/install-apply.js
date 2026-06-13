@@ -79,6 +79,12 @@ function printHumanPlan(plan, dryRun) {
     if (plan.excludedModuleIds.length > 0) {
       console.log(`Excluded modules: ${plan.excludedModuleIds.join(', ')}`);
     }
+    if (plan.selectedModuleIds.length === 0 && plan.skippedModuleIds.length > 0) {
+      process.stderr.write(
+        `Warning: all requested modules were skipped for target '${plan.target}'. ` +
+        `The modules or their dependencies may not support this target.\n`
+      );
+    }
   }
   console.log(`Operations: ${plan.operations.length}`);
 
