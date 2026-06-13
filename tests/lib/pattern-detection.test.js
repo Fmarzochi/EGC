@@ -13,7 +13,7 @@ if (!fs.existsSync(PATTERNS_BUILD)) {
   process.exit(0);
 }
 
-const { detectPatternsFromEvents, patternToStoreEntry } = require(PATTERNS_BUILD); // NOSONAR
+const { detectPatternsFromEvents, patternToStoreEntry } = require('../../mcp/servers/egc-memory/build/patterns.js');
 const { createStateStore } = require('../../scripts/lib/state-store');
 
 function createTempDir(prefix) {
