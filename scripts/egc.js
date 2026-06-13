@@ -27,6 +27,10 @@ const COMMANDS = {
     script: 'consult.js',
     description: 'Recommend EGC components and profiles from a natural language query',
   },
+  consolidate: {
+    script: 'consolidate.js',
+    description: 'Compact oversized project state files into layered summaries',
+  },
   'install-plan': {
     script: 'install-plan.js',
     description: 'Alias for plan',
@@ -79,6 +83,7 @@ const PRIMARY_COMMANDS = [
   'plan',
   'catalog',
   'consult',
+  'consolidate',
   'list-installed',
   'doctor',
   'repair',
@@ -120,6 +125,7 @@ Examples:
   egc catalog components --family language
   egc catalog show framework:nextjs
   egc consult "security reviews"
+  egc consolidate --dry-run
   egc list-installed --json
   egc doctor --target cursor
   egc repair --dry-run

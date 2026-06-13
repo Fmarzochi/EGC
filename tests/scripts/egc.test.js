@@ -74,6 +74,7 @@ function main() {
       assert.match(result.stdout, /doctor/);
       assert.match(result.stdout, /auto-update/);
       assert.match(result.stdout, /consult/);
+      assert.match(result.stdout, /consolidate/);
       assert.match(result.stdout, /loop-status/);
     }],
     ['prints package version with --version', () => {
