@@ -90,7 +90,7 @@ jobs:
           - Improved release-note generation and changelog hygiene
 
           ### Notes
-          - npm package: \`egc-universal\`
+          - npm package: \`@egchq/egc\`
           - Gemini marketplace/plugin identifier: \`egc@egc\`
           - For migration tips and compatibility notes, see README and CHANGELOG.
           EOF

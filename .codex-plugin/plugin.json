@@ -1,6 +1,6 @@
 {
   "name": "egc",
-  "version": "1.0.8",
+  "version": "1.1.0-rc.1",
   "description": "Battle-tested Codex workflows \u2014 228 shared EGC skills, production-ready MCP configs, and selective-install-aligned conventions for TDD, security scanning, code review, and autonomous development.",
   "author": {
     "name": "Felipe Marzochi",
