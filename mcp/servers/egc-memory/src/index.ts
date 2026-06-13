@@ -19,6 +19,19 @@ import {
   getWorkingMemory,
   listWorkingMemory,
 } from './working-memory';
+import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
+
+// Mirrors DEFAULT_STATE_STORE_RELATIVE_PATH from scripts/lib/state-store/index.js
+const STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
+
+function resolveStateStoreDbPath(): string {
+  const envOverride = process.env.EGC_STATE_DB;
+  if (envOverride) {
+    return path.resolve(envOverride);
+  }
+  const homeDir = process.env.HOME || os.homedir();
+  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
+}
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -470,6 +483,11 @@ const WorkingMemoryListSchema = z.object({
   project_path: z.string().optional()
 });
 
+const DetectPatternsSchema = z.object({
+  window_days: z.number().min(1).max(365).optional().default(7),
+  min_occurrences: z.number().min(2).max(1000).optional().default(3)
+});
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -574,6 +592,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             id: { type: "string", description: "The lesson ID returned by lesson_save or lesson_recall." }
           },
           required: ["id"]
+        }
+      },
+      {
+        name: "detect_patterns",
+        description: "Analyzes captured runtime events and surfaces recurring behaviors across sessions. Detects repeated commands and recurring errors using frequency analysis. Patterns are persisted to SQLite with frequency, last_seen, and suggested_automation fields. Returns patterns with type, description, occurrence count, and an actionable suggestion.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            window_days: { type: "number", description: "Number of past days to analyze. Defaults to 7." },
+            min_occurrences: { type: "number", description: "Minimum times a pattern must appear to be reported. Defaults to 3." }
+          }
         }
       }
     ]
@@ -760,6 +789,128 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "lesson_reinforce":
         return await handleLessonReinforce(db, request.params.arguments);
+
+      case "detect_patterns": {
+        const { window_days, min_occurrences } = DetectPatternsSchema.parse(request.params.arguments || {});
+        const cutoff = new Date(Date.now() - window_days * 24 * 60 * 60 * 1000).toISOString();
+
+        // Read events and persist patterns in the state-store DB where hooks write events.
+        // Uses the server's own sqlite3/sqlite driver so the build carries no extra dependency.
+        const stateDbPath = resolveStateStoreDbPath();
+
+        let events: Array<{
+          id: string;
+          sessionId: string | null;
+          eventType: string;
+          payload: Record<string, unknown> | null;
+          timestamp: string;
+        }> = [];
+
+        const patterns = await writeArbitrator.enqueue(async () => {
+          if (!fs.existsSync(stateDbPath)) {
+            log('INFO', 'State-store DB not found; no events to analyze', { path: stateDbPath });
+            return [];
+          }
+
+          const ssDb = await open({ filename: stateDbPath, driver: sqlite3.Database });
+          try {
+            await ssDb.exec('PRAGMA journal_mode = WAL;');
+            await ssDb.exec('PRAGMA busy_timeout = 5000;');
+            await ssDb.exec(`
+              CREATE TABLE IF NOT EXISTS patterns (
+                id TEXT PRIMARY KEY,
+                pattern_type TEXT NOT NULL,
+                key TEXT NOT NULL,
+                description TEXT NOT NULL,
+                occurrences INTEGER NOT NULL DEFAULT 1,
+                frequency REAL NOT NULL DEFAULT 0,
+                last_seen TEXT NOT NULL,
+                suggested_automation TEXT,
+                first_seen TEXT NOT NULL,
+                window_days INTEGER NOT NULL DEFAULT 7
+              );
+            `);
+
+            const rawEvents = await ssDb.all<Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>>(
+              'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC',
+              [cutoff]
+            );
+
+            events = rawEvents.map(row => ({
+              id: row.id,
+              sessionId: row.session_id ?? null,
+              eventType: row.event_type,
+              payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
+              timestamp: row.timestamp,
+            }));
+
+            const detected = detectPatternsFromEvents(events, window_days, min_occurrences);
+
+            const upsertSql = `
+              INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                pattern_type = excluded.pattern_type,
+                key = excluded.key,
+                description = excluded.description,
+                occurrences = excluded.occurrences,
+                frequency = excluded.frequency,
+                last_seen = excluded.last_seen,
+                suggested_automation = excluded.suggested_automation,
+                first_seen = MIN(patterns.first_seen, excluded.first_seen),
+                window_days = excluded.window_days
+            `;
+
+            await ssDb.exec('BEGIN');
+            try {
+              for (const p of detected) {
+                const entry = patternToStoreEntry(p, window_days);
+                await ssDb.run(upsertSql, [
+                  entry.id,
+                  entry.patternType,
+                  entry.key,
+                  entry.description,
+                  entry.occurrences,
+                  entry.frequency,
+                  entry.lastSeen,
+                  entry.suggestedAutomation,
+                  entry.firstSeen,
+                  entry.windowDays,
+                ]);
+              }
+              await ssDb.exec('COMMIT');
+            } catch (txError) {
+              await ssDb.exec('ROLLBACK');
+              throw txError;
+            }
+
+            return detected;
+          } finally {
+            await ssDb.close();
+          }
+        });
+
+        const output = patterns.map(p => ({
+          type: p.type,
+          description: p.description,
+          occurrences: p.occurrences,
+          suggestion: p.suggestion,
+        }));
+
+        log('INFO', 'Pattern detection complete', {
+          window_days,
+          min_occurrences,
+          events_analyzed: events.length,
+          patterns_found: patterns.length,
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ success: true, data: { patterns: output }, meta: { window_days, min_occurrences, events_analyzed: events.length } }, null, 2)
+          }]
+        };
+      }
 
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${request.params.name}`);
