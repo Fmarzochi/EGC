@@ -92,6 +92,18 @@ Use subagents (Task tool) for exploration instead of reading many files in your 
 
 ---
 
+## Compressing Observations
+
+EGC records raw hook events (tool calls, file edits, errors) in the state-store database. Over time these accumulate. The `compress_observations` MCP tool processes them into typed summaries:
+
+```
+compress_observations({ limit: 50 })
+```
+
+This replaces verbose raw records with compact entries like `tool_failure`, `tool_success`, and `file_edit`, drastically reducing the token cost of injecting history into a new session. Run it at logical session breakpoints or when the observation count grows large.
+
+---
+
 ## MCP Server Management
 
 Each enabled MCP server adds tool definitions to your context window. The README warns: **keep under 10 enabled per project**.
