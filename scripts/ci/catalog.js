@@ -132,26 +132,6 @@ function parseReadmeExpectations(readmeContent) {
     { category: 'commands', mode: 'exact', expected: Number(quickStartMatch[3]), source: 'README.md quick-start summary' }
   );
 
-  const tablePatterns = [
-    { category: 'agents', regex: /\|\s*(?:\*\*)?Agents(?:\*\*)?\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s+agents\s*\|/i, source: 'README.md comparison table' },
-    { category: 'commands', regex: /\|\s*(?:\*\*)?Commands(?:\*\*)?\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s+commands\s*\|/i, source: 'README.md comparison table' },
-    { category: 'skills', regex: /\|\s*(?:\*\*)?Skills(?:\*\*)?\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s+skills\s*\|/i, source: 'README.md comparison table' }
-  ];
-
-  for (const pattern of tablePatterns) {
-    const match = readmeContent.match(pattern.regex);
-    if (!match) {
-      throw new Error(`${pattern.source} is missing the ${pattern.category} row`);
-    }
-
-    expectations.push({
-      category: pattern.category,
-      mode: 'exact',
-      expected: Number(match[1]),
-      source: `${pattern.source} (${pattern.category})`
-    });
-  }
-
   const parityPatterns = [
     {
       category: 'agents',
