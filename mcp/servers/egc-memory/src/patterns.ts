@@ -216,7 +216,7 @@ export function patternToStoreEntry(
   p: DetectedPattern,
   windowDays: number
 ): PatternStoreEntry {
-  const id = crypto.createHash('sha1').update(p.key).digest('hex').slice(0, 16);
+  const id = crypto.createHash('sha256').update(p.key).digest('hex').slice(0, 16);
   return {
     id,
     patternType: p.type,
