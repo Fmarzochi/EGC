@@ -82,21 +82,36 @@ function formatDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
+const TRAILING_PUNCTUATION = new Set(['.', ',', ';', ':', '!', '?']);
+const EDGE_FILLER = new Set([' ', '\t', ':', ',', '-']);
+
+// Character-by-character trimming avoids the anchored +$ regexes that
+// SonarCloud flags as vulnerable to super-linear backtracking.
+function trimTrailingChars(text, chars) {
+  let end = text.length;
+  while (end > 0 && chars.has(text[end - 1])) end -= 1;
+  return text.slice(0, end);
+}
+
+function trimEdgeChars(text, chars) {
+  let start = 0;
+  let end = text.length;
+  while (start < end && chars.has(text[start])) start += 1;
+  while (end > start && chars.has(text[end - 1])) end -= 1;
+  return text.slice(start, end);
+}
+
 function normalizeKey(text) {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/[.,;:!?]+$/g, '')
-    .trim();
+  const collapsed = text.toLowerCase().replace(/\s+/g, ' ');
+  return trimTrailingChars(collapsed, TRAILING_PUNCTUATION).trim();
 }
 
 function stripDateTokens(text) {
-  return text
-    .replace(/[([]?\s*\d{4}-\d{2}-\d{2}\s*[)\]]?/g, ' ')
-    .replace(/[([]?\s*\d{2}\/\d{2}\/\d{4}\s*[)\]]?/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[\s:,-]+|[\s:,-]+$/g, '')
-    .trim();
+  const withoutDates = text
+    .replace(/[([]?\d{4}-\d{2}-\d{2}[)\]]?/g, ' ')
+    .replace(/[([]?\d{2}\/\d{2}\/\d{4}[)\]]?/g, ' ')
+    .replace(/\s+/g, ' ');
+  return trimEdgeChars(withoutDates, EDGE_FILLER).trim();
 }
 
 // Entries follow the "what: why" shape produced by update_state. The rationale
@@ -191,7 +206,7 @@ function consolidateSection(section, now, stats) {
 
   const output = [...working];
 
-  const weeks = [...episodicByWeek.keys()].sort().reverse();
+  const weeks = [...episodicByWeek.keys()].sort((a, b) => a.localeCompare(b)).reverse();
   for (const week of weeks) {
     output.push(`- Week of ${week}: ${episodicByWeek.get(week).join('; ')}`);
     stats.episodicWeeks += 1;
