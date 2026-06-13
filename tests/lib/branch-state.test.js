@@ -224,7 +224,7 @@ function runTests() {
     const result = spawnSync('node', [HOOK_PATH], {
       input: '{}',
       encoding: 'utf8',
-      env: Object.assign({}, process.env, { HOME: home, PWD: repo }),
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
       cwd: repo,
     });
 
@@ -242,7 +242,7 @@ function runTests() {
     const result = spawnSync('node', [HOOK_PATH], {
       input: '{}',
       encoding: 'utf8',
-      env: Object.assign({}, process.env, { HOME: home, PWD: repo }),
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
       cwd: repo,
     });
 
@@ -258,7 +258,7 @@ function runTests() {
     const result = spawnSync('node', [HOOK_PATH], {
       input: '{"session":"abc"}',
       encoding: 'utf8',
-      env: Object.assign({}, process.env, { HOME: home, PWD: repo }),
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
       cwd: repo,
     });
 

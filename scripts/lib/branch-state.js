@@ -3,7 +3,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
 
 const DEFAULT_BRANCH_FILE = 'main.md';
 
@@ -20,16 +19,34 @@ function sanitizeBranchName(branch) {
   return branch.replace(/\//g, '-').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
+// Reads .git/HEAD directly instead of spawning git: avoids PATH lookup
+// (SonarCloud S4036) and works without git installed.
+function findGitDir(startPath) {
+  let current = path.resolve(startPath);
+  for (;;) {
+    const candidate = path.join(current, '.git');
+    if (fs.existsSync(candidate)) return candidate;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
 function detectBranch(projectPath) {
   try {
-    const output = execSync('git rev-parse --abbrev-ref HEAD', {
-      cwd: projectPath,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf8',
-    }).trim();
-    // Detached HEAD reports the literal string "HEAD"; treat it as no branch
-    if (!output || output === 'HEAD') return null;
-    return output;
+    let gitDir = findGitDir(projectPath);
+    if (!gitDir) return null;
+    if (fs.statSync(gitDir).isFile()) {
+      // Worktrees and submodules store a pointer file instead of a directory
+      const pointer = fs.readFileSync(gitDir, 'utf8').trim();
+      if (!pointer.startsWith('gitdir:')) return null;
+      gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+    }
+    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    const refPrefix = 'ref: refs/heads/';
+    // Detached HEAD stores a bare commit hash; treat it as no branch
+    if (!head.startsWith(refPrefix)) return null;
+    return head.slice(refPrefix.length) || null;
   } catch (_) {
     return null;
   }
