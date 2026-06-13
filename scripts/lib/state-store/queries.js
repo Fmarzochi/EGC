@@ -362,7 +362,7 @@ function normalizeLessonInput(lesson) {
   let confidence = 0.7;
   if (typeof lesson.confidence === 'number') {
     if (!Number.isFinite(lesson.confidence)) {
-      throw new Error(`Invalid lesson.confidence: must be a finite number (got ${lesson.confidence})`);
+      throw new TypeError(`Invalid lesson.confidence: must be a finite number (got ${lesson.confidence})`);
     }
     confidence = Math.min(1, Math.max(0, lesson.confidence));
   }

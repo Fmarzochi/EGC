@@ -8,6 +8,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
@@ -382,7 +383,7 @@ function computeLessonDecay(confidence: number, lastRecalledIso: string | null, 
 }
 
 function generateLessonId(): string {
-  return `lesson-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `lesson-${Date.now()}-${randomUUID().slice(0, 8)}`;
 }
 
 async function runLessonDecaySweep(db: Database): Promise<number> {
@@ -579,6 +580,68 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+async function handleLessonSave(db: Database, args: unknown) {
+  const { content, context, tags, initial_confidence } = LessonSaveSchema.parse(args);
+  const id = generateLessonId();
+  const now = new Date().toISOString();
+  await writeArbitrator.enqueue(async () => {
+    await db.run(
+      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0)`,
+      [id, content, context, initial_confidence, now, tags ?? null]
+    );
+  });
+  log('INFO', 'Lesson saved', { id, context });
+  return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: tags ?? null, createdAt: now }, null, 2) }] };
+}
+
+async function handleLessonRecall(db: Database, args: unknown) {
+  const { query, min_confidence, limit } = LessonRecallSchema.parse(args);
+  const lowerQuery = query.toLowerCase();
+  const rows = await db.all<LessonRow[]>(
+    `SELECT * FROM lessons
+     WHERE archived = 0 AND confidence >= ?
+     ORDER BY confidence DESC, created_at DESC
+     LIMIT ?`,
+    [min_confidence, limit * 3]
+  );
+  const matched = rows
+    .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
+    .slice(0, limit)
+    .map(mapLessonRow);
+
+  const now = new Date().toISOString();
+  if (matched.length > 0) {
+    await writeArbitrator.enqueue(async () => {
+      for (const lesson of matched) {
+        await db.run('UPDATE lessons SET last_recalled = ? WHERE id = ?', [now, lesson.id]);
+      }
+    });
+  }
+
+  log('INFO', 'Lessons recalled', { query, count: matched.length });
+  return { content: [{ type: "text", text: JSON.stringify({ lessons: matched, meta: { query, min_confidence, limit, count: matched.length } }, null, 2) }] };
+}
+
+async function handleLessonReinforce(db: Database, args: unknown) {
+  const { id } = LessonReinforceSchema.parse(args);
+  const row = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
+  if (!row) {
+    throw new McpError(ErrorCode.InvalidRequest, `Lesson not found: ${id}`);
+  }
+  const newConfidence = Math.min(1, row.confidence + LESSON_REINFORCE_DELTA);
+  const now = new Date().toISOString();
+  await writeArbitrator.enqueue(async () => {
+    await db.run(
+      'UPDATE lessons SET confidence = ?, last_reinforced = ?, archived = 0 WHERE id = ?',
+      [newConfidence, now, id]
+    );
+  });
+  const updated = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
+  log('INFO', 'Lesson reinforced', { id, confidence: newConfidence });
+  return { content: [{ type: "text", text: JSON.stringify(updated ? mapLessonRow(updated) : { id, confidence: newConfidence }, null, 2) }] };
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const db = await getDb();
   try {
@@ -689,67 +752,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text: JSON.stringify(entries.map(e => ({ key: e.key, value: e.value, expires_at: e.expires_at })), null, 2) }] };
       }
 
-      case "lesson_save": {
-        const { content, context, tags, initial_confidence } = LessonSaveSchema.parse(request.params.arguments);
-        const id = generateLessonId();
-        const now = new Date().toISOString();
-        await writeArbitrator.enqueue(async () => {
-          await db.run(
-            `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived)
-             VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0)`,
-            [id, content, context, initial_confidence, now, tags ?? null]
-          );
-        });
-        log('INFO', 'Lesson saved', { id, context });
-        return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: tags ?? null, createdAt: now }, null, 2) }] };
-      }
+      case "lesson_save":
+        return await handleLessonSave(db, request.params.arguments);
 
-      case "lesson_recall": {
-        const { query, min_confidence, limit } = LessonRecallSchema.parse(request.params.arguments);
-        const lowerQuery = query.toLowerCase();
-        const rows = await db.all<LessonRow[]>(
-          `SELECT * FROM lessons
-           WHERE archived = 0 AND confidence >= ?
-           ORDER BY confidence DESC, created_at DESC
-           LIMIT ?`,
-          [min_confidence, limit * 3]
-        );
-        const matched = rows
-          .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
-          .slice(0, limit)
-          .map(mapLessonRow);
+      case "lesson_recall":
+        return await handleLessonRecall(db, request.params.arguments);
 
-        const now = new Date().toISOString();
-        if (matched.length > 0) {
-          await writeArbitrator.enqueue(async () => {
-            for (const lesson of matched) {
-              await db.run('UPDATE lessons SET last_recalled = ? WHERE id = ?', [now, lesson.id]);
-            }
-          });
-        }
-
-        log('INFO', 'Lessons recalled', { query, count: matched.length });
-        return { content: [{ type: "text", text: JSON.stringify({ lessons: matched, meta: { query, min_confidence, limit, count: matched.length } }, null, 2) }] };
-      }
-
-      case "lesson_reinforce": {
-        const { id } = LessonReinforceSchema.parse(request.params.arguments);
-        const row = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
-        if (!row) {
-          throw new McpError(ErrorCode.InvalidRequest, `Lesson not found: ${id}`);
-        }
-        const newConfidence = Math.min(1, row.confidence + LESSON_REINFORCE_DELTA);
-        const now = new Date().toISOString();
-        await writeArbitrator.enqueue(async () => {
-          await db.run(
-            'UPDATE lessons SET confidence = ?, last_reinforced = ?, archived = 0 WHERE id = ?',
-            [newConfidence, now, id]
-          );
-        });
-        const updated = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
-        log('INFO', 'Lesson reinforced', { id, confidence: newConfidence });
-        return { content: [{ type: "text", text: JSON.stringify(updated ? mapLessonRow(updated) : { id, confidence: newConfidence }, null, 2) }] };
-      }
+      case "lesson_reinforce":
+        return await handleLessonReinforce(db, request.params.arguments);
 
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${request.params.name}`);
