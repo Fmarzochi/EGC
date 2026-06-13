@@ -1,0 +1,49 @@
+language: "en-US"
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+
+  path_filters:
+    # Exclude pure prompt/content markdown files from the 150-file review limit.
+    # These files contain no executable code and only need prose quality checks,
+    # which are handled separately. Keeping them in scope would exhaust the
+    # per-PR file budget on style-only PRs.
+    - "!skills/**"
+    - "!.agents/skills/**"
+    - "!agents/**"
+    - "!commands/**"
+    - "!examples/**"
+    - "!rules/**"
+    - "!memory/**"
+    - "!.cursor/skills/**"
+    - "!.kiro/skills/**"
+    - "!.opencode/prompts/**"
+
+    # Always review code, configuration, and infrastructure.
+    - "scripts/**"
+    - "mcp/**"
+    - "src/**"
+    - "tests/**"
+    - "hooks/**"
+    - "schemas/**"
+    - "docs/**"
+    - "manifests/**"
+    - ".github/**"
+    - "*.json"
+    - "*.yaml"
+    - "*.yml"
+    - "*.ts"
+    - "*.js"
+    - "*.sh"
+    - "*.ps1"
+    - "README.md"
+    - "CHANGELOG.md"
+    - "AGENTS.md"
+    - "CLAUDE.md"
+    - "GEMINI.md"
