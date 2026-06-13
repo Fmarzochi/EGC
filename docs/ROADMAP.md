@@ -2,12 +2,16 @@
 
 This document describes the planned development direction for EGC (Extended Global Context).
 
-## v1.1.0 — Quality and Coverage
+## v1.1.0 — Memory Expansion (Released 2026-06-13)
 
-- Statement coverage >= 80% for all production scripts
-- ESLint cyclomatic complexity violations eliminated across all files
-- GPG-signed release tags
-- Automated dependency audit in CI
+- `working_memory` — transient key-value store with TTL (issue #138)
+- `lessons` — cross-session knowledge with confidence decay (issue #140)
+- `detect_patterns` — behavioral analysis from hook events (issue #141)
+- `compress_observations` — rule-based observation compression (issue #142)
+- `search_history` — BM25 full-text search over decisions (issue #139)
+- Branch-aware project state — `get_state`/`update_state` scope per git branch (issue #137)
+- State consolidation pipeline on each `update_state` call (issue #143)
+- SessionStart hook runs idempotently across harness reinstalls
 
 ## v1.2.0 — Ecosystem Expansion
 
