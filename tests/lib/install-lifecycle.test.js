@@ -18,6 +18,13 @@ const {
   createInstallState,
   writeInstallState,
 } = require('../../scripts/lib/install-state');
+const {
+  HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  applySessionStartHookToFile,
+  createSessionStartHookMergeOperation,
+  resolveHookScriptDestination,
+  resolveSettingsPath,
+} = require('../../scripts/lib/claude-settings-hooks');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const CURRENT_PACKAGE_VERSION = JSON.parse(
@@ -93,6 +100,58 @@ function writeCursorState(projectRoot, overrides = {}) {
     installStatePath: options.installStatePath,
     state: options,
   };
+}
+
+function writeClaudeSessionHookState(homeDir, options = {}) {
+  const targetRoot = path.join(homeDir, '.claude');
+  const installStatePath = path.join(targetRoot, 'egc', 'install-state.json');
+  const settingsPath = resolveSettingsPath(targetRoot);
+  const hookScriptPath = resolveHookScriptDestination(targetRoot);
+  const hookScriptSourcePath = path.join(REPO_ROOT, HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+
+  fs.mkdirSync(path.dirname(hookScriptPath), { recursive: true });
+  fs.copyFileSync(hookScriptSourcePath, hookScriptPath);
+  if (options.existingSettings) {
+    fs.writeFileSync(settingsPath, JSON.stringify(options.existingSettings, null, 2));
+  }
+  applySessionStartHookToFile(settingsPath, hookScriptPath);
+
+  writeState(installStatePath, {
+    adapter: { id: 'claude-home', target: 'claude', kind: 'home' },
+    targetRoot,
+    installStatePath,
+    request: {
+      profile: null,
+      modules: [],
+      includeComponents: [],
+      excludeComponents: [],
+      legacyLanguages: [],
+      legacyMode: true,
+    },
+    resolution: {
+      selectedModules: [],
+      skippedModules: [],
+    },
+    operations: [
+      {
+        kind: 'copy-file',
+        moduleId: 'claude-session-state-hook',
+        sourceRelativePath: HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+        destinationPath: hookScriptPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      },
+      createSessionStartHookMergeOperation(targetRoot),
+    ],
+    source: {
+      repoVersion: CURRENT_PACKAGE_VERSION,
+      repoCommit: 'abc123',
+      manifestVersion: CURRENT_MANIFEST_VERSION,
+    },
+  });
+
+  return { targetRoot, installStatePath, settingsPath, hookScriptPath };
 }
 
 function managedOperation(kind, destinationPath, overrides = {}) {
@@ -1598,6 +1657,132 @@ function runTests() {
       cleanup(homeDir);
       cleanup(unsupportedProjectRoot);
       cleanup(missingPayloadProjectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('doctor reports a removed Claude SessionStart hook as drift', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeClaudeSessionHookState(homeDir);
+
+      let report = buildDoctorReport({
+        homeDir,
+        projectRoot,
+        targets: ['claude'],
+      });
+      assert.strictEqual(report.results[0].status, 'ok');
+
+      fs.writeFileSync(installed.settingsPath, JSON.stringify({
+        hooks: {
+          SessionStart: [
+            { matcher: 'startup', hooks: [{ type: 'command', command: 'echo third-party' }] },
+          ],
+        },
+      }, null, 2));
+
+      report = buildDoctorReport({
+        homeDir,
+        projectRoot,
+        targets: ['claude'],
+      });
+      assert.strictEqual(report.results[0].status, 'warning');
+      const driftIssue = report.results[0].issues.find(
+        issue => issue.code === 'drifted-managed-files'
+      );
+      assert.ok(driftIssue, 'Should flag the missing hook entry as drift');
+      assert.ok(driftIssue.paths.includes(installed.settingsPath));
+
+      fs.rmSync(installed.settingsPath);
+      report = buildDoctorReport({
+        homeDir,
+        projectRoot,
+        targets: ['claude'],
+      });
+      assert.strictEqual(report.results[0].status, 'error');
+      assert.ok(report.results[0].issues.some(issue => issue.code === 'missing-managed-files'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair restores the Claude SessionStart hook without touching third-party hooks', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeClaudeSessionHookState(homeDir);
+      fs.writeFileSync(installed.settingsPath, JSON.stringify({
+        model: 'opus',
+        hooks: {
+          SessionStart: [
+            { matcher: 'startup', hooks: [{ type: 'command', command: 'echo third-party' }] },
+          ],
+        },
+      }, null, 2));
+
+      const result = repairInstalledStates({
+        homeDir,
+        projectRoot,
+        targets: ['claude'],
+      });
+      assert.strictEqual(result.results[0].status, 'repaired');
+      assert.ok(result.results[0].repairedPaths.includes(installed.settingsPath));
+
+      const settings = JSON.parse(fs.readFileSync(installed.settingsPath, 'utf8'));
+      assert.strictEqual(settings.model, 'opus');
+      assert.strictEqual(settings.hooks.SessionStart.length, 2);
+      assert.strictEqual(settings.hooks.SessionStart[0].hooks[0].command, 'echo third-party');
+      assert.ok(
+        settings.hooks.SessionStart[1].hooks[0].command.includes(installed.hookScriptPath)
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('uninstall removes only the EGC Claude hook and keeps settings.json', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeClaudeSessionHookState(homeDir, {
+        existingSettings: {
+          model: 'opus',
+          hooks: {
+            SessionStart: [
+              { matcher: 'startup', hooks: [{ type: 'command', command: 'echo third-party' }] },
+            ],
+            PreToolUse: [
+              { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo guard' }] },
+            ],
+          },
+        },
+      });
+
+      const result = uninstallInstalledStates({
+        homeDir,
+        projectRoot,
+        targets: ['claude'],
+      });
+      assert.strictEqual(result.results[0].status, 'uninstalled');
+      assert.ok(!fs.existsSync(installed.hookScriptPath));
+      assert.ok(!fs.existsSync(installed.installStatePath));
+
+      const settings = JSON.parse(fs.readFileSync(installed.settingsPath, 'utf8'));
+      assert.strictEqual(settings.model, 'opus');
+      assert.deepStrictEqual(settings.hooks.SessionStart, [
+        { matcher: 'startup', hooks: [{ type: 'command', command: 'echo third-party' }] },
+      ]);
+      assert.deepStrictEqual(settings.hooks.PreToolUse, [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo guard' }] },
+      ]);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
     }
   })) passed++; else failed++;
 

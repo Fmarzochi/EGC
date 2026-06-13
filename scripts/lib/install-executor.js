@@ -12,6 +12,7 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
+const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const GEMINI_EGC_NAMESPACE = 'egc';
@@ -584,6 +585,10 @@ function createLegacyCompatInstallPlan(options = {}) {
 }
 
 function materializeScaffoldOperation(sourceRoot, operation) {
+  if (operation.kind === HOOK_OPERATION_KIND) {
+    return [{ ...operation, scaffoldOnly: false }];
+  }
+
   if (operation.kind === 'merge-json') {
     return [{
       kind: 'merge-json',

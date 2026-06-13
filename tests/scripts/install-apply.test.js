@@ -324,6 +324,100 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('installs the Claude Code SessionStart state hook and records install-state', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--target', 'claude', '--modules', 'workflow-quality'], {
+        cwd: projectDir,
+        homeDir,
+      });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const claudeRoot = path.join(homeDir, '.claude');
+      const hookScriptPath = path.join(claudeRoot, 'egc', 'hooks', 'claude-session-start.js');
+      assert.ok(fs.existsSync(hookScriptPath), 'Should copy the session-start hook script');
+
+      const settings = readJson(path.join(claudeRoot, 'settings.json'));
+      const sessionStartGroups = settings.hooks.SessionStart;
+      assert.strictEqual(sessionStartGroups.length, 1);
+      assert.ok(
+        sessionStartGroups[0].hooks[0].command.includes(hookScriptPath),
+        'SessionStart hook should invoke the installed EGC script'
+      );
+
+      const state = readJson(path.join(claudeRoot, 'egc', 'install-state.json'));
+      assert.ok(
+        state.operations.some(operation => (
+          operation.kind === 'merge-claude-settings-hooks'
+          && operation.destinationPath === path.join(claudeRoot, 'settings.json')
+          && operation.hookScriptPath === hookScriptPath
+        )),
+        'Should record the settings.json hook merge in install-state'
+      );
+      assert.ok(
+        state.operations.some(operation => (
+          operation.kind === 'copy-file'
+          && operation.destinationPath === hookScriptPath
+        )),
+        'Should record the hook script copy in install-state'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('claude reinstall is idempotent and preserves third-party settings.json content', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const claudeRoot = path.join(homeDir, '.claude');
+      const settingsPath = path.join(claudeRoot, 'settings.json');
+      fs.mkdirSync(claudeRoot, { recursive: true });
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        model: 'opus',
+        hooks: {
+          SessionStart: [
+            { matcher: 'startup', hooks: [{ type: 'command', command: 'echo third-party' }] },
+          ],
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo guard' }] },
+          ],
+        },
+      }, null, 2));
+
+      const first = run(['--target', 'claude', '--modules', 'workflow-quality'], {
+        cwd: projectDir,
+        homeDir,
+      });
+      assert.strictEqual(first.code, 0, first.stderr);
+      const second = run(['--target', 'claude', '--modules', 'workflow-quality'], {
+        cwd: projectDir,
+        homeDir,
+      });
+      assert.strictEqual(second.code, 0, second.stderr);
+
+      const settings = readJson(settingsPath);
+      assert.strictEqual(settings.model, 'opus');
+      assert.strictEqual(settings.hooks.PreToolUse.length, 1);
+
+      const sessionStartGroups = settings.hooks.SessionStart;
+      assert.strictEqual(sessionStartGroups.length, 2, 'Reinstall must not duplicate the EGC hook');
+      assert.strictEqual(sessionStartGroups[0].hooks[0].command, 'echo third-party');
+      assert.ok(
+        sessionStartGroups[1].hooks[0].command.includes(
+          path.join(claudeRoot, 'egc', 'hooks', 'claude-session-start.js')
+        )
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('preserves existing top-level Gemini rules and skills during managed install', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

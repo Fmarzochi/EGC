@@ -11,6 +11,12 @@ const {
   getInstallTargetAdapter,
   listInstallTargetAdapters,
 } = require('./install-targets/registry');
+const {
+  HOOK_OPERATION_KIND,
+  applySessionStartHookToFile,
+  inspectSessionStartHookFile,
+  removeSessionStartHookFromFile,
+} = require('./claude-settings-hooks');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
 
@@ -357,6 +363,11 @@ function executeRepairOperation(repoRoot, operation) {
     return;
   }
 
+  if (operation.kind === HOOK_OPERATION_KIND) {
+    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+    return;
+  }
+
   throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
 }
 
@@ -437,11 +448,19 @@ function uninstallRemove(operation) {
   return { removedPaths: [], cleanupTargets: [] };
 }
 
+function uninstallClaudeSettingsHook(operation) {
+  // Strips only the EGC-managed SessionStart entry. The settings file itself
+  // is never deleted because Claude Code and the user own its other keys.
+  removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  return { removedPaths: [], cleanupTargets: [] };
+}
+
 const UNINSTALL_HANDLERS = {
   'copy-file': uninstallCopyFile,
   'render-template': uninstallRenderTemplate,
   'merge-json': uninstallMergeJson,
   'remove': uninstallRemove,
+  [HOOK_OPERATION_KIND]: uninstallClaudeSettingsHook,
 };
 
 function executeUninstallOperation(operation) {
@@ -525,6 +544,14 @@ function inspectManagedOperation(repoRoot, operation) {
 
   if (operation.kind === 'merge-json') {
     return inspectMergeJsonOperation(operation, destinationPath);
+  }
+
+  if (operation.kind === HOOK_OPERATION_KIND) {
+    return inspectResult(
+      inspectSessionStartHookFile(destinationPath, operation.hookScriptPath),
+      operation,
+      destinationPath
+    );
   }
 
   return inspectResult('unverified', operation, destinationPath);
