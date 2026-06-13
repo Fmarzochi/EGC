@@ -6,6 +6,19 @@ const {
   isForeignPlatformPath,
   normalizeRelativePath,
 } = require('./helpers');
+
+const CLAUDE_EXCLUDED_SOURCE_PREFIXES = [
+  'mcp-configs',
+  'scripts/auto-update.js',
+  'scripts/setup-package-manager.js',
+];
+
+function isClaudeExcludedPath(sourceRelativePath) {
+  const normalized = normalizeRelativePath(sourceRelativePath);
+  return CLAUDE_EXCLUDED_SOURCE_PREFIXES.some(
+    prefix => normalized === prefix || normalized.startsWith(`${prefix}/`)
+  );
+}
 const {
   HOOK_MODULE_ID,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -47,7 +60,7 @@ module.exports = createInstallTargetAdapter({
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
-        .filter(p => !isForeignPlatformPath(p, adapter.target))
+        .filter(p => !isForeignPlatformPath(p, adapter.target) && !isClaudeExcludedPath(p))
         .flatMap(sourceRelativePath => {
           const normalizedPath = normalizeRelativePath(sourceRelativePath);
 
