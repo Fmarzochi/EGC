@@ -45,6 +45,6 @@ The EGC runtime routes tasks to the appropriate agent using the execution orches
 ## MCP Servers
 
 - `egc-guardian` — `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
-- `egc-memory` — `get_state`, `update_state`, `store_decision`, `query_history`
+- `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.

@@ -9,6 +9,7 @@ import os from 'os';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import { z } from 'zod';
+import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -57,6 +58,7 @@ function log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: Re
 }
 
 let dbInstance: Database | null = null;
+let searchIndexReady = false;
 
 // ============================================================================
 // SQLite Arbitration & Message Queue (Cross-Runtime Synchronization)
@@ -173,6 +175,23 @@ async function runMigrations(db: Database, dbDir: string) {
       CREATE TABLE IF NOT EXISTS operational_state (id TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, context TEXT, decision TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
     `);
+
+    // Migration 2: FTS5 index over decisions for BM25 keyword search.
+    // Triggers keep the index in sync incrementally on every write; the
+    // one-time rebuild backfills rows stored before this migration existed.
+    const hasV2 = await db.get('SELECT version FROM schema_migrations WHERE version = 2');
+    try {
+      if (!hasV2) {
+        await createSearchIndex(db);
+        await rebuildSearchIndex(db);
+        await db.run('INSERT INTO schema_migrations (version) VALUES (2)');
+      }
+      searchIndexReady = true;
+    } catch (e) {
+      // SQLite builds without FTS5 keep working; only search_history is disabled.
+      searchIndexReady = false;
+      log('WARN', 'FTS5 unavailable, search_history disabled', { error: String(e) });
+    }
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {}
   }
@@ -291,6 +310,12 @@ const StoreDecisionSchema = z.object({
   decision: z.string().min(1).max(10000)
 });
 
+const SearchHistorySchema = z.object({
+  query: z.string().min(1).max(1000),
+  limit: z.number().min(1).max(100).optional().default(10),
+  min_score: z.number().min(0).max(1).optional().default(0)
+});
+
 const QueryHistorySchema = z.object({
   limit: z.number().min(1).max(100).optional().default(10),
   offset: z.number().min(0).optional().default(0)
@@ -321,6 +346,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       { name: "get_project_state", description: "Returns server health metadata for the active project: storage engine (sqlite-wal) and write arbitration mode (MessageQueue). Use this to verify the egc-memory server is running and responsive before calling get_state or update_state.", inputSchema: { type: "object", properties: {} } },
       { name: "store_decision", description: "Persist a single decision to the SQLite store with write-lock arbitration to prevent concurrent conflicts. Provide a short context label and the decision text. Decisions stored here are queryable via query_history and surfaced in get_state.", inputSchema: { type: "object", properties: { context: { type: "string", description: "Short label for the decision context, e.g. 'architecture' or 'dependencies'." }, decision: { type: "string", description: "The decision text to persist." } }, required: ["context", "decision"] } },
       { name: "query_history", description: "Return a paginated list of past decisions stored in the SQLite state. Each entry includes the decision text, context label, and timestamp. Use limit and offset for pagination. Useful for auditing what was decided without loading the full project state.", inputSchema: { type: "object", properties: { limit: { type: "number", description: "Maximum number of decisions to return. Defaults to 20." }, offset: { type: "number", description: "Number of decisions to skip for pagination. Defaults to 0." } } } },
+      { name: "search_history", description: "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Each result includes the decision content, context label, timestamp, and a score normalized to [0, 1] where 1 is the best match in the result set. Use this to find past decisions by topic instead of paging through query_history.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Keywords to search for, e.g. 'authentication jwt'." }, limit: { type: "number", description: "Maximum number of results to return. Defaults to 10." }, min_score: { type: "number", description: "Minimum normalized relevance score between 0 and 1. Defaults to 0." } }, required: ["query"] } },
       {
         name: "get_state",
         description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. Call this at the START of every session to restore context.",
@@ -369,6 +395,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { limit, offset } = QueryHistorySchema.parse(request.params.arguments || {});
         const rows = await db.all('SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
         return { content: [{ type: "text", text: JSON.stringify({ data: rows, meta: { limit, offset } }, null, 2) }] };
+      }
+      case "search_history": {
+        const { query, limit, min_score } = SearchHistorySchema.parse(request.params.arguments);
+        if (!searchIndexReady) {
+          throw new McpError(ErrorCode.InvalidRequest, 'search_history is unavailable: this SQLite build has no FTS5 support.');
+        }
+        const results = await searchDecisions(db, query, { limit, minScore: min_score });
+        log('INFO', 'Decision history searched', { results: results.length });
+        return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score, count: results.length } }, null, 2) }] };
       }
       case "get_project_state": {
         return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: "sqlite-wal", arbitration: "MessageQueue" }) }] };

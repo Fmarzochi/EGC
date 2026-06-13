@@ -52,6 +52,6 @@ update_state({
 Both servers must be registered in your MCP config (`.mcp.json`):
 
 - `egc-guardian` — `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
-- `egc-memory` — `get_state`, `update_state`, `store_decision`, `query_history`
+- `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.

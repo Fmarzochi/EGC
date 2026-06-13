@@ -26,6 +26,10 @@
       "description": "Query past decisions. Returns a paginated list of decisions stored in the session memory."
     },
     {
+      "name": "search_history",
+      "description": "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Returns decisions ordered by relevance with normalized scores."
+    },
+    {
       "name": "get_project_state",
       "description": "Get current state for the active project. Returns server status metadata including storage engine and arbitration mode."
     },
