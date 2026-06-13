@@ -37,7 +37,7 @@ function extractCommand(event: RuntimeEvent): string | null {
   const p = event.payload;
   if (!p || typeof p !== 'object') return null;
 
-  if (event.eventType === 'PreToolUse' || event.eventType === 'PostToolUse') {
+  if (event.eventType === 'PreToolUse') {
     const tool = p['tool'];
     if (typeof tool === 'string' && tool) return tool;
     const toolName = p['tool_name'];
@@ -63,11 +63,15 @@ function extractErrorKey(event: RuntimeEvent): string | null {
   const p = event.payload;
   if (!p || typeof p !== 'object') return null;
 
+  const hasErrorSignal =
+    typeof (p['error_code'] ?? p['errorCode'] ?? p['code']) === 'string' ||
+    typeof (p['error'] ?? p['message'] ?? p['errorMessage']) === 'string';
+
   const isErrorEvent =
     event.eventType === 'error' ||
     event.eventType === 'Error' ||
     event.eventType === 'ToolError' ||
-    event.eventType === 'PostToolUse';
+    (event.eventType === 'PostToolUse' && hasErrorSignal);
 
   if (!isErrorEvent) return null;
 
@@ -130,6 +134,42 @@ interface CountBucket {
   timestamps: string[];
 }
 
+function buildCommandPattern(cmd: string, bucket: CountBucket, windowDays: number): DetectedPattern {
+  const sorted = bucket.timestamps.slice().sort((a, b) => a.localeCompare(b));
+  const firstSeen = sorted[0];
+  const lastSeen = sorted.at(-1) ?? sorted[0];
+  const frequency = windowDays > 0 ? bucket.count / windowDays : bucket.count;
+  return {
+    type: 'repeated_command',
+    description: `Command "${cmd}" invoked ${bucket.count} times in ${windowDays} days`,
+    occurrences: bucket.count,
+    suggestion: buildCommandSuggestion(cmd, bucket.count),
+    key: `command:${cmd}`,
+    frequency,
+    firstSeen,
+    lastSeen,
+    suggestedAutomation: null,
+  };
+}
+
+function buildErrorPattern(errKey: string, bucket: CountBucket, windowDays: number): DetectedPattern {
+  const sorted = bucket.timestamps.slice().sort((a, b) => a.localeCompare(b));
+  const firstSeen = sorted[0];
+  const lastSeen = sorted.at(-1) ?? sorted[0];
+  const frequency = windowDays > 0 ? bucket.count / windowDays : bucket.count;
+  return {
+    type: 'recurring_error',
+    description: `Error "${errKey}" occurred ${bucket.count} times in ${windowDays} days`,
+    occurrences: bucket.count,
+    suggestion: buildErrorSuggestion(errKey, bucket.count),
+    key: `error:${errKey}`,
+    frequency,
+    firstSeen,
+    lastSeen,
+    suggestedAutomation: null,
+  };
+}
+
 export function detectPatternsFromEvents(
   events: RuntimeEvent[],
   windowDays: number,
@@ -141,22 +181,18 @@ export function detectPatternsFromEvents(
   for (const event of events) {
     const cmd = extractCommand(event);
     if (cmd) {
-      if (!commandCounts.has(cmd)) {
-        commandCounts.set(cmd, { count: 0, timestamps: [] });
-      }
-      const bucket = commandCounts.get(cmd) as CountBucket;
+      const bucket = commandCounts.get(cmd) ?? { count: 0, timestamps: [] };
       bucket.count += 1;
       bucket.timestamps.push(event.timestamp);
+      commandCounts.set(cmd, bucket);
     }
 
     const errKey = extractErrorKey(event);
     if (errKey) {
-      if (!errorCounts.has(errKey)) {
-        errorCounts.set(errKey, { count: 0, timestamps: [] });
-      }
-      const bucket = errorCounts.get(errKey) as CountBucket;
+      const bucket = errorCounts.get(errKey) ?? { count: 0, timestamps: [] };
       bucket.count += 1;
       bucket.timestamps.push(event.timestamp);
+      errorCounts.set(errKey, bucket);
     }
   }
 
@@ -164,44 +200,12 @@ export function detectPatternsFromEvents(
 
   for (const [cmd, bucket] of commandCounts.entries()) {
     if (bucket.count < minOccurrences) continue;
-
-    const sorted = bucket.timestamps.slice().sort();
-    const firstSeen = sorted[0];
-    const lastSeen = sorted[sorted.length - 1];
-    const frequency = windowDays > 0 ? bucket.count / windowDays : bucket.count;
-
-    patterns.push({
-      type: 'repeated_command',
-      description: `Command "${cmd}" invoked ${bucket.count} times in ${windowDays} days`,
-      occurrences: bucket.count,
-      suggestion: buildCommandSuggestion(cmd, bucket.count),
-      key: `command:${cmd}`,
-      frequency,
-      firstSeen,
-      lastSeen,
-      suggestedAutomation: null,
-    });
+    patterns.push(buildCommandPattern(cmd, bucket, windowDays));
   }
 
   for (const [errKey, bucket] of errorCounts.entries()) {
     if (bucket.count < minOccurrences) continue;
-
-    const sorted = bucket.timestamps.slice().sort();
-    const firstSeen = sorted[0];
-    const lastSeen = sorted[sorted.length - 1];
-    const frequency = windowDays > 0 ? bucket.count / windowDays : bucket.count;
-
-    patterns.push({
-      type: 'recurring_error',
-      description: `Error "${errKey}" occurred ${bucket.count} times in ${windowDays} days`,
-      occurrences: bucket.count,
-      suggestion: buildErrorSuggestion(errKey, bucket.count),
-      key: `error:${errKey}`,
-      frequency,
-      firstSeen,
-      lastSeen,
-      suggestedAutomation: null,
-    });
+    patterns.push(buildErrorPattern(errKey, bucket, windowDays));
   }
 
   patterns.sort((a, b) => b.occurrences - a.occurrences);

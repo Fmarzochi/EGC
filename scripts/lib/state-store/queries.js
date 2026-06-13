@@ -567,6 +567,7 @@ function createQueryApi(db) {
       frequency = excluded.frequency,
       last_seen = excluded.last_seen,
       suggested_automation = excluded.suggested_automation,
+      first_seen = MIN(patterns.first_seen, excluded.first_seen),
       window_days = excluded.window_days
   `);
   const listPatternsStatement = db.prepare(`

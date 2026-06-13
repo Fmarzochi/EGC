@@ -13,7 +13,7 @@ if (!fs.existsSync(PATTERNS_BUILD)) {
   process.exit(0);
 }
 
-const { detectPatternsFromEvents } = require(PATTERNS_BUILD);
+const { detectPatternsFromEvents, patternToStoreEntry } = require(PATTERNS_BUILD); // NOSONAR
 const { createStateStore } = require('../../scripts/lib/state-store');
 
 function createTempDir(prefix) {
@@ -237,7 +237,6 @@ async function runTests() {
   // the same file where hooks write runtime events, not the server memory DB.
   if (await test('detect_patterns reads events from state-store DB (same path hooks use)', async () => {
     const BetterSqlite3 = require('better-sqlite3');
-    const { patternToStoreEntry } = require(PATTERNS_BUILD);
 
     const testDir = createTempDir('egc-patterns-acceptance-');
     const stateDbPath = path.join(testDir, 'state.db');
@@ -277,75 +276,79 @@ async function runTests() {
       const minOccurrences = 3;
       const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
 
-      const ssDb = new BetterSqlite3(stateDbPath, { readonly: false });
-      ssDb.pragma('journal_mode = WAL');
-      ssDb.pragma('busy_timeout = 5000');
+      let ssDb;
+      try {
+        ssDb = new BetterSqlite3(stateDbPath, { readonly: false });
+        ssDb.pragma('journal_mode = WAL');
+        ssDb.pragma('busy_timeout = 5000');
 
-      const rawRows = ssDb.prepare(
-        'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC'
-      ).all(cutoff);
+        const rawRows = ssDb.prepare(
+          'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC'
+        ).all(cutoff);
 
-      const events = rawRows.map(row => ({
-        id: row.id,
-        sessionId: row.session_id ?? null,
-        eventType: row.event_type,
-        payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
-        timestamp: row.timestamp,
-      }));
+        const events = rawRows.map(row => ({
+          id: row.id,
+          sessionId: row.session_id ?? null,
+          eventType: row.event_type,
+          payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
+          timestamp: row.timestamp,
+        }));
 
-      const detected = detectPatternsFromEvents(events, windowDays, minOccurrences);
+        const detected = detectPatternsFromEvents(events, windowDays, minOccurrences);
 
-      const upsertStmt = ssDb.prepare(`
-        INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
-        VALUES (@id, @pattern_type, @key, @description, @occurrences, @frequency, @last_seen, @suggested_automation, @first_seen, @window_days)
-        ON CONFLICT(id) DO UPDATE SET
-          pattern_type = excluded.pattern_type,
-          key = excluded.key,
-          description = excluded.description,
-          occurrences = excluded.occurrences,
-          frequency = excluded.frequency,
-          last_seen = excluded.last_seen,
-          suggested_automation = excluded.suggested_automation,
-          window_days = excluded.window_days
-      `);
+        const upsertStmt = ssDb.prepare(`
+          INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
+          VALUES (@id, @pattern_type, @key, @description, @occurrences, @frequency, @last_seen, @suggested_automation, @first_seen, @window_days)
+          ON CONFLICT(id) DO UPDATE SET
+            pattern_type = excluded.pattern_type,
+            key = excluded.key,
+            description = excluded.description,
+            occurrences = excluded.occurrences,
+            frequency = excluded.frequency,
+            last_seen = excluded.last_seen,
+            suggested_automation = excluded.suggested_automation,
+            first_seen = MIN(patterns.first_seen, excluded.first_seen),
+            window_days = excluded.window_days
+        `);
 
-      const persistAll = ssDb.transaction(() => {
-        for (const p of detected) {
-          const entry = patternToStoreEntry(p, windowDays);
-          upsertStmt.run({
-            id: entry.id,
-            pattern_type: entry.patternType,
-            key: entry.key,
-            description: entry.description,
-            occurrences: entry.occurrences,
-            frequency: entry.frequency,
-            last_seen: entry.lastSeen,
-            suggested_automation: entry.suggestedAutomation,
-            first_seen: entry.firstSeen,
-            window_days: entry.windowDays,
-          });
-        }
-      });
-      persistAll();
+        const persistAll = ssDb.transaction(() => {
+          for (const p of detected) {
+            const entry = patternToStoreEntry(p, windowDays);
+            upsertStmt.run({
+              id: entry.id,
+              pattern_type: entry.patternType,
+              key: entry.key,
+              description: entry.description,
+              occurrences: entry.occurrences,
+              frequency: entry.frequency,
+              last_seen: entry.lastSeen,
+              suggested_automation: entry.suggestedAutomation,
+              first_seen: entry.firstSeen,
+              window_days: entry.windowDays,
+            });
+          }
+        });
+        persistAll();
 
-      // Verify patterns were detected from the events written by the state-store API.
-      assert.ok(detected.length >= 2, `expected at least 2 patterns, got ${detected.length}`);
+        // Verify patterns were detected from the events written by the state-store API.
+        assert.ok(detected.length >= 2, `expected at least 2 patterns, got ${detected.length}`);
 
-      const bashPattern = detected.find(p => p.key === 'command:Bash');
-      assert.ok(bashPattern, 'should detect repeated Bash command');
-      assert.strictEqual(bashPattern.occurrences, 5, 'bash command should appear 5 times');
+        const bashPattern = detected.find(p => p.key === 'command:Bash');
+        assert.ok(bashPattern, 'should detect repeated Bash command');
+        assert.strictEqual(bashPattern.occurrences, 5, 'bash command should appear 5 times');
 
-      const errPattern = detected.find(p => p.key === 'error:ENOENT');
-      assert.ok(errPattern, 'should detect recurring ENOENT error');
-      assert.strictEqual(errPattern.occurrences, 3, 'ENOENT should appear 3 times');
+        const errPattern = detected.find(p => p.key === 'error:ENOENT');
+        assert.ok(errPattern, 'should detect recurring ENOENT error');
+        assert.strictEqual(errPattern.occurrences, 3, 'ENOENT should appear 3 times');
 
-      // Verify patterns were persisted into the same state-store DB.
-      const persistedRows = ssDb.prepare('SELECT * FROM patterns ORDER BY occurrences DESC').all();
-      ssDb.close();
-
-      assert.ok(persistedRows.length >= 2, 'patterns should be persisted in the state-store DB');
-      assert.ok(persistedRows.some(r => r.key === 'command:Bash'), 'Bash pattern should be in state-store DB');
-      assert.ok(persistedRows.some(r => r.key === 'error:ENOENT'), 'ENOENT pattern should be in state-store DB');
+        // Verify patterns were persisted into the same state-store DB.
+        const persistedRows = ssDb.prepare('SELECT * FROM patterns ORDER BY occurrences DESC').all();
+        assert.ok(persistedRows.length >= 2, 'patterns should be persisted in the state-store DB');
+        assert.ok(persistedRows.some(r => r.key === 'command:Bash'), 'Bash pattern should be in state-store DB');
+        assert.ok(persistedRows.some(r => r.key === 'error:ENOENT'), 'ENOENT pattern should be in state-store DB');
+      } finally {
+        if (ssDb) ssDb.close();
+      }
     } finally {
       if (savedEnv === undefined) {
         delete process.env.EGC_STATE_DB;

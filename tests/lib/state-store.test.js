@@ -269,20 +269,22 @@ async function runTests() {
       const firstMigrations = firstStore.getAppliedMigrations();
       firstStore.close();
 
-      assert.strictEqual(firstMigrations.length, 3);
+      assert.strictEqual(firstMigrations.length, 4);
       assert.strictEqual(firstMigrations[0].version, 1);
       assert.strictEqual(firstMigrations[1].version, 2);
       assert.strictEqual(firstMigrations[2].version, 3);
+      assert.strictEqual(firstMigrations[3].version, 4);
       assert.ok(fs.existsSync(expectedPath));
 
       const secondStore = await createStateStore({ homeDir });
       const secondMigrations = secondStore.getAppliedMigrations();
       secondStore.close();
 
-      assert.strictEqual(secondMigrations.length, 3);
+      assert.strictEqual(secondMigrations.length, 4);
       assert.strictEqual(secondMigrations[0].version, 1);
       assert.strictEqual(secondMigrations[1].version, 2);
       assert.strictEqual(secondMigrations[2].version, 3);
+      assert.strictEqual(secondMigrations[3].version, 4);
     } finally {
       cleanupTempDir(homeDir);
     }
@@ -298,7 +300,7 @@ async function runTests() {
 
       const store = await createStateStore({ dbPath: ':memory:' });
       assert.strictEqual(store.dbPath, ':memory:');
-      assert.strictEqual(store.getAppliedMigrations().length, 3);
+      assert.strictEqual(store.getAppliedMigrations().length, 4);
       store.close();
 
       assert.ok(!fs.existsSync(path.join(tempDir, ':memory:')));

@@ -816,6 +816,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await ssDb.exec('PRAGMA journal_mode = WAL;');
             await ssDb.exec('PRAGMA busy_timeout = 5000;');
+            await ssDb.exec(`
+              CREATE TABLE IF NOT EXISTS patterns (
+                id TEXT PRIMARY KEY,
+                pattern_type TEXT NOT NULL,
+                key TEXT NOT NULL,
+                description TEXT NOT NULL,
+                occurrences INTEGER NOT NULL DEFAULT 1,
+                frequency REAL NOT NULL DEFAULT 0,
+                last_seen TEXT NOT NULL,
+                suggested_automation TEXT,
+                first_seen TEXT NOT NULL,
+                window_days INTEGER NOT NULL DEFAULT 7
+              );
+            `);
 
             const rawEvents = await ssDb.all<Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>>(
               'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC',
@@ -843,6 +857,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 frequency = excluded.frequency,
                 last_seen = excluded.last_seen,
                 suggested_automation = excluded.suggested_automation,
+                first_seen = MIN(patterns.first_seen, excluded.first_seen),
                 window_days = excluded.window_days
             `;
 
@@ -892,7 +907,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({ patterns: output, meta: { window_days, min_occurrences, events_analyzed: events.length } }, null, 2)
+            text: JSON.stringify({ success: true, data: { patterns: output }, meta: { window_days, min_occurrences, events_analyzed: events.length } }, null, 2)
           }]
         };
       }
