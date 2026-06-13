@@ -4,8 +4,21 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const sqlite3 = require('../../mcp/servers/egc-memory/node_modules/sqlite3');
-const { open } = require('../../mcp/servers/egc-memory/node_modules/sqlite');
+
+const SERVER_ROOT = path.join(__dirname, '../../mcp/servers/egc-memory');
+const MODULE_PATH = path.join(SERVER_ROOT, 'build', 'working-memory.js');
+const SQLITE3_PATH = path.join(SERVER_ROOT, 'node_modules', 'sqlite3');
+const SQLITE_PATH = path.join(SERVER_ROOT, 'node_modules', 'sqlite');
+
+if (!fs.existsSync(MODULE_PATH) || !fs.existsSync(SQLITE3_PATH) || !fs.existsSync(SQLITE_PATH)) {
+  console.error(
+    `[SKIP] Missing ${MODULE_PATH} or server dependencies. Run 'npm ci && npm run build' in mcp/servers/egc-memory first.`
+  );
+  process.exit(0);
+}
+
+const sqlite3 = require(SQLITE3_PATH);
+const { open } = require(SQLITE_PATH);
 
 const {
   createWorkingMemoryTable,
@@ -14,7 +27,7 @@ const {
   getWorkingMemory,
   listWorkingMemory,
   SESSION_TTL_SECONDS,
-} = require('../../mcp/servers/egc-memory/build/working-memory');
+} = require(MODULE_PATH);
 
 function makeTmpDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
