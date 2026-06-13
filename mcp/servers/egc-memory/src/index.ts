@@ -11,6 +11,13 @@ import { execSync } from 'child_process';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import {
+  createWorkingMemoryTable,
+  sweepExpired,
+  setWorkingMemory,
+  getWorkingMemory,
+  listWorkingMemory,
+} from './working-memory';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -193,6 +200,13 @@ async function runMigrations(db: Database, dbDir: string) {
       searchIndexReady = false;
       log('WARN', 'FTS5 unavailable, search_history disabled', { error: String(e) });
     }
+
+    // Migration 3: working_memory table for transient, TTL-bounded entries.
+    const hasV3 = await db.get('SELECT version FROM schema_migrations WHERE version = 3');
+    if (!hasV3) {
+      await createWorkingMemoryTable(db);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (3)');
+    }
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {}
   }
@@ -333,6 +347,22 @@ const UpdateStateSchema = z.object({
   next: z.array(z.string().max(500)).max(10).optional()
 });
 
+const WorkingMemorySetSchema = z.object({
+  project_path: z.string().optional(),
+  key: z.string().min(1).max(200),
+  value: z.string().min(1).max(50000),
+  ttl_seconds: z.number().int().min(1).optional()
+});
+
+const WorkingMemoryGetSchema = z.object({
+  project_path: z.string().optional(),
+  key: z.string().min(1).max(200)
+});
+
+const WorkingMemoryListSchema = z.object({
+  project_path: z.string().optional()
+});
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -362,6 +392,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             avoid: { type: "array", items: { type: "object", properties: { what: { type: "string" }, why: { type: "string" } }, required: ["what"] }, description: "What failed and should not be repeated." },
             preferences: { type: "array", items: { type: "string" }, description: "Coding style, workflow, or communication preferences discovered." },
             next: { type: "array", items: { type: "string" }, description: "What to pick up in the next session." }
+          }
+        }
+      },
+      {
+        name: "working_memory_set",
+        description: "Store a transient key-value entry scoped to the current project. The entry expires automatically after ttl_seconds (default: end-of-session). Use this for debug flags, temporary task context, or any value that should not pollute long-term project state.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." },
+            key: { type: "string", description: "Unique name for this transient entry, e.g. 'debug_flag' or 'active_config'." },
+            value: { type: "string", description: "Value to store. Any string including JSON." },
+            ttl_seconds: { type: "number", description: "How long the entry lives in seconds. Omit to use the session default (86400s)." }
+          },
+          required: ["key", "value"]
+        }
+      },
+      {
+        name: "working_memory_get",
+        description: "Retrieve a single transient entry by key for the current project. Returns null if the entry does not exist or has expired.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." },
+            key: { type: "string", description: "Key of the entry to retrieve." }
+          },
+          required: ["key"]
+        }
+      },
+      {
+        name: "working_memory_list",
+        description: "List all live transient entries for the current project, ordered by key. Expired entries are excluded.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." }
           }
         }
       }
@@ -407,6 +473,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const branch = detectBranch(projPath);
         const resolved = resolveStateRead(getStateDir(), projPath, branch);
 
+        // Sweep expired working memory entries on every session start.
+        const swept = await sweepExpired(db);
+        if (swept > 0) {
+          log('INFO', 'Swept expired working memory entries', { count: swept });
+        }
+
         if (resolved.source === 'none') {
           const branchLine = branch ? `Branch: ${branch}\n` : '';
           return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
@@ -433,6 +505,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0 });
         const branchLine = branch ? `Branch: ${branch}\n` : '';
         return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
+      }
+
+      case "working_memory_set": {
+        const args = WorkingMemorySetSchema.parse(request.params.arguments || {});
+        const projPath = resolveProjectPath(args.project_path);
+        await writeArbitrator.enqueue(async () => {
+          await setWorkingMemory(db, projPath, args.key, args.value, args.ttl_seconds);
+        });
+        const ttl = args.ttl_seconds ?? 86400;
+        log('INFO', 'Working memory entry stored', { project: projPath, key: args.key, ttl });
+        return { content: [{ type: "text", text: `Working memory entry stored: key="${args.key}", ttl=${ttl}s` }] };
+      }
+
+      case "working_memory_get": {
+        const args = WorkingMemoryGetSchema.parse(request.params.arguments || {});
+        const projPath = resolveProjectPath(args.project_path);
+        const entry = await getWorkingMemory(db, projPath, args.key);
+        if (!entry) {
+          return { content: [{ type: "text", text: `null` }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ key: entry.key, value: entry.value, expires_at: entry.expires_at }, null, 2) }] };
+      }
+
+      case "working_memory_list": {
+        const args = WorkingMemoryListSchema.parse(request.params.arguments || {});
+        const projPath = resolveProjectPath(args.project_path);
+        const entries = await listWorkingMemory(db, projPath);
+        return { content: [{ type: "text", text: JSON.stringify(entries.map(e => ({ key: e.key, value: e.value, expires_at: e.expires_at })), null, 2) }] };
       }
 
       default:
