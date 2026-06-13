@@ -228,4 +228,4 @@ Issues to Fix:
 - Re-run phases on significant changes or every 30–60 minutes in long sessions
 - Keep a short loop: `mvn -T 4 test` + spotbugs for quick feedback
 
-**Remember**: Fast feedback beats late surprises. Keep the gate strict,treat warnings as defects in production systems.
+**Remember**: Fast feedback beats late surprises. Keep the gate strict, treat warnings as defects in production systems.
