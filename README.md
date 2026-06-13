@@ -84,20 +84,14 @@ State files live at `~/.egc/state/<project-slug>.md`. One file per project, plai
 
 ## Prompt library
 
-**479 components included** and optional. Install once to get access to 63 agents, 229 skills, and 76 commands written from real experience. Skip them and EGC still gives you persistent memory.
-
-| Type | Count |
-|---|---|
-| Agents | 63 agents |
-| Skills | 229 skills |
-| Commands | 76 commands |
-| Rules | 111 |
+**479 components** — optional. Skip them and EGC still gives you persistent memory.
 
 | Component | Total | Claude Code | Gemini CLI | Claude Code native |
 |---|---|---|---|---|
 | Agents | 63 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
 | Commands | 76 | Shared | Instruction-based | 31 |
 | Skills | 229 | Shared | 10 (native format) | 37 |
+| Rules | 111 | — | — | — |
 
 ---
 
