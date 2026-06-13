@@ -20,8 +20,8 @@ export function sanitizeBranchName(branch: string): string {
   return branch.replace(/\//g, '-').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
-// Reads .git/HEAD directly instead of spawning git: avoids PATH lookup
-// (SonarCloud S4036) and works without git installed.
+// Branch detection reads .git/HEAD instead of spawning git: no PATH
+// lookup and it works on machines without git installed.
 function findGitDir(startPath: string): string | null {
   let current = path.resolve(startPath);
   for (;;) {
