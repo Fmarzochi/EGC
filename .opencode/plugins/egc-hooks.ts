@@ -399,7 +399,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
      */
     "shell.env": async () => {
       const env: Record<string, string> = {
-        EGC_VERSION: "1.1.0-rc.1",
+        EGC_VERSION: "1.1.0",
         EGC_PLUGIN: "true",
         EGC_HOOK_PROFILE: currentProfile,
         EGC_DISABLED_HOOKS: process.env.EGC_DISABLED_HOOKS || "",
@@ -453,7 +453,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
       const contextBlock = [
         "# EGC Context (preserve across compaction)",
         "",
-        "## Active Plugin: EGC - Extended Global Context v1.1.0-rc.1",
+        "## Active Plugin: EGC - Extended Global Context v1.1.0",
         "- Hooks: file.edited, tool.execute.before/after, session.created/idle/deleted, shell.env, compacting, permission.ask",
         "- Tools: run-tests, check-coverage, security-audit, format-code, lint-check, git-summary, changed-files",
         "- Agents: 13 specialized (planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, e2e-runner, refactor-cleaner, doc-updater, go-reviewer, go-build-resolver, database-reviewer, python-reviewer)",
