@@ -243,7 +243,8 @@ function runAutoUpdate(options = {}, dependencies = {}) {
         throw new Error(
           'git pull failed: no upstream tracking branch configured.\n' +
           'If installed via npm, update with: npm install -g @egchq/egc@latest\n' +
-          'Otherwise: git branch --set-upstream-to=origin/<branch>'
+          'Otherwise: git branch --set-upstream-to=origin/<branch>',
+          { cause: pullError }
         );
       }
       throw pullError;

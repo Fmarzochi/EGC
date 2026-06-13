@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const os = require('os');
-const { discoverInstalledStates, normalizeTargets } = require('./lib/install-lifecycle');
+const { discoverInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 
 function showHelp(exitCode = 0) {
