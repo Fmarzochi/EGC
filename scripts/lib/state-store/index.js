@@ -130,6 +130,9 @@ function createNullQueryApi() {
     listLessons: () => [],
     reinforceLesson: () => null,
     applyDecaySweep: () => 0,
+    listEventsInWindow: () => [],
+    upsertPattern: () => {},
+    listPatterns: () => [],
   };
 }
 

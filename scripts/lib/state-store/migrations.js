@@ -157,6 +157,28 @@ CREATE INDEX IF NOT EXISTS idx_lessons_archived_confidence
   ON lessons (archived, confidence DESC);
 `;
 
+const PATTERNS_SQL = `
+CREATE TABLE IF NOT EXISTS patterns (
+  id TEXT PRIMARY KEY,
+  pattern_type TEXT NOT NULL,
+  key TEXT NOT NULL,
+  description TEXT NOT NULL,
+  occurrences INTEGER NOT NULL DEFAULT 1,
+  frequency REAL NOT NULL DEFAULT 0,
+  last_seen TEXT NOT NULL,
+  suggested_automation TEXT,
+  first_seen TEXT NOT NULL,
+  window_days INTEGER NOT NULL DEFAULT 7
+);
+
+CREATE INDEX IF NOT EXISTS idx_patterns_type_key
+  ON patterns (pattern_type, key);
+CREATE INDEX IF NOT EXISTS idx_patterns_last_seen
+  ON patterns (last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_patterns_occurrences
+  ON patterns (occurrences DESC);
+`;
+
 const MIGRATIONS = [
   {
     version: 1,
@@ -172,6 +194,11 @@ const MIGRATIONS = [
     version: 3,
     name: '003_lessons_confidence_decay',
     sql: LESSONS_SQL,
+  },
+  {
+    version: 4,
+    name: '004_patterns',
+    sql: PATTERNS_SQL,
   },
 ];
 
