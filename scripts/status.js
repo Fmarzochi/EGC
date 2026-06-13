@@ -3,6 +3,7 @@
 
 const os = require('os');
 const { createStateStore } = require('./lib/state-store');
+const { getStateDir, projectSlug, detectBranch, resolveStateRead } = require('./lib/branch-state');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -103,6 +104,40 @@ function printInstallHealth(section) {
   }
 }
 
+function collectMemoryState(projectPath, homeDir) {
+  const stateDir = getStateDir(homeDir);
+  const branch = detectBranch(projectPath);
+  const resolved = resolveStateRead(stateDir, projectPath, branch);
+
+  return {
+    projectPath,
+    slug: projectSlug(projectPath),
+    branch,
+    source: resolved.source,
+    stateFile: resolved.source === 'none' ? null : resolved.filePath,
+  };
+}
+
+const MEMORY_SOURCE_LABELS = {
+  branch: 'branch state',
+  'default-branch': 'default branch state (main.md)',
+  flat: 'flat state (legacy)',
+};
+
+function printMemoryState(section) {
+  console.log('Memory state:');
+  console.log(`  Project: ${section.projectPath}`);
+  console.log(`  Branch: ${section.branch || '(not a git branch)'}`);
+
+  if (section.source === 'none') {
+    console.log('  Active state: none recorded yet');
+    return;
+  }
+
+  console.log(`  Active state: ${section.stateFile}`);
+  console.log(`  Source: ${MEMORY_SOURCE_LABELS[section.source] || section.source}`);
+}
+
 function printGovernance(section) {
   console.log(`Pending governance events: ${section.pendingCount}`);
   if (section.events.length === 0) {
@@ -127,6 +162,8 @@ function printHuman(payload) {
   printInstallHealth(payload.installHealth);
   console.log();
   printGovernance(payload.governance);
+  console.log();
+  printMemoryState(payload.memoryState);
 }
 
 async function main() {
@@ -150,6 +187,10 @@ async function main() {
         recentSkillRunLimit: 20,
         pendingLimit: options.limit,
       }),
+      memoryState: collectMemoryState(
+        process.env.PWD || process.cwd(),
+        process.env.HOME || os.homedir()
+      ),
     };
 
     if (options.json) {
@@ -174,4 +215,5 @@ if (require.main === module) {
 module.exports = {
   main,
   parseArgs,
+  collectMemoryState,
 };

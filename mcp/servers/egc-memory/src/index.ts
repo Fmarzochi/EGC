@@ -10,6 +10,7 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
+import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -224,15 +225,6 @@ function getStateDir(): string {
   return dir;
 }
 
-function projectSlug(projectPath: string): string {
-  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
-}
-
-function stateFilePath(projectPath: string): string {
-  return path.join(getStateDir(), `${projectSlug(projectPath)}.md`);
-}
-
 function resolveProjectPath(provided?: string): string {
   return provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
 }
@@ -260,7 +252,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
   avoid?: {what: string; why?: string}[];
   preferences?: string[];
   next?: string[];
-}, existing: Record<string, string[]|string>) {
+}, existing: Record<string, string[]|string>, branch: string | null = null) {
   const mergedDecisions = [
     ...(data.decisions || []).map(d => `- ${d.what}${d.why ? ': ' + d.why : ''}`),
     ...((existing['Active Decisions'] as string[]) || []).map(l => `- ${l}`)
@@ -283,6 +275,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
   const lines = [
     `# Project State`,
     `project: ${projectPath}`,
+    ...(branch ? [`branch: ${branch}`] : []),
     `updated: ${new Date().toISOString()}`,
     ``,
     `## Context`,
@@ -349,7 +342,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       { name: "search_history", description: "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Each result includes the decision content, context label, timestamp, and a score normalized to [0, 1] where 1 is the best match in the result set. Use this to find past decisions by topic instead of paging through query_history.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Keywords to search for, e.g. 'authentication jwt'." }, limit: { type: "number", description: "Maximum number of results to return. Defaults to 10." }, min_score: { type: "number", description: "Minimum normalized relevance score between 0 and 1. Defaults to 0." } }, required: ["query"] } },
       {
         name: "get_state",
-        description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. Call this at the START of every session to restore context.",
+        description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch when the project is a git repository, falling back to the default branch state and then to the legacy flat state file. Call this at the START of every session to restore context.",
         inputSchema: {
           type: "object",
           properties: {
@@ -359,7 +352,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "update_state",
-        description: "Updates the project memory with decisions made this session. Call this at the END of every session. Merges with existing state — does not erase previous memory.",
+        description: "Updates the project memory with decisions made this session. Writes to the state file of the current git branch when the project is a git repository. Call this at the END of every session. Merges with existing state and does not erase previous memory.",
         inputSchema: {
           type: "object",
           properties: {
@@ -411,27 +404,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_state": {
         const { project_path } = GetStateSchema.parse(request.params.arguments || {});
         const projPath = resolveProjectPath(project_path);
-        const filePath = stateFilePath(projPath);
+        const branch = detectBranch(projPath);
+        const resolved = resolveStateRead(getStateDir(), projPath, branch);
 
-        if (!fs.existsSync(filePath)) {
-          return { content: [{ type: "text", text: `No state found for this project yet.\nPath: ${filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
+        if (resolved.source === 'none') {
+          const branchLine = branch ? `Branch: ${branch}\n` : '';
+          return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
         }
 
-        const content = fs.readFileSync(filePath, 'utf-8');
-        log('INFO', 'Project state retrieved', { project: projPath });
+        const content = fs.readFileSync(resolved.filePath, 'utf-8');
+        log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source });
         return { content: [{ type: "text", text: content }] };
       }
 
       case "update_state": {
         const args = UpdateStateSchema.parse(request.params.arguments || {});
         const projPath = resolveProjectPath(args.project_path);
-        const filePath = stateFilePath(projPath);
-        const existing = readStateDoc(filePath);
+        const branch = detectBranch(projPath);
+        // Merge from the same file get_state would read, so the first
+        // branch-scoped write inherits the pre-existing flat state
+        const resolved = resolveStateRead(getStateDir(), projPath, branch);
+        const existing = readStateDoc(resolved.filePath);
+        const filePath = resolveStateWrite(getStateDir(), projPath, branch);
 
-        writeStateDoc(filePath, projPath, args, existing);
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        writeStateDoc(filePath, projPath, args, existing, branch);
 
-        log('INFO', 'Project state updated', { project: projPath, decisions: args.decisions?.length || 0 });
-        return { content: [{ type: "text", text: `Project memory updated.\nFile: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
+        log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0 });
+        const branchLine = branch ? `Branch: ${branch}\n` : '';
+        return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
       }
 
       default:
