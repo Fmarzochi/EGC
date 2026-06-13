@@ -2,9 +2,11 @@
 
 All notable changes to EGC are documented here.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-06-13
 
 ### New Tools
+
+- **`compress_observations`** - Compresses raw hook observations into structured typed summaries (`tool_failure`, `tool_success`, `file_edit`, etc.) using rule-based analysis. Reduces token usage when injecting observation history into new sessions. Contributed by [@Kunall7890](https://github.com/Kunall7890).
 
 - **`detect_patterns`** - Analyzes runtime events from the state-store database to surface repeated commands and recurring errors across sessions. Helps identify automation candidates and structural issues that persist between conversations.
 
