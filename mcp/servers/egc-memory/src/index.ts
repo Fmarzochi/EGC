@@ -4,10 +4,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
-import path from 'path';
-import os from 'os';
-import fs from 'fs';
-import { execSync } from 'child_process';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
@@ -20,6 +20,7 @@ import {
   listWorkingMemory,
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
+import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
 
 // Mirrors DEFAULT_STATE_STORE_RELATIVE_PATH from scripts/lib/state-store/index.js
 const STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
@@ -68,7 +69,8 @@ class PersistentLogger {
       }
       fs.appendFileSync(this.logPath, payload + '\n', 'utf-8');
     } catch(e) {
-      // Safe fail to avoid runtime crash if disk full
+      // non-critical: log rotation failure should not crash the server
+      console.error('[EGC memory] Log write failed (disk full?):', String(e));
     }
   }
 }
@@ -169,10 +171,15 @@ async function runMigrations(db: Database, dbDir: string) {
       if (!isNaN(storedPid) && storedPid !== process.pid) {
         // Check if the PID is still alive (POSIX: signal 0 = probe only)
         let alive = false;
-        try { process.kill(storedPid, 0); alive = true; } catch (_) {}
+        try { process.kill(storedPid, 0); alive = true; } catch (_) {
+          // non-critical: if signal probe fails, treat PID as dead and clear lock
+        }
         if (!alive) fs.unlinkSync(lockFile);
       }
-    } catch (_) {}
+    } catch (e) {
+      // non-critical: if lock file is unreadable, proceed and attempt to acquire
+      console.error('[EGC memory] Could not read migration lock file:', String(e));
+    }
   }
 
   let locked = false;
@@ -245,7 +252,10 @@ async function runMigrations(db: Database, dbDir: string) {
       await db.run('INSERT INTO schema_migrations (version) VALUES (4)');
     }
   } finally {
-    try { fs.unlinkSync(lockFile); } catch(e) {}
+    try { fs.unlinkSync(lockFile); } catch(e) {
+      // non-critical: stale lock will be cleaned up on next boot
+      console.error('[EGC memory] Could not remove migration lock:', String(e));
+    }
   }
 }
 
@@ -488,6 +498,12 @@ const DetectPatternsSchema = z.object({
   min_occurrences: z.number().min(2).max(1000).optional().default(3)
 });
 
+const CompressObservationsSchema = z.object({
+  project_path: z.string().optional(),
+  since: z.string().datetime().optional(),
+  limit: z.number().min(1).max(500).optional().default(50)
+});
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -602,6 +618,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             window_days: { type: "number", description: "Number of past days to analyze. Defaults to 7." },
             min_occurrences: { type: "number", description: "Minimum times a pattern must appear to be reported. Defaults to 3." }
+          }
+        }
+      },
+      {
+        name: "compress_observations",
+        description: "Compress recent raw hook observations into structured typed summaries. Reduces token usage for context injection. Returns count + summary of compressed items.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: {
+              type: "string",
+              description: "Absolute path to the project root. Defaults to current working directory."
+            },
+            since: {
+              type: "string",
+              description: "ISO 8601 timestamp — only compress observations newer than this. Optional."
+            },
+            limit: {
+              type: "number",
+              description: "Max number of raw observations to process. Default: 50."
+            }
           }
         }
       }
@@ -909,6 +946,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             type: "text",
             text: JSON.stringify({ success: true, data: { patterns: output }, meta: { window_days, min_occurrences, events_analyzed: events.length } }, null, 2)
           }]
+        };
+      }
+
+      case "compress_observations": {
+        const args = CompressObservationsSchema.parse(request.params.arguments || {});
+        const projPath = resolveProjectPath(args.project_path);
+
+        const rawObservations = await loadRawObservations(projPath, args.limit, args.since);
+
+        if (rawObservations.length === 0) {
+          return {
+            content: [{ type: "text", text: "No raw observations found to compress." }],
+          };
+        }
+
+        // Use llmCompress (with ruleBasedCompress as its internal fallback) as the primary path
+        // Sequential loop avoids race condition: replaceObservation rewrites the entire JSONL file each call
+        const compressed: import('./compress.js').CompressedObservation[] = [];
+        for (const raw of rawObservations) {
+          // llmCompress falls back to ruleBasedCompress automatically when no LLM client is wired
+          // TODO: pass a real llmCall once EGC dispatcher is wired into this server
+          try {
+            const result = await llmCompress(raw, () => Promise.reject(new Error('LLM not configured')));
+            compressed.push(result);
+          } catch (e) {
+            log('ERROR', 'LLM compression failed, skipping', { error: String(e) });
+          }
+        }
+
+        // Write replacements sequentially to prevent JSONL file corruption from concurrent writes
+        for (let i = 0; i < compressed.length; i++) {
+          const id = rawObservations[i].id;
+          if (id !== undefined) await replaceObservation(projPath, id, compressed[i]);
+        }
+
+        const summary = compressed.map((c) => ({
+          title:      c.title,
+          type:       c.type,
+          importance: c.importance,
+        }));
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { compressed_count: compressed.length, summary },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
 
