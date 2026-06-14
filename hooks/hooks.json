@@ -131,6 +131,17 @@
         ],
         "description": "EGC cross-runtime session lifecycle bridge (SessionStart)",
         "id": "sessionstart:egc-session-bridge"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js sessionstart:egc-memory-load scripts/hooks/egc-memory-load.js standard,strict"
+          }
+        ],
+        "description": "Load persistent EGC memory state at session start",
+        "id": "sessionstart:egc-memory-load"
       }
     ],
     "PostToolUse": [
