@@ -33,7 +33,7 @@ function getHomeDir() {
 }
 
 /**
- * Get the EGC config directory (~/.gemini)
+ * Get the EGC config directory
  * @deprecated Use getEGCDir() for canonical EGC runtime.
  */
 function getClaudeDir() {
@@ -41,10 +41,80 @@ function getClaudeDir() {
 }
 
 /**
- * Get the EGC config directory
+ * Get the EGC config directory for the active harness.
+ *
+ * Resolution order:
+ *   1. EGC_DIR env var (explicit override)
+ *   2. Harness-specific env vars injected at hook time (see docs/spec/harness-env-vars.md)
+ *   3. __dirname prefix match against known harness home dirs (production install)
+ *   4. ~/.egc (harness-agnostic fallback)
  */
 function getEGCDir() {
-  return path.join(getHomeDir(), '.gemini');
+  if (process.env.EGC_DIR) return process.env.EGC_DIR;
+
+  const home = getHomeDir();
+  const env = process.env;
+
+  // Gemini CLI / Antigravity AGY: GEMINI_PROJECT_DIR is injected by the CLI at hook time.
+  // Check this before CLAUDE_PROJECT_DIR because Gemini CLI sets both as a compat alias.
+  if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) {
+    return path.join(home, '.gemini');
+  }
+
+  // Claude Code: CLAUDE_PROJECT_DIR or CLAUDE_PLUGIN_ROOT is injected by the CLI.
+  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) {
+    return path.join(home, '.claude');
+  }
+
+  // CodeBuddy: CODEBUDDY_PROJECT_DIR or CODEBUDDY_PLUGIN_ROOT is injected at hook time.
+  if (env.CODEBUDDY_PROJECT_DIR || env.CODEBUDDY_PLUGIN_ROOT) {
+    return path.join(home, '.codebuddy');
+  }
+
+  // VS Code Copilot: VSCODE_AGENT is set when running inside a Copilot agent action.
+  if (env.VSCODE_AGENT || env.GITHUB_COPILOT_API_TOKEN) {
+    return path.join(home, '.github');
+  }
+
+  // Kiro (AWS): KIRO_HOOK_FILE is set for file-triggered hooks.
+  if (env.KIRO_HOOK_FILE || env.KIRO_FILE_PATH) {
+    return path.join(home, '.kiro');
+  }
+
+  // Trae (ByteDance): TRAE_ENV distinguishes China vs global build.
+  if (env.TRAE_ENV) {
+    return path.join(home, env.TRAE_ENV === 'cn' ? '.trae-cn' : '.trae');
+  }
+
+  // Tier 2: __dirname prefix match (harnesses without unique runtime env vars at hook time).
+  // Longest-prefix-first to avoid false matches (e.g. .config/opencode before .config).
+  const sep = path.sep;
+  const harnessDirs = [
+    path.join(home, '.codeium', 'windsurf'),
+    path.join(home, '.config', 'opencode'),
+    path.join(home, '.config', 'zed'),
+    path.join(home, '.gemini'),
+    path.join(home, '.claude'),
+    path.join(home, '.agents'),
+    path.join(home, '.amp'),
+    path.join(home, '.github'),
+    path.join(home, '.kiro'),
+    path.join(home, '.trae'),
+  ];
+
+  for (const dir of harnessDirs) {
+    if (__dirname === dir || __dirname.startsWith(dir + sep)) {
+      return dir;
+    }
+  }
+
+  // Tier 3: first existing harness dir under HOME (dev/test environments where
+  // __dirname points to the source repo rather than a harness install path).
+  for (const dir of harnessDirs) {
+    if (fs.existsSync(dir)) return dir;
+  }
+
+  return path.join(home, '.egc');
 }
 
 /**

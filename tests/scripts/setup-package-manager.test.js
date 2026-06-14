@@ -268,7 +268,7 @@ function runTests() {
       assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}. stderr: ${result.stderr}`);
       assert.ok(result.stdout.includes('Global preference set to'), 'Should show success message');
       assert.ok(result.stdout.includes('npm'), 'Should mention npm');
-      const configPath = path.join(tmpDir, '.gemini', 'package-manager.json');
+      const configPath = path.join(tmpDir, '.egc', 'package-manager.json');
       assert.ok(fs.existsSync(configPath), 'Config file should be created');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       assert.strictEqual(config.packageManager, 'npm', 'Config should contain npm');
@@ -286,7 +286,7 @@ function runTests() {
       const result = run(['npm'], { HOME: tmpDir, USERPROFILE: tmpDir });
       assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}. stderr: ${result.stderr}`);
       assert.ok(result.stdout.includes('Global preference set to'), 'Should show success message');
-      const configPath = path.join(tmpDir, '.gemini', 'package-manager.json');
+      const configPath = path.join(tmpDir, '.egc', 'package-manager.json');
       assert.ok(fs.existsSync(configPath), 'Config file should be created');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       assert.strictEqual(config.packageManager, 'npm', 'Config should contain npm');

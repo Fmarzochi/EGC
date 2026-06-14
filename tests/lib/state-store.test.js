@@ -262,7 +262,7 @@ async function runTests() {
     const homeDir = createTempDir('egc-state-home-');
 
     try {
-      const expectedPath = path.join(homeDir, '.gemini', 'egc', 'state.db');
+      const expectedPath = path.join(homeDir, '.egc', 'egc', 'state.db');
       assert.strictEqual(resolveStateStorePath({ homeDir }), expectedPath);
 
       const firstStore = await createStateStore({ homeDir });
