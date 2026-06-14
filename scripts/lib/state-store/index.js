@@ -31,15 +31,19 @@ function resolveStateStorePath(options = {}) {
   if (options.homeDir) {
     const savedHome = process.env.HOME;
     const savedUserProfile = process.env.USERPROFILE;
+    const savedEgcDir = process.env.EGC_DIR;
     try {
       process.env.HOME = options.homeDir;
       process.env.USERPROFILE = options.homeDir;
+      delete process.env.EGC_DIR;
       return path.join(getEGCDir(), 'egc', 'state.db');
     } finally {
       if (savedHome === undefined) delete process.env.HOME;
       else process.env.HOME = savedHome;
       if (savedUserProfile === undefined) delete process.env.USERPROFILE;
       else process.env.USERPROFILE = savedUserProfile;
+      if (savedEgcDir === undefined) delete process.env.EGC_DIR;
+      else process.env.EGC_DIR = savedEgcDir;
     }
   }
 

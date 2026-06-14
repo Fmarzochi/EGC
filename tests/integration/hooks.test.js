@@ -709,7 +709,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Should exit 0');
       assert.ok(result.stderr.includes('[SessionEnd]'), 'Should have SessionEnd log');
 
-      const sessionsDir = path.join(testDir, '.gemini', 'sessions');
+      const sessionsDir = path.join(testDir, '.egc', 'sessions');
       if (fs.existsSync(sessionsDir)) {
         const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
         assert.ok(files.length > 0, 'Should create a session file');
@@ -777,7 +777,7 @@ async function runTests() {
 
       assert.strictEqual(result.code, 0, 'Should exit 0');
 
-      const sessionsDir = path.join(testDir, '.gemini', 'sessions');
+      const sessionsDir = path.join(testDir, '.egc', 'sessions');
       if (fs.existsSync(sessionsDir)) {
         const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.tmp'));
         assert.ok(files.length > 0, 'Should create session file');

@@ -95,11 +95,13 @@ function getEGCDir() {
     path.join(home, '.config', 'zed'),
     path.join(home, '.gemini'),
     path.join(home, '.claude'),
+    path.join(home, '.cursor'),
     path.join(home, '.agents'),
     path.join(home, '.amp'),
     path.join(home, '.github'),
     path.join(home, '.kiro'),
     path.join(home, '.trae'),
+    path.join(home, '.trae-cn'),
   ];
 
   for (const dir of harnessDirs) {
