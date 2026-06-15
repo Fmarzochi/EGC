@@ -9,9 +9,12 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSION_START_EVENT = 'SessionStart';
+const STOP_EVENT = 'Stop';
 const HOOK_OPERATION_KIND = 'merge-claude-settings-hooks';
 const HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/claude-session-start.js';
 const HOOK_MODULE_ID = 'claude-session-state-hook';
+const STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/claude-session-stop.js';
+const STOP_HOOK_MODULE_ID = 'claude-session-stop-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -21,8 +24,16 @@ function buildSessionStartCommand(hookScriptPath) {
   return `node "${hookScriptPath}"`;
 }
 
+function buildStopCommand(hookScriptPath) {
+  return `node "${hookScriptPath}"`;
+}
+
 function resolveHookScriptDestination(targetRoot) {
   return path.join(targetRoot, 'egc', 'hooks', 'claude-session-start.js');
+}
+
+function resolveStopHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'egc', 'hooks', 'claude-session-stop.js');
 }
 
 function resolveSettingsPath(targetRoot) {
@@ -218,20 +229,159 @@ function createSessionStartHookMergeOperation(targetRoot) {
   };
 }
 
+function hasStopHook(settings, hookScriptPath) {
+  if (!isPlainObject(settings) || !isPlainObject(settings.hooks)) {
+    return false;
+  }
+
+  const groups = settings.hooks[STOP_EVENT];
+  return Array.isArray(groups)
+    && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath));
+}
+
+function addStopHook(settings, hookScriptPath) {
+  const base = isPlainObject(settings) ? settings : {};
+
+  if (hasStopHook(base, hookScriptPath)) {
+    return { settings: base, changed: false };
+  }
+
+  const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
+  const groups = Array.isArray(hooks[STOP_EVENT]) ? hooks[STOP_EVENT].slice() : [];
+
+  groups.push({
+    hooks: [{ type: 'command', command: buildStopCommand(hookScriptPath) }],
+  });
+  hooks[STOP_EVENT] = groups;
+
+  return { settings: { ...base, hooks }, changed: true };
+}
+
+function removeStopHook(settings, hookScriptPath) {
+  if (
+    !isPlainObject(settings)
+    || !isPlainObject(settings.hooks)
+    || !Array.isArray(settings.hooks[STOP_EVENT])
+  ) {
+    return { settings, changed: false };
+  }
+
+  let changed = false;
+  const groups = [];
+
+  for (const group of settings.hooks[STOP_EVENT]) {
+    if (!matcherGroupHasEgcEntry(group, hookScriptPath)) {
+      groups.push(group);
+      continue;
+    }
+
+    changed = true;
+    const remainingEntries = group.hooks.filter(
+      entry => !isEgcHookEntry(entry, hookScriptPath)
+    );
+    if (remainingEntries.length > 0) {
+      groups.push({ ...group, hooks: remainingEntries });
+    }
+  }
+
+  if (!changed) {
+    return { settings, changed: false };
+  }
+
+  const hooks = { ...settings.hooks };
+  if (groups.length > 0) {
+    hooks[STOP_EVENT] = groups;
+  } else {
+    delete hooks[STOP_EVENT];
+  }
+
+  const next = { ...settings };
+  if (Object.keys(hooks).length > 0) {
+    next.hooks = hooks;
+  } else {
+    delete next.hooks;
+  }
+
+  return { settings: next, changed: true };
+}
+
+function applyStopHookToFile(settingsPath, hookScriptPath) {
+  const current = readSettingsFile(settingsPath);
+  const { settings, changed } = addStopHook(current, hookScriptPath);
+
+  if (changed) {
+    writeSettingsFile(settingsPath, settings);
+  }
+
+  return { changed };
+}
+
+function removeStopHookFromFile(settingsPath, hookScriptPath) {
+  if (!fs.existsSync(settingsPath)) {
+    return { changed: false };
+  }
+
+  const current = readSettingsFile(settingsPath);
+  const { settings, changed } = removeStopHook(current, hookScriptPath);
+
+  if (changed) {
+    writeSettingsFile(settingsPath, settings);
+  }
+
+  return { changed };
+}
+
+function inspectStopHookFile(settingsPath, hookScriptPath) {
+  try {
+    return hasStopHook(readSettingsFile(settingsPath), hookScriptPath) ? 'ok' : 'drifted';
+  } catch (_error) {
+    return 'drifted';
+  }
+}
+
+function createStopHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveStopHookScriptDestination(targetRoot);
+
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: STOP_HOOK_MODULE_ID,
+    sourceRelativePath: STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: STOP_EVENT,
+    hookScriptPath,
+    hookCommand: buildStopCommand(hookScriptPath),
+  };
+}
+
 module.exports = {
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   SESSION_START_EVENT,
+  STOP_EVENT,
+  STOP_HOOK_MODULE_ID,
+  STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addSessionStartHook,
+  addStopHook,
   applySessionStartHookToFile,
+  applyStopHookToFile,
   buildSessionStartCommand,
+  buildStopCommand,
   createSessionStartHookMergeOperation,
+  createStopHookMergeOperation,
   hasSessionStartHook,
+  hasStopHook,
   inspectSessionStartHookFile,
+  inspectStopHookFile,
   readSettingsFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
+  removeStopHook,
+  removeStopHookFromFile,
   resolveHookScriptDestination,
   resolveSettingsPath,
+  resolveStopHookScriptDestination,
 };
