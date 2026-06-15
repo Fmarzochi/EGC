@@ -119,6 +119,17 @@
         ],
         "description": "Save state before context compaction",
         "id": "pre:compact"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs');const path=require('path');const {spawnSync}=require('child_process');const raw=fs.readFileSync(0,'utf8');const rel=path.join('scripts','hooks','run-with-flags.js');const hasRunnerRoot=candidate=>{const value=typeof candidate==='string'?candidate.trim():'';return value.length>0&&fs.existsSync(path.join(path.resolve(value),rel));};const root=(()=>{const envRoot=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT||'';if(hasRunnerRoot(envRoot))return path.resolve(envRoot.trim());const home=require('os').homedir();const claudeDir=path.join(home,'.gemini');if(hasRunnerRoot(claudeDir))return claudeDir;for(const candidate of [path.join(claudeDir,'plugins','egc'),path.join(claudeDir,'plugins','egc@egc'),path.join(claudeDir,'plugins','marketplace','egc'),path.join(claudeDir,'plugins','everything-gemini'),path.join(claudeDir,'plugins','everything-gemini@everything-gemini'),path.join(claudeDir,'plugins','marketplace','everything-gemini')]){if(hasRunnerRoot(candidate))return candidate;}try{for(const slug of ['egc','everything-gemini']){const cacheBase=path.join(claudeDir,'plugins','cache',slug);for(const org of fs.readdirSync(cacheBase,{withFileTypes:true})){if(!org.isDirectory())continue;for(const version of fs.readdirSync(path.join(cacheBase,org.name),{withFileTypes:true})){if(!version.isDirectory())continue;const candidate=path.join(cacheBase,org.name,version.name);if(fs.existsSync(path.join(candidate,rel)))return candidate;}}}}catch{}return claudeDir;})();const script=path.join(root,rel);if(fs.existsSync(script)){const result=spawnSync(process.execPath,[script,'pre:compact:egc-memory-save','scripts/hooks/egc-memory-save.js','minimal,standard,strict'],{input:raw,encoding:'utf8',env:process.env,cwd:process.cwd(),timeout:30000});const stdout=typeof result.stdout==='string'?result.stdout:'';if(stdout)process.stdout.write(stdout);else process.stdout.write(raw);if(result.stderr)process.stderr.write(result.stderr);if(result.error)process.stderr.write(`[hook error] ${result.error.message}\\n`);process.exit(typeof result.status==='number'?result.status:0);}else{process.stdout.write(raw);process.exit(0);}\""
+          }
+        ],
+        "description": "Persist EGC memory state before context compaction so session decisions survive summarization",
+        "id": "pre:compact:egc-memory-save"
       }
     ],
     "SessionStart": [
