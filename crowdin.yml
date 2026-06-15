@@ -1,0 +1,9 @@
+"$schema": "https://schema.crowdin.com/configuration-file/2.0"
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+preserve_hierarchy: true
+base_path: "."
+
+files:
+  - source: /README.md
+    translation: /translations/%two_letters_code%/README.md
