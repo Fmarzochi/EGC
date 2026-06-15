@@ -127,6 +127,7 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
+          files: ${{ steps.pack.outputs.tarball }}
 
       - name: Publish npm package
         if: steps.npm_publish_state.outputs.already_published != 'true'
