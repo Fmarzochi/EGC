@@ -33,7 +33,6 @@ jobs:
           pull_request_body: "New translations synced from [Crowdin](https://crowdin.com/project/egc)."
           pull_request_base_branch_name: main
           localization_branch_name: chore/crowdin-translations
-          skip_untranslated_strings: true
           skip_untranslated_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
