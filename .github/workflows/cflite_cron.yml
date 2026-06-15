@@ -3,13 +3,14 @@ name: ClusterFuzzLite cron tasks
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  security-events: write
+permissions: {}
 
 jobs:
   Pruning:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     concurrency:
       group: ${{ github.workflow }}
       cancel-in-progress: false
