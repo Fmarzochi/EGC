@@ -3,13 +3,14 @@ name: ClusterFuzzLite batch fuzzing
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  security-events: write
+permissions: {}
 
 jobs:
   BatchFuzzing:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     concurrency:
       group: ${{ github.workflow }}
       cancel-in-progress: false

@@ -3,13 +3,14 @@ name: ClusterFuzzLite PR fuzzing
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  security-events: write
+permissions: {}
 
 jobs:
   PR:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
