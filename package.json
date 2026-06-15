@@ -104,6 +104,9 @@
   "overrides": {
     "js-yaml": "^4.2.0"
   },
+  "resolutions": {
+    "markdownlint-cli/js-yaml": "^4.2.0"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3"
