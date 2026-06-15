@@ -2,6 +2,8 @@ name: ClusterFuzzLite cron tasks
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * 0'
 
 permissions: {}
 
@@ -20,7 +22,7 @@ jobs:
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
         with:
           language: javascript
-          sanitizer: address
+          sanitizer: none
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Fuzzers
@@ -30,7 +32,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 600
           mode: prune
-          sanitizer: address
+          sanitizer: none
           output-sarif: true
 
       - name: Upload SARIF
