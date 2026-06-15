@@ -8,7 +8,7 @@ cd $SRC/egc/fuzz
 npm ci
 
 cd $SRC/egc
-npm install --save-dev @jazzer.js/core@4.0.0
+npm ci
 
 cd $SRC
 compile_javascript_fuzzer egc fuzz/fuzz-validator.js

@@ -94,6 +94,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@iarna/toml": "^2.2.5",
+    "@jazzer.js/core": "4.0.0",
     "@types/node": "^25.9.1",
     "eslint": "^10.0.0",
     "globals": "^17.6.0",
