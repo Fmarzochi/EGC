@@ -8,6 +8,8 @@ on:
       - README.md
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   synchronize-with-crowdin:
     name: Sync translations
@@ -18,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Crowdin sync
-        uses: crowdin/github-action@v2
+        uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
         with:
           upload_sources: true
           upload_translations: false
