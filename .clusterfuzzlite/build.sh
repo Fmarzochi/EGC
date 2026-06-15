@@ -6,6 +6,8 @@ npm run build
 
 cd $SRC/egc/fuzz
 npm ci
+
+cd $SRC/egc
 npm install --save-dev @jazzer.js/core
 
 cd $SRC
