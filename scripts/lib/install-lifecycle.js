@@ -319,6 +319,14 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
+function repairClaudeSettingsHook(operation) {
+  if (operation.hookEvent === STOP_EVENT) {
+    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else {
+    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+  }
+}
+
 function executeRepairOperation(repoRoot, operation) {
   if (operation.kind === 'copy-file') {
     const sourcePath = resolveOperationSourcePath(repoRoot, operation);
@@ -368,11 +376,7 @@ function executeRepairOperation(repoRoot, operation) {
   }
 
   if (operation.kind === HOOK_OPERATION_KIND) {
-    if (operation.hookEvent === STOP_EVENT) {
-      applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
-    } else {
-      applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
-    }
+    repairClaudeSettingsHook(operation);
     return;
   }
 
