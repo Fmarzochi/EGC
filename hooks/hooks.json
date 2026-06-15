@@ -94,6 +94,18 @@
         ],
         "description": "Fact-forcing gate: block first Edit/Write/MultiEdit per file and demand investigation (importers, data schemas, user instruction) before allowing",
         "id": "pre:edit-write:gateguard-fact-force"
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js pre:insaits-security scripts/hooks/insaits-security-wrapper.js standard,strict",
+            "timeout": 15
+          }
+        ],
+        "description": "InsAIts real-time security monitor: detects credential exposure, prompt injection, and 20+ anomaly types. Enable with EGC_ENABLE_INSAITS=1",
+        "id": "pre:insaits-security"
       }
     ],
     "PreCompact": [
