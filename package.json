@@ -102,10 +102,12 @@
     "typescript": "^5.3.0"
   },
   "overrides": {
-    "js-yaml": "^4.2.0"
+    "js-yaml": "^4.2.0",
+    "markdown-it": "^14.2.0"
   },
   "resolutions": {
-    "markdownlint-cli/js-yaml": "^4.2.0"
+    "markdownlint-cli/js-yaml": "^4.2.0",
+    "markdown-it": "^14.2.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
