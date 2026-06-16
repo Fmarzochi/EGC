@@ -17,6 +17,8 @@ Because EGC operates as a structured engineering platform, contributions must al
 
 - [Governance Philosophy](#governance-philosophy)
 - [Quick Start](#quick-start)
+- [Developer Certificate of Origin (DCO)](#developer-certificate-of-origin-dco)
+- [CI Checks](#ci-checks)
 - [Orchestrators & Runtime Core](#orchestrators--runtime-core)
 - [Contributing Skills](#contributing-skills)
 - [Skill Adaptation Policy](#skill-adaptation-policy)
@@ -51,12 +53,70 @@ git checkout -b feat/my-contribution
 
 # 3. Add your contribution following the architectural standards below
 
-# 4. Verify locally
-sh install.sh && egc doctor
+# 4. Verify locally (all of these must pass before you open a PR)
+npm ci
+node tests/run-all.js              # full test suite (runs on Linux, macOS, Windows)
+npm audit --audit-level=high       # must show 0 high/critical vulnerabilities
 
-# 5. Submit PR
-git add . && git commit -m "feat: add my-feature" && git push -u origin feat/my-contribution
+# 5. Submit PR (note: -s adds the required DCO sign-off to your commit)
+git add . && git commit -s -m "feat: add my-feature" && git push -u origin feat/my-contribution
 ```
+
+---
+
+## Developer Certificate of Origin (DCO)
+
+Every commit in your pull request **must** include a `Signed-off-by` line. This certifies that you wrote the code and have the right to contribute it under the project's MIT license. The `dco.yml` workflow checks every commit in every PR and blocks the merge if any commit is missing the signature.
+
+**For new commits, always use the `-s` flag:**
+
+```bash
+git commit -s -m "feat: add my-feature"
+```
+
+This automatically appends the required line to your commit message:
+
+```
+Signed-off-by: Your Full Name <your@email.com>
+```
+
+**To sign an existing unsigned commit:**
+
+```bash
+git commit --amend -s
+git push --force-with-lease
+```
+
+**To sign all commits in a branch at once:**
+
+```bash
+git rebase --signoff main
+git push --force-with-lease
+```
+
+> The `Signed-off-by` line must use the same name and email as your Git identity (`git config user.name` and `git config user.email`).
+
+---
+
+## CI Checks
+
+Every pull request runs the following automated checks. Your PR must pass all of them before it can be merged.
+
+| Check | What it validates | How to pass |
+|---|---|---|
+| **DCO** | Every commit has `Signed-off-by` | Use `git commit -s` on every commit |
+| **CI / test** | `node tests/run-all.js` on Linux, macOS, Windows with Node 20 and 22, using npm, yarn, and bun | Run `node tests/run-all.js` locally before opening a PR |
+| **CI / lint** | ESLint on `scripts/` and `tests/`; markdownlint on all `.md` files in `agents/`, `skills/`, `commands/`, `rules/` | Run `npx markdownlint "agents/**/*.md"` if you added or edited Markdown files |
+| **CI / validate** | Structure validators: agents, hooks, skills, commands, install manifests, rules, unicode safety | Run `node scripts/ci/validate-skills.js` (or the equivalent for your component type) |
+| **CI / security** | `npm audit --audit-level=high` | Run `npm audit --audit-level=high` locally; do not introduce packages with known high or critical vulnerabilities |
+| **Dependency Review** | Blocks dependencies with incompatible licenses or known CVEs | Check the license of any package you add |
+| **SonarCloud** | Static analysis: code smells, bugs, security hotspots | Review the SonarCloud report linked in your PR |
+| **CodeRabbit** | AI code review | Read and address CodeRabbit's findings in your PR comments |
+| **PR Size** | Fails if your PR changes more than 150 code files | Keep PRs focused; split large changes into smaller ones |
+
+### CI on fork pull requests
+
+If this is your first contribution from a fork, GitHub requires a maintainer to approve the CI run by clicking **"Approve and run"** in the Actions tab. Your PR will show checks as "Waiting" until a maintainer approves. This is expected: do not close and reopen your PR. A maintainer will approve the run during review.
 
 ---
 
@@ -394,7 +454,12 @@ What architectural gap this fills or what capability this adds to EGC.
 How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 ## Checklist
-- [ ] Tested on Linux/macOS/Windows (if applicable)
+- [ ] All commits are signed off with `git commit -s` (required by DCO check)
+- [ ] `node tests/run-all.js` passes locally with zero failures
+- [ ] `npm audit --audit-level=high` shows no high or critical vulnerabilities
+- [ ] Markdownlint passes on all `.md` files you created or modified (agents, skills, commands, rules)
+- [ ] PR changes fewer than 150 code files
+- [ ] Tested on Linux/macOS/Windows (if applicable to your change)
 - [ ] Preserves EGC identity and formatting
 - [ ] No sensitive data committed
 - [ ] Doesn't break the `runtime-map.json` registry
@@ -456,7 +521,7 @@ npm ci
 npm run build
 
 # Run tests
-npm test
+node tests/run-all.js
 ```
 
 The MCP servers (`egc-guardian`, `egc-memory`) are TypeScript projects compiled with `tsc`. Build output goes to `dist/` inside each server directory.
