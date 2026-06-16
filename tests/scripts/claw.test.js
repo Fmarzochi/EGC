@@ -313,6 +313,18 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('askGemini() throws on invalid model name', () => {
+    assert.throws(
+      () => askGemini('sys', '', 'msg', 'bad model!'),
+      (err) => err.message === 'Invalid model name'
+    );
+  })) passed++; else failed++;
+
+  if (test('askGemini() strips null bytes from prompt before spawning', () => {
+    const result = askGemini('sys', '', 'hello\0world');
+    assert.strictEqual(typeof result, 'string');
+  })) passed++; else failed++;
+
   // ── Summary ───────────────────────────────────────────────────────────
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

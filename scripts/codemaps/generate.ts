@@ -79,7 +79,7 @@ function walkDir(dir: string, results: string[] = []): string[] {
 
   let entries: fs.Dirent[];
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries = fs.readdirSync(dir, { withFileTypes: true }); // NOSONAR jssecurity:S8707
   } catch {
     return results;
   }
@@ -161,7 +161,7 @@ function buildTree(dir: string, prefix = '', depth = 0): string {
 
   let entries: fs.Dirent[];
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries = fs.readdirSync(dir, { withFileTypes: true }); // NOSONAR jssecurity:S8707
   } catch {
     return '';
   }

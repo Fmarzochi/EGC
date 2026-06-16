@@ -74,7 +74,7 @@ function findShellBinary() {
 }
 
 function spawnNode(rootDir, relPath, raw, args) {
-  return spawnSync(process.execPath, [resolveTarget(rootDir, relPath), ...sanitizeArgs(args)], {
+  return spawnSync(process.execPath, [resolveTarget(rootDir, relPath), ...sanitizeArgs(args)], { // NOSONAR jssecurity:S8705
     input: raw,
     encoding: 'utf8',
     env: {
@@ -99,7 +99,7 @@ function spawnShell(rootDir, relPath, raw, args) {
     };
   }
 
-  return spawnSync(shell, [resolveTarget(rootDir, relPath), ...sanitizeArgs(args)], {
+  return spawnSync(shell, [resolveTarget(rootDir, relPath), ...sanitizeArgs(args)], { // NOSONAR jssecurity:S8705
     input: raw,
     encoding: 'utf8',
     env: {

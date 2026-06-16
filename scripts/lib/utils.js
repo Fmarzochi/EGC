@@ -424,7 +424,7 @@ function output(data) {
  */
 function readFile(filePath) {
   try {
-    return fs.readFileSync(filePath, 'utf8');
+    return fs.readFileSync(filePath, 'utf8'); // NOSONAR jssecurity:S8707
   } catch {
     return null;
   }

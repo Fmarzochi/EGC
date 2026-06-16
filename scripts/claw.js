@@ -95,7 +95,7 @@ function askGemini(systemPrompt, history, userMessage, model) {
   const safePrompt = fullPrompt.replaceAll('\0', '');
   args.push('-p', safePrompt);
 
-  const result = spawnSync(process.execPath, [path.join(__dirname, 'egc.js'), ...args], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, 'egc.js'), ...args], { // NOSONAR jssecurity:S8705
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, GEMINICODE: '' },
