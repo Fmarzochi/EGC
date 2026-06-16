@@ -23,6 +23,7 @@ Because EGC operates as a structured engineering platform, contributions must al
 - [Contributing Agents](#contributing-agents)
 - [Contributing Hooks](#contributing-hooks)
 - [Contributing Commands](#contributing-commands)
+- [Contributing Translations](#contributing-translations)
 - [Pull Request Process](#pull-request-process)
 
 ---
@@ -300,6 +301,64 @@ What this macro accomplishes within the EGC ecosystem.
 
 Expected deterministic outcome.
 ```
+
+---
+
+## Contributing Translations
+
+[![Crowdin](https://badges.crowdin.net/egc/localized.svg)](https://crowdin.com/project/egc)
+
+EGC uses [Crowdin](https://crowdin.com/project/egc) for community translations. Translations are synced automatically via GitHub Actions.
+
+### Rules
+
+- **Never open a manual PR for translations.** A PR is created automatically when a language reaches 100%.
+- **Never merge a translation PR if progress is below 100%.** The workflow badge and PR description show the current percentage.
+- If your language shows less than 100%, keep translating in Crowdin. The PR will be opened when you finish.
+
+### How to contribute as a translator
+
+1. Go to [crowdin.com/project/egc](https://crowdin.com/project/egc)
+2. Log in or create a free account
+3. Select your language
+4. Translate the strings
+5. When you reach 100%, a PR is opened automatically in this repository
+
+### Current translations
+
+| Language | Progress | File |
+|---|---|---|
+| English | Source | [README.md](../README.md) |
+| Portugues do Brasil | 100% | [translations/pt/README.md](../translations/pt/README.md) |
+
+---
+
+## Contribuindo com Traducoes
+
+[![Crowdin](https://badges.crowdin.net/egc/localized.svg)](https://crowdin.com/project/egc)
+
+O EGC usa o [Crowdin](https://crowdin.com/project/egc) para traducoes feitas pela comunidade. As traducoes sao sincronizadas automaticamente via GitHub Actions.
+
+### Regras
+
+- **Nunca abra um PR manual de traducao.** Um PR e criado automaticamente quando um idioma atinge 100%.
+- **Nunca faca merge de um PR de traducao com progresso abaixo de 100%.** O badge do workflow e a descricao do PR mostram a porcentagem atual.
+- Se o seu idioma mostrar menos de 100%, continue traduzindo no Crowdin. O PR sera aberto quando voce terminar.
+
+### Como contribuir como tradutor
+
+1. Acesse [crowdin.com/project/egc](https://crowdin.com/project/egc)
+2. Entre ou crie uma conta gratuita
+3. Escolha o seu idioma
+4. Traduza as strings
+5. Ao atingir 100%, um PR e aberto automaticamente neste repositorio
+
+### Traducoes disponíveis
+
+| Idioma | Progresso | Arquivo |
+|---|---|---|
+| Ingles | Fonte | [README.md](../README.md) |
+| Portugues do Brasil | 100% | [translations/pt/README.md](../translations/pt/README.md) |
 
 ---
 

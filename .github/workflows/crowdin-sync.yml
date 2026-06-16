@@ -22,15 +22,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Crowdin sync
+      - name: Check translation progress
+        id: progress
+        env:
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+        run: |
+          response=$(curl -sf \
+            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+            "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/languages/progress?limit=500")
+          min=$(echo "$response" | jq '[.data[].data.translationProgress] | min // 0')
+          count=$(echo "$response" | jq '[.data[].data | select(.translationProgress == 100)] | length')
+          total=$(echo "$response" | jq '.data | length')
+          echo "min_progress=${min}" >> "$GITHUB_OUTPUT"
+          echo "complete_count=${count}" >> "$GITHUB_OUTPUT"
+          echo "total_count=${total}" >> "$GITHUB_OUTPUT"
+          if [ "${min}" -lt 100 ]; then
+            echo "::notice::Minimum translation progress: ${min}%. Uploading sources only. A PR will be created automatically when all languages reach 100%."
+          else
+            echo "::notice::All ${total} language(s) at 100%. Proceeding with download and PR creation."
+          fi
+
+      - name: Upload sources to Crowdin (below 100%)
+        if: steps.progress.outputs.min_progress != '100'
+        uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: false
+          create_pull_request: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+
+      - name: Crowdin full sync (100% complete)
+        if: steps.progress.outputs.min_progress == '100'
         uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
         with:
           upload_sources: true
           upload_translations: false
           download_translations: true
           create_pull_request: true
-          pull_request_title: "chore: update translations from Crowdin"
-          pull_request_body: "New translations synced from [Crowdin](https://crowdin.com/project/egc)."
+          pull_request_title: "chore: sync translations from Crowdin (${{ steps.progress.outputs.complete_count }}/${{ steps.progress.outputs.total_count }} languages at 100%)"
+          pull_request_body: |
+            Translations synced automatically from [Crowdin](https://crowdin.com/project/egc).
+
+            **Translation progress: ${{ steps.progress.outputs.min_progress }}%** (${{ steps.progress.outputs.complete_count }} of ${{ steps.progress.outputs.total_count }} active language(s) at 100%)
+
+            Only fully translated files are included (`skip_untranslated_files: true`).
+
+            > This PR was created automatically. Do not merge unless all checks pass and the progress badge shows 100%.
           pull_request_base_branch_name: main
           localization_branch_name: chore/crowdin-translations
           skip_untranslated_files: true
