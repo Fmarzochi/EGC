@@ -49,13 +49,16 @@ function getClaudeDir() {
  *   3. __dirname prefix match against known harness home dirs (production install)
  *   4. ~/.egc (harness-agnostic fallback)
  */
+function assertWithinHome(resolved, home) {
+  if (!resolved.startsWith(home + path.sep) && resolved !== home) {
+    throw new Error('EGC_DIR must be within the user home directory');
+  }
+}
+
 function getEGCDir() {
   if (process.env.EGC_DIR) {
     const resolved = path.resolve(process.env.EGC_DIR);
-    const home = os.homedir();
-    if (!resolved.startsWith(home + path.sep) && resolved !== home) {
-      throw new Error('EGC_DIR must be within the user home directory');
-    }
+    assertWithinHome(resolved, os.homedir());
     return resolved;
   }
 

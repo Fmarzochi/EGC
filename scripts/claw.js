@@ -92,7 +92,7 @@ function askGemini(systemPrompt, history, userMessage, model) {
     }
     args.push('--model', model);
   }
-  const safePrompt = fullPrompt.replace(/\0/g, '');
+  const safePrompt = fullPrompt.replaceAll('\0', '');
   args.push('-p', safePrompt);
 
   const result = spawnSync(process.execPath, [path.join(__dirname, 'egc.js'), ...args], {
