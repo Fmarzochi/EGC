@@ -1,10 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-<div align="center">
-  <b>Language / Idioma</b>
-  <br/>
-  <a href="README.md"><b>English</b></a> |
-  <a href="translations/pt/README.md">Português do Brasil</a>
-</div>
+**Language:** English | [Português do Brasil](translations/pt/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">

@@ -41,11 +41,11 @@ const LANGUAGE_NAMES = {
   ca: "Català",
 };
 
-const ROOT              = path.join(__dirname, "..");
-const TRANSLATIONS_DIR  = path.join(ROOT, "translations");
-const README_PATH       = path.join(ROOT, "README.md");
-const SELECTOR_START    = "<!-- LANGUAGE-SELECTOR-START -->";
-const SELECTOR_END      = "<!-- LANGUAGE-SELECTOR-END -->";
+const ROOT             = path.join(__dirname, "..");
+const TRANSLATIONS_DIR = path.join(ROOT, "translations");
+const README_PATH      = path.join(ROOT, "README.md");
+const SELECTOR_START   = "<!-- LANGUAGE-SELECTOR-START -->";
+const SELECTOR_END     = "<!-- LANGUAGE-SELECTOR-END -->";
 
 function getAvailableLanguages() {
   if (!fs.existsSync(TRANSLATIONS_DIR)) return [];
@@ -53,9 +53,9 @@ function getAvailableLanguages() {
   return fs
     .readdirSync(TRANSLATIONS_DIR)
     .filter((code) => {
-      const readmePath = path.join(TRANSLATIONS_DIR, code, "README.md");
-      return fs.statSync(path.join(TRANSLATIONS_DIR, code)).isDirectory()
-        && fs.existsSync(readmePath);
+      const stat = fs.statSync(path.join(TRANSLATIONS_DIR, code));
+      const readme = path.join(TRANSLATIONS_DIR, code, "README.md");
+      return stat.isDirectory() && fs.existsSync(readme);
     })
     .sort();
 }
@@ -63,22 +63,11 @@ function getAvailableLanguages() {
 function buildSelector(langs) {
   const langLinks = langs.map((code) => {
     const name = LANGUAGE_NAMES[code] || code.toUpperCase();
-    return `  <a href="translations/${code}/README.md">${name}</a>`;
+    return `[${name}](translations/${code}/README.md)`;
   });
 
-  const englishLink = `  <a href="README.md"><b>English</b></a>`;
-  const allLinks    = [englishLink, ...langLinks];
-  const linksLine   = allLinks.join(" |\n");
-
-  return [
-    SELECTOR_START,
-    '<div align="center">',
-    "  <b>Language / Idioma</b>",
-    "  <br/>",
-    linksLine,
-    "</div>",
-    SELECTOR_END,
-  ].join("\n");
+  const parts = ["English", ...langLinks];
+  return `${SELECTOR_START}\n**Language:** ${parts.join(" | ")}\n${SELECTOR_END}`;
 }
 
 function updateReadme() {
