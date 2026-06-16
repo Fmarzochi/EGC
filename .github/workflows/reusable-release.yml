@@ -90,29 +90,10 @@ jobs:
           fi
           echo "dist_tag=${NPM_DIST_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate release highlights
-        env:
-          TAG_NAME: ${{ inputs.tag }}
-        run: |
-          TAG_VERSION="${TAG_NAME#v}"
-          cat > release_body.md <<EOF
-          ## EGC ${TAG_VERSION}
-
-          ### What This Release Focuses On
-          - Harness reliability and cross-platform compatibility
-          - Eval-driven quality improvements
-          - Better workflow and operator ergonomics
-
-          ### Package Notes
-          - npm package: \`@egchq/egc\`
-          - Gemini marketplace/plugin identifier: \`egc@egc\`
-          EOF
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ inputs.tag }}
-          body_path: release_body.md
           generate_release_notes: ${{ inputs.generate-notes }}
           prerelease: ${{ contains(inputs.tag, '-') }}
           make_latest: ${{ contains(inputs.tag, '-') && 'false' || 'true' }}
