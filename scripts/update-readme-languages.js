@@ -35,65 +35,126 @@ const LANGUAGE_NAMES = {
   hr: "Hrvatski",
   el: "Ελληνικά",
   he: "עברית",
-  fa: "فارسی",
+  fa: "فارסی",
   bn: "বাংলা",
   ms: "Bahasa Melayu",
   ca: "Català",
 };
 
-const ROOT             = path.join(__dirname, "..");
-const TRANSLATIONS_DIR = path.join(ROOT, "translations");
-const README_PATH      = path.join(ROOT, "README.md");
-const SELECTOR_START   = "<!-- LANGUAGE-SELECTOR-START -->";
-const SELECTOR_END     = "<!-- LANGUAGE-SELECTOR-END -->";
+const LANGUAGE_WORD = {
+  pt: "Idioma",
+  es: "Idioma",
+  fr: "Langue",
+  de: "Sprache",
+  it: "Lingua",
+  nl: "Taal",
+  pl: "Język",
+  ru: "Язык",
+  uk: "Мова",
+  tr: "Dil",
+  ar: "اللغة",
+  hi: "भाषा",
+  zh: "语言",
+  ja: "言語",
+  ko: "언어",
+  vi: "Ngôn ngữ",
+  th: "ภาษา",
+  id: "Bahasa",
+  sv: "Språk",
+  da: "Sprog",
+  no: "Språk",
+  fi: "Kieli",
+  cs: "Jazyk",
+  sk: "Jazyk",
+  ro: "Limbă",
+  hu: "Nyelv",
+  bg: "Език",
+  hr: "Jezik",
+  el: "Γλώσσα",
+  he: "שפה",
+  fa: "زبان",
+  bn: "ভাষা",
+  ms: "Bahasa",
+  ca: "Idioma",
+};
+
+const ROOT           = path.join(__dirname, "..");
+const TRANSLATIONS   = path.join(ROOT, "translations");
+const README_PATH    = path.join(ROOT, "README.md");
+const TOP_START      = "<!-- LANGUAGE-SELECTOR-START -->";
+const TOP_END        = "<!-- LANGUAGE-SELECTOR-END -->";
+const CENTER_START   = "<!-- CENTERED-LANGUAGE-SELECTOR-START -->";
+const CENTER_END     = "<!-- CENTERED-LANGUAGE-SELECTOR-END -->";
 
 function getAvailableLanguages() {
-  if (!fs.existsSync(TRANSLATIONS_DIR)) return [];
-
+  if (!fs.existsSync(TRANSLATIONS)) return [];
   return fs
-    .readdirSync(TRANSLATIONS_DIR)
+    .readdirSync(TRANSLATIONS)
     .filter((code) => {
-      const stat = fs.statSync(path.join(TRANSLATIONS_DIR, code));
-      const readme = path.join(TRANSLATIONS_DIR, code, "README.md");
+      const stat   = fs.statSync(path.join(TRANSLATIONS, code));
+      const readme = path.join(TRANSLATIONS, code, "README.md");
       return stat.isDirectory() && fs.existsSync(readme);
     })
     .sort();
 }
 
-function buildSelector(langs) {
-  const langLinks = langs.map((code) => {
+function buildTopSelector(langs) {
+  const links = langs.map((code) => {
     const name = LANGUAGE_NAMES[code] || code.toUpperCase();
     return `[${name}](translations/${code}/README.md)`;
   });
+  return `${TOP_START}\n**Language:** English | ${links.join(" | ")}\n${TOP_END}`;
+}
 
-  const parts = ["English", ...langLinks];
-  return `${SELECTOR_START}\n**Language:** ${parts.join(" | ")}\n${SELECTOR_END}`;
+function buildCenteredSelector(langs) {
+  const titleWords = ["Language", ...langs.map((c) => LANGUAGE_WORD[c] || c.toUpperCase())];
+  const title      = `**${titleWords.join(" / ")}**`;
+  const links      = [
+    `[**English**](README.md)`,
+    ...langs.map((code) => {
+      const name = LANGUAGE_NAMES[code] || code.toUpperCase();
+      return `[${name}](translations/${code}/README.md)`;
+    }),
+  ].join(" | ");
+
+  return [
+    CENTER_START,
+    '<div align="center">',
+    "",
+    title,
+    "",
+    links,
+    "",
+    "</div>",
+    CENTER_END,
+  ].join("\n");
+}
+
+function replaceBlock(content, start, end, block) {
+  const s = content.indexOf(start);
+  const e = content.indexOf(end);
+  if (s === -1 || e === -1) return content;
+  return content.slice(0, s) + block + content.slice(e + end.length);
 }
 
 function updateReadme() {
   const readme = fs.readFileSync(README_PATH, "utf8");
+  const langs  = getAvailableLanguages();
 
-  const startIdx = readme.indexOf(SELECTOR_START);
-  const endIdx   = readme.indexOf(SELECTOR_END);
-
-  if (startIdx === -1 || endIdx === -1) {
-    console.error("Language selector sentinels not found in README.md");
-    process.exit(1);
-  }
-
-  const langs       = getAvailableLanguages();
-  const newSelector = buildSelector(langs);
-  const updated     = readme.slice(0, startIdx)
-    + newSelector
-    + readme.slice(endIdx + SELECTOR_END.length);
+  const updated = replaceBlock(
+    replaceBlock(readme, TOP_START, TOP_END, buildTopSelector(langs)),
+    CENTER_START,
+    CENTER_END,
+    buildCenteredSelector(langs)
+  );
 
   if (updated === readme) {
-    console.log("Language selector already up to date.");
+    console.log("Language selectors already up to date.");
     return;
   }
 
   fs.writeFileSync(README_PATH, updated, "utf8");
-  console.log(`Language selector updated with ${langs.length} language(s): ${langs.join(", ")}`);
+  console.log(`Language selectors updated with ${langs.length} language(s): ${langs.join(", ")}`);
 }
 
 updateReadme();
