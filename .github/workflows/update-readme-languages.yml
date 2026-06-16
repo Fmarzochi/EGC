@@ -1,0 +1,41 @@
+name: Update README Language Selector
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "translations/*/README.md"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  update-selector:
+    name: Sync language selector
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+
+      - name: Update language selector
+        run: node scripts/update-readme-languages.js
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore(i18n): sync language selector in README
+
+Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+            git push
+          fi
