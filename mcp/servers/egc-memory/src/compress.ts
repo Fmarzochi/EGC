@@ -6,6 +6,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,12 +110,81 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
 }
 
 // ─── Loader & Replacer for observations.jsonl ──────────────────────────────────
+function resolveStateStoreDbPath(): string {
+  const envOverride = process.env.EGC_STATE_DB;
+  if (envOverride) {
+    return path.resolve(envOverride);
+  }
 
+  const homeDir = process.env.HOME || os.homedir();
+  return path.join(homeDir, ".gemini", "egc", "state.db");
+}
+async function loadRawObservationsFromStateDb(
+  limit: number = 50,
+  since?: string
+): Promise<RawObservation[]> {
+  const dbPath = resolveStateStoreDbPath();
+
+  if (!fs.existsSync(dbPath)) {
+    return [];
+  }
+
+  const db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database,
+  });
+
+  try {
+    const query = `
+      SELECT id, payload, timestamp
+      FROM events
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `;
+
+    const rows = await db.all(query, [limit]);
+
+    return rows.map((row: any) => {
+      let payload: any = {};
+
+      try {
+        payload = JSON.parse(row.payload);
+      } catch {
+        payload = {};
+      }
+
+      return {
+        id: row.id,
+        tool: payload.tool,
+        output: payload.output ?? payload.result ?? "",
+        content:
+          payload.input ??
+          payload.output ??
+          payload.result ??
+          "",
+        result: payload.result ?? payload.output ?? "",
+        path: payload.cwd ?? payload.file ?? "",
+        timestamp: row.timestamp,
+      };
+    });
+  } finally {
+    await db.close();
+  }
+}
 export async function loadRawObservations(
   projectPath: string,
   limit: number = 50,
   since?: string
 ): Promise<RawObservation[]> {
+  const sqliteObservations = await loadRawObservationsFromStateDb(
+  limit,
+  since
+);
+
+if (sqliteObservations.length > 0) {
+  return sqliteObservations;
+}
+
   const { projectDir } = getProjectHash(projectPath);
   const obsPath = path.join(projectDir, "observations.jsonl");
 
