@@ -110,15 +110,19 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
 }
 
 // ─── Loader & Replacer for observations.jsonl ──────────────────────────────────
+
+// Mirrors STATE_STORE_RELATIVE_PATH from mcp/servers/egc-memory/src/index.ts
+const STATE_STORE_RELATIVE_PATH = path.join(".gemini", "egc", "state.db");
+
 function resolveStateStoreDbPath(): string {
   const envOverride = process.env.EGC_STATE_DB;
   if (envOverride) {
     return path.resolve(envOverride);
   }
-
   const homeDir = process.env.HOME || os.homedir();
-  return path.join(homeDir, ".gemini", "egc", "state.db");
+  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
 }
+
 async function loadRawObservationsFromStateDb(
   limit: number = 50,
   since?: string
@@ -135,14 +139,16 @@ async function loadRawObservationsFromStateDb(
   });
 
   try {
+    const sinceFilter = since ?? null;
     const query = `
       SELECT id, payload, timestamp
       FROM events
+      WHERE (? IS NULL OR timestamp >= ?)
       ORDER BY timestamp DESC
       LIMIT ?
     `;
 
-    const rows = await db.all(query, [limit]);
+    const rows = await db.all(query, [sinceFilter, sinceFilter, limit]);
 
     return rows.map((row: any) => {
       let payload: any = {};
@@ -171,19 +177,17 @@ async function loadRawObservationsFromStateDb(
     await db.close();
   }
 }
+
 export async function loadRawObservations(
   projectPath: string,
   limit: number = 50,
   since?: string
 ): Promise<RawObservation[]> {
-  const sqliteObservations = await loadRawObservationsFromStateDb(
-  limit,
-  since
-);
+  const sqliteObservations = await loadRawObservationsFromStateDb(limit, since);
 
-if (sqliteObservations.length > 0) {
-  return sqliteObservations;
-}
+  if (sqliteObservations.length > 0) {
+    return sqliteObservations;
+  }
 
   const { projectDir } = getProjectHash(projectPath);
   const obsPath = path.join(projectDir, "observations.jsonl");
