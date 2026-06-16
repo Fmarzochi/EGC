@@ -121,6 +121,15 @@ function assertSafeScriptPath(hookId, scriptPath, resolvedRoot) {
  * Handles output emission and process.exit on all code paths.
  */
 async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
+  const resolvedRoot = path.resolve(pluginRoot);
+  try {
+    assertSafeScriptPath(hookId, scriptPath, resolvedRoot);
+  } catch (pathErr) {
+    process.stderr.write(`${pathErr.message}\n`);
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
   // Prefer direct require() when the hook exports a run(rawInput) function.
   // This eliminates one Node.js process spawn (~50-100ms savings per hook).
   //

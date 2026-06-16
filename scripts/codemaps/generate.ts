@@ -29,6 +29,14 @@ import path from 'path';
 
 const ROOT = process.cwd();
 const SRC_DIR = process.argv[2] ? path.resolve(process.argv[2]) : ROOT;
+
+if (process.argv[2]) {
+  if (!SRC_DIR.startsWith(ROOT + path.sep) && SRC_DIR !== ROOT) {
+    process.stderr.write('Error: source directory must be within the project root\n');
+    process.exit(1);
+  }
+}
+
 const OUTPUT_DIR = path.join(ROOT, 'docs', 'CODEMAPS');
 const TODAY = new Date().toISOString().split('T')[0];
 
