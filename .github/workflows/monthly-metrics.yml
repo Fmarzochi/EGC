@@ -90,20 +90,16 @@ jobs:
             }
 
             const [
-              mainWeek,
-              shieldWeek,
-              mainMonth,
-              shieldMonth,
+              weekDownloads,
+              monthDownloads,
               repoData,
               contributors,
               releases,
               views14d,
               clones14d
             ] = await Promise.all([
-              getNpmDownloads("last-week", "egc-universal"),
-              getNpmDownloads("last-week", "egc-agentshield"),
-              getNpmDownloads("last-month", "egc-universal"),
-              getNpmDownloads("last-month", "egc-agentshield"),
+              getNpmDownloads("last-week", "@egchq/egc"),
+              getNpmDownloads("last-month", "@egchq/egc"),
               github.rest.repos.get({ owner, repo }),
               getContributorsCount(),
               getReleasesCount(),
@@ -115,11 +111,11 @@ jobs:
             const forks = repoData.data.forks_count;
 
             const tableHeader = [
-              "| Month (UTC) | egc-universal (week) | egc-agentshield (week) | egc-universal (30d) | egc-agentshield (30d) | Stars | Forks | Contributors | GitHub App installs (manual) | Views (14d) | Clones (14d) | Releases |",
-              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+              "| Month (UTC) | @egchq/egc (week) | @egchq/egc (30d) | Stars | Forks | Contributors | GitHub App installs (manual) | Views (14d) | Clones (14d) | Releases |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
             ].join("\n");
 
-            const row = `| ${monthKey} | ${fmt(mainWeek)} | ${fmt(shieldWeek)} | ${fmt(mainMonth)} | ${fmt(shieldMonth)} | ${fmt(stars)} | ${fmt(forks)} | ${fmt(contributors)} | n/a | ${fmt(views14d)} | ${fmt(clones14d)} | ${fmt(releases)} |`;
+            const row = `| ${monthKey} | ${fmt(weekDownloads)} | ${fmt(monthDownloads)} | ${fmt(stars)} | ${fmt(forks)} | ${fmt(contributors)} | n/a | ${fmt(views14d)} | ${fmt(clones14d)} | ${fmt(releases)} |`;
 
             const intro = [
               "# Monthly Metrics Snapshot",
