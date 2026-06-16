@@ -110,18 +110,16 @@ State files live at `~/.egc/state/<project-slug>.md`. One file per project, plai
 
 ---
 
-## Languages
+## Contributing
 
-[![Crowdin](https://badges.crowdin.net/egc/localized.svg)](https://crowdin.com/project/egc)
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the full contributing guide.
 
-EGC is translated by the community via [Crowdin](https://crowdin.com/project/egc). A pull request is opened automatically when a language reaches **100%** completion.
+**Translations** are managed via [Crowdin](https://crowdin.com/project/egc). [![Crowdin](https://badges.crowdin.net/egc/localized.svg)](https://crowdin.com/project/egc) A pull request is opened automatically when a language reaches **100%** completion. To contribute a translation, see [Contributing Translations](.github/CONTRIBUTING.md#contributing-translations).
 
 | Language | Progress | File |
 |---|---|---|
 | English | Source | [README.md](README.md) |
 | Portugues do Brasil | 100% | [translations/pt/README.md](translations/pt/README.md) |
-
-Want to translate EGC into your language? See [Contributing Translations](.github/CONTRIBUTING.md#contributing-translations).
 
 ---
 
