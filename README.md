@@ -74,7 +74,7 @@ npx @egchq/egc install
 
 ## What the MCP server gives your AI
 
-EGC ships `egc-memory`, an MCP server that exposes 13 tools your AI can call during a session:
+EGC ships `egc-memory`, an MCP server that exposes 14 tools your AI can call during a session:
 
 | Tool | What it does |
 |---|---|
@@ -83,14 +83,15 @@ EGC ships `egc-memory`, an MCP server that exposes 13 tools your AI can call dur
 | `store_decision` | Persists a single decision to SQLite |
 | `query_history` | Returns past decisions by timestamp |
 | `search_history` | Full-text search with BM25 ranking |
-| `set_working_memory` | Stores transient context with a TTL |
-| `get_working_memory` | Reads a transient key |
-| `delete_working_memory` | Removes a transient key |
-| `add_lesson` | Records cross-session knowledge with confidence decay |
-| `list_lessons` | Retrieves active lessons above a confidence threshold |
-| `forget_lesson` | Removes a lesson permanently |
+| `working_memory_set` | Stores transient context with a TTL |
+| `working_memory_get` | Reads a transient key |
+| `working_memory_list` | Lists all live transient entries for the current project |
+| `lesson_save` | Records cross-session knowledge with confidence decay |
+| `lesson_recall` | Retrieves active lessons above a confidence threshold |
+| `lesson_reinforce` | Boosts confidence on a lesson when the same pattern repeats |
 | `detect_patterns` | Surfaces repeated commands and recurring errors from hook events |
 | `compress_observations` | Compresses raw hook observations into typed summaries to reduce token usage |
+| `get_project_state` | Returns server health metadata and storage engine status |
 
 State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
 
@@ -155,6 +156,6 @@ Support from the community keeps this project alive and independent.
 
 <a href="https://bestpractices.dev/projects/13099"><img src="assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<a href="https://linkedin.com/in/felipemarzochi"><img src="assets/images/egc-logo.png" alt="EGC" width="110" /></a>
+<a href="https://www.linkedin.com/in/felipemarzochi"><img src="assets/images/egc-logo.png" alt="EGC" width="110" /></a>
 
 </div>
