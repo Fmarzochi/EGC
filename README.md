@@ -1,5 +1,7 @@
-<div align="right">
-  <a href="README.md">English</a> |
+<div align="center">
+  <b>Language / Idioma</b>
+  <br/>
+  <a href="README.md"><b>English</b></a> |
   <a href="translations/pt/README.md">Português do Brasil</a>
 </div>
 
