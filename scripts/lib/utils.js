@@ -50,7 +50,14 @@ function getClaudeDir() {
  *   4. ~/.egc (harness-agnostic fallback)
  */
 function getEGCDir() {
-  if (process.env.EGC_DIR) return process.env.EGC_DIR;
+  if (process.env.EGC_DIR) {
+    const resolved = path.resolve(process.env.EGC_DIR);
+    const home = os.homedir();
+    if (!resolved.startsWith(home + path.sep) && resolved !== home) {
+      throw new Error('EGC_DIR must be within the user home directory');
+    }
+    return resolved;
+  }
 
   const home = getHomeDir();
   const env = process.env;

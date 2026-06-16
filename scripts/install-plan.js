@@ -3,6 +3,14 @@
  * Inspect selective-install profiles and module plans without mutating targets.
  */
 
+const os = require('os');
+
+function redactHome(str) {
+  const home = os.homedir();
+  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return typeof str === 'string' ? str.replace(new RegExp(escaped, 'g'), '~') : str;
+}
+
 const {
   listInstallComponents,
   listInstallModules,
@@ -142,15 +150,15 @@ function printPlan(plan) {
   console.log(
     'Note: target filtering and operation output currently reflect scaffold-level adapter planning, not a byte-for-byte mirror of legacy install.sh copy paths.\n'
   );
-  console.log(`Profile: ${plan.profileId || '(custom modules)'}`);
-  console.log(`Target: ${plan.target || '(all targets)'}`);
+  console.log(`Profile: ${redactHome(plan.profileId || '(custom modules)')}`);
+  console.log(`Target: ${redactHome(plan.target || '(all targets)')}`);
   console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
   console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
   console.log(`Requested: ${plan.requestedModuleIds.join(', ')}`);
   if (plan.targetAdapterId) {
     console.log(`Adapter: ${plan.targetAdapterId}`);
-    console.log(`Target root: ${plan.targetRoot}`);
-    console.log(`Install-state: ${plan.installStatePath}`);
+    console.log(`Target root: ${redactHome(plan.targetRoot)}`);
+    console.log(`Install-state: ${redactHome(plan.installStatePath)}`);
   }
   console.log('');
   console.log(`Selected modules (${plan.selectedModuleIds.length}):`);
@@ -253,7 +261,8 @@ function main() {
     });
 
     if (options.json) {
-      console.log(JSON.stringify(plan, null, 2));
+      const homeRe = new RegExp(os.homedir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      console.log(JSON.stringify(plan, (k, v) => typeof v === 'string' ? v.replace(homeRe, '~') : v, 2));
     } else {
       printPlan(plan);
     }

@@ -7,6 +7,13 @@
  */
 
 const os = require('os');
+
+function redactHome(str) {
+  const home = os.homedir();
+  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return typeof str === 'string' ? str.replace(new RegExp(escaped, 'g'), '~') : str;
+}
+
 const {
   SUPPORTED_INSTALL_TARGETS,
   listLegacyCompatibilityLanguages,
@@ -58,17 +65,17 @@ function showHelp(exitCode = 0) {
 function printHumanPlan(plan, dryRun) {
   console.log(`${dryRun ? 'Dry-run install plan' : 'Applying install plan'}:\n`);
   console.log(`Mode: ${plan.mode}`);
-  console.log(`Target: ${plan.target}`);
+  console.log(`Target: ${redactHome(plan.target)}`);
   console.log(`Adapter: ${plan.adapter.id}`);
-  console.log(`Install root: ${plan.installRoot}`);
-  console.log(`Install-state: ${plan.installStatePath}`);
+  console.log(`Install root: ${redactHome(plan.installRoot)}`);
+  console.log(`Install-state: ${redactHome(plan.installStatePath)}`);
   if (plan.mode === 'legacy') {
     console.log(`Languages: ${plan.languages.join(', ')}`);
   } else {
     if (plan.mode === 'legacy-compat') {
       console.log(`Legacy languages: ${plan.legacyLanguages.join(', ')}`);
     }
-    console.log(`Profile: ${plan.profileId || '(custom modules)'}`);
+    console.log(`Profile: ${redactHome(plan.profileId || '(custom modules)')}`);
     console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
     console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
     console.log(`Requested modules: ${plan.requestedModuleIds.join(', ') || '(none)'}`);
@@ -137,7 +144,8 @@ function main() {
 
     if (options.dryRun) {
       if (options.json) {
-        console.log(JSON.stringify({ dryRun: true, plan }, null, 2));
+        const homeRe = new RegExp(os.homedir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+        console.log(JSON.stringify({ dryRun: true, plan }, (k, v) => typeof v === 'string' ? v.replace(homeRe, '~') : v, 2));
       } else {
         printHumanPlan(plan, true);
       }
@@ -155,7 +163,8 @@ function main() {
     }
 
     if (options.json) {
-      console.log(JSON.stringify({ dryRun: false, result }, null, 2));
+      const homeRe = new RegExp(os.homedir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      console.log(JSON.stringify({ dryRun: false, result }, (k, v) => typeof v === 'string' ? v.replace(homeRe, '~') : v, 2));
     } else {
       printHumanPlan(result, false);
     }
