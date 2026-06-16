@@ -1,6 +1,8 @@
 name: Update README Language Selector
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions: {}
