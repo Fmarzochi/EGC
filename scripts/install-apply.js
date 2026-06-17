@@ -133,7 +133,7 @@ function main() {
     });
     const plan = createInstallPlanFromRequest(request, {
       projectRoot: process.cwd(),
-      homeDir: process.env.HOME || os.homedir(),
+      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       claudeRulesDir: process.env.GEMINI_RULES_DIR || null,
     });
 
