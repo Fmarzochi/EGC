@@ -75,7 +75,7 @@ function main() {
 
     const result = repairInstalledStates({
       repoRoot: require('path').join(__dirname, '..'),
-      homeDir: process.env.HOME || os.homedir(),
+      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,
       dryRun: options.dryRun,
