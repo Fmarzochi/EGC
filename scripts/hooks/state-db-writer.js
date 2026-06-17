@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const os = require('os');
 
 function resolveStateDbPath() {
-  const home = process.env.HOME || os.homedir();
+  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
   return path.join(home, '.gemini', 'egc', 'state.db');
 }
 
