@@ -30,7 +30,7 @@ function resolveStateStoreDbPath(): string {
   if (envOverride) {
     return path.resolve(envOverride);
   }
-  const homeDir = process.env.HOME || os.homedir();
+  const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
   return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
 }
 
