@@ -32,6 +32,7 @@ jobs:
           node-version: '20.x'
 
       - name: Run Socket supply chain scan
-        run: npx --yes @socketsecurity/cli@latest ci
+        if: ${{ env.SOCKET_SECURITY_API_KEY != '' }}
+        run: npx --yes @socketsecurity/cli@1.1.102 ci
         env:
           SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
