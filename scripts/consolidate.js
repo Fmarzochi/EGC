@@ -133,7 +133,7 @@ function main() {
       showHelp(0);
     }
 
-    const homeDir = process.env.HOME || os.homedir();
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const project = path.resolve(options.project || process.cwd());
     const stateFile = stateFilePath(homeDir, project);
     const threshold = resolveThreshold(options);
