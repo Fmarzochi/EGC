@@ -162,7 +162,7 @@ function runExternalCommand(command, args, options = {}) {
 function runAutoUpdate(options = {}, dependencies = {}) {
   const discover = dependencies.discoverInstalledStates || discoverInstalledStates;
   const execute = dependencies.runExternalCommand || runExternalCommand;
-  const homeDir = options.homeDir || process.env.HOME || os.homedir();
+  const homeDir = options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir();
   const projectRoot = options.projectRoot || process.cwd();
   const requestedRepoRoot = options.repoRoot ? validateRepoRoot(options.repoRoot) : null;
   const records = discover({
@@ -341,7 +341,7 @@ function main() {
     }
 
     const result = runAutoUpdate({
-      homeDir: process.env.HOME || os.homedir(),
+      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,
       repoRoot: options.repoRoot,
