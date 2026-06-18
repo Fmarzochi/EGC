@@ -41,6 +41,43 @@ const LANGUAGE_NAMES = {
   ca: "Català",
 };
 
+const LANGUAGE_WORD = {
+  pt: "Idioma",
+  es: "Idioma",
+  fr: "Langue",
+  de: "Sprache",
+  it: "Lingua",
+  nl: "Taal",
+  pl: "Język",
+  ru: "Язык",
+  uk: "Мова",
+  tr: "Dil",
+  ar: "اللغة",
+  hi: "भाषा",
+  zh: "语言",
+  ja: "言語",
+  ko: "언어",
+  vi: "Ngôn ngữ",
+  th: "ภาษา",
+  id: "Bahasa",
+  sv: "Språk",
+  da: "Sprog",
+  no: "Språk",
+  fi: "Kieli",
+  cs: "Jazyk",
+  sk: "Jazyk",
+  ro: "Limbă",
+  hu: "Nyelv",
+  bg: "Език",
+  hr: "Jezik",
+  el: "Γλώσσα",
+  he: "שפה",
+  fa: "زبان",
+  bn: "ভাষা",
+  ms: "Bahasa",
+  ca: "Idioma",
+};
+
 const ROOT           = path.join(__dirname, "..");
 const TRANSLATIONS   = path.join(ROOT, "translations");
 const README_PATH    = path.join(ROOT, "README.md");
@@ -70,7 +107,8 @@ function buildTopSelector(langs) {
 }
 
 function buildCenteredSelector(langs) {
-  const title = `**Language**`;
+  const titleWords = ["Language", ...langs.map((c) => LANGUAGE_WORD[c] || c.toUpperCase())];
+  const title      = `**${titleWords.join(" / ")}**`;
   const links      = [
     `[**English**](README.md)`,
     ...langs.map((code) => {
