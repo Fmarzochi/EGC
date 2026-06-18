@@ -24,6 +24,76 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      - name: Upload sources to Crowdin
+        uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: false
+          create_pull_request: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+
+      - name: Pre-translate via Machine Translation
+        id: pretranslate
+        env:
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+        run: |
+          engines=$(curl -sf \
+            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+            "https://api.crowdin.com/api/v2/mts?limit=1" || echo '{}')
+          engine_id=$(echo "$engines" | jq -r '.data[0].data.id // empty')
+          if [ -z "$engine_id" ]; then
+            echo "::notice::No MT engine configured. Skipping pre-translation."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "MT engine: $engine_id"
+          lang_response=$(curl -sf \
+            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+            "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/languages/progress?limit=500")
+          lang_ids=$(echo "$lang_response" | jq -r '[.data[].data.languageId] | @json')
+          pt_response=$(curl -sf -X POST \
+            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/pre-translations" \
+            -d "{\"method\":\"mt\",\"engineId\":${engine_id},\"languageIds\":${lang_ids},\"autoApproveOption\":\"all\",\"translateUntranslatedOnly\":true,\"duplicateTranslations\":false}" \
+            || echo '{}')
+          pre_id=$(echo "$pt_response" | jq -r '.data.identifier // empty')
+          if [ -z "$pre_id" ]; then
+            echo "::warning::Pre-translation request failed. Skipping."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Pre-translation started: $pre_id"
+          echo "pre_id=${pre_id}" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for pre-translation to finish
+        if: steps.pretranslate.outputs.skipped != 'true'
+        env:
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          PRE_ID: ${{ steps.pretranslate.outputs.pre_id }}
+        run: |
+          for i in $(seq 1 36); do
+            result=$(curl -sf \
+              -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+              "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/pre-translations/${PRE_ID}")
+            status=$(echo "$result" | jq -r '.data.status')
+            echo "Status: $status (attempt $i/36)"
+            if [ "$status" = "finished" ]; then
+              break
+            elif [ "$status" = "failed" ]; then
+              echo "::warning::Pre-translation failed. Proceeding with existing translations."
+              break
+            fi
+            sleep 10
+          done
+
       - name: Check translation progress
         id: progress
         env:
@@ -40,29 +110,16 @@ jobs:
           echo "complete_count=${count}" >> "$GITHUB_OUTPUT"
           echo "total_count=${total}" >> "$GITHUB_OUTPUT"
           if [ "${min}" -lt 100 ]; then
-            echo "::notice::Minimum translation progress: ${min}%. Uploading sources only. A PR will be created automatically when all languages reach 100%."
+            echo "::notice::Minimum translation progress: ${min}%. A PR will be created when all languages reach 100%."
           else
-            echo "::notice::All ${total} language(s) at 100%. Proceeding with download and PR creation."
+            echo "::notice::All ${total} language(s) at 100%. Proceeding with download."
           fi
 
-      - name: Upload sources to Crowdin (below 100%)
-        if: steps.progress.outputs.min_progress != '100'
-        uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
-        with:
-          upload_sources: true
-          upload_translations: false
-          download_translations: false
-          create_pull_request: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
-          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
-
-      - name: Crowdin full sync (100% complete)
+      - name: Download translations and create PR
         if: steps.progress.outputs.min_progress == '100'
         uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
         with:
-          upload_sources: true
+          upload_sources: false
           upload_translations: false
           download_translations: true
           create_pull_request: true
