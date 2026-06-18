@@ -1,0 +1,132 @@
+<div align="center">
+<img src="../../assets/hero.png" alt="EGC - Contexto Global Extendido" width="100%" />
+</div>
+
+[![npm version](https://img.shields.io/npm/v/@egchq/egc?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@egchq/egc) [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![Discord](https://img.shields.io/discord/1513941515452416130?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/AtazrtxJ) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](../../.github/CONTRIBUTING.md) [![Stars](https://img.shields.io/github/stars/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/stargazers) [![Forks](https://img.shields.io/github/forks/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/network/members) [![Issues](https://img.shields.io/github/issues/Fmarzochi/EGC)](https://github.com/Fmarzochi/EGC/issues) [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen)](https://github.com/Fmarzochi/EGC/commits/main) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
+
+<div align="center">
+
+# EGC - Contexto Global Extendido
+
+**Tus agentes de IA nunca vuelven a empezar desde cero.**
+
+</div>
+
+---
+
+EGC es un entorno de ejecución local que proporciona memoria persistente a todas las herramientas de programación con IA que utilizas. Al final de cada sesión, la IA guarda lo que aprendió sobre tu proyecto: las decisiones que tomaste, lo que falló, tus preferencias y los siguientes pasos. Al comienzo de la siguiente sesión, vuelve a cargar ese estado. Una sola instalación funciona para Claude Code, Cursor, Gemini CLI, Windsurf y más.
+
+---
+
+## Así es como EGC funciona en la práctica
+
+Abres Claude Code en un proyecto que no has tocado en dos semanas. Sin escribir nada:
+
+```text
+State loaded from egc-memory via ~/.egc/state/Projects--MyApp.md
+
+Context and preferences acknowledged (terse responses).
+
+Ready to pick up the next items:
+• Test full install on a clean machine
+• Add GEMINI.md with session memory protocol
+• Publish v1.0.1 fix to npm after clean install test passes
+• Add mcp_server_count to audit.js
+```
+
+La IA ya sabe qué estabas construyendo, qué decisiones tomaste, qué falló y exactamente dónde te detuviste. Lo sabe porque EGC guardó ese estado al final de tu última sesión y lo cargó nuevamente cuando esta comenzó. No escribiste nada. Simplemente empezaste a trabajar.
+
+<div align="center">
+  <img src="../../assets/egc-terminal.gif" alt="Demostración de EGC" width="700" />
+</div>
+
+---
+
+## Instalación
+
+```bash
+npm install -g @egchq/egc && egc install
+```
+
+O ejecútalo sin instalarlo globalmente:
+
+```bash
+npx @egchq/egc install
+```
+
+[Guía completa de instalación](../../docs/installation.md)
+
+---
+
+## Lo que el servidor MCP ofrece a tu IA
+
+EGC incluye `egc-memory`, un servidor MCP que expone 14 herramientas que tu IA puede utilizar durante una sesión:
+
+| Herramienta | Qué hace |
+|---|---|
+| `get_state` | Carga la memoria del proyecto al inicio de la sesión |
+| `update_state` | Guarda decisiones, preferencias y próximos pasos |
+| `store_decision` | Persiste una decisión individual en SQLite |
+| `query_history` | Devuelve decisiones pasadas por marca de tiempo |
+| `search_history` | Búsqueda de texto completo con clasificación BM25 |
+| `working_memory_set` | Almacena contexto temporal con TTL |
+| `working_memory_get` | Lee una clave temporal |
+| `working_memory_list` | Lista todas las entradas temporales activas del proyecto actual |
+| `lesson_save` | Registra conocimiento entre sesiones con degradación de confianza |
+| `lesson_recall` | Recupera lecciones activas por encima de un umbral de confianza |
+| `lesson_reinforce` | Aumenta la confianza en una lección cuando se repite el mismo patrón |
+| `detect_patterns` | Identifica comandos repetidos y errores recurrentes a partir de eventos hook |
+| `compress_observations` | Comprime observaciones sin procesar en resúmenes tipificados para reducir el uso de tokens |
+| `get_project_state` | Devuelve metadatos de estado del servidor y del motor de almacenamiento |
+
+Los archivos de estado se almacenan en `~/.egc/state/<project-slug>.md`. Un archivo por proyecto, en Markdown simple y legible para humanos.
+
+---
+
+## Biblioteca de prompts
+
+**479 componentes**: opcionales. Instálalos para obtener acceso a 63 agentes, 229 habilidades y 76 comandos escritos a partir de experiencia real. Si los omites, EGC seguirá proporcionándote memoria persistente.
+
+| Componente | Total | Claude Code | Gemini CLI | Claude Code nativo |
+|---|---|---|---|---|
+| Agentes | 63 | Compartidos (AGENTS.md) | Compartidos (AGENTS.md) | 12 |
+| Comandos | 76 | Compartidos | Basados en instrucciones | 31 |
+| Habilidades | 229 | Compartidas | 10 (formato nativo) | 37 |
+| Reglas | 111 | ✓ | ✓ | ✓ |
+
+---
+
+## Apoya a EGC
+
+EGC es desarrollado por una sola persona, mantenido de forma abierta y gratuito.
+
+- **[Únete al Discord](https://discord.gg/AtazrtxJ)**: haz preguntas y comparte comentarios
+- **[Patrocina en GitHub](https://github.com/sponsors/Fmarzochi)**: cualquier cantidad ayuda
+- **[Dona mediante PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: no necesitas una cuenta de GitHub
+- **Dale una estrella al repositorio**: ayuda a que otros desarrolladores lo descubran
+- **[Contribuye](../../.github/CONTRIBUTING.md)**: agentes, habilidades, comandos, correcciones de errores y documentación
+- **Comparte**: si EGC cambió tu forma de trabajar, cuéntaselo a alguien
+
+### Patrocinadores
+
+El apoyo de la comunidad mantiene este proyecto vivo e independiente.
+
+**Colaboradores**
+
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+
+**Patrocinadores mensuales** · _sé el primero_
+
+---
+
+<div align="center">
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](../../LICENSE) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)](https://www.bestpractices.dev/projects/13099?level=baseline-1) [![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
+
+<br>
+
+<a href="https://bestpractices.dev/projects/13099"><img src="../../assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+<a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
+
+</div>

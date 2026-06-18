@@ -108,7 +108,8 @@ function buildTopSelector(langs) {
 
 function buildCenteredSelector(langs) {
   const titleWords = ["Language", ...langs.map((c) => LANGUAGE_WORD[c] || c.toUpperCase())];
-  const title      = `**${titleWords.join(" / ")}**`;
+  const uniqueWords = [...new Set(titleWords)];
+  const title      = `**${uniqueWords.join(" / ")}**`;
   const links      = [
     `[**English**](README.md)`,
     ...langs.map((code) => {
