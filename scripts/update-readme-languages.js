@@ -5,7 +5,7 @@ const fs   = require("fs");
 const path = require("path");
 
 const LANGUAGE_NAMES = {
-  pt: "Português do Brasil",
+  pt: "Português (Brasil)",
   es: "Español",
   fr: "Français",
   de: "Deutsch",
