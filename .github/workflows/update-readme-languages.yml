@@ -3,6 +3,8 @@ name: Update README Language Selector
 on:
   push:
     branches: [main]
+    paths:
+      - translations/**/README.md
   workflow_dispatch:
 
 permissions: {}
@@ -13,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -23,15 +26,23 @@ jobs:
       - name: Update language selector
         run: node scripts/update-readme-languages.js
 
-      - name: Commit if changed
+      - name: Open PR if changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md
           if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            MSG=$'chore(i18n): sync language selector in README\n\nSigned-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
-            git commit -m "$MSG"
-            git push
+            echo "Language selector already up to date."
+            exit 0
           fi
+          BRANCH="chore/sync-language-selector-$(date +%Y%m%d%H%M%S)"
+          git checkout -b "$BRANCH"
+          git commit -m $'chore(i18n): sync language selector in README\n\nSigned-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore(i18n): sync language selector in README" \
+            --body "Language selector updated automatically to reflect available translations." \
+            --base main \
+            --head "$BRANCH"
