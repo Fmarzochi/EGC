@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**Language:** English | [Español](translations/es/README.md) | [Português do Brasil](translations/pt/README.md)
+**Language:** English | [Español](translations/es/README.md) | [Português (Brasil)](translations/pt/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -13,7 +13,7 @@
 
 **Language / Idioma**
 
-[**English**](README.md) | [Español](translations/es/README.md) | [Português do Brasil](translations/pt/README.md)
+[**English**](README.md) | [Español](translations/es/README.md) | [Português (Brasil)](translations/pt/README.md)
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
