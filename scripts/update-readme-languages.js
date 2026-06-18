@@ -44,6 +44,8 @@ const LANGUAGE_NAMES = {
 const ROOT           = path.join(__dirname, "..");
 const TRANSLATIONS   = path.join(ROOT, "translations");
 const README_PATH    = path.join(ROOT, "README.md");
+const TOP_START      = "<!-- LANGUAGE-SELECTOR-START -->";
+const TOP_END        = "<!-- LANGUAGE-SELECTOR-END -->";
 const CENTER_START   = "<!-- CENTERED-LANGUAGE-SELECTOR-START -->";
 const CENTER_END     = "<!-- CENTERED-LANGUAGE-SELECTOR-END -->";
 
@@ -57,6 +59,14 @@ function getAvailableLanguages() {
       return stat.isDirectory() && fs.existsSync(readme);
     })
     .sort();
+}
+
+function buildTopSelector(langs) {
+  const links = langs.map((code) => {
+    const name = LANGUAGE_NAMES[code] || code.toUpperCase();
+    return `[${name}](translations/${code}/README.md)`;
+  });
+  return `${TOP_START}\n**Language:** English | ${links.join(" | ")}\n${TOP_END}`;
 }
 
 function buildCenteredSelector(langs) {
@@ -93,15 +103,20 @@ function updateReadme() {
   const readme = fs.readFileSync(README_PATH, "utf8");
   const langs  = getAvailableLanguages();
 
-  const updated = replaceBlock(readme, CENTER_START, CENTER_END, buildCenteredSelector(langs));
+  const updated = replaceBlock(
+    replaceBlock(readme, TOP_START, TOP_END, buildTopSelector(langs)),
+    CENTER_START,
+    CENTER_END,
+    buildCenteredSelector(langs)
+  );
 
   if (updated === readme) {
-    console.log("Language selector already up to date.");
+    console.log("Language selectors already up to date.");
     return;
   }
 
   fs.writeFileSync(README_PATH, updated, "utf8");
-  console.log(`Language selector updated with ${langs.length} language(s): ${langs.join(", ")}`);
+  console.log(`Language selectors updated with ${langs.length} language(s): ${langs.join(", ")}`);
 }
 
 updateReadme();
