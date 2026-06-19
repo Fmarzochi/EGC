@@ -22,6 +22,7 @@ import { detectVolatile } from './cache-aligner.js';
 import { detectContentType } from './content-router.js';
 import { crushJsonArray } from './smart-crusher.js';
 import { autoLearn } from './learn-writer.js';
+import { compressViaHeadroom } from './headroom-client.js';
 
 interface PipelineResult {
   chunks: string[];
@@ -242,26 +243,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         const pipeline = runCompressionPipeline(rawPayloads);
 
+        // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
+        let finalContent = pipeline.chunks.join('\n\n');
+        let headroomSavingsPct = 0;
+        let headroomTransforms: string[] = [];
+        if (pipeline.chunks.length > 0) {
+          const hr = await compressViaHeadroom(pipeline.chunks);
+          if (hr !== null) {
+            finalContent = hr.text;
+            headroomSavingsPct = Math.round((1 - hr.bytes_after / hr.bytes_before) * 100);
+            headroomTransforms = hr.transforms_applied;
+          }
+        }
+
+        const finalBytes = Buffer.byteLength(finalContent, 'utf8');
+        const totalSavingsPct = pipeline.bytes_before === 0
+          ? 0
+          : Math.round((1 - finalBytes / pipeline.bytes_before) * 100);
+
         auditLog('PAYLOAD_MUTATION', 'MUTATED', {
           mode,
           files_requested: filepaths.length,
           raw_chunks: rawPayloads.length,
           reduced_chunks: pipeline.chunks.length,
           bytes_before: pipeline.bytes_before,
-          bytes_after: pipeline.bytes_after,
-          savings_pct: pipeline.savings_pct,
+          bytes_after: finalBytes,
+          savings_pct: totalSavingsPct,
           volatile_findings: pipeline.volatile_findings,
           chunks_crushed: pipeline.chunks_crushed,
+          headroom_savings_pct: headroomSavingsPct,
+          headroom_transforms: headroomTransforms.length,
         });
 
-        const header = [
-          `[reduce_context] ${pipeline.savings_pct}% saved`,
-          `(${pipeline.bytes_before} -> ${pipeline.bytes_after} bytes,`,
+        const headerParts = [
+          `[reduce_context] ${totalSavingsPct}% saved`,
+          `(${pipeline.bytes_before} -> ${finalBytes} bytes,`,
           `${pipeline.chunks_crushed} JSON chunks crushed,`,
-          `${pipeline.volatile_findings} volatile tokens detected)`,
-        ].join(' ');
+          `${pipeline.volatile_findings} volatile tokens detected`,
+        ];
+        if (headroomSavingsPct > 0) {
+          headerParts.push(`, headroom: ${headroomSavingsPct}% extra via ${headroomTransforms.length} transforms`);
+        }
+        const header = headerParts.join(' ') + ')';
 
-        const finalContent = pipeline.chunks.join('\n\n');
         return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
       }
 
