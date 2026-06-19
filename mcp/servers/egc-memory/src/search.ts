@@ -71,6 +71,98 @@ export function rankResults(rows: RawSearchRow[]): RankedDecision[] {
   }));
 }
 
+export interface RankedLesson {
+  id: string;
+  content: string;
+  context: string;
+  confidence: number;
+  tags: string | null;
+  created_at: string;
+  last_reinforced: string | null;
+  last_recalled: string | null;
+  score: number;
+}
+
+interface RawLessonRow {
+  id: string;
+  content: string;
+  context: string;
+  confidence: number;
+  tags: string | null;
+  created_at: string;
+  last_reinforced: string | null;
+  last_recalled: string | null;
+  rawScore: number;
+}
+
+export async function createLessonsSearchIndex(db: Database): Promise<void> {
+  await db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS lessons_fts USING fts5(
+      content,
+      context,
+      tags,
+      content='lessons',
+      content_rowid='rowid'
+    );
+    CREATE TRIGGER IF NOT EXISTS lessons_fts_after_insert AFTER INSERT ON lessons BEGIN
+      INSERT INTO lessons_fts(rowid, content, context, tags)
+        VALUES (new.rowid, new.content, new.context, COALESCE(new.tags, ''));
+    END;
+    CREATE TRIGGER IF NOT EXISTS lessons_fts_after_delete AFTER DELETE ON lessons BEGIN
+      INSERT INTO lessons_fts(lessons_fts, rowid, content, context, tags)
+        VALUES ('delete', old.rowid, old.content, old.context, COALESCE(old.tags, ''));
+    END;
+    CREATE TRIGGER IF NOT EXISTS lessons_fts_after_update AFTER UPDATE ON lessons BEGIN
+      INSERT INTO lessons_fts(lessons_fts, rowid, content, context, tags)
+        VALUES ('delete', old.rowid, old.content, old.context, COALESCE(old.tags, ''));
+      INSERT INTO lessons_fts(rowid, content, context, tags)
+        VALUES (new.rowid, new.content, new.context, COALESCE(new.tags, ''));
+    END;
+  `);
+}
+
+export async function rebuildLessonsSearchIndex(db: Database): Promise<void> {
+  await db.exec(`INSERT INTO lessons_fts(lessons_fts) VALUES ('rebuild')`);
+}
+
+export async function searchLessons(
+  db: Database,
+  query: string,
+  minConfidence: number,
+  limit: number
+): Promise<RankedLesson[]> {
+  const match = sanitizeFtsQuery(query);
+  if (!match) return [];
+
+  const rows: RawLessonRow[] = await db.all(
+    `SELECT l.id, l.content, l.context, l.confidence, l.tags,
+            l.created_at, l.last_reinforced, l.last_recalled,
+            bm25(lessons_fts) AS rawScore
+     FROM lessons_fts
+     JOIN lessons l ON l.rowid = lessons_fts.rowid
+     WHERE lessons_fts MATCH ?
+       AND l.archived = 0
+       AND l.confidence >= ?
+     ORDER BY rawScore
+     LIMIT ?`,
+    [match, minConfidence, limit]
+  );
+
+  if (rows.length === 0) return [];
+  const best = Math.max(...rows.map(r => -r.rawScore));
+  return rows.map(r => ({
+    id: r.id,
+    content: r.content,
+    context: r.context,
+    confidence: r.confidence,
+    tags: r.tags ?? null,
+    created_at: r.created_at,
+    last_reinforced: r.last_reinforced ?? null,
+    last_recalled: r.last_recalled ?? null,
+    score: best > 0 ? Math.round((-r.rawScore / best) * 100) / 100 : 0
+  }));
+}
+
 export async function searchDecisions(
   db: Database,
   query: string,

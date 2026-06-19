@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
+import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
 import {
   createWorkingMemoryTable,
@@ -83,6 +83,7 @@ function log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: Re
 
 let dbInstance: Database | null = null;
 let searchIndexReady = false;
+let lessonsSearchIndexReady = false;
 
 // ============================================================================
 // SQLite Arbitration & Message Queue (Cross-Runtime Synchronization)
@@ -250,6 +251,22 @@ async function runMigrations(db: Database, dbDir: string) {
           ON lessons (archived, confidence DESC);
       `);
       await db.run('INSERT INTO schema_migrations (version) VALUES (4)');
+    }
+
+    // Migration 5: FTS5 index over lessons for BM25 keyword search.
+    // Mirrors the decisions_fts pattern; triggers keep the index in sync on
+    // every write and a one-time rebuild backfills lessons from Migration 4.
+    const hasV5 = await db.get('SELECT version FROM schema_migrations WHERE version = 5');
+    try {
+      if (!hasV5) {
+        await createLessonsSearchIndex(db);
+        await rebuildLessonsSearchIndex(db);
+        await db.run('INSERT INTO schema_migrations (version) VALUES (5)');
+      }
+      lessonsSearchIndexReady = true;
+    } catch (e) {
+      lessonsSearchIndexReady = false;
+      log('WARN', 'FTS5 unavailable for lessons, lesson_recall falls back to substring matching', { error: String(e) });
     }
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {
@@ -663,18 +680,30 @@ async function handleLessonSave(db: Database, args: unknown) {
 
 async function handleLessonRecall(db: Database, args: unknown) {
   const { query, min_confidence, limit } = LessonRecallSchema.parse(args);
-  const lowerQuery = query.toLowerCase();
-  const rows = await db.all<LessonRow[]>(
-    `SELECT * FROM lessons
-     WHERE archived = 0 AND confidence >= ?
-     ORDER BY confidence DESC, created_at DESC
-     LIMIT ?`,
-    [min_confidence, limit * 3]
-  );
-  const matched = rows
-    .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
-    .slice(0, limit)
-    .map(mapLessonRow);
+
+  let matched: ReturnType<typeof mapLessonRow>[];
+
+  if (lessonsSearchIndexReady) {
+    const results = await searchLessons(db, query, min_confidence, limit);
+    matched = results.map(r => mapLessonRow({
+      id: r.id, content: r.content, context: r.context, confidence: r.confidence,
+      tags: r.tags ?? null, archived: 0, created_at: r.created_at,
+      last_reinforced: r.last_reinforced ?? null, last_recalled: r.last_recalled ?? null
+    } as LessonRow));
+  } else {
+    const lowerQuery = query.toLowerCase();
+    const rows = await db.all<LessonRow[]>(
+      `SELECT * FROM lessons
+       WHERE archived = 0 AND confidence >= ?
+       ORDER BY confidence DESC, created_at DESC
+       LIMIT ?`,
+      [min_confidence, limit * 3]
+    );
+    matched = rows
+      .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
+      .slice(0, limit)
+      .map(mapLessonRow);
+  }
 
   const now = new Date().toISOString();
   if (matched.length > 0) {
@@ -685,7 +714,7 @@ async function handleLessonRecall(db: Database, args: unknown) {
     });
   }
 
-  log('INFO', 'Lessons recalled', { query, count: matched.length });
+  log('INFO', 'Lessons recalled', { query, fts: lessonsSearchIndexReady, count: matched.length });
   return { content: [{ type: "text", text: JSON.stringify({ lessons: matched, meta: { query, min_confidence, limit, count: matched.length } }, null, 2) }] };
 }
 
