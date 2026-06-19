@@ -1,8 +1,8 @@
 export type ContentType = 'json_array' | 'code' | 'log' | 'diff' | 'text';
 
 const CODE_SIGNALS = [
-  /^\s*(import|export|const|let|var|function|class|interface|type|async|await|return|from)\b/m,
-  /^\s*(def |fn |pub fn |func |package |#include|using namespace)\b/m,
+  /^(import|export|const|let|var|function|class|interface|type|async|await|return|from)\b/m,
+  /^(def |fn |pub fn |func |package |#include|using namespace)\b/m,
   /[{};]\s*$/m,
 ];
 
