@@ -28,7 +28,7 @@
 
 ---
 
-EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, the AI saves what it learned about your project: the decisions you made, what failed, your preferences, what comes next. At the start of the next session, it loads that state back. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more.
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, the AI saves what it learned about your project: the decisions you made, what failed, your preferences, what comes next. At the start of the next session, it loads that state back. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
 
 ---
 

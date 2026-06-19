@@ -35,7 +35,7 @@ const LANGUAGE_NAMES = {
   hr: "Hrvatski",
   el: "Ελληνικά",
   he: "עברית",
-  fa: "فارסی",
+  fa: "فارسی",
   bn: "বাংলা",
   ms: "Bahasa Melayu",
   ca: "Català",
@@ -78,13 +78,20 @@ const LANGUAGE_WORD = {
   ca: "Idioma",
 };
 
-const ROOT           = path.join(__dirname, "..");
-const TRANSLATIONS   = path.join(ROOT, "translations");
-const README_PATH    = path.join(ROOT, "README.md");
-const TOP_START      = "<!-- LANGUAGE-SELECTOR-START -->";
-const TOP_END        = "<!-- LANGUAGE-SELECTOR-END -->";
-const CENTER_START   = "<!-- CENTERED-LANGUAGE-SELECTOR-START -->";
-const CENTER_END     = "<!-- CENTERED-LANGUAGE-SELECTOR-END -->";
+const ROOT         = path.join(__dirname, "..");
+const TRANSLATIONS = path.join(ROOT, "translations");
+const README_PATH  = path.join(ROOT, "README.md");
+const TOP_START    = "<!-- LANGUAGE-SELECTOR-START -->";
+const TOP_END      = "<!-- LANGUAGE-SELECTOR-END -->";
+const CENTER_START = "<!-- CENTERED-LANGUAGE-SELECTOR-START -->";
+const CENTER_END   = "<!-- CENTERED-LANGUAGE-SELECTOR-END -->";
+
+// Markers for blocks that should be identical across all translations
+// Format: [startMarker, endMarker]
+const SYNC_BLOCKS = [
+  ["<!-- BADGES-START -->", "<!-- BADGES-END -->"],
+  ["<!-- BOTTOM-BADGES-START -->", "<!-- BOTTOM-BADGES-END -->"],
+];
 
 function getAvailableLanguages() {
   if (!fs.existsSync(TRANSLATIONS)) return [];
@@ -107,10 +114,10 @@ function buildTopSelector(langs) {
 }
 
 function buildCenteredSelector(langs) {
-  const titleWords = ["Language", ...langs.map((c) => LANGUAGE_WORD[c] || c.toUpperCase())];
+  const titleWords  = ["Language", ...langs.map((c) => LANGUAGE_WORD[c] || c.toUpperCase())];
   const uniqueWords = [...new Set(titleWords)];
-  const title      = `**${uniqueWords.join(" / ")}**`;
-  const links      = [
+  const title       = `**${uniqueWords.join(" / ")}**`;
+  const links       = [
     `[**English**](README.md)`,
     ...langs.map((code) => {
       const name = LANGUAGE_NAMES[code] || code.toUpperCase();
@@ -138,6 +145,13 @@ function replaceBlock(content, start, end, block) {
   return content.slice(0, s) + block + content.slice(e + end.length);
 }
 
+function extractBlock(content, start, end) {
+  const s = content.indexOf(start);
+  const e = content.indexOf(end);
+  if (s === -1 || e === -1) return null;
+  return content.slice(s, e + end.length);
+}
+
 function updateReadme() {
   const readme = fs.readFileSync(README_PATH, "utf8");
   const langs  = getAvailableLanguages();
@@ -149,13 +163,77 @@ function updateReadme() {
     buildCenteredSelector(langs)
   );
 
-  if (updated === readme) {
+  if (updated !== readme) {
+    fs.writeFileSync(README_PATH, updated, "utf8");
+    console.log(`Language selectors updated with ${langs.length} language(s): ${langs.join(", ")}`);
+  } else {
     console.log("Language selectors already up to date.");
-    return;
+  }
+}
+
+function syncBlocks() {
+  const enContent = fs.readFileSync(README_PATH, "utf8");
+  const langs     = getAvailableLanguages();
+  let   synced    = 0;
+
+  for (const [start, end] of SYNC_BLOCKS) {
+    const enBlock = extractBlock(enContent, start, end);
+    if (!enBlock) continue;
+
+    for (const lang of langs) {
+      const filePath = path.join(TRANSLATIONS, lang, "README.md");
+      const content  = fs.readFileSync(filePath, "utf8");
+      const updated  = replaceBlock(content, start, end, enBlock);
+      if (updated !== content) {
+        fs.writeFileSync(filePath, updated, "utf8");
+        console.log(`  Synced block [${start}] in translations/${lang}/README.md`);
+        synced++;
+      }
+    }
   }
 
-  fs.writeFileSync(README_PATH, updated, "utf8");
-  console.log(`Language selectors updated with ${langs.length} language(s): ${langs.join(", ")}`);
+  if (synced === 0) console.log("Sync blocks: all translations up to date.");
+}
+
+function checkDrift() {
+  const enContent = fs.readFileSync(README_PATH, "utf8");
+  const langs     = getAvailableLanguages();
+  const warnings  = [];
+
+  // Extract key fingerprints from the English README
+  const enToolCount  = (enContent.match(/^\| `\w/gm) || []).length;
+  const enHasBadges  = enContent.includes("shields.io");
+  const enHasSocket  = enContent.includes("socket.dev/api/badge");
+  const enHasOpenRouter = enContent.includes("OpenRouter");
+
+  for (const lang of langs) {
+    const filePath = path.join(TRANSLATIONS, lang, "README.md");
+    const content  = fs.readFileSync(filePath, "utf8");
+    const toolCount = (content.match(/^\| `\w/gm) || []).length;
+
+    if (toolCount !== enToolCount) {
+      warnings.push(`[${lang}] tool count mismatch: has ${toolCount}, EN has ${enToolCount}`);
+    }
+    if (enHasBadges && !content.includes("shields.io")) {
+      warnings.push(`[${lang}] missing shields.io badges`);
+    }
+    if (enHasSocket && !content.includes("socket.dev/api/badge")) {
+      warnings.push(`[${lang}] missing Socket.dev badge`);
+    }
+    if (enHasOpenRouter && !content.includes("OpenRouter")) {
+      warnings.push(`[${lang}] missing OpenRouter mention`);
+    }
+  }
+
+  if (warnings.length === 0) {
+    console.log("Drift check: all translations appear in sync.");
+  } else {
+    console.warn("Drift check warnings:");
+    warnings.forEach((w) => console.warn("  " + w));
+    if (process.argv.includes("--strict")) process.exit(1);
+  }
 }
 
 updateReadme();
+syncBlocks();
+checkDrift();
