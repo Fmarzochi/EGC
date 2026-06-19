@@ -48,6 +48,10 @@
     {
       "name": "orchestrate_task",
       "description": "Routes a prompt with optional agent/skill lists and file payloads. Returns routing context and context-reduction metrics. Agent/skill selection is pass-through; provide explicit lists for deterministic routing."
+    },
+    {
+      "name": "auto_learn",
+      "description": "Mines recent tool failures from the EGC session database and writes ranked recommendations to CLAUDE.md between managed markers. Subsequent calls replace the block in-place. Skips gracefully when no session database exists."
     }
   ],
   "tags": [
