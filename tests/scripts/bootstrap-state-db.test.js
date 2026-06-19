@@ -109,7 +109,7 @@ async function runTests() {
         `expected FAILED in stderr, got: ${result.stderr}`
       );
     } finally {
-      try { fs.unlinkSync(tempFile); } catch (_) {}
+      try { fs.unlinkSync(tempFile); } catch (_) { /* cleanup best-effort */ }
     }
   })) passed++; else failed++;
 
