@@ -165,6 +165,7 @@ async function createStateStore(options = {}) {
     );
     return {
       dbPath,
+      nativeUnavailable: true,
       close() {},
       getAppliedMigrations() { return []; },
       validateEntity,

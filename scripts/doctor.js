@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 const os = require('os');
+const path = require('path');
+const fs = require('fs');
 const { buildDoctorReport } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
+const { getEGCDir } = require('./lib/utils');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -80,6 +83,12 @@ function printHuman(report) {
   console.log(`\nSummary: checked=${report.summary.checkedCount}, ok=${report.summary.okCount}, warnings=${report.summary.warningCount}, errors=${report.summary.errorCount}`);
 }
 
+function checkStateDb() {
+  const dbPath = path.join(getEGCDir(), 'egc', 'state.db');
+  if (fs.existsSync(dbPath)) return null;
+  return { missing: true, dbPath };
+}
+
 function main() {
   try {
     const options = parseArgs(process.argv);
@@ -88,17 +97,24 @@ function main() {
     }
 
     const report = buildDoctorReport({
-      repoRoot: require('path').join(__dirname, '..'),
+      repoRoot: path.join(__dirname, '..'),
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,
     });
     const hasIssues = report.summary.errorCount > 0 || report.summary.warningCount > 0;
+    const stateDb = checkStateDb();
 
     if (options.json) {
-      console.log(JSON.stringify(report, null, 2));
+      const out = stateDb ? { ...report, stateDb } : report;
+      console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman(report);
+      if (stateDb) {
+        console.log('\nState store:');
+        console.log('  WARNING: state.db not found at ' + stateDb.dbPath);
+        console.log('  Run: egc init  to create the state store (requires better-sqlite3 native module)');
+      }
     }
 
     process.exitCode = hasIssues ? 1 : 0;

@@ -182,6 +182,16 @@ function registerToml(target) {
   fs.writeFileSync(target, content);
 }
 
+function runStateDbBootstrap() {
+  const bootstrapScript = path.join(ROOT_DIR, 'scripts', 'bootstrap-state-db.js');
+  if (!fs.existsSync(bootstrapScript)) return;
+  logAction('initializing state store...');
+  if (flags.dryRun) return;
+  const result = spawnSync(process.execPath, [bootstrapScript], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
+  const output = (result.stderr || '').trim();
+  if (output) console.log('  ' + output.split('\n').join('\n  '));
+}
+
 function runDoctor() {
   const doctorScript = path.join(ROOT_DIR, 'scripts', 'doctor.js');
   log(`\n  running egc doctor for final validation...`);
@@ -206,6 +216,7 @@ checkNode();
 checkMcpBuilds();
 runBootstrap();
 registerMcpServers();
+runStateDbBootstrap();
 runDoctor();
 
 console.log('');
