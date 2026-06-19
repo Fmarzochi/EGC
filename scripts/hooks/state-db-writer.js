@@ -4,11 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const os = require('os');
+const { getEGCDir } = require(path.join(__dirname, '..', 'lib', 'utils.js'));
 
 function resolveStateDbPath() {
-  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-  return path.join(home, '.gemini', 'egc', 'state.db');
+  return path.join(getEGCDir(), 'egc', 'state.db');
 }
 
 async function main() {

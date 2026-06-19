@@ -2,10 +2,10 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const { createStateStore } = require('../lib/state-store');
+const { getEGCDir } = require('../lib/utils');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -106,7 +106,7 @@ function buildTracerBlock(opts) {
 async function buildStateStoreBlock(opts) {
     const dbPath = opts.dbPath
         ? path.resolve(opts.dbPath)
-        : path.join(os.homedir(), '.gemini', 'egc', 'state.db');
+        : path.join(getEGCDir(), 'egc', 'state.db');
     const block = {
         dbPath,
         dbExists: fs.existsSync(dbPath)
