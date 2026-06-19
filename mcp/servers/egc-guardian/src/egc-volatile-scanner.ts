@@ -10,7 +10,7 @@ const HEX_HASH_LENGTHS = new Set([32, 40, 64]);
 const HEX_ALPHABET_RE = /^[0-9a-f]+$/i;
 const ISO_DATE_MIN_LEN = 8;
 
-const ISO_RE = /\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?/g;
+const ISO_RE = /\d{4}-\d{2}-\d{2}(?:T[\d:+\-.Z]+)?/g;
 
 function isJwtShape(token: string): boolean {
   const parts = token.split('.');
@@ -22,46 +22,35 @@ function isHexHash(token: string): boolean {
   return HEX_HASH_LENGTHS.has(token.length) && HEX_ALPHABET_RE.test(token);
 }
 
+function addFinding(findings: VolatileFinding[], seen: Set<string>, key: string, label: VolatileLabel, sample: string): void {
+  if (!seen.has(key)) {
+    seen.add(key);
+    findings.push({ label, sample });
+  }
+}
+
 export function scanVolatile(text: string): VolatileFinding[] {
   const findings: VolatileFinding[] = [];
   const seen = new Set<string>();
 
-  const uuidMatches = text.match(UUID_RE) ?? [];
-  for (const m of uuidMatches) {
-    const key = `uuid:${m.toLowerCase()}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      findings.push({ label: 'uuid', sample: m.slice(0, 36) });
-    }
+  for (const m of text.match(UUID_RE) ?? []) {
+    addFinding(findings, seen, `uuid:${m.toLowerCase()}`, 'uuid', m.slice(0, 36));
   }
 
-  const isoMatches = text.match(ISO_RE) ?? [];
-  for (const m of isoMatches) {
+  for (const m of text.match(ISO_RE) ?? []) {
     if (m.length >= ISO_DATE_MIN_LEN) {
-      const key = `iso:${m}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        findings.push({ label: 'iso8601', sample: m.slice(0, 24) });
-      }
+      addFinding(findings, seen, `iso:${m}`, 'iso8601', m.slice(0, 24));
     }
   }
 
-  const tokens = text.split(/[\s,;'"()\[\]{}]+/).filter(Boolean);
+  const tokens = text.split(/[\s,;'"()[\]{}]+/).filter(Boolean);
   for (const token of tokens) {
     if (isJwtShape(token)) {
-      const key = `jwt:${token.slice(0, 16)}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        findings.push({ label: 'jwt', sample: token.slice(0, 20) + '...' });
-      }
+      addFinding(findings, seen, `jwt:${token.slice(0, 16)}`, 'jwt', `${token.slice(0, 20)}...`);
       continue;
     }
     if (isHexHash(token)) {
-      const key = `hex:${token}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        findings.push({ label: 'hex_hash', sample: token.slice(0, 16) + '...' });
-      }
+      addFinding(findings, seen, `hex:${token}`, 'hex_hash', `${token.slice(0, 16)}...`);
     }
   }
 

@@ -9,20 +9,20 @@ const MIN_ROWS_TO_ANALYZE = 5;
 const MAX_ROWS_AFTER_CRUSH = 10;
 const VARIANCE_THRESHOLD = 0.15;
 
+function toKey(v: unknown): string {
+  if (v === null || v === undefined) return '__null__';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
 function columnCardinality(rows: Record<string, unknown>[], key: string): number {
   const values = new Set<string>();
-  for (const row of rows) {
-    const v = row[key];
-    values.add(v === null || v === undefined ? '__null__' : String(v));
-  }
+  for (const row of rows) values.add(toKey(row[key]));
   return values.size / rows.length;
 }
 
 function rowSignature(row: Record<string, unknown>, keys: string[]): string {
-  return keys.map(k => {
-    const v = row[k];
-    return v === null || v === undefined ? '' : String(v).slice(0, 32);
-  }).join('|');
+  return keys.map(k => toKey(row[k]).slice(0, 32)).join('|');
 }
 
 export function reduceJsonArray(text: string): ReduceResult | null {
