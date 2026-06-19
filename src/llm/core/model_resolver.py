@@ -225,6 +225,105 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
+        # --- DeepSeek via OpenRouter ---
+        "deepseek/deepseek-r1": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.CODE,
+                ModelCapability.TOOL_CALLING,
+            ],
+            "fallback": "deepseek/deepseek-chat-v3-0324",
+            "context_window": 164000,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        "deepseek/deepseek-chat-v3-0324": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.CODE,
+                ModelCapability.COST_EFFICIENT,
+            ],
+            "fallback": "openai/gpt-4o-mini",
+            "context_window": 164000,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        # --- Qwen via OpenRouter ---
+        "qwen/qwen3-235b-a22b": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.CODE,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": "qwen/qwen3-32b",
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        "qwen/qwen3-32b": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.CODE,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.TOOL_CALLING,
+            ],
+            "fallback": "openai/gpt-4o-mini",
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        # --- Llama via OpenRouter ---
+        "meta-llama/llama-4-maverick": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": "meta-llama/llama-4-scout",
+            "context_window": 1048576,
+            "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        "meta-llama/llama-4-scout": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": "openai/gpt-4o-mini",
+            "context_window": 1048576,
+            "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.CODE,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.TOOL_CALLING,
+            ],
+            "fallback": "openai/gpt-4o-mini",
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
         "llama3.2": {
             "provider": "ollama",
             "capabilities": [ModelCapability.SPEED, ModelCapability.COST_EFFICIENT],
@@ -574,7 +673,14 @@ class ModelResolver:
             "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5 via OpenRouter",
             "openai/gpt-4o": "GPT-4o via OpenRouter",
             "openai/gpt-4o-mini": "GPT-4o-mini via OpenRouter",
-        }
+            "deepseek/deepseek-r1": "DeepSeek R1 via OpenRouter - strong reasoning",
+    "deepseek/deepseek-chat-v3-0324": "DeepSeek Chat V3 via OpenRouter - cost-efficient",
+    "qwen/qwen3-235b-a22b": "Qwen3 235B via OpenRouter - large reasoning model",
+    "qwen/qwen3-32b": "Qwen3 32B via OpenRouter - balanced & affordable",
+    "meta-llama/llama-4-maverick": "Llama 4 Maverick via OpenRouter - multimodal",
+    "meta-llama/llama-4-scout": "Llama 4 Scout via OpenRouter - fast & long context",
+    "meta-llama/llama-3.3-70b-instruct": "Llama 3.3 70B via OpenRouter - fast & cheap",
+ }
         return [(mid, labels.get(mid, mid)) for mid in cls.list_models(provider)]
 
     # ------------------------------------------------------------------ #
