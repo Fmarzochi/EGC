@@ -178,12 +178,19 @@ function syncBlocks() {
 
   for (const [start, end] of SYNC_BLOCKS) {
     const enBlock = extractBlock(enContent, start, end);
-    if (!enBlock) continue;
+    if (!enBlock) {
+      console.warn(`  Warning: sync marker not found in EN README: ${start}`);
+      continue;
+    }
 
     for (const lang of langs) {
       const filePath = path.join(TRANSLATIONS, lang, "README.md");
       const content  = fs.readFileSync(filePath, "utf8");
-      const updated  = replaceBlock(content, start, end, enBlock);
+      if (!content.includes(start) || !content.includes(end)) {
+        console.warn(`  Warning: sync marker missing in translations/${lang}/README.md: ${start}`);
+        continue;
+      }
+      const updated = replaceBlock(content, start, end, enBlock);
       if (updated !== content) {
         fs.writeFileSync(filePath, updated, "utf8");
         console.log(`  Synced block [${start}] in translations/${lang}/README.md`);
@@ -202,8 +209,8 @@ function checkDrift() {
 
   // Extract key fingerprints from the English README
   const enToolCount  = (enContent.match(/^\| `\w/gm) || []).length;
-  const enHasBadges  = enContent.includes("shields.io");
-  const enHasSocket  = enContent.includes("socket.dev/api/badge");
+  const enHasBadges  = enContent.includes("img.shields.io");
+  const enHasSocket  = enContent.includes("socket.dev/api/badge/npm");
   const enHasOpenRouter = enContent.includes("OpenRouter");
 
   for (const lang of langs) {
@@ -214,7 +221,7 @@ function checkDrift() {
     if (toolCount !== enToolCount) {
       warnings.push(`[${lang}] tool count mismatch: has ${toolCount}, EN has ${enToolCount}`);
     }
-    if (enHasBadges && !content.includes("shields.io")) {
+    if (enHasBadges && !content.includes("img.shields.io")) {
       warnings.push(`[${lang}] missing shields.io badges`);
     }
     if (enHasSocket && !content.includes("socket.dev/api/badge")) {
