@@ -59,11 +59,7 @@ async function run() {
 
   // Direct test of writeToFile via the marker logic
   if (test('marker block is written to a new file', () => {
-    const targetFile = path.join(tmpDir, 'CLAUDE_NEW.md');
-    // Simulate what autoLearn would write by calling the internal logic
-    // We test by verifying the file would contain markers after a real run.
-    // Since we can't call autoLearn with real data here, we test the file write path
-    // by calling the module's internal write logic indirectly: just verify the module loads
+    // Since we can't inject real DB data here, verify the module loaded correctly
     assert.ok(typeof autoLearn === 'function', 'autoLearn should be a function');
   })) passed++; else failed++;
 
@@ -102,7 +98,7 @@ async function run() {
   })) passed++; else failed++;
 
   // Cleanup
-  try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+  try { fs.rmSync(tmpDir, { recursive: true }); } catch (_e) { /* non-critical cleanup */ }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
