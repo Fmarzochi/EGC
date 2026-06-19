@@ -22,16 +22,46 @@ import {
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
 
-// Mirrors DEFAULT_STATE_STORE_RELATIVE_PATH from scripts/lib/state-store/index.js
-const STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
-
 function resolveStateStoreDbPath(): string {
   const envOverride = process.env.EGC_STATE_DB;
-  if (envOverride) {
-    return path.resolve(envOverride);
-  }
+  if (envOverride) return path.resolve(envOverride);
+
   const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
+  const env = process.env;
+
+  // Tier 1: harness-specific env vars injected at hook time (and sometimes at MCP launch).
+  if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) {
+    return path.join(homeDir, '.gemini', 'egc', 'state.db');
+  }
+  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) {
+    return path.join(homeDir, '.claude', 'egc', 'state.db');
+  }
+  if (env.CODEBUDDY_PROJECT_DIR || env.CODEBUDDY_PLUGIN_ROOT) {
+    return path.join(homeDir, '.codebuddy', 'egc', 'state.db');
+  }
+  if (env.VSCODE_AGENT || env.GITHUB_COPILOT_API_TOKEN) {
+    return path.join(homeDir, '.github', 'egc', 'state.db');
+  }
+  if (env.KIRO_HOOK_FILE || env.KIRO_FILE_PATH) {
+    return path.join(homeDir, '.kiro', 'egc', 'state.db');
+  }
+
+  // Tier 2: probe known harness locations for an existing DB.
+  const candidates = [
+    path.join(homeDir, '.claude', 'egc', 'state.db'),
+    path.join(homeDir, '.gemini', 'egc', 'state.db'),
+    path.join(homeDir, '.cursor', 'egc', 'state.db'),
+    path.join(homeDir, '.github', 'egc', 'state.db'),
+    path.join(homeDir, '.kiro', 'egc', 'state.db'),
+    path.join(homeDir, '.codebuddy', 'egc', 'state.db'),
+    path.join(homeDir, '.egc', 'egc', 'state.db'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  // Fallback: ~/.egc is the harness-agnostic default used by egc init.
+  return path.join(homeDir, '.egc', 'egc', 'state.db');
 }
 
 function hideEgcRootOnWindows(): void {
