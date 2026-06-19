@@ -18,21 +18,58 @@ function hideEgcRootOnWindows(): void {
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
+import { detectVolatile } from './cache-aligner.js';
+import { detectContentType } from './content-router.js';
+import { crushJsonArray } from './smart-crusher.js';
 
-// Inline: reduce payloads by deduplication (replaces AdaptiveReducer)
-function adaptiveReduce(payloads: string[], _mode: string): { compressed: string[]; metrics: { reduced_bytes: number } } {
-  const seen = new Set<string>();
-  const compressed: string[] = [];
-  for (const p of payloads) {
-    const key = p.trim();
-    if (!seen.has(key)) { seen.add(key); compressed.push(p); }
-  }
-  const originalBytes = payloads.reduce((a, b) => a + b.length, 0);
-  const compressedBytes = compressed.reduce((a, b) => a + b.length, 0);
-  return { compressed, metrics: { reduced_bytes: originalBytes - compressedBytes } };
+interface PipelineResult {
+  chunks: string[];
+  bytes_before: number;
+  bytes_after: number;
+  savings_pct: number;
+  volatile_findings: number;
+  chunks_crushed: number;
 }
 
-// Inline: route prompt to agents/skills (replaces cognitive-orchestrator pipeline)
+function runCompressionPipeline(chunks: string[]): PipelineResult {
+  const bytesBefore = chunks.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
+  let volatileFindings = 0;
+  let chunksCrushed = 0;
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const chunk of chunks) {
+    // CacheAligner: detect volatile content (informational only, never mutates)
+    const findings = detectVolatile(chunk);
+    volatileFindings += findings.length;
+
+    // ContentRouter: classify chunk
+    const contentType = detectContentType(chunk);
+
+    let processed = chunk;
+
+    if (contentType === 'json_array') {
+      const crushed = crushJsonArray(chunk);
+      if (crushed !== null) {
+        processed = crushed.crushed;
+        chunksCrushed++;
+      }
+    }
+
+    // Exact-match dedup as final safety net
+    const key = processed.trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(processed);
+    }
+  }
+
+  const bytesAfter = result.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
+  const savingsPct = bytesBefore === 0 ? 0 : Math.round((1 - bytesAfter / bytesBefore) * 100);
+
+  return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
+}
+
 function routeTask(prompt: string, agents: string[], skills: string[]): {
   agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]
 } {
@@ -189,24 +226,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
            }
         }
         
-        const executionMode = mode === 'DEEP_COGNITION' ? 'DEEP_COGNITION' : 'FAST_RESPONSE';
-        const { compressed: reducedPayloads } = adaptiveReduce(rawPayloads, executionMode);
-        
-        const originalCount = rawPayloads.length;
-        const finalCount = reducedPayloads.length;
-        const reductionPercent = originalCount === 0 ? 0 : Math.round(((originalCount - finalCount) / originalCount) * 100);
-        
-        auditLog('PAYLOAD_MUTATION', 'MUTATED', { 
-           mode: executionMode,
-           files_requested: filepaths.length,
-           raw_chunks: originalCount,
-           reduced_chunks: finalCount,
-           reduction_percent: reductionPercent,
-           bytes_loaded: totalBytesLoaded
+        const pipeline = runCompressionPipeline(rawPayloads);
+
+        auditLog('PAYLOAD_MUTATION', 'MUTATED', {
+          mode,
+          files_requested: filepaths.length,
+          raw_chunks: rawPayloads.length,
+          reduced_chunks: pipeline.chunks.length,
+          bytes_before: pipeline.bytes_before,
+          bytes_after: pipeline.bytes_after,
+          savings_pct: pipeline.savings_pct,
+          volatile_findings: pipeline.volatile_findings,
+          chunks_crushed: pipeline.chunks_crushed,
         });
 
-        const finalContent = reducedPayloads.join('\n\n');
-        return { content: [{ type: "text", text: finalContent }] };
+        const header = [
+          `[reduce_context] ${pipeline.savings_pct}% saved`,
+          `(${pipeline.bytes_before} -> ${pipeline.bytes_after} bytes,`,
+          `${pipeline.chunks_crushed} JSON chunks crushed,`,
+          `${pipeline.volatile_findings} volatile tokens detected)`,
+        ].join(' ');
+
+        const finalContent = pipeline.chunks.join('\n\n');
+        return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
       }
 
       case "orchestrate_task": {
@@ -225,7 +267,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           } catch {}
         }
 
-        const reduction = adaptiveReduce(rawPayloads, 'standard');
+        const pipeline = runCompressionPipeline(rawPayloads);
         const routing = routeTask(prompt, agents, skills);
 
         return {
@@ -234,7 +276,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               prompt,
               routing,
-              context_reduction: reduction.metrics,
+              context_reduction: {
+                bytes_before: pipeline.bytes_before,
+                bytes_after: pipeline.bytes_after,
+                savings_pct: pipeline.savings_pct,
+              },
               files_loaded: rawPayloads.length,
             }, null, 2),
           }],
