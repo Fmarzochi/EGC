@@ -21,6 +21,7 @@ import { validateCommand, validateWrite, isProtectedPath } from './validator.js'
 import { detectVolatile } from './cache-aligner.js';
 import { detectContentType } from './content-router.js';
 import { crushJsonArray } from './smart-crusher.js';
+import { autoLearn } from './learn-writer.js';
 
 interface PipelineResult {
   chunks: string[];
@@ -166,6 +167,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["prompt"]
         }
+      },
+      {
+        name: "auto_learn",
+        description: "Mines recent tool failures from session history and writes actionable recommendations to CLAUDE.md between managed markers. Safe to call at any time; skips gracefully if no failures are found.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: { type: "string", description: "Absolute path to the project root." },
+            target_file: { type: "string", description: "Path to write recommendations to. Defaults to CLAUDE.md in the project root." },
+            limit: { type: "number", description: "Max number of failure patterns to surface (default 10)." }
+          },
+          required: ["project_path"]
+        }
       }
     ]
   };
@@ -285,6 +299,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }, null, 2),
           }],
         };
+      }
+
+      case "auto_learn": {
+        const projectPath = request.params.arguments?.project_path as string;
+        const targetFile  = request.params.arguments?.target_file as string | undefined;
+        const limit       = request.params.arguments?.limit as number | undefined;
+
+        if (!projectPath) {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
+        }
+
+        const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
+
+        auditLog('AUTO_LEARN', 'MUTATED', {
+          project_path: projectPath,
+          patterns_found: result.patterns_found,
+          recommendations_written: result.recommendations_written,
+          skipped: result.skipped,
+        });
+
+        const summary = result.skipped
+          ? `[auto_learn] skipped: ${result.reason}`
+          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file} (${result.patterns_found} failure patterns found)`;
+
+        return { content: [{ type: 'text', text: summary }] };
       }
 
       default:
