@@ -7,7 +7,6 @@
 const assert = require('node:assert');
 const path = require('node:path');
 const fs = require('node:fs');
-const os = require('node:os');
 
 function test(name, fn) {
   try {
