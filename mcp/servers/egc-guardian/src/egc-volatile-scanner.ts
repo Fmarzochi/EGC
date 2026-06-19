@@ -10,13 +10,7 @@ const HEX_HASH_LENGTHS = new Set([32, 40, 64]);
 const HEX_ALPHABET_RE = /^[0-9a-f]+$/i;
 const ISO_DATE_MIN_LEN = 8;
 
-function isIso8601(token: string): boolean {
-  if (token.length < ISO_DATE_MIN_LEN) return false;
-  if (!token.includes('T') && !token.includes('-')) return false;
-  const candidate = token.endsWith('Z') ? token.slice(0, -1) + '+00:00' : token;
-  const d = new Date(candidate);
-  return !isNaN(d.getTime()) && candidate.includes('-');
-}
+const ISO_RE = /\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?/g;
 
 function isJwtShape(token: string): boolean {
   const parts = token.split('.');
@@ -28,9 +22,7 @@ function isHexHash(token: string): boolean {
   return HEX_HASH_LENGTHS.has(token.length) && HEX_ALPHABET_RE.test(token);
 }
 
-const ISO_RE = /\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?/g;
-
-export function detectVolatile(text: string): VolatileFinding[] {
+export function scanVolatile(text: string): VolatileFinding[] {
   const findings: VolatileFinding[] = [];
   const seen = new Set<string>();
 

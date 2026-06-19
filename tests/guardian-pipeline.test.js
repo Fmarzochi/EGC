@@ -32,13 +32,13 @@ if (!fs.existsSync(buildPath)) {
 
 // Write a temp file and call reduce_context via the exported pipeline logic.
 // We test the compressor modules directly since the MCP server requires stdio transport.
-const alignerPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'cache-aligner.js');
-const routerPath  = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'content-router.js');
-const crusherPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'smart-crusher.js');
+const scannerPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-volatile-scanner.js');
+const routerPath  = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-chunk-router.js');
+const crusherPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-array-crusher.js');
 
-const { detectVolatile } = require(alignerPath);
-const { detectContentType } = require(routerPath);
-const { crushJsonArray } = require(crusherPath);
+const { scanVolatile } = require(scannerPath);
+const { classifyChunk } = require(routerPath);
+const { reduceJsonArray } = require(crusherPath);
 
 // Simulate the pipeline as implemented in index.ts
 function runPipeline(chunks) {
@@ -49,14 +49,14 @@ function runPipeline(chunks) {
   const result = [];
 
   for (const chunk of chunks) {
-    const findings = detectVolatile(chunk);
+    const findings = scanVolatile(chunk);
     volatileFindings += findings.length;
 
-    const contentType = detectContentType(chunk);
+    const contentType = classifyChunk(chunk);
     let processed = chunk;
 
     if (contentType === 'json_array') {
-      const crushed = crushJsonArray(chunk);
+      const crushed = reduceJsonArray(chunk);
       if (crushed !== null) {
         processed = crushed.crushed;
         chunksCrushed++;

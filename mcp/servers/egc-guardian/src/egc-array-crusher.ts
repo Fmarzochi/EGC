@@ -1,4 +1,4 @@
-export interface CrushResult {
+export interface ReduceResult {
   crushed: string;
   rows_before: number;
   rows_after: number;
@@ -25,7 +25,7 @@ function rowSignature(row: Record<string, unknown>, keys: string[]): string {
   }).join('|');
 }
 
-export function crushJsonArray(text: string): CrushResult | null {
+export function reduceJsonArray(text: string): ReduceResult | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.trim());
@@ -39,11 +39,9 @@ export function crushJsonArray(text: string): CrushResult | null {
 
   const allKeys = [...new Set(rows.flatMap(r => Object.keys(r)))];
 
-  // Keep columns with meaningful variance (high cardinality = important)
   const importantKeys = allKeys.filter(k => columnCardinality(rows, k) >= VARIANCE_THRESHOLD);
   const scoreKeys = importantKeys.length > 0 ? importantKeys : allKeys;
 
-  // Deduplicate by signature on important keys
   const seen = new Set<string>();
   const unique: Record<string, unknown>[] = [];
   for (const row of rows) {
@@ -54,7 +52,6 @@ export function crushJsonArray(text: string): CrushResult | null {
     }
   }
 
-  // Cap at MAX_ROWS_AFTER_CRUSH, keeping first and last items for context
   let final = unique;
   if (unique.length > MAX_ROWS_AFTER_CRUSH) {
     const head = unique.slice(0, Math.floor(MAX_ROWS_AFTER_CRUSH / 2));

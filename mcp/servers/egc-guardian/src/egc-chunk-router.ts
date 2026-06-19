@@ -29,7 +29,7 @@ function isJsonArray(text: string): boolean {
   }
 }
 
-export function detectContentType(chunk: string): ContentType {
+export function classifyChunk(chunk: string): ContentType {
   if (isJsonArray(chunk)) return 'json_array';
 
   for (const re of DIFF_SIGNALS) {

@@ -18,9 +18,9 @@ function hideEgcRootOnWindows(): void {
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
-import { detectVolatile } from './cache-aligner.js';
-import { detectContentType } from './content-router.js';
-import { crushJsonArray } from './smart-crusher.js';
+import { scanVolatile } from './egc-volatile-scanner.js';
+import { classifyChunk } from './egc-chunk-router.js';
+import { reduceJsonArray } from './egc-array-crusher.js';
 import { autoLearn } from './learn-writer.js';
 
 interface PipelineResult {
@@ -40,19 +40,17 @@ function runCompressionPipeline(chunks: string[]): PipelineResult {
   const result: string[] = [];
 
   for (const chunk of chunks) {
-    // CacheAligner: detect volatile content (informational only, never mutates)
-    const findings = detectVolatile(chunk);
+    const findings = scanVolatile(chunk);
     volatileFindings += findings.length;
 
-    // ContentRouter: classify chunk
-    const contentType = detectContentType(chunk);
+    const contentType = classifyChunk(chunk);
 
     let processed = chunk;
 
     if (contentType === 'json_array') {
-      const crushed = crushJsonArray(chunk);
-      if (crushed !== null) {
-        processed = crushed.crushed;
+      const reduced = reduceJsonArray(chunk);
+      if (reduced !== null) {
+        processed = reduced.crushed;
         chunksCrushed++;
       }
     }
