@@ -209,8 +209,8 @@ function checkDrift() {
 
   // Extract key fingerprints from the English README
   const enToolCount  = (enContent.match(/^\| `\w/gm) || []).length;
-  const enHasBadges  = enContent.includes("img.shields.io");
-  const enHasSocket  = enContent.includes("socket.dev/api/badge/npm");
+  const enHasBadges  = enContent.includes("[![npm version");
+  const enHasSocket  = enContent.includes("socket.dev/npm/package");
   const enHasOpenRouter = enContent.includes("OpenRouter");
 
   for (const lang of langs) {
@@ -221,10 +221,10 @@ function checkDrift() {
     if (toolCount !== enToolCount) {
       warnings.push(`[${lang}] tool count mismatch: has ${toolCount}, EN has ${enToolCount}`);
     }
-    if (enHasBadges && !content.includes("img.shields.io")) {
+    if (enHasBadges && !content.includes("[![npm version")) {
       warnings.push(`[${lang}] missing shields.io badges`);
     }
-    if (enHasSocket && !content.includes("socket.dev/api/badge")) {
+    if (enHasSocket && !content.includes("socket.dev/npm/package")) {
       warnings.push(`[${lang}] missing Socket.dev badge`);
     }
     if (enHasOpenRouter && !content.includes("OpenRouter")) {
