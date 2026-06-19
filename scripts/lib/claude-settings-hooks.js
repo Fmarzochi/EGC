@@ -21,7 +21,7 @@ function isPlainObject(value) {
 }
 
 function buildHookCommand(hookScriptPath) {
-  return `node "${hookScriptPath}"`;
+  return `"${process.execPath}" "${hookScriptPath}"`;
 }
 
 function buildSessionStartCommand(hookScriptPath) {
