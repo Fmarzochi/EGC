@@ -78,7 +78,7 @@ npx @egchq/egc install
 
 EGC ships two MCP servers that work together during every session.
 
-### Memory -- 14 tools that your AI uses automatically
+### Memory - 14 tools that your AI uses automatically
 
 No commands to memorize. Your AI reads this table so you never have to. Say anything in any language -- "continue from yesterday", "remember this decision", "what broke last time?" -- and it calls the right tool. You just work. EGC handles the rest.
 
@@ -103,7 +103,7 @@ No commands to memorize. Your AI reads this table so you never have to. Say anyt
 
 State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
 
-### Context and safety -- 5 tools for when things get heavy
+### Context and safety - 5 tools for when things get heavy
 
 **`egc-guardian`**
 
@@ -117,7 +117,7 @@ These tools run automatically in the background. Every shell command and every f
 | `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
 | `auto_learn` | Mines session failures and writes actionable lessons to CLAUDE.md |
 
-### Always in sync -- across every tool you use
+### Always in sync - across every tool you use
 
 **`egc watch`** -- run it once and every tool you use stays in sync. Edit context in Cursor and it appears in Gemini CLI, Copilot, Windsurf, and everywhere else automatically. When your state updates, all your tool config files update with it. No manual steps, no stale state.
 
