@@ -252,6 +252,7 @@ function writeLlmsTxt(projectPath, parsed) {
     lines.push('', '## Next session');
     for (const n of parsed.next.slice(0, MAX_ITEMS)) lines.push(`- ${n}`);
   }
+  lines.push('', EGC_TRIGGERS);
   const block = lines.join('\n');
 
   const existing = fs.readFileSync(filePath, 'utf-8');
