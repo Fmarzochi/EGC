@@ -72,9 +72,11 @@ npx @egchq/egc install
 
 ---
 
-## What the MCP server gives your AI
+## What EGC gives your AI
 
-EGC ships `egc-memory`, an MCP server that exposes 14 tools your AI can call during a session:
+EGC ships two MCP servers that work together during every session.
+
+**`egc-memory`** — 14 tools for persistent memory:
 
 | Tool | What it does |
 |---|---|
@@ -95,6 +97,16 @@ EGC ships `egc-memory`, an MCP server that exposes 14 tools your AI can call dur
 
 State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
 
+**`egc-guardian`** — 5 tools for context and safety:
+
+| Tool | What it does |
+|---|---|
+| `validate_command` | Checks shell commands against project safety rules before execution |
+| `validate_write` | Validates file write paths to prevent unsafe writes |
+| `reduce_context` | Compresses file payloads to save your token budget |
+| `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
+| `auto_learn` | Mines session failures and writes actionable lessons to CLAUDE.md |
+
 ---
 
 ## Prompt library
@@ -106,7 +118,7 @@ State files live at `~/.egc/state/<project-slug>.md`. One file per project, plai
 | Agents | 63 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
 | Commands | 76 | Shared | Instruction-based | 31 |
 | Skills | 229 | Shared | 10 (native format) | 37 |
-| Rules | 111 |: |: |: |
+| Rules | 111 | ✓ | ✓ | ✓ |
 
 ---
 

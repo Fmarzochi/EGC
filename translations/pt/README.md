@@ -58,9 +58,11 @@ npx @egchq/egc install
 
 ---
 
-## O que o servidor MCP oferece à sua IA
+## O que o EGC oferece à sua IA
 
-O EGC inclui o `egc-memory`, um servidor MCP que expõe 14 ferramentas que sua IA pode chamar durante uma sessão:
+O EGC inclui dois servidores MCP que trabalham juntos durante cada sessão.
+
+**`egc-memory`** — 14 ferramentas para memória persistente:
 
 | Ferramenta | O que faz |
 |---|---|
@@ -80,6 +82,16 @@ O EGC inclui o `egc-memory`, um servidor MCP que expõe 14 ferramentas que sua I
 | `get_project_state` | Retorna metadados de saúde do servidor e status do mecanismo de armazenamento |
 
 Os arquivos de estado ficam em `~/.egc/state/<project-slug>.md`. Um arquivo por projeto, Markdown simples, legível por humanos.
+
+**`egc-guardian`** — 5 ferramentas para contexto e segurança:
+
+| Ferramenta | O que faz |
+|---|---|
+| `validate_command` | Verifica comandos de shell contra as regras de segurança do projeto antes da execução |
+| `validate_write` | Valida caminhos de escrita para prevenir gravações inseguras |
+| `reduce_context` | Comprime payloads de arquivos para economizar seu orçamento de tokens |
+| `orchestrate_task` | Roteia prompts com contexto de agentes/skills e retorna métricas de compressão |
+| `auto_learn` | Analisa falhas de sessão e escreve lições acionáveis no CLAUDE.md |
 
 ---
 
