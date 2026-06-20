@@ -636,7 +636,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_recall",
-        description: "Search active lessons by keyword across content, context, and tags. Only lessons at or above min_confidence (default 0.2) are returned; lower-confidence lessons are archived and hidden. Updates the last_recalled timestamp on matched lessons, which factors into reinforcement decay. Returns results ranked by confidence score descending. Call at session start to surface relevant patterns before beginning work on a known problem area.",
+        description: "Search active lessons by keyword across content, context, and tags. Only lessons at or above min_confidence (default 0.2) are returned; lower-confidence lessons are archived and hidden. Updates the last_recalled timestamp on matched lessons (decay is driven by last_reinforced, not last_recalled). Returns results ranked by confidence score descending. Call at session start to surface relevant patterns before beginning work on a known problem area.",
         inputSchema: {
           type: "object",
           properties: {
@@ -671,7 +671,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "compress_observations",
-        description: "Compress recent raw hook observations into structured typed summaries (tool_failure, tool_success, file_edit, shell_command) using rule-based analysis. Reduces token count when injecting session history into context. Does not delete raw observations — only marks them as compressed. Call before get_state or at session start to ensure hook data is compact before loading project memory. Returns the count of compressed items and a human-readable summary of what was processed.",
+        description: "Compress recent raw hook observations into structured typed summaries (tool_failure, tool_success, file_edit, generic) using rule-based analysis. Reduces token count when injecting session history into context. Does not delete raw observations — only marks them as compressed. Call before get_state or at session start to ensure hook data is compact before loading project memory. Returns the count of compressed items and a human-readable summary of what was processed.",
         inputSchema: {
           type: "object",
           properties: {
