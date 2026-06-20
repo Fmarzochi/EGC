@@ -236,7 +236,7 @@ async function runTests() {
   // Acceptance test: verifies the patched detect_patterns reads events from the state-store DB,
   // the same file where hooks write runtime events, not the server memory DB.
   if (await test('detect_patterns reads events from state-store DB (same path hooks use)', async () => {
-    const BetterSqlite3 = require('better-sqlite3');
+    const { openDatabase } = require('../../scripts/lib/state-store/db-adapter');
 
     const testDir = createTempDir('egc-patterns-acceptance-');
     const stateDbPath = path.join(testDir, 'state.db');
@@ -270,7 +270,7 @@ async function runTests() {
       store.close();
 
       // Replicate exactly what the patched detect_patterns handler does:
-      // open the state-store DB via better-sqlite3, query events, run detection,
+      // open the state-store DB via sql.js, query events, run detection,
       // persist patterns back to the same DB.
       const windowDays = 7;
       const minOccurrences = 3;
@@ -278,9 +278,7 @@ async function runTests() {
 
       let ssDb;
       try {
-        ssDb = new BetterSqlite3(stateDbPath, { readonly: false });
-        ssDb.pragma('journal_mode = WAL');
-        ssDb.pragma('busy_timeout = 5000');
+        ssDb = await openDatabase(stateDbPath);
 
         const rawRows = ssDb.prepare(
           'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC'
