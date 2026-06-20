@@ -111,14 +111,14 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('propagates to .windsurfrules when it exists (Windsurf)', () => {
+  if (test('propagates to .windsurf/rules/egc-context.md when .windsurf/ dir exists', () => {
     const dir = mktemp();
     try {
-      fs.writeFileSync(path.join(dir, '.windsurfrules'), '# Windsurf rules\n');
+      fs.mkdirSync(path.join(dir, '.windsurf'));
       const result = propagateStateContent(dir, SAMPLE_STATE);
       assert.ok(result.windsurf, 'windsurf path returned');
+      assert.ok(result.windsurf.includes(path.join('.windsurf', 'rules', 'egc-context.md')));
       const content = fs.readFileSync(result.windsurf, 'utf-8');
-      assert.ok(content.includes('# Windsurf rules'), 'original content preserved');
       assert.ok(content.includes('<!-- egc:start -->'));
       assert.ok(content.includes('EGC Project Memory'));
     } finally {
@@ -126,11 +126,131 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('does not create .windsurfrules when absent', () => {
+  if (test('does not create windsurf context when .windsurf/ dir absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
       assert.strictEqual(result.windsurf, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to .trae/rules/egc-context.md when .trae/ dir exists (Trae)', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.trae'));
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.trae, 'trae path returned');
+      assert.ok(result.trae.includes(path.join('.trae', 'rules', 'egc-context.md')));
+      const content = fs.readFileSync(result.trae, 'utf-8');
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create trae context when .trae/ dir absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.trae, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to .rules when it exists (Zed)', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, '.rules'), '# Zed rules\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.zed, 'zed path returned');
+      const content = fs.readFileSync(result.zed, 'utf-8');
+      assert.ok(content.includes('# Zed rules'), 'original content preserved');
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create .rules when absent (Zed)', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.zed, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to .clinerules when it exists (Cline/Roo)', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, '.clinerules'), '# Cline rules\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.cline, 'cline path returned');
+      const content = fs.readFileSync(result.cline, 'utf-8');
+      assert.ok(content.includes('# Cline rules'), 'original content preserved');
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create .clinerules when absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.cline, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to CONVENTIONS.md when it exists (Aider)', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'CONVENTIONS.md'), '# Conventions\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.aider, 'aider path returned');
+      const content = fs.readFileSync(result.aider, 'utf-8');
+      assert.ok(content.includes('# Conventions'), 'original content preserved');
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create CONVENTIONS.md when absent (Aider)', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.aider, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to .cursorrules when it exists (legacy Cursor)', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, '.cursorrules'), '# Legacy rules\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.cursorrules, 'cursorrules path returned');
+      const content = fs.readFileSync(result.cursorrules, 'utf-8');
+      assert.ok(content.includes('# Legacy rules'), 'original content preserved');
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create .cursorrules when absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.cursorrules, null);
     } finally {
       cleanup(dir);
     }
@@ -193,6 +313,11 @@ function runTests() {
       assert.strictEqual(result.copilot, null);
       assert.strictEqual(result.gemini, null);
       assert.strictEqual(result.windsurf, null);
+      assert.strictEqual(result.trae, null);
+      assert.strictEqual(result.zed, null);
+      assert.strictEqual(result.cline, null);
+      assert.strictEqual(result.aider, null);
+      assert.strictEqual(result.cursorrules, null);
       assert.strictEqual(result.agents, null);
       assert.strictEqual(result.llms, null);
     } finally {

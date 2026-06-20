@@ -13,6 +13,11 @@ export interface PropagateResult {
   copilot: string | null;
   gemini: string | null;
   windsurf: string | null;
+  trae: string | null;
+  zed: string | null;
+  cline: string | null;
+  aider: string | null;
+  cursorrules: string | null;
   agents: string | null;
   llms: string | null;
 }
@@ -103,7 +108,80 @@ function writeGeminiContext(projectPath: string, block: string): string | null {
 }
 
 function writeWindsurfContext(projectPath: string, block: string): string | null {
-  const filePath = path.join(projectPath, '.windsurfrules');
+  const windsurfDir = path.join(projectPath, '.windsurf');
+  try {
+    if (!fs.existsSync(windsurfDir) || !fs.statSync(windsurfDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(windsurfDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeTraeContext(projectPath: string, block: string): string | null {
+  const traeDir = path.join(projectPath, '.trae');
+  try {
+    if (!fs.existsSync(traeDir) || !fs.statSync(traeDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(traeDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeZedContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, '.rules');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeClineContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, '.clinerules');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeAiderContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, 'CONVENTIONS.md');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeLegacyCursorRules(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, '.cursorrules');
   try {
     if (!fs.existsSync(filePath)) return null;
   } catch {
@@ -156,6 +234,11 @@ export function propagateStateToTools(args: PropagateArgs): PropagateResult {
     copilot: writeCopilotContext(args.projectPath, block),
     gemini: writeGeminiContext(args.projectPath, block),
     windsurf: writeWindsurfContext(args.projectPath, block),
+    trae: writeTraeContext(args.projectPath, block),
+    zed: writeZedContext(args.projectPath, block),
+    cline: writeClineContext(args.projectPath, block),
+    aider: writeAiderContext(args.projectPath, block),
+    cursorrules: writeLegacyCursorRules(args.projectPath, block),
     agents: writeAgentsContext(args.projectPath, block),
     llms: writeLlmsTxt(args.projectPath, args),
   };

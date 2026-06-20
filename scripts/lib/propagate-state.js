@@ -104,7 +104,80 @@ function writeGeminiContext(projectPath, block) {
 }
 
 function writeWindsurfContext(projectPath, block) {
-  const filePath = path.join(projectPath, '.windsurfrules');
+  const windsurfDir = path.join(projectPath, '.windsurf');
+  try {
+    if (!fs.existsSync(windsurfDir) || !fs.statSync(windsurfDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(windsurfDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeTraeContext(projectPath, block) {
+  const traeDir = path.join(projectPath, '.trae');
+  try {
+    if (!fs.existsSync(traeDir) || !fs.statSync(traeDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(traeDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeZedContext(projectPath, block) {
+  const filePath = path.join(projectPath, '.rules');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeClineContext(projectPath, block) {
+  const filePath = path.join(projectPath, '.clinerules');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeAiderContext(projectPath, block) {
+  const filePath = path.join(projectPath, 'CONVENTIONS.md');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeLegacyCursorRules(projectPath, block) {
+  const filePath = path.join(projectPath, '.cursorrules');
   try {
     if (!fs.existsSync(filePath)) return null;
   } catch {
@@ -159,6 +232,11 @@ function propagateStateContent(projectPath, stateContent) {
     copilot: writeCopilotContext(projectPath, block),
     gemini: writeGeminiContext(projectPath, block),
     windsurf: writeWindsurfContext(projectPath, block),
+    trae: writeTraeContext(projectPath, block),
+    zed: writeZedContext(projectPath, block),
+    cline: writeClineContext(projectPath, block),
+    aider: writeAiderContext(projectPath, block),
+    cursorrules: writeLegacyCursorRules(projectPath, block),
     agents: writeAgentsContext(projectPath, block),
     llms: writeLlmsTxt(projectPath, parsed),
   };
