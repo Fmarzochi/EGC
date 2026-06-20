@@ -80,7 +80,7 @@ EGC ships two MCP servers that work together during every session.
 
 ### Memory -- 14 tools that your AI uses automatically
 
-You never call these tools yourself. When you say "let's pick up where we left off", "save this decision", or "what did we learn last time" -- in any language -- your AI detects the intent and calls the right tool. The commands exist, but you will never need to type them.
+No commands to memorize. Your AI reads this table so you never have to. Say anything in any language -- "continue from yesterday", "remember this decision", "what broke last time?" -- and it calls the right tool. You just work. EGC handles the rest.
 
 **`egc-memory`**
 
@@ -106,6 +106,8 @@ State files live at `~/.egc/state/<project-slug>.md`. One file per project, plai
 ### Context and safety -- 5 tools for when things get heavy
 
 **`egc-guardian`**
+
+These tools run automatically in the background. Every shell command and every file write is checked before it executes. You never invoke them directly.
 
 | Tool | What it does |
 |---|---|
