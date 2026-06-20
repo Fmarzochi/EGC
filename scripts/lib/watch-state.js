@@ -208,32 +208,28 @@ class StateWatcher {
     return found;
   }
 
+  _reattach(tool, filePath, oldWatcher) {
+    if (oldWatcher) { try { oldWatcher.close(); } catch (e) { void e; } }
+    this._watchers.delete(tool);
+    this._watchFile(tool, filePath);
+    this._schedule(tool, filePath);
+  }
+
   _watchFile(tool, filePath) {
     try {
       const watcher = fs.watch(filePath, (eventType) => {
         if (eventType === 'rename') {
-          setTimeout(() => {
-            try { watcher.close(); } catch (_) { /* watcher already replaced on rename */ }
-            this._watchers.delete(tool);
-            this._watchFile(tool, filePath);
-            this._schedule(tool, filePath);
-          }, 150);
+          setTimeout(() => this._reattach(tool, filePath, watcher), 150);
           return;
         }
         if (eventType !== 'change') return;
         this._schedule(tool, filePath);
       });
       // Windows emits 'error' (EPERM) instead of 'rename' on atomic file replacement
-      watcher.on('error', () => {
-        this._watchers.delete(tool);
-        setTimeout(() => {
-          this._watchFile(tool, filePath);
-          this._schedule(tool, filePath);
-        }, 150);
-      });
+      watcher.on('error', () => setTimeout(() => this._reattach(tool, filePath, null), 150));
       this._watchers.set(tool, watcher);
-    } catch (_) {
-      // File may have been deleted -- skip silently
+    } catch (e) {
+      void e; // File may have been deleted -- skip silently
     }
   }
 
@@ -258,7 +254,7 @@ class StateWatcher {
     }
 
     const block = extractEgcBlock(content);
-    if (!block || !block.trim()) return;
+    if (!block) return;
 
     const stateContent = parseBlockToStateContent(block);
     if (!stateContent.includes('## Context') && !stateContent.includes('## Active Decisions')) return;
