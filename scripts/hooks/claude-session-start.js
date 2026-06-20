@@ -9,6 +9,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { propagateStateContent } = require('../lib/propagate-state');
 
 function readStdinJson() {
   try {
@@ -53,6 +54,12 @@ function main() {
     const content = fs.readFileSync(stateFile, 'utf8');
     if (!content.trim()) {
       process.exit(0);
+    }
+
+    try {
+      propagateStateContent(projectPath, content);
+    } catch (_) {
+      // Propagation is best-effort; never block session startup.
     }
 
     process.stdout.write(

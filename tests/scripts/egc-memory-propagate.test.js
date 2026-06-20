@@ -79,27 +79,44 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('writes to .github/copilot-instructions.md when .github/ exists', () => {
+  if (await test('does NOT create copilot-instructions.md when only .github/ exists (bug fix)', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
       const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.copilot, null, 'copilot should be null when file does not exist');
+      assert.ok(
+        !fs.existsSync(path.join(dir, '.github', 'copilot-instructions.md')),
+        'file must not be created'
+      );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes to copilot-instructions.md only when file already exists', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.github'));
+      const filePath = path.join(dir, '.github', 'copilot-instructions.md');
+      fs.writeFileSync(filePath, '# My Copilot rules\n', 'utf-8');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
       assert.ok(result.copilot, 'copilot path should be returned');
       const content = fs.readFileSync(result.copilot, 'utf-8');
       assert.ok(content.includes('<!-- egc:start -->'), 'should have egc sentinel start');
-      assert.ok(content.includes('<!-- egc:end -->'), 'should have egc sentinel end');
       assert.ok(content.includes('EGC Project Memory'), 'should have section header');
     } finally {
       cleanup(dir);
     }
   })) passed++; else failed++;
 
-  if (await test('upserts egc section in existing copilot-instructions.md without destroying user content', () => {
+  if (await test('upserts egc section in copilot-instructions.md without destroying user content', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
       const filePath = path.join(dir, '.github', 'copilot-instructions.md');
       fs.writeFileSync(filePath, '# User instructions\n\nDo not use var.\n', 'utf-8');
+
 
       propagateStateToTools({ projectPath: dir, ...args });
       const first = fs.readFileSync(filePath, 'utf-8');

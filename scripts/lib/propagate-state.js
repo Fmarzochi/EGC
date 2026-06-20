@@ -1,50 +1,54 @@
-import fs from 'node:fs';
-import path from 'node:path';
+'use strict';
 
-export interface PropagateArgs {
-  projectPath: string;
-  context?: string;
-  decisions?: { what: string; why?: string }[];
-  next?: string[];
-}
-
-export interface PropagateResult {
-  cursor: string | null;
-  copilot: string | null;
-  gemini: string | null;
-}
+const fs = require('node:fs');
+const path = require('node:path');
 
 const EGC_START = '<!-- egc:start -->';
 const EGC_END = '<!-- egc:end -->';
 const MAX_ITEMS = 5;
 
-function buildSummaryBlock(args: PropagateArgs): string {
-  const lines: string[] = ['## EGC Project Memory'];
+function parseStateContent(content) {
+  const result = { context: '', decisions: [], next: [] };
+  let section = '';
 
-  if (args.context) {
-    lines.push('', `**Context:** ${args.context}`);
+  for (const line of content.split('\n')) {
+    const h2 = line.match(/^## (.+)/);
+    if (h2) { section = h2[1].trim(); continue; }
+
+    const item = line.replace(/^- /, '').trim();
+    if (!item) continue;
+
+    if (section === 'Context') result.context = item;
+    if (section === 'Active Decisions') result.decisions.push(item);
+    if (section === 'Next Session') result.next.push(item);
   }
 
-  const decisions = args.decisions?.slice(0, MAX_ITEMS) ?? [];
+  return result;
+}
+
+function buildSummaryBlock(parsed) {
+  const lines = ['## EGC Project Memory'];
+
+  if (parsed.context) {
+    lines.push('', `**Context:** ${parsed.context}`);
+  }
+
+  const decisions = parsed.decisions.slice(0, MAX_ITEMS);
   if (decisions.length > 0) {
     lines.push('', '**Active decisions:**');
-    for (const d of decisions) {
-      lines.push(`- ${d.what}`);
-    }
+    for (const d of decisions) lines.push(`- ${d}`);
   }
 
-  const next = args.next?.slice(0, MAX_ITEMS) ?? [];
+  const next = parsed.next.slice(0, MAX_ITEMS);
   if (next.length > 0) {
     lines.push('', '**Next session:**');
-    for (const n of next) {
-      lines.push(`- ${n}`);
-    }
+    for (const n of next) lines.push(`- ${n}`);
   }
 
   return lines.join('\n');
 }
 
-function upsertEgcSection(existing: string, block: string): string {
+function upsertEgcSection(existing, block) {
   const section = `${EGC_START}\n${block}\n${EGC_END}`;
   const startIdx = existing.indexOf(EGC_START);
   const endIdx = existing.indexOf(EGC_END);
@@ -56,7 +60,7 @@ function upsertEgcSection(existing: string, block: string): string {
   return existing ? `${existing.trimEnd()}\n\n${section}\n` : `${section}\n`;
 }
 
-function writeCursorContext(projectPath: string, block: string): string | null {
+function writeCursorContext(projectPath, block) {
   const cursorDir = path.join(projectPath, '.cursor');
   try {
     if (!fs.existsSync(cursorDir) || !fs.statSync(cursorDir).isDirectory()) return null;
@@ -68,12 +72,12 @@ function writeCursorContext(projectPath: string, block: string): string | null {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const filePath = path.join(rulesDir, 'egc-context.mdc');
-  const content = `---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n${block}\n`;
+  const content = `---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n${block}\n`;
   fs.writeFileSync(filePath, content, 'utf-8');
   return filePath;
 }
 
-function writeCopilotContext(projectPath: string, block: string): string | null {
+function writeCopilotContext(projectPath, block) {
   const filePath = path.join(projectPath, '.github', 'copilot-instructions.md');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -86,7 +90,7 @@ function writeCopilotContext(projectPath: string, block: string): string | null 
   return filePath;
 }
 
-function writeGeminiContext(projectPath: string, block: string): string | null {
+function writeGeminiContext(projectPath, block) {
   const filePath = path.join(projectPath, 'GEMINI.md');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -99,11 +103,15 @@ function writeGeminiContext(projectPath: string, block: string): string | null {
   return filePath;
 }
 
-export function propagateStateToTools(args: PropagateArgs): PropagateResult {
-  const block = buildSummaryBlock(args);
+function propagateStateContent(projectPath, stateContent) {
+  const parsed = parseStateContent(stateContent);
+  const block = buildSummaryBlock(parsed);
+
   return {
-    cursor: writeCursorContext(args.projectPath, block),
-    copilot: writeCopilotContext(args.projectPath, block),
-    gemini: writeGeminiContext(args.projectPath, block),
+    cursor: writeCursorContext(projectPath, block),
+    copilot: writeCopilotContext(projectPath, block),
+    gemini: writeGeminiContext(projectPath, block),
   };
 }
+
+module.exports = { propagateStateContent };
