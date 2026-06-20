@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import { propagateStateToTools } from './propagate';
 import {
   createWorkingMemoryTable,
   sweepExpired,
@@ -844,9 +845,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
         writeStateDoc(filePath, projPath, args, existing, branch);
 
-        log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0 });
+        const propagated = propagateStateToTools({
+          projectPath: projPath,
+          context: args.context,
+          decisions: args.decisions,
+          next: args.next,
+        });
+        const propagatedTools = Object.entries(propagated)
+          .filter(([, p]) => p !== null)
+          .map(([tool]) => tool);
+
+        log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0, propagated: propagatedTools });
         const branchLine = branch ? `Branch: ${branch}\n` : '';
-        return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
+        const toolsLine = propagatedTools.length > 0 ? `Tools updated: ${propagatedTools.join(', ')}\n` : '';
+        return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}${toolsLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
       }
 
       case "working_memory_set": {
