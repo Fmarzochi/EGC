@@ -62,7 +62,7 @@ npx @egchq/egc install
 
 O EGC inclui dois servidores MCP que trabalham juntos durante cada sessão.
 
-**`egc-memory`** — 14 ferramentas para memória persistente:
+**`egc-memory`** - 14 ferramentas para memória persistente:
 
 | Ferramenta | O que faz |
 |---|---|
@@ -83,7 +83,7 @@ O EGC inclui dois servidores MCP que trabalham juntos durante cada sessão.
 
 Os arquivos de estado ficam em `~/.egc/state/<project-slug>.md`. Um arquivo por projeto, Markdown simples, legível por humanos.
 
-**`egc-guardian`** — 5 ferramentas para contexto e segurança:
+**`egc-guardian`** - 5 ferramentas para contexto e segurança:
 
 | Ferramenta | O que faz |
 |---|---|
@@ -97,14 +97,7 @@ Os arquivos de estado ficam em `~/.egc/state/<project-slug>.md`. Um arquivo por 
 
 ## Biblioteca de prompts
 
-**479 componentes**: opcional. Instale para ter acesso a 63 agentes, 229 skills e 76 comandos escritos com experiência real. Ignore-os e o EGC ainda oferece memória persistente.
-
-| Componente | Total | Claude Code | Gemini CLI | Claude Code nativo |
-|---|---|---|---|---|
-| Agentes | 63 | Compartilhado (AGENTS.md) | Compartilhado (AGENTS.md) | 12 |
-| Comandos | 76 | Compartilhado | Baseado em instruções | 31 |
-| Skills | 229 | Compartilhado | 10 (formato nativo) | 37 |
-| Regras | 111 | ✓ | ✓ | ✓ |
+**479 componentes** inclusos como brinde: 63 agentes, 229 skills, 76 comandos e 111 regras escritos em sessões reais de engenharia. Ignore-os completamente e o EGC ainda oferece memória persistente.
 
 ---
 
