@@ -121,9 +121,10 @@ function resolveStateFilePath(projectPath) {
   if (branch) {
     const branchFile = path.join(stateDir, slug, `${sanitizeBranchName(branch)}.md`);
     if (fs.existsSync(branchFile)) return branchFile;
-    const defaultFile = path.join(stateDir, slug, 'main.md');
-    if (fs.existsSync(defaultFile)) return defaultFile;
   }
+
+  const defaultFile = path.join(stateDir, slug, 'main.md');
+  if (fs.existsSync(defaultFile)) return defaultFile;
 
   const flatFile = path.join(stateDir, `${slug}.md`);
   if (fs.existsSync(flatFile)) return flatFile;
@@ -148,7 +149,7 @@ function mergeBlockIntoStateFile(stateFilePath, block) {
   if (contextMatch) {
     const newCtx = contextMatch[1].trim();
     if (updated.includes('## Context\n')) {
-      updated = updated.replace(/^## Context\n.+/m, `## Context\n${newCtx}`);
+      updated = updated.replace(/## Context\n[\s\S]*?(?=\n##|$)/, `## Context\n${newCtx}\n`);
     }
   }
 
@@ -184,7 +185,7 @@ class StateWatcher {
     for (const [tool, filePath] of files) {
       this._watchFile(tool, filePath);
     }
-    return files.size;
+    return this._watchers.size;
   }
 
   stop() {
@@ -207,15 +208,28 @@ class StateWatcher {
     return found;
   }
 
+  _reattach(tool, filePath, oldWatcher) {
+    if (oldWatcher) { try { oldWatcher.close(); } catch (e) { void e; } }
+    this._watchers.delete(tool);
+    this._watchFile(tool, filePath);
+    this._schedule(tool, filePath);
+  }
+
   _watchFile(tool, filePath) {
     try {
       const watcher = fs.watch(filePath, (eventType) => {
+        if (eventType === 'rename') {
+          setTimeout(() => this._reattach(tool, filePath, watcher), 150);
+          return;
+        }
         if (eventType !== 'change') return;
         this._schedule(tool, filePath);
       });
+      // Windows emits 'error' (EPERM) instead of 'rename' on atomic file replacement
+      watcher.on('error', () => setTimeout(() => this._reattach(tool, filePath, null), 150));
       this._watchers.set(tool, watcher);
-    } catch (_) {
-      // File may have been deleted -- skip silently
+    } catch (e) {
+      void e; // File may have been deleted -- skip silently
     }
   }
 
@@ -243,7 +257,7 @@ class StateWatcher {
     if (!block) return;
 
     const stateContent = parseBlockToStateContent(block);
-    if (!stateContent.trim()) return;
+    if (!stateContent.includes('## Context') && !stateContent.includes('## Active Decisions')) return;
 
     // Propagate to all other tools
     const written = propagateStateContent(this._projectPath, stateContent);
@@ -272,4 +286,4 @@ class StateWatcher {
   }
 }
 
-module.exports = { StateWatcher, extractEgcBlock, parseBlockToStateContent };
+module.exports = { StateWatcher, extractEgcBlock, parseBlockToStateContent, mergeBlockIntoStateFile, resolveStateFilePath };

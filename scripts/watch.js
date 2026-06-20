@@ -55,6 +55,12 @@ function main() {
     process.exit(0);
   }
 
+  const fs = require('node:fs');
+  if (!fs.existsSync(opts.projectPath)) {
+    console.error(`[egc watch] error: path does not exist: ${opts.projectPath}`);
+    process.exit(1);
+  }
+
   const watcher = new StateWatcher(opts.projectPath, {
     onSync({ sourceTool, syncedTools, stateUpdated }) {
       if (opts.quiet) return;

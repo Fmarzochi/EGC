@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { extractEgcBlock, parseBlockToStateContent, StateWatcher } = require('../../scripts/lib/watch-state');
+const { extractEgcBlock, parseBlockToStateContent, StateWatcher, mergeBlockIntoStateFile, resolveStateFilePath } = require('../../scripts/lib/watch-state');
 
 function mktemp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-watch-state-'));
@@ -169,6 +169,146 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
+  })) passed++; else failed++;
+
+  if (await test('StateWatcher fires onSync after atomic rename (editor save)', () => {
+    return new Promise((resolve, reject) => {
+      const dir = mktemp();
+      let watcher;
+
+      try {
+        const targetPath = path.join(dir, 'GEMINI.md');
+        fs.writeFileSync(targetPath, `# Gemini\n\n${SAMPLE_MDC}`);
+
+        watcher = new StateWatcher(dir, {
+          onSync({ sourceTool }) {
+            try {
+              assert.strictEqual(sourceTool, 'gemini');
+              watcher.stop();
+              cleanup(dir);
+              resolve();
+            } catch (err) {
+              watcher.stop();
+              cleanup(dir);
+              reject(err);
+            }
+          },
+        });
+        watcher.start();
+
+        setTimeout(() => {
+          const tmpPath = targetPath + '.tmp';
+          const updated = `# Gemini\n\n<!-- egc:start -->\n${SAMPLE_BLOCK}\n- Atomic save item\n<!-- egc:end -->\n`;
+          fs.writeFileSync(tmpPath, updated);
+          fs.renameSync(tmpPath, targetPath);
+        }, 50);
+
+        setTimeout(() => {
+          watcher.stop();
+          cleanup(dir);
+          reject(new Error('onSync did not fire within 2s after atomic rename'));
+        }, 2000);
+      } catch (err) {
+        if (watcher) watcher.stop();
+        cleanup(dir);
+        reject(err);
+      }
+    });
+  })) passed++; else failed++;
+
+  if (await test('mergeBlockIntoStateFile replaces multi-line Context correctly', () => {
+    const dir = mktemp();
+    try {
+      const stateFilePath = path.join(dir, 'state.md');
+      const initial = '# Project State\n\n## Context\nOld line one\nOld line two\nOld line three\n\n## Active Decisions\n- Some decision\n';
+      fs.writeFileSync(stateFilePath, initial);
+
+      const block = `**Context:** New single-line context\n\n**Active decisions:**\n- Some decision`;
+      mergeBlockIntoStateFile(stateFilePath, block);
+
+      const result = fs.readFileSync(stateFilePath, 'utf-8');
+      assert.ok(result.includes('New single-line context'), 'should contain new context');
+      assert.ok(!result.includes('Old line one'), 'should not contain old context first line');
+      assert.ok(!result.includes('Old line two'), 'should not contain old context second line');
+      assert.ok(!result.includes('Old line three'), 'should not contain old context third line');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('resolveStateFilePath without branch finds main.md', () => {
+    const projectDir = mktemp();
+    const stateDir = path.join(os.homedir(), '.egc', 'state');
+    const slug = require('../../scripts/lib/branch-state').projectSlug(projectDir);
+    const slugDir = path.join(stateDir, slug);
+    let createdSlugDir = false;
+    const mainMd = path.join(slugDir, 'main.md');
+
+    try {
+      if (!fs.existsSync(slugDir)) {
+        fs.mkdirSync(slugDir, { recursive: true });
+        createdSlugDir = true;
+      }
+      fs.writeFileSync(mainMd, '# State\n');
+      const result = resolveStateFilePath(projectDir);
+      assert.strictEqual(result, mainMd, 'should resolve to main.md when no branch (detached HEAD or non-git dir)');
+    } finally {
+      try { fs.unlinkSync(mainMd); } catch (_) { /* may not exist if test failed early */ }
+      if (createdSlugDir) {
+        try { fs.rmdirSync(slugDir); } catch (_) { /* may fail if dir still has files */ }
+      }
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('StateWatcher.start returns count of successful watchers only', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'GEMINI.md'), SAMPLE_MDC);
+      const watcher = new StateWatcher(dir);
+      const count = watcher.start();
+      assert.strictEqual(count, 1, 'only GEMINI.md exists and should be watched');
+      watcher.stop();
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('_handleChange skips empty egc block without propagating', () => {
+    return new Promise((resolve, reject) => {
+      const dir = mktemp();
+      let watcher;
+
+      try {
+        const emptyBlock = `<!-- egc:start -->\n   \n<!-- egc:end -->\n`;
+        fs.writeFileSync(path.join(dir, 'GEMINI.md'), `# Gemini\n\n${emptyBlock}`);
+
+        let synced = false;
+        watcher = new StateWatcher(dir, {
+          onSync() { synced = true; },
+        });
+        watcher.start();
+
+        setTimeout(() => {
+          const emptyContent = `# Gemini\n\n<!-- egc:start -->\n   \n<!-- egc:end -->\n`;
+          fs.writeFileSync(path.join(dir, 'GEMINI.md'), emptyContent);
+        }, 50);
+
+        setTimeout(() => {
+          watcher.stop();
+          cleanup(dir);
+          if (synced) {
+            reject(new Error('onSync should not fire for empty block'));
+          } else {
+            resolve();
+          }
+        }, 800);
+      } catch (err) {
+        if (watcher) watcher.stop();
+        cleanup(dir);
+        reject(err);
+      }
+    });
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
