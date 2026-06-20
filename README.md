@@ -76,7 +76,7 @@ npx @egchq/egc install
 
 EGC ships two MCP servers that work together during every session.
 
-**`egc-memory`** — 14 tools for persistent memory:
+**`egc-memory`** - 14 tools for persistent memory:
 
 | Tool | What it does |
 |---|---|
@@ -97,7 +97,7 @@ EGC ships two MCP servers that work together during every session.
 
 State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
 
-**`egc-guardian`** — 5 tools for context and safety:
+**`egc-guardian`** - 5 tools for context and safety:
 
 | Tool | What it does |
 |---|---|

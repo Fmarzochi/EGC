@@ -62,7 +62,7 @@ npx @egchq/egc install
 
 O EGC inclui dois servidores MCP que trabalham juntos durante cada sessão.
 
-**`egc-memory`** — 14 ferramentas para memória persistente:
+**`egc-memory`** - 14 ferramentas para memória persistente:
 
 | Ferramenta | O que faz |
 |---|---|
@@ -83,7 +83,7 @@ O EGC inclui dois servidores MCP que trabalham juntos durante cada sessão.
 
 Os arquivos de estado ficam em `~/.egc/state/<project-slug>.md`. Um arquivo por projeto, Markdown simples, legível por humanos.
 
-**`egc-guardian`** — 5 ferramentas para contexto e segurança:
+**`egc-guardian`** - 5 ferramentas para contexto e segurança:
 
 | Ferramenta | O que faz |
 |---|---|
