@@ -186,7 +186,6 @@ function writeCatalogFixture(testDir, options = {}) {
   const {
     readmeCounts = { agents: 1, skills: 1, commands: 1 },
     readmeTableCounts = readmeCounts,
-    readmeParityCounts = readmeCounts,
     readmeUnrelatedSkillsCount = 16,
     summaryCounts = { agents: 1, skills: 1, commands: 1 },
     structureLines = [
@@ -197,7 +196,6 @@ function writeCatalogFixture(testDir, options = {}) {
     zhRootReadmeCounts = { agents: 1, skills: 1, commands: 1 },
     zhDocsReadmeCounts = { agents: 1, skills: 1, commands: 1 },
     zhDocsTableCounts = zhDocsReadmeCounts,
-    zhDocsParityCounts = zhDocsReadmeCounts,
     zhDocsUnrelatedSkillsCount = 16,
     zhAgentsSummaryCounts = { agents: 1, skills: 1, commands: 1 },
     zhAgentsStructureLines = [
@@ -222,10 +220,11 @@ function writeCatalogFixture(testDir, options = {}) {
   fs.writeFileSync(path.join(testDir, 'commands', 'plan.md'), '---\ndescription: Plan\n---\n# Plan');
   fs.writeFileSync(path.join(testDir, 'skills', 'demo-skill', 'SKILL.md'), '---\nname: demo-skill\ndescription: Demo skill\norigin: EGC\n---\n# Demo Skill');
 
-  fs.writeFileSync(readmePath, `Access to ${readmeCounts.agents} agents, ${readmeCounts.skills} skills, and ${readmeCounts.commands} commands.\n| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |\n|---------|------------|------------|-----------|----------|\n| Agents | PASS: ${readmeTableCounts.agents} agents | Shared | Shared | 1 |\n| Commands | PASS: ${readmeTableCounts.commands} commands | Shared | Shared | 1 |\n| Skills | PASS: ${readmeTableCounts.skills} skills | Shared | Shared | 1 |\n\n| Feature | Count | Format |\n|-----------|-------|---------|\n| Skills | ${readmeUnrelatedSkillsCount} | .agents/skills/ |\n\n## Cross-Tool Feature Parity\n\n| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |\n|---------|------------|------------|-----------|----------|\n| **Agents** | ${readmeParityCounts.agents} | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |\n| **Commands** | ${readmeParityCounts.commands} | Shared | Instruction-based | 31 |\n| **Skills** | ${readmeParityCounts.skills} | Shared | 10 (native format) | 37 |\n`);
+  fs.writeFileSync(readmePath, `Access to ${readmeCounts.agents} agents, ${readmeCounts.skills} skills, and ${readmeCounts.commands} commands.\n| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |\n|---------|------------|------------|-----------|----------|\n| Agents | PASS: ${readmeTableCounts.agents} agents | Shared | Shared | 1 |\n| Commands | PASS: ${readmeTableCounts.commands} commands | Shared | Shared | 1 |\n| Skills | PASS: ${readmeTableCounts.skills} skills | Shared | Shared | 1 |\n\n| Feature | Count | Format |\n|-----------|-------|---------|\n| Skills | ${readmeUnrelatedSkillsCount} | .agents/skills/ |\n`);
   fs.writeFileSync(agentsPath, `This is a **production-ready AI coding plugin** providing ${summaryCounts.agents} specialized agents, ${summaryCounts.skills} skills, ${summaryCounts.commands} commands, and automated hook workflows for software development.\n\n\`\`\`\n${structureLines.join('\n')}\n\`\`\`\n`);
   fs.writeFileSync(zhRootReadmePath, `**完成！** 你现在可以使用 ${zhRootReadmeCounts.agents} 个代理、${zhRootReadmeCounts.skills} 个技能和 ${zhRootReadmeCounts.commands} 个命令。\n`);
-  fs.writeFileSync(zhDocsReadmePath, `**搞定！** 你现在可以使用 ${zhDocsReadmeCounts.agents} 个智能体、${zhDocsReadmeCounts.skills} 项技能和 ${zhDocsReadmeCounts.commands} 个命令了。\n| 功能特性 | Gemini Code | OpenCode | 状态 |\n|---------|-------------|----------|--------|\n| 智能体 | \u2705 ${zhDocsTableCounts.agents} 个 | \u2705 12 个 | **Gemini Code 领先** |\n| 命令 | \u2705 ${zhDocsTableCounts.commands} 个 | \u2705 31 个 | **Gemini Code 领先** |\n| 技能 | \u2705 ${zhDocsTableCounts.skills} 项 | \u2705 37 项 | **Gemini Code 领先** |\n\n| 功能特性 | 数量 | 格式 |\n|-----------|-------|---------|\n| 技能 | ${zhDocsUnrelatedSkillsCount} | .agents/skills/ |\n\n## 跨工具功能对等\n\n| 功能特性 | Gemini Code | Cursor IDE | Codex CLI | OpenCode |\n|---------|------------|------------|-----------|----------|\n| **智能体** | ${zhDocsParityCounts.agents} | 共享 (AGENTS.md) | 共享 (AGENTS.md) | 12 |\n| **命令** | ${zhDocsParityCounts.commands} | 共享 | 基于指令 | 31 |\n| **技能** | ${zhDocsParityCounts.skills} | 共享 | 10 (原生格式) | 37 |\n`);
+  fs.writeFileSync(zhDocsReadmePath, `**搞定！** 你现在可以使用 ${zhDocsReadmeCounts.agents} 个智能体、${zhDocsReadmeCounts.skills} 项技能和 ${zhDocsReadmeCounts.commands} 个命令了。\n| 功能特性 | Gemini Code | OpenCode | 状态 |\n|---------|-------------|----------|--------|\n| 智能体 | \u2705 ${zhDocsTableCounts.agents} 个 | \u2705 12 个 | **Gemini Code 领先** |\n| 命令 | \u2705 ${zhDocsTableCounts.commands} 个 | \u2705 31 个 | **Gemini Code 领先** |\n| 技能 | \u2705 ${zhDocsTableCounts.skills} 项 | \u2705 37 项 | **Gemini Code 领先** |\n\n| 功能特性 | 数量 | 格式 |\n|-----------|-------|---------|\n| 技能 | ${zhDocsUnrelatedSkillsCount} | .agents/skills/ |
+`);
   fs.writeFileSync(zhAgentsPath, `这是一个**生产就绪的 AI 编码插件**，提供 ${zhAgentsSummaryCounts.agents} 个专业代理、${zhAgentsSummaryCounts.skills} 项技能、${zhAgentsSummaryCounts.commands} 条命令以及自动化钩子工作流，用于软件开发。\n\n\`\`\`\n${zhAgentsStructureLines.join('\n')}\n\`\`\`\n`);
 
   return { readmePath, agentsPath, zhRootReadmePath, zhDocsReadmePath, zhAgentsPath };
@@ -378,7 +377,6 @@ function runTests() {
     } = writeCatalogFixture(testDir, {
       readmeCounts: { agents: 99, skills: 99, commands: 99 },
       readmeTableCounts: { agents: 99, skills: 99, commands: 99 },
-      readmeParityCounts: { agents: 99, skills: 99, commands: 99 },
       summaryCounts: { agents: 99, skills: 99, commands: 99 },
       structureLines: [
         'agents/         : 99 specialized subagents',
@@ -388,7 +386,6 @@ function runTests() {
       zhRootReadmeCounts: { agents: 99, skills: 99, commands: 99 },
       zhDocsReadmeCounts: { agents: 99, skills: 99, commands: 99 },
       zhDocsTableCounts: { agents: 99, skills: 99, commands: 99 },
-      zhDocsParityCounts: { agents: 99, skills: 99, commands: 99 },
       zhAgentsSummaryCounts: { agents: 99, skills: 99, commands: 99 },
       zhAgentsStructureLines: [
         'agents/         : 99 个专业子代理',
@@ -408,38 +405,6 @@ function runTests() {
 
     assert.strictEqual(result.code, 1, 'Should fail when catalog counts drift');
     assert.ok((result.stdout + result.stderr).includes('Documentation count mismatches found:'), 'Should report mismatches');
-    cleanupTestDir(testDir);
-  })) passed++; else failed++;
-
-  if (test('fails when README parity table counts drift', () => {
-    const testDir = createTestDir();
-    const {
-      readmePath,
-      agentsPath,
-      zhRootReadmePath,
-      zhDocsReadmePath,
-      zhAgentsPath,
-    } = writeCatalogFixture(testDir, {
-      readmeCounts: { agents: 1, skills: 1, commands: 1 },
-      readmeTableCounts: { agents: 1, skills: 1, commands: 1 },
-      readmeParityCounts: { agents: 9, skills: 8, commands: 7 },
-      summaryCounts: { agents: 1, skills: 1, commands: 1 },
-    });
-
-    const result = runCatalogValidator({
-      ROOT: testDir,
-      README_PATH: readmePath,
-      AGENTS_PATH: agentsPath,
-      README_ZH_CN_PATH: zhRootReadmePath,
-      DOCS_ZH_CN_README_PATH: zhDocsReadmePath,
-      DOCS_ZH_CN_AGENTS_PATH: zhAgentsPath,
-    });
-
-    assert.strictEqual(result.code, 1, 'Should fail when README parity table drifts');
-    assert.ok(
-      (result.stdout + result.stderr).includes('README.md parity table'),
-      'Should mention the README parity table mismatch'
-    );
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
@@ -485,12 +450,10 @@ function runTests() {
     } = writeCatalogFixture(testDir, {
       readmeCounts: { agents: 9, skills: 9, commands: 9 },
       readmeTableCounts: { agents: 8, skills: 8, commands: 8 },
-      readmeParityCounts: { agents: 7, skills: 7, commands: 7 },
       summaryCounts: { agents: 6, skills: 6, commands: 6 },
       zhRootReadmeCounts: { agents: 10, skills: 10, commands: 10 },
       zhDocsReadmeCounts: { agents: 11, skills: 11, commands: 11 },
       zhDocsTableCounts: { agents: 12, skills: 12, commands: 12 },
-      zhDocsParityCounts: { agents: 13, skills: 13, commands: 13 },
       zhAgentsSummaryCounts: { agents: 14, skills: 14, commands: 14 },
       zhAgentsStructureLines: [
         'agents/         : 15 个专业子代理',
@@ -520,14 +483,12 @@ function runTests() {
     assert.ok(readme.includes('Access to 1 agents, 1 skills, and 1 legacy command shims'), 'Should sync README quick-start summary');
     assert.ok(readme.includes('| Agents | PASS: 1 agents |'), 'Should sync README comparison table');
     assert.ok(readme.includes('| Skills | 16 | .agents/skills/ |'), 'Should not rewrite unrelated README tables');
-    assert.ok(readme.includes('| **Agents** | 1 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |'), 'Should sync README parity table');
     assert.ok(agentsDoc.includes('providing 1 specialized agents, 1 skills, 1 commands'), 'Should sync AGENTS summary');
     assert.ok(agentsDoc.includes('skills/         : 1 workflow skills and domain knowledge'), 'Should sync AGENTS structure');
     assert.ok(zhRootReadme.includes('你现在可以使用 1 个代理、1 个技能和 1 个命令'), 'Should sync README.zh-CN quick-start summary');
     assert.ok(zhDocsReadme.includes('你现在可以使用 1 个智能体、1 项技能和 1 个命令了'), 'Should sync docs/zh-CN/README quick-start summary');
     assert.ok(zhDocsReadme.includes('| 智能体 | \u2705 1 个 |'), 'Should sync docs/zh-CN/README comparison table');
     assert.ok(zhDocsReadme.includes('| 技能 | 16 | .agents/skills/ |'), 'Should not rewrite unrelated docs/zh-CN/README tables');
-    assert.ok(zhDocsReadme.includes('| **智能体** | 1 | 共享 (AGENTS.md) | 共享 (AGENTS.md) | 12 |'), 'Should sync docs/zh-CN/README parity table');
     assert.ok(zhAgentsDoc.includes('提供 1 个专业代理、1 项技能、1 条命令'), 'Should sync docs/zh-CN/AGENTS summary');
     assert.ok(zhAgentsDoc.includes('commands/       : 1 个斜杠命令'), 'Should sync docs/zh-CN/AGENTS structure');
 
