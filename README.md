@@ -107,6 +107,14 @@ State files live at `~/.egc/state/<project-slug>.md`. One file per project, plai
 | `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
 | `auto_learn` | Mines session failures and writes actionable lessons to CLAUDE.md |
 
+**`egc watch`** — bidirectional sync daemon. Watches all EGC-managed tool config files in the project. When you edit context directly in any tool file (Cursor, Gemini CLI, Copilot, etc.), the change is extracted from the EGC block and synced to all other tools and back to `~/.egc/state/` automatically.
+
+```
+egc watch              # watch current project
+egc watch /path/proj   # watch a specific project
+egc watch --quiet      # suppress output
+```
+
 ---
 
 ## Prompt library
