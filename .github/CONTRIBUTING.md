@@ -389,7 +389,8 @@ EGC uses [Crowdin](https://crowdin.com/project/egc) for community translations. 
 | Language | Progress | File |
 |---|---|---|
 | English | Source | [README.md](../README.md) |
-| Portugues do Brasil | 100% | [translations/pt/README.md](../translations/pt/README.md) |
+| Español | 100% | [translations/es/README.md](../translations/es/README.md) |
+| Português (Brasil) | 100% | [translations/pt/README.md](../translations/pt/README.md) |
 
 ---
 
@@ -418,6 +419,7 @@ O EGC usa o [Crowdin](https://crowdin.com/project/egc) para traducoes feitas pel
 | Idioma | Progresso | Arquivo |
 |---|---|---|
 | Ingles | Fonte | [README.md](../README.md) |
+| Español | 100% | [translations/es/README.md](../translations/es/README.md) |
 | Portugues do Brasil | 100% | [translations/pt/README.md](../translations/pt/README.md) |
 
 ---
