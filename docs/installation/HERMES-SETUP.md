@@ -101,7 +101,7 @@ These stay local and should be configured per operator:
 
 ## Related Docs
 
-- [Hermes/OpenClaw migration guide](HERMES-OPENCLAW-MIGRATION.md)
+- Hermes/OpenClaw migration guide (coming soon)
 - [Cross-harness architecture](architecture/cross-harness.md)
 
 ## Why Hermes x egc
