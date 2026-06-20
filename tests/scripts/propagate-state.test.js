@@ -111,6 +111,80 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('propagates to .windsurfrules when it exists (Windsurf)', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, '.windsurfrules'), '# Windsurf rules\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.windsurf, 'windsurf path returned');
+      const content = fs.readFileSync(result.windsurf, 'utf-8');
+      assert.ok(content.includes('# Windsurf rules'), 'original content preserved');
+      assert.ok(content.includes('<!-- egc:start -->'));
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create .windsurfrules when absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.windsurf, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to AGENTS.md when it exists (Codex, OpenCode, Amp, Kiro)', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n\nDo not run tests in watch mode.\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.agents, 'agents path returned');
+      const content = fs.readFileSync(result.agents, 'utf-8');
+      assert.ok(content.includes('Do not run tests in watch mode'), 'original content preserved');
+      assert.ok(content.includes('EGC Project Memory'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create AGENTS.md when absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.agents, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('propagates to llms.txt when it exists', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'llms.txt'), '# Project context\n\nThis is a Node.js CLI tool.\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.llms, 'llms path returned');
+      const content = fs.readFileSync(result.llms, 'utf-8');
+      assert.ok(content.includes('This is a Node.js CLI tool'), 'original content preserved');
+      assert.ok(content.includes('EGC Project Memory'));
+      assert.ok(content.includes('Fix propagation hooks'), 'next item present');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not create llms.txt when absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.llms, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('returns all null when no tool configs exist', () => {
     const dir = mktemp();
     try {
@@ -118,6 +192,9 @@ function runTests() {
       assert.strictEqual(result.cursor, null);
       assert.strictEqual(result.copilot, null);
       assert.strictEqual(result.gemini, null);
+      assert.strictEqual(result.windsurf, null);
+      assert.strictEqual(result.agents, null);
+      assert.strictEqual(result.llms, null);
     } finally {
       cleanup(dir);
     }

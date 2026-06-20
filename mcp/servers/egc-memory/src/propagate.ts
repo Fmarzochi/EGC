@@ -12,6 +12,9 @@ export interface PropagateResult {
   cursor: string | null;
   copilot: string | null;
   gemini: string | null;
+  windsurf: string | null;
+  agents: string | null;
+  llms: string | null;
 }
 
 const EGC_START = '<!-- egc:start -->';
@@ -99,11 +102,61 @@ function writeGeminiContext(projectPath: string, block: string): string | null {
   return filePath;
 }
 
+function writeWindsurfContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, '.windsurfrules');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeAgentsContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, 'AGENTS.md');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
+  const filePath = path.join(projectPath, 'llms.txt');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const lines: string[] = ['# EGC Project Memory'];
+  if (args.context) lines.push('', args.context);
+  const next = args.next?.slice(0, MAX_ITEMS) ?? [];
+  if (next.length > 0) {
+    lines.push('', '## Next session');
+    for (const n of next) lines.push(`- ${n}`);
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, lines.join('\n')), 'utf-8');
+  return filePath;
+}
+
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
   const block = buildSummaryBlock(args);
   return {
     cursor: writeCursorContext(args.projectPath, block),
     copilot: writeCopilotContext(args.projectPath, block),
     gemini: writeGeminiContext(args.projectPath, block),
+    windsurf: writeWindsurfContext(args.projectPath, block),
+    agents: writeAgentsContext(args.projectPath, block),
+    llms: writeLlmsTxt(args.projectPath, args),
   };
 }

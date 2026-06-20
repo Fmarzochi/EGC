@@ -103,6 +103,53 @@ function writeGeminiContext(projectPath, block) {
   return filePath;
 }
 
+function writeWindsurfContext(projectPath, block) {
+  const filePath = path.join(projectPath, '.windsurfrules');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeAgentsContext(projectPath, block) {
+  const filePath = path.join(projectPath, 'AGENTS.md');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeLlmsTxt(projectPath, parsed) {
+  const filePath = path.join(projectPath, 'llms.txt');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const lines = ['# EGC Project Memory'];
+  if (parsed.context) lines.push('', parsed.context);
+  if (parsed.next.length > 0) {
+    lines.push('', '## Next session');
+    for (const n of parsed.next.slice(0, MAX_ITEMS)) lines.push(`- ${n}`);
+  }
+  const block = lines.join('\n');
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
 function propagateStateContent(projectPath, stateContent) {
   const parsed = parseStateContent(stateContent);
   const block = buildSummaryBlock(parsed);
@@ -111,6 +158,9 @@ function propagateStateContent(projectPath, stateContent) {
     cursor: writeCursorContext(projectPath, block),
     copilot: writeCopilotContext(projectPath, block),
     gemini: writeGeminiContext(projectPath, block),
+    windsurf: writeWindsurfContext(projectPath, block),
+    agents: writeAgentsContext(projectPath, block),
+    llms: writeLlmsTxt(projectPath, parsed),
   };
 }
 
