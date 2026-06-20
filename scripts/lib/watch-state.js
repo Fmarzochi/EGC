@@ -213,7 +213,7 @@ class StateWatcher {
       const watcher = fs.watch(filePath, (eventType) => {
         if (eventType === 'rename') {
           setTimeout(() => {
-            try { watcher.close(); } catch (_) {}
+            try { watcher.close(); } catch (_) { /* watcher already replaced on rename */ }
             this._watchers.delete(tool);
             this._watchFile(tool, filePath);
             this._schedule(tool, filePath);
@@ -222,6 +222,14 @@ class StateWatcher {
         }
         if (eventType !== 'change') return;
         this._schedule(tool, filePath);
+      });
+      // Windows emits 'error' (EPERM) instead of 'rename' on atomic file replacement
+      watcher.on('error', () => {
+        this._watchers.delete(tool);
+        setTimeout(() => {
+          this._watchFile(tool, filePath);
+          this._schedule(tool, filePath);
+        }, 150);
       });
       this._watchers.set(tool, watcher);
     } catch (_) {
