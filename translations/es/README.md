@@ -93,6 +93,14 @@ Los archivos de estado se almacenan en `~/.egc/state/<project-slug>.md`. Un arch
 | `orchestrate_task` | Enruta prompts con contexto de agentes/skills y devuelve métricas de compresión |
 | `auto_learn` | Analiza fallos de sesión y escribe lecciones accionables en CLAUDE.md |
 
+**`egc watch`** — daemon de sincronización bidireccional. Monitorea todos los archivos de configuración de herramientas gestionados por EGC en el proyecto. Cuando editas el contexto directamente en cualquier archivo de herramienta (Cursor, Gemini CLI, Copilot, etc.), el cambio se extrae del bloque EGC y se sincroniza con todas las demás herramientas y de vuelta a `~/.egc/state/` automáticamente.
+
+```
+egc watch              # monitorear proyecto actual
+egc watch /ruta/proj   # monitorear proyecto específico
+egc watch --quiet      # silenciar salida
+```
+
 ---
 
 ## Biblioteca de prompts
