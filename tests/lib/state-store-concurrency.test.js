@@ -137,6 +137,19 @@ function classifyRows(rows) {
   return { python, node };
 }
 
+async function detectWalSupport() {
+  const tempDir = createTempDir('egc-wal-detect-');
+  const dbPath = path.join(tempDir, 'detect.db');
+  try {
+    const store = await createStateStore({ dbPath });
+    const supported = store._database._supportsWal === true;
+    store.close();
+    return supported;
+  } finally {
+    cleanupTempDir(tempDir);
+  }
+}
+
 async function runTests() {
   console.log('\n=== Testing state-store concurrency (Node + Python writers) ===\n');
 
@@ -146,6 +159,8 @@ async function runTests() {
   const runCase = async (name, fn) => {
     if (await test(name, fn)) passed += 1; else failed += 1;
   };
+
+  const WAL_SUPPORTED = await detectWalSupport();
 
   if (!PYTHON_AVAILABLE) {
     testSkip('test_python_writes_survive_subsequent_node_open', 'python3 not available');
@@ -177,7 +192,9 @@ async function runTests() {
       }
     });
 
-    await runCase('test_concurrent_node_python_writes_no_lost_writes', async () => {
+    if (!WAL_SUPPORTED) {
+      testSkip('test_concurrent_node_python_writes_no_lost_writes', 'database adapter uses in-memory model without WAL; concurrent external writes not supported');
+    } else await runCase('test_concurrent_node_python_writes_no_lost_writes', async () => {
       const tempDir = createTempDir('egc-conc-race-');
       const dbPath = path.join(tempDir, 'state.db');
       try {
@@ -209,7 +226,9 @@ async function runTests() {
     });
   }
 
-  await runCase('test_wal_mode_active_on_real_file_db', async () => {
+  if (!WAL_SUPPORTED) {
+    testSkip('test_wal_mode_active_on_real_file_db', 'database adapter uses in-memory model; WAL journal mode not applicable');
+  } else await runCase('test_wal_mode_active_on_real_file_db', async () => {
     const tempDir = createTempDir('egc-conc-wal-');
     const dbPath = path.join(tempDir, 'state.db');
     try {

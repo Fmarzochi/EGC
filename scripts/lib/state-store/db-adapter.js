@@ -68,12 +68,26 @@ class SqlJsDatabase {
   constructor(sqlJs, dbPath, fileData) {
     this._path = dbPath;
     this._inTransaction = false;
+    this._supportsWal = false;
     this._db = new sqlJs.Database(fileData || null);
   }
 
   pragma(str) {
-    if (str.toLowerCase().includes('journal_mode')) return;
-    this._db.run(`PRAGMA ${str}`);
+    const normalized = str.toLowerCase().replace(/\s+/g, '');
+    if (normalized.includes('=')) {
+      if (normalized.startsWith('journal_mode=')) return;
+      this._db.run(`PRAGMA ${str}`);
+      return;
+    }
+    if (normalized === 'journal_mode') return [{ journal_mode: 'memory' }];
+    const stmt = this._db.prepare(`PRAGMA ${str}`);
+    const rows = [];
+    try {
+      while (stmt.step()) rows.push(stmt.getAsObject());
+    } finally {
+      stmt.free();
+    }
+    return rows;
   }
 
   exec(sql) {
