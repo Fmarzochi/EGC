@@ -11,7 +11,7 @@ Se voce nao sabe por onde comecar, leia `governance/SUBSYSTEM-MAP.md` para a cla
 | `architecture/` | Arquitetura completa, atual e futura | `architecture/README.md` |
 | `governance/` | Classificacao de subsistemas, politicas de skills e agentes | `governance/README.md` |
 | `guides/` | Guias operacionais e tutoriais para contribuidores | `guides/README.md` |
-| `installation/` | Playbooks de configuracao para stacks especificas | `installation/HERMES-SETUP.md` |
+| `installation/` | Playbooks de configuracao para stacks especificas | arquivos diretos |
 | `runtime/` | Contratos de runtime (mapa de comandos/agentes, adaptador de sessao) | arquivos diretos |
 
 ## Referencias cruzadas
