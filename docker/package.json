@@ -1,0 +1,8 @@
+{
+  "name": "mcp-proxy-pin",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "mcp-proxy": "6.4.3"
+  }
+}
