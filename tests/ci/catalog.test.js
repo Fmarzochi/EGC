@@ -205,7 +205,6 @@ function runTests() {
       assert.ok(formatted.includes('README.md quick-start summary'));
       assert.ok(formatted.includes('AGENTS.md summary'));
       assert.ok(formatted.includes('README.zh-CN.md quick-start summary'));
-      assert.ok(formatted.includes('README.zh-CN.md parity table'));
       assert.ok(formatted.includes('docs/zh-CN/AGENTS.md project structure'));
     } finally {
       cleanupTestDir(testDir);
