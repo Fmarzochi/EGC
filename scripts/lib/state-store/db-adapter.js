@@ -96,7 +96,7 @@ class SqlJsDatabase {
         this._persist();
         return result;
       } catch (err) {
-        try { this._db.run('ROLLBACK'); } catch (_) {}
+        try { this._db.run('ROLLBACK'); } catch (_) { /* rollback is best-effort */ }
         this._inTransaction = false;
         throw err;
       }
