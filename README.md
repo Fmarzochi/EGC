@@ -24,11 +24,13 @@
 
 **Your AI agents never start from zero again.**
 
+*No commands to learn. Just work -- EGC handles the rest.*
+
 </div>
 
 ---
 
-EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, the AI saves what it learned about your project: the decisions you made, what failed, your preferences, what comes next. At the start of the next session, it loads that state back. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own -- no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
 
 ---
 
@@ -48,7 +50,7 @@ Ready to pick up the next items:
 • Add mcp_server_count to audit.js
 ```
 
-The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started. You didn't type anything. You just started working.
+The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started -- on its own, without you asking. You didn't type anything. You just started working.
 
 <div align="center">
   <img src="assets/egc-terminal.gif" alt="EGC demo" width="700" />
@@ -76,7 +78,11 @@ npx @egchq/egc install
 
 EGC ships two MCP servers that work together during every session.
 
-**`egc-memory`** - 14 tools for persistent memory:
+### Memory -- 14 tools that your AI uses automatically
+
+You never call these tools yourself. When you say "let's pick up where we left off", "save this decision", or "what did we learn last time" -- in any language -- your AI detects the intent and calls the right tool. The commands exist, but you will never need to type them.
+
+**`egc-memory`**
 
 | Tool | What it does |
 |---|---|
@@ -97,7 +103,9 @@ EGC ships two MCP servers that work together during every session.
 
 State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
 
-**`egc-guardian`** - 5 tools for context and safety:
+### Context and safety -- 5 tools for when things get heavy
+
+**`egc-guardian`**
 
 | Tool | What it does |
 |---|---|
@@ -107,7 +115,9 @@ State files live at `~/.egc/state/<project-slug>.md`. One file per project, plai
 | `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
 | `auto_learn` | Mines session failures and writes actionable lessons to CLAUDE.md |
 
-**`egc watch`** — bidirectional sync daemon. Watches all EGC-managed tool config files in the project. When you edit context directly in any tool file (Cursor, Gemini CLI, Copilot, etc.), the change is extracted from the EGC block and synced to all other tools and back to `~/.egc/state/` automatically.
+### Always in sync -- across every tool you use
+
+**`egc watch`** -- run it once and every tool you use stays in sync. Edit context in Cursor and it appears in Gemini CLI, Copilot, Windsurf, and everywhere else automatically. When your state updates, all your tool config files update with it. No manual steps, no stale state.
 
 ```
 egc watch              # watch current project
