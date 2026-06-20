@@ -253,9 +253,9 @@ async function runTests() {
       const result = resolveStateFilePath(projectDir);
       assert.strictEqual(result, mainMd, 'should resolve to main.md when no branch (detached HEAD or non-git dir)');
     } finally {
-      try { fs.unlinkSync(mainMd); } catch (_) {}
+      try { fs.unlinkSync(mainMd); } catch (_) { /* may not exist if test failed early */ }
       if (createdSlugDir) {
-        try { fs.rmdirSync(slugDir); } catch (_) {}
+        try { fs.rmdirSync(slugDir); } catch (_) { /* may fail if dir still has files */ }
       }
       cleanup(projectDir);
     }
