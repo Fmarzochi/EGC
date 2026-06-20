@@ -2,6 +2,12 @@
 
 This document describes the planned development direction for EGC (Extended Global Context).
 
+## v1.1.1: Bidirectional Sync (In progress)
+
+- `egc watch`: bidirectional sync daemon -- edits in any tool config file propagate to all others and back to `~/.egc/state/` automatically (issues #302, #303)
+- `update_state` now propagates context to all 13 supported tool config files in one call (issue #313)
+- Handles atomic saves (VS Code, Cursor, Windsurf rename-based writes) and Windows EPERM events (issue #320)
+
 ## v1.1.0: Memory Expansion (Released 2026-06-13)
 
 - `working_memory`: transient key-value store with TTL (issue #138)
@@ -15,9 +21,10 @@ This document describes the planned development direction for EGC (Extended Glob
 
 ## v1.2.0: Ecosystem Expansion
 
-- Support for additional AI harnesses (Zed, Windsurf, Continue)
+- `egc install --target <tool>`: create context stubs for individual tools on first install
 - Plugin system for community-contributed agents and skills
 - Per-project skill profiles and overrides
+- Shared state between team members (multi-user installations)
 
 ## v1.3.0: Governance and Security
 
