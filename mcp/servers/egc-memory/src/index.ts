@@ -586,7 +586,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "working_memory_set",
-        description: "Store a transient key-value entry scoped to the current project. The entry expires automatically after ttl_seconds (default: end-of-session). Use this for debug flags, temporary task context, or any value that should not pollute long-term project state.",
+        description: "Store a transient key-value entry scoped to the current project. Expires automatically after ttl_seconds (default 86400s). Overwrites any existing entry with the same key without error. Use for debug flags, temporary task context, or values that must not pollute long-term state in update_state. Do not use for data that must survive a session restart — use update_state instead.",
         inputSchema: {
           type: "object",
           properties: {
@@ -600,7 +600,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "working_memory_get",
-        description: "Retrieve a single transient entry by key for the current project. Returns null if the entry does not exist or has expired.",
+        description: "Retrieve a single transient entry by key for the current project. Returns null if the key does not exist or has expired — does not throw. Does not modify the entry or extend its TTL. Use working_memory_list when the key is unknown or to audit all active entries.",
         inputSchema: {
           type: "object",
           properties: {
@@ -612,7 +612,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "working_memory_list",
-        description: "List all live transient entries for the current project, ordered by key. Expired entries are excluded.",
+        description: "List all live transient key-value entries for the current project, ordered by key. Expired entries are excluded automatically. Returns an empty array when no live entries exist. Each entry includes key, value, and expires_at. Use to audit active transient state or to check whether a key exists before calling working_memory_get.",
         inputSchema: {
           type: "object",
           properties: {
@@ -622,7 +622,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_save",
-        description: "Persist a new lesson learned during this session. Lessons are stored with a confidence score and decay over time when not reinforced. Use this to record patterns, rules, or observations the AI should remember across sessions.",
+        description: "Persist a new lesson learned during this session with an initial confidence score (default 0.7). Confidence decays over time when the lesson is not reinforced. Does not deduplicate — call lesson_recall first to check whether a similar lesson already exists. Use to record patterns, heuristics, or observations the AI should carry forward across sessions.",
         inputSchema: {
           type: "object",
           properties: {
@@ -636,7 +636,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_recall",
-        description: "Search active lessons above a confidence threshold. Lessons below 0.2 confidence are archived and not returned by default. Returns lessons ranked by confidence score.",
+        description: "Search active lessons by keyword across content, context, and tags. Only lessons at or above min_confidence (default 0.2) are returned; lower-confidence lessons are archived and hidden. Updates the last_recalled timestamp on matched lessons, which factors into reinforcement decay. Returns results ranked by confidence score descending. Call at session start to surface relevant patterns before beginning work on a known problem area.",
         inputSchema: {
           type: "object",
           properties: {
@@ -649,7 +649,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_reinforce",
-        description: "Reinforce an existing lesson when the same pattern is observed again. Increases confidence by 0.15, capped at 1.0. Call this when a previously stored lesson proves relevant or a mistake is repeated.",
+        description: "Reinforce an existing lesson when the same pattern is observed again. Increases confidence by 0.15, capped at 1.0. Unarchives lessons that had decayed below the threshold. Call this when a lesson recalled via lesson_recall proves relevant to the current task, or when the same mistake recurs. Returns the updated lesson with its new confidence score.",
         inputSchema: {
           type: "object",
           properties: {
@@ -660,7 +660,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "detect_patterns",
-        description: "Analyzes captured runtime events and surfaces recurring behaviors across sessions. Detects repeated commands and recurring errors using frequency analysis. Patterns are persisted to SQLite with frequency, last_seen, and suggested_automation fields. Returns patterns with type, description, occurrence count, and an actionable suggestion.",
+        description: "Analyze captured runtime hook events and surface recurring behaviors across sessions. Detects repeated shell commands and recurring error signatures using frequency analysis. Patterns are stored with frequency, last_seen, and suggested_automation fields. Returns an array of pattern objects with type, description, occurrence count, and an actionable automation suggestion. Call after several sessions of work to identify tasks worth automating or formalizing as a hook.",
         inputSchema: {
           type: "object",
           properties: {
@@ -671,7 +671,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "compress_observations",
-        description: "Compress recent raw hook observations into structured typed summaries. Reduces token usage for context injection. Returns count + summary of compressed items.",
+        description: "Compress recent raw hook observations into structured typed summaries (tool_failure, tool_success, file_edit, shell_command) using rule-based analysis. Reduces token count when injecting session history into context. Does not delete raw observations — only marks them as compressed. Call before get_state or at session start to ensure hook data is compact before loading project memory. Returns the count of compressed items and a human-readable summary of what was processed.",
         inputSchema: {
           type: "object",
           properties: {
