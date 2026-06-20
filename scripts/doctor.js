@@ -113,7 +113,7 @@ function main() {
       if (stateDb) {
         console.log('\nState store:');
         console.log('  WARNING: state.db not found at ' + stateDb.dbPath);
-        console.log('  Run: egc init  to create the state store (requires better-sqlite3 native module)');
+        console.log('  Run: egc init  to create the state store');
       }
     }
 
