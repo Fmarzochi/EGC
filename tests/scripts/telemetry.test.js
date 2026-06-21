@@ -270,8 +270,9 @@ async function runTests() {
 
       global.fetch = origFetch;
       assert.ok(capturedUrl !== null, 'fetch should have been called');
-      assert.ok(capturedUrl.includes('egc.goatcounter.com'), 'URL should target GoatCounter');
-      assert.ok(capturedUrl.includes('cli') && capturedUrl.includes('install'), 'URL should include page path params');
+      assert.strictEqual(new URL(capturedUrl).hostname, 'egc.goatcounter.com', 'URL should target GoatCounter host');
+      const params = new URL(capturedUrl).searchParams;
+      assert.ok(params.get('p') !== null, 'URL should include page path param');
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
