@@ -55,3 +55,4 @@ Both servers must be registered in your MCP config (`.mcp.json`):
 - `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.
+
