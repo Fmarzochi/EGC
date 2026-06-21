@@ -98,12 +98,29 @@ git push --force-with-lease
 
 ---
 
+## Contributor License Agreement (CLA)
+
+Every contributor must sign the CLA once before their first PR can be merged.
+
+**How to sign:** When you open your first PR, the CLA bot will post a comment. Reply with:
+
+```
+I have read the CLA Document and I hereby sign the CLA.
+```
+
+That is it. One comment, one time. Future PRs are merged without any extra steps.
+
+Read the full agreement at [.github/CLA.md](CLA.md). It is short (4 clauses) and written in plain English.
+
+---
+
 ## CI Checks
 
 Every pull request runs the following automated checks. Your PR must pass all of them before it can be merged.
 
 | Check | What it validates | How to pass |
 |---|---|---|
+| **CLA** | First-time contributors have signed the CLA | Post the sign comment when the bot asks |
 | **DCO** | Every commit has `Signed-off-by` | Use `git commit -s` on every commit |
 | **CI / test** | `node tests/run-all.js` on Linux, macOS, Windows with Node 20 and 22, using npm, yarn, and bun | Run `node tests/run-all.js` locally before opening a PR |
 | **CI / lint** | ESLint on `scripts/` and `tests/`; markdownlint on all `.md` files in `agents/`, `skills/`, `commands/`, `rules/` | Run `npx markdownlint "agents/**/*.md"` if you added or edited Markdown files |
@@ -456,6 +473,7 @@ What architectural gap this fills or what capability this adds to EGC.
 How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 ## Checklist
+- [ ] CLA signed (first contribution only - reply to the bot comment)
 - [ ] All commits are signed off with `git commit -s` (required by DCO check)
 - [ ] `node tests/run-all.js` passes locally with zero failures
 - [ ] `npm audit --audit-level=high` shows no high or critical vulnerabilities
