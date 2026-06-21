@@ -129,6 +129,28 @@ egc watch --quiet      # suppress output
 
 ---
 
+## Telemetry
+
+EGC can send anonymous usage data to help improve the project. This is **opt-in**: you will be asked once on the first run of `egc install`, `egc init`, or `egc doctor`.
+
+**What is sent:** EGC version + OS platform only. No project data, no file contents, no identifiers.
+
+**How to disable at any time:**
+
+```bash
+egc telemetry off
+```
+
+or delete `~/.egc/telemetry.json`.
+
+**How to check your current setting:**
+
+```bash
+egc telemetry status
+```
+
+---
+
 ## Prompt library
 
 **479 components** included as a bonus. Install to get access to 63 agents, 229 skills, and 76 commands written from real engineering sessions. Skip them entirely and EGC still gives you persistent memory.

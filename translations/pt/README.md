@@ -103,9 +103,31 @@ egc watch --quiet      # suprimir saída
 
 ---
 
+## Telemetria
+
+O EGC pode enviar dados de uso anônimos para ajudar a melhorar o projeto. Isso e **opt-in**: voce sera perguntado uma vez no primeiro uso de `egc install`, `egc init` ou `egc doctor`.
+
+**O que e enviado:** versao do EGC + plataforma do sistema operacional. Sem dados de projeto, sem conteudo de arquivos, sem identificadores.
+
+**Como desativar a qualquer momento:**
+
+```bash
+egc telemetry off
+```
+
+ou exclua `~/.egc/telemetry.json`.
+
+**Como verificar sua configuracao atual:**
+
+```bash
+egc telemetry status
+```
+
+---
+
 ## Biblioteca de prompts
 
-**479 componentes** inclusos como brinde: 63 agentes, 229 skills, 76 comandos e 111 regras escritos em sessões reais de engenharia. Ignore-os completamente e o EGC ainda oferece memória persistente.
+**479 componentes** inclusos como brinde: 63 agentes, 229 skills, 76 comandos e 111 regras escritos em sessoes reais de engenharia. Ignore-os completamente e o EGC ainda oferece memoria persistente.
 
 ---
 
