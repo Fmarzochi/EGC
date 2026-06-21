@@ -5,6 +5,7 @@ const path = require('path');
 const { version: PACKAGE_VERSION } = require('../package.json');
 const { listAvailableLanguages } = require('./lib/install-executor');
 const { formatOSC8 } = require('./lib/utils');
+const { ensureConsent, ping } = require('./lib/telemetry');
 
 const COMMANDS = {
   init: {
@@ -79,6 +80,10 @@ const COMMANDS = {
     script: 'watch.js',
     description: 'Watch tool config files and sync state changes bidirectionally',
   },
+  telemetry: {
+    script: 'telemetry.js',
+    description: 'Manage anonymous usage telemetry (status | on | off)',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -98,7 +103,10 @@ const PRIMARY_COMMANDS = [
   'loop-status',
   'uninstall',
   'watch',
+  'telemetry',
 ];
+
+const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -143,6 +151,8 @@ Examples:
   egc uninstall --target antigravity --dry-run
   egc watch
   egc watch --project /path/to/project --quiet
+  egc telemetry status
+  egc telemetry off
 `);
 
   process.exit(exitCode);
@@ -245,7 +255,7 @@ function runCommand(commandName, args) {
   return 1;
 }
 
-function main() {
+async function main() {
   try {
     const resolution = resolveCommand(process.argv);
 
@@ -269,6 +279,13 @@ function main() {
 
       process.exitCode = runCommand(resolution.command, ['--help']);
       return;
+    }
+
+    if (TELEMETRY_COMMANDS.has(resolution.command)) {
+      const telemetryEnabled = await ensureConsent();
+      if (telemetryEnabled) {
+        ping(`/cli/egc-${resolution.command}`, `EGC CLI v${PACKAGE_VERSION}`);
+      }
     }
 
     process.exitCode = runCommand(resolution.command, resolution.args);
