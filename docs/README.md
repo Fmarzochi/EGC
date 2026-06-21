@@ -13,7 +13,7 @@ for the formal classification of every subsystem.
 | `architecture/` | Long-form architecture, current and target | `architecture/README.md` |
 | `governance/` | Subsystem classification, skill/agent policies | `governance/README.md` |
 | `guides/` | Operational and contributor walk-throughs | `guides/README.md` |
-| `installation/` | Setup playbooks for downstream stacks | `installation/HERMES-SETUP.md` |
+| `installation/` | Setup playbooks for downstream stacks | direct files |
 | `runtime/` | Runtime contracts (command/agent map, session adapter) | direct files |
 
 ## Cross-references

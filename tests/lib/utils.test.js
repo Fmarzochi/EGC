@@ -108,14 +108,14 @@ function runTests() {
     const egcDir = utils.getEGCDir();
     const homeDir = utils.getHomeDir();
     assert.ok(egcDir.startsWith(homeDir), 'EGC dir should be under home');
-    assert.ok(egcDir.includes('.gemini'), 'Should contain .gemini');
+    assert.ok(egcDir !== homeDir, 'EGC dir should be a subdirectory of home');
   })) passed++; else failed++;
 
   if (test('getSessionsDir returns path under EGC dir', () => {
     const sessionsDir = utils.getSessionsDir();
     const egcDir = utils.getEGCDir();
     assert.ok(sessionsDir.startsWith(egcDir), 'Sessions should be under EGC dir');
-    assert.ok(sessionsDir.endsWith(path.join('.gemini', 'session-data')) || sessionsDir.endsWith('/.gemini/session-data'), 'Should use canonical session-data directory');
+    assert.ok(sessionsDir.endsWith('session-data'), 'Should use canonical session-data directory');
   })) passed++; else failed++;
 
   if (test('getSessionSearchDirs includes canonical and legacy paths', () => {
@@ -654,9 +654,9 @@ function runTests() {
   // getLearnedSkillsDir() test
   console.log('\ngetLearnedSkillsDir():');
 
-  if (test('getLearnedSkillsDir returns path under Gemini dir', () => {
+  if (test('getLearnedSkillsDir returns path under EGC dir', () => {
     const dir = utils.getLearnedSkillsDir();
-    assert.ok(dir.includes('.gemini'));
+    assert.ok(dir.startsWith(utils.getEGCDir()), 'Should be under EGC dir');
     assert.ok(dir.includes('skills'));
     assert.ok(dir.includes('learned'));
   })) passed++; else failed++;

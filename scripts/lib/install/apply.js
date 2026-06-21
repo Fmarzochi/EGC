@@ -7,7 +7,9 @@ const { writeInstallState } = require('../install-state');
 const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
+  STOP_EVENT,
   applySessionStartHookToFile,
+  applyStopHookToFile,
 } = require('../claude-settings-hooks');
 
 function readJsonObject(filePath, label) {
@@ -127,7 +129,11 @@ function applyInstallPlan(plan) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
     if (operation.kind === HOOK_OPERATION_KIND) {
-      applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+      if (operation.hookEvent === STOP_EVENT) {
+        applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+      } else {
+        applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+      }
       continue;
     }
 

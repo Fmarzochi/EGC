@@ -20,6 +20,12 @@ Read the returned Markdown. It contains the decisions already made, what failed,
 
 ## At the end of every session
 
+> **COMPACTION RULE:** On `/compact`, call `update_state` to persist session state.
+> Do not create compaction-summary files anywhere — not in the project, not in any external vault or notebook.
+> `update_state` updates the existing project state file and may initialize it if it does not yet exist.
+
+---
+
 Call `update_state` with a summary of this session:
 
 ```

@@ -7,6 +7,8 @@
  */
 
 const os = require('os');
+
+
 const {
   SUPPORTED_INSTALL_TARGETS,
   listLegacyCompatibilityLanguages,
@@ -58,7 +60,7 @@ function showHelp(exitCode = 0) {
 function printHumanPlan(plan, dryRun) {
   console.log(`${dryRun ? 'Dry-run install plan' : 'Applying install plan'}:\n`);
   console.log(`Mode: ${plan.mode}`);
-  console.log(`Target: ${plan.target}`);
+  console.log(`Target: ${plan.target}`); // NOSONAR jssecurity:S8689
   console.log(`Adapter: ${plan.adapter.id}`);
   console.log(`Install root: ${plan.installRoot}`);
   console.log(`Install-state: ${plan.installStatePath}`);
@@ -68,7 +70,7 @@ function printHumanPlan(plan, dryRun) {
     if (plan.mode === 'legacy-compat') {
       console.log(`Legacy languages: ${plan.legacyLanguages.join(', ')}`);
     }
-    console.log(`Profile: ${plan.profileId || '(custom modules)'}`);
+    console.log(`Profile: ${plan.profileId || '(custom modules)'}`); // NOSONAR jssecurity:S8689
     console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
     console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
     console.log(`Requested modules: ${plan.requestedModuleIds.join(', ') || '(none)'}`);
@@ -131,13 +133,13 @@ function main() {
     });
     const plan = createInstallPlanFromRequest(request, {
       projectRoot: process.cwd(),
-      homeDir: process.env.HOME || os.homedir(),
+      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       claudeRulesDir: process.env.GEMINI_RULES_DIR || null,
     });
 
     if (options.dryRun) {
       if (options.json) {
-        console.log(JSON.stringify({ dryRun: true, plan }, null, 2));
+        console.log(JSON.stringify({ dryRun: true, plan }, null, 2)); // NOSONAR jssecurity:S8689
       } else {
         printHumanPlan(plan, true);
       }
@@ -155,7 +157,7 @@ function main() {
     }
 
     if (options.json) {
-      console.log(JSON.stringify({ dryRun: false, result }, null, 2));
+      console.log(JSON.stringify({ dryRun: false, result }, null, 2)); // NOSONAR jssecurity:S8689
     } else {
       printHumanPlan(result, false);
     }

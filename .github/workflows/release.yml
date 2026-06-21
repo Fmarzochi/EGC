@@ -11,6 +11,7 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
       id-token: write
       attestations: write
@@ -70,31 +71,6 @@ jobs:
           fi
           echo "dist_tag=${NPM_DIST_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate release highlights
-        id: highlights
-        env:
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          TAG_VERSION="${TAG_NAME#v}"
-          cat > release_body.md <<EOF
-          ## EGC ${TAG_VERSION}
-
-          ### What This Release Focuses On
-          - Harness reliability and hook stability across Gemini Code, Cursor, OpenCode, and Codex
-          - Stronger eval-driven workflows and quality gates
-          - Better operator UX for autonomous loop execution
-
-          ### Notable Changes
-          - Session persistence and hook lifecycle fixes
-          - Expanded skills and command coverage for harness performance work
-          - Improved release-note generation and changelog hygiene
-
-          ### Notes
-          - npm package: \`@egchq/egc\`
-          - Gemini marketplace/plugin identifier: \`egc@egc\`
-          - For migration tips and compatibility notes, see README and CHANGELOG.
-          EOF
-
       - name: Pack npm tarball
         id: pack
         run: |
@@ -105,15 +81,15 @@ jobs:
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.17.0
         with:
           path: .
-          artifact-name: sbom.spdx.json
-          output-file: sbom.spdx.json
-          format: spdx-json
+          artifact-name: sbom.cyclonedx.json
+          output-file: sbom.cyclonedx.json
+          format: cyclonedx-json
 
       - name: Attest SBOM
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: ${{ steps.pack.outputs.tarball }}
-          sbom-path: sbom.spdx.json
+          sbom-path: sbom.cyclonedx.json
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
@@ -123,10 +99,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
-          body_path: release_body.md
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
+          files: ${{ steps.pack.outputs.tarball }}
 
       - name: Publish npm package
         if: steps.npm_publish_state.outputs.already_published != 'true'

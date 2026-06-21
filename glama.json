@@ -1,7 +1,7 @@
 {
   "$schema": "https://glama.ai/mcp/servers/schema.json",
   "name": "EGC",
-  "description": "Local MCP runtime that gives persistent cross-session memory to 12 AI coding agents (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, and more). SQLite-backed state survives context resets. Install: npm install -g @egchq/egc",
+  "description": "Local MCP runtime that gives persistent cross-session memory to 13 AI coding tools (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, Kiro, VS Code Copilot, and more). SQLite-backed state survives context resets. Bidirectional sync keeps all tool config files in sync. Install: npm install -g @egchq/egc",
   "license": "MIT",
   "homepage": "https://github.com/Fmarzochi/EGC",
   "repository": "https://github.com/Fmarzochi/EGC",
@@ -11,43 +11,59 @@
   "tools": [
     {
       "name": "get_state",
-      "description": "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. Call this at the START of every session to restore context."
+      "description": "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch. Call this at the START of every session to restore context."
     },
     {
       "name": "update_state",
-      "description": "Updates the project memory with decisions made this session. Call this at the END of every session. Merges with existing state: does not erase previous memory."
-    },
-    {
-      "name": "store_decision",
-      "description": "Store a decision with lock arbitration. Records a significant decision with its context for future reference."
-    },
-    {
-      "name": "query_history",
-      "description": "Query past decisions. Returns a paginated list of decisions stored in the session memory."
-    },
-    {
-      "name": "search_history",
-      "description": "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Returns decisions ordered by relevance with normalized scores."
+      "description": "Updates the project memory with decisions made this session. Writes to the state file of the current git branch. Call this at the END of every session. Merges with existing state: does not erase previous memory."
     },
     {
       "name": "get_project_state",
-      "description": "Get current state for the active project. Returns server status metadata including storage engine and arbitration mode."
+      "description": "Returns server health metadata: storage engine and write arbitration mode. Use this to verify the egc-memory server is running before calling get_state or update_state."
     },
     {
-      "name": "validate_command",
-      "description": "Validate command execution safety. Checks whether a shell command is safe to run before execution."
+      "name": "store_decision",
+      "description": "Persist a single decision to SQLite with write-lock arbitration to prevent concurrent conflicts. Decisions are queryable via query_history and surfaced in get_state."
     },
     {
-      "name": "validate_write",
-      "description": "Validate write path safety. Checks whether a file path is safe to write before creating or modifying files."
+      "name": "query_history",
+      "description": "Return a paginated list of past decisions stored in SQLite. Each entry includes decision text, context label, and timestamp. Use limit and offset for pagination."
     },
     {
-      "name": "reduce_context",
-      "description": "Adaptive Context Routing: Loads files and mutates payloads to save IDE token budget. Reduces context window usage by intelligently compressing file payloads."
+      "name": "search_history",
+      "description": "Keyword search over decision history with BM25 relevance ranking (SQLite FTS5). Returns decisions ordered by relevance with scores normalized to [0, 1]."
     },
     {
-      "name": "orchestrate_task",
-      "description": "Routes a prompt with optional agent/skill lists and file payloads. Returns routing context and context-reduction metrics. Agent/skill selection is pass-through; provide explicit lists for deterministic routing."
+      "name": "working_memory_set",
+      "description": "Store a transient key-value entry scoped to the current project. Expires automatically after ttl_seconds. Use for debug flags, temporary task context, or values that should not pollute long-term state."
+    },
+    {
+      "name": "working_memory_get",
+      "description": "Retrieve a single transient entry by key for the current project. Returns null if the entry does not exist or has expired."
+    },
+    {
+      "name": "working_memory_list",
+      "description": "List all live transient entries for the current project, ordered by key. Expired entries are excluded."
+    },
+    {
+      "name": "lesson_save",
+      "description": "Persist a lesson learned during this session with a confidence score. Lessons decay over time when not reinforced. Use to record patterns, rules, or observations the AI should remember across sessions."
+    },
+    {
+      "name": "lesson_recall",
+      "description": "Search active lessons above a confidence threshold. Lessons below 0.2 confidence are archived. Returns lessons ranked by confidence score."
+    },
+    {
+      "name": "lesson_reinforce",
+      "description": "Reinforce an existing lesson when the same pattern is observed again. Increases confidence by 0.15 (capped at 1.0). Call when a previously stored lesson proves relevant."
+    },
+    {
+      "name": "detect_patterns",
+      "description": "Analyze captured runtime events and surface recurring behaviors across sessions. Detects repeated commands and recurring errors using frequency analysis. Returns patterns with type, occurrence count, and an actionable suggestion."
+    },
+    {
+      "name": "compress_observations",
+      "description": "Compress recent raw hook observations into structured typed summaries to reduce token usage for context injection. Returns count and summary of compressed items."
     }
   ],
   "tags": [
@@ -59,7 +75,13 @@
     "gemini-cli",
     "codex",
     "windsurf",
-    "coding-assistant"
+    "amp",
+    "kiro",
+    "coding-assistant",
+    "cross-session",
+    "bidirectional-sync",
+    "sqlite",
+    "session-memory"
   ],
   "authors": [
     {

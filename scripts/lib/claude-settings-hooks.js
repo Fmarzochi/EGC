@@ -1,6 +1,6 @@
 'use strict';
 
-// Manages the EGC SessionStart hook entry inside Claude Code settings.json.
+// Manages EGC hook entries inside Claude Code settings.json.
 // All merges are additive and idempotent: third-party hooks and unrelated
 // settings keys are always preserved, and the EGC entry is identified by the
 // installed hook script path so uninstall removes only what EGC added.
@@ -9,20 +9,35 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSION_START_EVENT = 'SessionStart';
+const STOP_EVENT = 'Stop';
 const HOOK_OPERATION_KIND = 'merge-claude-settings-hooks';
 const HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/claude-session-start.js';
 const HOOK_MODULE_ID = 'claude-session-state-hook';
+const STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/claude-session-stop.js';
+const STOP_HOOK_MODULE_ID = 'claude-session-stop-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function buildHookCommand(hookScriptPath) {
+  return `"${process.execPath}" "${hookScriptPath}"`;
+}
+
 function buildSessionStartCommand(hookScriptPath) {
-  return `node "${hookScriptPath}"`;
+  return buildHookCommand(hookScriptPath);
+}
+
+function buildStopCommand(hookScriptPath) {
+  return buildHookCommand(hookScriptPath);
 }
 
 function resolveHookScriptDestination(targetRoot) {
   return path.join(targetRoot, 'egc', 'hooks', 'claude-session-start.js');
+}
+
+function resolveStopHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'egc', 'hooks', 'claude-session-stop.js');
 }
 
 function resolveSettingsPath(targetRoot) {
@@ -45,49 +60,32 @@ function matcherGroupHasEgcEntry(group, hookScriptPath) {
   );
 }
 
-function hasSessionStartHook(settings, hookScriptPath) {
+function hasHookEntry(settings, event, hookScriptPath) {
   if (!isPlainObject(settings) || !isPlainObject(settings.hooks)) {
     return false;
   }
-
-  const groups = settings.hooks[SESSION_START_EVENT];
+  const groups = settings.hooks[event];
   return Array.isArray(groups)
     && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath));
 }
 
-function addSessionStartHook(settings, hookScriptPath) {
+function addHookEntry(settings, event, hookScriptPath) {
   const base = isPlainObject(settings) ? settings : {};
-
-  if (hasSessionStartHook(base, hookScriptPath)) {
+  if (hasHookEntry(base, event, hookScriptPath)) {
     return { settings: base, changed: false };
   }
-
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
-  const groups = Array.isArray(hooks[SESSION_START_EVENT])
-    ? hooks[SESSION_START_EVENT].slice()
-    : [];
-
-  groups.push({
-    hooks: [
-      {
-        type: 'command',
-        command: buildSessionStartCommand(hookScriptPath),
-      },
-    ],
-  });
-  hooks[SESSION_START_EVENT] = groups;
-
-  return {
-    settings: { ...base, hooks },
-    changed: true,
-  };
+  const groups = Array.isArray(hooks[event]) ? hooks[event].slice() : [];
+  groups.push({ hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] });
+  hooks[event] = groups;
+  return { settings: { ...base, hooks }, changed: true };
 }
 
-function removeSessionStartHook(settings, hookScriptPath) {
+function removeHookEntry(settings, event, hookScriptPath) {
   if (
     !isPlainObject(settings)
     || !isPlainObject(settings.hooks)
-    || !Array.isArray(settings.hooks[SESSION_START_EVENT])
+    || !Array.isArray(settings.hooks[event])
   ) {
     return { settings, changed: false };
   }
@@ -95,12 +93,11 @@ function removeSessionStartHook(settings, hookScriptPath) {
   let changed = false;
   const groups = [];
 
-  for (const group of settings.hooks[SESSION_START_EVENT]) {
+  for (const group of settings.hooks[event]) {
     if (!matcherGroupHasEgcEntry(group, hookScriptPath)) {
       groups.push(group);
       continue;
     }
-
     changed = true;
     const remainingEntries = group.hooks.filter(
       entry => !isEgcHookEntry(entry, hookScriptPath)
@@ -116,9 +113,9 @@ function removeSessionStartHook(settings, hookScriptPath) {
 
   const hooks = { ...settings.hooks };
   if (groups.length > 0) {
-    hooks[SESSION_START_EVENT] = groups;
+    hooks[event] = groups;
   } else {
-    delete hooks[SESSION_START_EVENT];
+    delete hooks[event];
   }
 
   const next = { ...settings };
@@ -165,45 +162,63 @@ function writeSettingsFile(settingsPath, settings) {
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
-function applySessionStartHookToFile(settingsPath, hookScriptPath) {
+function applyHookEntryToFile(settingsPath, event, hookScriptPath) {
   const current = readSettingsFile(settingsPath);
-  const { settings, changed } = addSessionStartHook(current, hookScriptPath);
-
+  const { settings, changed } = addHookEntry(current, event, hookScriptPath);
   if (changed) {
     writeSettingsFile(settingsPath, settings);
   }
-
   return { changed };
 }
 
-function removeSessionStartHookFromFile(settingsPath, hookScriptPath) {
+function removeHookEntryFromFile(settingsPath, event, hookScriptPath) {
   if (!fs.existsSync(settingsPath)) {
     return { changed: false };
   }
-
   const current = readSettingsFile(settingsPath);
-  const { settings, changed } = removeSessionStartHook(current, hookScriptPath);
-
+  const { settings, changed } = removeHookEntry(current, event, hookScriptPath);
   if (changed) {
     writeSettingsFile(settingsPath, settings);
   }
-
   return { changed };
 }
 
-function inspectSessionStartHookFile(settingsPath, hookScriptPath) {
+function inspectHookEntryFile(settingsPath, event, hookScriptPath) {
   try {
-    return hasSessionStartHook(readSettingsFile(settingsPath), hookScriptPath)
+    return hasHookEntry(readSettingsFile(settingsPath), event, hookScriptPath)
       ? 'ok'
       : 'drifted';
-  } catch (_error) {
+  } catch {
     return 'drifted';
   }
 }
 
+function hasSessionStartHook(settings, hookScriptPath) {
+  return hasHookEntry(settings, SESSION_START_EVENT, hookScriptPath);
+}
+
+function addSessionStartHook(settings, hookScriptPath) {
+  return addHookEntry(settings, SESSION_START_EVENT, hookScriptPath);
+}
+
+function removeSessionStartHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, SESSION_START_EVENT, hookScriptPath);
+}
+
+function applySessionStartHookToFile(settingsPath, hookScriptPath) {
+  return applyHookEntryToFile(settingsPath, SESSION_START_EVENT, hookScriptPath);
+}
+
+function removeSessionStartHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, SESSION_START_EVENT, hookScriptPath);
+}
+
+function inspectSessionStartHookFile(settingsPath, hookScriptPath) {
+  return inspectHookEntryFile(settingsPath, SESSION_START_EVENT, hookScriptPath);
+}
+
 function createSessionStartHookMergeOperation(targetRoot) {
   const hookScriptPath = resolveHookScriptDestination(targetRoot);
-
   return {
     kind: HOOK_OPERATION_KIND,
     moduleId: HOOK_MODULE_ID,
@@ -218,20 +233,72 @@ function createSessionStartHookMergeOperation(targetRoot) {
   };
 }
 
+function hasStopHook(settings, hookScriptPath) {
+  return hasHookEntry(settings, STOP_EVENT, hookScriptPath);
+}
+
+function addStopHook(settings, hookScriptPath) {
+  return addHookEntry(settings, STOP_EVENT, hookScriptPath);
+}
+
+function removeStopHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, STOP_EVENT, hookScriptPath);
+}
+
+function applyStopHookToFile(settingsPath, hookScriptPath) {
+  return applyHookEntryToFile(settingsPath, STOP_EVENT, hookScriptPath);
+}
+
+function removeStopHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, STOP_EVENT, hookScriptPath);
+}
+
+function inspectStopHookFile(settingsPath, hookScriptPath) {
+  return inspectHookEntryFile(settingsPath, STOP_EVENT, hookScriptPath);
+}
+
+function createStopHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveStopHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: STOP_HOOK_MODULE_ID,
+    sourceRelativePath: STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: STOP_EVENT,
+    hookScriptPath,
+    hookCommand: buildStopCommand(hookScriptPath),
+  };
+}
+
 module.exports = {
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   SESSION_START_EVENT,
+  STOP_EVENT,
+  STOP_HOOK_MODULE_ID,
+  STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addSessionStartHook,
+  addStopHook,
   applySessionStartHookToFile,
+  applyStopHookToFile,
   buildSessionStartCommand,
+  buildStopCommand,
   createSessionStartHookMergeOperation,
+  createStopHookMergeOperation,
   hasSessionStartHook,
+  hasStopHook,
   inspectSessionStartHookFile,
+  inspectStopHookFile,
   readSettingsFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
+  removeStopHook,
+  removeStopHookFromFile,
   resolveHookScriptDestination,
   resolveSettingsPath,
+  resolveStopHookScriptDestination,
 };

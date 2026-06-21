@@ -6,6 +6,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,11 +111,102 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
 
 // ─── Loader & Replacer for observations.jsonl ──────────────────────────────────
 
+// Mirrors STATE_STORE_RELATIVE_PATH from mcp/servers/egc-memory/src/index.ts
+const STATE_STORE_RELATIVE_PATH = path.join(".gemini", "egc", "state.db");
+
+function resolveStateStoreDbPath(): string {
+  const envOverride = process.env.EGC_STATE_DB;
+  if (envOverride) {
+    return path.resolve(envOverride);
+  }
+  const homeDir = process.env.HOME || os.homedir();
+  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
+}
+
+function resolveProjectRoot(projectPath: string): string {
+  let dir = projectPath;
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, ".git"))) return dir;
+    dir = path.dirname(dir);
+  }
+  return projectPath;
+}
+
+async function loadRawObservationsFromStateDb(
+  projectPath: string,
+  limit: number = 50,
+  since?: string
+): Promise<RawObservation[]> {
+  const dbPath = resolveStateStoreDbPath();
+
+  if (!fs.existsSync(dbPath)) {
+    return [];
+  }
+
+  const db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database,
+  });
+
+  try {
+    try {
+      await db.run("ALTER TABLE events ADD COLUMN compressed_at TEXT");
+    } catch {
+      // column already exists
+    }
+
+    const projectRoot = resolveProjectRoot(projectPath);
+    const sinceFilter = since ?? null;
+    const query = `
+      SELECT e.id, e.payload, e.timestamp
+      FROM events e
+      INNER JOIN sessions s ON e.session_id = s.id
+      WHERE e.compressed_at IS NULL
+        AND s.repo_root = ?
+        AND (? IS NULL OR e.timestamp >= ?)
+      ORDER BY e.timestamp DESC
+      LIMIT ?
+    `;
+
+    const rows = await db.all(query, [projectRoot, sinceFilter, sinceFilter, limit]);
+
+    return rows
+      .filter((row: any) => {
+        try {
+          const p = JSON.parse(row.payload);
+          return p !== null && typeof p === "object" && (p.tool || p.output || p.result || p.input);
+        } catch {
+          return false;
+        }
+      })
+      .map((row: any) => {
+        const payload = JSON.parse(row.payload);
+        return {
+          id: row.id,
+          tool: payload.tool,
+          output: payload.output ?? payload.result ?? "",
+          content: payload.input ?? payload.output ?? payload.result ?? "",
+          result: payload.result ?? payload.output ?? "",
+          path: payload.cwd ?? payload.file ?? "",
+          timestamp: row.timestamp,
+        };
+      });
+  } finally {
+    await db.close();
+  }
+}
+
 export async function loadRawObservations(
   projectPath: string,
   limit: number = 50,
   since?: string
 ): Promise<RawObservation[]> {
+  const sqliteObservations = await loadRawObservationsFromStateDb(projectPath, limit, since);
+
+  if (sqliteObservations.length > 0) {
+    return sqliteObservations;
+  }
+
   const { projectDir } = getProjectHash(projectPath);
   const obsPath = path.join(projectDir, "observations.jsonl");
 
@@ -167,6 +260,34 @@ function readObsFile(filePath: string, limit: number, since?: string): RawObserv
 
 export async function replaceObservation(projectPath: string, id: string, compressed: CompressedObservation): Promise<void> {
   const { projectDir } = getProjectHash(projectPath);
+  const dbPath = resolveStateStoreDbPath();
+
+  if (fs.existsSync(dbPath)) {
+    const db = await open({
+      filename: dbPath,
+      driver: sqlite3.Database,
+    });
+
+    try {
+      try {
+        await db.run("ALTER TABLE events ADD COLUMN compressed_at TEXT");
+      } catch {
+        // column already exists
+      }
+
+      const result = await db.run(
+        "UPDATE events SET compressed_at = ? WHERE id = ?",
+        [compressed.compressed_at, id]
+      );
+
+      if ((result as any)?.changes > 0) {
+        return;
+      }
+    } finally {
+      await db.close();
+    }
+  }
+
   let obsPath = path.join(projectDir, "observations.jsonl");
   if (!fs.existsSync(obsPath)) {
     const globalObsPath = path.join(os.homedir(), ".gemini", "homunculus", "observations.jsonl");

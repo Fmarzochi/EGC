@@ -121,6 +121,15 @@ function assertSafeScriptPath(hookId, scriptPath, resolvedRoot) {
  * Handles output emission and process.exit on all code paths.
  */
 async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
+  const resolvedRoot = path.resolve(pluginRoot);
+  try {
+    assertSafeScriptPath(hookId, scriptPath, resolvedRoot);
+  } catch (pathErr) {
+    process.stderr.write(`${pathErr.message}\n`);
+    process.stdout.write(raw);
+    process.exit(0);
+  }
+
   // Prefer direct require() when the hook exports a run(rawInput) function.
   // This eliminates one Node.js process spawn (~50-100ms savings per hook).
   //
@@ -128,7 +137,7 @@ async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
   // side effects at module scope (stdin listeners, process.exit, main() calls)
   // which would interfere with the parent process or cause double execution.
   let hookModule;
-  const src = fs.readFileSync(scriptPath, 'utf8');
+  const src = fs.readFileSync(scriptPath, 'utf8'); // NOSONAR jssecurity:S8707
   const hasRunExport = /\bmodule\.exports\b/.test(src) && /\brun\b/.test(src);
 
   if (hasRunExport) {
@@ -157,7 +166,7 @@ async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
   }
 
   // Legacy path: spawn a child Node process for hooks without run() export
-  const result = spawnSync(process.execPath, [scriptPath], {
+  const result = spawnSync(process.execPath, [scriptPath], { // NOSONAR jssecurity:S8705
     input: raw,
     encoding: 'utf8',
     env: {

@@ -200,6 +200,15 @@ const MIGRATIONS = [
     name: '004_patterns',
     sql: PATTERNS_SQL,
   },
+  {
+    version: 5,
+    name: '005_events_compressed_at',
+    sql: `
+      ALTER TABLE events ADD COLUMN compressed_at TEXT;
+      CREATE INDEX IF NOT EXISTS idx_events_compressed_at_timestamp
+        ON events (compressed_at, timestamp DESC);
+    `,
+  },
 ];
 
 function ensureMigrationTable(db) {

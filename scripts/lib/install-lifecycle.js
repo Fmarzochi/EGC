@@ -13,9 +13,13 @@ const {
 } = require('./install-targets/registry');
 const {
   HOOK_OPERATION_KIND,
+  STOP_EVENT,
   applySessionStartHookToFile,
+  applyStopHookToFile,
   inspectSessionStartHookFile,
+  inspectStopHookFile,
   removeSessionStartHookFromFile,
+  removeStopHookFromFile,
 } = require('./claude-settings-hooks');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
@@ -315,6 +319,14 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
+function repairClaudeSettingsHook(operation) {
+  if (operation.hookEvent === STOP_EVENT) {
+    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else {
+    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+  }
+}
+
 function executeRepairOperation(repoRoot, operation) {
   if (operation.kind === 'copy-file') {
     const sourcePath = resolveOperationSourcePath(repoRoot, operation);
@@ -364,7 +376,7 @@ function executeRepairOperation(repoRoot, operation) {
   }
 
   if (operation.kind === HOOK_OPERATION_KIND) {
-    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+    repairClaudeSettingsHook(operation);
     return;
   }
 
@@ -449,9 +461,13 @@ function uninstallRemove(operation) {
 }
 
 function uninstallClaudeSettingsHook(operation) {
-  // Strips only the EGC-managed SessionStart entry. The settings file itself
-  // is never deleted because Claude Code and the user own its other keys.
-  removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  // Strips only the EGC-managed hook entry. The settings file itself is never
+  // deleted because Claude Code and the user own its other keys.
+  if (operation.hookEvent === STOP_EVENT) {
+    removeStopHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else {
+    removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  }
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -547,11 +563,10 @@ function inspectManagedOperation(repoRoot, operation) {
   }
 
   if (operation.kind === HOOK_OPERATION_KIND) {
-    return inspectResult(
-      inspectSessionStartHookFile(destinationPath, operation.hookScriptPath),
-      operation,
-      destinationPath
-    );
+    const inspectFn = operation.hookEvent === STOP_EVENT
+      ? inspectStopHookFile
+      : inspectSessionStartHookFile;
+    return inspectResult(inspectFn(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }
 
   return inspectResult('unverified', operation, destinationPath);
@@ -635,7 +650,7 @@ function buildDiscoveryRecord(adapter, context) {
 
 function discoverInstalledStates(options = {}) {
   const context = {
-    homeDir: options.homeDir || process.env.HOME || os.homedir(),
+    homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
   };
   const targets = normalizeTargets(options.targets);
@@ -843,7 +858,7 @@ function buildDoctorReport(options = {}) {
   }).filter(record => record.exists);
   const context = {
     repoRoot,
-    homeDir: options.homeDir || process.env.HOME || os.homedir(),
+    homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
     manifestVersion: manifests.modulesVersion,
     packageVersion: readPackageVersion(repoRoot),
@@ -927,7 +942,7 @@ function repairInstalledStates(options = {}) {
   const manifests = loadInstallManifests({ repoRoot });
   const context = {
     repoRoot,
-    homeDir: options.homeDir || process.env.HOME || os.homedir(),
+    homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
     manifestVersion: manifests.modulesVersion,
     packageVersion: readPackageVersion(repoRoot),

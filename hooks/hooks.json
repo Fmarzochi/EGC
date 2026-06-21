@@ -94,6 +94,18 @@
         ],
         "description": "Fact-forcing gate: block first Edit/Write/MultiEdit per file and demand investigation (importers, data schemas, user instruction) before allowing",
         "id": "pre:edit-write:gateguard-fact-force"
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js pre:insaits-security scripts/hooks/insaits-security-wrapper.js standard,strict",
+            "timeout": 15
+          }
+        ],
+        "description": "InsAIts real-time security monitor: detects credential exposure, prompt injection, and 20+ anomaly types. Enable with EGC_ENABLE_INSAITS=1",
+        "id": "pre:insaits-security"
       }
     ],
     "PreCompact": [
@@ -107,6 +119,17 @@
         ],
         "description": "Save state before context compaction",
         "id": "pre:compact"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs');const path=require('path');const {spawnSync}=require('child_process');const raw=fs.readFileSync(0,'utf8');const rel=path.join('scripts','hooks','run-with-flags.js');const hasRunnerRoot=candidate=>{const value=typeof candidate==='string'?candidate.trim():'';return value.length>0&&fs.existsSync(path.join(path.resolve(value),rel));};const root=(()=>{const envRoot=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT||'';if(hasRunnerRoot(envRoot))return path.resolve(envRoot.trim());const home=require('os').homedir();const claudeDir=path.join(home,'.gemini');if(hasRunnerRoot(claudeDir))return claudeDir;for(const candidate of [path.join(claudeDir,'plugins','egc'),path.join(claudeDir,'plugins','egc@egc'),path.join(claudeDir,'plugins','marketplace','egc'),path.join(claudeDir,'plugins','everything-gemini'),path.join(claudeDir,'plugins','everything-gemini@everything-gemini'),path.join(claudeDir,'plugins','marketplace','everything-gemini')]){if(hasRunnerRoot(candidate))return candidate;}try{for(const slug of ['egc','everything-gemini']){const cacheBase=path.join(claudeDir,'plugins','cache',slug);for(const org of fs.readdirSync(cacheBase,{withFileTypes:true})){if(!org.isDirectory())continue;for(const version of fs.readdirSync(path.join(cacheBase,org.name),{withFileTypes:true})){if(!version.isDirectory())continue;const candidate=path.join(cacheBase,org.name,version.name);if(fs.existsSync(path.join(candidate,rel)))return candidate;}}}}catch{}return claudeDir;})();const script=path.join(root,rel);if(fs.existsSync(script)){const result=spawnSync(process.execPath,[script,'pre:compact:egc-memory-save','scripts/hooks/egc-memory-save.js','minimal,standard,strict'],{input:raw,encoding:'utf8',env:process.env,cwd:process.cwd(),timeout:30000});const stdout=typeof result.stdout==='string'?result.stdout:'';if(stdout)process.stdout.write(stdout);else process.stdout.write(raw);if(result.stderr)process.stderr.write(result.stderr);if(result.error)process.stderr.write(`[hook error] ${result.error.message}\\n`);process.exit(typeof result.status==='number'?result.status:1);}else{process.stdout.write(raw);process.exit(0);}\""
+          }
+        ],
+        "description": "Persist EGC memory state before context compaction so session decisions survive summarization",
+        "id": "pre:compact:egc-memory-save"
       }
     ],
     "SessionStart": [
@@ -137,10 +160,17 @@
         "hooks": [
           {
             "type": "command",
+fix/register-egc-memory-load
             "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/egc-memory-load.js"
           }
         ],
         "description": "Load EGC memory at session start",
+
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js sessionstart:egc-memory-load scripts/hooks/egc-memory-load.js standard,strict"
+          }
+        ],
+        "description": "Load persistent EGC memory state at session start",
+ main
         "id": "sessionstart:egc-memory-load"
       }
     ],
@@ -241,6 +271,19 @@
         ],
         "description": "Capture tool use results for continuous learning",
         "id": "post:observe:continuous-learning"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path');const r=(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require('path'),f=require('fs'),h=require('os').homedir(),d=p.join(h,'.gemini'),q=p.join('scripts','lib','utils.js');if(f.existsSync(p.join(d,q)))return d;for(var s of [['egc'],['egc@egc'],['marketplace','egc'],['everything-gemini'],['everything-gemini@everything-gemini'],['marketplace','everything-gemini']]){var l=p.join(d,'plugins',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ['egc','everything-gemini']){var b=p.join(d,'plugins','cache',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})();const s=p.join(r,'scripts/hooks/plugin-hook-bootstrap.js');process.env.GEMINI_PLUGIN_ROOT=r;process.argv.splice(1,0,s);require(s)\" node scripts/hooks/run-with-flags.js post:state-db-writer scripts/hooks/state-db-writer.js standard,strict",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Write runtime events to SQLite state DB after each tool use",
+        "id": "post:state-db-writer"
       }
     ],
     "PostToolUseFailure": [
@@ -292,6 +335,19 @@
         ],
         "description": "Persist session state after each response (Stop carries transcript_path)",
         "id": "stop:session-end"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs');const path=require('path');const {spawnSync}=require('child_process');const raw=fs.readFileSync(0,'utf8');const rel=path.join('scripts','hooks','run-with-flags.js');const hasRunnerRoot=candidate=>{const value=typeof candidate==='string'?candidate.trim():'';return value.length>0&&fs.existsSync(path.join(path.resolve(value),rel));};const root=(()=>{const envRoot=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT||'';if(hasRunnerRoot(envRoot))return path.resolve(envRoot.trim());const home=require('os').homedir();const claudeDir=path.join(home,'.gemini');if(hasRunnerRoot(claudeDir))return claudeDir;for(const candidate of [path.join(claudeDir,'plugins','egc'),path.join(claudeDir,'plugins','egc@egc'),path.join(claudeDir,'plugins','marketplace','egc'),path.join(claudeDir,'plugins','everything-gemini'),path.join(claudeDir,'plugins','everything-gemini@everything-gemini'),path.join(claudeDir,'plugins','marketplace','everything-gemini')]){if(hasRunnerRoot(candidate))return candidate;}try{for(const slug of ['egc','everything-gemini']){const cacheBase=path.join(claudeDir,'plugins','cache',slug);for(const org of fs.readdirSync(cacheBase,{withFileTypes:true})){if(!org.isDirectory())continue;for(const version of fs.readdirSync(path.join(cacheBase,org.name),{withFileTypes:true})){if(!version.isDirectory())continue;const candidate=path.join(cacheBase,org.name,version.name);if(fs.existsSync(path.join(candidate,rel)))return candidate;}}}}catch{}return claudeDir;})();const script=path.join(root,rel);if(fs.existsSync(script)){const result=spawnSync(process.execPath,[script,'stop:egc-memory-save','scripts/hooks/egc-memory-save.js','minimal,standard,strict'],{input:raw,encoding:'utf8',env:process.env,cwd:process.cwd(),timeout:30000});const stdout=typeof result.stdout==='string'?result.stdout:'';if(stdout)process.stdout.write(stdout);else process.stdout.write(raw);if(result.stderr)process.stderr.write(result.stderr);if(result.error)process.stderr.write(`[hook error] ${result.error.message}\\n`);process.exit(typeof result.status==='number'?result.status:0);}else{process.stdout.write(raw);process.exit(0);}\"",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Persist EGC memory state at session end via egc-memory MCP",
+        "id": "stop:egc-memory-save"
       },
       {
         "matcher": "*",

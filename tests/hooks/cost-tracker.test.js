@@ -32,6 +32,7 @@ function withTempHome(homeDir) {
   return {
     HOME: homeDir,
     USERPROFILE: homeDir,
+    EGC_DIR: path.join(homeDir, '.gemini'),
   };
 }
 

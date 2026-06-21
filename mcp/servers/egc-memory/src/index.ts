@@ -10,8 +10,9 @@ import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { createSearchIndex, rebuildSearchIndex, searchDecisions } from './search.js';
+import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import { propagateStateToTools } from './propagate';
 import {
   createWorkingMemoryTable,
   sweepExpired,
@@ -22,16 +23,46 @@ import {
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
 
-// Mirrors DEFAULT_STATE_STORE_RELATIVE_PATH from scripts/lib/state-store/index.js
-const STATE_STORE_RELATIVE_PATH = path.join('.gemini', 'egc', 'state.db');
-
 function resolveStateStoreDbPath(): string {
   const envOverride = process.env.EGC_STATE_DB;
-  if (envOverride) {
-    return path.resolve(envOverride);
+  if (envOverride) return path.resolve(envOverride);
+
+  const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  const env = process.env;
+
+  // Tier 1: harness-specific env vars injected at hook time (and sometimes at MCP launch).
+  if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) {
+    return path.join(homeDir, '.gemini', 'egc', 'state.db');
   }
-  const homeDir = process.env.HOME || os.homedir();
-  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
+  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) {
+    return path.join(homeDir, '.claude', 'egc', 'state.db');
+  }
+  if (env.CODEBUDDY_PROJECT_DIR || env.CODEBUDDY_PLUGIN_ROOT) {
+    return path.join(homeDir, '.codebuddy', 'egc', 'state.db');
+  }
+  if (env.VSCODE_AGENT || env.GITHUB_COPILOT_API_TOKEN) {
+    return path.join(homeDir, '.github', 'egc', 'state.db');
+  }
+  if (env.KIRO_HOOK_FILE || env.KIRO_FILE_PATH) {
+    return path.join(homeDir, '.kiro', 'egc', 'state.db');
+  }
+
+  // Tier 2: probe known harness locations for an existing DB.
+  const candidates = [
+    path.join(homeDir, '.claude', 'egc', 'state.db'),
+    path.join(homeDir, '.gemini', 'egc', 'state.db'),
+    path.join(homeDir, '.cursor', 'egc', 'state.db'),
+    path.join(homeDir, '.github', 'egc', 'state.db'),
+    path.join(homeDir, '.kiro', 'egc', 'state.db'),
+    path.join(homeDir, '.codebuddy', 'egc', 'state.db'),
+    path.join(homeDir, '.egc', 'egc', 'state.db'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  // Fallback: ~/.egc is the harness-agnostic default used by egc init.
+  return path.join(homeDir, '.egc', 'egc', 'state.db');
 }
 
 function hideEgcRootOnWindows(): void {
@@ -83,6 +114,7 @@ function log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: Re
 
 let dbInstance: Database | null = null;
 let searchIndexReady = false;
+let lessonsSearchIndexReady = false;
 
 // ============================================================================
 // SQLite Arbitration & Message Queue (Cross-Runtime Synchronization)
@@ -250,6 +282,22 @@ async function runMigrations(db: Database, dbDir: string) {
           ON lessons (archived, confidence DESC);
       `);
       await db.run('INSERT INTO schema_migrations (version) VALUES (4)');
+    }
+
+    // Migration 5: FTS5 index over lessons for BM25 keyword search.
+    // Mirrors the decisions_fts pattern; triggers keep the index in sync on
+    // every write and a one-time rebuild backfills lessons from Migration 4.
+    const hasV5 = await db.get('SELECT version FROM schema_migrations WHERE version = 5');
+    try {
+      if (!hasV5) {
+        await createLessonsSearchIndex(db);
+        await rebuildLessonsSearchIndex(db);
+        await db.run('INSERT INTO schema_migrations (version) VALUES (5)');
+      }
+      lessonsSearchIndexReady = true;
+    } catch (e) {
+      lessonsSearchIndexReady = false;
+      log('WARN', 'FTS5 unavailable for lessons, lesson_recall falls back to substring matching', { error: String(e) });
     }
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {
@@ -538,7 +586,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "working_memory_set",
-        description: "Store a transient key-value entry scoped to the current project. The entry expires automatically after ttl_seconds (default: end-of-session). Use this for debug flags, temporary task context, or any value that should not pollute long-term project state.",
+        description: "Store a transient key-value entry scoped to the current project. Expires automatically after ttl_seconds (default 86400s). Overwrites any existing entry with the same key without error. Use for debug flags, temporary task context, or values that must not pollute long-term state in update_state. Do not use for data that must survive a session restart — use update_state instead.",
         inputSchema: {
           type: "object",
           properties: {
@@ -552,7 +600,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "working_memory_get",
-        description: "Retrieve a single transient entry by key for the current project. Returns null if the entry does not exist or has expired.",
+        description: "Retrieve a single transient entry by key for the current project. Returns null if the key does not exist or has expired — does not throw. Does not modify the entry or extend its TTL. Use working_memory_list when the key is unknown or to audit all active entries.",
         inputSchema: {
           type: "object",
           properties: {
@@ -564,7 +612,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "working_memory_list",
-        description: "List all live transient entries for the current project, ordered by key. Expired entries are excluded.",
+        description: "List all live transient key-value entries for the current project, ordered by key. Expired entries are excluded automatically. Returns an empty array when no live entries exist. Each entry includes key, value, and expires_at. Use to audit active transient state or to check whether a key exists before calling working_memory_get.",
         inputSchema: {
           type: "object",
           properties: {
@@ -574,7 +622,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_save",
-        description: "Persist a new lesson learned during this session. Lessons are stored with a confidence score and decay over time when not reinforced. Use this to record patterns, rules, or observations the AI should remember across sessions.",
+        description: "Persist a new lesson learned during this session with an initial confidence score (default 0.7). Confidence decays over time when the lesson is not reinforced. Does not deduplicate — call lesson_recall first to check whether a similar lesson already exists. Use to record patterns, heuristics, or observations the AI should carry forward across sessions.",
         inputSchema: {
           type: "object",
           properties: {
@@ -588,7 +636,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_recall",
-        description: "Search active lessons above a confidence threshold. Lessons below 0.2 confidence are archived and not returned by default. Returns lessons ranked by confidence score.",
+        description: "Search active lessons by keyword across content, context, and tags. Only lessons at or above min_confidence (default 0.2) are returned; lower-confidence lessons are archived and hidden. Updates the last_recalled timestamp on matched lessons (decay is driven by last_reinforced, not last_recalled). Returns results ranked by confidence score descending. Call at session start to surface relevant patterns before beginning work on a known problem area.",
         inputSchema: {
           type: "object",
           properties: {
@@ -601,7 +649,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "lesson_reinforce",
-        description: "Reinforce an existing lesson when the same pattern is observed again. Increases confidence by 0.15, capped at 1.0. Call this when a previously stored lesson proves relevant or a mistake is repeated.",
+        description: "Reinforce an existing lesson when the same pattern is observed again. Increases confidence by 0.15, capped at 1.0. Unarchives lessons that had decayed below the threshold. Call this when a lesson recalled via lesson_recall proves relevant to the current task, or when the same mistake recurs. Returns the updated lesson with its new confidence score.",
         inputSchema: {
           type: "object",
           properties: {
@@ -612,7 +660,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "detect_patterns",
-        description: "Analyzes captured runtime events and surfaces recurring behaviors across sessions. Detects repeated commands and recurring errors using frequency analysis. Patterns are persisted to SQLite with frequency, last_seen, and suggested_automation fields. Returns patterns with type, description, occurrence count, and an actionable suggestion.",
+        description: "Analyze captured runtime hook events and surface recurring behaviors across sessions. Detects repeated shell commands and recurring error signatures using frequency analysis. Patterns are stored with frequency, last_seen, and suggested_automation fields. Returns an array of pattern objects with type, description, occurrence count, and an actionable automation suggestion. Call after several sessions of work to identify tasks worth automating or formalizing as a hook.",
         inputSchema: {
           type: "object",
           properties: {
@@ -623,7 +671,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "compress_observations",
-        description: "Compress recent raw hook observations into structured typed summaries. Reduces token usage for context injection. Returns count + summary of compressed items.",
+        description: "Compress recent raw hook observations into structured typed summaries (tool_failure, tool_success, file_edit, generic) using rule-based analysis. Reduces token count when injecting session history into context. Does not delete raw observations — only marks them as compressed. Call before get_state or at session start to ensure hook data is compact before loading project memory. Returns the count of compressed items and a human-readable summary of what was processed.",
         inputSchema: {
           type: "object",
           properties: {
@@ -663,18 +711,30 @@ async function handleLessonSave(db: Database, args: unknown) {
 
 async function handleLessonRecall(db: Database, args: unknown) {
   const { query, min_confidence, limit } = LessonRecallSchema.parse(args);
-  const lowerQuery = query.toLowerCase();
-  const rows = await db.all<LessonRow[]>(
-    `SELECT * FROM lessons
-     WHERE archived = 0 AND confidence >= ?
-     ORDER BY confidence DESC, created_at DESC
-     LIMIT ?`,
-    [min_confidence, limit * 3]
-  );
-  const matched = rows
-    .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
-    .slice(0, limit)
-    .map(mapLessonRow);
+
+  let matched: ReturnType<typeof mapLessonRow>[];
+
+  if (lessonsSearchIndexReady) {
+    const results = await searchLessons(db, query, min_confidence, limit);
+    matched = results.map(r => mapLessonRow({
+      id: r.id, content: r.content, context: r.context, confidence: r.confidence,
+      tags: r.tags ?? null, archived: 0, created_at: r.created_at,
+      last_reinforced: r.last_reinforced ?? null, last_recalled: r.last_recalled ?? null
+    } as LessonRow));
+  } else {
+    const lowerQuery = query.toLowerCase();
+    const rows = await db.all<LessonRow[]>(
+      `SELECT * FROM lessons
+       WHERE archived = 0 AND confidence >= ?
+       ORDER BY confidence DESC, created_at DESC
+       LIMIT ?`,
+      [min_confidence, limit * 3]
+    );
+    matched = rows
+      .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
+      .slice(0, limit)
+      .map(mapLessonRow);
+  }
 
   const now = new Date().toISOString();
   if (matched.length > 0) {
@@ -685,7 +745,7 @@ async function handleLessonRecall(db: Database, args: unknown) {
     });
   }
 
-  log('INFO', 'Lessons recalled', { query, count: matched.length });
+  log('INFO', 'Lessons recalled', { query, fts: lessonsSearchIndexReady, count: matched.length });
   return { content: [{ type: "text", text: JSON.stringify({ lessons: matched, meta: { query, min_confidence, limit, count: matched.length } }, null, 2) }] };
 }
 
@@ -785,9 +845,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
         writeStateDoc(filePath, projPath, args, existing, branch);
 
-        log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0 });
+        const propagated = propagateStateToTools({
+          projectPath: projPath,
+          context: args.context,
+          decisions: args.decisions,
+          next: args.next,
+        });
+        const propagatedTools = Object.entries(propagated)
+          .filter(([, p]) => p !== null)
+          .map(([tool]) => tool);
+
+        log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0, propagated: propagatedTools });
         const branchLine = branch ? `Branch: ${branch}\n` : '';
-        return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
+        const toolsLine = propagatedTools.length > 0 ? `Tools updated: ${propagatedTools.join(', ')}\n` : '';
+        return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}${toolsLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
       }
 
       case "working_memory_set": {

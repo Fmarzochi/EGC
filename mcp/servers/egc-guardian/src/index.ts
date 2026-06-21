@@ -18,21 +18,58 @@ function hideEgcRootOnWindows(): void {
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
+import { scanVolatile } from './egc-volatile-scanner.js';
+import { classifyChunk } from './egc-chunk-router.js';
+import { reduceJsonArray } from './egc-array-crusher.js';
+import { autoLearn } from './learn-writer.js';
+import { compressViaHeadroom } from './headroom-client.js';
 
-// Inline: reduce payloads by deduplication (replaces AdaptiveReducer)
-function adaptiveReduce(payloads: string[], _mode: string): { compressed: string[]; metrics: { reduced_bytes: number } } {
-  const seen = new Set<string>();
-  const compressed: string[] = [];
-  for (const p of payloads) {
-    const key = p.trim();
-    if (!seen.has(key)) { seen.add(key); compressed.push(p); }
-  }
-  const originalBytes = payloads.reduce((a, b) => a + b.length, 0);
-  const compressedBytes = compressed.reduce((a, b) => a + b.length, 0);
-  return { compressed, metrics: { reduced_bytes: originalBytes - compressedBytes } };
+interface PipelineResult {
+  chunks: string[];
+  bytes_before: number;
+  bytes_after: number;
+  savings_pct: number;
+  volatile_findings: number;
+  chunks_crushed: number;
 }
 
-// Inline: route prompt to agents/skills (replaces cognitive-orchestrator pipeline)
+function runCompressionPipeline(chunks: string[]): PipelineResult {
+  const bytesBefore = chunks.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
+  let volatileFindings = 0;
+  let chunksCrushed = 0;
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const chunk of chunks) {
+    const findings = scanVolatile(chunk);
+    volatileFindings += findings.length;
+
+    const contentType = classifyChunk(chunk);
+
+    let processed = chunk;
+
+    if (contentType === 'json_array') {
+      const reduced = reduceJsonArray(chunk);
+      if (reduced !== null) {
+        processed = reduced.crushed;
+        chunksCrushed++;
+      }
+    }
+
+    // Exact-match dedup as final safety net
+    const key = processed.trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(processed);
+    }
+  }
+
+  const bytesAfter = result.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
+  const savingsPct = bytesBefore === 0 ? 0 : Math.round((1 - bytesAfter / bytesBefore) * 100);
+
+  return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
+}
+
 function routeTask(prompt: string, agents: string[], skills: string[]): {
   agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]
 } {
@@ -129,6 +166,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["prompt"]
         }
+      },
+      {
+        name: "auto_learn",
+        description: "Mines recent tool failures from session history and writes actionable recommendations to CLAUDE.md between managed markers. Safe to call at any time; skips gracefully if no failures are found.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: { type: "string", description: "Absolute path to the project root." },
+            target_file: { type: "string", description: "Path to write recommendations to. Defaults to CLAUDE.md in the project root." },
+            limit: { type: "number", description: "Max number of failure patterns to surface (default 10)." }
+          },
+          required: ["project_path"]
+        }
       }
     ]
   };
@@ -189,24 +239,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
            }
         }
         
-        const executionMode = mode === 'DEEP_COGNITION' ? 'DEEP_COGNITION' : 'FAST_RESPONSE';
-        const { compressed: reducedPayloads } = adaptiveReduce(rawPayloads, executionMode);
-        
-        const originalCount = rawPayloads.length;
-        const finalCount = reducedPayloads.length;
-        const reductionPercent = originalCount === 0 ? 0 : Math.round(((originalCount - finalCount) / originalCount) * 100);
-        
-        auditLog('PAYLOAD_MUTATION', 'MUTATED', { 
-           mode: executionMode,
-           files_requested: filepaths.length,
-           raw_chunks: originalCount,
-           reduced_chunks: finalCount,
-           reduction_percent: reductionPercent,
-           bytes_loaded: totalBytesLoaded
+        const pipeline = runCompressionPipeline(rawPayloads);
+
+        // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
+        let finalContent = pipeline.chunks.join('\n\n');
+        let headroomSavingsPct = 0;
+        let headroomTransforms: string[] = [];
+        if (pipeline.chunks.length > 0) {
+          const hr = await compressViaHeadroom(pipeline.chunks);
+          if (hr !== null) {
+            finalContent = hr.text;
+            headroomSavingsPct = Math.round((1 - hr.bytes_after / hr.bytes_before) * 100);
+            headroomTransforms = hr.transforms_applied;
+          }
+        }
+
+        const finalBytes = Buffer.byteLength(finalContent, 'utf8');
+        const totalSavingsPct = pipeline.bytes_before === 0
+          ? 0
+          : Math.round((1 - finalBytes / pipeline.bytes_before) * 100);
+
+        auditLog('PAYLOAD_MUTATION', 'MUTATED', {
+          mode,
+          files_requested: filepaths.length,
+          raw_chunks: rawPayloads.length,
+          reduced_chunks: pipeline.chunks.length,
+          bytes_before: pipeline.bytes_before,
+          bytes_after: finalBytes,
+          savings_pct: totalSavingsPct,
+          volatile_findings: pipeline.volatile_findings,
+          chunks_crushed: pipeline.chunks_crushed,
+          headroom_savings_pct: headroomSavingsPct,
+          headroom_transforms: headroomTransforms.length,
         });
 
-        const finalContent = reducedPayloads.join('\n\n');
-        return { content: [{ type: "text", text: finalContent }] };
+        const headerParts = [
+          `[reduce_context] ${totalSavingsPct}% saved`,
+          `(${pipeline.bytes_before} -> ${finalBytes} bytes,`,
+          `${pipeline.chunks_crushed} JSON chunks crushed,`,
+          `${pipeline.volatile_findings} volatile tokens detected`,
+        ];
+        if (headroomSavingsPct > 0) {
+          headerParts.push(`, headroom: ${headroomSavingsPct}% extra via ${headroomTransforms.length} transforms`);
+        }
+        const header = headerParts.join(' ') + ')';
+
+        return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
       }
 
       case "orchestrate_task": {
@@ -225,7 +303,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           } catch {}
         }
 
-        const reduction = adaptiveReduce(rawPayloads, 'standard');
+        const pipeline = runCompressionPipeline(rawPayloads);
         const routing = routeTask(prompt, agents, skills);
 
         return {
@@ -234,11 +312,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               prompt,
               routing,
-              context_reduction: reduction.metrics,
+              context_reduction: {
+                bytes_before: pipeline.bytes_before,
+                bytes_after: pipeline.bytes_after,
+                savings_pct: pipeline.savings_pct,
+              },
               files_loaded: rawPayloads.length,
             }, null, 2),
           }],
         };
+      }
+
+      case "auto_learn": {
+        const projectPath = request.params.arguments?.project_path as string;
+        const targetFile  = request.params.arguments?.target_file as string | undefined;
+        const limit       = request.params.arguments?.limit as number | undefined;
+
+        if (!projectPath) {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
+        }
+
+        const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
+
+        auditLog('AUTO_LEARN', 'MUTATED', {
+          project_path: projectPath,
+          patterns_found: result.patterns_found,
+          recommendations_written: result.recommendations_written,
+          skipped: result.skipped,
+        });
+
+        const summary = result.skipped
+          ? `[auto_learn] skipped: ${result.reason}`
+          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file} (${result.patterns_found} failure patterns found)`;
+
+        return { content: [{ type: 'text', text: summary }] };
       }
 
       default:

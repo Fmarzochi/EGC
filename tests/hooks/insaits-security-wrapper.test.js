@@ -22,32 +22,30 @@ function cleanup(dirPath) {
 
 function writeFakePython(binDir) {
   fs.mkdirSync(binDir, { recursive: true });
+
+  const nodeScript = [
+    `#!${process.execPath}`,
+    "'use strict';",
+    "const fs = require('fs');",
+    "const stdin = fs.readFileSync(0);",
+    "const mode = process.env.FAKE_INSAITS_MODE || 'clean';",
+    "if (mode === 'clean') { process.exit(0); }",
+    "if (mode === 'echo') { process.stdout.write(stdin); process.exit(0); }",
+    "if (mode === 'block') {",
+    "  process.stdout.write('blocked by monitor\\n');",
+    "  process.stderr.write('monitor warning\\n');",
+    "  process.exit(2);",
+    "}",
+    "if (mode === 'error') {",
+    "  process.stderr.write('spawned but failed\\n');",
+    "  process.exit(1);",
+    "}",
+  ].join('\n');
+
   if (process.platform === 'win32') {
     const fakePythonJs = path.join(binDir, 'fake-python.js');
     const fakePythonCmd = path.join(binDir, 'python3.cmd');
-    fs.writeFileSync(fakePythonJs, [
-      "'use strict';",
-      "const fs = require('fs');",
-      "const mode = process.env.FAKE_INSAITS_MODE || 'clean';",
-      "if (mode === 'clean') {",
-      "  fs.readFileSync(0, 'utf8');",
-      "  process.exit(0);",
-      "}",
-      "if (mode === 'echo') {",
-      "  process.stdout.write(fs.readFileSync(0, 'utf8'));",
-      "  process.exit(0);",
-      "}",
-      "if (mode === 'block') {",
-      "  process.stdout.write('blocked by monitor\\n');",
-      "  process.stderr.write('monitor warning\\n');",
-      "  process.exit(2);",
-      "}",
-      "if (mode === 'error') {",
-      "  fs.readFileSync(0, 'utf8');",
-      "  process.stderr.write('spawned but failed\\n');",
-      "  process.exit(1);",
-      "}",
-    ].join('\n'), 'utf8');
+    fs.writeFileSync(fakePythonJs, nodeScript.split('\n').slice(1).join('\n'), 'utf8');
     fs.writeFileSync(fakePythonCmd, [
       '@echo off',
       `"${process.execPath}" "%~dp0fake-python.js" %*`,
@@ -56,30 +54,7 @@ function writeFakePython(binDir) {
   }
 
   const fakePython = path.join(binDir, 'python3');
-  fs.writeFileSync(fakePython, [
-    '#!/bin/sh',
-    'mode="${FAKE_INSAITS_MODE:-clean}"',
-    'case "$mode" in',
-    '  clean)',
-    '    cat >/dev/null',
-    '    exit 0',
-    '    ;;',
-    '  echo)',
-    '    cat',
-    '    exit 0',
-    '    ;;',
-    '  block)',
-    '    printf "blocked by monitor\\n"',
-    '    printf "monitor warning\\n" >&2',
-    '    exit 2',
-    '    ;;',
-    '  error)',
-    '    cat >/dev/null',
-    '    printf "spawned but failed\\n" >&2',
-    '    exit 1',
-    '    ;;',
-    'esac',
-  ].join('\n'), 'utf8');
+  fs.writeFileSync(fakePython, nodeScript, 'utf8');
   fs.chmodSync(fakePython, 0o755);
 }
 
@@ -184,8 +159,8 @@ function runTests() {
 
       assert.strictEqual(result.status, 0);
       assert.strictEqual(result.stdout, 'raw-input');
-      assert.ok(result.stderr.includes('Security monitor exited with status 1'));
-      assert.ok(result.stderr.includes('spawned but failed'));
+      assert.ok(result.stderr.includes('Security monitor exited with status 1'), `stderr was: ${JSON.stringify(result.stderr)}`);
+      assert.ok(result.stderr.includes('spawned but failed'), `stderr was: ${JSON.stringify(result.stderr)}`);
     } finally {
       cleanup(tempDir);
     }

@@ -83,11 +83,11 @@ function sleepMs(ms) {
 }
 
 function getCanonicalSessionsDir(homeDir) {
-  return path.join(homeDir, '.gemini', 'session-data');
+  return path.join(homeDir, '.egc', 'session-data');
 }
 
 function getLegacySessionsDir(homeDir) {
-  return path.join(homeDir, '.gemini', 'sessions');
+  return path.join(homeDir, '.egc', 'sessions');
 }
 
 function getSessionStartAdditionalContext(stdout) {
@@ -348,7 +348,7 @@ async function runTests() {
     await asyncTest('exits 0 even with isolated empty HOME', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-iso-start-${Date.now()}`);
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
       try {
         const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
           HOME: isoHome,
@@ -377,7 +377,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-tpl-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const sessionFile = path.join(sessionsDir, '2026-02-11-abcd1234-session.tmp');
       fs.writeFileSync(sessionFile, '## Current State\n\n[Session context goes here]\n');
@@ -403,7 +403,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-real-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const sessionFile = path.join(sessionsDir, '2026-02-11-efgh5678-session.tmp');
       fs.writeFileSync(sessionFile, '# Real Session\n\nI worked on authentication refactor.\n');
@@ -445,7 +445,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-large-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const sessionFile = path.join(sessionsDir, '2026-02-11-large000-session.tmp');
       fs.writeFileSync(sessionFile, `# Large Session\n\nSTART_MARKER\n${'A'.repeat(20000)}\nEND_MARKER\n`);
@@ -474,7 +474,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-max-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const sessionFile = path.join(sessionsDir, '2026-02-11-max0000-session.tmp');
       fs.writeFileSync(sessionFile, `# Sized Session\n\n${'B'.repeat(1200)}\n`);
@@ -502,7 +502,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-disabled-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const sessionFile = path.join(sessionsDir, '2026-02-11-disabled-session.tmp');
       fs.writeFileSync(sessionFile, '# Disabled Session\n\nDO_NOT_INJECT_THIS\n');
@@ -539,7 +539,7 @@ async function runTests() {
 
       fs.mkdirSync(canonicalDir, { recursive: true });
       fs.mkdirSync(legacyDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       fs.writeFileSync(canonicalFile, '# Canonical Session\n\nUse the canonical session-data copy.\n');
       fs.writeFileSync(legacyFile, '# Legacy Session\n\nDo not prefer the legacy duplicate.\n');
@@ -568,7 +568,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-ansi-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const sessionFile = path.join(sessionsDir, '2026-02-11-winansi00-session.tmp');
       fs.writeFileSync(
@@ -600,7 +600,7 @@ async function runTests() {
   if (
     await asyncTest('reports learned skills count', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-skills-start-${Date.now()}`);
-      const learnedDir = path.join(isoHome, '.gemini', 'skills', 'learned');
+      const learnedDir = path.join(isoHome, '.egc', 'skills', 'learned');
       fs.mkdirSync(learnedDir, { recursive: true });
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
 
@@ -625,7 +625,7 @@ async function runTests() {
   if (
     await asyncTest('injects learned skills into session-start additional context', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-skills-context-${Date.now()}`);
-      const learnedDir = path.join(isoHome, '.gemini', 'skills', 'learned');
+      const learnedDir = path.join(isoHome, '.egc', 'skills', 'learned');
       fs.mkdirSync(learnedDir, { recursive: true });
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
 
@@ -946,9 +946,19 @@ async function runTests() {
 
   if (
     await asyncTest('creates compaction log', async () => {
-      await runScript(path.join(scriptsDir, 'pre-compact.js'));
-      const logFile = path.join(getCanonicalSessionsDir(os.homedir()), 'compaction-log.txt');
-      assert.ok(fs.existsSync(logFile), 'Compaction log should exist');
+      const isoHome = path.join(os.tmpdir(), `egc-compact-create-${Date.now()}`);
+      const sessionsDir = getCanonicalSessionsDir(isoHome);
+      fs.mkdirSync(sessionsDir, { recursive: true });
+      try {
+        await runScript(path.join(scriptsDir, 'pre-compact.js'), '', {
+          HOME: isoHome,
+          USERPROFILE: isoHome
+        });
+        const logFile = path.join(sessionsDir, 'compaction-log.txt');
+        assert.ok(fs.existsSync(logFile), 'Compaction log should exist');
+      } finally {
+        fs.rmSync(isoHome, { recursive: true, force: true });
+      }
     })
   )
     passed++;
@@ -1448,7 +1458,7 @@ async function runTests() {
       fs.writeFileSync(filePath, 'export const value = 1;\n');
       createCommandShim(binDir, 'npx', logFile);
       const isolatedHome = path.join(testDir, 'isolated-home');
-      fs.mkdirSync(path.join(isolatedHome, '.gemini'), { recursive: true });
+      fs.mkdirSync(path.join(isolatedHome, '.egc'), { recursive: true });
 
       const stdinJson = JSON.stringify({ tool_input: { file_path: filePath } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson, withPrependedPath(binDir, {
@@ -3570,7 +3580,7 @@ async function runTests() {
     await asyncTest('exits 0 with empty sessions directory (no recent sessions)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-empty-${Date.now()}`);
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
       try {
         const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
           HOME: isoHome,
@@ -3593,7 +3603,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-start-blank-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const today = new Date().toISOString().slice(0, 10);
       const sessionFile = path.join(sessionsDir, `${today}-blank-session.tmp`);
@@ -4275,7 +4285,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-start-empty-file-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const today = new Date().toISOString().slice(0, 10);
       const sessionFile = path.join(sessionsDir, `${today}-empty0000-session.tmp`);
@@ -4372,11 +4382,11 @@ async function runTests() {
     await asyncTest('reports available session aliases on startup', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-alias-${Date.now()}`);
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       // Pre-populate the aliases file
       fs.writeFileSync(
-        path.join(isoHome, '.gemini', 'session-aliases.json'),
+        path.join(isoHome, '.egc', 'session-aliases.json'),
         JSON.stringify({
           version: '1.0',
           aliases: {
@@ -4441,7 +4451,7 @@ async function runTests() {
   if (
     await asyncTest('exits 0 when sessions path is a file (not a directory)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-blocked-${Date.now()}`);
-      fs.mkdirSync(path.join(isoHome, '.gemini'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc'), { recursive: true });
       // Block sessions dir creation by placing a file at that path
       fs.writeFileSync(getCanonicalSessionsDir(isoHome), 'blocked');
 
@@ -4508,7 +4518,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-start-7day-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const recentFile = path.join(sessionsDir, '2026-02-06-recent69-session.tmp');
       fs.writeFileSync(recentFile, '# Recent Session\n\nRECENT CONTENT HERE');
@@ -4543,7 +4553,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-start-prune-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const recentFile = path.join(sessionsDir, '2026-02-10-keepme-session.tmp');
       fs.writeFileSync(recentFile, '# Recent Session\n\nKEEP ME');
@@ -4581,7 +4591,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-start-multi-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
 
       const now = Date.now();
 
@@ -5013,7 +5023,7 @@ async function runTests() {
       const isoHome = path.join(os.tmpdir(), `egc-r71-ss-default-${Date.now()}`);
       const isoProject = path.join(isoHome, 'project');
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
-      fs.mkdirSync(path.join(isoHome, '.gemini', 'skills', 'learned'), { recursive: true });
+      fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
       fs.mkdirSync(isoProject, { recursive: true });
       // No package.json, no lock files, no package-manager.json: forces default source
 

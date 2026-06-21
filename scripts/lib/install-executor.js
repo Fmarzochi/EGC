@@ -488,7 +488,7 @@ function planAntigravityLegacyInstall(context) {
 function createLegacyInstallPlan(options = {}) {
   const sourceRoot = options.sourceRoot || getSourceRoot();
   const projectRoot = options.projectRoot || process.cwd();
-  const homeDir = options.homeDir || process.env.HOME || os.homedir();
+  const homeDir = options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir();
   const target = options.target || 'egc';
 
   validateLegacyTarget(target);

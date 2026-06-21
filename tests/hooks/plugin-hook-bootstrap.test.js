@@ -247,6 +247,26 @@ process.exit(7);
     }
   })) passed++; else failed++;
 
+  if (test('node mode passes multiple args intact to hook script', () => {
+    const root = createTempDir();
+    try {
+      writeFile(root, 'scripts/multi-arg.js', [
+        'process.stdout.write(JSON.stringify(process.argv.slice(2)));',
+      ].join('\n'));
+
+      const result = run(['node', path.join('scripts', 'multi-arg.js'), 'alpha', 'beta', 'gamma'], {
+        root,
+        input: 'payload',
+      });
+
+      assert.strictEqual(result.status, 0, result.stderr);
+      const received = JSON.parse(result.stdout);
+      assert.deepStrictEqual(received, ['alpha', 'beta', 'gamma']);
+    } finally {
+      cleanup(root);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

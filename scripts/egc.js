@@ -75,6 +75,10 @@ const COMMANDS = {
     script: 'uninstall.js',
     description: 'Remove EGC-managed files recorded in install-state',
   },
+  watch: {
+    script: 'watch.js',
+    description: 'Watch tool config files and sync state changes bidirectionally',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -93,6 +97,7 @@ const PRIMARY_COMMANDS = [
   'session-inspect',
   'loop-status',
   'uninstall',
+  'watch',
 ];
 
 function showHelp(exitCode = 0) {
@@ -136,6 +141,8 @@ Examples:
   egc session-inspect egc:latest
   egc loop-status --json
   egc uninstall --target antigravity --dry-run
+  egc watch
+  egc watch --project /path/to/project --quiet
 `);
 
   process.exit(exitCode);

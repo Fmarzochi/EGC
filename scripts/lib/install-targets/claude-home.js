@@ -22,8 +22,12 @@ function isClaudeExcludedPath(sourceRelativePath) {
 const {
   HOOK_MODULE_ID,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  STOP_HOOK_MODULE_ID,
+  STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   createSessionStartHookMergeOperation,
+  createStopHookMergeOperation,
   resolveHookScriptDestination,
+  resolveStopHookScriptDestination,
 } = require('../claude-settings-hooks');
 
 function createSessionStateHookOperations(adapter, targetRoot) {
@@ -36,6 +40,14 @@ function createSessionStateHookOperations(adapter, targetRoot) {
       { strategy: 'preserve-relative-path' }
     ),
     createSessionStartHookMergeOperation(targetRoot),
+    createRemappedOperation(
+      adapter,
+      STOP_HOOK_MODULE_ID,
+      STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveStopHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    createStopHookMergeOperation(targetRoot),
   ];
 }
 

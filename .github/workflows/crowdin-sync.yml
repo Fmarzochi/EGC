@@ -1,0 +1,120 @@
+name: Crowdin Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  synchronize-with-crowdin:
+    name: Sync translations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Upload sources to Crowdin
+        uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: false
+          create_pull_request: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+
+      - name: Pre-translate via Machine Translation
+        id: pretranslate
+        env:
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+        run: |
+          engines=$(curl -sf \
+            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+            "https://api.crowdin.com/api/v2/mts?limit=1" || echo '{}')
+          engine_id=$(echo "$engines" | jq -r '.data[0].data.id // empty')
+          if [ -z "$engine_id" ]; then
+            echo "::notice::No MT engine configured. Skipping pre-translation."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "MT engine: $engine_id"
+          supported=$(echo "$engines" | jq -r '.data[0].data.supportedLanguagePairs.en // [] | @json')
+          if [ "$supported" = "[]" ]; then
+            echo "::notice::MT engine has no en->X pairs. Skipping pre-translation."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Supported target languages: $supported"
+          pt_response=$(curl -sf -X POST \
+            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/pre-translations" \
+            -d "{\"method\":\"mt\",\"engineId\":${engine_id},\"languageIds\":${supported},\"autoApproveOption\":\"all\",\"translateUntranslatedOnly\":true,\"duplicateTranslations\":false}" \
+            || echo '{}')
+          pre_id=$(echo "$pt_response" | jq -r '.data.identifier // empty')
+          if [ -z "$pre_id" ]; then
+            echo "::warning::Pre-translation request failed. Skipping."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Pre-translation started: $pre_id"
+          echo "pre_id=${pre_id}" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for pre-translation to finish
+        if: steps.pretranslate.outputs.skipped != 'true'
+        env:
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          PRE_ID: ${{ steps.pretranslate.outputs.pre_id }}
+        run: |
+          for i in $(seq 1 36); do
+            result=$(curl -sf \
+              -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
+              "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/pre-translations/${PRE_ID}")
+            status=$(echo "$result" | jq -r '.data.status')
+            echo "Status: $status (attempt $i/36)"
+            if [ "$status" = "finished" ]; then
+              break
+            elif [ "$status" = "failed" ]; then
+              echo "::warning::Pre-translation failed. Proceeding with existing translations."
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Download translations and create PR
+        uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f # v2
+        with:
+          upload_sources: false
+          upload_translations: false
+          download_translations: true
+          create_pull_request: true
+          pull_request_title: "chore: sync translations from Crowdin"
+          pull_request_body: |
+            Translations synced automatically from [Crowdin](https://crowdin.com/project/egc).
+
+            Only fully translated files are included (`skip_untranslated_files: true`).
+
+            > This PR was created automatically. Do not merge unless all checks pass.
+          pull_request_base_branch_name: main
+          localization_branch_name: chore/crowdin-translations
+          skip_untranslated_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}

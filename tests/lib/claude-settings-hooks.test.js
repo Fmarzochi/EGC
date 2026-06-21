@@ -12,19 +12,32 @@ const {
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   SESSION_START_EVENT,
+  STOP_EVENT,
+  STOP_HOOK_MODULE_ID,
+  STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addSessionStartHook,
+  addStopHook,
   applySessionStartHookToFile,
+  applyStopHookToFile,
   buildSessionStartCommand,
+  buildStopCommand,
   createSessionStartHookMergeOperation,
+  createStopHookMergeOperation,
   hasSessionStartHook,
+  hasStopHook,
   inspectSessionStartHookFile,
+  inspectStopHookFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
+  removeStopHook,
+  removeStopHookFromFile,
   resolveHookScriptDestination,
   resolveSettingsPath,
+  resolveStopHookScriptDestination,
 } = require('../../scripts/lib/claude-settings-hooks');
 
 const HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-start.js';
+const STOP_HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-stop.js';
 
 function test(name, fn) {
   try {
@@ -59,6 +72,27 @@ function thirdPartySettings() {
         {
           matcher: 'startup',
           hooks: [{ type: 'command', command: 'echo third-party' }],
+        },
+      ],
+      PreToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: 'echo guard' }],
+        },
+      ],
+    },
+  };
+}
+
+function stopHookThirdPartySettings() {
+  return {
+    model: 'opus',
+    permissions: { allow: ['Bash(npm test)'] },
+    hooks: {
+      Stop: [
+        {
+          matcher: 'cleanup',
+          hooks: [{ type: 'command', command: 'echo third-party-stop' }],
         },
       ],
       PreToolUse: [
@@ -290,6 +324,147 @@ function runTests() {
     assert.strictEqual(
       operation.hookCommand,
       buildSessionStartCommand(resolveHookScriptDestination(targetRoot))
+    );
+  })) passed++; else failed++;
+
+  console.log('\n--- Stop hook ---\n');
+
+  if (test('addStopHook adds the Stop hook to empty settings', () => {
+    const { settings, changed } = addStopHook({}, STOP_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(settings.hooks[STOP_EVENT], [
+      { hooks: [{ type: 'command', command: buildStopCommand(STOP_HOOK_SCRIPT_PATH) }] },
+    ]);
+    assert.ok(hasStopHook(settings, STOP_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('addStopHook is idempotent and reports no change when the hook exists', () => {
+    const first = addStopHook({}, STOP_HOOK_SCRIPT_PATH);
+    const second = addStopHook(first.settings, STOP_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(second.changed, false);
+    assert.strictEqual(second.settings.hooks[STOP_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('addStopHook preserves third-party Stop hooks and unrelated settings keys', () => {
+    const { settings } = addStopHook(stopHookThirdPartySettings(), STOP_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(settings.model, 'opus');
+    assert.deepStrictEqual(settings.permissions, { allow: ['Bash(npm test)'] });
+    assert.strictEqual(settings.hooks.PreToolUse.length, 1);
+    assert.strictEqual(settings.hooks[STOP_EVENT].length, 2);
+    assert.strictEqual(
+      settings.hooks[STOP_EVENT][0].hooks[0].command,
+      'echo third-party-stop'
+    );
+    assert.ok(hasStopHook(settings, STOP_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('removeStopHook strips only the EGC Stop entry and keeps third-party hooks', () => {
+    const installed = addStopHook(stopHookThirdPartySettings(), STOP_HOOK_SCRIPT_PATH).settings;
+    const { settings, changed } = removeStopHook(installed, STOP_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(changed, true);
+    assert.strictEqual(settings.model, 'opus');
+    assert.strictEqual(settings.hooks[STOP_EVENT].length, 1);
+    assert.strictEqual(
+      settings.hooks[STOP_EVENT][0].hooks[0].command,
+      'echo third-party-stop'
+    );
+    assert.strictEqual(settings.hooks.PreToolUse.length, 1);
+    assert.ok(!hasStopHook(settings, STOP_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('removeStopHook drops empty hooks containers when EGC was the only Stop hook', () => {
+    const installed = addStopHook({ model: 'opus' }, STOP_HOOK_SCRIPT_PATH).settings;
+    const { settings, changed } = removeStopHook(installed, STOP_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(settings, { model: 'opus' });
+  })) passed++; else failed++;
+
+  if (test('removeStopHook is a no-op when the Stop hook is not registered', () => {
+    const settings = stopHookThirdPartySettings();
+    const result = removeStopHook(settings, STOP_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(result.changed, false);
+    assert.deepStrictEqual(result.settings, settings);
+  })) passed++; else failed++;
+
+  if (test('applyStopHookToFile creates settings.json with Stop hook when absent', () => {
+    const homeDir = createTempDir('claude-stop-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, '.claude', 'settings.json');
+      const result = applyStopHookToFile(settingsPath, STOP_HOOK_SCRIPT_PATH);
+
+      assert.strictEqual(result.changed, true);
+      assert.ok(hasStopHook(readJson(settingsPath), STOP_HOOK_SCRIPT_PATH));
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('applyStopHookToFile is idempotent on subsequent calls', () => {
+    const homeDir = createTempDir('claude-stop-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      applyStopHookToFile(settingsPath, STOP_HOOK_SCRIPT_PATH);
+      const repeat = applyStopHookToFile(settingsPath, STOP_HOOK_SCRIPT_PATH);
+
+      assert.strictEqual(repeat.changed, false);
+      assert.strictEqual(readJson(settingsPath).hooks[STOP_EVENT].length, 1);
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('removeStopHookFromFile is a no-op when settings.json is absent', () => {
+    const homeDir = createTempDir('claude-stop-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      const result = removeStopHookFromFile(settingsPath, STOP_HOOK_SCRIPT_PATH);
+
+      assert.strictEqual(result.changed, false);
+      assert.ok(!fs.existsSync(settingsPath));
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('inspectStopHookFile reports ok, drifted, and invalid JSON as drifted', () => {
+    const homeDir = createTempDir('claude-stop-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+
+      fs.writeFileSync(settingsPath, JSON.stringify(stopHookThirdPartySettings()));
+      assert.strictEqual(inspectStopHookFile(settingsPath, STOP_HOOK_SCRIPT_PATH), 'drifted');
+
+      applyStopHookToFile(settingsPath, STOP_HOOK_SCRIPT_PATH);
+      assert.strictEqual(inspectStopHookFile(settingsPath, STOP_HOOK_SCRIPT_PATH), 'ok');
+
+      fs.writeFileSync(settingsPath, '{ not json');
+      assert.strictEqual(inspectStopHookFile(settingsPath, STOP_HOOK_SCRIPT_PATH), 'drifted');
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('createStopHookMergeOperation builds a managed operation for the target root', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createStopHookMergeOperation(targetRoot);
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, STOP_HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.ownership, 'managed');
+    assert.strictEqual(operation.scaffoldOnly, false);
+    assert.strictEqual(operation.hookEvent, STOP_EVENT);
+    assert.strictEqual(operation.hookScriptPath, resolveStopHookScriptDestination(targetRoot));
+    assert.strictEqual(
+      operation.hookCommand,
+      buildStopCommand(resolveStopHookScriptDestination(targetRoot))
     );
   })) passed++; else failed++;
 

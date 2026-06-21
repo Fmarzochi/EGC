@@ -74,7 +74,7 @@ function main() {
     }
 
     const result = uninstallInstalledStates({
-      homeDir: process.env.HOME || os.homedir(),
+      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,
       dryRun: options.dryRun,

@@ -17,12 +17,15 @@ Because EGC operates as a structured engineering platform, contributions must al
 
 - [Governance Philosophy](#governance-philosophy)
 - [Quick Start](#quick-start)
+- [Developer Certificate of Origin (DCO)](#developer-certificate-of-origin-dco)
+- [CI Checks](#ci-checks)
 - [Orchestrators & Runtime Core](#orchestrators--runtime-core)
 - [Contributing Skills](#contributing-skills)
 - [Skill Adaptation Policy](#skill-adaptation-policy)
 - [Contributing Agents](#contributing-agents)
 - [Contributing Hooks](#contributing-hooks)
 - [Contributing Commands](#contributing-commands)
+- [Contributing Translations](#contributing-translations)
 - [Pull Request Process](#pull-request-process)
 
 ---
@@ -50,12 +53,87 @@ git checkout -b feat/my-contribution
 
 # 3. Add your contribution following the architectural standards below
 
-# 4. Verify locally
-sh install.sh && egc doctor
+# 4. Verify locally (all of these must pass before you open a PR)
+npm ci
+node tests/run-all.js              # full test suite (runs on Linux, macOS, Windows)
+npm audit --audit-level=high       # must show 0 high/critical vulnerabilities
 
-# 5. Submit PR
-git add . && git commit -m "feat: add my-feature" && git push -u origin feat/my-contribution
+# 5. Submit PR (note: -s adds the required DCO sign-off to your commit)
+git add . && git commit -s -m "feat: add my-feature" && git push -u origin feat/my-contribution
 ```
+
+---
+
+## Developer Certificate of Origin (DCO)
+
+Every commit in your pull request **must** include a `Signed-off-by` line. This certifies that you wrote the code and have the right to contribute it under the project's MIT license. The `dco.yml` workflow checks every commit in every PR and blocks the merge if any commit is missing the signature.
+
+**For new commits, always use the `-s` flag:**
+
+```bash
+git commit -s -m "feat: add my-feature"
+```
+
+This automatically appends the required line to your commit message:
+
+```
+Signed-off-by: Your Full Name <your@email.com>
+```
+
+**To sign an existing unsigned commit:**
+
+```bash
+git commit --amend -s
+git push --force-with-lease
+```
+
+**To sign all commits in a branch at once:**
+
+```bash
+git rebase --signoff main
+git push --force-with-lease
+```
+
+> The `Signed-off-by` line must use the same name and email as your Git identity (`git config user.name` and `git config user.email`).
+
+---
+
+## Contributor License Agreement (CLA)
+
+Every contributor must sign the CLA once before their first PR can be merged.
+
+**How to sign:** When you open your first PR, the CLA bot will post a comment. Reply with:
+
+```
+I have read the CLA Document and I hereby sign the CLA.
+```
+
+That is it. One comment, one time. Future PRs are merged without any extra steps.
+
+Read the full agreement at [.github/CLA.md](CLA.md). It is short (4 clauses) and written in plain English.
+
+---
+
+## CI Checks
+
+Every pull request runs the following automated checks. Your PR must pass all of them before it can be merged.
+
+| Check | What it validates | How to pass |
+|---|---|---|
+| **CLA** | First-time contributors have signed the CLA | Post the sign comment when the bot asks |
+| **DCO** | Every commit has `Signed-off-by` | Use `git commit -s` on every commit |
+| **CI / test** | `node tests/run-all.js` on Linux, macOS, Windows with Node 20 and 22, using npm, yarn, and bun | Run `node tests/run-all.js` locally before opening a PR |
+| **CI / lint** | ESLint on `scripts/` and `tests/`; markdownlint on all `.md` files in `agents/`, `skills/`, `commands/`, `rules/` | Run `npx markdownlint "agents/**/*.md"` if you added or edited Markdown files |
+| **CI / validate** | Structure validators: agents, hooks, skills, commands, install manifests, rules, unicode safety | Run `node scripts/ci/validate-skills.js` (or the equivalent for your component type) |
+| **CI / security** | `npm audit --audit-level=high` | Run `npm audit --audit-level=high` locally; do not introduce packages with known high or critical vulnerabilities |
+| **Dependency Review** | Blocks dependencies with incompatible licenses or known CVEs | Check the license of any package you add |
+| **SonarCloud** | Static analysis: code smells, bugs, security hotspots | Review the SonarCloud report linked in your PR |
+| **CodeRabbit** | AI code review | Read and address CodeRabbit's findings in your PR comments |
+| **PR Size** | Fails if your PR changes more than 150 code files | Keep PRs focused; split large changes into smaller ones |
+
+### CI on fork pull requests
+
+If this is your first contribution from a fork, GitHub requires a maintainer to approve the CI run by clicking **"Approve and run"** in the Actions tab. Your PR will show checks as "Waiting" until a maintainer approves. This is expected: do not close and reopen your PR. A maintainer will approve the run during review.
 
 ---
 
@@ -303,6 +381,66 @@ Expected deterministic outcome.
 
 ---
 
+## Contributing Translations
+
+[![Crowdin](https://badges.crowdin.net/egc/localized.svg)](https://crowdin.com/project/egc)
+
+EGC uses [Crowdin](https://crowdin.com/project/egc) for community translations. Translations are synced automatically via GitHub Actions.
+
+### Rules
+
+- **Never open a manual PR for translations.** A PR is created automatically when a language reaches 100%.
+- **Never merge a translation PR if progress is below 100%.** The workflow badge and PR description show the current percentage.
+- If your language shows less than 100%, keep translating in Crowdin. The PR will be opened when you finish.
+
+### How to contribute as a translator
+
+1. Go to [crowdin.com/project/egc](https://crowdin.com/project/egc)
+2. Log in or create a free account
+3. Select your language
+4. Translate the strings
+5. When you reach 100%, a PR is opened automatically in this repository
+
+### Current translations
+
+| Language | Progress | File |
+|---|---|---|
+| English | Source | [README.md](../README.md) |
+| Español | 100% | [translations/es/README.md](../translations/es/README.md) |
+| Português (Brasil) | 100% | [translations/pt/README.md](../translations/pt/README.md) |
+
+---
+
+## Contribuindo com Traducoes
+
+[![Crowdin](https://badges.crowdin.net/egc/localized.svg)](https://crowdin.com/project/egc)
+
+O EGC usa o [Crowdin](https://crowdin.com/project/egc) para traducoes feitas pela comunidade. As traducoes sao sincronizadas automaticamente via GitHub Actions.
+
+### Regras
+
+- **Nunca abra um PR manual de traducao.** Um PR e criado automaticamente quando um idioma atinge 100%.
+- **Nunca faca merge de um PR de traducao com progresso abaixo de 100%.** O badge do workflow e a descricao do PR mostram a porcentagem atual.
+- Se o seu idioma mostrar menos de 100%, continue traduzindo no Crowdin. O PR sera aberto quando voce terminar.
+
+### Como contribuir como tradutor
+
+1. Acesse [crowdin.com/project/egc](https://crowdin.com/project/egc)
+2. Entre ou crie uma conta gratuita
+3. Escolha o seu idioma
+4. Traduza as strings
+5. Ao atingir 100%, um PR e aberto automaticamente neste repositorio
+
+### Traducoes disponíveis
+
+| Idioma | Progresso | Arquivo |
+|---|---|---|
+| Ingles | Fonte | [README.md](../README.md) |
+| Español | 100% | [translations/es/README.md](../translations/es/README.md) |
+| Portugues do Brasil | 100% | [translations/pt/README.md](../translations/pt/README.md) |
+
+---
+
 ## Pull Request Process
 
 ### 1. PR Title Format
@@ -335,7 +473,13 @@ What architectural gap this fills or what capability this adds to EGC.
 How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 ## Checklist
-- [ ] Tested on Linux/macOS/Windows (if applicable)
+- [ ] CLA signed (first contribution only - reply to the bot comment)
+- [ ] All commits are signed off with `git commit -s` (required by DCO check)
+- [ ] `node tests/run-all.js` passes locally with zero failures
+- [ ] `npm audit --audit-level=high` shows no high or critical vulnerabilities
+- [ ] Markdownlint passes on all `.md` files you created or modified (agents, skills, commands, rules)
+- [ ] PR changes fewer than 150 code files
+- [ ] Tested on Linux/macOS/Windows (if applicable to your change)
 - [ ] Preserves EGC identity and formatting
 - [ ] No sensitive data committed
 - [ ] Doesn't break the `runtime-map.json` registry
@@ -397,7 +541,7 @@ npm ci
 npm run build
 
 # Run tests
-npm test
+node tests/run-all.js
 ```
 
 The MCP servers (`egc-guardian`, `egc-memory`) are TypeScript projects compiled with `tsc`. Build output goes to `dist/` inside each server directory.

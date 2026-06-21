@@ -1,0 +1,23 @@
+name: GitLab Mirror
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Push to GitLab
+        run: |
+          git remote add gitlab https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab.com/Fmarzochi/EGC.git
+          git push gitlab main --force

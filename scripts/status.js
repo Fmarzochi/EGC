@@ -177,7 +177,7 @@ async function main() {
 
     store = await createStateStore({
       dbPath: options.dbPath,
-      homeDir: process.env.HOME || os.homedir(),
+      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
     });
 
     const payload = {
@@ -189,7 +189,7 @@ async function main() {
       }),
       memoryState: collectMemoryState(
         process.env.PWD || process.cwd(),
-        process.env.HOME || os.homedir()
+        process.env.HOME || process.env.USERPROFILE || os.homedir()
       ),
     };
 

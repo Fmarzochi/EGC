@@ -262,29 +262,31 @@ async function runTests() {
     const homeDir = createTempDir('egc-state-home-');
 
     try {
-      const expectedPath = path.join(homeDir, '.gemini', 'egc', 'state.db');
+      const expectedPath = path.join(homeDir, '.egc', 'egc', 'state.db');
       assert.strictEqual(resolveStateStorePath({ homeDir }), expectedPath);
 
       const firstStore = await createStateStore({ homeDir });
       const firstMigrations = firstStore.getAppliedMigrations();
       firstStore.close();
 
-      assert.strictEqual(firstMigrations.length, 4);
+      assert.strictEqual(firstMigrations.length, 5);
       assert.strictEqual(firstMigrations[0].version, 1);
       assert.strictEqual(firstMigrations[1].version, 2);
       assert.strictEqual(firstMigrations[2].version, 3);
       assert.strictEqual(firstMigrations[3].version, 4);
+      assert.strictEqual(firstMigrations[4].version, 5);
       assert.ok(fs.existsSync(expectedPath));
 
       const secondStore = await createStateStore({ homeDir });
       const secondMigrations = secondStore.getAppliedMigrations();
       secondStore.close();
 
-      assert.strictEqual(secondMigrations.length, 4);
+      assert.strictEqual(secondMigrations.length, 5);
       assert.strictEqual(secondMigrations[0].version, 1);
       assert.strictEqual(secondMigrations[1].version, 2);
       assert.strictEqual(secondMigrations[2].version, 3);
       assert.strictEqual(secondMigrations[3].version, 4);
+      assert.strictEqual(secondMigrations[4].version, 5);
     } finally {
       cleanupTempDir(homeDir);
     }
@@ -300,7 +302,7 @@ async function runTests() {
 
       const store = await createStateStore({ dbPath: ':memory:' });
       assert.strictEqual(store.dbPath, ':memory:');
-      assert.strictEqual(store.getAppliedMigrations().length, 4);
+      assert.strictEqual(store.getAppliedMigrations().length, 5);
       store.close();
 
       assert.ok(!fs.existsSync(path.join(tempDir, ':memory:')));

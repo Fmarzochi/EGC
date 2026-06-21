@@ -372,6 +372,23 @@ if [ -n "$obsidian_block" ]; then
 fi
 set -e
 
+# Install git pre-commit hook (strips egc:state blocks before commits)
+if [ -d "$ROOT_DIR/.git" ] && [ "$DRY_RUN" = false ]; then
+  GIT_HOOK="$ROOT_DIR/.git/hooks/pre-commit"
+  STRIP_SCRIPT="$ROOT_DIR/scripts/hooks/git-pre-commit.sh"
+  if [ ! -f "$GIT_HOOK" ]; then
+    printf '#!/usr/bin/env bash\nROOT="$(git rev-parse --show-toplevel)"\nbash "$ROOT/scripts/hooks/git-pre-commit.sh"\n' > "$GIT_HOOK"
+    chmod +x "$GIT_HOOK"
+    echo "  ✓ git pre-commit hook installed"
+  elif ! grep -q "git-pre-commit.sh" "$GIT_HOOK" 2>/dev/null; then
+    printf '\nROOT="$(git rev-parse --show-toplevel)"\nbash "$ROOT/scripts/hooks/git-pre-commit.sh"\n' >> "$GIT_HOOK"
+    chmod +x "$GIT_HOOK"
+    echo "  ✓ git pre-commit hook updated"
+  else
+    echo "  ✓ git pre-commit hook already installed"
+  fi
+fi
+
 echo ""
 echo "Installation complete."
 echo "Run 'egc doctor' to verify."

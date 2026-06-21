@@ -1,0 +1,40 @@
+name: ClusterFuzzLite PR fuzzing
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  PR:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Build Fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
+        with:
+          language: javascript
+          sanitizer: none
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Fuzzers
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 300
+          mode: code-change
+          sanitizer: none
+          output-sarif: true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: cifuzz-sarif/results.sarif

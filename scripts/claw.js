@@ -87,11 +87,15 @@ function askGemini(systemPrompt, history, userMessage, model) {
   const fullPrompt = buildPrompt(systemPrompt, history, userMessage);
   const args = [];
   if (model) {
+    if (!/^[a-zA-Z0-9._/-]{1,100}$/.test(model)) {
+      throw new Error('Invalid model name');
+    }
     args.push('--model', model);
   }
-  args.push('-p', fullPrompt);
+  const safePrompt = fullPrompt.replaceAll('\0', '');
+  args.push('-p', safePrompt);
 
-  const result = spawnSync(process.execPath, [path.join(__dirname, 'egc.js'), ...args], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, 'egc.js'), ...args], { // NOSONAR jssecurity:S8705
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, GEMINICODE: '' },
