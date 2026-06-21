@@ -6,6 +6,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const readline = require('readline');
 
 function createTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-telemetry-test-'));
@@ -32,9 +33,9 @@ function loadTelemetry(homeDir) {
   return mod;
 }
 
-function test(name, fn) {
+async function test(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
@@ -44,14 +45,14 @@ function test(name, fn) {
   }
 }
 
-function runTests() {
+async function runTests() {
   console.log('\n=== Testing telemetry.js ===\n');
 
   let passed = 0;
   let failed = 0;
 
   // readConsent
-  if (test('readConsent returns null when file does not exist', () => {
+  if (await test('readConsent returns null when file does not exist', () => {
     const dir = createTempDir();
     try {
       const { readConsent } = loadTelemetry(dir);
@@ -59,7 +60,7 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('readConsent returns consent object with enabled=true', () => {
+  if (await test('readConsent returns consent object with enabled=true', () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -72,7 +73,7 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('readConsent returns consent object with enabled=false', () => {
+  if (await test('readConsent returns consent object with enabled=false', () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -84,7 +85,7 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('readConsent returns null on invalid JSON', () => {
+  if (await test('readConsent returns null on invalid JSON', () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -95,7 +96,7 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('readConsent returns null when enabled field is missing', () => {
+  if (await test('readConsent returns null when enabled field is missing', () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -108,7 +109,7 @@ function runTests() {
   })) { passed++; } else { failed++; }
 
   // writeConsent
-  if (test('writeConsent creates .egc dir and writes enabled=true', () => {
+  if (await test('writeConsent creates .egc dir and writes enabled=true', () => {
     const dir = createTempDir();
     try {
       const { writeConsent } = loadTelemetry(dir);
@@ -121,7 +122,7 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('writeConsent writes enabled=false correctly', () => {
+  if (await test('writeConsent writes enabled=false correctly', () => {
     const dir = createTempDir();
     try {
       const { writeConsent } = loadTelemetry(dir);
@@ -132,7 +133,7 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('writeConsent overwrites existing consent file', () => {
+  if (await test('writeConsent overwrites existing consent file', () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -146,8 +147,93 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
+  // ensureConsent
+  if (await test('ensureConsent returns true when consent already enabled', async () => {
+    const dir = createTempDir();
+    try {
+      const egcDir = path.join(dir, '.egc');
+      fs.mkdirSync(egcDir, { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'telemetry.json'),
+        JSON.stringify({ enabled: true, version: 1 }), 'utf8');
+      const { ensureConsent } = loadTelemetry(dir);
+      const result = await ensureConsent();
+      assert.strictEqual(result, true);
+    } finally { cleanup(dir); }
+  })) { passed++; } else { failed++; }
+
+  if (await test('ensureConsent returns false when consent already disabled', async () => {
+    const dir = createTempDir();
+    try {
+      const egcDir = path.join(dir, '.egc');
+      fs.mkdirSync(egcDir, { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'telemetry.json'),
+        JSON.stringify({ enabled: false, version: 1 }), 'utf8');
+      const { ensureConsent } = loadTelemetry(dir);
+      const result = await ensureConsent();
+      assert.strictEqual(result, false);
+    } finally { cleanup(dir); }
+  })) { passed++; } else { failed++; }
+
+  if (await test('ensureConsent writes false and returns false in non-TTY', async () => {
+    const dir = createTempDir();
+    try {
+      const { ensureConsent } = loadTelemetry(dir);
+      const result = await ensureConsent();
+      assert.strictEqual(result, false);
+      const filePath = path.join(dir, '.egc', 'telemetry.json');
+      assert.ok(fs.existsSync(filePath));
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      assert.strictEqual(data.enabled, false);
+    } finally { cleanup(dir); }
+  })) { passed++; } else { failed++; }
+
+  if (await test('ensureConsent prompts via readline when stdin is TTY', async () => {
+    const origCreate = readline.createInterface;
+    readline.createInterface = () => ({
+      question: (_prompt, cb) => cb('y'),
+      close: () => {},
+    });
+    const origIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+
+    const dir = createTempDir();
+    try {
+      const { ensureConsent } = loadTelemetry(dir);
+      const result = await ensureConsent();
+      assert.strictEqual(result, true);
+      const filePath = path.join(dir, '.egc', 'telemetry.json');
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      assert.strictEqual(data.enabled, true);
+    } finally {
+      readline.createInterface = origCreate;
+      process.stdin.isTTY = origIsTTY;
+      cleanup(dir);
+    }
+  })) { passed++; } else { failed++; }
+
+  if (await test('ensureConsent stores false when user declines in TTY', async () => {
+    const origCreate = readline.createInterface;
+    readline.createInterface = () => ({
+      question: (_prompt, cb) => cb('n'),
+      close: () => {},
+    });
+    const origIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+
+    const dir = createTempDir();
+    try {
+      const { ensureConsent } = loadTelemetry(dir);
+      const result = await ensureConsent();
+      assert.strictEqual(result, false);
+    } finally {
+      readline.createInterface = origCreate;
+      process.stdin.isTTY = origIsTTY;
+      cleanup(dir);
+    }
+  })) { passed++; } else { failed++; }
+
   // ping
-  if (test('ping does not throw when consent is disabled', () => {
+  if (await test('ping does not throw when consent is disabled', () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -159,11 +245,33 @@ function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (test('ping does not throw when no consent file exists', () => {
+  if (await test('ping does not throw when no consent file exists', () => {
     const dir = createTempDir();
     try {
       const { ping } = loadTelemetry(dir);
       assert.doesNotThrow(() => ping('/cli/egc', 'EGC CLI'));
+    } finally { cleanup(dir); }
+  })) { passed++; } else { failed++; }
+
+  if (await test('ping fires fetch with correct URL when consent is enabled', () => {
+    const dir = createTempDir();
+    try {
+      const egcDir = path.join(dir, '.egc');
+      fs.mkdirSync(egcDir, { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'telemetry.json'),
+        JSON.stringify({ enabled: true, version: 1 }), 'utf8');
+
+      let capturedUrl = null;
+      const origFetch = global.fetch;
+      global.fetch = (url) => { capturedUrl = url; return Promise.resolve({}); };
+
+      const { ping } = loadTelemetry(dir);
+      ping('/cli/install', 'EGC Install');
+
+      global.fetch = origFetch;
+      assert.ok(capturedUrl !== null, 'fetch should have been called');
+      assert.ok(capturedUrl.includes('egc.goatcounter.com'), 'URL should target GoatCounter');
+      assert.ok(capturedUrl.includes('cli') && capturedUrl.includes('install'), 'URL should include page path params');
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
