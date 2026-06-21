@@ -23,7 +23,7 @@ jobs:
         with:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/Fmarzochi/EGC/blob/main/.github/CLA.md
-          branch: main
+          branch: cla-signatures
           allowlist: Fmarzochi,dependabot[bot],github-actions[bot],renovate[bot],coderabbitai[bot],sonarqubecloud[bot],cubic-dev-ai[bot]
           create-file-commit-message: "chore(cla): initialize signatures file"
           signed-commit-message: "chore(cla): add @$contributorName signature"
