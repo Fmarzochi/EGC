@@ -198,6 +198,29 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('briefing shows install hint when agents directory is missing', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    const projectDir = createTempDir('claude-session-start-project-');
+    try {
+      fs.writeFileSync(
+        path.join(projectDir, 'package.json'),
+        JSON.stringify({ name: 'test', version: '1.0.0' })
+      );
+
+      const result = runHook(homeDir, JSON.stringify({ cwd: projectDir }), {
+        EGC_AGENTS_DIR: path.join(homeDir, 'nonexistent-agents'),
+      });
+
+      assert.strictEqual(result.code, 0);
+      assert.ok(result.stdout.includes('=== EGC Stack Briefing ==='), 'briefing header missing');
+      assert.ok(result.stdout.includes('none installed'), 'install hint missing');
+      assert.ok(result.stdout.includes('coding-standards'), 'coding-standards reminder missing');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

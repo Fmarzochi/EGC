@@ -90,7 +90,7 @@ function readAgentFiles(agentsDir) {
 }
 
 function loadRelevantAgents(languages, frameworks, knownFrameworkNames) {
-  const agentsDir = path.join(__dirname, '..', '..', 'agents');
+  const agentsDir = process.env.EGC_AGENTS_DIR || path.join(__dirname, '..', '..', 'agents');
   if (!fs.existsSync(agentsDir)) return { stackSpecific: [], generic: [], missing: true };
 
   const files = readAgentFiles(agentsDir);
