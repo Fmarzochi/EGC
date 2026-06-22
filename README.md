@@ -160,7 +160,7 @@ egc telemetry status
 
 ## Prompt library
 
-**481 components** included as a bonus. Install to get access to 64 agents, 229 skills, 77 commands, and 111 rules written from real engineering sessions. Skip them entirely and EGC still gives you persistent memory.
+**479 components** included as a bonus. Install to get access to 63 agents, 229 skills, and 76 commands, plus 111 rules, all written from real engineering sessions. Skip them entirely and EGC still gives you persistent memory.
 
 ---
 

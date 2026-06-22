@@ -134,7 +134,7 @@ egc telemetry status
 
 ## Biblioteca de prompts
 
-**481 componentes** incluidos como bonus: 64 agentes, 229 habilidades, 77 comandos y 111 reglas escritos en sesiones de ingeniería reales. Ignóralos por completo y EGC seguirá dándote memoria persistente.
+**479 componentes** incluidos como bonus: 63 agentes, 229 habilidades, 76 comandos y 111 reglas escritos en sesiones de ingeniería reales. Ignóralos por completo y EGC seguirá dándote memoria persistente.
 
 ---
 

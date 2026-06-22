@@ -134,7 +134,7 @@ egc telemetry status
 
 ## Biblioteca de prompts
 
-**481 componentes** inclusos como brinde: 64 agentes, 229 skills, 77 comandos e 111 regras escritos em sessoes reais de engenharia. Ignore-os completamente e o EGC ainda oferece memoria persistente.
+**479 componentes** inclusos como brinde: 63 agentes, 229 skills, 76 comandos e 111 regras escritos em sessoes reais de engenharia. Ignore-os completamente e o EGC ainda oferece memoria persistente.
 
 ---
 
