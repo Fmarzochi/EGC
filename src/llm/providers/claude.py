@@ -86,10 +86,16 @@ class ClaudeProvider(LLMProvider):
                         )
                     ]
 
+            content = next(
+                (block.text for block in response.content if block.type == "text"),
+                "",
+            )
+
             return LLMOutput(
                 content=next(
                     (block.text for block in response.content if block.type == "text"), "",
                 ),
+                content=content,
                 tool_calls=tool_calls,
                 model=response.model,
                 usage={
