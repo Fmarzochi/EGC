@@ -85,14 +85,19 @@ class OpenAIProvider(LLMProvider):
 
             tool_calls = None
             if choice.message.tool_calls:
-                tool_calls = [
-                    ToolCall(
-                        id=tc.id or "",
-                        name=tc.function.name,
-                        arguments={} if not tc.function.arguments else json.loads(tc.function.arguments),
+                tool_calls = []
+                for tc in choice.message.tool_calls:
+                    try:
+                        args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                    except json.JSONDecodeError:
+                        args = {}
+                    tool_calls.append(
+                        ToolCall(
+                            id=tc.id or "",
+                            name=tc.function.name,
+                            arguments=args,
+                        )
                     )
-                    for tc in choice.message.tool_calls
-                ]
 
             return LLMOutput(
                 content=choice.message.content or "",
