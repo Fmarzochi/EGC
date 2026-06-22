@@ -64,7 +64,7 @@ class OllamaProvider(LLMProvider):
                 "messages": [msg.to_dict() for msg in input.messages],
                 "stream": False,
             }
-            if abs(input.temperature - 1.0) > 1e-9:
+            if input.temperature is not None and abs(input.temperature - 1.0) > 1e-9:
                 payload["options"] = {"temperature": input.temperature}
 
             data = json.dumps(payload).encode("utf-8")
