@@ -3,6 +3,7 @@ name: go-build-resolver
 description: Go build, vet, and compilation error resolution specialist. Fixes build errors, go vet issues, and linter warnings with minimal changes. Use when Go builds fail.
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 model: gemini-2.5-pro
+stack: ["golang"]
 ---
 
 # Go Build Error Resolver

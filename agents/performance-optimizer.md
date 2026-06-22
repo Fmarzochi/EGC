@@ -3,6 +3,7 @@ name: performance-optimizer
 description: Performance analysis and optimization specialist. Use PROACTIVELY for identifying bottlenecks, optimizing slow code, reducing bundle sizes, and improving runtime performance. Profiling, memory leaks, render optimization, and algorithmic improvements.
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 model: gemini-2.5-pro
+stack: ["*"]
 ---
 
 # Performance Optimizer

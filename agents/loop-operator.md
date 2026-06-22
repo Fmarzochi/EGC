@@ -4,6 +4,7 @@ description: Operate autonomous agent loops, monitor progress, and intervene saf
 tools: ["Read", "Grep", "Glob", "Bash", "Edit"]
 model: gemini-2.5-pro
 color: orange
+stack: ["*"]
 ---
 
 You are the loop operator.

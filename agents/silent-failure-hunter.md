@@ -3,6 +3,7 @@ name: silent-failure-hunter
 description: Review code for silent failures, swallowed errors, bad fallbacks, and missing error propagation.
 model: gemini-2.5-pro
 tools: [Read, Grep, Glob, Bash]
+stack: ["*"]
 ---
 
 # Silent Failure Hunter Agent

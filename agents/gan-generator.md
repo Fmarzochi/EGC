@@ -4,6 +4,7 @@ description: "GAN Harness: Generator agent. Implements features according to the
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 model: gemini-2.5-pro
 color: green
+stack: ["*"]
 ---
 
 You are the **Generator** in a GAN-style multi-agent harness .

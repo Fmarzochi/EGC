@@ -4,6 +4,7 @@ description: Analyze and improve the local agent harness configuration for relia
 tools: ["Read", "Grep", "Glob", "Bash", "Edit"]
 model: gemini-2.5-pro
 color: teal
+stack: ["*"]
 ---
 
 You are the harness optimizer.

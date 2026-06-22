@@ -4,6 +4,7 @@ description: "GAN Harness: Planner agent. Expands a one-line prompt into a full 
 tools: ["Read", "Write", "Grep", "Glob"]
 model: gemini-2.5-pro
 color: purple
+stack: ["*"]
 ---
 
 You are the **Planner** in a GAN-style multi-agent harness .

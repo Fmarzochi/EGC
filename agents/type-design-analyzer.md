@@ -3,6 +3,7 @@ name: type-design-analyzer
 description: Analyze type design for encapsulation, invariant expression, usefulness, and enforcement.
 model: gemini-2.5-pro
 tools: [Read, Grep, Glob, Bash]
+stack: ["*"]
 ---
 
 # Type Design Analyzer Agent

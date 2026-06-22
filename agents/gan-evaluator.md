@@ -4,6 +4,7 @@ description: "GAN Harness: Evaluator agent. Tests the live running application v
 tools: ["Read", "Write", "Bash", "Grep", "Glob"]
 model: gemini-2.5-pro
 color: red
+stack: ["*"]
 ---
 
 You are the **Evaluator** in a GAN-style multi-agent harness .
