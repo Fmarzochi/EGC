@@ -68,7 +68,7 @@ npm install -g @egchq/egc && egc install
 npx @egchq/egc install
 ```
 
-[دليل التثبيت الكامل](docs/installation.md)
+[دليل التثبيت الكامل](../../docs/installation.md)
 
 ---
 
@@ -118,7 +118,7 @@ npx @egchq/egc install
 - **[رعاية المشروع على GitHub](https://github.com/sponsors/Fmarzochi)**: أي مبلغ يساعد
 - **[تبرع عبر PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: لا يلزم وجود حساب GitHub
 - **ضع نجمة على المستودع**: يساعد المطورين الآخرين في العثور عليه
-- **[المساهمة](.github/CONTRIBUTING.md)**: وكلاء، مهارات، أوامر، إصلاح أخطاء، وثائق
+- **[المساهمة](../../.github/CONTRIBUTING.md)**: وكلاء، مهارات، أوامر، إصلاح أخطاء، وثائق
 - **المشاركة**: إذا غير EGC طريقة عملك، أخبر أحداً بذلك
 
 ### الرعاة
@@ -128,6 +128,10 @@ npx @egchq/egc install
 **الداعمون**
 
 <a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+
+**المترجم**
+
+<a href="https://github.com/muhammadhasnain3031"><img src="https://avatars.githubusercontent.com/u/262106526?v=4" width="48" height="48" alt="@muhammadhasnain3031" title="@muhammadhasnain3031 — Arabic translation" /></a>
 
 **الرعاة الشهريون** · _كن الأول_
 
