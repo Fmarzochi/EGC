@@ -168,7 +168,7 @@ class GeminiProvider(LLMProvider):
                             args=tc.arguments
                         ))
                 else:
-                    parts.append(types.Part.from_text(text=msg.content))
+                    parts.append(types.Part.from_text(text=msg.content or ""))
                     
                 if parts:
                     contents.append(types.Content(role=gemini_role, parts=parts))
