@@ -43,9 +43,9 @@ EGC install
   ✓ ~/.claude/CLAUDE.md updated
   ✓ ~/.gemini/GEMINI.md updated
   registering MCP servers...
-  ✓ registered in Antigravity CLI
   ✓ registered in Claude Code (global)
   ✓ registered in Cursor
+  ✓ registered in Gemini CLI
 
 Install prompt library? (63 agents, 229 skills, 76 commands) [y/N]:
 

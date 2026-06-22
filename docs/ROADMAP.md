@@ -2,11 +2,21 @@
 
 This document describes the planned development direction for EGC (Extended Global Context).
 
-## v1.1.1: Bidirectional Sync (In progress)
+## v1.1.2: Bidirectional Sync (Released 2026-06-20)
 
-- `egc watch`: bidirectional sync daemon -- edits in any tool config file propagate to all others and back to `~/.egc/state/` automatically (issues #302, #303)
-- `update_state` now propagates context to all 13 supported tool config files in one call (issue #313)
-- Handles atomic saves (VS Code, Cursor, Windsurf rename-based writes) and Windows EPERM events (issue #320)
+- `egc watch`: bidirectional sync daemon - edits in any tool config file propagate to all others and back to `~/.egc/state/` automatically (issues #302, #303)
+- `update_state` now propagates context to 11 supported tool config files in one call (issue #313)
+- Guardian pipeline: CacheAligner, ContentRouter, SmartCrusher, Headroom Phase 2 wired into `reduce_context`
+- `sql.js` replaces `better-sqlite3`: pure-JavaScript/WebAssembly SQLite, no native compilation required
+- `auto_learn`: new `egc-guardian` tool that mines session failures and writes actionable lessons automatically
+- Stack briefing: session start now detects the project stack and emits a briefing with relevant agents
+
+## v1.1.1: BM25 Search and Bug Fixes (Released 2026-06-19)
+
+- `lesson_recall` upgraded to BM25 full-text search via FTS5 virtual table
+- Fixed state DB path resolution across all harnesses
+- Fixed hook commands to use `process.execPath` for reliable PATH resolution
+- Added 7 OpenRouter model mappings (community contribution)
 
 ## v1.1.0: Memory Expansion (Released 2026-06-13)
 

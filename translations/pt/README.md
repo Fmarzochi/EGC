@@ -32,6 +32,13 @@ Ready to pick up the next items:
 • Add GEMINI.md with session memory protocol
 • Publish v1.0.1 fix to npm after clean install test passes
 • Add mcp_server_count to audit.js
+
+=== EGC Stack Briefing ===
+Stack: typescript, javascript
+Stack agents: typescript-reviewer, javascript-reviewer
+Always use: code-reviewer
+Skill: coding-standards (cyclomatic complexity) -- apply to all code written this session
+===
 ```
 
 A IA já sabe o que você estava construindo, quais decisões tomou, o que falhou e exatamente onde parou. Ela sabe porque o EGC salvou esse estado ao final da sua última sessão e o carregou de volta quando esta começou. Você não digitou nada. Você simplesmente começou a trabalhar.
@@ -127,7 +134,7 @@ egc telemetry status
 
 ## Biblioteca de prompts
 
-**479 componentes** inclusos como brinde: 63 agentes, 229 skills, 76 comandos e 111 regras escritos em sessoes reais de engenharia. Ignore-os completamente e o EGC ainda oferece memoria persistente.
+**481 componentes** inclusos como brinde: 64 agentes, 229 skills, 77 comandos e 111 regras escritos em sessoes reais de engenharia. Ignore-os completamente e o EGC ainda oferece memoria persistente.
 
 ---
 

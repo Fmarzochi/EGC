@@ -252,7 +252,8 @@ agents/your-agent-name.md
 name: your-agent-name
 description: What this agent does and when the orchestrator should invoke it. Be specific!
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-model: gemini-2.5-pro
+model: claude-sonnet-4-6
+stack: ["*"]
 ---
 
 You are a [role] specialist operating within the EGC runtime.
@@ -286,7 +287,8 @@ What you return to the runtime queue or user.
 | `name` | Lowercase, hyphenated | `code-reviewer` |
 | `description` | Used for routing decisions | Be specific! |
 | `tools` | Only what's needed | `Read`, `Write`, `Bash`, `Task` (for delegation) |
-| `model` | Capability target | `gemini-1.5-flash` (fast), `gemini-2.5-pro` (complex) |
+| `model` | Capability target | `claude-haiku-4-5` (fast), `claude-sonnet-4-6` (complex) |
+| `stack` | Project types this agent targets | `["*"]` (all), `["python"]`, `["python", "django"]` |
 
 ---
 
