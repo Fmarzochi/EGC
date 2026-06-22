@@ -75,17 +75,20 @@ class ClaudeProvider(LLMProvider):
 
             response = self.client.messages.create(**params)
 
-            tool_calls = None
-            if response.content and hasattr(response.content[0], "type"):
-                if response.content[0].type == "tool_use":
-                    tool_input = getattr(response.content[0], "input", {})
-                    tool_calls = [
-                        ToolCall(
-                            id=getattr(response.content[0], "id", ""),
-                            name=getattr(response.content[0], "name", ""),
-                            arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
-                        )
-                    ]
+            tool_calls = []
+            for block in response.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                tool_input = getattr(block, "input", {})
+                tool_calls.append(
+                    ToolCall(
+                        id=getattr(block, "id", ""),
+                        name=getattr(block, "name", ""),
+                        arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
+                    )
+                )
+            if not tool_calls:
+                tool_calls = None
 
             content = next(
                 (block.text for block in response.content if block.type == "text"),
