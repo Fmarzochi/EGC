@@ -75,6 +75,28 @@ This checks that both MCP servers are built, registered, and reachable in every 
 
 ---
 
+## Telemetry
+
+EGC can send anonymous usage data to help improve the project. This is **opt-in**: you will be asked once on the first run of `egc install`, `egc init`, or `egc doctor`.
+
+**What is sent:** EGC version + OS platform only. No project data, no file contents, no identifiers.
+
+**How to disable at any time:**
+
+```bash
+egc telemetry off
+```
+
+or delete `~/.egc/telemetry.json`.
+
+**How to check your current setting:**
+
+```bash
+egc telemetry status
+```
+
+---
+
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues including permission errors, Node.js version mismatches, and manual MCP registration steps.

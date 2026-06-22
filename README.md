@@ -24,13 +24,13 @@
 
 **Your AI agents never start from zero again.**
 
-*No commands to learn. Just work -- EGC handles the rest.*
+*No commands to learn. Just work - EGC handles the rest.*
 
 </div>
 
 ---
 
-EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own -- no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own - no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
 
 ---
 
@@ -39,7 +39,7 @@ EGC is a local runtime that gives every AI coding tool you use a persistent memo
 You open Claude Code on a project you haven't touched in two weeks. Without typing anything:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projects--MyApp.md
+State loaded from egc-memory via ~/.egc/state/Projects-MyApp.md
 
 Context and preferences acknowledged (terse responses).
 
@@ -53,11 +53,11 @@ Ready to pick up the next items:
 Stack: typescript, javascript
 Stack agents: typescript-reviewer, javascript-reviewer
 Always use: code-reviewer
-Skill: coding-standards (cyclomatic complexity) -- apply to all code written this session
+Skill: coding-standards (cyclomatic complexity) - apply to all code written this session
 ===
 ```
 
-The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started -- on its own, without you asking. You didn't type anything. You just started working.
+The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started - on its own, without you asking. You didn't type anything. You just started working.
 
 <div align="center">
   <img src="assets/egc-terminal.gif" alt="EGC demo" width="700" />
@@ -87,7 +87,7 @@ EGC ships two MCP servers that work together during every session.
 
 ### Memory - 14 tools that your AI uses automatically
 
-No commands to memorize. Your AI reads this table so you never have to. Say anything in any language -- "continue from yesterday", "remember this decision", "what broke last time?" -- and it calls the right tool. You just work. EGC handles the rest.
+No commands to memorize. Your AI reads this table so you never have to. Say anything in any language - "continue from yesterday", "remember this decision", "what broke last time?" - and it calls the right tool. You just work. EGC handles the rest.
 
 **`egc-memory`**
 
@@ -122,38 +122,16 @@ These tools run automatically in the background. Every shell command and every f
 | `validate_write` | Validates file write paths to prevent unsafe writes |
 | `reduce_context` | Compresses file payloads to save your token budget |
 | `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
-| `auto_learn` | Mines session failures and writes actionable lessons to CLAUDE.md |
+| `auto_learn` | Mines session failures and writes actionable lessons to all AI tool config files in the project |
 
 ### Always in sync - across every tool you use
 
-**`egc watch`** -- run it once and every tool you use stays in sync. Edit context in Cursor and it appears in Gemini CLI, Copilot, Windsurf, and everywhere else automatically. When your state updates, all your tool config files update with it. No manual steps, no stale state.
+**`egc watch`** - run it once and every tool you use stays in sync. Edit context in Cursor and it appears in Gemini CLI, Copilot, Windsurf, and everywhere else automatically. When your state updates, all your tool config files update with it. No manual steps, no stale state.
 
 ```
 egc watch              # watch current project
 egc watch /path/proj   # watch a specific project
 egc watch --quiet      # suppress output
-```
-
----
-
-## Telemetry
-
-EGC can send anonymous usage data to help improve the project. This is **opt-in**: you will be asked once on the first run of `egc install`, `egc init`, or `egc doctor`.
-
-**What is sent:** EGC version + OS platform only. No project data, no file contents, no identifiers.
-
-**How to disable at any time:**
-
-```bash
-egc telemetry off
-```
-
-or delete `~/.egc/telemetry.json`.
-
-**How to check your current setting:**
-
-```bash
-egc telemetry status
 ```
 
 ---
