@@ -47,12 +47,12 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         block.text = text
         return block
 
-    def _tool_block(self, name="some_tool", tool_id="call_1"):
+    def _tool_block(self, name="some_tool", tool_id="call_1", arguments=None):
         block = MagicMock()
         block.type = "tool_use"
         block.id = tool_id
         block.name = name
-        block.configure_mock(input={"key": "value"})
+        block.configure_mock(input=arguments or {"key": "value"})
         return block
 
     def test_text_block_returns_text_content(self):
@@ -79,6 +79,25 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         )
         result = self.provider.generate(_simple_input())
         self.assertEqual(result.content, "done")
+
+    def test_multiple_tool_use_blocks_are_collected(self):
+        self.provider.client.messages.create.return_value = self._make_response(
+            [
+                self._tool_block("first_tool", "call_1", {"first": "value"}),
+                self._tool_block("second_tool", "call_2", {"second": "value"}),
+            ],
+            stop_reason="tool_use",
+        )
+        result = self.provider.generate(_simple_input())
+        self.assertIsNotNone(result.tool_calls)
+        self.assertEqual(
+            [tc.name for tc in result.tool_calls],
+            ["first_tool", "second_tool"],
+        )
+        self.assertEqual(
+            [tc.arguments for tc in result.tool_calls],
+            [{"first": "value"}, {"second": "value"}],
+        )
 
     def test_empty_content_returns_empty_string(self):
         self.provider.client.messages.create.return_value = self._make_response([])
