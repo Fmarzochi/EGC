@@ -12,6 +12,13 @@ const os = require('os');
 const path = require('path');
 const { propagateStateContent } = require('../lib/propagate-state');
 
+let projectDetect = null;
+try {
+  projectDetect = require('../lib/project-detect');
+} catch (_) {
+  // Optional module -- minimal installations without project-detect skip the briefing.
+}
+
 function readStdinJson() {
   try {
     const raw = fs.readFileSync(0, 'utf8');
@@ -37,6 +44,15 @@ function projectSlug(projectPath) {
   return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
+function parseFrontmatterValue(val) {
+  if (!val.startsWith('[')) return val;
+  try {
+    return JSON.parse(val);
+  } catch (_) {
+    return val;
+  }
+}
+
 function parseFrontmatter(content) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
@@ -45,29 +61,43 @@ function parseFrontmatter(content) {
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
-    const val = line.slice(colonIdx + 1).trim();
-    if (val.startsWith('[')) {
-      try { result[key] = JSON.parse(val); } catch (_) { result[key] = val; }
-    } else {
-      result[key] = val;
-    }
+    result[key] = parseFrontmatterValue(line.slice(colonIdx + 1).trim());
   }
   return result;
+}
+
+function agentMatchesStack(agentStack, languages, frameworks, knownFrameworkNames) {
+  if (agentStack.includes('*')) return 'generic';
+
+  const agentFrameworks = agentStack.filter(s => knownFrameworkNames.has(s));
+  const agentLanguages = agentStack.filter(s => !knownFrameworkNames.has(s));
+
+  if (agentFrameworks.length > 0) {
+    const allFrameworksPresent = agentFrameworks.every(f => frameworks.includes(f));
+    const languageMatches = agentLanguages.length === 0 || agentLanguages.some(l => languages.includes(l));
+    return allFrameworksPresent && languageMatches ? 'specific' : 'none';
+  }
+
+  return agentLanguages.some(l => languages.includes(l)) ? 'specific' : 'none';
+}
+
+function readAgentFiles(agentsDir) {
+  try {
+    return fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+  } catch (_) {
+    return null;
+  }
 }
 
 function loadRelevantAgents(languages, frameworks, knownFrameworkNames) {
   const agentsDir = path.join(__dirname, '..', '..', 'agents');
   if (!fs.existsSync(agentsDir)) return { stackSpecific: [], generic: [], missing: true };
 
+  const files = readAgentFiles(agentsDir);
+  if (!files) return { stackSpecific: [], generic: [], missing: false };
+
   const stackSpecific = [];
   const generic = [];
-
-  let files;
-  try {
-    files = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
-  } catch (_) {
-    return { stackSpecific: [], generic: [], missing: false };
-  }
 
   for (const file of files) {
     try {
@@ -75,27 +105,9 @@ function loadRelevantAgents(languages, frameworks, knownFrameworkNames) {
       const fm = parseFrontmatter(content);
       if (!fm.name) continue;
       const agentStack = Array.isArray(fm.stack) ? fm.stack : ['*'];
-
-      if (agentStack.includes('*')) {
-        generic.push(fm.name);
-        continue;
-      }
-
-      // Split agent's stack entries into frameworks and languages.
-      const agentFrameworks = agentStack.filter(s => knownFrameworkNames.has(s));
-      const agentLanguages = agentStack.filter(s => !knownFrameworkNames.has(s));
-
-      let matches = false;
-      if (agentFrameworks.length > 0) {
-        // Framework-specific agent: requires all declared frameworks to be detected.
-        matches = agentFrameworks.every(f => frameworks.includes(f)) &&
-          (agentLanguages.length === 0 || agentLanguages.some(l => languages.includes(l)));
-      } else {
-        // Language-only agent: OR semantics -- matches if any language is detected.
-        matches = agentLanguages.some(l => languages.includes(l));
-      }
-
-      if (matches) stackSpecific.push(fm.name);
+      const match = agentMatchesStack(agentStack, languages, frameworks, knownFrameworkNames);
+      if (match === 'generic') generic.push(fm.name);
+      else if (match === 'specific') stackSpecific.push(fm.name);
     } catch (_) {
       // skip unreadable agent
     }
@@ -104,24 +116,7 @@ function loadRelevantAgents(languages, frameworks, knownFrameworkNames) {
   return { stackSpecific, generic, missing: false };
 }
 
-function emitStackBriefing(projectPath) {
-  let detected;
-  let FRAMEWORK_RULES;
-  try {
-    const projectDetect = require('../lib/project-detect');
-    detected = projectDetect.detectProjectType(projectPath);
-    FRAMEWORK_RULES = projectDetect.FRAMEWORK_RULES || [];
-  } catch (_) {
-    return;
-  }
-
-  const { languages, frameworks } = detected;
-  if (languages.length === 0 && frameworks.length === 0) return;
-
-  const knownFrameworkNames = new Set((FRAMEWORK_RULES).map(r => r.framework));
-  const stack = [...new Set([...frameworks, ...languages])];
-  const { stackSpecific, generic, missing } = loadRelevantAgents(languages, frameworks, knownFrameworkNames);
-
+function buildBriefingLines(stack, stackSpecific, generic, missing) {
   const lines = ['', '=== EGC Stack Briefing ==='];
   lines.push(`Stack: ${stack.slice(0, 6).join(', ')}`);
 
@@ -131,9 +126,8 @@ function emitStackBriefing(projectPath) {
     if (stackSpecific.length > 0) {
       lines.push(`Stack agents: ${stackSpecific.slice(0, 6).join(', ')}`);
     }
-    const alwaysUse = generic.filter(n => n === 'code-reviewer').concat(
-      generic.filter(n => n !== 'code-reviewer').slice(0, 2)
-    );
+    const alwaysUse = generic.filter(n => n === 'code-reviewer')
+      .concat(generic.filter(n => n !== 'code-reviewer').slice(0, 2));
     if (alwaysUse.length > 0) {
       lines.push(`Always use: ${alwaysUse.join(', ')}`);
     }
@@ -142,37 +136,45 @@ function emitStackBriefing(projectPath) {
   lines.push('Skill: coding-standards (cyclomatic complexity) -- apply to all code written this session');
   lines.push('===');
   lines.push('');
+  return lines;
+}
 
-  process.stdout.write(lines.join('\n'));
+function emitStackBriefing(projectPath) {
+  if (!projectDetect) return;
+
+  const detected = projectDetect.detectProjectType(projectPath);
+  const { languages, frameworks } = detected;
+  if (languages.length === 0 && frameworks.length === 0) return;
+
+  const FRAMEWORK_RULES = projectDetect.FRAMEWORK_RULES || [];
+  const knownFrameworkNames = new Set(FRAMEWORK_RULES.map(r => r.framework));
+  const stack = [...new Set([...frameworks, ...languages])];
+  const { stackSpecific, generic, missing } = loadRelevantAgents(languages, frameworks, knownFrameworkNames);
+
+  process.stdout.write(buildBriefingLines(stack, stackSpecific, generic, missing).join('\n'));
+}
+
+function loadAndPrintState(projectPath) {
+  const stateFile = path.join(os.homedir(), '.egc', 'state', `${projectSlug(projectPath)}.md`);
+  if (!fs.existsSync(stateFile)) return;
+
+  const content = fs.readFileSync(stateFile, 'utf8');
+  if (!content.trim()) return;
+
+  try {
+    propagateStateContent(projectPath, content);
+  } catch (_) {
+    // Propagation is best-effort; never block session startup.
+  }
+
+  process.stdout.write('EGC persistent memory for this project (restored automatically):\n\n' + content);
 }
 
 function main() {
   try {
     const input = readStdinJson();
     const projectPath = resolveProjectPath(input);
-    const stateFile = path.join(
-      os.homedir(),
-      '.egc',
-      'state',
-      `${projectSlug(projectPath)}.md`
-    );
-
-    if (fs.existsSync(stateFile)) {
-      const content = fs.readFileSync(stateFile, 'utf8');
-      if (content.trim()) {
-        try {
-          propagateStateContent(projectPath, content);
-        } catch (_) {
-          // Propagation is best-effort; never block session startup.
-        }
-
-        process.stdout.write(
-          'EGC persistent memory for this project (restored automatically):\n\n'
-          + content
-        );
-      }
-    }
-
+    loadAndPrintState(projectPath);
     emitStackBriefing(projectPath);
   } catch (_error) {
     // Never break session startup because of memory loading.

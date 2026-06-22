@@ -369,12 +369,11 @@ function getDartDeps(projectDir) {
     if (!fs.existsSync(pubspecPath)) return [];
     const content = fs.readFileSync(pubspecPath, 'utf8');
     const deps = [];
-    const depMatches = content.match(/^(\s+)(\w[\w_-]*):/gm);
-    if (depMatches) {
-      depMatches.forEach(m => {
-        const name = m.trim().replace(/:$/, '');
-        if (name) deps.push(name);
-      });
+    for (const line of content.split('\n')) {
+      const trimmed = line.trimStart();
+      if (!trimmed || line[0] === trimmed[0]) continue;
+      const colonIdx = trimmed.indexOf(':');
+      if (colonIdx > 0) deps.push(trimmed.slice(0, colonIdx).trim());
     }
     return deps;
   } catch {

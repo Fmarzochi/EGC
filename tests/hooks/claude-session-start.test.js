@@ -141,6 +141,63 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('emits stack briefing for detectable project (JavaScript)', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    const projectDir = createTempDir('claude-session-start-project-');
+    try {
+      fs.writeFileSync(
+        path.join(projectDir, 'package.json'),
+        JSON.stringify({ name: 'test', version: '1.0.0' })
+      );
+
+      const result = runHook(homeDir, JSON.stringify({ cwd: projectDir }));
+
+      assert.strictEqual(result.code, 0);
+      assert.ok(result.stdout.includes('=== EGC Stack Briefing ==='), 'briefing header missing');
+      assert.ok(result.stdout.includes('Stack:'), 'stack line missing');
+      assert.ok(result.stdout.includes('coding-standards'), 'coding-standards reminder missing');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('briefing and state are both printed when state exists', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    const projectDir = createTempDir('claude-session-start-project-');
+    try {
+      fs.writeFileSync(
+        path.join(projectDir, 'package.json'),
+        JSON.stringify({ name: 'test', version: '1.0.0' })
+      );
+
+      const slug = path.basename(os.tmpdir()) + '--' + path.basename(projectDir);
+      const sanitized = slug.replace(/[^a-zA-Z0-9-_]/g, '_');
+      writeStateFile(homeDir, sanitized, '# My Project State\n- resume task A\n');
+
+      const result = runHook(homeDir, JSON.stringify({ cwd: projectDir }));
+
+      assert.strictEqual(result.code, 0);
+      assert.ok(result.stdout.includes('EGC persistent memory'), 'state header missing');
+      assert.ok(result.stdout.includes('=== EGC Stack Briefing ==='), 'briefing missing');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('no briefing emitted for unrecognized project type', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    try {
+      const result = runHook(homeDir, JSON.stringify({ cwd: '/workspace/empty' }));
+
+      assert.strictEqual(result.code, 0);
+      assert.ok(!result.stdout.includes('EGC Stack Briefing'), 'unexpected briefing');
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
