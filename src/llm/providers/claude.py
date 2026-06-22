@@ -87,7 +87,9 @@ class ClaudeProvider(LLMProvider):
                     ]
 
             return LLMOutput(
-                content=response.content[0].text if response.content else "",
+                content=next(
+                    (block.text for block in response.content if block.type == "text"), "",
+                ),
                 tool_calls=tool_calls,
                 model=response.model,
                 usage={
