@@ -169,12 +169,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "auto_learn",
-        description: "Mines recent tool failures from session history and writes actionable recommendations to CLAUDE.md between managed markers. Safe to call at any time; skips gracefully if no failures are found.",
+        description: "Mines recent tool failures from session history and writes actionable recommendations to all AI tool config files found in the project (CLAUDE.md, GEMINI.md, AGENTS.md, Cursor, Copilot, Windsurf, and others). Safe to call at any time; skips gracefully if no failures are found.",
         inputSchema: {
           type: "object",
           properties: {
             project_path: { type: "string", description: "Absolute path to the project root." },
-            target_file: { type: "string", description: "Path to write recommendations to. Defaults to CLAUDE.md in the project root." },
+            target_file: { type: "string", description: "Primary file to write recommendations to. Defaults to CLAUDE.md in the project root. Lessons are also propagated to all other AI tool config files found in the project." },
             limit: { type: "number", description: "Max number of failure patterns to surface (default 10)." }
           },
           required: ["project_path"]
@@ -341,9 +341,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           skipped: result.skipped,
         });
 
+        const extraFiles = result.propagated_to?.length ?? 0;
         const summary = result.skipped
           ? `[auto_learn] skipped: ${result.reason}`
-          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file} (${result.patterns_found} failure patterns found)`;
+          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file}${extraFiles > 0 ? ` and ${extraFiles} other AI tool config file(s)` : ''} (${result.patterns_found} failure patterns found)`;
 
         return { content: [{ type: 'text', text: summary }] };
       }

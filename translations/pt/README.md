@@ -23,7 +23,7 @@ EGC é um runtime local que oferece memória persistente para cada ferramenta de
 Você abre o Claude Code em um projeto que não tocou há duas semanas. Sem digitar nada:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projects--MyApp.md
+State loaded from egc-memory via ~/.egc/state/Projects-MyApp.md
 
 Context and preferences acknowledged (terse responses).
 
@@ -37,7 +37,7 @@ Ready to pick up the next items:
 Stack: typescript, javascript
 Stack agents: typescript-reviewer, javascript-reviewer
 Always use: code-reviewer
-Skill: coding-standards (cyclomatic complexity) -- apply to all code written this session
+Skill: coding-standards (cyclomatic complexity) - apply to all code written this session
 ===
 ```
 
@@ -98,36 +98,14 @@ Os arquivos de estado ficam em `~/.egc/state/<project-slug>.md`. Um arquivo por 
 | `validate_write` | Valida caminhos de escrita para prevenir gravações inseguras |
 | `reduce_context` | Comprime payloads de arquivos para economizar seu orçamento de tokens |
 | `orchestrate_task` | Roteia prompts com contexto de agentes/skills e retorna métricas de compressão |
-| `auto_learn` | Analisa falhas de sessão e escreve lições acionáveis no CLAUDE.md |
+| `auto_learn` | Analisa falhas de sessão e escreve lições acionáveis em todos os arquivos de configuração de ferramentas de IA do projeto |
 
-**`egc watch`** — daemon de sincronização bidirecional. Monitora todos os arquivos de configuração de ferramentas gerenciados pelo EGC no projeto. Quando você edita o contexto diretamente em qualquer arquivo de ferramenta (Cursor, Gemini CLI, Copilot, etc.), a mudança é extraída do bloco EGC e sincronizada com todas as outras ferramentas e de volta para `~/.egc/state/` automaticamente.
+**`egc watch`** - daemon de sincronização bidirecional. Monitora todos os arquivos de configuração de ferramentas gerenciados pelo EGC no projeto. Quando você edita o contexto diretamente em qualquer arquivo de ferramenta (Cursor, Gemini CLI, Copilot, etc.), a mudança é extraída do bloco EGC e sincronizada com todas as outras ferramentas e de volta para `~/.egc/state/` automaticamente.
 
 ```
 egc watch              # monitorar projeto atual
 egc watch /caminho     # monitorar projeto específico
 egc watch --quiet      # suprimir saída
-```
-
----
-
-## Telemetria
-
-O EGC pode enviar dados de uso anônimos para ajudar a melhorar o projeto. Isso e **opt-in**: voce sera perguntado uma vez no primeiro uso de `egc install`, `egc init` ou `egc doctor`.
-
-**O que e enviado:** versao do EGC + plataforma do sistema operacional. Sem dados de projeto, sem conteudo de arquivos, sem identificadores.
-
-**Como desativar a qualquer momento:**
-
-```bash
-egc telemetry off
-```
-
-ou exclua `~/.egc/telemetry.json`.
-
-**Como verificar sua configuracao atual:**
-
-```bash
-egc telemetry status
 ```
 
 ---

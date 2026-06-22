@@ -7,6 +7,20 @@ import { open } from 'sqlite';
 const MARKER_START = '<!-- egc:learn:start -->';
 const MARKER_END   = '<!-- egc:learn:end -->';
 
+const PROPAGATION_TARGETS = [
+  'GEMINI.md',
+  'AGENTS.md',
+  '.cursor/rules/egc-context.mdc',
+  '.github/copilot-instructions.md',
+  '.windsurf/rules/egc-context.md',
+  '.trae/rules/egc-context.md',
+  '.rules',
+  '.clinerules',
+  'CONVENTIONS.md',
+  '.cursorrules',
+  'llms.txt',
+];
+
 export interface FailurePattern {
   tool: string;
   count: number;
@@ -19,6 +33,7 @@ export interface LearnResult {
   target_file: string;
   skipped: boolean;
   reason?: string;
+  propagated_to: string[];
 }
 
 function resolveStateDb(): string {
@@ -107,28 +122,42 @@ function writeToFile(filePath: string, content: string): void {
   }
 }
 
+function propagateLearnBlock(projectRoot: string, content: string): string[] {
+  const written: string[] = [];
+  for (const rel of PROPAGATION_TARGETS) {
+    const targetPath = path.join(projectRoot, rel);
+    if (fs.existsSync(targetPath)) {
+      writeToFile(targetPath, content);
+      written.push(rel);
+    }
+  }
+  return written;
+}
+
 export async function autoLearn(opts: {
   project_path: string;
   target_file?: string;
   limit?: number;
 }): Promise<LearnResult> {
   const projectRoot = opts.project_path;
-  const targetFile  = opts.target_file ?? path.join(projectRoot, 'CLAUDE.md');
+  const primaryFile = opts.target_file ?? path.join(projectRoot, 'CLAUDE.md');
   const limit       = opts.limit ?? 10;
 
   const patterns = await loadRecentFailures(projectRoot, limit);
 
   if (patterns.length === 0) {
-    return { patterns_found: 0, recommendations_written: 0, target_file: targetFile, skipped: true, reason: 'no failures found in session history' };
+    return { patterns_found: 0, recommendations_written: 0, target_file: primaryFile, skipped: true, reason: 'no failures found in session history', propagated_to: [] };
   }
 
   const content = buildRecommendations(patterns);
-  writeToFile(targetFile, content);
+  writeToFile(primaryFile, content);
+  const propagated = propagateLearnBlock(projectRoot, content);
 
   return {
     patterns_found: patterns.length,
     recommendations_written: patterns.length,
-    target_file: targetFile,
+    target_file: primaryFile,
     skipped: false,
+    propagated_to: propagated,
   };
 }

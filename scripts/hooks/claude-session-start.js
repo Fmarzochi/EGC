@@ -16,7 +16,7 @@ let projectDetect = null;
 try {
   projectDetect = require('../lib/project-detect');
 } catch (_) {
-  // Optional module -- minimal installations without project-detect skip the briefing.
+  // Optional module - minimal installations without project-detect skip the briefing.
 }
 
 function readStdinJson() {
@@ -41,7 +41,7 @@ function resolveProjectPath(input) {
 
 function projectSlug(projectPath) {
   const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
+  return parts.slice(-2).join('-').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
 function parseFrontmatterValue(val) {
@@ -121,7 +121,7 @@ function buildBriefingLines(stack, stackSpecific, generic, missing) {
   lines.push(`Stack: ${stack.slice(0, 6).join(', ')}`);
 
   if (missing) {
-    lines.push('Agents: none installed -- run: egc install --profile full');
+    lines.push('Agents: none installed - run: egc install --profile full');
   } else {
     if (stackSpecific.length > 0) {
       lines.push(`Stack agents: ${stackSpecific.slice(0, 6).join(', ')}`);
@@ -133,7 +133,7 @@ function buildBriefingLines(stack, stackSpecific, generic, missing) {
     }
   }
 
-  lines.push('Skill: coding-standards (cyclomatic complexity) -- apply to all code written this session');
+  lines.push('Skill: coding-standards (cyclomatic complexity) - apply to all code written this session');
   lines.push('===');
   lines.push('');
   return lines;
