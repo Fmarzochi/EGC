@@ -86,11 +86,19 @@ class OllamaProvider(LLMProvider):
                     for tc in result["message"]["tool_calls"]
                 ]
 
+            prompt_tokens = result.get("prompt_eval_count", 0)
+            completion_tokens = result.get("eval_count", 0)
+
             return LLMOutput(
                 content=content,
                 tool_calls=tool_calls,
                 model=model,
                 stop_reason=result.get("done_reason"),
+                usage={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                },
             )
         except Exception as e:
             msg = str(e)
