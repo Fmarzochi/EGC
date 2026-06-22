@@ -78,11 +78,12 @@ class ClaudeProvider(LLMProvider):
             tool_calls = None
             if response.content and hasattr(response.content[0], "type"):
                 if response.content[0].type == "tool_use":
+                    tool_input = getattr(response.content[0], "input", {})
                     tool_calls = [
                         ToolCall(
                             id=getattr(response.content[0], "id", ""),
                             name=getattr(response.content[0], "name", ""),
-                            arguments=getattr(response.content[0].input, "__dict__", {}),
+                            arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
                         )
                     ]
 
