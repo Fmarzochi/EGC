@@ -15,6 +15,7 @@ except ImportError:
 from llm.core.interface import (
     AuthenticationError,
     ContextLengthError,
+    LLMError,
     LLMProvider,
     RateLimitError,
 )
@@ -81,6 +82,11 @@ class OpenAIProvider(LLMProvider):
                 params["tools"] = [tool.to_dict() for tool in input.tools]
 
             response = self.client.chat.completions.create(**params)
+            if not response.choices:
+                raise LLMError(
+                    "OpenAI returned an empty choices list",
+                    provider=ProviderType.OPENAI,
+                )
             choice = response.choices[0]
 
             tool_calls = None
