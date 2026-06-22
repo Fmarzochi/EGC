@@ -48,16 +48,11 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         return block
 
     def _tool_block(self, name="some_tool", tool_id="call_1"):
-        class _Input:
-            pass
-        inp = _Input()
-        inp.__dict__ = {"key": "value"}
-
         block = MagicMock()
         block.type = "tool_use"
         block.id = tool_id
         block.name = name
-        block.configure_mock(input=inp)
+        block.configure_mock(input={"key": "value"})
         return block
 
     def test_text_block_returns_text_content(self):
@@ -75,6 +70,7 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         result = self.provider.generate(_simple_input())
         self.assertEqual(result.content, "")
         self.assertIsNotNone(result.tool_calls)
+        self.assertEqual(result.tool_calls[0].arguments, {"key": "value"})
 
     def test_tool_use_then_text_extracts_text(self):
         """Text after a tool_use block must be returned, not skipped."""
