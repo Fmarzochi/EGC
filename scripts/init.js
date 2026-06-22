@@ -27,6 +27,19 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const os = require('os');
 
+const { version: PKG_VERSION } = require('../package.json');
+
+const isTTY = process.stdout.isTTY;
+const c = {
+  reset:  isTTY ? '\x1b[0m'  : '',
+  bold:   isTTY ? '\x1b[1m'  : '',
+  dim:    isTTY ? '\x1b[2m'  : '',
+  green:  isTTY ? '\x1b[32m' : '',
+  cyan:   isTTY ? '\x1b[36m' : '',
+  yellow: isTTY ? '\x1b[33m' : '',
+  red:    isTTY ? '\x1b[31m' : '',
+};
+
 const ROOT_DIR = path.resolve(__dirname, '..');
 const GUARDIAN_BIN = path.join(ROOT_DIR, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js');
 const MEMORY_BIN = path.join(ROOT_DIR, 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
@@ -63,9 +76,12 @@ Examples:
 
 if (flags.help) showHelp();
 
+function ok(label, detail = '')  { console.log(`  ${c.green}${c.bold}✓${c.reset}  ${c.bold}${label}${c.reset}${detail ? `  ${c.dim}${detail}${c.reset}` : ''}`); }
+function skip(label, reason = '') { console.log(`  ${c.dim}-  ${label}${reason ? `  (${reason})` : ''}${c.reset}`); }
+function warn(label, reason = '') { console.log(`  ${c.yellow}!${c.reset}  ${label}${reason ? `  ${c.dim}${reason}${c.reset}` : ''}`); }
 function log(msg) { console.log(msg); }
-function logDry(msg) { if (flags.dryRun) console.log(`  [dry-run] ${msg}`); }
-function logAction(msg) { console.log(`  ${flags.dryRun ? '[dry-run] ' : ''}${msg}`); }
+function logDry(msg) { if (flags.dryRun) console.log(`  ${c.dim}[dry-run] ${msg}${c.reset}`); }
+function logAction(msg) { console.log(`  ${c.dim}${flags.dryRun ? '[dry-run] ' : ''}${msg}${c.reset}`); }
 
 function checkNode() {
   const major = parseInt(process.versions.node.split('.')[0], 10);
@@ -77,7 +93,7 @@ function checkNode() {
     console.error('Update Node.js: https://nodejs.org/en/download');
     process.exit(1);
   }
-  log(`  ✓ node ${process.version}`);
+  ok('node', process.version);
 }
 
 function checkMcpBuilds() {
@@ -94,16 +110,16 @@ function checkMcpBuilds() {
     console.error('If you installed via git clone, run: sh install.sh');
     process.exit(1);
   }
-  log(`  ✓ MCP server builds present`);
+  ok('MCP servers', 'built');
 }
 
 function runBootstrap() {
   if (flags.mcpOnly) {
-    log(`  skipping cognitive bootstrap (--mcp-only)`);
+    skip('cognitive bootstrap', '--mcp-only');
     return;
   }
   const bootstrapScript = path.join(ROOT_DIR, 'scripts', 'bootstrap-cognitive.js');
-  logAction(`bootstrapping cognitive protocol...`);
+  logAction('bootstrapping cognitive protocol...');
   if (flags.dryRun) return;
   const result = spawnSync(process.execPath, [bootstrapScript], { stdio: 'inherit' });
   if (result.status !== 0) {
@@ -113,7 +129,7 @@ function runBootstrap() {
 }
 
 function registerMcpServers() {
-  log(`  registering MCP servers in detected tools...`);
+  logAction('detecting tools...');
   const HOME = os.homedir();
 
   const targets = [
@@ -135,13 +151,13 @@ function registerMcpServers() {
     try {
       if (target.format === 'json') {
         registerJson(target.path);
-        log(`  ✓ registered in ${target.name}`);
+        ok(target.name);
       } else if (target.format === 'toml') {
         registerToml(target.path);
-        log(`  ✓ registered in ${target.name}`);
+        ok(target.name);
       }
     } catch (err) {
-      log(`  ! skipped ${target.name}: ${err.message}`);
+      warn(target.name, err.message);
     }
   }
 }
@@ -194,7 +210,7 @@ function runStateDbBootstrap() {
 
 function runDoctor() {
   const doctorScript = path.join(ROOT_DIR, 'scripts', 'doctor.js');
-  log(`\n  running egc doctor for final validation...`);
+  log(`\n${c.dim}  running egc doctor for final validation...${c.reset}`);
   if (flags.dryRun) {
     logDry(`would run: node scripts/doctor.js`);
     return;
@@ -207,10 +223,17 @@ function runDoctor() {
   }
 }
 
-console.log('EGC init');
-if (flags.dryRun) console.log('(dry-run mode: no files will be written)');
-if (flags.mcpOnly) console.log('(mcp-only mode: cognitive bootstrap will be skipped)');
-console.log('');
+const banner = [
+  '',
+  `  ${c.cyan}${c.bold}╭──────────────────────────────────────────╮${c.reset}`,
+  `  ${c.cyan}${c.bold}│${c.reset}  ${c.bold}EGC${c.reset} ${c.dim}·${c.reset} AI context manager${' '.repeat(16)}${c.cyan}${c.bold}│${c.reset}`,
+  `  ${c.cyan}${c.bold}│${c.reset}  ${c.dim}v${PKG_VERSION}${' '.repeat(39 - PKG_VERSION.length)}${c.reset}${c.cyan}${c.bold}│${c.reset}`,
+  `  ${c.cyan}${c.bold}╰──────────────────────────────────────────╯${c.reset}`,
+  '',
+];
+console.log(banner.join('\n'));
+if (flags.dryRun) console.log(`  ${c.yellow}dry-run mode -- no files will be written${c.reset}\n`);
+if (flags.mcpOnly) console.log(`  ${c.dim}mcp-only mode -- cognitive bootstrap will be skipped${c.reset}\n`);
 
 checkNode();
 checkMcpBuilds();
@@ -220,5 +243,5 @@ runStateDbBootstrap();
 runDoctor();
 
 console.log('');
-console.log('Installation complete.');
-console.log('Run `egc doctor` anytime to verify the install.');
+console.log(`  ${c.green}${c.bold}Installation complete.${c.reset}`);
+console.log(`  ${c.dim}Run \`egc doctor\` anytime to verify.${c.reset}`);
