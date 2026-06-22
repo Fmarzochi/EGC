@@ -1,6 +1,6 @@
 # Hooks
 
-Hooks are event-driven automations that fire before or after Gemini Code tool executions. They enforce code quality, catch mistakes early, and automate repetitive checks.
+Hooks are event-driven automations that fire before or after AI tool executions. They enforce code quality, catch mistakes early, and automate repetitive checks.
 
 ## How Hooks Work
 
@@ -59,7 +59,7 @@ That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Ge
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
-| **Session start** | `SessionStart` | Loads previous context and detects package manager |
+| **Session start** | `SessionStart` | Loads previous project state and emits a stack briefing with relevant agents for the detected project type |
 | **Pre-compact** | `PreCompact` | Saves state before context compaction |
 | **Console.log audit** | `Stop` | Checks all modified files for `console.log` after each response |
 | **Session summary** | `Stop` | Persists session state when transcript path is available |

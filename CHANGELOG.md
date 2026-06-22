@@ -36,6 +36,7 @@ All notable changes to EGC are documented here.
 - Fixed `StateWatcher.start()` to return the count of successfully attached watchers rather than the count of discovered files.
 - Fixed `egc doctor` to remove stale `better-sqlite3` references after the sql.js migration.
 - Pinned `undici` to 6.27.0 in both MCP servers, patching a known CVE.
+- Fixed session start hook: the AI had no way to know which agents applied to each project. Session start now detects the project stack and emits a briefing with relevant agents at the start of every session, closing the gap between what EGC promised and what it actually delivered.
 
 ## [1.1.1] - 2026-06-19
 

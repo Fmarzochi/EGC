@@ -32,6 +32,13 @@ Ready to pick up the next items:
 • Add GEMINI.md with session memory protocol
 • Publish v1.0.1 fix to npm after clean install test passes
 • Add mcp_server_count to audit.js
+
+=== EGC Stack Briefing ===
+Stack: typescript, javascript
+Stack agents: typescript-reviewer, javascript-reviewer
+Always use: code-reviewer
+Skill: coding-standards (cyclomatic complexity) -- apply to all code written this session
+===
 ```
 
 La IA ya sabe qué estabas construyendo, qué decisiones tomaste, qué falló y exactamente dónde te detuviste. Lo sabe porque EGC guardó ese estado al final de tu última sesión y lo cargó nuevamente cuando esta comenzó. No escribiste nada. Simplemente empezaste a trabajar.
