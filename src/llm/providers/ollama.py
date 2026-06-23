@@ -73,10 +73,10 @@ class OllamaProvider(LLMProvider):
             with urllib.request.urlopen(req, timeout=60) as response:
                 result = json.loads(response.read().decode("utf-8"))
 
-            content = result.get("message", {}).get("content", "")
+            content = (result.get("message") or {}).get("content", "")
 
             tool_calls = None
-            if result.get("message", {}).get("tool_calls"):
+            if (result.get("message") or {}).get("tool_calls"):
                 tool_calls = [
                     ToolCall(
                         id=tc.get("id", ""),
