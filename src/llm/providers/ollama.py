@@ -73,17 +73,18 @@ class OllamaProvider(LLMProvider):
             with urllib.request.urlopen(req, timeout=60) as response:
                 result = json.loads(response.read().decode("utf-8"))
 
-            content = result.get("message", {}).get("content", "")
+            message = result.get("message") or {}
+            content = message.get("content", "")
 
             tool_calls = None
-            if result.get("message", {}).get("tool_calls"):
+            if message.get("tool_calls"):
                 tool_calls = [
                     ToolCall(
                         id=tc.get("id", ""),
                         name=tc.get("function", {}).get("name", ""),
                         arguments=tc.get("function", {}).get("arguments", {}),
                     )
-                    for tc in result["message"]["tool_calls"]
+                    for tc in message["tool_calls"]
                 ]
 
             prompt_tokens = result.get("prompt_eval_count", 0)
