@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**اللغة:** [English](../../README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **العربية**
+**اللغة:** [English](../../README.md) | **العربية** | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -13,7 +13,7 @@
 
 **اللغة / Idioma**
 
-[English](../../README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [**العربية**](README.md)
+[English](../../README.md) | [**العربية**](README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md)
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
