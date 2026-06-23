@@ -91,7 +91,7 @@ class ClaudeProvider(LLMProvider):
                 tool_calls = None
 
             content = next(
-                (block.text for block in response.content if block.type == "text"),
+                (block.text or "" for block in response.content if block.type == "text"),
                 "",
             )
 
