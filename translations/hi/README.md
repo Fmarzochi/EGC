@@ -11,7 +11,7 @@
 <!-- CENTERED-LANGUAGE-SELECTOR-START -->
 <div align="center">
 
-**Language / भाषा**
+**Language / اللغة / Idioma / भाषा**
 
 [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
 
