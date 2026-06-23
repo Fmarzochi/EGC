@@ -8,9 +8,8 @@ from enum import Enum
 
 try:
     from llm.core.model_resolver import ModelResolver
-except Exception:  # pragma: no cover - selector still works standalone
+except ImportError:  # pragma: no cover - selector still works standalone
     ModelResolver = None  # type: ignore[assignment]
-
 
 class Color(str, Enum):
     RESET = "\033[0m"
