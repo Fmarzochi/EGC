@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**भाषा:** [English](../../README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
+**भाषा:** [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -13,7 +13,7 @@
 
 **Language / भाषा**
 
-[English](../../README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
+[English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
@@ -127,7 +127,7 @@ EGC एक डेवलपर द्वारा बनाया गया ह�
 
 **समर्थक (Backers)**
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/muhammadhasnain3031"><img src="https://avatars.githubusercontent.com/u/262106526?v=4" width="48" height="48" alt="@muhammadhasnain3031" title="@muhammadhasnain3031 — Hindi translation" /></a>
 
 **मासिक प्रायोजक** · _पहले बनें_
 
