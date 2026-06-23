@@ -28,6 +28,8 @@ sh install.sh
 1. Compiles the MCP servers (`egc-guardian`, `egc-memory`)
 2. Initializes the local SQLite database
 3. Runs the cognitive bootstrap: writes the memory protocol into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, and equivalent files for each detected tool
+
+> **Note:** Gemini CLI free tier was discontinued on June 18, 2026 for individual users. The `~/.gemini/GEMINI.md` target still works for paid Google accounts. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative — EGC supports it via `egc install --target antigravity`.
 4. Registers both MCP servers in every detected tool's config file
 5. Asks interactively whether to install the prompt library (63 agents, 229 skills, 76 commands): skipped automatically in CI
 
@@ -45,7 +47,7 @@ EGC install
   registering MCP servers...
   ✓ registered in Claude Code (global)
   ✓ registered in Cursor
-  ✓ registered in Gemini CLI
+  ✓ registered in Gemini CLI  ← paid accounts only; see note above
 
 Install prompt library? (63 agents, 229 skills, 76 commands) [y/N]:
 
@@ -62,6 +64,16 @@ git clone https://github.com/Fmarzochi/EGC.git
 cd EGC
 .\install.ps1
 ```
+
+### Windows notes
+
+- **Node.js**: install from [nodejs.org](https://nodejs.org). Confirmed working with Node.js v24 + PowerShell 5.1 and WSL2.
+- **Antigravity CLI on Windows**: if the `irm | iex` install script hangs silently, use the direct binary download instead:
+  ```powershell
+  Invoke-WebRequest -Uri https://antigravity.dev/install/agy.exe -OutFile agy.exe
+  ```
+- **Antigravity free tier**: the starter quota is limited. Expect to exhaust it within a few exchanges. Upgrade or use Claude Code / Cursor for longer sessions.
+- **Gemini CLI**: free tier discontinued June 18, 2026. Use Antigravity CLI as a replacement on Windows.
 
 ---
 
