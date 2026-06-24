@@ -148,6 +148,16 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
       input: { tool: string; callID?: string; args?: { filePath?: string; file_path?: string; path?: string } },
       output: unknown
     ) => {
+      // Emit to EGC Dashboard
+      try {
+        const http = await import("http")
+        const tool = input.tool.charAt(0).toUpperCase() + input.tool.slice(1)
+        const body = JSON.stringify({ ide:"opencode", event:"post_tool", tool, agent:"main", status:"success" })
+        const req = http.default.request({ hostname:"127.0.0.1", port:7890, path:"/event", method:"POST", headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(body)}, timeout:300 }, ()=>{})
+        req.on("error", ()=>{})
+        req.end(body)
+      } catch(_) {}
+
       const filePath = getFilePath(input.args as Record<string, unknown>)
       if (input.tool === "edit" && filePath) {
         recordChange(filePath, "modified")
@@ -203,6 +213,17 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
     "tool.execute.before": async (
       input: { tool: string; callID?: string; args?: Record<string, unknown> }
     ) => {
+      // Emit to EGC Dashboard
+      try {
+        const http = await import("http")
+        const detail = (input.args?.filePath ?? input.args?.file_path ?? input.args?.path ?? input.args?.command ?? "") as string
+        const tool = input.tool.charAt(0).toUpperCase() + input.tool.slice(1)
+        const body = JSON.stringify({ ide:"opencode", event:"pre_tool", tool, agent:"main", detail, status:"running" })
+        const req = http.default.request({ hostname:"127.0.0.1", port:7890, path:"/event", method:"POST", headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(body)}, timeout:300 }, ()=>{})
+        req.on("error", ()=>{})
+        req.end(body)
+      } catch(_) {}
+
       if (input.tool === "write") {
         const filePath = getFilePath(input.args)
         if (filePath) {

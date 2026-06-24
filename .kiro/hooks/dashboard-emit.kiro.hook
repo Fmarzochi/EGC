@@ -1,0 +1,15 @@
+{
+  "name": "dashboard-emit-pre",
+  "version": "1.0.0",
+  "enabled": true,
+  "description": "Emit pre-tool events to EGC Dashboard at localhost:7890",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["*"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "node -e \"const h=require('http'),b=JSON.stringify({ide:'kiro',event:'pre_tool',tool:process.env.KIRO_TOOL_NAME||'',agent:'main',detail:process.env.KIRO_HOOK_FILE||'',status:'running'});const r=h.request({hostname:'127.0.0.1',port:7890,path:'/event',method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(b)},timeout:300},()=>{});r.on('error',()=>{});r.end(b);\"",
+    "timeout": 1
+  }
+}

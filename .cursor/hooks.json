@@ -15,7 +15,19 @@
         "description": "Persist session state and evaluate patterns"
       }
     ],
+    "beforeFileEdit": [
+      {
+        "command": "EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js",
+        "event": "beforeFileEdit",
+        "description": "Emit pre-edit event to EGC Dashboard"
+      }
+    ],
     "beforeShellExecution": [
+      {
+        "command": "EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js",
+        "event": "beforeShellExecution",
+        "description": "Emit pre-bash event to EGC Dashboard"
+      },
       {
         "command": "npx block-no-verify@1.1.2",
         "event": "beforeShellExecution",
@@ -29,12 +41,22 @@
     ],
     "afterShellExecution": [
       {
+        "command": "EGC_HOOK_EVENT=post_tool node .cursor/hooks/dashboard-emit.js",
+        "event": "afterShellExecution",
+        "description": "Emit post-bash event to EGC Dashboard"
+      },
+      {
         "command": "node .cursor/hooks/after-shell-execution.js",
         "event": "afterShellExecution",
         "description": "PR URL logging, build analysis"
       }
     ],
     "afterFileEdit": [
+      {
+        "command": "EGC_HOOK_EVENT=post_tool node .cursor/hooks/dashboard-emit.js",
+        "event": "afterFileEdit",
+        "description": "Emit post-edit event to EGC Dashboard"
+      },
       {
         "command": "node .cursor/hooks/after-file-edit.js",
         "event": "afterFileEdit",

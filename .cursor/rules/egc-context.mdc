@@ -1,0 +1,22 @@
+---
+description: EGC project memory (auto-updated by update_state)
+alwaysApply: true
+---
+
+## EGC Project Memory
+
+**Context:** EGC main estavel. PR #441 feat/dashboard-integration aberto com dashboard completo + botoes min/max/close + egc dashboard command + egc init auto-start. Fix de lint pushado, CI rodando.
+
+**Active decisions:**
+- PR #441 aberto: dashboard no repo EGC com 4 features integradas
+- scripts/dashboard.js: novo comando egc dashboard com start/stop/status
+- scripts/init.js: auto-start do dashboard apos egc init
+- Botoes min/max/close no header do dashboard
+- Fix lint: empty catch blocks em dashboard.js precisam de comentario
+
+**Next session:**
+- Aguardar CI do PR #441 ficar verde e mergear
+- Verificar reviews do CodeRabbit/cubic no PR #441
+- Anunciar dashboard no Discord quando PR #441 mergear
+- Versao 1.1.2 beta: nao publicar no npm sem autorizacao do Felipe
+- Issues #438 #439 #440: aguardar contributors testarem o dashboard
