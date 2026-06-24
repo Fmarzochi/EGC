@@ -5,7 +5,7 @@ const http    = require('http');
 const path    = require('path');
 const fs      = require('fs');
 const os      = require('os');
-const { exec, execSync } = require('child_process');
+const { execSync } = require('child_process');
 
 const PORT   = 7890;
 const PUBLIC = path.join(__dirname, 'public');
@@ -115,7 +115,9 @@ const clients = new Set();
 
 // ── HTTP server ─────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const reqOrigin = req.headers.origin || '';
+  res.setHeader('Access-Control-Allow-Origin',
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin) ? reqOrigin : 'http://localhost:7890');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -270,9 +272,7 @@ try {
 }
 
 server.listen(PORT, '127.0.0.1', () => {
-  const url = `http://localhost:${PORT}`;
-  console.log(`EGC Dashboard running at ${url}`);
-  exec(`xdg-open ${url} 2>/dev/null || open ${url} 2>/dev/null || true`);
+  console.log(`EGC Dashboard running at http://localhost:${PORT}`);
 });
 
 server.on('error', err => {

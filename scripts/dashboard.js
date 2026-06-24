@@ -77,11 +77,16 @@ async function start() {
 
   // Wait up to 3s for server to accept connections
   const deadline = Date.now() + 3000;
+  let ready = false;
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 200));
-    if (await isRunning()) break;
+    if (await isRunning()) { ready = true; break; }
   }
 
+  if (!ready) {
+    console.error('EGC Dashboard failed to start. Check server.js for errors.');
+    process.exit(1);
+  }
   console.log(`EGC Dashboard running at http://localhost:${PORT}`);
   openBrowser();
 }
@@ -91,6 +96,14 @@ async function stop() {
   if (!pid) {
     const already = await isRunning();
     if (!already) { console.log('Dashboard is not running.'); return; }
+    console.error('No PID file found. Stop the server manually.');
+    return;
+  }
+  try {
+    process.kill(pid, 0);
+  } catch (_) {
+    try { fs.unlinkSync(PID_FILE); } catch (__) { /* pid file is optional */ }
+    if (!await isRunning()) { console.log('Dashboard is not running (stale PID cleaned up).'); return; }
     console.error('No PID file found. Stop the server manually.');
     return;
   }

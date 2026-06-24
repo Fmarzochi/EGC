@@ -429,6 +429,7 @@ const IDES=[
   {id:'vscode',    label:'VS Code',    c:'#007acc',e:'🔷'},
   {id:'aider',     label:'Aider',      c:'#f57c00',e:'⚡'},
 ];
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 const EGC_AGENTS=[
   {id:'memory',    name:'Memory',        icon:'🧠',node:'memory',    c:'#00d992',tools:['Read','Grep','Glob','Search'],   thoughts:{Read:'🧠 Reading memory',Grep:'🔎 Searching history',Glob:'📂 Scanning directory',Search:'🔎 Searching knowledge base'}},
@@ -653,10 +654,10 @@ function renderAgents(){
 
   wrap.innerHTML=EGC_AGENTS.map(ag=>{
     const st=S.agState[ag.id]||'idle';
-    const act=S.agState[ag.id+'_act']||'Standby';
-    const file=S.agState[ag.id+'_file']||'';
+    const act=esc(S.agState[ag.id+'_act']||'Standby');
+    const file=esc(S.agState[ag.id+'_file']||'');
     const elapsed=S.agState[ag.id+'_t']?Math.round((Date.now()-S.agState[ag.id+'_t']))+'ms':'';
-    const prog=S.agState[ag.id+'_prog']||0;
+    const prog=parseFloat(S.agState[ag.id+'_prog'])||0;
     const isActive=st==='active';
     return`<div class="ag-card ${isActive?'active':'idle'}" style="--ag-c:${ag.c}">
       <div class="ag-top">
@@ -851,9 +852,9 @@ function addRow(ev,na){
   r.innerHTML=`
     <span class="tl-time" style="color:var(--muted)">${time}</span>
     <span class="tl-ico" style="color:${col}">${ico}</span>
-    <span class="tl-who" style="color:${ic.c}">${ev.agent||'main'}</span>
-    <span class="tl-what">${what}${file?` <span style="color:var(--muted);font-size:10px">${file}</span>`:''}</span>
-    <span class="tl-dur">${ev.duration_ms?ev.duration_ms+'ms':''}</span>`;
+    <span class="tl-who" style="color:${ic.c}">${esc(ev.agent||'main')}</span>
+    <span class="tl-what">${esc(what)}${file?` <span style="color:var(--muted);font-size:10px">${esc(file)}</span>`:''}</span>
+    <span class="tl-dur">${esc(ev.duration_ms?ev.duration_ms+'ms':'')}</span>`;
   list.insertBefore(r,list.firstChild);
   while(list.children.length>150)list.removeChild(list.lastChild);
 }
