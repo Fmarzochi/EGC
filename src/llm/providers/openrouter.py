@@ -41,7 +41,7 @@ class OpenRouterProvider(OpenAIProvider):
         # OpenRouter recommends (but does not require) attribution headers.
         default_headers = {}
         referer = os.environ.get("OPENROUTER_HTTP_REFERER") or os.environ.get("OPENROUTER_SITE_URL")
-        title = os.environ.get("OPENROUTER_X_TITLE") or "Everything Gemini Code"
+        title = os.environ.get("OPENROUTER_X_TITLE") or "EGC"
         if referer:
             default_headers["HTTP-Referer"] = referer
         if title:

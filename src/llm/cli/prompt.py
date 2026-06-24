@@ -57,7 +57,7 @@ async def run_prompt(prompt: str, model: str = None):
         input_data = LLMInput(messages=messages, model=model, session_id=session_id)
 
         print(f"--- EGC Bridge Execution (Session: {session_id}) ---")
-        output = await agent.run(input_data)
+        output = agent.run(input_data)
 
         print(output.content)
     finally:

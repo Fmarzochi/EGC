@@ -56,3 +56,24 @@ Both servers must be registered in your MCP config (`.mcp.json`):
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.
 
+## EGC Guardian Protocol — MANDATORY
+
+These calls are automatic and non-negotiable. Never wait for the user to ask.
+
+**Start of every task (non-trivial):**
+```
+orchestrate_task({ prompt: "<task description>" })
+```
+
+**Before every shell/Bash command:**
+```
+validate_command({ command: "<command>" })
+```
+
+**Before every new file Write or Edit on a file not yet read:**
+```
+validate_write({ filepath: "<path>" })
+```
+
+Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.
+
