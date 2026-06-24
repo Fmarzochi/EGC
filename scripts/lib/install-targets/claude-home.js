@@ -30,7 +30,23 @@ const {
   resolveStopHookScriptDestination,
 } = require('../claude-settings-hooks');
 
+const HOOK_LIB_SOURCES = [
+  'scripts/lib/propagate-state.js',
+  'scripts/lib/project-detect.js',
+];
+
 function createSessionStateHookOperations(adapter, targetRoot) {
+  const libDestDir = path.join(targetRoot, 'egc', 'lib');
+  const libOperations = HOOK_LIB_SOURCES.map(src =>
+    createRemappedOperation(
+      adapter,
+      HOOK_MODULE_ID,
+      src,
+      path.join(libDestDir, path.basename(src)),
+      { strategy: 'preserve-relative-path' }
+    )
+  );
+
   return [
     createRemappedOperation(
       adapter,
@@ -39,6 +55,7 @@ function createSessionStateHookOperations(adapter, targetRoot) {
       resolveHookScriptDestination(targetRoot),
       { strategy: 'preserve-relative-path' }
     ),
+    ...libOperations,
     createSessionStartHookMergeOperation(targetRoot),
     createRemappedOperation(
       adapter,

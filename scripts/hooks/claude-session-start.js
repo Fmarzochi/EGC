@@ -10,7 +10,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { propagateStateContent } = require('../lib/propagate-state');
+let propagateStateContent = null;
+try {
+  propagateStateContent = require('../lib/propagate-state').propagateStateContent;
+} catch (_) {
+  // Lib not installed yet; run `egc repair` to restore it.
+}
 
 let projectDetect = null;
 try {
@@ -161,10 +166,12 @@ function loadAndPrintState(projectPath) {
   const content = fs.readFileSync(stateFile, 'utf8');
   if (!content.trim()) return;
 
-  try {
-    propagateStateContent(projectPath, content);
-  } catch (_) {
-    // Propagation is best-effort; never block session startup.
+  if (propagateStateContent) {
+    try {
+      propagateStateContent(projectPath, content);
+    } catch (_) {
+      // Propagation is best-effort; never block session startup.
+    }
   }
 
   process.stdout.write('EGC persistent memory for this project (restored automatically):\n\n' + content);
