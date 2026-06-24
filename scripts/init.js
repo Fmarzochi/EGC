@@ -268,9 +268,11 @@ if (!flags.dryRun) {
         return;
       }
       const child = spawn(process.execPath, [dashboardScript], {
-        detached: true, stdio: 'ignore',
-      });
-      child.unref();
+  detached: true,
+  stdio: 'ignore',
+  ...(process.platform === 'win32' && { shell: true }),
+});
+child.unref();
       console.log(`\n  ${c.cyan}EGC Dashboard starting at http://localhost:7890${c.reset}`);
       console.log(`  ${c.dim}Minimize it to keep working. Run \`egc dashboard stop\` to close.${c.reset}`);
       setTimeout(openBrowser, 1500);
