@@ -34,7 +34,7 @@ jobs:
       - name: Unpublish existing version
         run: npm unpublish "@egchq/egc@${{ github.event.inputs.version }}" --force || true
         env:
-          NODE_AUTH_TOKEN: ${{ env.NODE_AUTH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Wait for unpublish to propagate
         run: |
@@ -58,3 +58,5 @@ jobs:
 
       - name: Publish
         run: npm publish --access public --provenance --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
