@@ -54,7 +54,8 @@ jobs:
           echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
 
       - name: Deprecate broken version if still present
-        run: npm deprecate "@egchq/egc@${{ github.event.inputs.version }}" "BROKEN: dashboard/ missing. Republish in progress -- reinstall once fixed." || true
+        run: |
+          npm deprecate "@egchq/egc@${{ github.event.inputs.version }}" "BROKEN: dashboard/ missing. Republish in progress -- reinstall once fixed." || true
 
       - name: Publish
         run: npm publish --access public --provenance --tag latest
