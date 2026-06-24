@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -42,7 +43,7 @@ class Message:
             result["tool_call_id"] = self.tool_call_id
         if self.tool_calls:
             result["tool_calls"] = [
-                {"id": tc.id, "function": {"name": tc.name, "arguments": tc.arguments}}
+                {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
                 for tc in self.tool_calls
             ]
         return result
@@ -57,10 +58,13 @@ class ToolDefinition:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": self.parameters,
-            "strict": self.strict,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+                "strict": self.strict,
+            },
         }
 
 

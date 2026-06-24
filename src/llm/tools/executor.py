@@ -76,7 +76,7 @@ class ReActAgent:
         self.max_iterations = max_iterations
         self.recorder = recorder
 
-    async def run(self, input: LLMInput) -> LLMOutput:
+    def run(self, input: LLMInput) -> LLMOutput:
         messages = list(input.messages)
         tools = input.tools or []
 
