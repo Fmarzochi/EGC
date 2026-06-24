@@ -154,9 +154,9 @@ class GeminiProvider(LLMProvider):
                 parts = []
                 if role == "tool" and msg.tool_call_id:
                     try:
-                        resp_data = json.loads(msg.content)
+                        resp_data = json.loads(msg.content) if msg.content else {}
                     except (json.JSONDecodeError, ValueError):
-                        resp_data = {"result": msg.content}
+                        resp_data = {"result": msg.content or ""}
                     parts.append(types.Part.from_function_response(
                         name=msg.name or "unknown_tool",
                         response=resp_data
