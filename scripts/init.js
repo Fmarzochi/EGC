@@ -24,7 +24,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const http = require('http');
+const { spawnSync, spawn } = require('child_process');
 const os = require('os');
 
 const { version: PKG_VERSION } = require('../package.json');
@@ -245,3 +246,26 @@ runDoctor();
 console.log('');
 console.log(`  ${c.green}${c.bold}Installation complete.${c.reset}`);
 console.log(`  ${c.dim}Run \`egc doctor\` anytime to verify.${c.reset}`);
+
+if (!flags.dryRun) {
+  const dashboardScript = path.join(ROOT_DIR, 'scripts', 'dashboard.js');
+  if (fs.existsSync(dashboardScript)) {
+    const dashPing = new Promise(resolve => {
+      const req = http.get('http://localhost:7890/ping', res => { res.resume(); resolve(res.statusCode === 200); });
+      req.on('error', () => resolve(false));
+      req.setTimeout(500, () => { req.destroy(); resolve(false); });
+    });
+    dashPing.then(already => {
+      if (already) {
+        console.log(`\n  ${c.cyan}Dashboard already running at http://localhost:7890${c.reset}`);
+        return;
+      }
+      const child = spawn(process.execPath, [dashboardScript], {
+        detached: true, stdio: 'ignore',
+      });
+      child.unref();
+      console.log(`\n  ${c.cyan}EGC Dashboard starting at http://localhost:7890${c.reset}`);
+      console.log(`  ${c.dim}Minimize it to keep working. Run \`egc dashboard stop\` to close.${c.reset}`);
+    });
+  }
+}

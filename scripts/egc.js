@@ -84,6 +84,10 @@ const COMMANDS = {
     script: 'telemetry.js',
     description: 'Manage anonymous usage telemetry (status | on | off)',
   },
+  dashboard: {
+    script: 'dashboard.js',
+    description: 'Start the EGC Dashboard (localhost:7890). Use "stop" or "status" as sub-args.',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -104,6 +108,7 @@ const PRIMARY_COMMANDS = [
   'uninstall',
   'watch',
   'telemetry',
+  'dashboard',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);

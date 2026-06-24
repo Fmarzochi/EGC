@@ -1,0 +1,14 @@
+{
+  "name": "EGC - Extended Global Context · Mission Control",
+  "short_name": "EGC Mission Control",
+  "description": "Real-time runtime observability for the EGC ecosystem",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101010",
+  "theme_color": "#101010",
+  "orientation": "landscape",
+  "icons": [
+    { "src": "/egc-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/egc-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
