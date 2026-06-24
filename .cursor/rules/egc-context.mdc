@@ -5,18 +5,16 @@ alwaysApply: true
 
 ## EGC Project Memory
 
-**Context:** EGC main estavel. PR #441 feat/dashboard-integration aberto com dashboard completo + botoes min/max/close + egc dashboard command + egc init auto-start. Fix de lint pushado, CI rodando.
+**Context:** EGC v1.1.5 lançado e publicado no npm. Trabalhando em fixes pós-release enquanto Felipe dorme.
 
 **Active decisions:**
-- PR #441 aberto: dashboard no repo EGC com 4 features integradas
-- scripts/dashboard.js: novo comando egc dashboard com start/stop/status
-- scripts/init.js: auto-start do dashboard apos egc init
-- Botoes min/max/close no header do dashboard
-- Fix lint: empty catch blocks em dashboard.js precisam de comentario
+- republish.yml usa env.NODE_AUTH_TOKEN (linha 37) em vez de secrets.NODE_AUTH_TOKEN
+- README.md não menciona o dashboard em nenhuma seção
+- Glama mostra tools:[] para o servidor EGC
 
 **Next session:**
-- Aguardar CI do PR #441 ficar verde e mergear
-- Verificar reviews do CodeRabbit/cubic no PR #441
-- Anunciar dashboard no Discord quando PR #441 mergear
-- Versao 1.1.2 beta: nao publicar no npm sem autorizacao do Felipe
-- Issues #438 #439 #440: aguardar contributors testarem o dashboard
+- republish.yml: corrigir env.NODE_AUTH_TOKEN -> secrets.NODE_AUTH_TOKEN nos steps Unpublish e Publish
+- README.md: adicionar secao Dashboard apos 'Always in sync'
+- Atualizar traducoes do README (ar, es, hi, pt) com secao Dashboard
+- Verificar Glama -- Felipe precisa logar para ver logs do build failure
+- Atualizar local EGC para v1.1.5 e testar egc init abre browser
