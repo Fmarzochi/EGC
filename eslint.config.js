@@ -6,6 +6,8 @@ module.exports = [
         ignores: [
             '.opencode/dist/**',
             '.cursor/**',
+            '.claude/**',
+            'dashboard/**',
             'node_modules/**',
             'mcp/servers/*/build/**'
         ]
