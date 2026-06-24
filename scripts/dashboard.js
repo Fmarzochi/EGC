@@ -31,14 +31,14 @@ function openBrowser() {
                process.platform === 'darwin' ? 'open' : 'xdg-open';
   try {
     spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' });
-  } catch (_) {}
+  } catch (_) { /* browser open is best-effort */ }
 }
 
 function writePid(pid) {
   try {
     fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
     fs.writeFileSync(PID_FILE, String(pid));
-  } catch (_) {}
+  } catch (_) { /* pid file is optional */ }
 }
 
 function readPid() {
