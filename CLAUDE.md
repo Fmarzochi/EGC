@@ -71,7 +71,7 @@ These calls are automatic and non-negotiable. Never wait for the user to ask.
 orchestrate_task({ prompt: "<task description>" })
 ```
 
-**Before every Bash command:**
+**Before every shell/Bash command:**
 ```
 validate_command({ command: "<command>" })
 ```
