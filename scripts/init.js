@@ -268,7 +268,9 @@ if (!flags.dryRun) {
         return;
       }
       const child = spawn(process.execPath, [dashboardScript], {
-        detached: true, stdio: 'ignore',
+        detached: true,
+        stdio: 'ignore',
+        ...(process.platform === 'win32' && { shell: true }),
       });
       child.unref();
       console.log(`\n  ${c.cyan}EGC Dashboard starting at http://localhost:7890${c.reset}`);
