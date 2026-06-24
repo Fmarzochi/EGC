@@ -134,6 +134,16 @@ egc watch /path/proj   # watch a specific project
 egc watch --quiet      # suppress output
 ```
 
+### Dashboard - real-time Mission Control
+
+**`egc dashboard`** - open your browser at `http://localhost:7890` and watch everything your AI does, live. Tool calls, file edits, shell commands, token usage, memory state, and agent status stream in real time. The dashboard starts automatically every time you run `egc init`.
+
+```
+egc dashboard          # start Mission Control (auto-starts after egc init)
+egc dashboard stop     # stop the background server
+egc dashboard status   # check if the server is running
+```
+
 ---
 
 ## Prompt library

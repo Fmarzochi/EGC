@@ -112,6 +112,16 @@ egc watch /ruta/proj   # monitorear proyecto específico
 egc watch --quiet      # silenciar salida
 ```
 
+### Dashboard - panel de control en tiempo real
+
+**`egc dashboard`** - abre el navegador en `http://localhost:7890` y observa todo lo que hace tu agente de IA, en vivo. Llamadas a herramientas, ediciones de archivos, comandos shell, uso de tokens, estado de memoria y estado del agente en tiempo real. El dashboard arranca automáticamente al ejecutar `egc init`.
+
+```
+egc dashboard          # iniciar el panel (arranca automáticamente tras egc init)
+egc dashboard stop     # detener el servidor en segundo plano
+egc dashboard status   # comprobar si el servidor está ejecutándose
+```
+
 ---
 
 ## Biblioteca de prompts
