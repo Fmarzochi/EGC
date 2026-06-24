@@ -255,9 +255,16 @@ if (!flags.dryRun) {
       req.on('error', () => resolve(false));
       req.setTimeout(500, () => { req.destroy(); resolve(false); });
     });
+    const openBrowser = () => {
+      const url = 'http://localhost:7890';
+      const cmd = process.platform === 'win32' ? 'start' :
+                  process.platform === 'darwin' ? 'open' : 'xdg-open';
+      try { require('child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* best-effort */ }
+    };
     dashPing.then(already => {
       if (already) {
         console.log(`\n  ${c.cyan}Dashboard already running at http://localhost:7890${c.reset}`);
+        openBrowser();
         return;
       }
       const child = spawn(process.execPath, [dashboardScript], {
@@ -266,6 +273,7 @@ if (!flags.dryRun) {
       child.unref();
       console.log(`\n  ${c.cyan}EGC Dashboard starting at http://localhost:7890${c.reset}`);
       console.log(`  ${c.dim}Minimize it to keep working. Run \`egc dashboard stop\` to close.${c.reset}`);
+      setTimeout(openBrowser, 1500);
     });
   }
 }
