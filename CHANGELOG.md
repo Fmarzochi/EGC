@@ -2,6 +2,26 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.4] - 2026-06-24
+
+### Bug Fixes
+
+- **npm package corrected**: `dashboard/` directory and the `ws` dependency were missing from the v1.1.3 npm tarball. Users who installed v1.1.3 globally and saw `EGC Dashboard not found. Expected: .../dashboard/server.js` should run `npm install -g @egchq/egc` to get the fix.
+
+## [1.1.3] - 2026-06-24
+
+### New Features
+
+- **EGC Dashboard** (`egc dashboard`): real-time Mission Control panel at `http://localhost:7890`. Shows live tool calls, file edits, shell commands, token usage, memory state, and agent status as your AI works. Auto-starts after `egc init`. Runs as a background WebSocket server; stop with `egc dashboard stop` and check status with `egc dashboard status`.
+- **IDE hook emitters**: Cursor, Kiro, and OpenCode now emit structured hook events to the dashboard over WebSocket. Tool calls, file writes, and shell commands appear in real time in the Mission Control panel.
+
+### Bug Fixes
+
+- Fixed OpenAI tool serialization: `parameters` is now always emitted as an object, preventing schema validation errors with strict OpenAI-compatible endpoints.
+- Fixed async `ReActAgent` iteration: the agent loop now correctly awaits each tool call result before continuing.
+- Fixed stale `X-Title` header in the OpenRouter provider: the header is now derived from the live session title instead of a startup-time snapshot.
+- Fixed `GeminiProvider` null content crash: provider now skips `null` content parts instead of throwing on `.text` access.
+
 ## [1.1.2] - 2026-06-20
 
 ### New Features
