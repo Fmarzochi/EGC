@@ -1,0 +1,49 @@
+name: Republish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to republish (e.g. 1.1.3)'
+        required: true
+
+permissions: {}
+
+jobs:
+  republish:
+    name: Unpublish and republish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 'v${{ github.event.inputs.version }}'
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unpublish existing version
+        run: npm unpublish "@egchq/egc@${{ github.event.inputs.version }}" --force || true
+        env:
+          NODE_AUTH_TOKEN: ${{ env.NODE_AUTH_TOKEN }}
+
+      - name: Wait for unpublish to propagate
+        run: sleep 20
+
+      - name: Pack tarball
+        id: pack
+        run: |
+          TARBALL=$(npm pack --json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'))[0].filename")
+          echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: npm publish --access public --provenance --tag latest
