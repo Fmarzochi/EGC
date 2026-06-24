@@ -2,6 +2,14 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.5] - 2026-06-24
+
+### Bug Fixes
+
+- **SessionStart hook no longer crashes on startup**: the install plan now copies `propagate-state.js` and `project-detect.js` into `~/.claude/egc/lib/` alongside the hook script. Both `require()` calls are also wrapped in try/catch so existing installs degrade gracefully until `egc repair` runs.
+- **`egc init` opens the browser automatically** after starting the dashboard, and also when the dashboard was already running.
+- **ESLint now ignores `.claude/worktrees/` and `dashboard/`** -- eliminates lint CI failures caused by Claude Code agent worktrees being scanned and service-worker browser globals in the dashboard files.
+
 ## [1.1.4] - 2026-06-24
 
 ### Bug Fixes
