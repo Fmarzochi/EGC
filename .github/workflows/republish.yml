@@ -37,7 +37,15 @@ jobs:
           NODE_AUTH_TOKEN: ${{ env.NODE_AUTH_TOKEN }}
 
       - name: Wait for unpublish to propagate
-        run: sleep 20
+        run: |
+          for i in $(seq 1 12); do
+            if ! npm view "@egchq/egc@${{ github.event.inputs.version }}" version >/dev/null 2>&1; then
+              echo "Version ${{ github.event.inputs.version }} no longer visible in registry"
+              break
+            fi
+            echo "Attempt $i: version still visible, waiting 10s..."
+            sleep 10
+          done
 
       - name: Pack tarball
         id: pack
