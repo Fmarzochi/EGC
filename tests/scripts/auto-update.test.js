@@ -73,6 +73,7 @@ function makeRecord({ repoRoot, homeDir, projectRoot, adapter, request, resoluti
 
 function ensureFakeRepo(repoRoot) {
   fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(repoRoot, '.git'), { recursive: true });
   fs.writeFileSync(
     path.join(repoRoot, 'package.json'),
     JSON.stringify({ name: 'everything-gemini', version: '1.10.0' }, null, 2)
@@ -112,11 +113,13 @@ function runTests() {
   })) passed += 1; else failed += 1;
 
   if (test('deriveRepoRootFromState uses sourcePath and sourceRelativePath', () => {
+    // Use a sourceRelativePath that does not exist in the running EGC package so
+    // the __dirname-based fast path falls through to the absolute-sourcePath fallback.
     const state = {
       operations: [
         {
-          sourcePath: path.join('/tmp', 'egc', 'scripts', 'setup-package-manager.js'),
-          sourceRelativePath: path.join('scripts', 'setup-package-manager.js'),
+          sourcePath: path.join('/tmp', 'egc', 'custom-nonexistent-file.js'),
+          sourceRelativePath: 'custom-nonexistent-file.js',
         },
       ],
     };

@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { version: PKG_VERSION } = require('../package.json');
 
 const { discoverInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
@@ -54,28 +55,36 @@ function parseArgs(argv) {
 function deriveRepoRootFromState(state) {
   const operations = Array.isArray(state && state.operations) ? state.operations : [];
 
+  // Prefer deriving root from the currently running package (__dirname = <pkg>/scripts)
+  // This works correctly regardless of which Node version is active.
+  const pkgRoot = path.resolve(__dirname, '..');
+  for (const operation of operations) {
+    if (typeof operation.sourceRelativePath !== 'string' || !operation.sourceRelativePath.trim()) {
+      continue;
+    }
+    if (fs.existsSync(path.join(pkgRoot, operation.sourceRelativePath))) {
+      return pkgRoot;
+    }
+  }
+
+  // Fallback: derive from absolute sourcePath (git-clone installs)
   for (const operation of operations) {
     if (typeof operation.sourcePath !== 'string' || !operation.sourcePath.trim()) {
       continue;
     }
-
     if (typeof operation.sourceRelativePath !== 'string' || !operation.sourceRelativePath.trim()) {
       continue;
     }
-
     const relativeParts = operation.sourceRelativePath
       .split(/[\\/]+/)
       .filter(Boolean);
-
     if (relativeParts.length === 0) {
       continue;
     }
-
     let repoRoot = path.resolve(operation.sourcePath);
     for (let index = 0; index < relativeParts.length; index += 1) {
       repoRoot = path.dirname(repoRoot);
     }
-
     return repoRoot;
   }
 
@@ -234,20 +243,28 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   };
 
   if (!options.dryRun) {
-    execute('git', ['fetch', '--all', '--prune'], { cwd: repoRoot, env });
-    try {
-      execute('git', ['pull', '--ff-only'], { cwd: repoRoot, env });
-    } catch (pullError) {
-      const msg = String(pullError.message || '');
-      if (msg.includes('no tracking information') || msg.includes('set-upstream')) {
-        throw new Error(
-          'git pull failed: no upstream tracking branch configured.\n' +
-          'If installed via npm, update with: npm install -g @egchq/egc@latest\n' +
-          'Otherwise: git branch --set-upstream-to=origin/<branch>',
-          { cause: pullError }
-        );
+    const isGitRepo = fs.existsSync(path.join(repoRoot, '.git'));
+    if (!isGitRepo) {
+      // npm-installed: git pull is not applicable. Reinstall from current package.
+      console.log(`EGC is installed via npm (v${PKG_VERSION}).`);
+      console.log('To upgrade to a newer version, run: npm install -g @egchq/egc@latest');
+      console.log('Reinstalling current version into managed targets...\n');
+    } else {
+      execute('git', ['fetch', '--all', '--prune'], { cwd: repoRoot, env });
+      try {
+        execute('git', ['pull', '--ff-only'], { cwd: repoRoot, env });
+      } catch (pullError) {
+        const msg = String(pullError.message || '');
+        if (msg.includes('no tracking information') || msg.includes('set-upstream')) {
+          throw new Error(
+            'git pull failed: no upstream tracking branch configured.\n' +
+            'To update: npm install -g @egchq/egc@latest\n' +
+            'Or set upstream: git branch --set-upstream-to=origin/<branch>',
+            { cause: pullError }
+          );
+        }
+        throw pullError;
       }
-      throw pullError;
     }
   }
 

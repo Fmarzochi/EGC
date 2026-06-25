@@ -2,7 +2,7 @@
 
 ## Via npm (recommended)
 
-Requires [Node.js 20 or later](https://nodejs.org/en/download).
+Requires [Node.js 20 or later](https://nodejs.org/en/download). Node.js 24 LTS is recommended.
 
 ```bash
 npm install -g @egchq/egc
@@ -10,6 +10,8 @@ egc install
 ```
 
 That's it. The installer detects which AI tools you have installed and configures all of them automatically.
+
+> **Note:** If you use a Node.js version manager (mise, nvm, asdf, fnm), install EGC under your **default** Node version -- the one active outside any project directory. Installing it under multiple Node versions causes version conflicts. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for details.
 
 ---
 
