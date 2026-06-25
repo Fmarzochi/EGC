@@ -5,16 +5,14 @@ alwaysApply: true
 
 ## EGC Project Memory
 
-**Context:** EGC v1.1.5 lançado e publicado no npm. Trabalhando em fixes pós-release enquanto Felipe dorme.
+**Context:** EGC v1.1.6 em produção. PR #474 mergeado (a442023f): três fixes críticos -- server.js brace, release.yml hash pin, package.json pnpm selector.
 
 **Active decisions:**
-- republish.yml usa env.NODE_AUTH_TOKEN (linha 37) em vez de secrets.NODE_AUTH_TOKEN
-- README.md não menciona o dashboard em nenhuma seção
-- Glama mostra tools:[] para o servidor EGC
+- PR #474 mergeado (a442023f): fecha accumulateEvent em server.js, pina peter-evans/repository-dispatch@ff45666b, remove resolutions Yarn e adiciona markdownlint-cli>js-yaml em pnpm.overrides
+- Glama build falhou em 24/06 e 25/06 por ERR_PNPM_INVALID_SELECTOR no campo resolutions.markdownlint-cli/js-yaml
+- CodeQL javascript-typescript estava falhando com 'Unexpected token' no commit 89488b63
 
 **Next session:**
-- republish.yml: corrigir env.NODE_AUTH_TOKEN -> secrets.NODE_AUTH_TOKEN nos steps Unpublish e Publish
-- README.md: adicionar secao Dashboard apos 'Always in sync'
-- Atualizar traducoes do README (ar, es, hi, pt) com secao Dashboard
-- Verificar Glama -- Felipe precisa logar para ver logs do build failure
-- Atualizar local EGC para v1.1.5 e testar egc init abre browser
+- Verificar se Glama rebuild passou após merge do PR #474 em main -- acessar https://glama.ai/mcp/servers/Fmarzochi/EGC/admin
+- Commitar os arquivos unstaged (.cursor/rules/egc-context.mdc, .trae/rules/egc-context.md, AGENTS.md, GEMINI.md) quando houver contexto do que mudou
+- Scorecard alert #256 (Pinned-Dependencies) deve fechar automaticamente após merge -- verificar em Security > Code scanning
