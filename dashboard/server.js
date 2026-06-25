@@ -125,6 +125,8 @@ if (ev.usage) {
   p.tokens.cacheRead += (ev.usage.cache_read_input_tokens || 0);
   p.tokens.cacheWrite += (ev.usage.cache_creation_input_tokens || 0);
 }
+}
+
 // Mark providers offline after 90 s without events
 setInterval(() => {
   const now = Date.now();
