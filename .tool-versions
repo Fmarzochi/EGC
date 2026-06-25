@@ -1,8 +1,8 @@
 # .tool-versions — Local development tool versions for asdf / mise
 # This is a LOCAL DEVELOPMENT default only — NOT a runtime requirement.
-# The project supports Node.js >= 18 (see engines in package.json).
+# The project supports Node.js >= 20 (see engines in package.json).
 # asdf: run `asdf install` to get this version locally.
-# mise: run `mise install`. Any 18.x, 20.x, or 22.x release works.
+# mise: run `mise install`. Any 20.x, 22.x, or 24.x release works.
 
-nodejs 20.19.0
+nodejs 24.16.0
 python 3.12.8
