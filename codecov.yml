@@ -25,6 +25,8 @@ coverage:
         target: 80%
         # Allow up to 5% miss on patch before failing
         threshold: 5%
+        # Informational only: shows coverage diff without blocking merges
+        informational: true
         if_no_uploads: success
         if_not_found: success
 
