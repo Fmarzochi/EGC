@@ -107,13 +107,10 @@
     "js-yaml": "^4.2.0",
     "markdown-it": "^14.2.0"
   },
-  "resolutions": {
-    "markdownlint-cli/js-yaml": "^4.2.0",
-    "markdown-it": "^14.2.0"
-  },
   "pnpm": {
     "overrides": {
       "js-yaml": "^4.2.0",
+      "markdownlint-cli>js-yaml": "^4.2.0",
       "markdown-it": "^14.2.0"
     }
   }
