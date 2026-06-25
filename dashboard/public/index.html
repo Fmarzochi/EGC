@@ -256,6 +256,70 @@ body.minimized footer{display:none!important;}
 .tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:color .15s;user-select:none;-webkit-tap-highlight-color:transparent;}
 .tab-btn.a{color:var(--primary);}
 .tab-ico{font-size:20px;line-height:1;}
+/* ── Usage Analytics Heatmap ───────────────────────── */
+
+  .heatmap-grid{
+    display:grid;
+    grid-template-columns:40px repeat(24,12px);
+    gap:2px;
+    margin-top:10px;
+    align-items:center;
+  }
+
+  .heat-hours{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    margin:6px 0 8px 42px;
+    color:var(--muted);
+    font-size:10px;
+    letter-spacing:.5px;
+  }
+
+  .heat-hours span{
+    text-align:center;
+  }
+
+  .heat-day{
+    font-size:10px;
+    color:#888;
+    text-align:right;
+    padding-right:6px;
+  }
+
+  .heat-cell{
+    width:12px;
+    height:12px;
+    border-radius:2px;
+    background:#1f2937;
+  }
+
+  .heat-0{ background:#1f2937; }
+  .heat-1{ background:#1e3a8a; }
+  .heat-2{ background:#2563eb; }
+  .heat-3{ background:#3b82f6; }
+  .heat-4{ background:#60a5fa; }
+
+  /* Heatmap Legend */
+  .heat-legend{
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    gap:4px;
+    margin-top:10px;
+    color:var(--muted);
+    font-size:10px;
+  }
+
+  .heat-legend .heat-cell{
+    width:12px;
+    height:12px;
+  }
+
+  #peakSummary{
+    margin-bottom:12px;
+    font-size:12px;
+    color:var(--muted);
+  }
 </style>
 </head>
 <body>
@@ -395,7 +459,39 @@ body.minimized footer{display:none!important;}
       <span class="eye">Economy</span>
       <div id="ecoContent"><div class="eco-empty">Waiting for provider events…</div></div>
     </div>
-  </section>
+    <div class="rcard">
+  <span class="eye">Usage Analytics</span>
+
+  <div id="peakSummary" class="rc-label">
+    Waiting for session history…
+  </div>
+
+  <!-- Hour labels -->
+  <div class="heat-hours">
+    <span>00</span>
+    <span>06</span>
+    <span>12</span>
+    <span>18</span>
+    <span>23</span>
+  </div>
+<div id="usageHeatmap" class="heatmap-grid">
+  <!-- Heatmap will be rendered here -->
+</div>
+
+<div class="heat-legend">
+  <span>Less</span>
+
+  <div class="heat-cell heat-0"></div>
+  <div class="heat-cell heat-1"></div>
+  <div class="heat-cell heat-2"></div>
+  <div class="heat-cell heat-3"></div>
+  <div class="heat-cell heat-4"></div>
+
+  <span>More</span>
+</div>
+
+</div>
+</section>
 </main>
 
 <footer class="timeline">
@@ -489,8 +585,19 @@ const S={
 /* ── GREETING ───────────────────────────────────────────── */
 const ghr=new Date().getHours();
 document.getElementById('grT').textContent=ghr<12?'Good morning':ghr<18?'Good afternoon':'Good evening';
-function dg(){const el=document.getElementById('gr');el.classList.add('out');setTimeout(()=>el.remove(),500);}
-setTimeout(dg,7000);
+function dg() {
+  const el = document.getElementById("gr");
+
+  if (!el) return;
+
+  el.classList.add("out");
+
+  setTimeout(() => {
+    if (el.parentNode) {
+      el.remove();
+    }
+  }, 500);
+}
 
 /* ── MOBILE TABS ────────────────────────────────────────── */
 function swTab(name){
@@ -753,6 +860,121 @@ function renderEconomy(telemetry){
     </div>`;
   }).join('');
 }
+  const DAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday"
+];
+
+function buildHeatmap(sessions) {
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+
+  let peak = {
+    day: 0,
+    hour: 0,
+    value: 0
+  };
+
+  sessions.forEach(session => {
+    const date = new Date(session.timestamp);
+
+    const day = (date.getDay() + 6) % 7;
+    const hour = date.getHours();
+
+   grid[day][hour] += session.total_tokens; 
+
+    if (grid[day][hour] > peak.value) {
+      peak = {
+        day,
+        hour,
+        value: grid[day][hour]
+      };
+    }
+  });
+
+  return { grid, peak };
+}
+async function loadSessionHistory() {
+  try {
+   const response = await fetch("/session-history");
+
+if (!response.ok) {
+    throw new Error("Failed to fetch session history");
+}
+
+const sessions = await response.json();
+    if (sessions.length === 0) {
+    document.getElementById("peakSummary").textContent =
+        "No session history available.";
+
+    document.getElementById("usageHeatmap").innerHTML = "";
+
+    return;
+}
+
+const { grid, peak } = buildHeatmap(sessions);
+
+renderHeatmap(grid);
+
+    document.getElementById("peakSummary").textContent =
+      `Your peak hours are ${DAY_NAMES[peak.day]} ${String(peak.hour).padStart(2, "0")}:00–${String(peak.hour + 1).padStart(2, "0")}:00`;
+
+  } catch (err) {
+    console.error(err);
+
+    document.getElementById("peakSummary").textContent =
+      "Failed to load session history.";
+  }
+}
+function renderHeatmap(grid) {
+    const container = document.getElementById("usageHeatmap");
+    container.innerHTML = "";
+
+    const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+    const max = Math.max(...grid.flat(),1);
+
+    grid.forEach((row, dayIndex) => {
+
+        const label = document.createElement("div");
+        label.className = "heat-day";
+        label.textContent = days[dayIndex];
+
+        container.appendChild(label);
+
+       row.forEach((value, hour) => { 
+
+            const cell = document.createElement("div");
+
+            let level = 0;
+
+            if(value>0){
+
+                const ratio=value/max;
+
+                if(ratio<0.25) level=1;
+                else if(ratio<0.5) level=2;
+                else if(ratio<0.75) level=3;
+                else level=4;
+            }
+
+            cell.className=`heat-cell heat-${level}`;
+
+            cell.title =
+`${days[dayIndex]}
+${String(hour).padStart(2, "0")}:00 - ${String(hour + 1).padStart(2, "0")}:00
+
+${value.toLocaleString()} tokens`;
+
+            container.appendChild(cell);
+        });
+
+    });
+}
 
 function pollTelemetry(){
   fetch('/telemetry').then(r=>r.json()).then(t=>{
@@ -934,6 +1156,10 @@ fetch('/stats').then(r=>r.json()).then(st=>{
 });
 
 connect();
+
+loadSessionHistory();
+
+setInterval(loadSessionHistory, 10000);
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/sw.js').catch(()=>{});
