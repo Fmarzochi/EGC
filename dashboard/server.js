@@ -70,6 +70,9 @@ const CLAUDE_PRICING = {
 
 // Runtime telemetry accumulated from real events
 const providerState = {};
+// Store recent completed sessions for dashboard analytics
+const sessionHistory = [];
+const MAX_SESSION_HISTORY = 1000;
 
 function getProvider(ide) {
   if (!providerState[ide]) {
@@ -86,20 +89,42 @@ function getProvider(ide) {
 }
 
 function accumulateEvent(ev) {
+  
+
   const p = getProvider(ev.ide);
   p.lastSeen = Date.now();
   p.running  = true;
 
-  if (ev.event === 'pre_tool')    p.toolCalls++;
-  if (ev.event === 'session_end' && ev.usage) {
-    p.sessions++;
-    p.tokens.input      += (ev.usage.input_tokens                  || 0);
-    p.tokens.output     += (ev.usage.output_tokens                 || 0);
-    p.tokens.cacheRead  += (ev.usage.cache_read_input_tokens       || 0);
-    p.tokens.cacheWrite += (ev.usage.cache_creation_input_tokens   || 0);
+if (ev.event === 'pre_tool') p.toolCalls++;
+
+if (ev.event === 'session_end') {
+  const usage = ev.usage || {};
+
+  // Save session for analytics
+  sessionHistory.push({
+    timestamp: Date.now(),
+    ide: ev.ide,
+    input_tokens: usage.input_tokens || 0,
+    output_tokens: usage.output_tokens || 0,
+    total_tokens:
+      (usage.input_tokens || 0) +
+      (usage.output_tokens || 0)
+  });
+
+  // Keep memory bounded
+  if (sessionHistory.length > MAX_SESSION_HISTORY) {
+    sessionHistory.shift();
   }
 }
 
+if (ev.usage) {
+  p.sessions++;
+
+  p.tokens.input += (ev.usage.input_tokens || 0);
+  p.tokens.output += (ev.usage.output_tokens || 0);
+  p.tokens.cacheRead += (ev.usage.cache_read_input_tokens || 0);
+  p.tokens.cacheWrite += (ev.usage.cache_creation_input_tokens || 0);
+}
 // Mark providers offline after 90 s without events
 setInterval(() => {
   const now = Date.now();
@@ -172,6 +197,20 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(result));
     return;
   }
+  // ── GET /session-history ───────────────────────────────
+if (req.method === 'GET' && req.url === '/session-history') {
+
+  
+  
+ 
+
+  res.writeHead(200, {
+    'Content-Type': 'application/json'
+  });
+
+  res.end(JSON.stringify(sessionHistory));
+  return;
+}
 
   // ── GET /stats ───────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/stats') {
