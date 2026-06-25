@@ -106,3 +106,10 @@ jobs:
 
       - name: Publish npm package
         run: npm publish --access public --provenance --tag "${{ steps.npm_publish_state.outputs.dist_tag }}"
+
+      - name: Trigger EGCSite rebuild
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.EGCSITE_DISPATCH_TOKEN }}
+          repository: Fmarzochi/EGCSite
+          event-type: egc-release
