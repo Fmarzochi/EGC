@@ -12,7 +12,7 @@
       "name": "egc",
       "source": "./",
       "description": "EGC - Extended Global Context: 62 agents, 228 skills, 74 commands, persistent memory across sessions, and production-ready hooks for TDD, security scanning, code review, and continuous learning",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "author": {
         "name": "Felipe Marzochi",
         "email": "fmarzochi@gmail.com"

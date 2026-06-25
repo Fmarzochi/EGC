@@ -1,6 +1,6 @@
 spec_version: "0.1.0"
 name: egc
-version: 1.1.5
+version: 1.1.6
 description: "EGC - Extended Global Context. Persistent memory and shared context for AI coding tools. Desenvolvido por Felipe Marzochi. @MarzochiFelipe. https://github.com/Fmarzochi/EGC"
 author: fmarzochi
 license: MIT
