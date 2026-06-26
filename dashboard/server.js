@@ -60,13 +60,39 @@ const CAPABILITIES = {
   aider:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
 };
 
-// Pricing per 1M tokens — updated from Anthropic pricing page
-const CLAUDE_PRICING = {
-  input:      3.00,
-  output:    15.00,
-  cacheRead:  0.30,
-  cacheWrite: 3.75,
+// Pricing per 1M tokens — loaded from prices.json (configurable)
+const PRICES_PATH = path.join(__dirname, 'prices.json');
+let MODEL_PRICES = {};
+function loadPrices() {
+  try {
+    MODEL_PRICES = JSON.parse(fs.readFileSync(PRICES_PATH, 'utf8'));
+  } catch (_) {
+    MODEL_PRICES = {
+      '_default_claude': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+      '_default_gemini': { input: 0.10, output: 0.40,  cacheRead: 0.025, cacheWrite: 0.00 },
+      '_default_codex':  { input: 2.50, output: 10.00, cacheRead: 1.25, cacheWrite: 0.00 },
+    };
+  }
+}
+loadPrices();
+fs.watchFile(PRICES_PATH, () => loadPrices());
+
+const IDE_PRICE_KEY = {
+  claude: '_default_claude',
+  gemini: '_default_gemini',
+  codex:  '_default_codex',
+  opencode: '_default_opencode',
 };
+
+function calcCost(ide, tokens, model) {
+  const pricing = MODEL_PRICES[model] || MODEL_PRICES[IDE_PRICE_KEY[ide]];
+  if (!pricing) return null;
+  const inp = (tokens.input      || 0) * (pricing.input      || 0) / 1e6;
+  const out = (tokens.output     || 0) * (pricing.output     || 0) / 1e6;
+  const cr  = (tokens.cacheRead  || 0) * (pricing.cacheRead  || 0) / 1e6;
+  const cw  = (tokens.cacheWrite || 0) * (pricing.cacheWrite || 0) / 1e6;
+  return inp + out + cr + cw;
+}
 
 // Runtime telemetry accumulated from real events
 const providerState = {};
@@ -82,6 +108,7 @@ function getProvider(ide) {
       running:   false,
       toolCalls: 0,
       sessions:  0,
+      lastModel: null,          // ← add this line
       tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     };
   }
@@ -94,27 +121,32 @@ function accumulateEvent(ev) {
   const p = getProvider(ev.ide);
   p.lastSeen = Date.now();
   p.running  = true;
+  if (ev.model) p.lastModel = ev.model;   // ← add this line
 
 if (ev.event === 'pre_tool') p.toolCalls++;
 
 if (ev.event === 'session_end') {
   const usage = ev.usage || {};
+  const sessionTokens = {
+    input:      usage.input_tokens                || 0,
+    output:     usage.output_tokens               || 0,
+    cacheRead:  usage.cache_read_input_tokens     || 0,
+    cacheWrite: usage.cache_creation_input_tokens || 0,
+  };
+  const sessionModel = ev.model || p.lastModel || null;
+  const sessionCost  = calcCost(ev.ide, sessionTokens, sessionModel);
 
-  // Save session for analytics
   sessionHistory.push({
-    timestamp: Date.now(),
-    ide: ev.ide,
-    input_tokens: usage.input_tokens || 0,
-    output_tokens: usage.output_tokens || 0,
-    total_tokens:
-      (usage.input_tokens || 0) +
-      (usage.output_tokens || 0)
+    timestamp:    Date.now(),
+    ide:          ev.ide,
+    model:        sessionModel,
+    input_tokens:  sessionTokens.input,
+    output_tokens: sessionTokens.output,
+    total_tokens:  sessionTokens.input + sessionTokens.output,
+    cost:          sessionCost,
   });
 
-  // Keep memory bounded
-  if (sessionHistory.length > MAX_SESSION_HISTORY) {
-    sessionHistory.shift();
-  }
+  if (sessionHistory.length > MAX_SESSION_HISTORY) sessionHistory.shift();
 }
 
 if (ev.usage) {
@@ -179,12 +211,8 @@ const server = http.createServer((req, res) => {
     for (const [ide, p] of Object.entries(providerState)) {
       const cap = CAPABILITIES[ide] || {};
       let cost = null;
-      if (ide === 'claude' && cap.cost && p.tokens.input > 0) {
-        cost =
-          p.tokens.input      * CLAUDE_PRICING.input      / 1e6 +
-          p.tokens.output     * CLAUDE_PRICING.output     / 1e6 +
-          p.tokens.cacheRead  * CLAUDE_PRICING.cacheRead  / 1e6 +
-          p.tokens.cacheWrite * CLAUDE_PRICING.cacheWrite / 1e6;
+      if (cap.tokenUsage && cap.cost && p.tokens.input > 0) {
+        cost = calcCost(ide, p.tokens, p.lastModel);
       }
       result[ide] = {
         running:      p.running,
@@ -213,6 +241,36 @@ if (req.method === 'GET' && req.url === '/session-history') {
   res.end(JSON.stringify(sessionHistory));
   return;
 }
+
+  // ── GET /prices ──────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/prices') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(MODEL_PRICES));
+    return;
+  }
+
+  // ── GET /cost-summary ────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/cost-summary') {
+    const byIde = {};
+    for (const s of sessionHistory) {
+      if (!byIde[s.ide]) {
+        const cap = CAPABILITIES[s.ide] || {};
+        byIde[s.ide] = { totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, sessions: 0, costSupported: cap.cost === true };
+      }
+      byIde[s.ide].totalCost         += s.cost || 0;
+      byIde[s.ide].totalInputTokens  += s.input_tokens  || 0;
+      byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
+      byIde[s.ide].sessions          += 1;
+    }
+    const grandTotal = Object.values(byIde).reduce((acc, v) => acc + v.totalCost, 0);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      grandTotal,
+      byIde,
+      recentSessions: sessionHistory.slice(-50).reverse(),
+    }));
+    return;
+  }
 
   // ── GET /stats ───────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/stats') {

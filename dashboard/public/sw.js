@@ -1,6 +1,6 @@
 // EGC Mission Control — Service Worker
 // Serves only the shell offline; all telemetry requires the local server.
-const CACHE = 'egc-mc-v2';
+const CACHE = 'egc-mc-v3';
 const SHELL  = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

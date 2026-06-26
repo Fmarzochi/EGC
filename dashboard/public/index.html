@@ -320,6 +320,26 @@ body.minimized footer{display:none!important;}
     font-size:12px;
     color:var(--muted);
   }
+.cost-grand{display:flex;align-items:baseline;gap:6px;margin-bottom:4px;}
+.cost-grand-val{font-size:22px;font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;}
+.cost-grand-lbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;}
+.cost-bars{display:flex;flex-direction:column;gap:8px;margin:4px 0;}
+.cost-bar-row{display:flex;flex-direction:column;gap:3px;}
+.cost-bar-head{display:flex;justify-content:space-between;align-items:baseline;}
+.cost-bar-ide{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+.cost-bar-meta{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.cost-bar-track{height:6px;border-radius:3px;background:var(--hairline-2);overflow:hidden;}
+.cost-bar-fill{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1);}
+.cost-sessions{display:flex;flex-direction:column;gap:3px;max-height:150px;overflow-y:auto;margin-top:4px;}
+.cost-sessions::-webkit-scrollbar{width:2px;}
+.cost-sessions::-webkit-scrollbar-thumb{background:var(--hairline);}
+.cost-sess-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:var(--canvas-soft);border:1px solid var(--hairline-2);}
+.cost-sess-ide{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;min-width:48px;}
+.cost-sess-tok{font-size:10px;color:var(--muted);flex:1;font-variant-numeric:tabular-nums;}
+.cost-sess-cost{font-size:10px;font-weight:600;color:var(--primary);font-variant-numeric:tabular-nums;min-width:52px;text-align:right;}
+.cost-sess-time{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:right;}
+.cost-empty{padding:14px 0;text-align:center;color:var(--muted);font-size:11px;}
+.cost-section-lbl{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
 </style>
 </head>
 <body>
@@ -490,6 +510,22 @@ body.minimized footer{display:none!important;}
   <span>More</span>
 </div>
 
+</div>
+
+<div class="rcard" id="costCard">
+  <span class="eye">💰 Cost Comparison</span>
+  <div class="cost-grand">
+    <span class="cost-grand-val" id="costGrandTotal">$0.0000</span>
+    <span class="cost-grand-lbl">total spend</span>
+  </div>
+  <div class="cost-section-lbl">spend by IDE</div>
+  <div class="cost-bars" id="costBars">
+    <div class="cost-empty">No session data yet.</div>
+  </div>
+  <div class="cost-section-lbl">recent sessions</div>
+  <div class="cost-sessions" id="costSessions">
+    <div class="cost-empty">Waiting for sessions…</div>
+  </div>
 </div>
 </section>
 </main>
@@ -1051,6 +1087,7 @@ function handleEv(ev){
     pipelineActivate('memory');
     pipelineActivate('lessons');
     pollTelemetry();
+    loadCostSummary();
   }
   if(!S.filter||ev.ide===S.filter)enqueueLog(ev);
   document.getElementById('tlCt').textContent=S.total+' events';
@@ -1154,6 +1191,88 @@ fetch('/stats').then(r=>r.json()).then(st=>{
   document.getElementById('grStats').innerHTML=
     '<div class="gr-stat"><span class="gr-check">◌</span>Server unavailable — running offline.</div>';
 });
+
+const IDE_COLORS = {
+  claude: '#00d992', gemini: '#4285f4', codex: '#a78bfa',
+  cursor: '#60a5fa', vscode: '#fbbf24',
+};
+
+function fmtCost(v) {
+  if (v === null || v === undefined) return '$—';
+  if (v < 0.0001) return '$0.0000';
+  if (v < 0.01)   return '$' + v.toFixed(4);
+  if (v < 1)      return '$' + v.toFixed(3);
+  return '$' + v.toFixed(2);
+}
+
+function fmtTokens(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return n.toString();
+}
+
+function fmtTimeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60)   return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  return Math.floor(s / 3600) + 'h ago';
+}
+
+async function loadCostSummary() {
+  try {
+    const r = await fetch('/cost-summary');
+    if (!r.ok) return;
+    const data = await r.json();
+
+    document.getElementById('costGrandTotal').textContent = fmtCost(data.grandTotal);
+
+    const barsEl = document.getElementById('costBars');
+    const ideEntries = Object.entries(data.byIde);
+    if (!ideEntries.length) {
+      barsEl.innerHTML = '<div class="cost-empty">No session data yet.</div>';
+    } else {
+      const maxCost = Math.max(...ideEntries.map(([, v]) => v.totalCost), 0.000001);
+      barsEl.innerHTML = ideEntries
+        .sort(([, a], [, b]) => b.totalCost - a.totalCost)
+        .map(([ide, v]) => {
+          const pct = Math.round((v.totalCost / maxCost) * 100);
+          const col = IDE_COLORS[ide] || '#8b949e';
+          const tok = fmtTokens(v.totalInputTokens + v.totalOutputTokens);
+          const costStr = (v.totalCost === 0 && v.costSupported === false)
+            ? `<span style="color:#777; font-size:11px; margin-left:8px;">N/A</span>`
+            : `<strong style="color:${col}">${fmtCost(v.totalCost)}</strong>`;
+          return `<div class="cost-bar-row">
+            <div class="cost-bar-head">
+              <span class="cost-bar-ide" style="color:${col}">${ide}</span>
+              <span class="cost-bar-meta">${tok} tokens · ${v.sessions} session${v.sessions !== 1 ? 's' : ''} · ${costStr}</span>
+            </div>
+            <div class="cost-bar-track">
+              <div class="cost-bar-fill" style="width:${pct}%;background:${col}"></div>
+            </div>
+          </div>`;
+        }).join('');
+    }
+
+    const sessEl = document.getElementById('costSessions');
+    if (!data.recentSessions || !data.recentSessions.length) {
+      sessEl.innerHTML = '<div class="cost-empty">Waiting for sessions…</div>';
+    } else {
+      sessEl.innerHTML = data.recentSessions.map(s => {
+        const col = IDE_COLORS[s.ide] || '#8b949e';
+        return `<div class="cost-sess-row">
+          <span class="cost-sess-ide" style="color:${col}">${s.ide}</span>
+          <span class="cost-sess-tok">${fmtTokens(s.total_tokens)} tok</span>
+          <span class="cost-sess-cost">${fmtCost(s.cost)}</span>
+          <span class="cost-sess-time">${fmtTimeAgo(s.timestamp)}</span>
+        </div>`;
+      }).join('');
+    }
+  } catch (_) {}
+}
+
+loadCostSummary();
+setInterval(loadCostSummary, 10000);
+
 
 connect();
 
