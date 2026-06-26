@@ -8,16 +8,16 @@
 const fs = require('node:fs');
 const http = require('node:http');
 
-function post(ev) {
+function post(ev, done) {
   const body = JSON.stringify(ev);
   const req = http.request(
     { hostname: '127.0.0.1', port: 7890, path: '/event', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
       timeout: 300 },
-    () => {}
+    () => done()
   );
-  req.on('error', () => {});
-  req.on('timeout', () => req.destroy());
+  req.on('error', () => done());
+  req.on('timeout', () => { req.destroy(); done(); });
   req.end(body);
 }
 
@@ -43,6 +43,11 @@ function main() {
 
   const output = { ...input, promptForAssistant: prompt };
 
+  // Write the assistant prompt to stdout first (synchronous, always completes).
+  // Then post the session_end event and exit only after the dashboard has
+  // acknowledged it (or the 300ms timeout fires). This prevents process.exit()
+  // from tearing down the socket before the HTTP request is flushed.
+  process.stdout.write(JSON.stringify(output));
   post({
     ide: 'claude',
     event: 'session_end',
@@ -50,10 +55,7 @@ function main() {
     session_id: input.session_id,
     stop_reason: input.stop_reason || null,
     usage: input.usage || null,
-  });
-
-  process.stdout.write(JSON.stringify(output));
-  process.exit(0);
+  }, () => process.exit(0));
 }
 
 main();
