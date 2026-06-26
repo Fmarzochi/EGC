@@ -111,6 +111,32 @@ egc telemetry status
 
 ---
 
+## Dashboard
+
+After install, EGC starts a local dashboard server at `http://localhost:7890`. It streams everything your AI does in real time: tool calls, file edits, shell commands, token usage, cost per session, and agent status -- across every IDE you have running.
+
+The dashboard starts automatically when you run `egc init`. You can also control it manually:
+
+```bash
+egc dashboard          # start the dashboard server
+egc dashboard stop     # stop it
+egc dashboard status   # check if it is running
+```
+
+**What you see:**
+
+| Widget | What it shows |
+|---|---|
+| Active agents | Which IDEs are online right now |
+| Tool calls | Every tool invocation as it happens |
+| Token usage | Input / output / cache per session |
+| Cost | Real-time spend estimate (Claude only) |
+| Memory state | Decisions, lessons, and patterns saved this session |
+
+Cost tracking requires the Claude provider. Other IDEs show token usage where available.
+
+---
+
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues including permission errors, Node.js version mismatches, and manual MCP registration steps.
