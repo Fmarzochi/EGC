@@ -172,13 +172,13 @@ Support from the community keeps this project alive and independent.
 
 AI coding tools that integrate natively with EGC. Partners get logo placement across all READMEs and EGCSite.
 
-_No tool partners yet — [become the first](https://github.com/sponsors/Fmarzochi)_
+<a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="80" height="80" alt="Pincushion" title="Pincushion" /></a>
 
 #### Annual Sponsors
 
 Supporters who have backed EGC for 12+ months receive a dedicated section with avatar, name, and link.
 
-_Be the first annual sponsor — [GitHub Sponsors](https://github.com/sponsors/Fmarzochi) · [PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)_
+_Be the first annual sponsor._
 
 #### Backers
 

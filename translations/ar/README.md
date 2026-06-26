@@ -163,17 +163,17 @@ egc dashboard status   # التحقق من حالة تشغيل الخادم
 
 أدوات البرمجة بالذكاء الاصطناعي التي تتكامل بشكل أصلي مع EGC. يحصل الشركاء على مساحة للشعار في جميع ملفات README وموقع EGCSite.
 
-_لا يوجد شركاء أدوات بعد — [كن الأول](https://github.com/sponsors/Fmarzochi)_
+<a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="80" height="80" alt="Pincushion" title="Pincushion" /></a>
 
 #### الرعاة السنويون
 
 الداعمون الذين دعموا EGC لمدة 12+ شهرًا يحصلون على قسم مخصص مع الصورة الرمزية والاسم والرابط.
 
-_كن أول راعٍ سنوي — [GitHub Sponsors](https://github.com/sponsors/Fmarzochi) · [PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)_
+_كن أول راعٍ سنوي._
 
 #### الداعمون
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/muhammadhasnain3031"><img src="https://avatars.githubusercontent.com/u/262106526?v=4" width="48" height="48" alt="@muhammadhasnain3031" title="@muhammadhasnain3031 — Arabic translation" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/muhammadhasnain3031"><img src="https://avatars.githubusercontent.com/u/262106526?v=4" width="48" height="48" alt="@muhammadhasnain3031" title="@muhammadhasnain3031 -- Arabic translation" /></a>
 
 #### الرعاة الشهريون · _كن الأول_
 
