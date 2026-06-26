@@ -149,13 +149,11 @@ O apoio da comunidade mantém este projeto vivo e independente.
 
 Ferramentas de programacao com IA que se integram nativamente com o EGC. Os parceiros recebem espaco para logo em todos os READMEs e no EGCSite.
 
-<a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="80" height="80" alt="Pincushion" title="Pincushion" /></a>
+<a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
-#### Patrocinadores anuais
+---
 
-Apoiadores que sustentaram o EGC por 12+ meses recebem uma secao dedicada com avatar, nome e link.
-
-_Seja o primeiro patrocinador anual._
+#### Patrocinadores anuais · _Seja o primeiro patrocinador anual._
 
 #### Apoiadores
 
