@@ -145,11 +145,23 @@ O EGC é desenvolvido por um único desenvolvedor, mantido de forma aberta e gra
 
 O apoio da comunidade mantém este projeto vivo e independente.
 
-**Apoiadores**
+#### Parceiros de ferramentas
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+Ferramentas de programacao com IA que se integram nativamente com o EGC. Os parceiros recebem espaco para logo em todos os READMEs e no EGCSite.
 
-**Patrocinadores mensais** · _seja o primeiro_
+_Nenhum parceiro de ferramentas ainda — [seja o primeiro](https://github.com/sponsors/Fmarzochi)_
+
+#### Patrocinadores anuais
+
+Apoiadores que sustentaram o EGC por 12+ meses recebem uma secao dedicada com avatar, nome e link.
+
+_Seja o primeiro patrocinador anual — [GitHub Sponsors](https://github.com/sponsors/Fmarzochi) · [PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)_
+
+#### Apoiadores
+
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+
+#### Patrocinadores mensais · _seja o primeiro_
 
 ---
 
