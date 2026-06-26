@@ -5,14 +5,16 @@ alwaysApply: true
 
 ## EGC Project Memory
 
-**Context:** EGC v1.1.6 em produção. PR #474 mergeado (a442023f): três fixes críticos -- server.js brace, release.yml hash pin, package.json pnpm selector.
+**Context:** EGC é um MCP server de memória persistente para agentes de IA (Claude Code, Cursor, Codex, Gemini CLI). Fase atual: pós-security-hardening, testando integração com Pincushion.
 
 **Active decisions:**
-- PR #474 mergeado (a442023f): fecha accumulateEvent em server.js, pina peter-evans/repository-dispatch@ff45666b, remove resolutions Yarn e adiciona markdownlint-cli>js-yaml em pnpm.overrides
-- Glama build falhou em 24/06 e 25/06 por ERR_PNPM_INVALID_SELECTOR no campo resolutions.markdownlint-cli/js-yaml
-- CodeQL javascript-typescript estava falhando com 'Unexpected token' no commit 89488b63
+- Pincushion MCP adicionado ao Claude Code via: claude mcp add pincushion -- npx pincushion-mcp --project-dir . --cloud-sync
+- Não adicionar gh ao guardian allowlist
+- Todos os emails @pincushion.io bloqueiam (554 relay denied)
 
 **Next session:**
-- Verificar se Glama rebuild passou após merge do PR #474 em main -- acessar https://glama.ai/mcp/servers/Fmarzochi/EGC/admin
-- Commitar os arquivos unstaged (.cursor/rules/egc-context.mdc, .trae/rules/egc-context.md, AGENTS.md, GEMINI.md) quando houver contexto do que mudou
-- Scorecard alert #256 (Pinned-Dependencies) deve fechar automaticamente após merge -- verificar em Security > Code scanning
+- PINCUSHION: reiniciar Claude Code e verificar se pincushion-mcp inicializa com --cloud-sync sem erro OAuth. Se funcionar, rodar configure_project com URLs: local http://localhost:4321, prod https://fmarzochi.github.io/EGCSite
+- PINCUSHION: Josh só pode ser contactado via LinkedIn DM (cooleyjosh) -- DM enviada em 26/06 aguardando resposta
+- Commitar 4 arquivos modificados: .cursor/rules/egc-context.mdc, .trae/rules/egc-context.md, AGENTS.md, GEMINI.md
+- Contributors.md Obsidian: adicionar Vincent Gao (gaoflow) -- PR #404 mergeado em 22/06
+- Testes unitarios para sanitize.ts (13 padroes de injeção)
