@@ -8,5 +8,7 @@
   "gpt-4o-mini":          { "input": 0.15,  "output": 0.60,  "cacheRead": 0.075, "cacheWrite": 0.00 },
   "_default_claude":      { "input": 3.00,  "output": 15.00, "cacheRead": 0.30,  "cacheWrite": 3.75 },
   "_default_gemini":      { "input": 0.10,  "output": 0.40,  "cacheRead": 0.025, "cacheWrite": 0.00 },
-  "_default_codex":       { "input": 2.50,  "output": 10.00, "cacheRead": 1.25,  "cacheWrite": 0.00 }
+  "_default_codex":       { "input": 2.50,  "output": 10.00, "cacheRead": 1.25,  "cacheWrite": 0.00 },
+  "deepseek-v4-flash":    { "input": 0.14,  "output": 0.28,  "cacheRead": 0.01,  "cacheWrite": 0.00 },
+  "_default_opencode":    { "input": 0.14,  "output": 0.28,  "cacheRead": 0.01,  "cacheWrite": 0.00 }
 }

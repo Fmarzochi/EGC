@@ -81,6 +81,7 @@ const IDE_PRICE_KEY = {
   claude: '_default_claude',
   gemini: '_default_gemini',
   codex:  '_default_codex',
+  opencode: '_default_opencode',
 };
 
 function calcCost(ide, tokens, model) {
