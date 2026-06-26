@@ -168,11 +168,23 @@ EGC is built by one developer, maintained in the open, and free.
 
 Support from the community keeps this project alive and independent.
 
-**Backers**
+#### Tool Partners
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="48" height="48" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+AI coding tools that integrate natively with EGC. Partners get logo placement across all READMEs and EGCSite.
 
-**Monthly sponsors** · _be the first_
+_No tool partners yet — [become the first](https://github.com/sponsors/Fmarzochi)_
+
+#### Annual Sponsors
+
+Supporters who have backed EGC for 12+ months receive a dedicated section with avatar, name, and link.
+
+_Be the first annual sponsor — [GitHub Sponsors](https://github.com/sponsors/Fmarzochi) · [PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)_
+
+#### Backers
+
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+
+#### Monthly sponsors · _be the first_
 
 ---
 
