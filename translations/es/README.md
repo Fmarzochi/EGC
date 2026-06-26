@@ -159,7 +159,7 @@ _Se el primer patrocinador anual — [GitHub Sponsors](https://github.com/sponso
 
 #### Colaboradores
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/ayushikaul02"><img src="https://avatars.githubusercontent.com/u/212903502?v=4" width="48" height="48" alt="@ayushikaul02" title="@ayushikaul02 — Spanish translation" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/ayushikaul02"><img src="https://avatars.githubusercontent.com/u/212903502?v=4" width="48" height="48" alt="@ayushikaul02" title="@ayushikaul02 -- Spanish translation" /></a>
 
 #### Patrocinadores mensuales · _se el primero_
 
