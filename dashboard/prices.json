@@ -1,0 +1,12 @@
+{
+  "claude-sonnet-4-6":    { "input": 3.00,  "output": 15.00, "cacheRead": 0.30,  "cacheWrite": 3.75 },
+  "claude-opus-4-6":      { "input": 15.00, "output": 75.00, "cacheRead": 1.50,  "cacheWrite": 18.75 },
+  "claude-haiku-4-5":     { "input": 0.80,  "output": 4.00,  "cacheRead": 0.08,  "cacheWrite": 1.00 },
+  "gemini-2.0-flash":     { "input": 0.10,  "output": 0.40,  "cacheRead": 0.025, "cacheWrite": 0.00 },
+  "gemini-1.5-pro":       { "input": 3.50,  "output": 10.50, "cacheRead": 0.875, "cacheWrite": 0.00 },
+  "gpt-4o":               { "input": 2.50,  "output": 10.00, "cacheRead": 1.25,  "cacheWrite": 0.00 },
+  "gpt-4o-mini":          { "input": 0.15,  "output": 0.60,  "cacheRead": 0.075, "cacheWrite": 0.00 },
+  "_default_claude":      { "input": 3.00,  "output": 15.00, "cacheRead": 0.30,  "cacheWrite": 3.75 },
+  "_default_gemini":      { "input": 0.10,  "output": 0.40,  "cacheRead": 0.025, "cacheWrite": 0.00 },
+  "_default_codex":       { "input": 2.50,  "output": 10.00, "cacheRead": 1.25,  "cacheWrite": 0.00 }
+}
