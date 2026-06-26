@@ -174,9 +174,9 @@ AI coding tools that integrate natively with EGC. Partners get logo placement ac
 
 <a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
----
-
 #### Annual Sponsors · _Be the first annual sponsor._
+
+---
 
 #### Backers
 
