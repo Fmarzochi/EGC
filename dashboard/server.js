@@ -211,7 +211,7 @@ const server = http.createServer((req, res) => {
     for (const [ide, p] of Object.entries(providerState)) {
       const cap = CAPABILITIES[ide] || {};
       let cost = null;
-      if (cap.tokenUsage && p.tokens.input > 0) {
+      if (cap.tokenUsage && cap.cost && p.tokens.input > 0) {
         cost = calcCost(ide, p.tokens, p.lastModel);
       }
       result[ide] = {
@@ -254,7 +254,8 @@ if (req.method === 'GET' && req.url === '/session-history') {
     const byIde = {};
     for (const s of sessionHistory) {
       if (!byIde[s.ide]) {
-        byIde[s.ide] = { totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, sessions: 0 };
+        const cap = CAPABILITIES[s.ide] || {};
+        byIde[s.ide] = { totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, sessions: 0, costSupported: cap.cost === true };
       }
       byIde[s.ide].totalCost         += s.cost || 0;
       byIde[s.ide].totalInputTokens  += s.input_tokens  || 0;

@@ -1087,6 +1087,7 @@ function handleEv(ev){
     pipelineActivate('memory');
     pipelineActivate('lessons');
     pollTelemetry();
+    loadCostSummary();
   }
   if(!S.filter||ev.ide===S.filter)enqueueLog(ev);
   document.getElementById('tlCt').textContent=S.total+' events';
@@ -1237,10 +1238,13 @@ async function loadCostSummary() {
           const pct = Math.round((v.totalCost / maxCost) * 100);
           const col = IDE_COLORS[ide] || '#8b949e';
           const tok = fmtTokens(v.totalInputTokens + v.totalOutputTokens);
+          const costStr = (v.totalCost === 0 && v.costSupported === false)
+            ? `<span style="color:#777; font-size:11px; margin-left:8px;">N/A</span>`
+            : `<strong style="color:${col}">${fmtCost(v.totalCost)}</strong>`;
           return `<div class="cost-bar-row">
             <div class="cost-bar-head">
               <span class="cost-bar-ide" style="color:${col}">${ide}</span>
-              <span class="cost-bar-meta">${tok} tokens · ${v.sessions} session${v.sessions !== 1 ? 's' : ''} · <strong style="color:${col}">${fmtCost(v.totalCost)}</strong></span>
+              <span class="cost-bar-meta">${tok} tokens · ${v.sessions} session${v.sessions !== 1 ? 's' : ''} · ${costStr}</span>
             </div>
             <div class="cost-bar-track">
               <div class="cost-bar-fill" style="width:${pct}%;background:${col}"></div>
@@ -1269,11 +1273,6 @@ async function loadCostSummary() {
 loadCostSummary();
 setInterval(loadCostSummary, 10000);
 
-const _origHandleEv = handleEv;
-handleEv = function(ev) {
-  _origHandleEv(ev);
-  if (ev.event === 'session_end') loadCostSummary();
-};
 
 connect();
 

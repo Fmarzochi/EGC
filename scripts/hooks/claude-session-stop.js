@@ -6,6 +6,20 @@
 // event: missing stdin or parse errors are silently ignored and exit 0.
 
 const fs = require('node:fs');
+const http = require('node:http');
+
+function post(ev) {
+  const body = JSON.stringify(ev);
+  const req = http.request(
+    { hostname: '127.0.0.1', port: 7890, path: '/event', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: 300 },
+    () => {}
+  );
+  req.on('error', () => {});
+  req.on('timeout', () => req.destroy());
+  req.end(body);
+}
 
 function main() {
   let raw = '';
@@ -28,6 +42,16 @@ function main() {
     + 'project_path is optional: omit it and it uses PWD automatically.';
 
   const output = { ...input, promptForAssistant: prompt };
+
+  post({
+    ide: 'claude',
+    event: 'session_end',
+    agent: 'main',
+    session_id: input.session_id,
+    stop_reason: input.stop_reason || null,
+    usage: input.usage || null,
+  });
+
   process.stdout.write(JSON.stringify(output));
   process.exit(0);
 }
