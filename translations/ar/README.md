@@ -169,7 +169,7 @@ egc dashboard status   # التحقق من حالة تشغيل الخادم
 
 الداعمون الذين دعموا EGC لمدة 12+ شهرًا يحصلون على قسم مخصص مع الصورة الرمزية والاسم والرابط.
 
-_كن أول راعٍ سنوي -- [GitHub Sponsors](https://github.com/sponsors/Fmarzochi) · [PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)_
+_كن أول راعٍ سنوي._
 
 #### الداعمون
 

@@ -155,7 +155,7 @@ Ferramentas de programacao com IA que se integram nativamente com o EGC. Os parc
 
 Apoiadores que sustentaram o EGC por 12+ meses recebem uma secao dedicada com avatar, nome e link.
 
-_Seja o primeiro patrocinador anual -- [GitHub Sponsors](https://github.com/sponsors/Fmarzochi) · [PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)_
+_Seja o primeiro patrocinador anual._
 
 #### Apoiadores
 
