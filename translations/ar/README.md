@@ -163,13 +163,11 @@ egc dashboard status   # التحقق من حالة تشغيل الخادم
 
 أدوات البرمجة بالذكاء الاصطناعي التي تتكامل بشكل أصلي مع EGC. يحصل الشركاء على مساحة للشعار في جميع ملفات README وموقع EGCSite.
 
-<a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="80" height="80" alt="Pincushion" title="Pincushion" /></a>
+<a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
-#### الرعاة السنويون
+---
 
-الداعمون الذين دعموا EGC لمدة 12+ شهرًا يحصلون على قسم مخصص مع الصورة الرمزية والاسم والرابط.
-
-_كن أول راعٍ سنوي._
+#### الرعاة السنويون · _كن أول راعٍ سنوي._
 
 #### الداعمون
 
