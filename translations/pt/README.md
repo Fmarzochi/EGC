@@ -151,9 +151,9 @@ Ferramentas de programacao com IA que se integram nativamente com o EGC. Os parc
 
 <a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
----
-
 #### Patrocinadores anuais · _Seja o primeiro patrocinador anual._
+
+---
 
 #### Apoiadores
 

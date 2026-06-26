@@ -165,9 +165,9 @@ egc dashboard status   # التحقق من حالة تشغيل الخادم
 
 <a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
----
-
 #### الرعاة السنويون · _كن أول راعٍ سنوي._
+
+---
 
 #### الداعمون
 
