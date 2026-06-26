@@ -114,13 +114,7 @@ egc watch --quiet      # suprimir saída
 
 ### Dashboard - painel de controle em tempo real
 
-**`egc dashboard`** - abra seu navegador em `http://localhost:7890` e acompanhe tudo que seu agente de IA faz, ao vivo. Chamadas de ferramentas, edições de arquivos, comandos shell, uso de tokens, estado da memória e status do agente em tempo real. O dashboard inicia automaticamente após `egc init`.
-
-```
-egc dashboard          # iniciar o painel (inicia automaticamente após egc init)
-egc dashboard stop     # parar o servidor em background
-egc dashboard status   # verificar se o servidor está rodando
-```
+Veja cada chamada de ferramenta, token e custo gerado pelos seus agentes -- ao vivo no navegador. Inicia automaticamente após `egc init`. [Guia completo](docs/installation.md#dashboard)
 
 ---
 
