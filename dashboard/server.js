@@ -250,7 +250,7 @@ if (req.method === 'GET' && req.url === '/session-history') {
   }
 
   // ── GET /cost-summary [? range=today|week|month|all] ────────────────
-  if (req.method === 'GET' && req.url.startsWith('/cost-summary')) {
+  if (req.method === 'GET' && (req.url === '/cost-summary' || req.url.startsWith('/cost-summary?'))) {
     const urlObj = new URL(req.url, 'http://localhost');
     const range  = urlObj.searchParams.get('range') || 'all';
     const now    = Date.now();
