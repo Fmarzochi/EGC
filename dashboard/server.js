@@ -249,15 +249,24 @@ if (req.method === 'GET' && req.url === '/session-history') {
     return;
   }
 
-  // ── GET /cost-summary ────────────────────────────────────
-  if (req.method === 'GET' && req.url === '/cost-summary') {
+  // ── GET /cost-summary [? range=today|week|month|all] ────────────────
+  if (req.method === 'GET' && req.url.startsWith('/cost-summary')) {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const range  = urlObj.searchParams.get('range') || 'all';
+    const now    = Date.now();
+    const CUTOFFS = { today: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000 };
+    const cutoff  = CUTOFFS[range] ? now - CUTOFFS[range] : 0;
+    const filtered = cutoff
+      ? sessionHistory.filter(s => s.timestamp >= cutoff)
+      : sessionHistory;
+
     const byIde = {};
-    for (const s of sessionHistory) {
+    for (const s of filtered) {
       if (!byIde[s.ide]) {
         const cap = CAPABILITIES[s.ide] || {};
         byIde[s.ide] = { totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, sessions: 0, costSupported: cap.cost === true };
       }
-      byIde[s.ide].totalCost         += s.cost || 0;
+      byIde[s.ide].totalCost         += s.cost          || 0;
       byIde[s.ide].totalInputTokens  += s.input_tokens  || 0;
       byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
       byIde[s.ide].sessions          += 1;
@@ -267,7 +276,7 @@ if (req.method === 'GET' && req.url === '/session-history') {
     res.end(JSON.stringify({
       grandTotal,
       byIde,
-      recentSessions: sessionHistory.slice(-50).reverse(),
+      recentSessions: filtered.slice(-50).reverse(),
     }));
     return;
   }
