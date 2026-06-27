@@ -340,6 +340,16 @@ body.minimized footer{display:none!important;}
 .cost-sess-time{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:right;}
 .cost-empty{padding:14px 0;text-align:center;color:var(--muted);font-size:11px;}
 .cost-section-lbl{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+/* Time range selector */
+.cost-range-wrap{display:flex;gap:4px;margin-bottom:8px;}
+.cost-range-btn{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  padding:3px 8px;border-radius:4px;border:1px solid var(--hairline);background:transparent;
+  color:var(--muted);cursor:pointer;transition:all .15s;}
+.cost-range-btn.active{background:var(--primary);color:#000;border-color:var(--primary);}
+/* Input / output stacked bar */
+.cost-bar-stack{height:6px;border-radius:3px;background:var(--hairline-2);overflow:hidden;display:flex;}
+.cost-bar-inp{height:100%;transition:width .6s cubic-bezier(.4,0,.2,1);}
+.cost-bar-out{height:100%;transition:width .6s cubic-bezier(.4,0,.2,1);opacity:0.4;}
 </style>
 </head>
 <body>
@@ -518,7 +528,13 @@ body.minimized footer{display:none!important;}
     <span class="cost-grand-val" id="costGrandTotal">$0.0000</span>
     <span class="cost-grand-lbl">total spend</span>
   </div>
-  <div class="cost-section-lbl">spend by IDE</div>
+  <div class="cost-range-wrap">
+    <button class="cost-range-btn active" data-range="all"   id="crAll"   onclick="setCostRange('all')">All time</button>
+    <button class="cost-range-btn"        data-range="today" id="crToday" onclick="setCostRange('today')">Today</button>
+    <button class="cost-range-btn"        data-range="week"  id="crWeek"  onclick="setCostRange('week')">Week</button>
+    <button class="cost-range-btn"        data-range="month" id="crMonth" onclick="setCostRange('month')">Month</button>
+  </div>
+  <div class="cost-section-lbl">spend by IDE &nbsp;<span style="color:var(--muted);font-weight:400;opacity:.8"><span style="opacity:1">█</span> input &nbsp;<span style="opacity:0.4">█</span> output</span></div>
   <div class="cost-bars" id="costBars">
     <div class="cost-empty">No session data yet.</div>
   </div>
@@ -1218,9 +1234,20 @@ function fmtTimeAgo(ts) {
   return Math.floor(s / 3600) + 'h ago';
 }
 
+// ── COST RANGE STATE ──────────────────────────────────────────
+let currentCostRange = 'all';
+
+function setCostRange(range) {
+  currentCostRange = range;
+  document.querySelectorAll('.cost-range-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.range === range);
+  });
+  loadCostSummary();
+}
+
 async function loadCostSummary() {
   try {
-    const r = await fetch('/cost-summary');
+    const r = await fetch(`/cost-summary?range=${currentCostRange}`);
     if (!r.ok) return;
     const data = await r.json();
 
@@ -1231,23 +1258,26 @@ async function loadCostSummary() {
     if (!ideEntries.length) {
       barsEl.innerHTML = '<div class="cost-empty">No session data yet.</div>';
     } else {
-      const maxCost = Math.max(...ideEntries.map(([, v]) => v.totalCost), 0.000001);
       barsEl.innerHTML = ideEntries
         .sort(([, a], [, b]) => b.totalCost - a.totalCost)
         .map(([ide, v]) => {
-          const pct = Math.round((v.totalCost / maxCost) * 100);
-          const col = IDE_COLORS[ide] || '#8b949e';
-          const tok = fmtTokens(v.totalInputTokens + v.totalOutputTokens);
+          const col     = IDE_COLORS[ide] || '#8b949e';
+          const total   = (v.totalInputTokens + v.totalOutputTokens) || 1;
+          const inpPct  = Math.round((v.totalInputTokens  / total) * 100);
+          const outPct  = Math.round((v.totalOutputTokens / total) * 100);
+          const inpTok  = fmtTokens(v.totalInputTokens);
+          const outTok  = fmtTokens(v.totalOutputTokens);
           const costStr = (v.totalCost === 0 && v.costSupported === false)
-            ? `<span style="color:#777; font-size:11px; margin-left:8px;">N/A</span>`
+            ? `<span style="color:#777;font-size:11px;margin-left:4px;">N/A</span>`
             : `<strong style="color:${col}">${fmtCost(v.totalCost)}</strong>`;
           return `<div class="cost-bar-row">
             <div class="cost-bar-head">
               <span class="cost-bar-ide" style="color:${col}">${ide}</span>
-              <span class="cost-bar-meta">${tok} tokens · ${v.sessions} session${v.sessions !== 1 ? 's' : ''} · ${costStr}</span>
+              <span class="cost-bar-meta">${inpTok}↑ ${outTok}↓ · ${v.sessions} sess · ${costStr}</span>
             </div>
-            <div class="cost-bar-track">
-              <div class="cost-bar-fill" style="width:${pct}%;background:${col}"></div>
+            <div class="cost-bar-stack">
+              <div class="cost-bar-inp" style="width:${inpPct}%;background:${col}"></div>
+              <div class="cost-bar-out" style="width:${outPct}%;background:${col}"></div>
             </div>
           </div>`;
         }).join('');
@@ -1261,7 +1291,7 @@ async function loadCostSummary() {
         const col = IDE_COLORS[s.ide] || '#8b949e';
         return `<div class="cost-sess-row">
           <span class="cost-sess-ide" style="color:${col}">${s.ide}</span>
-          <span class="cost-sess-tok">${fmtTokens(s.total_tokens)} tok</span>
+          <span class="cost-sess-tok">${fmtTokens(s.input_tokens || 0)}↑ ${fmtTokens(s.output_tokens || 0)}↓</span>
           <span class="cost-sess-cost">${fmtCost(s.cost)}</span>
           <span class="cost-sess-time">${fmtTimeAgo(s.timestamp)}</span>
         </div>`;
