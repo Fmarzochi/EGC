@@ -134,7 +134,8 @@ if (ev.event === 'session_end') {
     cacheWrite: usage.cache_creation_input_tokens || 0,
   };
   const sessionModel = ev.model || p.lastModel || null;
-  const sessionCost  = calcCost(ev.ide, sessionTokens, sessionModel);
+  const ideCap       = CAPABILITIES[ev.ide] || {};
+  const sessionCost  = ideCap.cost === true ? calcCost(ev.ide, sessionTokens, sessionModel) : null;
 
   sessionHistory.push({
     timestamp:    Date.now(),
@@ -271,7 +272,7 @@ if (req.method === 'GET' && req.url === '/session-history') {
       byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
       byIde[s.ide].sessions          += 1;
     }
-    const grandTotal = Object.values(byIde).reduce((acc, v) => acc + v.totalCost, 0);
+    const grandTotal = Object.values(byIde).reduce((acc, v) => acc + (v.costSupported ? v.totalCost : 0), 0);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       grandTotal,
