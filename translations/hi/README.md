@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**भाषा:** [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
+**भाषा:** [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी** | [한국어](../ko/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -11,9 +11,9 @@
 <!-- CENTERED-LANGUAGE-SELECTOR-START -->
 <div align="center">
 
-**Language / اللغة / Idioma / भाषा**
+**Language / اللغة / Idioma / भाषा / 언어**
 
-[English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी**
+[English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी** | [한국어](../ko/README.md)
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
