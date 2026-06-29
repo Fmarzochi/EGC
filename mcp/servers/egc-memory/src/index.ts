@@ -22,6 +22,7 @@ import {
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
+import { sanitize, sanitizeStrings } from './sanitize.js';
 
 function resolveStateStoreDbPath(): string {
   const envOverride = process.env.EGC_STATE_DB;
@@ -774,12 +775,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (request.params.name) {
       case "store_decision": {
         const { context, decision } = StoreDecisionSchema.parse(request.params.arguments);
-        
+        const cleaned = sanitizeStrings({ context, decision });
+        if (cleaned.flagged) {
+          log('WARN', 'store_decision: suspicious content blocked', { reasons: cleaned.reasons });
+          return { content: [{ type: "text", text: `Blocked: ${cleaned.reasons.join('; ')}` }] };
+        }
+
         // Execute write through the Queue Arbitrator to prevent IDE crash on SQLITE_BUSY
         await writeArbitrator.enqueue(async () => {
-          await db.run('INSERT INTO decisions (context, decision) VALUES (?, ?)', [context, decision]);
+          await db.run('INSERT INTO decisions (context, decision) VALUES (?, ?)', [cleaned.sanitized.context, cleaned.sanitized.decision]);
         });
-        
+
         log('INFO', 'Decision stored securely via Queue Arbitration');
         return { content: [{ type: "text", text: "Decision stored securely." }] };
       }
@@ -834,6 +840,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "update_state": {
         const args = UpdateStateSchema.parse(request.params.arguments || {});
+        if (args.context) {
+          const check = sanitize(args.context);
+          if (check.flagged) {
+            log('WARN', 'update_state: suspicious content in context', { reason: check.reason });
+            return { content: [{ type: "text", text: `Blocked: ${check.reason}` }] };
+          }
+        }
         const projPath = resolveProjectPath(args.project_path);
         const branch = detectBranch(projPath);
         // Merge from the same file get_state would read, so the first
@@ -863,6 +876,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "working_memory_set": {
         const args = WorkingMemorySetSchema.parse(request.params.arguments || {});
+        const valueCheck = sanitize(args.value);
+        if (valueCheck.flagged) {
+          log('WARN', 'working_memory_set: suspicious content blocked', { key: args.key, reason: valueCheck.reason });
+          return { content: [{ type: "text", text: `Blocked: ${valueCheck.reason}` }] };
+        }
         const projPath = resolveProjectPath(args.project_path);
         await writeArbitrator.enqueue(async () => {
           await setWorkingMemory(db, projPath, args.key, args.value, args.ttl_seconds);
