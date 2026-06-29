@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**언어:** English | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [Português (Brasil)](translations/pt/README.md) | [한국어](translations/ko/README.md)
+**언어:** [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [हिन्दी](../hi/README.md) | [Português (Brasil)](../pt/README.md) | **한국어**
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
