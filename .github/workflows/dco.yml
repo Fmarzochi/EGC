@@ -39,7 +39,7 @@ jobs:
             echo "Use 'git commit -s' or 'git commit --amend -s' to sign existing commits."
             exit 1
           fi
-          echo "All commits have DCO sign-off."
+          echo "All commits have DCO sign-off. OK"
 
       - name: Post guidance comment
         if: always() && steps.dco.outputs.missing == '1'
@@ -58,7 +58,7 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: `${marker}
-            👋 **DCO sign-off missing**
+            **DCO sign-off missing**
 
             One or more commits in this PR are missing a \`Signed-off-by\` line (Developer Certificate of Origin).
 
@@ -68,10 +68,10 @@ jobs:
             git commit --amend -s
             git push --force-with-lease
 
-            # Multiple commits — replace N with the number of commits in your PR
+            # Multiple commits -- replace N with the number of commits in your PR
             git rebase --signoff HEAD~N
             git push --force-with-lease
             \`\`\`
 
-            > ℹ️ This check is **informational only** — a maintainer can still merge your PR without sign-off.`
+            > Note: This check is **informational only** -- a maintainer can still merge your PR without sign-off.`
             });
