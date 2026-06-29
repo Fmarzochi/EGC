@@ -306,13 +306,13 @@ if (req.method === 'GET' && req.url === '/session-history') {
         let d = 0, l = 0, p = 0;
         for (const f of files) {
           const c = fs.readFileSync(path.join(dir, f), 'utf8');
-          d += (c.match(/^- What:/gm)   || []).length;
-          l += (c.match(/lesson/gi)      || []).length;
-          p += (c.match(/pattern/gi)     || []).length;
+          d += (c.match(/^- What:/gm)      || []).length;
+          l += (c.match(/^- Lesson:/gm)    || []).length;
+          p += (c.match(/^- Pattern:/gm)   || []).length;
         }
         stats.decisions = d;
-        stats.lessons   = Math.min(l, 99);
-        stats.patterns  = Math.min(p, 30);
+        stats.lessons   = l;
+        stats.patterns  = p;
       }
     } catch (_) {}
 
