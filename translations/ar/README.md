@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**اللغة:** [English](../../README.md) | **العربية** | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md)
+**اللغة:** [English](../../README.md) | **العربية** | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md) | [한국어](../ko/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -11,9 +11,9 @@
 <!-- CENTERED-LANGUAGE-SELECTOR-START -->
 <div align="center">
 
-**Language / اللغة / Idioma / भाषा**
+**Language / اللغة / Idioma / भाषا / 언어**
 
-[English](../../README.md) | [**العربية**](README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md)
+[English](../../README.md) | [**العربية**](README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md) | [한국어](../ko/README.md)
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
