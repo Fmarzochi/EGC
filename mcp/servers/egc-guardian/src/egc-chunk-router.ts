@@ -29,24 +29,34 @@ function isJsonArray(text: string): boolean {
   }
 }
 
+import rateLimit from 'express-rate-limit';
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+
 export function classifyChunk(chunk: string): ContentType {
-  if (isJsonArray(chunk)) return 'json_array';
+  limiter(chunk, {}, () => {
+    if (isJsonArray(chunk)) return 'json_array';
 
-  for (const re of DIFF_SIGNALS) {
-    if (re.test(chunk)) return 'diff';
-  }
+    for (const re of DIFF_SIGNALS) {
+      if (re.test(chunk)) return 'diff';
+    }
 
-  let logScore = 0;
-  for (const re of LOG_SIGNALS) {
-    if (re.test(chunk)) logScore++;
-  }
-  if (logScore >= 2) return 'log';
+    let logScore = 0;
+    for (const re of LOG_SIGNALS) {
+      if (re.test(chunk)) logScore++;
+    }
+    if (logScore >= 2) return 'log';
 
-  let codeScore = 0;
-  for (const re of CODE_SIGNALS) {
-    if (re.test(chunk)) codeScore++;
-  }
-  if (codeScore >= 1) return 'code';
+    let codeScore = 0;
+    for (const re of CODE_SIGNALS) {
+      if (re.test(chunk)) codeScore++;
+    }
+    if (codeScore >= 1) return 'code'
+  });
+;
 
   return 'text';
 }
