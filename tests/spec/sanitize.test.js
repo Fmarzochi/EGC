@@ -14,7 +14,6 @@ if (!fs.existsSync(BUILD)) {
 const { sanitize, sanitizeStrings } = require(BUILD);
 
 function pass(label) { console.log(`  PASS  ${label}`); }
-function fail(label, msg) { throw new Error(`FAIL ${label}: ${msg}`); }
 
 function testCleanInputPassThrough() {
   const r = sanitize('Decided to use TypeScript for the MCP server.');
