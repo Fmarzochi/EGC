@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   dco:
@@ -16,7 +16,9 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
+
       - name: Check DCO sign-off
+        id: dco
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -26,14 +28,50 @@ jobs:
             body=$(git log -1 --format="%B" "$sha")
             if ! echo "$body" | grep -qE "^Signed-off-by: .+ <.+>$"; then
               author=$(git log -1 --format="%an <%ae>" "$sha")
-              echo "::error::Commit $sha ($author) is missing Signed-off-by"
+              echo "::warning::Commit $sha ($author) is missing Signed-off-by"
               missing=1
             fi
           done < <(git log --format="%H" "${BASE_SHA}..${HEAD_SHA}")
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
           if [ "$missing" -eq 1 ]; then
             echo ""
             echo "Add 'Signed-off-by: Name <email>' to commit messages."
             echo "Use 'git commit -s' or 'git commit --amend -s' to sign existing commits."
             exit 1
           fi
-          echo "All commits have DCO sign-off."
+          echo "All commits have DCO sign-off. OK"
+
+      - name: Post guidance comment
+        if: always() && steps.dco.outputs.missing == '1'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const marker = '<!-- dco-guidance -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            if (comments.some(c => c.body.includes(marker))) return;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `${marker}
+            **DCO sign-off missing**
+
+            One or more commits in this PR are missing a \`Signed-off-by\` line (Developer Certificate of Origin).
+
+            **How to fix:**
+            \`\`\`bash
+            # Single commit
+            git commit --amend -s
+            git push --force-with-lease
+
+            # Multiple commits -- replace N with the number of commits in your PR
+            git rebase --signoff HEAD~N
+            git push --force-with-lease
+            \`\`\`
+
+            > Note: This check is **informational only** -- a maintainer can still merge your PR without sign-off.`
+            });
