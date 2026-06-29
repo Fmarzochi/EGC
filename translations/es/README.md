@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**Idioma:** [English](../../README.md) | [العربية](../ar/README.md) | **Español** | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md)
+**Idioma:** [English](../../README.md) | [العربية](../ar/README.md) | **Español** | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md) | [한국어](../ko/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
