@@ -36,6 +36,7 @@ function watchFile(filePath) {
     if (evt !== 'change') return;
     try {
       const stat = fs.statSync(filePath);
+      if (stat.size < lastSizes[filePath]) lastSizes[filePath] = 0;
       if (stat.size <= lastSizes[filePath]) return;
 
       const fd = fs.openSync(filePath, 'r');

@@ -55,6 +55,7 @@ function watch() {
     fs.watch(logFile, { persistent:false }, () => {
       try {
         const stat = fs.statSync(logFile);
+        if (stat.size < lastSize) lastSize = 0;
         if (stat.size <= lastSize) return;
         const buf = Buffer.alloc(stat.size - lastSize);
         const fd = fs.openSync(logFile, 'r');
