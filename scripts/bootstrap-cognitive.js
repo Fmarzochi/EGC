@@ -17,11 +17,24 @@ The \`egc-memory\` MCP server is installed. Use it to maintain cross-session mem
 **End of every session:** Call \`update_state({...})\` to save decisions, preferences, and next steps.
 
 State files live at \`~/.egc/state/<project-slug>.md\`: plain Markdown, one file per project.
+
+## EGC Auto-Intuition
+
+Act on user intent, not keywords. When what the user says implies an EGC action, call the right tool immediately -- no explicit command needed.
+
+- Session ending (goodbye, break, sleep, done, closing) → call \`update_state\`
+- Session starting or resuming → call \`get_state\`
+- Save/remember this decision → call \`lesson_save\` or \`store_decision\`
+- What failed? What did we decide? → call \`search_history\` or \`query_history\`
+- Review code or a PR → spawn \`/review-pr\` agents
+- Context is heavy or slow → call \`reduce_context\`
+
+Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
 <!-- /egc-memory-protocol -->
 `;
 
-const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions.';
-const CODEX_PROTOCOL_FULL   = `persistent_instructions = "At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md."\n`;
+const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history. Judge by full context not literal words.';
+const CODEX_PROTOCOL_FULL   = `persistent_instructions = "At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history. Judge by full context not literal words."\n`;
 
 const HOME = os.homedir();
 
@@ -88,7 +101,7 @@ try {
         return;
       }
       const separator = existing.trim() ? '\n\n' : '';
-      obj['cursor.rules'] = existing + separator + '[egc-memory-protocol] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md.';
+      obj['cursor.rules'] = existing + separator + '[egc-memory-protocol] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents. Judge by full context not literal words.';
       fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
       fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
       console.log(`  [cognitive] Cursor: memory protocol installed (${settingsFile.replace(HOME, '~')})`);
@@ -172,7 +185,7 @@ try {
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, target);
     } else {
-      fs.writeFileSync(target, '# EGC Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n');
+      fs.writeFileSync(target, '# EGC Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n');
     }
     console.log(`  [cognitive] OpenCode: memory protocol installed (${target.replace(HOME, '~')})`);
   } catch (e) {
@@ -215,7 +228,7 @@ try {
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, target);
     } else {
-      fs.writeFileSync(target, '# Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n');
+      fs.writeFileSync(target, '# Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n');
     }
     console.log('  [cognitive] CodeBuddy: memory protocol installed (~/.codebuddy/MEMORY.md)');
   } catch (e) {

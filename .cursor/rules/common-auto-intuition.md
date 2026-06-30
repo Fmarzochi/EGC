@@ -1,12 +1,7 @@
-## EGC Guardian Protocol — MANDATORY
-
-These calls are automatic and non-negotiable. Never wait for the user to ask.
-
-- **Start of every non-trivial task:** call `orchestrate_task({ prompt: "<task>" })`
-- **Before every shell/Bash command:** call `validate_command({ command: "<cmd>" })`
-- **Before every new file Write or Edit on a file not yet read:** call `validate_write({ filepath: "<path>" })`
-
-Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.
+---
+description: EGC auto-intuition -- act on intent, not keywords
+alwaysApply: true
+---
 
 ## EGC Auto-Intuition
 
@@ -20,4 +15,3 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - Context is heavy or slow → call `reduce_context`
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
-
