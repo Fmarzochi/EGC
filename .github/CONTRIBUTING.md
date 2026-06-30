@@ -41,6 +41,22 @@ EGC operates under a philosophy of **Stability over Expansion** and **Passive Ma
 
 ---
 
+## Where to start
+
+Not sure where to begin? Here are the best entry points:
+
+**Fix a real bug (code):** Issues labeled [`good first issue`](https://github.com/Fmarzochi/EGC/issues?q=is%3Aopen+label%3A%22good+first+issue%22) are small, self-contained, and come with a suggested fix and the exact file and line range. Start here if you want to write code.
+
+**Translate the README:** Open issues exist for [German](https://github.com/Fmarzochi/EGC/issues/486), [French](https://github.com/Fmarzochi/EGC/issues/480), [Japanese](https://github.com/Fmarzochi/EGC/issues/482), [Chinese Simplified](https://github.com/Fmarzochi/EGC/issues/483), [Russian](https://github.com/Fmarzochi/EGC/issues/487), [Italian](https://github.com/Fmarzochi/EGC/issues/481), [Turkish](https://github.com/Fmarzochi/EGC/issues/484), [Ukrainian](https://github.com/Fmarzochi/EGC/issues/479), and [Malay](https://github.com/Fmarzochi/EGC/issues/488). Translation is done on [Crowdin](https://crowdin.com/project/egc) -- no code required.
+
+**Test on your platform:** If you are on [Windows](https://github.com/Fmarzochi/EGC/issues/476) or [macOS](https://github.com/Fmarzochi/EGC/issues/477), install EGC and report what works and what does not. No code required.
+
+**Add an agent or skill:** Look at existing files in `agents/` and `skills/` for examples. The format is documented below and the CI validator will tell you exactly what is wrong if your file has a structural issue.
+
+For all contributions, the two hard requirements are `git commit -s` (DCO) and signing the CLA when the bot asks. Both are explained in the sections below.
+
+---
+
 ## Quick Start
 
 ```bash
