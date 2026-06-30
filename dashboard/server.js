@@ -356,7 +356,12 @@ if (req.method === 'GET' && req.url === '/session-history') {
   // ── Static files ─────────────────────────────────────────
   const urlPath = req.url === '/' ? '/index.html' : req.url;
   const file    = path.join(PUBLIC, urlPath.split('?')[0]);
-  if (!file.startsWith(PUBLIC)) { res.writeHead(403); res.end(); return; }
+  const resolvedFilePath = path.resolve(file);
+  if (resolvedFilePath !== PUBLIC && !resolvedFilePath.startsWith(PUBLIC + path.sep)) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
   if (fs.existsSync(file) && fs.statSync(file).isFile()) {
     const ext = path.extname(file);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
