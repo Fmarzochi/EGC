@@ -6,6 +6,7 @@ const path    = require('path');
 const fs      = require('fs');
 const os      = require('os');
 const { execSync } = require('child_process');
+const { createAccumulator } = require('./accumulator');
 
 const PORT   = 7890;
 const PUBLIC = path.join(__dirname, 'public');
@@ -22,6 +23,24 @@ const MIME = {
 };
 
 const SERVER_START = Date.now();
+
+function buildStaticManifest(dir) {
+  const manifest = new Map();
+  if (!fs.existsSync(dir)) return manifest;
+  function scan(current, base) {
+    for (const name of fs.readdirSync(current)) {
+      const abs = path.join(current, name);
+      const rel  = base + '/' + name;
+      try {
+        if (fs.statSync(abs).isDirectory()) scan(abs, rel);
+        else manifest.set(rel, abs);
+      } catch (_) {}
+    }
+  }
+  scan(dir, '');
+  return manifest;
+}
+const STATIC_FILES = buildStaticManifest(PUBLIC);
 
 function detectModel() {
   const candidates = [
@@ -46,119 +65,27 @@ function detectOperator() {
 }
 const OPERATOR = detectOperator();
 
-// What each provider can actually expose — honest contract
-const CAPABILITIES = {
-  claude:    { tokenUsage:true,  model:true,  cost:true,  session:true,  workspace:true  },
-  gemini:    { tokenUsage:true,  model:true,  cost:false, session:true,  workspace:false },
-  cursor:    { tokenUsage:false, model:false, cost:false, session:true,  workspace:true  },
-  codex:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-  vscode:    { tokenUsage:false, model:false, cost:false, session:false, workspace:true  },
-  kiro:      { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-  trae:      { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-  opencode:  { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-  codebuddy: { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-  aider:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-};
-
 // Pricing per 1M tokens — loaded from prices.json (configurable)
 const PRICES_PATH = path.join(__dirname, 'prices.json');
-let MODEL_PRICES = {};
+const MODEL_PRICES = {};
 function loadPrices() {
   try {
-    MODEL_PRICES = JSON.parse(fs.readFileSync(PRICES_PATH, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(PRICES_PATH, 'utf8'));
+    Object.assign(MODEL_PRICES, data);
   } catch (_) {
-    MODEL_PRICES = {
+    Object.assign(MODEL_PRICES, {
       '_default_claude': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
       '_default_gemini': { input: 0.10, output: 0.40,  cacheRead: 0.025, cacheWrite: 0.00 },
       '_default_codex':  { input: 2.50, output: 10.00, cacheRead: 1.25, cacheWrite: 0.00 },
-    };
+    });
   }
 }
 loadPrices();
 fs.watchFile(PRICES_PATH, () => loadPrices());
 
-const IDE_PRICE_KEY = {
-  claude: '_default_claude',
-  gemini: '_default_gemini',
-  codex:  '_default_codex',
-  opencode: '_default_opencode',
-};
-
-function calcCost(ide, tokens, model) {
-  const pricing = MODEL_PRICES[model] || MODEL_PRICES[IDE_PRICE_KEY[ide]];
-  if (!pricing) return null;
-  const inp = (tokens.input      || 0) * (pricing.input      || 0) / 1e6;
-  const out = (tokens.output     || 0) * (pricing.output     || 0) / 1e6;
-  const cr  = (tokens.cacheRead  || 0) * (pricing.cacheRead  || 0) / 1e6;
-  const cw  = (tokens.cacheWrite || 0) * (pricing.cacheWrite || 0) / 1e6;
-  return inp + out + cr + cw;
-}
-
-// Runtime telemetry accumulated from real events
-const providerState = {};
-// Store recent completed sessions for dashboard analytics
-const sessionHistory = [];
-const MAX_SESSION_HISTORY = 1000;
-
-function getProvider(ide) {
-  if (!providerState[ide]) {
-    providerState[ide] = {
-      ide,
-      lastSeen:  null,
-      running:   false,
-      toolCalls: 0,
-      sessions:  0,
-      lastModel: null,          // ← add this line
-      tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    };
-  }
-  return providerState[ide];
-}
-
-function accumulateEvent(ev) {
-  
-
-  const p = getProvider(ev.ide);
-  p.lastSeen = Date.now();
-  p.running  = true;
-  if (ev.model) p.lastModel = ev.model;   // ← add this line
-
-if (ev.event === 'pre_tool') p.toolCalls++;
-
-if (ev.event === 'session_end') {
-  const usage = ev.usage || {};
-  const sessionTokens = {
-    input:      usage.input_tokens                || 0,
-    output:     usage.output_tokens               || 0,
-    cacheRead:  usage.cache_read_input_tokens     || 0,
-    cacheWrite: usage.cache_creation_input_tokens || 0,
-  };
-  const sessionModel = ev.model || p.lastModel || null;
-  const ideCap       = CAPABILITIES[ev.ide] || {};
-  const sessionCost  = ideCap.cost === true ? calcCost(ev.ide, sessionTokens, sessionModel) : null;
-
-  sessionHistory.push({
-    timestamp:    Date.now(),
-    ide:          ev.ide,
-    model:        sessionModel,
-    input_tokens:  sessionTokens.input,
-    output_tokens: sessionTokens.output,
-    total_tokens:  sessionTokens.input + sessionTokens.output,
-    cost:          sessionCost,
-  });
-
-  if (sessionHistory.length > MAX_SESSION_HISTORY) sessionHistory.shift();
-}
-
-if (ev.usage) {
-  p.sessions++;
-
-  p.tokens.input += (ev.usage.input_tokens || 0);
-  p.tokens.output += (ev.usage.output_tokens || 0);
-  p.tokens.cacheRead += (ev.usage.cache_read_input_tokens || 0);
-  p.tokens.cacheWrite += (ev.usage.cache_creation_input_tokens || 0);
-}
-}
+// Shared accumulator — fresh state, production logic
+const ACC = createAccumulator(MODEL_PRICES);
+const { providerState, sessionHistory, getProvider, accumulateEvent, calcCost, CAPABILITIES } = ACC;
 
 // Mark providers offline after 90 s without events
 setInterval(() => {
@@ -189,9 +116,10 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const ev = JSON.parse(body);
-        accumulateEvent(ev);
-        const msg = JSON.stringify(ev);
-        for (const ws of clients) { if (ws.readyState === 1) ws.send(msg); }
+        if (accumulateEvent(ev)) {
+          const msg = JSON.stringify(ev);
+          for (const ws of clients) { if (ws.readyState === 1) ws.send(msg); }
+        }
       } catch (_) {}
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end('{"ok":true}');
@@ -260,25 +188,62 @@ if (req.method === 'GET' && req.url === '/session-history') {
     const filtered = cutoff
       ? sessionHistory.filter(s => s.timestamp >= cutoff)
       : sessionHistory;
+const byIde = {};
 
-    const byIde = {};
-    for (const s of filtered) {
-      if (!byIde[s.ide]) {
-        const cap = CAPABILITIES[s.ide] || {};
-        byIde[s.ide] = { totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, sessions: 0, costSupported: cap.cost === true };
-      }
-      byIde[s.ide].totalCost         += s.cost          || 0;
-      byIde[s.ide].totalInputTokens  += s.input_tokens  || 0;
-      byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
-      byIde[s.ide].sessions          += 1;
-    }
-    const grandTotal = Object.values(byIde).reduce((acc, v) => acc + (v.costSupported ? v.totalCost : 0), 0);
+for (const s of filtered) {
+  if (!byIde[s.ide]) {
+    const cap = CAPABILITIES[s.ide] || {};
+    byIde[s.ide] = {
+      totalCost: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      sessions: 0,
+      costSupported: cap.cost === true,
+    };
+  }
+
+  byIde[s.ide].totalCost += Number(s.cost) || 0;
+byIde[s.ide].totalInputTokens += Number(s.input_tokens) || 0;
+byIde[s.ide].totalOutputTokens += Number(s.output_tokens) || 0;
+byIde[s.ide].sessions += 1;
+}
+
+const totalTokens = Object.values(byIde).reduce(
+  (sum, provider) =>
+    sum + provider.totalInputTokens + provider.totalOutputTokens,
+  0
+);
+
+let mostUsedProvider = null;
+let maxTokens = -1;
+
+for (const [ide, provider] of Object.entries(byIde)) {
+  provider.totalTokens =
+    provider.totalInputTokens + provider.totalOutputTokens;
+
+  provider.usagePercentage =
+    totalTokens > 0
+      ? Number(((provider.totalTokens / totalTokens) * 100).toFixed(1))
+      : 0;
+
+ if (provider.totalTokens > 0 && provider.totalTokens > maxTokens) {
+  maxTokens = provider.totalTokens;
+  mostUsedProvider = ide;
+}
+}
+
+const grandTotal = Object.values(byIde).reduce(
+  (acc, v) => acc + (v.costSupported ? v.totalCost : 0),
+  0
+);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      grandTotal,
-      byIde,
-      recentSessions: filtered.slice(-50).reverse(),
-    }));
+   res.end(JSON.stringify({ 
+  grandTotal,
+  totalTokens,
+  mostUsedProvider,
+  byIde,
+  recentSessions: filtered.slice(-50).reverse(),
+}));
     return;
   }
 
@@ -354,13 +319,12 @@ if (req.method === 'GET' && req.url === '/session-history') {
   }
 
   // ── Static files ─────────────────────────────────────────
-  const urlPath = req.url === '/' ? '/index.html' : req.url;
-  const file    = path.join(PUBLIC, urlPath.split('?')[0]);
-  if (!file.startsWith(PUBLIC)) { res.writeHead(403); res.end(); return; }
-  if (fs.existsSync(file) && fs.statSync(file).isFile()) {
-    const ext = path.extname(file);
+  const segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
+  const filePath = STATIC_FILES.get(segment);
+  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(fs.readFileSync(file));
+    res.end(fs.readFileSync(filePath));
   } else {
     res.writeHead(404); res.end('Not found');
   }
