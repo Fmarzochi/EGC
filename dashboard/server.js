@@ -309,10 +309,10 @@ const grandTotal = Object.values(byIde).reduce(
     res.end();
     return;
   }
-  if (fs.existsSync(file) && fs.statSync(file).isFile()) {
-    const ext = path.extname(file);
+  if (fs.existsSync(resolvedFilePath) && fs.statSync(resolvedFilePath).isFile()) {
+    const ext = path.extname(resolvedFilePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(fs.readFileSync(file));
+    res.end(fs.readFileSync(resolvedFilePath));
   } else {
     res.writeHead(404); res.end('Not found');
   }
