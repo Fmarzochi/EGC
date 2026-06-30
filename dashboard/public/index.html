@@ -323,6 +323,16 @@ body.minimized footer{display:none!important;}
 .cost-grand{display:flex;align-items:baseline;gap:6px;margin-bottom:4px;}
 .cost-grand-val{font-size:22px;font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;}
 .cost-grand-lbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;}
+.provider-highlight{
+  margin-top:6px;
+  font-size:11px;
+  color:var(--muted);
+  font-weight:500;
+}
+
+.provider-highlight strong{
+  color:var(--primary);
+}
 .cost-bars{display:flex;flex-direction:column;gap:8px;margin:4px 0;}
 .cost-bar-row{display:flex;flex-direction:column;gap:3px;}
 .cost-bar-head{display:flex;justify-content:space-between;align-items:baseline;}
@@ -522,12 +532,12 @@ body.minimized footer{display:none!important;}
 
 </div>
 
-<div class="rcard" id="costCard">
-  <span class="eye">💰 Cost Comparison</span>
-  <div class="cost-grand">
-    <span class="cost-grand-val" id="costGrandTotal">$0.0000</span>
-    <span class="cost-grand-lbl">total spend</span>
-  </div>
+<div class="cost-grand">
+  <span class="cost-grand-val" id="costGrandTotal">$0.0000</span>
+  <span class="cost-grand-lbl">total spend</span>
+</div>
+
+<div id="providerHighlight" class="provider-highlight"></div>
   <div class="cost-range-wrap">
     <button class="cost-range-btn active" data-range="all"   id="crAll"   onclick="setCostRange('all')">All time</button>
     <button class="cost-range-btn"        data-range="today" id="crToday" onclick="setCostRange('today')">Today</button>
@@ -1252,6 +1262,17 @@ async function loadCostSummary() {
     const data = await r.json();
 
     document.getElementById('costGrandTotal').textContent = fmtCost(data.grandTotal);
+    const highlightEl = document.getElementById('providerHighlight');
+
+if (data.mostUsedProvider && data.byIde[data.mostUsedProvider]) {
+  const provider = data.byIde[data.mostUsedProvider];
+
+  highlightEl.innerHTML =
+    `🏆 Most Used: <strong>${data.mostUsedProvider}</strong> (${provider.usagePercentage}% of total tokens)`;
+} else {
+  highlightEl.innerHTML =
+  '<span style="opacity:.7">No provider usage available yet.</span>';
+}
 
     const barsEl = document.getElementById('costBars');
     const ideEntries = Object.entries(data.byIde);
@@ -1259,21 +1280,32 @@ async function loadCostSummary() {
       barsEl.innerHTML = '<div class="cost-empty">No session data yet.</div>';
     } else {
       barsEl.innerHTML = ideEntries
-        .sort(([, a], [, b]) => b.totalCost - a.totalCost)
+       .sort(([, a], [, b]) => b.totalTokens - a.totalTokens)
         .map(([ide, v]) => {
           const col     = IDE_COLORS[ide] || '#8b949e';
           const total   = (v.totalInputTokens + v.totalOutputTokens) || 1;
           const inpPct  = Math.round((v.totalInputTokens  / total) * 100);
           const outPct  = Math.round((v.totalOutputTokens / total) * 100);
-          const inpTok  = fmtTokens(v.totalInputTokens);
-          const outTok  = fmtTokens(v.totalOutputTokens);
-          const costStr = (v.totalCost === 0 && v.costSupported === false)
-            ? `<span style="color:#777;font-size:11px;margin-left:4px;">N/A</span>`
-            : `<strong style="color:${col}">${fmtCost(v.totalCost)}</strong>`;
+          
+          const inpTok = fmtTokens(v.totalInputTokens);
+          const outTok = fmtTokens(v.totalOutputTokens);
+          const totalTok = fmtTokens(v.totalTokens);
+          const usagePct = `${v.usagePercentage}%`;
+
+const costStr =
+  (v.totalCost === 0 && v.costSupported === false)
+    ? `<span style="color:#777;font-size:11px;margin-left:4px;">N/A</span>`
+    : `<strong style="color:${col}">${fmtCost(v.totalCost)}</strong>`;
           return `<div class="cost-bar-row">
             <div class="cost-bar-head">
               <span class="cost-bar-ide" style="color:${col}">${ide}</span>
-              <span class="cost-bar-meta">${inpTok}↑ ${outTok}↓ · ${v.sessions} sess · ${costStr}</span>
+             <span class="cost-bar-meta">
+  ${inpTok}↑ ${outTok}↓ ·
+  ${totalTok} total ·
+  ${v.sessions} sess ·
+  ${usagePct} ·
+  ${costStr}
+</span>
             </div>
             <div class="cost-bar-stack">
               <div class="cost-bar-inp" style="width:${inpPct}%;background:${col}"></div>
