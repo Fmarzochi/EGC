@@ -30,11 +30,22 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - Context is heavy or slow → call \`reduce_context\`
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
+
+## EGC Guardian Protocol
+
+These calls are automatic and non-negotiable. Never wait for the user to ask.
+
+**Start of every non-trivial task:** call \`orchestrate_task({ prompt: "<task>" })\`
+**Before every shell/Bash command:** call \`validate_command({ command: "<cmd>" })\`
+**Before every new file Write or Edit on a file not yet read:** call \`validate_write({ filepath: "<path>" })\`
+**At the end of every significant work block:** call \`auto_learn({ project_path: "<cwd>" })\`
+
+Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.
 <!-- /egc-memory-protocol -->
 `;
 
-const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history. Judge by full context not literal words.';
-const CODEX_PROTOCOL_FULL   = `persistent_instructions = "At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history. Judge by full context not literal words."\n`;
+const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history. Judge by full context not literal words. Guardian Protocol (mandatory): before every non-trivial task call orchestrate_task, before every shell command call validate_command, before every new file write/edit call validate_write, after every work block call auto_learn.';
+const CODEX_PROTOCOL_FULL   = `persistent_instructions = "At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history. Judge by full context not literal words. Guardian Protocol (mandatory): before every non-trivial task call orchestrate_task, before every shell command call validate_command, before every new file write/edit call validate_write, after every work block call auto_learn."\n`;
 
 const HOME = os.homedir();
 
@@ -101,7 +112,7 @@ try {
         return;
       }
       const separator = existing.trim() ? '\n\n' : '';
-      obj['cursor.rules'] = existing + separator + '[egc-memory-protocol] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents. Judge by full context not literal words.';
+      obj['cursor.rules'] = existing + separator + '[egc-memory-protocol] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents. Judge by full context not literal words. [egc-guardian] Before every non-trivial task call orchestrate_task. Before every shell command call validate_command. Before every new file write/edit call validate_write. After every work block call auto_learn.';
       fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
       fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
       console.log(`  [cognitive] Cursor: memory protocol installed (${settingsFile.replace(HOME, '~')})`);
@@ -185,7 +196,7 @@ try {
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, target);
     } else {
-      fs.writeFileSync(target, '# EGC Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n');
+      fs.writeFileSync(target, '# EGC Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n\n## EGC Guardian Protocol\n\nThese calls are automatic and non-negotiable. Never wait for the user to ask.\n\n- Before every non-trivial task: call `orchestrate_task({ prompt: "<task>" })`\n- Before every shell/Bash command: call `validate_command({ command: "<cmd>" })`\n- Before every new file Write or Edit on a file not yet read: call `validate_write({ filepath: "<path>" })`\n- At the end of every significant work block: call `auto_learn({ project_path: "<cwd>" })`\n\nSkipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.\n');
     }
     console.log(`  [cognitive] OpenCode: memory protocol installed (${target.replace(HOME, '~')})`);
   } catch (e) {
@@ -228,7 +239,7 @@ try {
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, target);
     } else {
-      fs.writeFileSync(target, '# Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n');
+      fs.writeFileSync(target, '# Session Memory\n\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n\n## EGC Guardian Protocol\n\nThese calls are automatic and non-negotiable. Never wait for the user to ask.\n\n- Before every non-trivial task: call `orchestrate_task({ prompt: "<task>" })`\n- Before every shell/Bash command: call `validate_command({ command: "<cmd>" })`\n- Before every new file Write or Edit on a file not yet read: call `validate_write({ filepath: "<path>" })`\n- At the end of every significant work block: call `auto_learn({ project_path: "<cwd>" })`\n\nSkipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.\n');
     }
     console.log('  [cognitive] CodeBuddy: memory protocol installed (~/.codebuddy/MEMORY.md)');
   } catch (e) {
