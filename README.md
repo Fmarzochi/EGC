@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**Language:** English | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [한국어](translations/ko/README.md) | [Português (Brasil)](translations/pt/README.md)
+**Language:** English | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [한국어](translations/ko/README.md) | [Português (Brasil)](translations/pt/README.md) | [Русский](translations/ru/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -11,9 +11,9 @@
 <!-- CENTERED-LANGUAGE-SELECTOR-START -->
 <div align="center">
 
-**Language / اللغة / Idioma / भाषा / 언어**
+**Language / اللغة / Idioma / भाषा / 언어 / Язык**
 
-[**English**](README.md) | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [한국어](translations/ko/README.md) | [Português (Brasil)](translations/pt/README.md)
+[**English**](README.md) | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [한국어](translations/ko/README.md) | [Português (Brasil)](translations/pt/README.md) | [Русский](translations/ru/README.md)
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
