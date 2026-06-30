@@ -274,10 +274,10 @@ for (const s of filtered) {
     };
   }
 
-  byIde[s.ide].totalCost += s.cost || 0;
-  byIde[s.ide].totalInputTokens += s.input_tokens || 0;
-  byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
-  byIde[s.ide].sessions += 1;
+  byIde[s.ide].totalCost += Number(s.cost) || 0;
+byIde[s.ide].totalInputTokens += Number(s.input_tokens) || 0;
+byIde[s.ide].totalOutputTokens += Number(s.output_tokens) || 0;
+byIde[s.ide].sessions += 1;
 }
 
 const totalTokens = Object.values(byIde).reduce(
@@ -298,10 +298,10 @@ for (const [ide, provider] of Object.entries(byIde)) {
       ? Number(((provider.totalTokens / totalTokens) * 100).toFixed(1))
       : 0;
 
-  if (provider.totalTokens > maxTokens) {
-    maxTokens = provider.totalTokens;
-    mostUsedProvider = ide;
-  }
+ if (provider.totalTokens > 0 && provider.totalTokens > maxTokens) {
+  maxTokens = provider.totalTokens;
+  mostUsedProvider = ide;
+}
 }
 
 const grandTotal = Object.values(byIde).reduce(

@@ -532,14 +532,12 @@ body.minimized footer{display:none!important;}
 
 </div>
 
-<div class="rcard" id="costCard">
-  <span class="eye">💰 Cost Comparison</span>
-  <div class="cost-grand">
+<div class="cost-grand">
   <span class="cost-grand-val" id="costGrandTotal">$0.0000</span>
   <span class="cost-grand-lbl">total spend</span>
-
-  <div id="providerHighlight" class="provider-highlight"></div>
 </div>
+
+<div id="providerHighlight" class="provider-highlight"></div>
   <div class="cost-range-wrap">
     <button class="cost-range-btn active" data-range="all"   id="crAll"   onclick="setCostRange('all')">All time</button>
     <button class="cost-range-btn"        data-range="today" id="crToday" onclick="setCostRange('today')">Today</button>
@@ -1288,7 +1286,7 @@ if (data.mostUsedProvider && data.byIde[data.mostUsedProvider]) {
           const total   = (v.totalInputTokens + v.totalOutputTokens) || 1;
           const inpPct  = Math.round((v.totalInputTokens  / total) * 100);
           const outPct  = Math.round((v.totalOutputTokens / total) * 100);
-          const inpTok  = fmtTokens(v.totalInputTokens);
+          
           const inpTok = fmtTokens(v.totalInputTokens);
           const outTok = fmtTokens(v.totalOutputTokens);
           const totalTok = fmtTokens(v.totalTokens);
