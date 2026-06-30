@@ -24,6 +24,24 @@ const MIME = {
 
 const SERVER_START = Date.now();
 
+function buildStaticManifest(dir) {
+  const manifest = new Map();
+  if (!fs.existsSync(dir)) return manifest;
+  function scan(current, base) {
+    for (const name of fs.readdirSync(current)) {
+      const abs = path.join(current, name);
+      const rel  = base + '/' + name;
+      try {
+        if (fs.statSync(abs).isDirectory()) scan(abs, rel);
+        else manifest.set(rel, abs);
+      } catch (_) {}
+    }
+  }
+  scan(dir, '');
+  return manifest;
+}
+const STATIC_FILES = buildStaticManifest(PUBLIC);
+
 function detectModel() {
   const candidates = [
     path.join(os.homedir(), '.claude', 'settings.json'),
@@ -301,18 +319,12 @@ const grandTotal = Object.values(byIde).reduce(
   }
 
   // ── Static files ─────────────────────────────────────────
-  const urlPath = req.url === '/' ? '/index.html' : req.url;
-  const file    = path.join(PUBLIC, urlPath.split('?')[0]);
-  const resolvedFilePath = path.resolve(file);
-  if (resolvedFilePath !== PUBLIC && !resolvedFilePath.startsWith(PUBLIC + path.sep)) {
-    res.writeHead(403);
-    res.end();
-    return;
-  }
-  if (fs.existsSync(resolvedFilePath) && fs.statSync(resolvedFilePath).isFile()) {
-    const ext = path.extname(resolvedFilePath);
+  const segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
+  const filePath = STATIC_FILES.get(segment);
+  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(fs.readFileSync(resolvedFilePath));
+    res.end(fs.readFileSync(filePath));
   } else {
     res.writeHead(404); res.end('Not found');
   }
