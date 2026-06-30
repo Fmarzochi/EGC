@@ -106,9 +106,16 @@ class PersistentLogger {
 
 const sysLogger = new PersistentLogger('egc-guardian-router');
 
+const auditLogPath = path.join(os.homedir(), '.egc', 'audit.log');
+function writeSecurityAuditLog(action: string, details: Record<string, unknown>) {
+  const entry = JSON.stringify({ timestamp: new Date().toISOString(), action, ...details });
+  try { fs.appendFileSync(auditLogPath, entry + '\n', 'utf-8'); } catch { /* non-critical */ }
+}
+
 function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: Record<string, unknown> = {}) {
   const level = (status === 'FATAL' || status === 'DENIED') ? 'ERROR' : (status === 'ONLINE' || status === 'SHUTDOWN' ? 'INFO' : 'AUDIT');
   sysLogger.log(level, action, status, details);
+  if (status === 'DENIED') writeSecurityAuditLog(action, details);
 }
 
 const server = new Server({ name: "egc-guardian-router", version: "3.0.0" }, { capabilities: { tools: {} } });
@@ -184,8 +191,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_CALLS = 60;
+const rateLimitMap = new Map<string, number[]>();
+
+function checkRateLimit(tool: string): boolean {
+  const now = Date.now();
+  const timestamps = (rateLimitMap.get(tool) ?? []).filter(t => now - t < RATE_WINDOW_MS);
+  timestamps.push(now);
+  rateLimitMap.set(tool, timestamps);
+  return timestamps.length <= RATE_MAX_CALLS;
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
+    const tool = request.params.name;
+    if (!checkRateLimit(tool)) {
+      auditLog('RATE_LIMIT_EXCEEDED', 'DENIED', { tool, limit: RATE_MAX_CALLS, window_ms: RATE_WINDOW_MS });
+      return { content: [{ type: "text", text: `[DENIED] Rate limit exceeded for tool '${tool}': max ${RATE_MAX_CALLS} calls per ${RATE_WINDOW_MS / 1000}s` }] };
+    }
     switch (request.params.name) {
       case "validate_command": {
         const { command } = ValidateCommandSchema.parse(request.params.arguments);

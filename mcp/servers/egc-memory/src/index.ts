@@ -336,7 +336,11 @@ function getStateDir(): string {
 }
 
 function resolveProjectPath(provided?: string): string {
-  return provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
+  const raw = provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
+  if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
+    throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
+  }
+  return path.resolve(raw);
 }
 
 function readStateDoc(filePath: string): Record<string, string[]|string> {
@@ -406,6 +410,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
   ];
 
   fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+  try { fs.chmodSync(filePath, 0o600); } catch { /* chmod not supported on Windows */ }
 }
 
 const LESSON_REINFORCE_DELTA = 0.15;
