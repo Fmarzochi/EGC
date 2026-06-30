@@ -212,21 +212,34 @@ const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_CALLS = 60;
 const rateLimitMap = new Map<string, number[]>();
 
-function checkRateLimit(tool: string): boolean {
+function checkRateLimit(tool: string, projectPath?: string | null): boolean {
   const now = Date.now();
-  const timestamps = (rateLimitMap.get(tool) ?? []).filter(t => now - t < RATE_WINDOW_MS);
+  
+  // Create a composite storage key if projectPath is available, otherwise fall back to global tool name
+  const trimmed = projectPath ? projectPath.trim() : "";
+  const storageKey = trimmed !== "" 
+    ? `${trimmed}::${tool}` 
+    : tool;
+
+  const timestamps = (rateLimitMap.get(storageKey) ?? []).filter(t => now - t < RATE_WINDOW_MS);
   timestamps.push(now);
-  rateLimitMap.set(tool, timestamps);
+  rateLimitMap.set(storageKey, timestamps);
   return timestamps.length <= RATE_MAX_CALLS;
 }
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const tool = request.params.name;
-    if (!checkRateLimit(tool)) {
-      auditLog('RATE_LIMIT_EXCEEDED', 'DENIED', { tool, limit: RATE_MAX_CALLS, window_ms: RATE_WINDOW_MS });
+    
+    // Safely extract project_path from arguments if provided by the client
+    const args = request.params.arguments as Record<string, unknown> | undefined;
+    const projectPath = typeof args?.project_path === 'string' ? args.project_path : undefined;
+
+    if (!checkRateLimit(tool, projectPath)) {
+      auditLog('RATE_LIMIT_EXCEEDED', 'DENIED', { tool, project_path: projectPath, limit: RATE_MAX_CALLS, window_ms: RATE_WINDOW_MS });
       return { content: [{ type: "text", text: `[DENIED] Rate limit exceeded for tool '${tool}': max ${RATE_MAX_CALLS} calls per ${RATE_WINDOW_MS / 1000}s` }] };
     }
+    
     switch (request.params.name) {
       case "validate_command": {
         const { command } = ValidateCommandSchema.parse(request.params.arguments);
