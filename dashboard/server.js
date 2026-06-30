@@ -260,25 +260,62 @@ if (req.method === 'GET' && req.url === '/session-history') {
     const filtered = cutoff
       ? sessionHistory.filter(s => s.timestamp >= cutoff)
       : sessionHistory;
+const byIde = {};
 
-    const byIde = {};
-    for (const s of filtered) {
-      if (!byIde[s.ide]) {
-        const cap = CAPABILITIES[s.ide] || {};
-        byIde[s.ide] = { totalCost: 0, totalInputTokens: 0, totalOutputTokens: 0, sessions: 0, costSupported: cap.cost === true };
-      }
-      byIde[s.ide].totalCost         += s.cost          || 0;
-      byIde[s.ide].totalInputTokens  += s.input_tokens  || 0;
-      byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
-      byIde[s.ide].sessions          += 1;
-    }
-    const grandTotal = Object.values(byIde).reduce((acc, v) => acc + (v.costSupported ? v.totalCost : 0), 0);
+for (const s of filtered) {
+  if (!byIde[s.ide]) {
+    const cap = CAPABILITIES[s.ide] || {};
+    byIde[s.ide] = {
+      totalCost: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      sessions: 0,
+      costSupported: cap.cost === true,
+    };
+  }
+
+  byIde[s.ide].totalCost += s.cost || 0;
+  byIde[s.ide].totalInputTokens += s.input_tokens || 0;
+  byIde[s.ide].totalOutputTokens += s.output_tokens || 0;
+  byIde[s.ide].sessions += 1;
+}
+
+const totalTokens = Object.values(byIde).reduce(
+  (sum, provider) =>
+    sum + provider.totalInputTokens + provider.totalOutputTokens,
+  0
+);
+
+let mostUsedProvider = null;
+let maxTokens = -1;
+
+for (const [ide, provider] of Object.entries(byIde)) {
+  provider.totalTokens =
+    provider.totalInputTokens + provider.totalOutputTokens;
+
+  provider.usagePercentage =
+    totalTokens > 0
+      ? Number(((provider.totalTokens / totalTokens) * 100).toFixed(1))
+      : 0;
+
+  if (provider.totalTokens > maxTokens) {
+    maxTokens = provider.totalTokens;
+    mostUsedProvider = ide;
+  }
+}
+
+const grandTotal = Object.values(byIde).reduce(
+  (acc, v) => acc + (v.costSupported ? v.totalCost : 0),
+  0
+);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      grandTotal,
-      byIde,
-      recentSessions: filtered.slice(-50).reverse(),
-    }));
+   res.end(JSON.stringify({ 
+  grandTotal,
+  totalTokens,
+  mostUsedProvider,
+  byIde,
+  recentSessions: filtered.slice(-50).reverse(),
+}));
     return;
   }
 
