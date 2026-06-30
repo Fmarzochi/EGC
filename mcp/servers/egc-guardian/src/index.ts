@@ -106,10 +106,27 @@ class PersistentLogger {
 
 const sysLogger = new PersistentLogger('egc-guardian-router');
 
-const auditLogPath = path.join(os.homedir(), '.egc', 'audit.log');
+const auditLogDir = path.join(os.homedir(), '.egc');
+const auditLogPath = path.join(auditLogDir, 'audit.log');
 function writeSecurityAuditLog(action: string, details: Record<string, unknown>) {
   const entry = JSON.stringify({ timestamp: new Date().toISOString(), action, ...details });
-  try { fs.appendFileSync(auditLogPath, entry + '\n', 'utf-8'); } catch { /* non-critical */ }
+  try {
+    fs.mkdirSync(auditLogDir, { recursive: true, mode: 0o700 });
+  } catch (err) {
+    sysLogger.log('ERROR', 'AUDIT_LOG_WRITE_FAILED', 'FATAL', { error: String(err) });
+    return;
+  }
+  // Best-effort hardening for the case where auditLogDir already existed with
+  // looser permissions (mkdirSync's mode option is a no-op then). Kept out of
+  // the write's critical path so a chmod failure here (e.g. EPERM on a
+  // directory owned by another user) can never cause a DENIED event to be lost.
+  try { fs.chmodSync(auditLogDir, 0o700); } catch { /* non-critical */ }
+  try {
+    fs.appendFileSync(auditLogPath, entry + '\n', { encoding: 'utf-8', mode: 0o600 });
+    fs.chmodSync(auditLogPath, 0o600);
+  } catch (err) {
+    sysLogger.log('ERROR', 'AUDIT_LOG_WRITE_FAILED', 'FATAL', { error: String(err) });
+  }
 }
 
 function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: Record<string, unknown> = {}) {
