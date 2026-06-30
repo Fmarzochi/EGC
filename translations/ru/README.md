@@ -176,6 +176,7 @@ EGC создан одним разработчиком, поддерживает
 #### Сторонники
 
 <a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+<a href="https://github.com/Vile93"><img src="https://avatars.githubusercontent.com/u/107775351?v=4" width="52" height="52" alt="@Vile93" title="@Vile93" /></a>
 
 #### Ежемесячные спонсоры · _станьте первым_
 
