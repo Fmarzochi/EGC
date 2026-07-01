@@ -45,7 +45,7 @@ function buildSkeleton(projectPath, branch, ts) {
 function writeSnapshotToDisk() {
   const projectPath = process.env.PWD || process.cwd();
   const branch = detectBranch(projectPath);
-  const stateDir = getStateDir();
+  const stateDir = getStateDir(process.env.HOME);
   const resolved = resolveStateRead(stateDir, projectPath, branch);
   const filePath = resolveStateWrite(stateDir, projectPath, branch);
   const ts = new Date().toISOString();
@@ -71,7 +71,7 @@ function main() {
 
   // Direct write: guaranteed snapshot regardless of AI or tool availability.
   // Non-fatal: a write failure must never block the session from stopping.
-  try { writeSnapshotToDisk(); } catch (_) {}
+  try { writeSnapshotToDisk(); } catch (_) { /* non-fatal */ }
 
   // Prompt: lets a cooperative AI enrich the snapshot with synthesized
   // decisions, preferences, and next steps via update_state.
