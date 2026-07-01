@@ -95,18 +95,17 @@ test('invalid event returns false (broadcast guard)', () => {
 // ---------------------------------------------------------------------------
 
 test('POST /event rejects payloads larger than 256 KB with 413 status code', (t, done) => {
-  // Capture existing definitions to properly clean up background side-effects
   const originalCreateServer = http.createServer;
   const originalSetInterval = global.setInterval;
   const originalWatchFile = fs.watchFile;
-
+  
   let serverHandler = null;
   const activeIntervals = [];
   const watchedFiles = [];
 
   http.createServer = (handler) => {
     serverHandler = handler;
-    return { listen: () => { }, on: () => { } };
+    return { listen: () => {}, on: () => {} };
   };
 
   global.setInterval = (cb, ms) => {
@@ -124,33 +123,38 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
     }
   };
 
-  // Import server file to extract the application routing logic
-  delete require.cache[require.resolve('../dashboard/server.js')];
-  require('../dashboard/server.js');
+  // Safely evaluate the target module and guarantee cleanup via try/finally
+  try {
+    delete require.cache[require.resolve('../dashboard/server.js')];
+    require('../dashboard/server.js');
+  } finally {
+    http.createServer = originalCreateServer;
+    global.setInterval = originalSetInterval;
+    fs.watchFile = originalWatchFile;
+  }
 
-  // Restore defaults immediately
-  http.createServer = originalCreateServer;
-  global.setInterval = originalSetInterval;
-  fs.watchFile = originalWatchFile;
-
-  if (typeof serverHandler !== 'function') {
+  const cleanupHandles = () => {
     activeIntervals.forEach(id => clearInterval(id));
     watchedFiles.forEach(file => fs.unwatchFile(file));
+  };
+
+  if (typeof serverHandler !== 'function') {
+    cleanupHandles();
     return done(new Error('Failed to intercept dashboard server route handler logic'));
   }
 
-  // Spin up an isolated test server instance using a distinct loopback port
   const testServer = http.createServer(serverHandler);
-  const TEST_PORT = 7895;
+  let responseValidated = false;
 
-  const connections = new Set();
-  testServer.on('connection', (socket) => {
-    connections.add(socket);
-    socket.on('close', () => connections.delete(socket));
+  testServer.on('error', (err) => {
+    cleanupHandles();
+    done(err);
   });
 
-  testServer.listen(TEST_PORT, '127.0.0.1', () => {
-    // Generate a 300 KB chunk payload meeting requirement item #4 literally
+  // Dynamic port assignment (Port 0) avoids cross-process network binding collisions
+  testServer.listen(0, '127.0.0.1', () => {
+    const DYNAMIC_PORT = testServer.address().port;
+
     const payloadSize = 300 * 1024;
     const largePayload = JSON.stringify({
       ide: 'claude',
@@ -160,32 +164,13 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
 
     const options = {
       hostname: '127.0.0.1',
-      port: TEST_PORT,
+      port: DYNAMIC_PORT,
       path: '/event',
       method: 'POST',
-      agent: false,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(largePayload),
-        'Connection': 'close'
+        'Content-Length': Buffer.byteLength(largePayload)
       }
-    };
-
-    let finished = false;
-    const cleanup = (err) => {
-      if (finished) return;
-      finished = true;
-
-      for (const socket of connections) {
-        socket.destroy();
-      }
-      connections.clear();
-
-      testServer.close(() => {
-        activeIntervals.forEach(id => clearInterval(id));
-        watchedFiles.forEach(file => fs.unwatchFile(file));
-        done(err);
-      });
     };
 
     const req = http.request(options, (res) => {
@@ -193,23 +178,32 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
       res.setEncoding('utf8');
       res.on('data', chunk => { responseData += chunk; });
       res.on('end', () => {
-        try {
-          assert.equal(res.statusCode, 413, 'Server must reject large inputs with 413 Status');
-          const body = JSON.parse(responseData);
-          assert.equal(body.error, 'Payload too large', 'Error response should explicitly match design expectations');
-          cleanup();
-        } catch (err) {
-          cleanup(err);
-        }
+        testServer.close(() => {
+          cleanupHandles();
+          try {
+            assert.equal(res.statusCode, 413, 'Server must reject large inputs with 413 Status');
+            const body = JSON.parse(responseData);
+            assert.equal(body.error, 'Payload too large', 'Error response should explicitly match design expectations');
+            responseValidated = true;
+            done();
+          } catch (err) {
+            done(err);
+          }
+        });
       });
     });
 
     req.on('error', (err) => {
-      if (err.code === 'ECONNRESET') {
-        cleanup();
-      } else {
-        cleanup(err);
-      }
+      if (responseValidated) return; // Prevent double-callback invocations if already verified cleanly
+      
+      testServer.close(() => {
+        cleanupHandles();
+        if (err.code === 'ECONNRESET') {
+          done(new Error('Connection reset before 413 response was fully processed – server may not be sending the expected rejection'));
+        } else {
+          done(err);
+        }
+      });
     });
 
     req.write(largePayload);
