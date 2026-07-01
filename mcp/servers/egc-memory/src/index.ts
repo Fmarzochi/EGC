@@ -300,6 +300,39 @@ async function runMigrations(db: Database, dbDir: string) {
       lessonsSearchIndexReady = false;
       log('WARN', 'FTS5 unavailable for lessons, lesson_recall falls back to substring matching', { error: String(e) });
     }
+
+    // Migration 6: project_path column in lessons for per-project lesson scoping.
+    const hasV6 = await db.get('SELECT version FROM schema_migrations WHERE version = 6');
+    if (!hasV6) {
+      await db.exec('ALTER TABLE lessons ADD COLUMN project_path TEXT');
+      await db.run('INSERT INTO schema_migrations (version) VALUES (6)');
+    }
+
+    // Migration 7: project_path column in decisions for per-project scoping.
+    const hasV7 = await db.get('SELECT version FROM schema_migrations WHERE version = 7');
+    if (!hasV7) {
+      await db.exec('ALTER TABLE decisions ADD COLUMN project_path TEXT');
+      await db.run('INSERT INTO schema_migrations (version) VALUES (7)');
+    }
+
+    // Migration 8: sessions table for time-aware session tracking.
+    const hasV8 = await db.get('SELECT version FROM schema_migrations WHERE version = 8');
+    if (!hasV8) {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          project_path TEXT,
+          tool TEXT,
+          started_at TEXT NOT NULL,
+          ended_at TEXT
+        );
+      `);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (8)');
+    }
+
+    const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
+    const bootCount = bootRow ? parseInt(bootRow.value, 10) + 1 : 1;
+    await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['server_boot_count', String(bootCount)]);
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {
       // non-critical: stale lock will be cleaned up on next boot
@@ -461,6 +494,15 @@ function computeLessonDecay(confidence: number, lastRecalledIso: string | null, 
 
 function generateLessonId(): string {
   return `lesson-${Date.now()}-${randomUUID().slice(0, 8)}`;
+}
+
+async function getMaintenanceState(db: Database, key: string): Promise<string | null> {
+  const row = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', [key]);
+  return row?.value ?? null;
+}
+
+async function setMaintenanceState(db: Database, key: string, value: string): Promise<void> {
+  await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', [key, value]);
 }
 
 async function runLessonDecaySweep(db: Database): Promise<number> {
@@ -702,13 +744,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 async function handleLessonSave(db: Database, args: unknown) {
   const { content, context, tags, initial_confidence } = LessonSaveSchema.parse(args);
+
+  // Exact-match deduplication: reinforce an identical lesson instead of duplicating.
+  const duplicate = await db.get<{id: string}>(
+    'SELECT id FROM lessons WHERE content = ? AND context = ? AND archived = 0',
+    [content, context]
+  );
+  if (duplicate) {
+    log('INFO', 'Lesson deduplicated via exact match, reinforcing', { id: duplicate.id });
+    return await handleLessonReinforce(db, { id: duplicate.id });
+  }
+
   const id = generateLessonId();
   const now = new Date().toISOString();
+  const projPath = resolveProjectPath();
   await writeArbitrator.enqueue(async () => {
     await db.run(
-      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0)`,
-      [id, content, context, initial_confidence, now, tags ?? null]
+      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0, ?)`,
+      [id, content, context, initial_confidence, now, tags ?? null, projPath]
     );
   });
   log('INFO', 'Lesson saved', { id, context });
@@ -786,9 +840,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return { content: [{ type: "text", text: `Blocked: ${cleaned.reasons.join('; ')}` }] };
         }
 
-        // Execute write through the Queue Arbitrator to prevent IDE crash on SQLITE_BUSY
+        const decisionProjPath = resolveProjectPath();
         await writeArbitrator.enqueue(async () => {
-          await db.run('INSERT INTO decisions (context, decision) VALUES (?, ?)', [cleaned.sanitized.context, cleaned.sanitized.decision]);
+          await db.run('INSERT INTO decisions (context, decision, project_path) VALUES (?, ?, ?)', [cleaned.sanitized.context, cleaned.sanitized.decision, decisionProjPath]);
         });
 
         log('INFO', 'Decision stored securely via Queue Arbitration');
@@ -817,21 +871,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const branch = detectBranch(projPath);
         const resolved = resolveStateRead(getStateDir(), projPath, branch);
 
-        // Sweep expired working memory entries on every session start.
-        const swept = await sweepExpired(db);
-        if (swept > 0) {
-          log('INFO', 'Swept expired working memory entries', { count: swept });
+        // Sweep expired working memory entries throttled to once per hour.
+        try {
+          const lastWmSweep = await getMaintenanceState(db, 'last_working_memory_sweep');
+          const wmSweepDue = !lastWmSweep || Date.now() - new Date(lastWmSweep).getTime() > 60 * 60 * 1000;
+          if (wmSweepDue) {
+            const swept = await sweepExpired(db);
+            await setMaintenanceState(db, 'last_working_memory_sweep', new Date().toISOString());
+            if (swept > 0) log('INFO', 'Swept expired working memory entries', { count: swept });
+          }
+        } catch (e) {
+          log('WARN', 'Working memory sweep failed, continuing', { error: String(e) });
         }
 
-        // Run confidence decay sweep on every get_state call.
+        // Run confidence decay sweep throttled to once per day.
         try {
-          const affected = await runLessonDecaySweep(db);
-          if (affected > 0) {
-            log('INFO', 'Lesson decay sweep ran', { affected });
+          const lastDecay = await getMaintenanceState(db, 'last_decay_sweep');
+          const decayDue = !lastDecay || Date.now() - new Date(lastDecay).getTime() > 24 * 60 * 60 * 1000;
+          if (decayDue) {
+            const affected = await runLessonDecaySweep(db);
+            await setMaintenanceState(db, 'last_decay_sweep', new Date().toISOString());
+            if (affected > 0) log('INFO', 'Lesson decay sweep ran', { affected });
           }
         } catch (e) {
           log('WARN', 'Lesson decay sweep failed, continuing', { error: String(e) });
         }
+
+        // Open a session record for time-aware session tracking.
+        try {
+          const sessionId = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
+          await writeArbitrator.enqueue(async () => {
+            await db.run(
+              'INSERT INTO sessions (id, project_path, tool, started_at) VALUES (?, ?, ?, ?)',
+              [sessionId, projPath, 'get_state', new Date().toISOString()]
+            );
+            await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['current_session_id', sessionId]);
+          });
+        } catch (_) { /* non-fatal */ }
 
         if (resolved.source === 'none') {
           const branchLine = branch ? `Branch: ${branch}\n` : '';
@@ -854,6 +930,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const projPath = resolveProjectPath(args.project_path);
         const branch = detectBranch(projPath);
+
+        // Close the open session if one exists.
+        try {
+          const sessionId = await getMaintenanceState(db, 'current_session_id');
+          if (sessionId) {
+            await writeArbitrator.enqueue(async () => {
+              await db.run('UPDATE sessions SET ended_at = ? WHERE id = ?', [new Date().toISOString(), sessionId]);
+              await db.run('DELETE FROM operational_state WHERE id = ?', ['current_session_id']);
+            });
+          }
+        } catch (_) { /* non-fatal */ }
         // Merge from the same file get_state would read, so the first
         // branch-scoped write inherits the pre-existing flat state
         const resolved = resolveStateRead(getStateDir(), projPath, branch);
