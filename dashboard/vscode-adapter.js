@@ -34,7 +34,17 @@ function findCopilotLog(dir) {
       if (e.isDirectory()) {
         const sub = path.join(dir, e.name);
         const files = fs.readdirSync(sub).filter(f=>f.includes('copilot') || f.includes('github'));
-        if (files.length) return path.join(sub, files[0]);
+        if (files.length) {
+          let newestLogFile = files[0];
+          // Find the newest log file in the directory
+          for(const f of files) {
+            const fStat = fs.statSync(path.join(sub, f));
+            if (fStat.mtimeMs > fs.statSync(path.join(sub, newestLogFile)).mtimeMs) {
+              newestLogFile = f;
+            }
+          }
+          return path.join(sub, newestLogFile);
+        }
       }
     }
   } catch(_) {}
