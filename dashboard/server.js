@@ -112,8 +112,29 @@ const server = http.createServer((req, res) => {
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
     let body = '';
-    req.on('data', d => body += d);
+    let currentSize = 0;
+    const MAX_SIZE = 256 * 1024; // 256 KB cap
+    let exceeded = false;
+
+    req.on('data', d => {
+      if (exceeded) return;
+      
+      currentSize += d.length;
+      if (currentSize > MAX_SIZE) {
+        exceeded = true;
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Payload too large' }), () => {
+          req.destroy();
+        });
+        return;
+      }
+      
+      body += d;
+    });
+
     req.on('end', () => {
+      if (exceeded) return;
+
       try {
         const ev = JSON.parse(body);
         if (accumulateEvent(ev)) {
@@ -158,10 +179,6 @@ const server = http.createServer((req, res) => {
   }
   // ── GET /session-history ───────────────────────────────
 if (req.method === 'GET' && req.url === '/session-history') {
-
-  
-  
- 
 
   res.writeHead(200, {
     'Content-Type': 'application/json'
