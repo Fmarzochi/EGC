@@ -112,6 +112,12 @@ egc watch /ruta/proj   # monitorear proyecto específico
 egc watch --quiet      # silenciar salida
 ```
 
+### Aplicado por código, no por petición
+
+La validación no depende de que la IA elija cooperar. EGC instala hooks en el harness que se ejecutan en cada llamada de herramienta: cada comando de shell y cada escritura de archivo se valida antes de ejecutarse, y los comandos destructivos, las rutas de credenciales y los force-push se bloquean incluso dentro de comandos compuestos. Cada prompt también se enruta contra el catálogo de componentes, inyectando en el contexto las skills y agents correctos. Si el validador falta, los hooks fallan abiertos: nunca quedas bloqueado fuera de tu propia herramienta.
+
+Con una API key de proveedor (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` u `OPENROUTER_API_KEY`), EGC también entiende la intención de la sesión semánticamente, en cualquier idioma, sin frases predefinidas: di que terminas por hoy y tu estado se guarda antes de que la IA responda; saluda a la mañana siguiente y tus próximos pasos ya están en contexto. Al final de la sesión, un minero de memoria destila las decisiones y lecciones de la sesión en el estado de tu proyecto. Sin key, estas funciones de LLM honestamente no hacen nada, y los hooks de ciclo de vida siguen garantizando el guardado del estado.
+
 ### Dashboard - panel de control en tiempo real
 
 Ve cada llamada de herramienta, token y coste de tus agentes -- en vivo en el navegador. Arranca automáticamente tras `egc init`. [Guía completa](docs/installation.md#dashboard)

@@ -124,6 +124,12 @@ These tools run automatically in the background. Every shell command and every f
 | `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
 | `auto_learn` | Mines session failures and writes actionable lessons to all AI tool config files in the project |
 
+### Enforced, not requested
+
+Validation does not depend on the AI choosing to cooperate. EGC installs harness hooks that run on every tool call: each shell command and file write is validated before it executes, and destructive commands, credential paths, and force-pushes are blocked even inside compound commands. Every prompt is also routed against the component catalog so the right skills and agents are injected into context. If the validator is ever missing, hooks fail open so you are never locked out of your own tool.
+
+With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY`), EGC also understands session intent semantically, in any language, with no predefined phrases: say you are done for the night and your state is saved before the AI even answers; greet it the next morning and your next steps are already in context. At session end a memory miner distills the session's decisions and lessons into your project state. Without a key these LLM features honestly do nothing, and the lifecycle hooks still guarantee your state is saved.
+
 ### Always in sync - across every tool you use
 
 **`egc watch`** - run it once and every tool you use stays in sync. Edit context in Cursor and it appears in Gemini CLI, Copilot, Windsurf, and everywhere else automatically. When your state updates, all your tool config files update with it. No manual steps, no stale state.
