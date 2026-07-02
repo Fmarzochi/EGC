@@ -4,6 +4,10 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### New Features
+
+- **`orchestrate_task` now performs real skill/agent/rule routing**: a build-time generator indexes the full component catalog (260 skills, 63 agents, 109 rules) and the guardian classifies each task prompt against it. With an `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY` (model configurable via `OPENROUTER_MODEL`) in the environment, routing is semantic via the corresponding LLM; without any key it falls back to a local keyword scorer and keeps working, adding a `routing_hint` that explains how to enable semantic routing. LLM responses are validated against the catalog so models cannot invent component names, and every provider call has a 5s timeout. (#566)
+
 ### Bug Fixes
 
 - **codebuddy-adapter: hybrid debounce and extension filter for `fs.watch`**: the watcher now fires `pre_tool/running` immediately on the first event (leading edge) and coalesces rapid follow-ups, emitting `post_tool/success` only after 200 ms of silence (trailing edge). Also filters out temp files (`.tmp`, `.swp`, `.lock`, `.bak`, `.orig`) and restricts emissions to recognized log extensions (`.log`, `.jsonl`, `.json`, `.txt`). Closes #506. (by @Maqbool61)
