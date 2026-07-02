@@ -350,6 +350,8 @@ body.minimized footer{display:none!important;}
 .cost-sess-time{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:right;}
 .cost-empty{padding:14px 0;text-align:center;color:var(--muted);font-size:11px;}
 .cost-section-lbl{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+.export-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.export-btns{display:flex;gap:6px;flex-shrink:0;}
 /* Time range selector */
 .cost-range-wrap{display:flex;gap:4px;margin-bottom:8px;}
 .cost-range-btn{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
@@ -548,7 +550,13 @@ body.minimized footer{display:none!important;}
   <div class="cost-bars" id="costBars">
     <div class="cost-empty">No session data yet.</div>
   </div>
-  <div class="cost-section-lbl">recent sessions</div>
+  <div class="cost-section-lbl export-row">
+    <span>recent sessions</span>
+    <span class="export-btns">
+      <button class="btn-sm" id="exportCsvBtn" onclick="exportSessionsAs('csv')">Export CSV</button>
+      <button class="btn-sm" id="exportJsonBtn" onclick="exportSessionsAs('json')">Export JSON</button>
+    </span>
+  </div>
   <div class="cost-sessions" id="costSessions">
     <div class="cost-empty">Waiting for sessions…</div>
   </div>
@@ -1379,6 +1387,45 @@ if('serviceWorker' in navigator){
     },200);
   });
 })();
+</script>
+<script src="/export.js"></script>
+<script>
+async function exportSessionsAs(format) {
+  const btnId = format === 'csv' ? 'exportCsvBtn' : 'exportJsonBtn';
+  const btn = document.getElementById(btnId);
+  const original = btn.textContent;
+
+  try {
+    const res = await fetch('/session-history');
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const sessions = await res.json();
+
+    if (!sessions.length) {
+      btn.textContent = 'No data';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+      return;
+    }
+
+    const content = format === 'csv' ? sessionsToCSV(sessions) : sessionsToJSON(sessions);
+    const mime = format === 'csv' ? 'text/csv' : 'application/json';
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportFilename(format);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    btn.textContent = 'Exported!';
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  } catch (err) {
+    console.error('Export failed:', err);
+    btn.textContent = 'Error';
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  }
+}
 </script>
 </body>
 </html>
