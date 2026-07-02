@@ -19,6 +19,13 @@ function sanitizeBranchName(branch) {
   return branch.replace(/\//g, '-').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
+// Validates a resolved absolute path belongs to a git repository by
+// requiring '.git' to appear as a directory segment, blocking traversal
+// to unrelated filesystem locations.
+function isGitRelatedPath(p) {
+  return path.resolve(p).split(path.sep).includes('.git');
+}
+
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
 // lookup and it works on machines without git installed.
 function findGitDir(startPath) {
@@ -34,15 +41,19 @@ function findGitDir(startPath) {
 
 function detectBranch(projectPath) {
   try {
-    let gitDir = findGitDir(projectPath);
-    if (!gitDir) return null;
+    const rawGitDir = findGitDir(projectPath);
+    if (!rawGitDir) return null;
+    let gitDir = path.resolve(rawGitDir);
+    if (!isGitRelatedPath(gitDir)) return null;
     if (fs.statSync(gitDir).isFile()) {
       // Worktrees and submodules store a pointer file instead of a directory
       const pointer = fs.readFileSync(gitDir, 'utf8').trim();
       if (!pointer.startsWith('gitdir:')) return null;
       gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+      if (!isGitRelatedPath(gitDir)) return null;
     }
-    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    const headPath = path.resolve(gitDir, 'HEAD');
+    const head = fs.readFileSync(headPath, 'utf8').trim();
     const refPrefix = 'ref: refs/heads/';
     // Detached HEAD stores a bare commit hash; treat it as no branch
     if (!head.startsWith(refPrefix)) return null;
