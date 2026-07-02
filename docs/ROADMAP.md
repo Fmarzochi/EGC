@@ -29,22 +29,35 @@ This document describes the planned development direction for EGC (Extended Glob
 - State consolidation pipeline on each `update_state` call (issue #143)
 - SessionStart hook runs idempotently across harness reinstalls
 
-## v1.2.0: Stability
+## v1.1.3 -- v1.1.6: Stability (Released 2026-07)
 
-Fix what is broken before growing further.
+What shipped in the 1.1.x patch series:
 
-- Fix dashboard adapters: CodeBuddy noisy events (#506), VS Code wrong Copilot log (#504), Aider stops after log rotation (#503), POST /event body size cap (#499)
-- True automatic session save: eliminate dependency on AI following a prompt to call `update_state`
+- EGC Dashboard: real-time mission control at `localhost:7890` with live tool calls, token usage, provider comparison, and session export to CSV/JSON
+- IDE hook emitters: Cursor, Kiro, OpenCode, CodeBuddy now emit events to the dashboard in real time
+- Guardian Protocol deployed to all install targets: `orchestrate_task`, `validate_command`, `validate_write`, `auto_learn` ship by default
+- Hook wiring fix: all four Claude Code hooks (SessionStart, Stop, UserPromptSubmit, PreToolUse) now correctly registered after `egc install`
+- Continue.dev MCP registration (#564)
+- Security batch: audit.log chmod 600, path traversal guard, scoped rate limiter, POST /event body cap, XSS escaping
+- Community translations: Korean, Russian (7 languages total)
+- 14 supported AI coding tools
+
+## v1.2.0: Ecosystem
+
+Expand what EGC can do through community-driven features:
+
+- `egc replay`: session playback with timeline scrubbing -- review any past session event by event (#598)
+- Budget guardian: per-session token and cost limits enforced at the PreToolUse hook (#599)
+- Plugin registry: `egc plugin install <name>` -- community skill/agent packs via npm (#600)
+- Team memory: sync lessons and decisions across teammates via git or S3 (#601)
+- Native IDE integrations: Zed, Amp, or Windsurf (#602, good first issue)
 - Validated Windows install experience with documented troubleshooting
-- Contributor pipeline: structured `good first issue` backlog, "Where to start" in CONTRIBUTING.md
-- `egc install --target <tool>`: create context stubs for individual tools on first install
 
 ## v1.3.0: Growth
 
-- Community translations: German, French, Japanese, Chinese Simplified, Russian, Italian, Turkish, Ukrainian, Malay
-- Plugin system for community-contributed agents and skills
+- Plugin registry: community-published agent and skill packs installable via npm
+- Community translations: German, French, Japanese, Chinese Simplified, Italian, Turkish, Ukrainian, Malay
 - Per-project skill profiles and overrides
-- `egc install --target <tool>`: expanded target coverage
 
 ## v2.0.0: Teams
 
