@@ -4,6 +4,7 @@
 const { isHookEnabled } = require('../lib/hook-flags');
 const { trace } = require('../lib/utils');
 
+const { run: runGuardianValidate } = require('./pre-bash-guardian-validate');
 const { run: runBlockNoVerify } = require('./block-no-verify');
 const { run: runAutoTmuxDev } = require('./auto-tmux-dev');
 const { run: runTmuxReminder } = require('./pre-bash-tmux-reminder');
@@ -17,6 +18,11 @@ const { run: runBuildComplete } = require('./post-bash-build-complete');
 const MAX_STDIN = 1024 * 1024;
 
 const PRE_BASH_HOOKS = [
+  {
+    id: 'pre:bash:guardian-validate',
+    profiles: 'minimal,standard,strict',
+    run: rawInput => runGuardianValidate(rawInput),
+  },
   {
     id: 'pre:bash:block-no-verify',
     profiles: 'minimal,standard,strict',

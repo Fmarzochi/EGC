@@ -184,7 +184,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "orchestrate_task",
-        description: "Routes a prompt with optional agent/skill lists and file payloads. Returns routing context and context-reduction metrics. Agent/skill selection is pass-through; provide explicit lists for deterministic routing.",
+        description: "Routes a prompt against the EGC catalog of skills, agents, and rules. Uses semantic LLM routing when a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY) and falls back to local keyword scoring otherwise. Also returns context-reduction metrics for any file payloads.",
         inputSchema: {
           type: "object",
           properties: {
