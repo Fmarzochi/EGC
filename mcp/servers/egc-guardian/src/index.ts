@@ -6,7 +6,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { execSync } from 'child_process';
-import { CATALOG } from './catalog-index.js';
+import { llmRoute, keywordRoute } from './llm-router.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -71,66 +71,14 @@ function runCompressionPipeline(chunks: string[]): PipelineResult {
   return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
 }
 
-const STOP_WORDS = new Set([
-  'the','a','an','in','for','of','to','is','are','and','or','with','from',
-  'on','by','as','at','be','it','its','this','that','use','used','using',
-  'all','any','your','you','can','will','when','how','what','which','their',
-  'they','we','has','have','had','do','does','did','but','not','no','if',
-  'so','then','than','into','about','more','also','each','other','these',
-  'patterns','best','practices','support','building','robust','production',
-]);
-
-function tokenize(text: string): Set<string> {
-  return new Set(
-    text.toLowerCase()
-      .split(/[\s,.\-_/()[\]{}|:;!?'"]+/)
-      .filter(t => t.length > 2 && !STOP_WORDS.has(t))
-  );
-}
-
-function routeTask(prompt: string, inputAgents: string[], inputSkills: string[]): {
-  agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]
-} {
-  const promptTokens = tokenize(prompt);
-  if (promptTokens.size === 0) {
-    return { agents: inputAgents, skills: inputSkills, scores: {}, rejected: [] };
+async function routeTask(prompt: string): Promise<{
+  agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string;
+}> {
+  const llm = await llmRoute(prompt);
+  if (llm) {
+    return { ...llm, scores: {}, rejected: [] };
   }
-
-  const explicitMode = inputAgents.length > 0 || inputSkills.length > 0;
-  const pool = explicitMode
-    ? CATALOG.filter(e =>
-        (e.kind === 'agent' && inputAgents.includes(e.name)) ||
-        (e.kind === 'skill' && inputSkills.includes(e.name)) ||
-        (e.kind === 'rule' && inputSkills.includes(e.name))
-      )
-    : CATALOG;
-
-  const scores: Record<string, number> = {};
-  const rejected: string[] = [];
-
-  for (const entry of pool) {
-    const entryTokens = tokenize(`${entry.name} ${entry.description}`);
-    let matches = 0;
-    for (const t of promptTokens) {
-      if (entryTokens.has(t)) matches++;
-    }
-    const score = matches === 0
-      ? 0
-      : Math.round((matches / Math.sqrt(entryTokens.size)) * 100) / 100;
-    scores[entry.name] = score;
-    if (explicitMode && score === 0) rejected.push(entry.name);
-  }
-
-  const ranked = [...pool]
-    .filter(e => (scores[e.name] ?? 0) > 0)
-    .sort((a, b) => (scores[b.name] ?? 0) - (scores[a.name] ?? 0));
-
-  return {
-    agents: ranked.filter(e => e.kind === 'agent').slice(0, 5).map(e => e.name),
-    skills: ranked.filter(e => e.kind === 'skill' || e.kind === 'rule').slice(0, 10).map(e => e.name),
-    scores,
-    rejected,
-  };
+  return { ...keywordRoute(prompt), provider: 'keyword' };
 }
 
 class PersistentLogger {
@@ -415,7 +363,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const pipeline = runCompressionPipeline(rawPayloads);
-        const routing = routeTask(prompt, agents, skills);
+        const routing = await routeTask(prompt);
+
+        const hint = routing.provider === 'keyword'
+          ? 'Semantic routing unavailable: set ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY to enable LLM-based routing.'
+          : undefined;
 
         return {
           content: [{
@@ -423,6 +375,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               prompt,
               routing,
+              ...(hint ? { routing_hint: hint } : {}),
               context_reduction: {
                 bytes_before: pipeline.bytes_before,
                 bytes_after: pipeline.bytes_after,
