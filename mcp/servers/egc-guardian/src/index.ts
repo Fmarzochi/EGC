@@ -6,6 +6,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { execSync } from 'child_process';
+import { llmRoute, keywordRoute } from './llm-router.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -70,10 +71,14 @@ function runCompressionPipeline(chunks: string[]): PipelineResult {
   return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
 }
 
-function routeTask(prompt: string, agents: string[], skills: string[]): {
-  agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]
-} {
-  return { agents, skills, scores: {}, rejected: [] };
+async function routeTask(prompt: string): Promise<{
+  agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string;
+}> {
+  const llm = await llmRoute(prompt);
+  if (llm) {
+    return { ...llm, scores: {}, rejected: [] };
+  }
+  return { ...keywordRoute(prompt), provider: 'keyword' };
 }
 
 class PersistentLogger {
@@ -358,7 +363,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const pipeline = runCompressionPipeline(rawPayloads);
-        const routing = routeTask(prompt, agents, skills);
+        const routing = await routeTask(prompt);
+
+        const hint = routing.provider === 'keyword'
+          ? 'Semantic routing unavailable: set ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY to enable LLM-based routing.'
+          : undefined;
 
         return {
           content: [{
@@ -366,6 +375,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               prompt,
               routing,
+              ...(hint ? { routing_hint: hint } : {}),
               context_reduction: {
                 bytes_before: pipeline.bytes_before,
                 bytes_after: pipeline.bytes_after,
