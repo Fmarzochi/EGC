@@ -7,7 +7,11 @@ const { writeInstallState } = require('../install-state');
 const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
+  PRE_TOOL_USE_EVENT,
   STOP_EVENT,
+  USER_PROMPT_SUBMIT_EVENT,
+  applyBashDispatcherHookToFile,
+  applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
 } = require('../claude-settings-hooks');
@@ -131,6 +135,10 @@ function applyInstallPlan(plan) {
     if (operation.kind === HOOK_OPERATION_KIND) {
       if (operation.hookEvent === STOP_EVENT) {
         applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+      } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
+        applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
+      } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
+        applyBashDispatcherHookToFile(operation.destinationPath, operation.hookScriptPath);
       } else {
         applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
       }

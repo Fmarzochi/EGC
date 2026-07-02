@@ -10,11 +10,17 @@ const path = require('path');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
+const USER_PROMPT_SUBMIT_EVENT = 'UserPromptSubmit';
+const PRE_TOOL_USE_EVENT = 'PreToolUse';
 const HOOK_OPERATION_KIND = 'merge-claude-settings-hooks';
 const HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/claude-session-start.js';
 const HOOK_MODULE_ID = 'claude-session-state-hook';
 const STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/claude-session-stop.js';
 const STOP_HOOK_MODULE_ID = 'claude-session-stop-hook';
+const INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-intuition.js';
+const INTUITION_HOOK_MODULE_ID = 'claude-intuition-hook';
+const BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/bash-hook-dispatcher.js';
+const BASH_DISPATCHER_HOOK_MODULE_ID = 'claude-bash-dispatcher-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -69,14 +75,18 @@ function hasHookEntry(settings, event, hookScriptPath) {
     && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath));
 }
 
-function addHookEntry(settings, event, hookScriptPath) {
+function addHookEntry(settings, event, hookScriptPath, options = {}) {
   const base = isPlainObject(settings) ? settings : {};
   if (hasHookEntry(base, event, hookScriptPath)) {
     return { settings: base, changed: false };
   }
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
   const groups = Array.isArray(hooks[event]) ? hooks[event].slice() : [];
-  groups.push({ hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] });
+  const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
+  if (typeof options.matcher === 'string' && options.matcher) {
+    group.matcher = options.matcher;
+  }
+  groups.push(group);
   hooks[event] = groups;
   return { settings: { ...base, hooks }, changed: true };
 }
@@ -273,32 +283,148 @@ function createStopHookMergeOperation(targetRoot) {
   };
 }
 
+function resolveIntuitionHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'prompt-intuition.js');
+}
+
+function hasIntuitionHook(settings, hookScriptPath) {
+  return hasHookEntry(settings, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function addIntuitionHook(settings, hookScriptPath) {
+  return addHookEntry(settings, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function removeIntuitionHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function applyIntuitionHookToFile(settingsPath, hookScriptPath) {
+  return applyHookEntryToFile(settingsPath, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function removeIntuitionHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function inspectIntuitionHookFile(settingsPath, hookScriptPath) {
+  return inspectHookEntryFile(settingsPath, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function createUserPromptSubmitHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveIntuitionHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: INTUITION_HOOK_MODULE_ID,
+    sourceRelativePath: INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: USER_PROMPT_SUBMIT_EVENT,
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
+function resolveBashDispatcherHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'bash-hook-dispatcher.js');
+}
+
+function hasBashDispatcherHook(settings, hookScriptPath) {
+  return hasHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function addBashDispatcherHook(settings, hookScriptPath) {
+  return addHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher: 'Bash' });
+}
+
+function removeBashDispatcherHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function applyBashDispatcherHookToFile(settingsPath, hookScriptPath) {
+  const current = readSettingsFile(settingsPath);
+  const { settings, changed } = addBashDispatcherHook(current, hookScriptPath);
+  if (changed) {
+    writeSettingsFile(settingsPath, settings);
+  }
+  return { changed };
+}
+
+function removeBashDispatcherHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function inspectBashDispatcherHookFile(settingsPath, hookScriptPath) {
+  return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function createPreToolUseBashDispatcherHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveBashDispatcherHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: BASH_DISPATCHER_HOOK_MODULE_ID,
+    sourceRelativePath: BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: 'Bash',
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
 module.exports = {
+  BASH_DISPATCHER_HOOK_MODULE_ID,
+  BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  INTUITION_HOOK_MODULE_ID,
+  INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  PRE_TOOL_USE_EVENT,
   SESSION_START_EVENT,
   STOP_EVENT,
   STOP_HOOK_MODULE_ID,
   STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  USER_PROMPT_SUBMIT_EVENT,
+  addBashDispatcherHook,
+  addIntuitionHook,
   addSessionStartHook,
   addStopHook,
+  applyBashDispatcherHookToFile,
+  applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
+  createPreToolUseBashDispatcherHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
+  createUserPromptSubmitHookMergeOperation,
+  hasBashDispatcherHook,
+  hasIntuitionHook,
   hasSessionStartHook,
   hasStopHook,
+  inspectBashDispatcherHookFile,
+  inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
   readSettingsFile,
+  removeBashDispatcherHook,
+  removeBashDispatcherHookFromFile,
+  removeIntuitionHook,
+  removeIntuitionHookFromFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
   removeStopHook,
   removeStopHookFromFile,
+  resolveBashDispatcherHookScriptDestination,
   resolveHookScriptDestination,
+  resolveIntuitionHookScriptDestination,
   resolveSettingsPath,
   resolveStopHookScriptDestination,
 };
