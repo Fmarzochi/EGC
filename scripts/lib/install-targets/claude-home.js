@@ -26,6 +26,8 @@ const {
   STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
+  createUserPromptSubmitHookMergeOperation,
+  createPreToolUseBashDispatcherHookMergeOperation,
   resolveHookScriptDestination,
   resolveStopHookScriptDestination,
 } = require('../claude-settings-hooks');
@@ -65,6 +67,8 @@ function createSessionStateHookOperations(adapter, targetRoot) {
       { strategy: 'preserve-relative-path' }
     ),
     createStopHookMergeOperation(targetRoot),
+    createUserPromptSubmitHookMergeOperation(targetRoot),
+    createPreToolUseBashDispatcherHookMergeOperation(targetRoot),
   ];
 }
 

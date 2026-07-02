@@ -13,11 +13,19 @@ const {
 } = require('./install-targets/registry');
 const {
   HOOK_OPERATION_KIND,
+  PRE_TOOL_USE_EVENT,
   STOP_EVENT,
+  USER_PROMPT_SUBMIT_EVENT,
+  applyBashDispatcherHookToFile,
+  applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
+  inspectBashDispatcherHookFile,
+  inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
+  removeBashDispatcherHookFromFile,
+  removeIntuitionHookFromFile,
   removeSessionStartHookFromFile,
   removeStopHookFromFile,
 } = require('./claude-settings-hooks');
@@ -322,6 +330,10 @@ function shouldRepairFromRecordedOperations(state) {
 function repairClaudeSettingsHook(operation) {
   if (operation.hookEvent === STOP_EVENT) {
     applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
+    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
+    applyBashDispatcherHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -465,6 +477,10 @@ function uninstallClaudeSettingsHook(operation) {
   // deleted because Claude Code and the user own its other keys.
   if (operation.hookEvent === STOP_EVENT) {
     removeStopHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
+    removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
+    removeBashDispatcherHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -563,9 +579,14 @@ function inspectManagedOperation(repoRoot, operation) {
   }
 
   if (operation.kind === HOOK_OPERATION_KIND) {
-    const inspectFn = operation.hookEvent === STOP_EVENT
-      ? inspectStopHookFile
-      : inspectSessionStartHookFile;
+    let inspectFn = inspectSessionStartHookFile;
+    if (operation.hookEvent === STOP_EVENT) {
+      inspectFn = inspectStopHookFile;
+    } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
+      inspectFn = inspectIntuitionHookFile;
+    } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
+      inspectFn = inspectBashDispatcherHookFile;
+    }
     return inspectResult(inspectFn(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }
 

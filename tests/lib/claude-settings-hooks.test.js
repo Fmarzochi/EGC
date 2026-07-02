@@ -8,36 +8,58 @@ const os = require('os');
 const path = require('path');
 
 const {
+  BASH_DISPATCHER_HOOK_MODULE_ID,
+  BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  INTUITION_HOOK_MODULE_ID,
+  INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  PRE_TOOL_USE_EVENT,
   SESSION_START_EVENT,
   STOP_EVENT,
   STOP_HOOK_MODULE_ID,
   STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  USER_PROMPT_SUBMIT_EVENT,
+  addBashDispatcherHook,
+  addIntuitionHook,
   addSessionStartHook,
   addStopHook,
+  applyBashDispatcherHookToFile,
+  applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
+  createPreToolUseBashDispatcherHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
+  createUserPromptSubmitHookMergeOperation,
+  hasBashDispatcherHook,
+  hasIntuitionHook,
   hasSessionStartHook,
   hasStopHook,
+  inspectBashDispatcherHookFile,
+  inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
+  removeBashDispatcherHook,
+  removeIntuitionHook,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
   removeStopHook,
   removeStopHookFromFile,
+  resolveBashDispatcherHookScriptDestination,
   resolveHookScriptDestination,
+  resolveIntuitionHookScriptDestination,
   resolveSettingsPath,
   resolveStopHookScriptDestination,
 } = require('../../scripts/lib/claude-settings-hooks');
 
 const HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-start.js';
 const STOP_HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-stop.js';
+const INTUITION_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/prompt-intuition.js';
+const BASH_DISPATCHER_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/bash-hook-dispatcher.js';
 
 function test(name, fn) {
   try {
@@ -466,6 +488,129 @@ function runTests() {
       operation.hookCommand,
       buildStopCommand(resolveStopHookScriptDestination(targetRoot))
     );
+  })) passed++; else failed++;
+
+  console.log('\n--- UserPromptSubmit (intuition) hook ---\n');
+
+  if (test('addIntuitionHook adds UserPromptSubmit hook to empty settings', () => {
+    const result = addIntuitionHook({}, INTUITION_HOOK_SCRIPT_PATH);
+    assert.strictEqual(result.changed, true);
+    assert.ok(hasIntuitionHook(result.settings, INTUITION_HOOK_SCRIPT_PATH));
+    assert.strictEqual(result.settings.hooks[USER_PROMPT_SUBMIT_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('addIntuitionHook is idempotent', () => {
+    const first = addIntuitionHook({}, INTUITION_HOOK_SCRIPT_PATH);
+    const second = addIntuitionHook(first.settings, INTUITION_HOOK_SCRIPT_PATH);
+    assert.strictEqual(second.changed, false);
+    assert.strictEqual(second.settings.hooks[USER_PROMPT_SUBMIT_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('addIntuitionHook preserves third-party hooks and unrelated settings keys', () => {
+    const base = {
+      model: 'opus',
+      hooks: { UserPromptSubmit: [{ matcher: 'other', hooks: [{ type: 'command', command: 'echo third' }] }] },
+    };
+    const result = addIntuitionHook(base, INTUITION_HOOK_SCRIPT_PATH);
+    assert.strictEqual(result.changed, true);
+    assert.strictEqual(result.settings.model, 'opus');
+    assert.strictEqual(result.settings.hooks[USER_PROMPT_SUBMIT_EVENT].length, 2);
+  })) passed++; else failed++;
+
+  if (test('removeIntuitionHook strips only the EGC intuition entry', () => {
+    const after = addIntuitionHook({}, INTUITION_HOOK_SCRIPT_PATH);
+    const removed = removeIntuitionHook(after.settings, INTUITION_HOOK_SCRIPT_PATH);
+    assert.strictEqual(removed.changed, true);
+    assert.ok(!hasIntuitionHook(removed.settings, INTUITION_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('applyIntuitionHookToFile and inspectIntuitionHookFile work end-to-end', () => {
+    const homeDir = createTempDir('claude-intuition-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      assert.strictEqual(inspectIntuitionHookFile(settingsPath, INTUITION_HOOK_SCRIPT_PATH), 'drifted');
+      applyIntuitionHookToFile(settingsPath, INTUITION_HOOK_SCRIPT_PATH);
+      assert.strictEqual(inspectIntuitionHookFile(settingsPath, INTUITION_HOOK_SCRIPT_PATH), 'ok');
+      applyIntuitionHookToFile(settingsPath, INTUITION_HOOK_SCRIPT_PATH);
+      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.strictEqual(data.hooks[USER_PROMPT_SUBMIT_EVENT].length, 1);
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('createUserPromptSubmitHookMergeOperation builds a managed operation', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createUserPromptSubmitHookMergeOperation(targetRoot);
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, INTUITION_HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.hookEvent, USER_PROMPT_SUBMIT_EVENT);
+    assert.strictEqual(operation.hookScriptPath, resolveIntuitionHookScriptDestination(targetRoot));
+  })) passed++; else failed++;
+
+  console.log('\n--- PreToolUse Bash dispatcher hook ---\n');
+
+  if (test('addBashDispatcherHook adds PreToolUse hook with Bash matcher', () => {
+    const result = addBashDispatcherHook({}, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+    assert.strictEqual(result.changed, true);
+    assert.ok(hasBashDispatcherHook(result.settings, BASH_DISPATCHER_HOOK_SCRIPT_PATH));
+    const group = result.settings.hooks[PRE_TOOL_USE_EVENT][0];
+    assert.strictEqual(group.matcher, 'Bash');
+  })) passed++; else failed++;
+
+  if (test('addBashDispatcherHook is idempotent', () => {
+    const first = addBashDispatcherHook({}, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+    const second = addBashDispatcherHook(first.settings, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+    assert.strictEqual(second.changed, false);
+    assert.strictEqual(second.settings.hooks[PRE_TOOL_USE_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('addBashDispatcherHook preserves existing third-party PreToolUse hooks', () => {
+    const base = {
+      hooks: { PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: 'echo guard' }] }] },
+    };
+    const result = addBashDispatcherHook(base, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+    assert.strictEqual(result.changed, true);
+    assert.strictEqual(result.settings.hooks[PRE_TOOL_USE_EVENT].length, 2);
+  })) passed++; else failed++;
+
+  if (test('removeBashDispatcherHook strips only the EGC dispatcher entry', () => {
+    const after = addBashDispatcherHook({}, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+    const removed = removeBashDispatcherHook(after.settings, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+    assert.strictEqual(removed.changed, true);
+    assert.ok(!hasBashDispatcherHook(removed.settings, BASH_DISPATCHER_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('applyBashDispatcherHookToFile and inspectBashDispatcherHookFile work end-to-end', () => {
+    const homeDir = createTempDir('claude-bash-dispatcher-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      assert.strictEqual(inspectBashDispatcherHookFile(settingsPath, BASH_DISPATCHER_HOOK_SCRIPT_PATH), 'drifted');
+      applyBashDispatcherHookToFile(settingsPath, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+      assert.strictEqual(inspectBashDispatcherHookFile(settingsPath, BASH_DISPATCHER_HOOK_SCRIPT_PATH), 'ok');
+      applyBashDispatcherHookToFile(settingsPath, BASH_DISPATCHER_HOOK_SCRIPT_PATH);
+      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.strictEqual(data.hooks[PRE_TOOL_USE_EVENT].length, 1);
+      assert.strictEqual(data.hooks[PRE_TOOL_USE_EVENT][0].matcher, 'Bash');
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('createPreToolUseBashDispatcherHookMergeOperation builds a managed operation', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createPreToolUseBashDispatcherHookMergeOperation(targetRoot);
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, BASH_DISPATCHER_HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.hookEvent, PRE_TOOL_USE_EVENT);
+    assert.strictEqual(operation.hookMatcher, 'Bash');
+    assert.strictEqual(operation.hookScriptPath, resolveBashDispatcherHookScriptDestination(targetRoot));
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

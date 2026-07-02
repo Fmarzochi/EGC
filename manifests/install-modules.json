@@ -70,6 +70,7 @@
       ],
       "targets": [
         "egc",
+        "claude",
         "cursor",
         "opencode",
         "codebuddy"
