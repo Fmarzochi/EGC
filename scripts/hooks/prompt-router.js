@@ -39,7 +39,7 @@ function routeViaCli(cli, prompt) {
   const args = [cli, 'route', prompt];
   if (useLlm) args.push('--llm');
 
-  const result = spawnSync(process.execPath, args, {
+  const result = spawnSync(process.execPath, args, { // NOSONAR jssecurity:S8705
     encoding: 'utf8',
     timeout: useLlm ? LLM_TIMEOUT_MS : KEYWORD_TIMEOUT_MS,
   });

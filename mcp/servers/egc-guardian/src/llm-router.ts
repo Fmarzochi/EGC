@@ -54,43 +54,27 @@ function buildUserMessage(prompt: string, catalogBlock: string): string {
   return `Task: "${prompt}"\n\nCatalog:\n${catalogBlock}`;
 }
 
-interface LlmRouteResult {
-  agents: string[];
-  skills: string[];
-  provider: string;
-}
-
-function parseJsonResponse(raw: string): { agents: string[]; skills: string[] } | null {
+function extractJsonBlock(raw: string): unknown {
   try {
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return null;
-    const parsed = JSON.parse(match[0]) as { agents?: unknown; skills?: unknown };
-    const agents = Array.isArray(parsed.agents) ? (parsed.agents as unknown[]).filter((x): x is string => typeof x === 'string') : [];
-    const skills = Array.isArray(parsed.skills) ? (parsed.skills as unknown[]).filter((x): x is string => typeof x === 'string') : [];
-    return { agents, skills };
+    return JSON.parse(match[0]);
   } catch {
     return null;
   }
 }
 
-function validNames(names: string[], kind: 'agent' | 'skill' | 'rule'): string[] {
-  const valid = new Set(CATALOG.filter(e => e.kind === kind).map(e => e.name));
-  const ruleValid = new Set(CATALOG.filter(e => e.kind === 'rule').map(e => e.name));
-  return names.filter(n => valid.has(n) || (kind === 'skill' && ruleValid.has(n)));
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
-    return res;
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function callAnthropic(key: string, userMsg: string): Promise<LlmRouteResult | null> {
+async function anthropicText(key: string, system: string, user: string, maxTokens: number, timeoutMs: number): Promise<string | null> {
   try {
     const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -101,56 +85,36 @@ async function callAnthropic(key: string, userMsg: string): Promise<LlmRouteResu
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 256,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userMsg }],
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: 'user', content: user }],
       }),
-    });
+    }, timeoutMs);
     if (!res.ok) return null;
     const data = await res.json() as { content?: Array<{ text?: string }> };
-    const text = data.content?.[0]?.text ?? '';
-    const parsed = parseJsonResponse(text);
-    if (!parsed) return null;
-    return {
-      agents: validNames(parsed.agents, 'agent').slice(0, MAX_AGENTS_OUT),
-      skills: validNames(parsed.skills, 'skill').slice(0, MAX_SKILLS_OUT),
-      provider: 'anthropic',
-    };
+    return data.content?.[0]?.text ?? null;
   } catch { return null; }
 }
 
-async function callGemini(key: string, userMsg: string): Promise<LlmRouteResult | null> {
+async function geminiText(key: string, system: string, user: string, maxTokens: number, timeoutMs: number): Promise<string | null> {
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`;
     const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ parts: [{ text: userMsg }] }],
-        generationConfig: { maxOutputTokens: 256, responseMimeType: 'application/json' },
+        system_instruction: { parts: [{ text: system }] },
+        contents: [{ parts: [{ text: user }] }],
+        generationConfig: { maxOutputTokens: maxTokens, responseMimeType: 'application/json' },
       }),
-    });
+    }, timeoutMs);
     if (!res.ok) return null;
     const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const parsed = parseJsonResponse(text);
-    if (!parsed) return null;
-    return {
-      agents: validNames(parsed.agents, 'agent').slice(0, MAX_AGENTS_OUT),
-      skills: validNames(parsed.skills, 'skill').slice(0, MAX_SKILLS_OUT),
-      provider: 'gemini',
-    };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
   } catch { return null; }
 }
 
-async function callOpenAICompat(
-  key: string,
-  baseUrl: string,
-  model: string,
-  providerName: string,
-  userMsg: string,
-): Promise<LlmRouteResult | null> {
+async function openAICompatText(key: string, baseUrl: string, model: string, system: string, user: string, maxTokens: number, timeoutMs: number): Promise<string | null> {
   try {
     const res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -160,25 +124,80 @@ async function callOpenAICompat(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 256,
+        max_tokens: maxTokens,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userMsg },
+          { role: 'system', content: system },
+          { role: 'user', content: user },
         ],
       }),
-    });
+    }, timeoutMs);
     if (!res.ok) return null;
     const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const text = data.choices?.[0]?.message?.content ?? '';
-    const parsed = parseJsonResponse(text);
-    if (!parsed) return null;
-    return {
-      agents: validNames(parsed.agents, 'agent').slice(0, MAX_AGENTS_OUT),
-      skills: validNames(parsed.skills, 'skill').slice(0, MAX_SKILLS_OUT),
-      provider: providerName,
-    };
+    return data.choices?.[0]?.message?.content ?? null;
   } catch { return null; }
+}
+
+export interface CompletionResult {
+  json: unknown;
+  provider: string;
+}
+
+type ProviderCall = (system: string, user: string, maxTokens: number, timeoutMs: number) => Promise<string | null>;
+
+function providerChain(): Array<{ name: string; call: ProviderCall }> {
+  const chain: Array<{ name: string; call: ProviderCall }> = [];
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (anthropicKey) {
+    chain.push({ name: 'anthropic', call: (s, u, m, t) => anthropicText(anthropicKey, s, u, m, t) });
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (geminiKey) {
+    chain.push({ name: 'gemini', call: (s, u, m, t) => geminiText(geminiKey, s, u, m, t) });
+  }
+
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    chain.push({ name: 'openai', call: (s, u, m, t) => openAICompatText(openaiKey, 'https://api.openai.com/v1', 'gpt-4o-mini', s, u, m, t) });
+  }
+
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  if (openrouterKey) {
+    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    chain.push({ name: 'openrouter', call: (s, u, m, t) => openAICompatText(openrouterKey, 'https://openrouter.ai/api/v1', model, s, u, m, t) });
+  }
+
+  return chain;
+}
+
+export async function completeJson(
+  system: string,
+  user: string,
+  maxTokens = 256,
+  timeoutMs = ROUTE_TIMEOUT_MS,
+): Promise<CompletionResult | null> {
+  for (const provider of providerChain()) {
+    const text = await provider.call(system, user, maxTokens, timeoutMs);
+    const json = text ? extractJsonBlock(text) : null;
+    if (json) return { json, provider: provider.name };
+  }
+  return null;
+}
+
+function validNames(names: unknown, kind: 'agent' | 'skill'): string[] {
+  if (!Array.isArray(names)) return [];
+  const strings = names.filter((x): x is string => typeof x === 'string');
+  const valid = new Set(CATALOG.filter(e => e.kind === kind).map(e => e.name));
+  const ruleValid = new Set(CATALOG.filter(e => e.kind === 'rule').map(e => e.name));
+  return strings.filter(n => valid.has(n) || (kind === 'skill' && ruleValid.has(n)));
+}
+
+interface LlmRouteResult {
+  agents: string[];
+  skills: string[];
+  provider: string;
 }
 
 export async function llmRoute(prompt: string): Promise<LlmRouteResult | null> {
@@ -189,38 +208,15 @@ export async function llmRoute(prompt: string): Promise<LlmRouteResult | null> {
   if (candidates.length === 0) return null;
 
   const userMsg = buildUserMessage(prompt, buildCatalogBlock(candidates));
+  const completion = await completeJson(SYSTEM_PROMPT, userMsg, 256, ROUTE_TIMEOUT_MS);
+  if (!completion) return null;
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const openrouterKey = process.env.OPENROUTER_API_KEY;
-
-  if (anthropicKey) {
-    const result = await callAnthropic(anthropicKey, userMsg);
-    if (result) return result;
-  }
-
-  if (geminiKey) {
-    const result = await callGemini(geminiKey, userMsg);
-    if (result) return result;
-  }
-
-  if (openaiKey) {
-    const result = await callOpenAICompat(
-      openaiKey, 'https://api.openai.com/v1', 'gpt-4o-mini', 'openai', userMsg
-    );
-    if (result) return result;
-  }
-
-  if (openrouterKey) {
-    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-    const result = await callOpenAICompat(
-      openrouterKey, 'https://openrouter.ai/api/v1', model, 'openrouter', userMsg
-    );
-    if (result) return result;
-  }
-
-  return null;
+  const parsed = completion.json as { agents?: unknown; skills?: unknown };
+  return {
+    agents: validNames(parsed.agents, 'agent').slice(0, MAX_AGENTS_OUT),
+    skills: validNames(parsed.skills, 'skill').slice(0, MAX_SKILLS_OUT),
+    provider: completion.provider,
+  };
 }
 
 export function keywordRoute(prompt: string): {

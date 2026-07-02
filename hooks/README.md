@@ -62,6 +62,9 @@ That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Ge
 | Hook | Event | What It Does |
 |------|-------|-------------|
 | **Prompt router** | `UserPromptSubmit` | Routes every prompt through the guardian catalog and injects recommended skills and agents into context. Keyword routing by default; set `EGC_ROUTING_LLM=1` for semantic LLM routing when a provider key is available. Never blocks |
+| **Auto-intuition** | `UserPromptSubmit` | Detects session intent semantically via a provider LLM, in any language, with no phrase lists. Requires a provider API key; without one it detects nothing and the lifecycle hooks carry the guarantees. On session-end intent it saves the state snapshot and mines the transcript before the AI responds; on resume it injects next steps; on remember it records the user's words verbatim; on history queries it injects project memory. Never blocks |
+| **Session memory miner** | `SessionEnd`, `PreCompact` | Extracts decisions, failures, preferences, and next steps from the session transcript via a provider LLM and merges them into the project state sections. Requires a provider API key; skips silently without one. `EGC_MEMORY_MINER=0` disables |
+| **Session auto-learn** | `SessionEnd` | Runs the guardian auto_learn miner automatically at session end so recurring tool failures become recommendations in the project's AI config files. Skips gracefully when no failures are found. `EGC_AUTO_LEARN=0` disables |
 | **Session start** | `SessionStart` | Loads previous project state and emits a stack briefing with relevant agents for the detected project type |
 | **Pre-compact** | `PreCompact` | Saves state before context compaction |
 | **Console.log audit** | `Stop` | Checks all modified files for `console.log` after each response |

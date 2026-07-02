@@ -1,66 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
-const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('../lib/branch-state');
-
-const MARKER_RE = /^- \[session-snapshot [^\]]+\]\n?/gm;
-
-function updateTimestamp(content, ts) {
-  if (/^updated: /m.test(content)) {
-    return content.replace(/^updated: .*/m, `updated: ${ts}`);
-  }
-  return content.replace(/^(project: [^\n]*\n(?:branch: [^\n]*\n)?)/m, `$1updated: ${ts}\n`);
-}
-
-function injectSessionMarker(content, ts) {
-  const marker = `- [session-snapshot ${ts}]`;
-  const withoutStale = content.replace(MARKER_RE, '');
-  if (/^## Next Session$/m.test(withoutStale)) {
-    return withoutStale.replace(/^(## Next Session\n)/m, `$1${marker}\n`);
-  }
-  return withoutStale + `\n## Next Session\n${marker}\n`;
-}
-
-function buildSkeleton(projectPath, branch, ts) {
-  return [
-    '# Project State',
-    `project: ${projectPath}`,
-    ...(branch ? [`branch: ${branch}`] : []),
-    `updated: ${ts}`,
-    '',
-    '## Context',
-    '',
-    '## Active Decisions',
-    '',
-    '## Do Not Repeat',
-    '',
-    '## Preferences',
-    '',
-    '## Next Session',
-    '',
-  ].join('\n');
-}
-
-function writeSnapshotToDisk() {
-  const projectPath = process.env.PWD || process.cwd();
-  const branch = detectBranch(projectPath);
-  const stateDir = getStateDir(process.env.HOME);
-  const resolved = resolveStateRead(stateDir, projectPath, branch);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch);
-  const ts = new Date().toISOString();
-
-  let content = (resolved.source !== 'none' && fs.existsSync(resolved.filePath))
-    ? fs.readFileSync(resolved.filePath, 'utf-8')
-    : buildSkeleton(projectPath, branch, ts);
-
-  content = updateTimestamp(content, ts);
-  content = injectSessionMarker(content, ts);
-
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf-8');
-  try { fs.chmodSync(filePath, 0o600); } catch { /* chmod not supported on Windows */ }
-}
+const { writeSnapshotToDisk } = require('../lib/state-snapshot');
 
 function main() {
   let raw = '';

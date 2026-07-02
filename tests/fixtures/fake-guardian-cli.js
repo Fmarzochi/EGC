@@ -43,6 +43,23 @@ if (mode === 'command') {
   }
 } else if (mode === 'route') {
   process.stdout.write(JSON.stringify({ agents: ['code-reviewer'], skills: ['security-review'], provider: 'keyword' }));
+} else if (mode === 'intent') {
+  const intent = process.env.FAKE_GUARDIAN_INTENT || 'none';
+  process.stdout.write(JSON.stringify({ intent, source: intent === 'none' ? 'none' : 'llm' }));
+} else if (mode === 'mine') {
+  if (process.env.FAKE_GUARDIAN_MINE === 'skip') {
+    process.stdout.write(JSON.stringify({ skip: true, reason: 'no provider key' }));
+  } else {
+    process.stdout.write(JSON.stringify({
+      decisions: [{ what: 'Use fixture-driven tests', why: 'CI has no guardian build' }],
+      avoid: [{ what: 'Piping CI watchers to tail', why: 'masks exit codes' }],
+      preferences: ['Conventional commits'],
+      next: ['Ship the memory miner'],
+      provider: 'fixture',
+    }));
+  }
+} else if (mode === 'learn') {
+  process.stdout.write(JSON.stringify({ patterns_found: 0, skipped: true, reason: 'fixture' }));
 } else {
   process.stdout.write(JSON.stringify({ error: `unknown mode: ${mode}` }));
 }
