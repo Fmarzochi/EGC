@@ -6,7 +6,8 @@ const {
   escapeCSVCell,
   sessionsToCSV,
   sessionsToJSON,
-  exportFilename
+  exportFilename,
+  sanitizeFilename
 } = require('../dashboard/public/export.js');
 
 test('escapeCSVCell escapes quotes, commas, and newlines', () => {
@@ -102,4 +103,11 @@ test('exportFilename generates filename correctly', () => {
 
   const jsonFilename = exportFilename('json', testDate);
   assert.equal(jsonFilename, 'egc-sessions-2026-07-02.json');
+});
+
+test('sanitizeFilename strips path separators and control characters', () => {
+  assert.equal(sanitizeFilename('../secrets/evil.csv'), 'secrets-evil.csv');
+  assert.equal(sanitizeFilename('report\nname.csv'), 'report-name.csv');
+  assert.equal(sanitizeFilename('  export  '), 'export');
+  assert.equal(sanitizeFilename(''), 'download');
 });

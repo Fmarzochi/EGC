@@ -71,12 +71,30 @@ function exportFilename(format, date = new Date()) {
   return `egc-sessions-${yyyymmdd}.${format}`;
 }
 
+function sanitizeFilename(filename) {
+  const raw = String(filename || 'download');
+  const parts = raw
+    .normalize('NFKD')
+    .replace(/[\\/<>:"|?*\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .split(/[\\/]+/)
+    .flatMap(part => part.split(' '))
+    .map(part => part.replace(/[^a-zA-Z0-9._-]/g, '-'))
+    .map(part => part.replace(/^\.+/, '').replace(/\.+$/g, ''))
+    .filter(Boolean);
+
+  const joined = parts.join('-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safe = joined.length ? joined : 'download';
+  return safe.slice(0, 120);
+}
+
 // Support Node.js test environment imports
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     escapeCSVCell,
     sessionsToCSV,
     sessionsToJSON,
-    exportFilename
+    exportFilename,
+    sanitizeFilename
   };
 }

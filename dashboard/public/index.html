@@ -1312,9 +1312,12 @@ async function loadCostSummary() {
 function downloadBlob(content, filename, contentType) {
   const blob = new Blob([content], { type: contentType });
   const url = URL.createObjectURL(blob);
+  const safeFilename = sanitizeFilename(filename);
   const a = document.createElement('a');
+  a.rel = 'noopener';
   a.href = url;
-  a.download = filename;
+  a.download = safeFilename;
+  a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
