@@ -19,11 +19,18 @@ function sanitizeBranchName(branch) {
   return branch.replace(/\//g, '-').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
-// Validates a resolved absolute path belongs to a git repository by
-// requiring '.git' to appear as a directory segment, blocking traversal
-// to unrelated filesystem locations.
+// Validates a resolved absolute path is within a trusted directory root
+// (home or tmp) and contains '.git' as a path segment. Using startsWith
+// against os.homedir()/os.tmpdir() -- which are untainted system values --
+// satisfies SonarCloud's path-injection sanitization requirement and also
+// prevents traversal to unrelated filesystem locations.
 function isGitRelatedPath(p) {
-  return path.resolve(p).split(path.sep).includes('.git');
+  const resolved = path.resolve(p);
+  const home = os.homedir() + path.sep;
+  const tmp = os.tmpdir() + path.sep;
+  const underTrustedRoot = resolved.startsWith(home) || resolved.startsWith(tmp);
+  const hasGitSegment = resolved.split(path.sep).includes('.git');
+  return underTrustedRoot && hasGitSegment;
 }
 
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
@@ -53,6 +60,7 @@ function detectBranch(projectPath) {
       if (!isGitRelatedPath(gitDir)) return null;
     }
     const headPath = path.resolve(gitDir, 'HEAD');
+    if (!isGitRelatedPath(headPath)) return null;
     const head = fs.readFileSync(headPath, 'utf8').trim();
     const refPrefix = 'ref: refs/heads/';
     // Detached HEAD stores a bare commit hash; treat it as no branch
