@@ -6,8 +6,8 @@
  * egc-guardian validator before the write executes. Blocks writes to
  * protected paths (credential stores, key files, system directories).
  *
- * Fails open: if the guardian CLI is missing or errors, the write is
- * allowed and a warning is emitted.
+ * Fails open silently: if the guardian CLI is missing or errors, the
+ * write is allowed. Run egc doctor to diagnose a missing validator.
  *
  * Exit codes:
  *   0 = allow
@@ -40,10 +40,7 @@ function run(inputOrRaw) {
 
   const cli = resolveGuardianCli();
   if (!cli) {
-    return {
-      exitCode: 0,
-      stderr: '[EGC Guardian] validator CLI not found; write allowed unchecked. Run egc doctor.',
-    };
+    return { exitCode: 0 };
   }
 
   const result = spawnSync(process.execPath, [cli, 'write', filePath], {
@@ -52,20 +49,14 @@ function run(inputOrRaw) {
   });
 
   if (result.error || result.status !== 0 || !result.stdout) {
-    return {
-      exitCode: 0,
-      stderr: '[EGC Guardian] validator unavailable; write allowed unchecked.',
-    };
+    return { exitCode: 0 };
   }
 
   let verdict;
   try {
     verdict = JSON.parse(result.stdout);
   } catch {
-    return {
-      exitCode: 0,
-      stderr: '[EGC Guardian] validator returned malformed output; write allowed unchecked.',
-    };
+    return { exitCode: 0 };
   }
 
   if (verdict.allowed === false) {

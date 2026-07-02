@@ -1,0 +1,48 @@
+#!/usr/bin/env node
+/**
+ * Deterministic stand-in for the compiled guardian CLI, used by hook tests
+ * so they do not depend on the egc-guardian build existing in the test
+ * environment. Mirrors the CLI protocol (mode + payload argv, JSON verdict
+ * on stdout, exit 0); the verdict rules cover only what the hook tests
+ * assert. Validator correctness itself is covered by the guardian tests.
+ */
+
+'use strict';
+
+const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
+
+function verdictForCommand(segment) {
+  const base = segment.trim().split(/\s+/)[0] || '';
+  if (base === 'rm' || base === 'mv') {
+    return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS' };
+  }
+  if (PROTECTED_RE.test(segment)) {
+    return { allowed: false, reason: `${base} of protected path is forbidden`, trust_level: 'SAFE_READONLY' };
+  }
+  if (base === 'git' && /\bpush\b/.test(segment) && /(\s--force\b|\s-f\b)/.test(segment)) {
+    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
+  }
+  return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+const mode = process.argv[2];
+const payload = process.argv[3] || '';
+
+if (mode === 'command') {
+  process.stdout.write(JSON.stringify(verdictForCommand(payload)));
+} else if (mode === 'command-batch') {
+  let segments;
+  try { segments = JSON.parse(payload); } catch { segments = []; }
+  if (!Array.isArray(segments)) segments = [];
+  process.stdout.write(JSON.stringify(segments.map(verdictForCommand)));
+} else if (mode === 'write') {
+  if (PROTECTED_RE.test(payload)) {
+    process.stdout.write(JSON.stringify({ allowed: false, reason: `Path '${payload}' is protected`, trust_level: 'BLOCKED' }));
+  } else {
+    process.stdout.write(JSON.stringify({ allowed: true }));
+  }
+} else if (mode === 'route') {
+  process.stdout.write(JSON.stringify({ agents: ['code-reviewer'], skills: ['security-review'], provider: 'keyword' }));
+} else {
+  process.stdout.write(JSON.stringify({ error: `unknown mode: ${mode}` }));
+}

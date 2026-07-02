@@ -9,6 +9,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
+const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 
 function test(name, fn) {
   try {
@@ -30,6 +31,7 @@ function runHook(prompt, env = {}) {
     env: {
       ...process.env,
       ECC_HOOK_PROFILE: 'standard',
+      EGC_GUARDIAN_CLI: fakeCli,
       ...env
     },
     timeout: 15000,
@@ -53,7 +55,7 @@ function runTests() {
     const result = runHook('review this typescript pull request for security issues');
     assert.strictEqual(result.code, 0, `Expected exit 0, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('=== EGC Routing ==='), `Expected routing header, got: ${result.stdout}`);
-    assert.ok(result.stdout.includes('Skills:'), `Expected skills line, got: ${result.stdout}`);
+    assert.ok(result.stdout.includes('Skills: security-review'), `Expected skills line, got: ${result.stdout}`);
   })) passed++; else failed++;
 
   if (test('stays silent for prompts below the minimum length', () => {

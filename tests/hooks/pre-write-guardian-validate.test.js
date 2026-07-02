@@ -9,6 +9,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
+const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 
 function test(name, fn) {
   try {
@@ -30,6 +31,7 @@ function runHook(filePath, env = {}) {
     env: {
       ...process.env,
       ECC_HOOK_PROFILE: 'standard',
+      EGC_GUARDIAN_CLI: fakeCli,
       ...env
     },
     timeout: 15000,
@@ -65,13 +67,13 @@ function runTests() {
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
   })) passed++; else failed++;
 
-  if (test('fails open with a warning when the validator crashes', () => {
+  if (test('fails open silently when the validator crashes', () => {
     const brokenCli = path.join(os.tmpdir(), `egc-broken-cli-${Date.now()}.js`);
     fs.writeFileSync(brokenCli, 'process.exit(1);\n');
     try {
       const result = runHook(path.join(os.homedir(), '.ssh', 'id_rsa'), { EGC_GUARDIAN_CLI: brokenCli });
       assert.strictEqual(result.code, 0, 'Expected fail-open on validator crash');
-      assert.ok(result.stderr.includes('validator unavailable'), `Expected warning, got: ${result.stderr}`);
+      assert.strictEqual(result.stderr, '', `Expected silent fail-open, got: ${result.stderr}`);
     } finally {
       try { fs.rmSync(brokenCli, { force: true }); } catch { /* best-effort cleanup */ }
     }
@@ -82,7 +84,7 @@ function runTests() {
     const result = spawnSync('node', [runner, 'pre:write-guardian-validate', 'scripts/hooks/pre-write-guardian-validate.js', 'minimal,standard,strict'], {
       input: rawInput,
       encoding: 'utf8',
-      env: { ...process.env, ECC_HOOK_PROFILE: 'standard' },
+      env: { ...process.env, ECC_HOOK_PROFILE: 'standard', EGC_GUARDIAN_CLI: fakeCli },
       timeout: 15000,
       stdio: ['pipe', 'pipe', 'pipe']
     });

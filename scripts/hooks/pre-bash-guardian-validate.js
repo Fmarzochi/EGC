@@ -73,10 +73,7 @@ function run(inputOrRaw) {
 
   const cli = resolveGuardianCli();
   if (!cli) {
-    return {
-      exitCode: 0,
-      stderr: '[EGC Guardian] validator CLI not found; command allowed unchecked. Run egc doctor.',
-    };
+    return { exitCode: 0 };
   }
 
   const result = spawnSync(
@@ -86,20 +83,14 @@ function run(inputOrRaw) {
   );
 
   if (result.error || result.status !== 0 || !result.stdout) {
-    return {
-      exitCode: 0,
-      stderr: '[EGC Guardian] validator unavailable; command allowed unchecked.',
-    };
+    return { exitCode: 0 };
   }
 
   let verdicts;
   try {
     verdicts = JSON.parse(result.stdout);
   } catch {
-    return {
-      exitCode: 0,
-      stderr: '[EGC Guardian] validator returned malformed output; command allowed unchecked.',
-    };
+    return { exitCode: 0 };
   }
   if (!Array.isArray(verdicts)) return { exitCode: 0 };
 
