@@ -21,8 +21,7 @@
 
 'use strict';
 
-const { spawnSync } = require('child_process');
-const { resolveGuardianCli } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 
 const MAX_STDIN = 1024 * 1024;
 const VALIDATE_TIMEOUT_MS = 4000;
@@ -76,22 +75,7 @@ function run(inputOrRaw) {
     return { exitCode: 0 };
   }
 
-  const result = spawnSync(
-    process.execPath,
-    [cli, 'command-batch', JSON.stringify(segments)],
-    { encoding: 'utf8', timeout: VALIDATE_TIMEOUT_MS },
-  );
-
-  if (result.error || result.status !== 0 || !result.stdout) {
-    return { exitCode: 0 };
-  }
-
-  let verdicts;
-  try {
-    verdicts = JSON.parse(result.stdout);
-  } catch {
-    return { exitCode: 0 };
-  }
+  const verdicts = callGuardian(cli, ['command-batch'], JSON.stringify(segments), VALIDATE_TIMEOUT_MS);
   if (!Array.isArray(verdicts)) return { exitCode: 0 };
 
   for (let i = 0; i < verdicts.length; i++) {

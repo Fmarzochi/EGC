@@ -65,9 +65,21 @@ const MODES: Record<string, (payload: string) => unknown | Promise<unknown>> = {
   'learn': learn,
 };
 
+// Payload arrives on stdin, never as a command-line argument. Untrusted
+// content (user prompts, commands, paths) must not flow into argv, where a
+// leading dash could be parsed as a flag by this or any wrapped process.
+// Only the fixed mode and literal flags travel in argv.
+function readStdin(): string {
+  try {
+    return fs.readFileSync(0, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 async function main() {
   const mode = process.argv[2] ?? '';
-  const payload = process.argv[3] ?? '';
+  const payload = readStdin();
   const handler = MODES[mode];
   const result = handler ? await handler(payload) : { error: `unknown mode: ${mode}` };
   process.stdout.write(JSON.stringify(result));

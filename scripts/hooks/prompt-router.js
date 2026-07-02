@@ -15,10 +15,9 @@
 
 'use strict';
 
-const { spawnSync } = require('child_process');
-const { resolveGuardianCli } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
+const { runStandalone } = require('../lib/hook-io');
 
-const MAX_STDIN = 1024 * 1024;
 const KEYWORD_TIMEOUT_MS = 3000;
 const LLM_TIMEOUT_MS = 8000;
 const MIN_PROMPT_LENGTH = 12;
@@ -36,25 +35,13 @@ function parseInput(inputOrRaw) {
 
 function routeViaCli(cli, prompt) {
   const useLlm = /^(1|true|yes)$/i.test(String(process.env.EGC_ROUTING_LLM || ''));
-  const args = [cli, 'route', prompt];
-  if (useLlm) args.push('--llm');
-
-  const result = spawnSync(process.execPath, args, { // NOSONAR jssecurity:S8705
-    encoding: 'utf8',
-    timeout: useLlm ? LLM_TIMEOUT_MS : KEYWORD_TIMEOUT_MS,
-  });
-
-  if (result.error || result.status !== 0 || !result.stdout) return null;
-
-  try {
-    const routing = JSON.parse(result.stdout);
-    return {
-      agents: Array.isArray(routing.agents) ? routing.agents : [],
-      skills: Array.isArray(routing.skills) ? routing.skills : [],
-    };
-  } catch {
-    return null;
-  }
+  const args = useLlm ? ['route', '--llm'] : ['route'];
+  const routing = callGuardian(cli, args, prompt, useLlm ? LLM_TIMEOUT_MS : KEYWORD_TIMEOUT_MS);
+  if (!routing) return null;
+  return {
+    agents: Array.isArray(routing.agents) ? routing.agents : [],
+    skills: Array.isArray(routing.skills) ? routing.skills : [],
+  };
 }
 
 function run(inputOrRaw) {
@@ -83,16 +70,5 @@ function run(inputOrRaw) {
 module.exports = { run };
 
 if (require.main === module) {
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
-    }
-  });
-  process.stdin.on('end', () => {
-    const result = run(raw);
-    if (result.stdout) process.stdout.write(result.stdout + '\n');
-    process.exit(0);
-  });
+  runStandalone(run);
 }

@@ -16,8 +16,7 @@
 
 'use strict';
 
-const { spawnSync } = require('child_process');
-const { resolveGuardianCli } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 
 const MAX_STDIN = 1024 * 1024;
 const VALIDATE_TIMEOUT_MS = 4000;
@@ -43,21 +42,8 @@ function run(inputOrRaw) {
     return { exitCode: 0 };
   }
 
-  const result = spawnSync(process.execPath, [cli, 'write', filePath], {
-    encoding: 'utf8',
-    timeout: VALIDATE_TIMEOUT_MS,
-  });
-
-  if (result.error || result.status !== 0 || !result.stdout) {
-    return { exitCode: 0 };
-  }
-
-  let verdict;
-  try {
-    verdict = JSON.parse(result.stdout);
-  } catch {
-    return { exitCode: 0 };
-  }
+  const verdict = callGuardian(cli, ['write'], filePath, VALIDATE_TIMEOUT_MS);
+  if (!verdict) return { exitCode: 0 };
 
   if (verdict.allowed === false) {
     return {

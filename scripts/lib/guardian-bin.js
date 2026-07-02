@@ -1,8 +1,9 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 
 // Locates the compiled guardian CLI so hooks can enforce validation without
 // the MCP server running. Resolution order: explicit env override, the
@@ -51,4 +52,23 @@ function resolveGuardianCli() {
   return fromEnv() || fromPackageLayout() || fromMcpConfigs();
 }
 
-module.exports = { resolveGuardianCli };
+// Invokes the guardian CLI with the payload on stdin, never in argv.
+// Untrusted content (prompts, commands, paths) must not travel as command
+// arguments where a leading dash could be parsed as a flag. argv carries
+// only the fixed mode and literal flags. Returns parsed JSON, or null on
+// any failure so callers fail open.
+function callGuardian(cli, args, input, timeoutMs) {
+  const result = spawnSync(process.execPath, [cli, ...args], {
+    input: input == null ? '' : String(input),
+    encoding: 'utf8',
+    timeout: timeoutMs,
+  });
+  if (result.error || result.status !== 0 || !result.stdout) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { resolveGuardianCli, callGuardian };

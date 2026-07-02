@@ -2,13 +2,15 @@
 /**
  * Deterministic stand-in for the compiled guardian CLI, used by hook tests
  * so they do not depend on the egc-guardian build existing in the test
- * environment. Mirrors the CLI protocol (mode + payload argv, JSON verdict
- * on stdout, exit 0); the verdict rules cover only what the hook tests
- * assert. Validator correctness itself is covered by the guardian tests.
+ * environment. Mirrors the CLI protocol (mode in argv, payload via stdin,
+ * JSON verdict on stdout, exit 0); the verdict rules cover only what the
+ * hook tests assert. Validator correctness itself is covered by the
+ * guardian tests.
  */
 
 'use strict';
 
+const fs = require('node:fs');
 const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
 
 function verdictForCommand(segment) {
@@ -26,7 +28,8 @@ function verdictForCommand(segment) {
 }
 
 const mode = process.argv[2];
-const payload = process.argv[3] || '';
+let payload;
+try { payload = fs.readFileSync(0, 'utf8'); } catch { payload = ''; }
 
 if (mode === 'command') {
   process.stdout.write(JSON.stringify(verdictForCommand(payload)));

@@ -15,8 +15,7 @@
 
 'use strict';
 
-const { spawnSync } = require('node:child_process');
-const { resolveGuardianCli } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 const { runStandalone } = require('../lib/hook-io');
 
 const LEARN_TIMEOUT_MS = 10000;
@@ -28,10 +27,7 @@ function run(_inputOrRaw) {
   if (!cli) return { exitCode: 0 };
 
   const projectPath = process.env.PWD || process.cwd();
-  spawnSync(process.execPath, [cli, 'learn', projectPath], { // NOSONAR jssecurity:S8705
-    encoding: 'utf8',
-    timeout: LEARN_TIMEOUT_MS,
-  });
+  callGuardian(cli, ['learn'], projectPath, LEARN_TIMEOUT_MS);
 
   return { exitCode: 0 };
 }

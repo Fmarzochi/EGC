@@ -24,8 +24,7 @@
 
 'use strict';
 
-const { spawnSync } = require('node:child_process');
-const { resolveGuardianCli } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 const { parseInput, runStandalone } = require('../lib/hook-io');
 const {
   loadState, saveState, appendToSection, extractSection,
@@ -37,16 +36,6 @@ const MINE_TIMEOUT_MS = 15000;
 const MAX_REMEMBER_CHARS = 400;
 const MAX_INJECT_CHARS = 1600;
 
-function cliJson(cli, args, timeout) {
-  const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', timeout }); // NOSONAR jssecurity:S8705
-  if (result.error || result.status !== 0 || !result.stdout) return null;
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    return null;
-  }
-}
-
 function clip(text, max) {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
@@ -56,7 +45,7 @@ function handleSessionEnd(cli, projectPath, transcriptPath) {
 
   let minedNote = '';
   if (transcriptPath) {
-    const mined = cliJson(cli, ['mine', transcriptPath], MINE_TIMEOUT_MS);
+    const mined = callGuardian(cli, ['mine'], transcriptPath, MINE_TIMEOUT_MS);
     if (mined && !mined.skip) {
       const result = applyMinedMemory(projectPath, mined);
       if (result.added > 0) minedNote = ` ${result.added} decisions and lessons from this session were extracted and merged.`;
@@ -117,7 +106,7 @@ function run(inputOrRaw) {
   const cli = resolveGuardianCli();
   if (!cli) return { exitCode: 0, stdout: '' };
 
-  const detection = cliJson(cli, ['intent', prompt], INTENT_TIMEOUT_MS);
+  const detection = callGuardian(cli, ['intent'], prompt, INTENT_TIMEOUT_MS);
   const intent = detection?.intent;
   if (!intent || intent === 'none') return { exitCode: 0, stdout: '' };
 

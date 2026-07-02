@@ -16,8 +16,7 @@
 
 'use strict';
 
-const { spawnSync } = require('node:child_process');
-const { resolveGuardianCli } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 const { applyMinedMemory } = require('../lib/state-snapshot');
 const { parseInput, runStandalone } = require('../lib/hook-io');
 
@@ -33,18 +32,7 @@ function run(inputOrRaw) {
   const cli = resolveGuardianCli();
   if (!cli) return { exitCode: 0 };
 
-  const result = spawnSync(process.execPath, [cli, 'mine', transcriptPath], { // NOSONAR jssecurity:S8705
-    encoding: 'utf8',
-    timeout: MINE_TIMEOUT_MS,
-  });
-  if (result.error || result.status !== 0 || !result.stdout) return { exitCode: 0 };
-
-  let mined;
-  try {
-    mined = JSON.parse(result.stdout);
-  } catch {
-    return { exitCode: 0 };
-  }
+  const mined = callGuardian(cli, ['mine'], transcriptPath, MINE_TIMEOUT_MS);
   if (!mined || mined.skip) return { exitCode: 0 };
 
   try {
