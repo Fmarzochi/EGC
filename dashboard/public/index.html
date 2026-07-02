@@ -340,6 +340,9 @@ body.minimized footer{display:none!important;}
 .cost-sess-time{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:right;}
 .cost-empty{padding:14px 0;text-align:center;color:var(--muted);font-size:11px;}
 .cost-section-lbl{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+.export-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.export-btns{display:flex;gap:6px;flex-shrink:0;}
+.export-btns .btn-sm{letter-spacing:1px;text-transform:uppercase;}
 /* Time range selector */
 .cost-range-wrap{display:flex;gap:4px;margin-bottom:8px;}
 .cost-range-btn{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
@@ -538,7 +541,13 @@ body.minimized footer{display:none!important;}
   <div class="cost-bars" id="costBars">
     <div class="cost-empty">No session data yet.</div>
   </div>
-  <div class="cost-section-lbl">recent sessions</div>
+  <div class="cost-section-lbl export-row">
+    <span>recent sessions</span>
+    <span class="export-btns">
+      <button class="btn-sm" id="exportCsvBtn" onclick="exportSessionsAsCSV()">Export CSV</button>
+      <button class="btn-sm" id="exportJsonBtn" onclick="exportSessionsAsJSON()">Export JSON</button>
+    </span>
+  </div>
   <div class="cost-sessions" id="costSessions">
     <div class="cost-empty">Waiting for sessions…</div>
   </div>
@@ -562,7 +571,7 @@ body.minimized footer{display:none!important;}
   <div class="tab-btn" id="tb-agents" onclick="swTab('agents')"><span class="tab-ico">🤖</span>Agents</div>
   <div class="tab-btn" id="tb-mission" onclick="swTab('mission')"><span class="tab-ico">📊</span>Mission</div>
 </nav>
-
+<script src="/export.js"></script>
 <script>
 /* ── CONSTANTS ─────────────────────────────────────────── */
 const IDES=[
@@ -1298,6 +1307,72 @@ async function loadCostSummary() {
       }).join('');
     }
   } catch (_) {}
+}
+
+function downloadBlob(content, filename, contentType) {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function flashButtonLabel(btnId, tempLabel) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const oldText = btn.textContent;
+  btn.textContent = tempLabel;
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }, 1000);
+}
+
+async function fetchAllSessions() {
+  const response = await fetch('/session-history');
+  if (!response.ok) {
+    throw new Error('Failed to fetch session history');
+  }
+  return response.json();
+}
+
+async function exportSessionsAsCSV() {
+  try {
+    const sessions = await fetchAllSessions();
+    if (!sessions || !sessions.length) {
+      alert('No sessions available to export.');
+      return;
+    }
+    const csvContent = sessionsToCSV(sessions);
+    const filename = exportFilename('csv');
+    downloadBlob(csvContent, filename, 'text/csv;charset=utf-8;');
+    flashButtonLabel('exportCsvBtn', 'Exported!');
+  } catch (err) {
+    console.error('CSV export failed:', err);
+    alert('Failed to export CSV: ' + err.message);
+  }
+}
+
+async function exportSessionsAsJSON() {
+  try {
+    const sessions = await fetchAllSessions();
+    if (!sessions || !sessions.length) {
+      alert('No sessions available to export.');
+      return;
+    }
+    const jsonContent = sessionsToJSON(sessions);
+    const filename = exportFilename('json');
+    downloadBlob(jsonContent, filename, 'application/json;charset=utf-8;');
+    flashButtonLabel('exportJsonBtn', 'Exported!');
+  } catch (err) {
+    console.error('JSON export failed:', err);
+    alert('Failed to export JSON: ' + err.message);
+  }
 }
 
 loadCostSummary();
