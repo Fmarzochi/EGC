@@ -23,9 +23,16 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   const parsed = { sessionId: null, json: false, help: false };
   for (const arg of args) {
-    if (arg === '--help' || arg === '-h') parsed.help = true;
-    else if (arg === '--json') parsed.json = true;
-    else if (!arg.startsWith('--')) parsed.sessionId = arg;
+    if (arg === '--help' || arg === '-h') {
+      parsed.help = true;
+    } else if (arg === '--json') {
+      parsed.json = true;
+    } else if (arg.startsWith('--') || arg.startsWith('-')) {
+      console.error(`Error: Unrecognized option '${arg}'`);
+      showHelp();
+    } else {
+      parsed.sessionId = arg;
+    }
   }
   return parsed;
 }
