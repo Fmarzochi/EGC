@@ -32,7 +32,7 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { redactPayload, writeAuditEntry, AUDIT_LOG_DIR, AUDIT_LOG_PATH, MAX_SIZE_BYTES } = require(buildPath);
+const { redactPayload, writeAuditEntry } = require(buildPath);
 
 console.log('\n=== Testing audit-log (egc-guardian) ===\n');
 
@@ -76,9 +76,12 @@ if (test('redactPayload: walks nested objects one level deep', () => {
   assert.strictEqual(result.meta.tool, 'bash');
 })) passed++; else failed++;
 
-if (test('redactPayload: arrays are passed through unchanged', () => {
+if (test('redactPayload: arrays are walked — non-secret strings pass through, secret strings are redacted', () => {
   const result = redactPayload({ files: ['/tmp/a', '/tmp/b'] });
   assert.deepStrictEqual(result.files, ['/tmp/a', '/tmp/b']);
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.SomeSignatureHere1234567';
+  const result2 = redactPayload({ headers: [{ authorization: jwt }] });
+  assert.strictEqual(result2.headers[0].authorization, '[REDACTED]');
 })) passed++; else failed++;
 
 // ── writeAuditEntry ─────────────────────────────────────────────────────────
@@ -86,39 +89,48 @@ if (test('redactPayload: arrays are passed through unchanged', () => {
 if (test('writeAuditEntry: appends a valid NDJSON line to audit.log', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-audit-test-'));
   const tmpLog = path.join(tmpDir, 'audit.log');
-  writeAuditEntry('TEST_ACTION', 'DENIED', { tool: 'bash', reason: 'blocked' }, tmpDir, tmpLog);
-  const lines = fs.readFileSync(tmpLog, 'utf-8').trim().split('\n');
-  assert.strictEqual(lines.length, 1);
-  const entry = JSON.parse(lines[0]);
-  assert.ok(entry.timestamp, 'should have timestamp');
-  assert.strictEqual(entry.action, 'TEST_ACTION');
-  assert.strictEqual(entry.status, 'DENIED');
-  assert.strictEqual(entry.tool, 'bash');
-  assert.strictEqual(entry.reason, 'blocked');
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  try {
+    writeAuditEntry('TEST_ACTION', 'DENIED', { tool: 'bash', reason: 'blocked' }, tmpDir, tmpLog);
+    const lines = fs.readFileSync(tmpLog, 'utf-8').trim().split('\n');
+    assert.strictEqual(lines.length, 1);
+    const entry = JSON.parse(lines[0]);
+    assert.ok(entry.timestamp, 'should have timestamp');
+    assert.strictEqual(entry.action, 'TEST_ACTION');
+    assert.strictEqual(entry.status, 'DENIED');
+    assert.strictEqual(entry.tool, 'bash');
+    assert.strictEqual(entry.reason, 'blocked');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 })) passed++; else failed++;
 
 if (test('writeAuditEntry: redacts secrets in logged details', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-audit-test-'));
   const tmpLog = path.join(tmpDir, 'audit.log');
-  writeAuditEntry('COMMAND_EXECUTION', 'DENIED', { token: 'super-secret-123', command: 'rm -rf /' }, tmpDir, tmpLog);
-  const entry = JSON.parse(fs.readFileSync(tmpLog, 'utf-8').trim());
-  assert.strictEqual(entry.token, '[REDACTED]');
-  assert.strictEqual(entry.command, 'rm -rf /');
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  try {
+    writeAuditEntry('COMMAND_EXECUTION', 'DENIED', { token: 'super-secret-123', command: 'rm -rf /' }, tmpDir, tmpLog);
+    const entry = JSON.parse(fs.readFileSync(tmpLog, 'utf-8').trim());
+    assert.strictEqual(entry.token, '[REDACTED]');
+    assert.strictEqual(entry.command, 'rm -rf /');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 })) passed++; else failed++;
 
 if (test('writeAuditEntry: rotates when file exceeds size limit', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-audit-test-'));
   const tmpLog = path.join(tmpDir, 'audit.log');
-  // Write a file that exceeds a tiny limit (10 bytes)
-  fs.writeFileSync(tmpLog, 'x'.repeat(20));
-  writeAuditEntry('ROTATE_TEST', 'DENIED', {}, tmpDir, tmpLog, 10);
-  const files = fs.readdirSync(tmpDir);
-  const bakFiles = files.filter(f => f.includes('.bak'));
-  assert.ok(bakFiles.length >= 1, 'should have created a .bak rotation file');
-  assert.ok(fs.existsSync(tmpLog), 'should have created a fresh audit.log after rotation');
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  try {
+    // Write a file that exceeds a tiny limit (10 bytes)
+    fs.writeFileSync(tmpLog, 'x'.repeat(20));
+    writeAuditEntry('ROTATE_TEST', 'DENIED', {}, tmpDir, tmpLog, 10);
+    const files = fs.readdirSync(tmpDir);
+    const bakFiles = files.filter(f => f.includes('.bak'));
+    assert.ok(bakFiles.length >= 1, 'should have created a .bak rotation file');
+    assert.ok(fs.existsSync(tmpLog), 'should have created a fresh audit.log after rotation');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 })) passed++; else failed++;
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

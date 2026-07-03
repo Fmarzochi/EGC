@@ -5,9 +5,9 @@
  * blocked/denied call. Rotates at MAX_SIZE_BYTES. Redacts values that
  * look like secrets before persisting.
  */
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export const AUDIT_LOG_DIR = path.join(os.homedir(), '.egc');
 export const AUDIT_LOG_PATH = path.join(AUDIT_LOG_DIR, 'audit.log');
@@ -20,11 +20,11 @@ const REDACTED_KEYS = new Set([
 ]);
 
 // Pattern for values that look like secrets (long hex/base64 strings, JWTs).
-const SECRET_VALUE_RE = /^(ey[A-Za-z0-9_-]{20,}|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2})$/;
+const SECRET_VALUE_RE = /^(ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2})$/;
 
 /**
  * Returns a shallow copy of `payload` with secret-looking values replaced by
- * the string "[REDACTED]". Nested objects are walked one level deep.
+ * the string "[REDACTED]". Nested objects and arrays are walked recursively.
  */
 export function redactPayload(
   payload: Record<string, unknown>,
@@ -36,7 +36,15 @@ export function redactPayload(
       out[k] = '[REDACTED]';
     } else if (typeof v === 'string' && SECRET_VALUE_RE.test(v)) {
       out[k] = '[REDACTED]';
-    } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+    } else if (Array.isArray(v)) {
+      out[k] = v.map((item) =>
+        item !== null && typeof item === 'object' && !Array.isArray(item)
+          ? redactPayload(item as Record<string, unknown>)
+          : typeof item === 'string' && SECRET_VALUE_RE.test(item)
+          ? '[REDACTED]'
+          : item,
+      );
+    } else if (v !== null && typeof v === 'object') {
       out[k] = redactPayload(v as Record<string, unknown>);
     } else {
       out[k] = v;
@@ -60,13 +68,19 @@ export function writeAuditEntry(
   logPath: string = AUDIT_LOG_PATH,
   maxSizeBytes: number = MAX_SIZE_BYTES,
 ): void {
-  const entry =
-    JSON.stringify({
-      timestamp: new Date().toISOString(),
-      action,
-      status,
-      ...redactPayload(details),
-    }) + '\n';
+  let entry: string;
+  try {
+    entry =
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        action,
+        status,
+        ...redactPayload(details),
+      }) + '\n';
+  } catch {
+    // best-effort: non-serializable payload should not crash the guardian
+    return;
+  }
 
   try {
     fs.mkdirSync(logDir, { recursive: true, mode: 0o700 });
