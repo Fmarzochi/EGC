@@ -60,9 +60,9 @@ async function main() {
   assert(buildIndex.includes('TeamSync_js_1.teamInit'), 'teamInit() called in switch handler');
   assert(buildIndex.includes('TeamSync_js_1.teamSync'), 'teamSync() called in switch handler');
   assert(buildIndex.includes('TeamSync_js_1.teamStatus'), 'teamStatus() called in switch handler');
-  assert(buildIndex.includes('case \"team_init\"'), 'case team_init in switch');
-  assert(buildIndex.includes('case \"team_sync\"'), 'case team_sync in switch');
-  assert(buildIndex.includes('case \"team_status\"'), 'case team_status in switch');
+  assert(buildIndex.includes('case "team_init"'), 'case team_init in switch');
+  assert(buildIndex.includes('case "team_sync"'), 'case team_sync in switch');
+  assert(buildIndex.includes('case "team_status"'), 'case team_status in switch');
 
   // Test 4: Author metadata in state files
   console.log('\n=== Test 4: Author metadata ===');

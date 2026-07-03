@@ -82,8 +82,10 @@ export async function teamSync(): Promise<SyncResult> {
 
     // Step 3: Push local changes.
     try {
-      await instance.push();
-      result.pushedCount = 1;
+      const pushed = await instance.push();
+      if (pushed) {
+        result.pushedCount = 1;
+      }
     } catch (err) {
       result.errors.push(`Push failed: ${String(err)}`);
     }
@@ -132,8 +134,14 @@ async function mergeTeamState(): Promise<void> {
   }
 
   const syncFiles = getAllFiles(syncStateDir);
+  if (syncFiles.length === 0) {
+    return; // No remote state yet; preserve local files.
+  }
+  const syncedRelativePaths = new Set<string>();
+
   for (const syncFile of syncFiles) {
     const relativePath = path.relative(syncStateDir, syncFile);
+    syncedRelativePaths.add(relativePath);
     const localFile = path.join(localStateDir, relativePath);
 
     const syncContent = fs.readFileSync(syncFile, 'utf-8');
@@ -150,6 +158,15 @@ async function mergeTeamState(): Promise<void> {
       // Both exist: merge with last-write-wins per section.
       const merged = mergeStateDocs(localContent, syncContent);
       fs.writeFileSync(localFile, merged, 'utf-8');
+    }
+  }
+
+  // Propagate remote deletions: remove local files absent from sync repo.
+  const localFiles = getAllFiles(localStateDir);
+  for (const localFile of localFiles) {
+    const relativePath = path.relative(localStateDir, localFile);
+    if (!syncedRelativePaths.has(relativePath)) {
+      fs.unlinkSync(localFile);
     }
   }
 }

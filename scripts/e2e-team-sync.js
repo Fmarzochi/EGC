@@ -106,7 +106,7 @@ async function main() {
   // User 1: Check team status
   console.log('\n[Verify] team status...');
   try {
-    const statusOut = runIn(USER1_DIR, 'node', [teamScript, 'status']);
+    runIn(USER1_DIR, 'node', [teamScript, 'status']);
     console.log(`  Status output includes last sync info`);
     console.log(`  PASS: team status works`);
   } catch (e) {
@@ -151,14 +151,14 @@ async function main() {
   console.log('E2E Integration Test Complete');
 
   // Cleanup temp dir
-  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch {}
-  try { fs.rmSync(stateDir, { recursive: true, force: true }); } catch {}
-  try { fs.rmSync(path.join(os.homedir(), '.egc', 'team.json')); } catch {}
-  try { fs.rmSync(path.join(os.homedir(), '.egc', 'team-sync'), { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { fs.rmSync(stateDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { fs.rmSync(path.join(os.homedir(), '.egc', 'team.json')); } catch { /* best-effort */ }
+  try { fs.rmSync(path.join(os.homedir(), '.egc', 'team-sync'), { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 
 main().catch(e => {
   console.error(`FATAL: ${e.message}`);
-  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* best-effort */ }
   process.exit(1);
 });

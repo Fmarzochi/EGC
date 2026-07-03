@@ -23,7 +23,7 @@ import {
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
 import { sanitize, sanitizeStrings } from './sanitize.js';
-import { teamInit, teamSync, teamStatus, getTeamConfig } from './sync/TeamSync.js';
+import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 
 function resolveStateStoreDbPath(): string {
   const envOverride = process.env.EGC_STATE_DB;

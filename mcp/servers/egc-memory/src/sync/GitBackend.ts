@@ -9,7 +9,7 @@ const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
 export class GitBackend extends SyncBackend {
   private git: SimpleGit;
   private config: SyncConfig | null = null;
-  private repoDir: string;
+  private readonly repoDir: string;
 
   constructor() {
     super();
@@ -28,20 +28,9 @@ export class GitBackend extends SyncBackend {
       await this.git.init();
       // Rename default branch (master) to match config branch (e.g. main).
       await this.git.raw(['branch', '-M', config.branch]);
-      try {
-        await this.git.addRemote('origin', config.remote);
-      } catch {
-        // remote may already exist
-        const remotes = await this.git.getRemotes(true);
-        if (!remotes.find(r => r.name === 'origin')) {
-          await this.git.addRemote('origin', config.remote);
-        }
-      }
+      await this.ensureOriginRemote(config.remote);
     } else {
-      const remotes = await this.git.getRemotes(true);
-      if (!remotes.find(r => r.name === 'origin')) {
-        await this.git.addRemote('origin', config.remote);
-      }
+      await this.ensureOriginRemote(config.remote);
     }
 
     // Try to pull once to establish the branch tracking.
@@ -55,15 +44,11 @@ export class GitBackend extends SyncBackend {
   async pull(): Promise<string[]> {
     if (!this.config) throw new Error('GitBackend not initialized. Call init() first.');
 
-    // Stash any local changes before pulling.
+    // Discard uncommitted sync-repo changes before pulling.
     try {
-      await this.git.add('.');
-      const stash = await this.git.stash();
-      if (stash) {
-        // Changes were stashed
-      }
+      await this.git.reset(['--hard']);
     } catch {
-      // Nothing to stash
+      // Empty repo on first sync.
     }
 
     try {
@@ -75,44 +60,46 @@ export class GitBackend extends SyncBackend {
 
     // Get list of changed files from the pull.
     const log = await this.git.log({ maxCount: 1 });
-    if (log.latest) {
-      const diff = await this.git.diff(['--name-only', `${log.latest.hash}~1`, log.latest.hash]);
-      return diff.split('\n').filter(Boolean);
+    if (!log.latest) {
+      return [];
     }
 
-    return [];
+    const commitCount = await this.git.raw(['rev-list', '--count', 'HEAD']);
+    if (parseInt(commitCount.trim(), 10) <= 1) {
+      const show = await this.git.show(['--name-only', '--pretty=format:', log.latest.hash]);
+      return show.split('\n').filter(Boolean);
+    }
+
+    const diff = await this.git.diff(['--name-only', `${log.latest.hash}~1`, log.latest.hash]);
+    return diff.split('\n').filter(Boolean);
   }
 
-  async push(): Promise<void> {
+  async push(): Promise<boolean> {
     if (!this.config) throw new Error('GitBackend not initialized. Call init() first.');
 
     // Copy the current state files into the sync repo.
     const stateDir = path.join(os.homedir(), '.egc', 'state');
     const syncStateDir = path.join(this.repoDir, 'state');
-    if (!fs.existsSync(syncStateDir)) {
-      fs.mkdirSync(syncStateDir, { recursive: true });
-    }
 
     if (fs.existsSync(stateDir)) {
-      this.copyRecursive(stateDir, syncStateDir);
+      this.mirrorCopy(stateDir, syncStateDir);
     }
 
     // Also copy lessons/decisions from the memory DB as JSON.
     const memoryDir = path.join(os.homedir(), '.egc', 'memory');
     const syncMemoryDir = path.join(this.repoDir, 'memory');
-    if (!fs.existsSync(syncMemoryDir)) {
-      fs.mkdirSync(syncMemoryDir, { recursive: true });
-    }
     if (fs.existsSync(memoryDir)) {
-      this.copyRecursive(memoryDir, syncMemoryDir);
+      this.mirrorCopy(memoryDir, syncMemoryDir);
     }
 
     // Add, commit, and push.
-    await this.git.add('.');
-    const status = await this.git.status();
-    if (status.files.length === 0) {
-      return; // Nothing to commit.
+    await this.git.add('-A');
+    const staged = await this.git.diff(['--cached', '--name-only']);
+    if (!staged.trim()) {
+      return false;
     }
+
+    await this.ensureGitIdentity();
 
     const author = process.env.USER || process.env.USERNAME || 'unknown';
     await this.git.commit(`sync: team memory update from ${author}`);
@@ -126,6 +113,7 @@ export class GitBackend extends SyncBackend {
         throw new Error(`Push failed after setting upstream: ${String(err2)}`);
       }
     }
+    return true;
   }
 
   async status(): Promise<SyncStatus> {
@@ -153,16 +141,16 @@ export class GitBackend extends SyncBackend {
 
     let hasUncommittedChanges = false;
     try {
-      const status = await this.git.status();
-      hasUncommittedChanges = status.files.length > 0;
+      const gitStatus = await this.git.status();
+      hasUncommittedChanges = gitStatus.files.length > 0;
     } catch {
       hasUncommittedChanges = false;
     }
 
     let conflictCount = 0;
     try {
-      const status = await this.git.status();
-      conflictCount = status.conflicted.length;
+      const gitStatus = await this.git.status();
+      conflictCount = gitStatus.conflicted.length;
     } catch {
       conflictCount = 0;
     }
@@ -179,19 +167,34 @@ export class GitBackend extends SyncBackend {
     this.config = null;
   }
 
-  private copyRecursive(src: string, dest: string): void {
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        if (!fs.existsSync(destPath)) {
-          fs.mkdirSync(destPath, { recursive: true });
+  private async ensureGitIdentity(): Promise<void> {
+    const name = process.env.USER || process.env.USERNAME || 'egc';
+    await this.git.addConfig('user.email', `${name}@egc.local`, false, 'local');
+    await this.git.addConfig('user.name', name, false, 'local');
+  }
+
+  private async ensureOriginRemote(remoteUrl: string): Promise<void> {
+    const remotes = await this.git.getRemotes(true);
+    const origin = remotes.find(r => r.name === 'origin');
+    if (!origin) {
+      try {
+        await this.git.addRemote('origin', remoteUrl);
+      } catch {
+        // remote may already exist from a concurrent init
+        if (!remotes.some(r => r.name === 'origin')) {
+          await this.git.addRemote('origin', remoteUrl);
         }
-        this.copyRecursive(srcPath, destPath);
-      } else if (entry.isFile()) {
-        fs.copyFileSync(srcPath, destPath);
       }
+    } else if (origin.refs.fetch !== remoteUrl) {
+      await this.git.remote(['set-url', 'origin', remoteUrl]);
     }
+  }
+
+  private mirrorCopy(src: string, dest: string): void {
+    if (fs.existsSync(dest)) {
+      fs.rmSync(dest, { recursive: true, force: true });
+    }
+    fs.mkdirSync(dest, { recursive: true });
+    fs.cpSync(src, dest, { recursive: true });
   }
 }

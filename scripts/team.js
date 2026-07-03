@@ -9,14 +9,22 @@ const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-m
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
 
 // Resolve absolute git path once at startup to avoid PATH-reliance.
-const GIT_BIN = (() => {
+function resolveGitBin() {
+  const lookupCmd = process.platform === 'win32' ? 'where' : 'which';
+  let output;
   try {
-    const where = execFileSync('where', ['git'], { encoding: 'utf-8', stdio: 'pipe' });
-    return where.split('\n').map(s => s.trim()).filter(Boolean)[0] || 'git';
-  } catch {
-    return 'git';
+    output = execFileSync(lookupCmd, ['git'], { encoding: 'utf-8', stdio: 'pipe' });
+  } catch (err) {
+    throw new Error(`git executable not found. Install git and ensure it is on PATH. ${err.message}`, { cause: err });
   }
-})();
+  const gitPath = output.split('\n').map(s => s.trim()).filter(Boolean)[0];
+  if (!gitPath || !path.isAbsolute(gitPath)) {
+    throw new Error(`git executable not found at an absolute path (got: ${gitPath || 'none'})`);
+  }
+  return gitPath;
+}
+
+const GIT_BIN = resolveGitBin();
 
 function safeGit(args, cwd) {
   return execFileSync(GIT_BIN, args, {
@@ -224,7 +232,9 @@ async function main() {
           try {
             const log = safeGit(['log', '-1', '--format=%ai'], syncDir);
             if (log) console.log(`Last commit: ${log}`);
-          } catch {}
+          } catch {
+            // no commits yet
+          }
         }
       }
       break;
@@ -235,6 +245,25 @@ async function main() {
       showHelp();
       process.exit(1);
   }
+}
+
+function ensureRemote(syncDir, remoteUrl) {
+  try {
+    const current = safeGit(['remote', 'get-url', 'origin'], syncDir);
+    if (current !== remoteUrl) {
+      safeGit(['remote', 'set-url', 'origin', remoteUrl], syncDir);
+    }
+  } catch {
+    safeGit(['remote', 'add', 'origin', remoteUrl], syncDir);
+  }
+}
+
+function mirrorCopy(src, dest) {
+  if (fs.existsSync(dest)) {
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
+  fs.mkdirSync(dest, { recursive: true });
+  fs.cpSync(src, dest, { recursive: true });
 }
 
 async function directSync(config) {
@@ -250,13 +279,16 @@ async function directSync(config) {
   if (!isRepo) {
     safeGit(['init'], syncDir);
     safeGit(['remote', 'add', 'origin', config.remote], syncDir);
+  } else {
+    ensureRemote(syncDir, config.remote);
   }
 
-  // Pull.
+  // Discard uncommitted sync-repo changes before pull.
   try {
-    safeGit(['add', '-A'], syncDir);
-    safeGit(['stash'], syncDir);
-  } catch {}
+    safeGit(['reset', '--hard'], syncDir);
+  } catch {
+    // empty repo on first sync
+  }
 
   try {
     safeGit(['pull', 'origin', config.branch, '--allow-unrelated-histories', '--no-rebase'], syncDir);
@@ -266,16 +298,27 @@ async function directSync(config) {
     console.log(`  Pull: ${msg.includes('no upstream') ? 'first sync, no upstream yet' : msg}`);
   }
 
-  // Copy state files into sync repo.
+  // Copy state files into sync repo (mirror to avoid resurrecting deleted files).
   const syncStateDir = path.join(syncDir, 'state');
-  if (!fs.existsSync(syncStateDir)) fs.mkdirSync(syncStateDir, { recursive: true });
   if (fs.existsSync(stateDir)) {
-    execFileSync('robocopy', [stateDir, syncStateDir, '/E', '/NP', '/NFL', '/NDL'], { stdio: 'pipe', encoding: 'utf-8' });
+    mirrorCopy(stateDir, syncStateDir);
   }
 
   // Commit and push.
   safeGit(['add', '-A'], syncDir);
   try {
+    safeGit(['config', 'user.email', `${process.env.USER || process.env.USERNAME || 'egc'}@egc.local`], syncDir);
+    safeGit(['config', 'user.name', process.env.USER || process.env.USERNAME || 'egc'], syncDir);
+  } catch {
+    // identity may already be configured
+  }
+  try {
+    const staged = safeGit(['diff', '--cached', '--name-only'], syncDir);
+    if (!staged.trim()) {
+      console.log('  Nothing new to push.');
+      console.log('Sync complete.');
+      return;
+    }
     const author = process.env.USER || process.env.USERNAME || 'unknown';
     safeGit(['commit', '-m', `sync: team memory update from ${author}`], syncDir);
     safeGit(['push', 'origin', config.branch], syncDir);
