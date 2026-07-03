@@ -77,7 +77,7 @@ function hideEgcRootOnWindows(): void {
 }
 
 function ensurePrivateDir(dirPath: string): void {
-  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
   if (process.platform !== 'win32') {
     try { fs.chmodSync(dirPath, 0o700); } catch { /* best-effort */ }
   }

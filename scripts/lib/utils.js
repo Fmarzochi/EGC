@@ -176,14 +176,21 @@ function ensureDir(dirPath) {
 
 /**
  * Ensure a private directory exists with restricted permissions (owner only).
- * On POSIX systems this sets mode 0700; on Windows permissions are unchanged.
- * Safe to call on an already-existing directory -- permissions are always
- * enforced, not just at creation time.
+ * On POSIX systems this sets mode 0700 at creation time and re-enforces it on
+ * already-existing directories. On Windows permissions are unchanged.
  * @param {string} dirPath - Directory path to create
  * @returns {string} The directory path
  */
 function ensurePrivateDir(dirPath) {
-  ensureDir(dirPath);
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+    }
+  } catch (err) {
+    if (err.code !== 'EEXIST') {
+      throw new Error(`Failed to create directory '${dirPath}': ${err.message}`, { cause: err });
+    }
+  }
   if (!isWindows) {
     try {
       fs.chmodSync(dirPath, 0o700);
