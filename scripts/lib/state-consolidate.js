@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ensurePrivateDir } = require('./utils');
 
 const DEFAULT_THRESHOLD = 40;
 const WORKING_WINDOW_DAYS = 7;
@@ -281,7 +282,7 @@ function consolidateState(content, options = {}) {
 
 function backupStateFile(homeDir, filePath, now = new Date()) {
   const dir = archiveDir(homeDir);
-  fs.mkdirSync(dir, { recursive: true });
+  ensurePrivateDir(dir);
   const stamp = now.toISOString().replace(/[:.]/g, '-');
   const base = path.basename(filePath, '.md');
   const backupPath = path.join(dir, `${base}.${stamp}.md`);

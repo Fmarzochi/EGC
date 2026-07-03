@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
+const { ensurePrivateDir } = require('./utils');
 
 const TELEMETRY_FILE = path.join(
   process.env.HOME || process.env.USERPROFILE || os.homedir(),
@@ -45,9 +46,7 @@ function readConsent() {
  */
 function writeConsent(enabled) {
   const dir = path.dirname(TELEMETRY_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  ensurePrivateDir(dir);
   fs.writeFileSync(
     TELEMETRY_FILE,
     JSON.stringify({ enabled, version: SCHEMA_VERSION }, null, 2) + '\n',

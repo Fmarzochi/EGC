@@ -175,6 +175,33 @@ function ensureDir(dirPath) {
 }
 
 /**
+ * Ensure a private directory exists with restricted permissions (owner only).
+ * On POSIX systems this sets mode 0700 at creation time and re-enforces it on
+ * already-existing directories. On Windows permissions are unchanged.
+ * @param {string} dirPath - Directory path to create
+ * @returns {string} The directory path
+ */
+function ensurePrivateDir(dirPath) {
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+    }
+  } catch (err) {
+    if (err.code !== 'EEXIST') {
+      throw new Error(`Failed to create directory '${dirPath}': ${err.message}`, { cause: err });
+    }
+  }
+  if (!isWindows) {
+    try {
+      fs.chmodSync(dirPath, 0o700);
+    } catch {
+      // best-effort -- do not crash if chmod is not supported (e.g. tmpfs)
+    }
+  }
+  return dirPath;
+}
+
+/**
  * Get current date in YYYY-MM-DD format
  */
 function getDateString() {
@@ -716,6 +743,7 @@ module.exports = {
   getLearnedSkillsDir,
   getTempDir,
   ensureDir,
+  ensurePrivateDir,
 
   // Date/Time
   getDateString,
