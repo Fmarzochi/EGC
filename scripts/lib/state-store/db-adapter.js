@@ -118,8 +118,13 @@ class SqlJsDatabase {
   }
 
   close() {
-    this._persist();
-    this._db.close();
+    if (!this._db) return;
+    try {
+      this._persist();
+    } finally {
+      this._db.close();
+      this._db = null;
+    }
   }
 
   _persist() {

@@ -43,9 +43,15 @@ async function createStateStore(options = {}) {
   const dbPath = resolveStateStorePath(options);
 
   const db = await openDatabase(dbPath);
-  db.pragma('foreign_keys = ON');
-  const appliedMigrations = applyMigrations(db);
-  const queryApi = createQueryApi(db);
+  let queryApi, appliedMigrations;
+  try {
+    db.pragma('foreign_keys = ON');
+    appliedMigrations = applyMigrations(db);
+    queryApi = createQueryApi(db);
+  } catch (err) {
+    db.close();
+    throw err;
+  }
 
   return {
     dbPath,

@@ -30,7 +30,7 @@ if (require.main === module) {
     })
     .catch(err => {
       process.stderr.write(`[bootstrap-state-db] FAILED: ${err.message}\n`);
-      process.exit(1);
+      process.exitCode = 1;
     });
 }
 
