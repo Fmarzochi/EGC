@@ -101,6 +101,10 @@ const COMMANDS = {
     script: 'team.js',
     description: 'Team memory sync: init, sync, or status. Share state across teammates.',
   },
+  budget: {
+    script: 'budget.js',
+    description: 'Budget guardian: set, status, reset token/cost limits per session.',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -123,6 +127,7 @@ const PRIMARY_COMMANDS = [
   'telemetry',
   'dashboard',
   'team',
+  'budget',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);
