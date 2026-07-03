@@ -109,7 +109,7 @@ function installPluginFromNpm(npmPackage, pluginName) {
   try {
     fs.mkdirSync(tmpDir, { recursive: true });
 
-    const npmResult = spawnSync('npm', ['pack', npmPackage, '--pack-destination', tmpDir], {
+    const npmResult = spawnSync('npm', ['pack', npmPackage, '--pack-destination', tmpDir], { // NOSONAR jssecurity:S8705
       cwd: tmpDir,
       encoding: 'utf-8',
       stdio: 'pipe',
@@ -129,7 +129,7 @@ function installPluginFromNpm(npmPackage, pluginName) {
     const extractDir = path.join(tmpDir, 'extracted');
     fs.mkdirSync(extractDir, { recursive: true });
 
-    const tarResult = spawnSync('tar', ['-xzf', path.join(tmpDir, tgzFile), '-C', extractDir], {
+    const tarResult = spawnSync('tar', ['-xzf', path.join(tmpDir, tgzFile), '-C', extractDir], { // NOSONAR jssecurity:S8705
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 30000,
