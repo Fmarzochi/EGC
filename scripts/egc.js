@@ -105,6 +105,10 @@ const COMMANDS = {
     script: 'budget.js',
     description: 'Budget guardian: set, status, reset token/cost limits per session.',
   },
+  plugin: {
+    script: 'plugin.js',
+    description: 'Plugin registry: install, list, remove, update EGC plugins from npm or local path.',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -128,6 +132,7 @@ const PRIMARY_COMMANDS = [
   'dashboard',
   'team',
   'budget',
+  'plugin',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);
