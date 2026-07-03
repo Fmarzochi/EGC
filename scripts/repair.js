@@ -3,12 +3,14 @@
 const os = require('os');
 const { repairInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
+const { reinstallAllPlugins, listInstalledPlugins } = require('./lib/plugin-registry');
 
 function showHelp(exitCode = 0) {
   console.log(`
 Usage: node scripts/repair.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json]
 
 Rebuild EGC-managed files recorded in install-state for the current context.
+Also reinstalls all plugins from the plugin lock file.
 `);
   process.exit(exitCode);
 }
@@ -81,14 +83,33 @@ function main() {
       dryRun: options.dryRun,
     });
     const hasErrors = result.summary.errorCount > 0;
+    let pluginResults = [];
+
+    if (!options.dryRun) {
+      const plugins = listInstalledPlugins();
+      if (plugins.length > 0) {
+        pluginResults = reinstallAllPlugins();
+      }
+    }
 
     if (options.json) {
+      if (pluginResults.length > 0) {
+        result.pluginRepairs = pluginResults;
+      }
       console.log(JSON.stringify(result, null, 2));
     } else {
       printHuman(result);
+      if (pluginResults.length > 0) {
+        console.log('\nPlugin reinstall:\n');
+        for (const p of pluginResults) {
+          const icon = p.success ? '\u2713' : '\u2717';
+          console.log(`  ${icon} ${p.name}${p.success ? '' : ': ' + (p.errors || []).join(', ')}`);
+        }
+      }
     }
 
-    process.exitCode = hasErrors ? 1 : 0;
+    const pluginErrors = pluginResults.filter(p => !p.success).length;
+    process.exitCode = (hasErrors || pluginErrors > 0) ? 1 : 0;
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
