@@ -69,6 +69,10 @@ const COMMANDS = {
     script: 'sessions-cli.js',
     description: 'List or inspect EGC sessions from the SQLite state store',
   },
+  replay: {
+    script: 'replay.js',
+    description: 'List or replay recorded sessions with timeline scrubbing',
+  },
   prompt: {
     script: 'gemini.js',
     description: 'Execute an LLM prompt via the Gemini backend (EGC Bridge)',
@@ -124,6 +128,7 @@ const PRIMARY_COMMANDS = [
   'auto-update',
   'status',
   'sessions',
+  'replay',
   'session-inspect',
   'loop-status',
   'uninstall',

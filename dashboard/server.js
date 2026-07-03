@@ -164,9 +164,9 @@ const server = http.createServer((req, res) => {
       if (cap.tokenUsage && cap.cost && p.tokens.input > 0) {
         cost = calcCost(ide, p.tokens, p.lastModel);
       }
-      const cs = p.currentSession;
-      const currentSession = cap.tokenUsage ? {
-        tokens:   cs.tokens,
+      const cs = p.currentSession || null;
+      const currentSession = (cap.tokenUsage && cs) ? {
+        tokens:    cs.tokens,
         toolCalls: cs.toolCalls,
         startedAt: cs.startedAt,
         totalTokens: cs.tokens.input + cs.tokens.output,
@@ -186,6 +186,34 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(result));
     return;
   }
+
+// ── GET /replay/sessions ─────────────────────────────
+  if (req.method === 'GET' && req.url === '/replay/sessions') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(ACC.getReplaySessions()));
+    return;
+  }
+
+  // ── GET /replay/events?id=<sessionId> ────────────────
+  if (req.method === 'GET' && req.url.startsWith('/replay/events')) {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const sessionId = urlObj.searchParams.get('id');
+    if (!sessionId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'missing ?id=' }));
+      return;
+    }
+    const entry = ACC.getReplayEvents(sessionId);
+    if (!entry) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'session not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(entry));
+    return;
+  }
+
   // ── GET /session-history ───────────────────────────────
 if (req.method === 'GET' && req.url === '/session-history') {
 
