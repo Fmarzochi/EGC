@@ -14,18 +14,20 @@ export class GitBackend extends SyncBackend {
   constructor() {
     super();
     this.repoDir = SYNC_STATE_DIR;
+    if (!fs.existsSync(this.repoDir)) {
+      fs.mkdirSync(this.repoDir, { recursive: true });
+    }
     this.git = simpleGit(this.repoDir);
   }
 
   async init(config: SyncConfig): Promise<void> {
     this.config = config;
-    if (!fs.existsSync(this.repoDir)) {
-      fs.mkdirSync(this.repoDir, { recursive: true });
-    }
 
     const isRepo = fs.existsSync(path.join(this.repoDir, '.git'));
     if (!isRepo) {
       await this.git.init();
+      // Rename default branch (master) to match config branch (e.g. main).
+      await this.git.raw(['branch', '-M', config.branch]);
       try {
         await this.git.addRemote('origin', config.remote);
       } catch {
@@ -108,7 +110,7 @@ export class GitBackend extends SyncBackend {
     // Add, commit, and push.
     await this.git.add('.');
     const status = await this.git.status();
-    if (status.staged.length === 0 && status.modified.length === 0 && status.not_added.length === 0) {
+    if (status.files.length === 0) {
       return; // Nothing to commit.
     }
 
@@ -118,7 +120,11 @@ export class GitBackend extends SyncBackend {
       await this.git.push('origin', this.config.branch);
     } catch {
       // Push failed, maybe no upstream. Try setting upstream.
-      await this.git.push(['--set-upstream', 'origin', this.config.branch]);
+      try {
+        await this.git.push(['--set-upstream', 'origin', this.config.branch]);
+      } catch (err2) {
+        throw new Error(`Push failed after setting upstream: ${String(err2)}`);
+      }
     }
   }
 

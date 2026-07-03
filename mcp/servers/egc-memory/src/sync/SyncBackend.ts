@@ -19,7 +19,9 @@ export interface SyncResult {
 }
 
 export abstract class SyncBackend {
-  abstract init(config: SyncConfig): Promise<void>;
+  async init(_config: SyncConfig): Promise<void> {
+    throw new Error('Not implemented');
+  }
   abstract pull(): Promise<string[]>;
   abstract push(): Promise<void>;
   abstract status(): Promise<SyncStatus>;
