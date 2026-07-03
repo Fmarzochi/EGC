@@ -8,8 +8,18 @@ const { spawnSync, execFileSync } = require('child_process');
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
 
+// Resolve absolute git path once at startup to avoid PATH-reliance.
+const GIT_BIN = (() => {
+  try {
+    const where = execFileSync('where', ['git'], { encoding: 'utf-8', stdio: 'pipe' });
+    return where.split('\n').map(s => s.trim()).filter(Boolean)[0] || 'git';
+  } catch {
+    return 'git';
+  }
+})();
+
 function safeGit(args, cwd) {
-  return execFileSync('git', args, {
+  return execFileSync(GIT_BIN, args, {
     cwd,
     stdio: 'pipe',
     encoding: 'utf-8',
