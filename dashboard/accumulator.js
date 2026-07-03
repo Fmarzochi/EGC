@@ -15,6 +15,11 @@ function createAccumulator(externalPrices) {
   const providerState = {};
   const sessionHistory = [];
   const MAX_SESSION_HISTORY = 1000;
+  const MAX_REPLAY_SESSIONS = 200;
+  const MAX_EVENTS_PER_SESSION = 2000;
+
+  // replayLog: Map<sessionId, { meta, events[] }>
+  const replayLog = new Map();
 
   const CAPABILITIES = {
     claude:    { tokenUsage:true,  model:true,  cost:true,  session:true,  workspace:true  },
@@ -36,8 +41,6 @@ function createAccumulator(externalPrices) {
     opencode: '_default_opencode',
   };
 
-  // externalPrices is the same object reference the server mutates via
-  // Object.assign when prices.json changes — calcCost always sees fresh data.
   const prices = externalPrices || {};
 
   function calcCost(ide, tokens, model) {
@@ -60,14 +63,32 @@ function createAccumulator(externalPrices) {
         sessions:  0,
         lastModel: null,
         tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        currentSession: {
-          tokens: { input: 0, output: 0 },
-          toolCalls: 0,
-          startedAt: null,
-        },
       };
     }
     return providerState[ide];
+  }
+
+  function getOrCreateReplaySession(sessionId, ide, model) {
+    if (!replayLog.has(sessionId)) {
+      // evict oldest if over limit
+      if (replayLog.size >= MAX_REPLAY_SESSIONS) {
+        const oldest = replayLog.keys().next().value;
+        replayLog.delete(oldest);
+      }
+      replayLog.set(sessionId, {
+        id:        sessionId,
+        ide,
+        model:     model || null,
+        startedAt: Date.now(),
+        endedAt:   null,
+        events:    [],
+      });
+    }
+    return replayLog.get(sessionId);
+  }
+
+  function resolveSessionId(ev) {
+    return ev.session_id || ev.sessionId || `${ev.ide}-${Date.now()}`;
   }
 
   /**
@@ -83,19 +104,25 @@ function createAccumulator(externalPrices) {
     p.running  = true;
     if (ev.model) p.lastModel = ev.model;
 
-    // Session lifecycle — reset current session counter on start or change
-    if (ev.event === 'session_start' || ev.event === 'session_begin') {
-      p.currentSession = {
-        tokens: { input: 0, output: 0 },
-        toolCalls: 0,
-        startedAt: Date.now(),
-      };
-    }
+    if (ev.event === 'pre_tool') p.toolCalls++;
 
-    if (ev.event === 'pre_tool') {
-      p.toolCalls++;
-      p.currentSession.toolCalls++;
+    // ── Replay tracking ──────────────────────────────────────
+    const sessionId = resolveSessionId(ev);
+    const replay = getOrCreateReplaySession(sessionId, ev.ide, ev.model || p.lastModel);
+
+    if (replay.events.length < MAX_EVENTS_PER_SESSION) {
+      replay.events.push({
+        t:     Date.now(),
+        event: ev.event || 'unknown',
+        tool:  ev.tool_name || ev.tool || null,
+        file:  ev.file_path || ev.file || null,
+        cmd:   ev.command   || null,
+        mem:   ev.memory_key || null,
+        model: ev.model || null,
+        raw:   ev,
+      });
     }
+    // ────────────────────────────────────────────────────────
 
     if (ev.event === 'session_end') {
       const usage = ev.usage || {};
@@ -109,7 +136,12 @@ function createAccumulator(externalPrices) {
       const ideCap       = CAPABILITIES[ev.ide] || {};
       const sessionCost  = ideCap.cost === true ? calcCost(ev.ide, sessionTokens, sessionModel) : null;
 
+      // Mark replay session as ended
+      replay.endedAt = Date.now();
+      replay.duration = replay.endedAt - replay.startedAt;
+
       sessionHistory.push({
+        id:           sessionId,
         timestamp:    Date.now(),
         ide:          ev.ide,
         model:        sessionModel,
@@ -117,16 +149,11 @@ function createAccumulator(externalPrices) {
         output_tokens: sessionTokens.output,
         total_tokens:  sessionTokens.input + sessionTokens.output,
         cost:          sessionCost,
+        duration:      replay.duration,
+        eventCount:    replay.events.length,
       });
 
       if (sessionHistory.length > MAX_SESSION_HISTORY) sessionHistory.shift();
-
-      // Reset current session counter for next session
-      p.currentSession = {
-        tokens: { input: 0, output: 0 },
-        toolCalls: 0,
-        startedAt: null,
-      };
     }
 
     if (ev.usage) {
@@ -135,14 +162,32 @@ function createAccumulator(externalPrices) {
       p.tokens.output += (ev.usage.output_tokens || 0);
       p.tokens.cacheRead += (ev.usage.cache_read_input_tokens || 0);
       p.tokens.cacheWrite += (ev.usage.cache_creation_input_tokens || 0);
-      p.currentSession.tokens.input += (ev.usage.input_tokens || 0);
-      p.currentSession.tokens.output += (ev.usage.output_tokens || 0);
     }
 
     return true;
   }
 
-  return { providerState, sessionHistory, getProvider, accumulateEvent, calcCost, CAPABILITIES };
+  function getReplaySessions() {
+    return sessionHistory.slice().reverse();
+  }
+
+  function getReplayEvents(sessionId) {
+    const entry = replayLog.get(sessionId);
+    if (!entry) return null;
+    return entry;
+  }
+
+  return {
+    providerState,
+    sessionHistory,
+    replayLog,
+    getProvider,
+    accumulateEvent,
+    calcCost,
+    CAPABILITIES,
+    getReplaySessions,
+    getReplayEvents,
+  };
 }
 
 module.exports = { createAccumulator };

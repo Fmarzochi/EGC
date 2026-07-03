@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>EGC Replay</title>
+<link rel="icon" type="image/png" href="/egc-logo.png"/>
+<style>
+:root{
+  --canvas:#101010;--canvas-soft:#1a1a1a;--canvas-mid:#141414;
+  --hairline:#3d3a39;--hairline-2:#252320;
+  --ink:#f2f2f2;--ink-strong:#ffffff;--body:#bdbdbd;--muted:#8b949e;
+  --primary:#00d992;--primary-soft:#2fd6a1;--primary-dim:rgba(0,217,146,.08);
+  --red:#f87171;--yellow:#fbbf24;--blue:#60a5fa;--purple:#a78bfa;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-font-smoothing:antialiased;}
+body{background:var(--canvas);color:var(--ink);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:13px;min-height:100vh;}
+a{color:var(--primary);text-decoration:none;}
+a:hover{text-decoration:underline;}
+
+/* ── HEADER ── */
+.hd{display:flex;align-items:center;gap:16px;padding:0 24px;height:56px;border-bottom:1px solid var(--hairline);background:var(--canvas);}
+.hd-title{font-size:16px;font-weight:700;color:var(--ink-strong);}
+.hd-sub{font-size:11px;color:var(--muted);}
+.hd-back{font-size:12px;color:var(--primary);cursor:pointer;padding:4px 10px;border:1px solid rgba(0,217,146,.3);border-radius:6px;}
+.hd-back:hover{background:var(--primary-dim);}
+
+/* ── LAYOUT ── */
+.layout{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 56px);}
+.sidebar{border-right:1px solid var(--hairline);overflow-y:auto;background:var(--canvas-mid);}
+.main{display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── SESSION LIST ── */
+.sl-head{padding:14px 16px 10px;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--hairline-2);}
+.sl-empty{padding:24px 16px;color:var(--muted);font-size:12px;}
+.sl-item{padding:12px 16px;border-bottom:1px solid var(--hairline-2);cursor:pointer;transition:background .15s;}
+.sl-item:hover{background:var(--canvas-soft);}
+.sl-item.active{background:var(--primary-dim);border-left:2px solid var(--primary);}
+.sl-ide{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--primary);margin-bottom:3px;}
+.sl-time{font-size:12px;color:var(--ink);margin-bottom:2px;}
+.sl-meta{font-size:11px;color:var(--muted);display:flex;gap:10px;}
+
+/* ── PLAYER ── */
+.player{padding:20px 24px 16px;border-bottom:1px solid var(--hairline);background:var(--canvas-soft);}
+.player-empty{padding:40px 24px;color:var(--muted);font-size:13px;}
+.pl-info{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.pl-ide{font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--primary);}
+.pl-model{font-size:11px;color:var(--muted);}
+.pl-dur{font-size:11px;color:var(--muted);margin-left:auto;}
+.pl-bar-wrap{position:relative;height:6px;background:var(--hairline);border-radius:3px;cursor:pointer;margin-bottom:14px;}
+.pl-bar-fill{height:100%;background:var(--primary);border-radius:3px;transition:width .1s linear;pointer-events:none;}
+.pl-thumb{position:absolute;top:50%;width:12px;height:12px;background:var(--primary);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 6px rgba(0,217,146,.5);}
+.pl-controls{display:flex;align-items:center;gap:10px;}
+.pl-btn{background:var(--canvas);border:1px solid var(--hairline);color:var(--ink);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:border-color .15s,color .15s;}
+.pl-btn:hover{border-color:var(--primary);color:var(--primary);}
+.pl-btn.active{background:var(--primary-dim);border-color:var(--primary);color:var(--primary);}
+.pl-speed{display:flex;align-items:center;gap:4px;margin-left:auto;}
+.pl-speed-btn{background:none;border:1px solid var(--hairline);color:var(--muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;transition:all .15s;}
+.pl-speed-btn:hover,.pl-speed-btn.active{border-color:var(--primary);color:var(--primary);}
+.pl-counter{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:80px;text-align:right;}
+
+/* ── EVENT FEED ── */
+.feed{flex:1;overflow-y:auto;padding:12px 24px;}
+.feed-empty{color:var(--muted);padding:24px 0;font-size:12px;}
+.ev{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--hairline-2);animation:evslide .2s ease-out;}
+@keyframes evslide{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.ev-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px;}
+.ev-icon.tool{background:rgba(96,165,250,.12);color:var(--blue);}
+.ev-icon.file{background:rgba(167,139,250,.12);color:var(--purple);}
+.ev-icon.shell{background:rgba(251,191,36,.12);color:var(--yellow);}
+.ev-icon.memory{background:rgba(0,217,146,.12);color:var(--primary);}
+.ev-icon.session{background:rgba(248,113,113,.12);color:var(--red);}
+.ev-icon.unknown{background:var(--canvas-soft);color:var(--muted);}
+.ev-body{flex:1;min-width:0;}
+.ev-type{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:2px;}
+.ev-label{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ev-time{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;margin-top:2px;}
+
+/* ── EXPORT ── */
+.export-btn{margin-left:8px;background:none;border:1px solid var(--hairline);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;transition:all .15s;}
+.export-btn:hover{border-color:var(--primary);color:var(--primary);}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <button class="hd-back" onclick="location.href='/'">← Dashboard</button>
+  <div>
+    <div class="hd-title">⏪ EGC Replay</div>
+    <div class="hd-sub">Session playback with timeline scrubbing</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar: session list -->
+  <div class="sidebar">
+    <div class="sl-head">Sessions</div>
+    <div id="sessionList"><div class="sl-empty">Loading…</div></div>
+  </div>
+
+  <!-- Main: player + event feed -->
+  <div class="main">
+    <!-- Player controls -->
+    <div id="playerWrap">
+      <div class="player-empty" id="playerEmpty">← Select a session to replay</div>
+      <div class="player" id="player" style="display:none">
+        <div class="pl-info">
+          <span class="pl-ide" id="plIde"></span>
+          <span class="pl-model" id="plModel"></span>
+          <span class="pl-dur" id="plDur"></span>
+          <button class="export-btn" onclick="exportSession()">Export HTML</button>
+        </div>
+        <div class="pl-bar-wrap" id="plBarWrap">
+          <div class="pl-bar-fill" id="plBarFill" style="width:0%"></div>
+          <div class="pl-thumb" id="plThumb" style="left:0%"></div>
+        </div>
+        <div class="pl-controls">
+          <button class="pl-btn" id="btnRewind" onclick="seekTo(0)">⏮</button>
+          <button class="pl-btn" id="btnStepBack" onclick="stepBy(-1)">⏪</button>
+          <button class="pl-btn active" id="btnPlay" onclick="togglePlay()">▶ Play</button>
+          <button class="pl-btn" id="btnStepFwd" onclick="stepBy(1)">⏩</button>
+          <div class="pl-speed">
+            <span style="font-size:10px;color:var(--muted);margin-right:4px;">Speed</span>
+            <button class="pl-speed-btn" onclick="setSpeed(0.5)">0.5×</button>
+            <button class="pl-speed-btn active" onclick="setSpeed(1)">1×</button>
+            <button class="pl-speed-btn" onclick="setSpeed(2)">2×</button>
+            <button class="pl-speed-btn" onclick="setSpeed(5)">5×</button>
+          </div>
+          <span class="pl-counter" id="plCounter">0 / 0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event feed -->
+    <div class="feed" id="feed">
+      <div class="feed-empty">No events to display.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────
+let sessions = [];
+let currentSession = null;
+let events = [];
+let cursor = 0;       // index of next event to show
+let playing = false;
+let speed = 1;
+let playTimer = null;
+
+// ── Init ─────────────────────────────────────────────────
+async function init() {
+  // Check if ?session=id is in URL — auto-load
+  const params = new URLSearchParams(location.search);
+  const autoId = params.get('session');
+
+  await loadSessions();
+
+  if (autoId) {
+    const s = sessions.find(x => x.id === autoId);
+    if (s) selectSession(s);
+  }
+}
+
+// ── Load session list ─────────────────────────────────────
+async function loadSessions() {
+  try {
+    const res = await fetch('/replay/sessions');
+    sessions = await res.json();
+    renderSessionList();
+  } catch (e) {
+    document.getElementById('sessionList').innerHTML =
+      '<div class="sl-empty">Failed to load sessions.</div>';
+  }
+}
+
+function renderSessionList() {
+  const el = document.getElementById('sessionList');
+  if (!sessions.length) {
+    el.innerHTML = '<div class="sl-empty">No sessions recorded yet.<br>Events appear after the dashboard receives telemetry.</div>';
+    return;
+  }
+  el.innerHTML = sessions.map((s, i) => `
+    <div class="sl-item ${currentSession && currentSession.id === s.id ? 'active' : ''}"
+         onclick="selectSession(sessions[${i}])">
+      <div class="sl-ide">${s.ide || 'unknown'}</div>
+      <div class="sl-time">${formatTs(s.timestamp)}</div>
+      <div class="sl-meta">
+        <span>${s.eventCount || 0} events</span>
+        ${s.duration ? '<span>' + formatDur(s.duration) + '</span>' : ''}
+        ${s.model ? '<span>' + s.model + '</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Select & load session ─────────────────────────────────
+async function selectSession(s) {
+  stopPlay();
+  currentSession = s;
+  renderSessionList();
+
+  try {
+    const res = await fetch(`/replay/events?id=${encodeURIComponent(s.id)}`);
+    if (!res.ok) throw new Error('not found');
+    const data = await res.json();
+    events = data.events || [];
+  } catch(e) {
+    events = [];
+  }
+
+  cursor = 0;
+  renderPlayer();
+  renderFeed();
+}
+
+// ── Player ────────────────────────────────────────────────
+function renderPlayer() {
+  if (!currentSession) return;
+  document.getElementById('playerEmpty').style.display = 'none';
+  const pl = document.getElementById('player');
+  pl.style.display = '';
+
+  document.getElementById('plIde').textContent = (currentSession.ide || 'unknown').toUpperCase();
+  document.getElementById('plModel').textContent = currentSession.model || '';
+  document.getElementById('plDur').textContent = currentSession.duration
+    ? formatDur(currentSession.duration) : '';
+  updatePlayerProgress();
+}
+
+function updatePlayerProgress() {
+  const total = events.length;
+  const pct = total === 0 ? 0 : (cursor / total) * 100;
+  document.getElementById('plBarFill').style.width = pct + '%';
+  document.getElementById('plThumb').style.left = pct + '%';
+  document.getElementById('plCounter').textContent = `${cursor} / ${total}`;
+}
+
+// Scrub bar click
+
+function seekTo(idx) {
+  cursor = Math.max(0, Math.min(idx, events.length));
+  renderFeed();
+  updatePlayerProgress();
+}
+
+function stepBy(delta) {
+  seekTo(cursor + delta);
+}
+
+function togglePlay() {
+  if (playing) stopPlay(); else startPlay();
+}
+
+function startPlay() {
+  if (cursor >= events.length) cursor = 0;
+  playing = true;
+  document.getElementById('btnPlay').textContent = '⏸ Pause';
+  document.getElementById('btnPlay').classList.add('active');
+  scheduleNext();
+}
+
+function stopPlay() {
+  playing = false;
+  if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+  const btn = document.getElementById('btnPlay');
+  if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('active'); }
+}
+
+function scheduleNext() {
+  if (!playing || cursor >= events.length) { stopPlay(); return; }
+
+  const ev = events[cursor];
+  const nextEv = events[cursor + 1];
+
+  // Calculate delay based on real timestamps, capped at 3s, scaled by speed
+  let delay = 800;
+  if (nextEv && ev.t && nextEv.t) {
+    const diff = nextEv.t - ev.t;
+    // Use real timing but clamp between 600ms and 3000ms so it's always readable
+    delay = Math.min(Math.max(diff, 600), 3000) / speed;
+  } else {
+    delay = 800 / speed;
+  }
+
+  cursor++;
+  renderFeed();
+  updatePlayerProgress();
+
+  playTimer = setTimeout(scheduleNext, Math.max(50, delay));
+}
+
+function setSpeed(s) {
+  speed = s;
+  document.querySelectorAll('.pl-speed-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === s + '×');
+  });
+}
+
+// ── Event feed ────────────────────────────────────────────
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  const visible = events.slice(0, cursor);
+
+  if (!visible.length) {
+    feed.innerHTML = '<div class="feed-empty">Press ▶ Play or click the timeline to start.</div>';
+    return;
+  }
+
+  feed.innerHTML = visible.map(ev => {
+    const { icon, cls, label, typeLabel } = classifyEvent(ev);
+    const relTime = currentSession && currentSession.startedAt
+      ? formatRelTime(ev.t - currentSession.startedAt)
+      : '';
+    return `
+      <div class="ev">
+        <div class="ev-icon ${cls}">${icon}</div>
+        <div class="ev-body">
+          <div class="ev-type">${typeLabel}</div>
+          <div class="ev-label" title="${escHtml(label)}">${escHtml(label)}</div>
+        </div>
+        <div class="ev-time">${relTime}</div>
+      </div>
+    `;
+  }).reverse().join('');  // newest on top
+}
+
+function classifyEvent(ev) {
+  const type = (ev.event || '').toLowerCase();
+
+  if (type === 'session_start') return { icon:'▶', cls:'session', typeLabel:'SESSION START', label: ev.ide || 'session started' };
+  if (type === 'session_end')   return { icon:'⏹', cls:'session', typeLabel:'SESSION END',   label: ev.ide || 'session ended' };
+
+  if (type === 'pre_tool' || type === 'post_tool' || ev.tool) {
+    const tool = ev.tool || ev.raw?.tool_name || 'tool';
+    return { icon:'🔧', cls:'tool', typeLabel:'TOOL CALL', label: tool };
+  }
+
+  if (ev.file || type.includes('file') || type.includes('write') || type.includes('read')) {
+    const file = ev.file || ev.raw?.file_path || 'file operation';
+    return { icon:'📄', cls:'file', typeLabel:'FILE', label: file };
+  }
+
+  if (ev.cmd || type.includes('command') || type.includes('shell') || type.includes('exec')) {
+    const cmd = ev.cmd || ev.raw?.command || 'shell command';
+    return { icon:'$', cls:'shell', typeLabel:'SHELL', label: cmd };
+  }
+
+  if (ev.mem || type.includes('memory') || type.includes('mem_')) {
+    const mem = ev.mem || ev.raw?.memory_key || 'memory operation';
+    return { icon:'🧠', cls:'memory', typeLabel:'MEMORY', label: mem };
+  }
+
+  return { icon:'·', cls:'unknown', typeLabel: type || 'EVENT', label: JSON.stringify(ev.raw || ev).slice(0, 80) };
+}
+
+// ── Export ────────────────────────────────────────────────
+function exportSession() {
+  if (!currentSession || !events.length) return;
+
+  const rows = events.map(ev => {
+    const { typeLabel, label } = classifyEvent(ev);
+    const relTime = formatRelTime(ev.t - (currentSession.startedAt || ev.t));
+    return `<tr><td>${escHtml(relTime)}</td><td>${escHtml(typeLabel)}</td><td>${escHtml(label)}</td></tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>EGC Replay Export — ${escHtml(currentSession.id)}</title>
+<style>
+body{font-family:monospace;background:#101010;color:#f2f2f2;padding:24px;}
+h1{color:#00d992;margin-bottom:8px;}
+p{color:#8b949e;margin-bottom:16px;font-size:12px;}
+table{border-collapse:collapse;width:100%;}
+th,td{text-align:left;padding:6px 12px;border-bottom:1px solid #252320;font-size:12px;}
+th{color:#8b949e;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;}
+tr:hover td{background:#1a1a1a;}
+</style></head><body>
+<h1>EGC Replay Export</h1>
+<p>Session: ${escHtml(currentSession.id)} &nbsp;|&nbsp; IDE: ${escHtml(currentSession.ide || '')} &nbsp;|&nbsp; ${events.length} events</p>
+<table><thead><tr><th>Time</th><th>Type</th><th>Detail</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `egc-replay-${currentSession.id || 'session'}.html`;
+  a.click();
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function formatTs(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString();
+}
+
+function formatDur(ms) {
+  if (!ms) return '';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+  return Math.floor(ms / 60000) + 'm ' + Math.floor((ms % 60000) / 1000) + 's';
+}
+
+function formatRelTime(ms) {
+  if (!ms || ms < 0) return '+0s';
+  if (ms < 60000) return '+' + (ms / 1000).toFixed(1) + 's';
+  return '+' + Math.floor(ms / 60000) + 'm' + Math.floor((ms % 60000) / 1000) + 's';
+}
+
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Wire up scrub bar after DOM ready
+window.addEventListener('DOMContentLoaded', () => {
+  const bar = document.getElementById('plBarWrap');
+  if (bar) {
+    function scrubFromEvent(e) {
+      if (!events.length) return;
+      const rect = bar.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      seekTo(Math.round(pct * events.length));
+    }
+    bar.addEventListener('click', scrubFromEvent);
+    bar.addEventListener('mousedown', e => {
+      stopPlay();
+      scrubFromEvent(e);
+      function onMove(e) { scrubFromEvent(e); }
+      function onUp() {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  }
+  init();
+});
+</script>
+</body>
+</html>
