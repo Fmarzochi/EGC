@@ -13,6 +13,21 @@ That's it. The installer detects which AI tools you have installed and configure
 
 > **Note:** If you use a Node.js version manager (mise, nvm, asdf, fnm), install EGC under your **default** Node version -- the one active outside any project directory. Installing it under multiple Node versions causes version conflicts. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for details.
 
+### VS Code + GitHub Copilot
+
+If VS Code is your primary editor, install the [GitHub Copilot Chat extension](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat) first. Inline autocomplete alone is not enough; Copilot needs the chat extension to discover and use EGC skills.
+
+Then install the Copilot target:
+
+```bash
+npm install -g @egchq/egc
+egc install --target copilot
+```
+
+The Copilot target installs EGC skills under `~/.github/skills/`, using one flat directory per skill. VS Code Copilot discovers that directory automatically.
+
+Memory is shared across EGC targets. Context saved while using Copilot is the same state used by Claude Code, Cursor, Gemini CLI, Windsurf, and the rest of the supported tools.
+
 ---
 
 ## Linux / macOS (from source)
