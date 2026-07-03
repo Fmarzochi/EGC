@@ -173,9 +173,9 @@ function writeSettingsFile(settingsPath, settings) {
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
-function applyHookEntryToFile(settingsPath, event, hookScriptPath) {
+function applyHookEntryToFile(settingsPath, event, hookScriptPath, options = {}) {
   const current = readSettingsFile(settingsPath);
-  const { settings, changed } = addHookEntry(current, event, hookScriptPath);
+  const { settings, changed } = addHookEntry(current, event, hookScriptPath, options);
   if (changed) {
     writeSettingsFile(settingsPath, settings);
   }
@@ -194,9 +194,9 @@ function removeHookEntryFromFile(settingsPath, event, hookScriptPath) {
   return { changed };
 }
 
-function inspectHookEntryFile(settingsPath, event, hookScriptPath) {
+function inspectHookEntryFile(settingsPath, event, hookScriptPath, matcherFilter) {
   try {
-    return hasHookEntry(readSettingsFile(settingsPath), event, hookScriptPath)
+    return hasHookEntry(readSettingsFile(settingsPath), event, hookScriptPath, matcherFilter)
       ? 'ok'
       : 'drifted';
   } catch {
@@ -345,12 +345,7 @@ function removeBashDispatcherHook(settings, hookScriptPath) {
 }
 
 function applyBashDispatcherHookToFile(settingsPath, hookScriptPath) {
-  const current = readSettingsFile(settingsPath);
-  const { settings, changed } = addBashDispatcherHook(current, hookScriptPath);
-  if (changed) {
-    writeSettingsFile(settingsPath, settings);
-  }
-  return { changed };
+  return applyHookEntryToFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher: 'Bash' });
 }
 
 function removeBashDispatcherHookFromFile(settingsPath, hookScriptPath) {
@@ -361,21 +356,31 @@ function inspectBashDispatcherHookFile(settingsPath, hookScriptPath) {
   return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
 }
 
-function createPreToolUseBashDispatcherHookMergeOperation(targetRoot) {
-  const hookScriptPath = resolveBashDispatcherHookScriptDestination(targetRoot);
+function buildPreToolUseMergeOperation(targetRoot, moduleId, sourceRelativePath, hookScriptPath, matcher) {
   return {
     kind: HOOK_OPERATION_KIND,
-    moduleId: BASH_DISPATCHER_HOOK_MODULE_ID,
-    sourceRelativePath: BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    moduleId,
+    sourceRelativePath,
     destinationPath: resolveSettingsPath(targetRoot),
     strategy: HOOK_OPERATION_KIND,
     ownership: 'managed',
     scaffoldOnly: false,
     hookEvent: PRE_TOOL_USE_EVENT,
-    hookMatcher: 'Bash',
+    hookMatcher: matcher,
     hookScriptPath,
     hookCommand: buildHookCommand(hookScriptPath),
   };
+}
+
+function createPreToolUseBashDispatcherHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveBashDispatcherHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    BASH_DISPATCHER_HOOK_MODULE_ID,
+    BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    'Bash'
+  );
 }
 
 function resolveWriteValidatorHookScriptDestination(targetRoot) {
@@ -395,12 +400,7 @@ function removeWriteValidatorHook(settings, hookScriptPath) {
 }
 
 function applyWriteValidatorHookToFile(settingsPath, hookScriptPath, matcher) {
-  const current = readSettingsFile(settingsPath);
-  const { settings, changed } = addWriteValidatorHook(current, hookScriptPath, matcher);
-  if (changed) {
-    writeSettingsFile(settingsPath, settings);
-  }
-  return { changed };
+  return applyHookEntryToFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
 }
 
 function removeWriteValidatorHookFromFile(settingsPath, hookScriptPath) {
@@ -408,30 +408,18 @@ function removeWriteValidatorHookFromFile(settingsPath, hookScriptPath) {
 }
 
 function inspectWriteValidatorHookFile(settingsPath, hookScriptPath, matcher) {
-  try {
-    return hasWriteValidatorHook(readSettingsFile(settingsPath), hookScriptPath, matcher)
-      ? 'ok'
-      : 'drifted';
-  } catch {
-    return 'drifted';
-  }
+  return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
 }
 
 function createPreToolUseWriteValidatorHookMergeOperation(targetRoot, matcher) {
   const hookScriptPath = resolveWriteValidatorHookScriptDestination(targetRoot);
-  return {
-    kind: HOOK_OPERATION_KIND,
-    moduleId: WRITE_VALIDATOR_HOOK_MODULE_ID,
-    sourceRelativePath: WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-    destinationPath: resolveSettingsPath(targetRoot),
-    strategy: HOOK_OPERATION_KIND,
-    ownership: 'managed',
-    scaffoldOnly: false,
-    hookEvent: PRE_TOOL_USE_EVENT,
-    hookMatcher: matcher,
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    WRITE_VALIDATOR_HOOK_MODULE_ID,
+    WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
     hookScriptPath,
-    hookCommand: buildHookCommand(hookScriptPath),
-  };
+    matcher
+  );
 }
 
 module.exports = {
