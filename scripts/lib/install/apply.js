@@ -10,7 +10,7 @@ const {
   PRE_TOOL_USE_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
-  applyBashDispatcherHookToFile,
+  applyHookEntryToFile,
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
@@ -138,7 +138,7 @@ function applyInstallPlan(plan) {
       } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
         applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
       } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-        applyBashDispatcherHookToFile(operation.destinationPath, operation.hookScriptPath);
+        applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
       } else {
         applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
       }

@@ -404,12 +404,19 @@ function runTests() {
       assert.strictEqual(settings.model, 'opus');
 
       const preToolUseGroups = settings.hooks.PreToolUse;
-      assert.strictEqual(preToolUseGroups.length, 2, 'Reinstall must not duplicate PreToolUse hooks');
+      assert.strictEqual(preToolUseGroups.length, 5, 'Reinstall must not duplicate PreToolUse hooks');
       assert.strictEqual(preToolUseGroups[0].hooks[0].command, 'echo guard');
       assert.ok(
         preToolUseGroups[1].hooks[0].command.includes('bash-hook-dispatcher.js'),
         'EGC bash dispatcher should be registered in PreToolUse'
       );
+      assert.ok(
+        preToolUseGroups[2].hooks[0].command.includes('pre-write-guardian-validate.js'),
+        'EGC write validator should be registered for Edit'
+      );
+      assert.strictEqual(preToolUseGroups[2].matcher, 'Edit');
+      assert.strictEqual(preToolUseGroups[3].matcher, 'Write');
+      assert.strictEqual(preToolUseGroups[4].matcher, 'MultiEdit');
 
       const sessionStartGroups = settings.hooks.SessionStart;
       assert.strictEqual(sessionStartGroups.length, 2, 'Reinstall must not duplicate the EGC hook');

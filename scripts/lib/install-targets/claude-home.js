@@ -28,6 +28,7 @@ const {
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createPreToolUseWriteValidatorHookMergeOperation,
   resolveHookScriptDestination,
   resolveStopHookScriptDestination,
 } = require('../claude-settings-hooks');
@@ -69,6 +70,9 @@ function createSessionStateHookOperations(adapter, targetRoot) {
     createStopHookMergeOperation(targetRoot),
     createUserPromptSubmitHookMergeOperation(targetRoot),
     createPreToolUseBashDispatcherHookMergeOperation(targetRoot),
+    createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Edit'),
+    createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Write'),
+    createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'MultiEdit'),
   ];
 }
 
