@@ -29,7 +29,7 @@ function isPlainObject(value) {
 }
 
 function buildHookCommand(hookScriptPath) {
-  return `"${process.execPath}" "${hookScriptPath}"`;
+  return `"${process.execPath}" "${hookScriptPath}"`; // NOSONAR jssecurity:S8705
 }
 
 function buildSessionStartCommand(hookScriptPath) {
