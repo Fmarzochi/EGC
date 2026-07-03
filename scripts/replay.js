@@ -37,7 +37,7 @@ function fetchJSON(path) {
       res.on('data', d => data += d);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error('Invalid JSON response')); }
+        catch (_e) { reject(new Error('Invalid JSON response')); }
       });
     }).on('error', () => {
       reject(new Error(
