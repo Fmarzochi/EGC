@@ -21,17 +21,22 @@ const {
   STOP_HOOK_MODULE_ID,
   STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   USER_PROMPT_SUBMIT_EVENT,
+  WRITE_VALIDATOR_HOOK_MODULE_ID,
+  WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
   addIntuitionHook,
   addSessionStartHook,
   addStopHook,
+  addWriteValidatorHook,
   applyBashDispatcherHookToFile,
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
+  applyWriteValidatorHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
@@ -39,27 +44,32 @@ const {
   hasIntuitionHook,
   hasSessionStartHook,
   hasStopHook,
+  hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
   inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
+  inspectWriteValidatorHookFile,
   removeBashDispatcherHook,
   removeIntuitionHook,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
   removeStopHook,
   removeStopHookFromFile,
+  removeWriteValidatorHook,
   resolveBashDispatcherHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveSettingsPath,
   resolveStopHookScriptDestination,
+  resolveWriteValidatorHookScriptDestination,
 } = require('../../scripts/lib/claude-settings-hooks');
 
 const HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-start.js';
 const STOP_HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-stop.js';
 const INTUITION_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/prompt-intuition.js';
 const BASH_DISPATCHER_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/bash-hook-dispatcher.js';
+const WRITE_VALIDATOR_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/pre-write-guardian-validate.js';
 
 function test(name, fn) {
   try {
@@ -611,6 +621,84 @@ function runTests() {
     assert.strictEqual(operation.hookEvent, PRE_TOOL_USE_EVENT);
     assert.strictEqual(operation.hookMatcher, 'Bash');
     assert.strictEqual(operation.hookScriptPath, resolveBashDispatcherHookScriptDestination(targetRoot));
+  })) passed++; else failed++;
+
+  console.log('\n--- PreToolUse write validator hook (Edit / Write / MultiEdit) ---\n');
+
+  if (test('addWriteValidatorHook adds PreToolUse hook with Edit matcher', () => {
+    const result = addWriteValidatorHook({}, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit');
+    assert.strictEqual(result.changed, true);
+    assert.ok(hasWriteValidatorHook(result.settings, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+    const group = result.settings.hooks[PRE_TOOL_USE_EVENT][0];
+    assert.strictEqual(group.matcher, 'Edit');
+  })) passed++; else failed++;
+
+  if (test('same script can be registered for Edit, Write, and MultiEdit as separate groups', () => {
+    let s = {};
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write').settings;
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'MultiEdit').settings;
+
+    assert.strictEqual(s.hooks[PRE_TOOL_USE_EVENT].length, 3);
+    assert.ok(hasWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+    assert.ok(hasWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write'));
+    assert.ok(hasWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'MultiEdit'));
+  })) passed++; else failed++;
+
+  if (test('addWriteValidatorHook is idempotent per matcher', () => {
+    let s = addWriteValidatorHook({}, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit').settings;
+    const result = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit');
+    assert.strictEqual(result.changed, false);
+    assert.strictEqual(result.settings.hooks[PRE_TOOL_USE_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('write validator and Bash dispatcher coexist under PreToolUse', () => {
+    let s = addBashDispatcherHook({}, BASH_DISPATCHER_HOOK_SCRIPT_PATH).settings;
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write').settings;
+
+    assert.strictEqual(s.hooks[PRE_TOOL_USE_EVENT].length, 3);
+    assert.ok(hasBashDispatcherHook(s, BASH_DISPATCHER_HOOK_SCRIPT_PATH));
+    assert.ok(hasWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+    assert.ok(hasWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write'));
+  })) passed++; else failed++;
+
+  if (test('removeWriteValidatorHook strips all write validator groups for that script', () => {
+    let s = addWriteValidatorHook({}, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write').settings;
+    const result = removeWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH);
+    assert.strictEqual(result.changed, true);
+    assert.ok(!hasWriteValidatorHook(result.settings, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+    assert.ok(!hasWriteValidatorHook(result.settings, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write'));
+  })) passed++; else failed++;
+
+  if (test('applyWriteValidatorHookToFile and inspectWriteValidatorHookFile work end-to-end', () => {
+    const homeDir = createTempDir('claude-write-validator-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      assert.strictEqual(inspectWriteValidatorHookFile(settingsPath, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'), 'drifted');
+      applyWriteValidatorHookToFile(settingsPath, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit');
+      assert.strictEqual(inspectWriteValidatorHookFile(settingsPath, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'), 'ok');
+      applyWriteValidatorHookToFile(settingsPath, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write');
+      applyWriteValidatorHookToFile(settingsPath, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'MultiEdit');
+      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.strictEqual(data.hooks[PRE_TOOL_USE_EVENT].length, 3);
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('createPreToolUseWriteValidatorHookMergeOperation builds a managed operation per matcher', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Edit');
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, WRITE_VALIDATOR_HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.hookEvent, PRE_TOOL_USE_EVENT);
+    assert.strictEqual(operation.hookMatcher, 'Edit');
+    assert.strictEqual(operation.hookScriptPath, resolveWriteValidatorHookScriptDestination(targetRoot));
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

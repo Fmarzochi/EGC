@@ -14,6 +14,7 @@ const {
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
+  applyWriteValidatorHookToFile,
 } = require('../claude-settings-hooks');
 
 function readJsonObject(filePath, label) {
@@ -138,7 +139,15 @@ function applyInstallPlan(plan) {
       } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
         applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
       } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-        applyBashDispatcherHookToFile(operation.destinationPath, operation.hookScriptPath);
+        if (operation.hookMatcher === 'Bash') {
+          applyBashDispatcherHookToFile(operation.destinationPath, operation.hookScriptPath);
+        } else {
+          applyWriteValidatorHookToFile(
+            operation.destinationPath,
+            operation.hookScriptPath,
+            operation.hookMatcher
+          );
+        }
       } else {
         applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
       }

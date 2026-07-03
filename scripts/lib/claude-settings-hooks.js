@@ -21,6 +21,8 @@ const INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-intuiti
 const INTUITION_HOOK_MODULE_ID = 'claude-intuition-hook';
 const BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/bash-hook-dispatcher.js';
 const BASH_DISPATCHER_HOOK_MODULE_ID = 'claude-bash-dispatcher-hook';
+const WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-write-guardian-validate.js';
+const WRITE_VALIDATOR_HOOK_MODULE_ID = 'claude-write-validator-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -58,33 +60,32 @@ function isEgcHookEntry(entry, hookScriptPath) {
   );
 }
 
-function matcherGroupHasEgcEntry(group, hookScriptPath) {
-  return (
-    isPlainObject(group)
-    && Array.isArray(group.hooks)
-    && group.hooks.some(entry => isEgcHookEntry(entry, hookScriptPath))
-  );
+function matcherGroupHasEgcEntry(group, hookScriptPath, matcherFilter) {
+  if (!isPlainObject(group) || !Array.isArray(group.hooks)) return false;
+  if (matcherFilter !== undefined && group.matcher !== matcherFilter) return false;
+  return group.hooks.some(entry => isEgcHookEntry(entry, hookScriptPath));
 }
 
-function hasHookEntry(settings, event, hookScriptPath) {
+function hasHookEntry(settings, event, hookScriptPath, matcherFilter) {
   if (!isPlainObject(settings) || !isPlainObject(settings.hooks)) {
     return false;
   }
   const groups = settings.hooks[event];
   return Array.isArray(groups)
-    && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath));
+    && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath, matcherFilter));
 }
 
 function addHookEntry(settings, event, hookScriptPath, options = {}) {
   const base = isPlainObject(settings) ? settings : {};
-  if (hasHookEntry(base, event, hookScriptPath)) {
+  const matcher = typeof options.matcher === 'string' && options.matcher ? options.matcher : undefined;
+  if (hasHookEntry(base, event, hookScriptPath, matcher)) {
     return { settings: base, changed: false };
   }
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
   const groups = Array.isArray(hooks[event]) ? hooks[event].slice() : [];
   const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
-  if (typeof options.matcher === 'string' && options.matcher) {
-    group.matcher = options.matcher;
+  if (matcher) {
+    group.matcher = matcher;
   }
   groups.push(group);
   hooks[event] = groups;
@@ -377,6 +378,62 @@ function createPreToolUseBashDispatcherHookMergeOperation(targetRoot) {
   };
 }
 
+function resolveWriteValidatorHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+}
+
+function hasWriteValidatorHook(settings, hookScriptPath, matcher) {
+  return hasHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function addWriteValidatorHook(settings, hookScriptPath, matcher) {
+  return addHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeWriteValidatorHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function applyWriteValidatorHookToFile(settingsPath, hookScriptPath, matcher) {
+  const current = readSettingsFile(settingsPath);
+  const { settings, changed } = addWriteValidatorHook(current, hookScriptPath, matcher);
+  if (changed) {
+    writeSettingsFile(settingsPath, settings);
+  }
+  return { changed };
+}
+
+function removeWriteValidatorHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function inspectWriteValidatorHookFile(settingsPath, hookScriptPath, matcher) {
+  try {
+    return hasWriteValidatorHook(readSettingsFile(settingsPath), hookScriptPath, matcher)
+      ? 'ok'
+      : 'drifted';
+  } catch {
+    return 'drifted';
+  }
+}
+
+function createPreToolUseWriteValidatorHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveWriteValidatorHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: WRITE_VALIDATOR_HOOK_MODULE_ID,
+    sourceRelativePath: WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -391,17 +448,22 @@ module.exports = {
   STOP_HOOK_MODULE_ID,
   STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   USER_PROMPT_SUBMIT_EVENT,
+  WRITE_VALIDATOR_HOOK_MODULE_ID,
+  WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
   addIntuitionHook,
   addSessionStartHook,
   addStopHook,
+  addWriteValidatorHook,
   applyBashDispatcherHookToFile,
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
+  applyWriteValidatorHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
@@ -409,10 +471,12 @@ module.exports = {
   hasIntuitionHook,
   hasSessionStartHook,
   hasStopHook,
+  hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
   inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
+  inspectWriteValidatorHookFile,
   readSettingsFile,
   removeBashDispatcherHook,
   removeBashDispatcherHookFromFile,
@@ -422,9 +486,12 @@ module.exports = {
   removeSessionStartHookFromFile,
   removeStopHook,
   removeStopHookFromFile,
+  removeWriteValidatorHook,
+  removeWriteValidatorHookFromFile,
   resolveBashDispatcherHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveSettingsPath,
   resolveStopHookScriptDestination,
+  resolveWriteValidatorHookScriptDestination,
 };
