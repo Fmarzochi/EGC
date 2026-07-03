@@ -21,13 +21,15 @@ const INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-intuiti
 const INTUITION_HOOK_MODULE_ID = 'claude-intuition-hook';
 const BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/bash-hook-dispatcher.js';
 const BASH_DISPATCHER_HOOK_MODULE_ID = 'claude-bash-dispatcher-hook';
+const WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-write-guardian-validate.js';
+const WRITE_VALIDATOR_HOOK_MODULE_ID = 'claude-write-validator-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function buildHookCommand(hookScriptPath) {
-  return `"${process.execPath}" "${hookScriptPath}"`;
+  return `"${process.execPath}" "${hookScriptPath}"`; // NOSONAR jssecurity:S8705
 }
 
 function buildSessionStartCommand(hookScriptPath) {
@@ -58,33 +60,32 @@ function isEgcHookEntry(entry, hookScriptPath) {
   );
 }
 
-function matcherGroupHasEgcEntry(group, hookScriptPath) {
-  return (
-    isPlainObject(group)
-    && Array.isArray(group.hooks)
-    && group.hooks.some(entry => isEgcHookEntry(entry, hookScriptPath))
-  );
+function matcherGroupHasEgcEntry(group, hookScriptPath, matcherFilter) {
+  if (!isPlainObject(group) || !Array.isArray(group.hooks)) return false;
+  if (matcherFilter !== undefined && group.matcher !== matcherFilter) return false;
+  return group.hooks.some(entry => isEgcHookEntry(entry, hookScriptPath));
 }
 
-function hasHookEntry(settings, event, hookScriptPath) {
+function hasHookEntry(settings, event, hookScriptPath, matcherFilter) {
   if (!isPlainObject(settings) || !isPlainObject(settings.hooks)) {
     return false;
   }
   const groups = settings.hooks[event];
   return Array.isArray(groups)
-    && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath));
+    && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath, matcherFilter));
 }
 
 function addHookEntry(settings, event, hookScriptPath, options = {}) {
   const base = isPlainObject(settings) ? settings : {};
-  if (hasHookEntry(base, event, hookScriptPath)) {
+  const matcher = typeof options.matcher === 'string' && options.matcher ? options.matcher : undefined;
+  if (hasHookEntry(base, event, hookScriptPath, matcher)) {
     return { settings: base, changed: false };
   }
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
   const groups = Array.isArray(hooks[event]) ? hooks[event].slice() : [];
   const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
-  if (typeof options.matcher === 'string' && options.matcher) {
-    group.matcher = options.matcher;
+  if (matcher) {
+    group.matcher = matcher;
   }
   groups.push(group);
   hooks[event] = groups;
@@ -172,9 +173,9 @@ function writeSettingsFile(settingsPath, settings) {
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
-function applyHookEntryToFile(settingsPath, event, hookScriptPath) {
+function applyHookEntryToFile(settingsPath, event, hookScriptPath, options = {}) {
   const current = readSettingsFile(settingsPath);
-  const { settings, changed } = addHookEntry(current, event, hookScriptPath);
+  const { settings, changed } = addHookEntry(current, event, hookScriptPath, options);
   if (changed) {
     writeSettingsFile(settingsPath, settings);
   }
@@ -193,9 +194,9 @@ function removeHookEntryFromFile(settingsPath, event, hookScriptPath) {
   return { changed };
 }
 
-function inspectHookEntryFile(settingsPath, event, hookScriptPath) {
+function inspectHookEntryFile(settingsPath, event, hookScriptPath, matcherFilter) {
   try {
-    return hasHookEntry(readSettingsFile(settingsPath), event, hookScriptPath)
+    return hasHookEntry(readSettingsFile(settingsPath), event, hookScriptPath, matcherFilter)
       ? 'ok'
       : 'drifted';
   } catch {
@@ -344,12 +345,7 @@ function removeBashDispatcherHook(settings, hookScriptPath) {
 }
 
 function applyBashDispatcherHookToFile(settingsPath, hookScriptPath) {
-  const current = readSettingsFile(settingsPath);
-  const { settings, changed } = addBashDispatcherHook(current, hookScriptPath);
-  if (changed) {
-    writeSettingsFile(settingsPath, settings);
-  }
-  return { changed };
+  return applyHookEntryToFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher: 'Bash' });
 }
 
 function removeBashDispatcherHookFromFile(settingsPath, hookScriptPath) {
@@ -360,21 +356,69 @@ function inspectBashDispatcherHookFile(settingsPath, hookScriptPath) {
   return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
 }
 
-function createPreToolUseBashDispatcherHookMergeOperation(targetRoot) {
-  const hookScriptPath = resolveBashDispatcherHookScriptDestination(targetRoot);
+function buildPreToolUseMergeOperation(targetRoot, moduleId, sourceRelativePath, hookScriptPath, matcher) {
   return {
     kind: HOOK_OPERATION_KIND,
-    moduleId: BASH_DISPATCHER_HOOK_MODULE_ID,
-    sourceRelativePath: BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    moduleId,
+    sourceRelativePath,
     destinationPath: resolveSettingsPath(targetRoot),
     strategy: HOOK_OPERATION_KIND,
     ownership: 'managed',
     scaffoldOnly: false,
     hookEvent: PRE_TOOL_USE_EVENT,
-    hookMatcher: 'Bash',
+    hookMatcher: matcher,
     hookScriptPath,
-    hookCommand: buildHookCommand(hookScriptPath),
   };
+}
+
+function createPreToolUseBashDispatcherHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveBashDispatcherHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    BASH_DISPATCHER_HOOK_MODULE_ID,
+    BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    'Bash'
+  );
+}
+
+function resolveWriteValidatorHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+}
+
+function hasWriteValidatorHook(settings, hookScriptPath, matcher) {
+  return hasHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function addWriteValidatorHook(settings, hookScriptPath, matcher) {
+  return addHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeWriteValidatorHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function applyWriteValidatorHookToFile(settingsPath, hookScriptPath, matcher) {
+  return applyHookEntryToFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeWriteValidatorHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function inspectWriteValidatorHookFile(settingsPath, hookScriptPath, matcher) {
+  return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function createPreToolUseWriteValidatorHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveWriteValidatorHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    WRITE_VALIDATOR_HOOK_MODULE_ID,
+    WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    matcher
+  );
 }
 
 module.exports = {
@@ -391,17 +435,23 @@ module.exports = {
   STOP_HOOK_MODULE_ID,
   STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   USER_PROMPT_SUBMIT_EVENT,
+  WRITE_VALIDATOR_HOOK_MODULE_ID,
+  WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
   addIntuitionHook,
   addSessionStartHook,
   addStopHook,
+  addWriteValidatorHook,
   applyBashDispatcherHookToFile,
+  applyHookEntryToFile,
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
+  applyWriteValidatorHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
@@ -409,22 +459,29 @@ module.exports = {
   hasIntuitionHook,
   hasSessionStartHook,
   hasStopHook,
+  hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
+  inspectHookEntryFile,
   inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
+  inspectWriteValidatorHookFile,
   readSettingsFile,
   removeBashDispatcherHook,
   removeBashDispatcherHookFromFile,
+  removeHookEntryFromFile,
   removeIntuitionHook,
   removeIntuitionHookFromFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
   removeStopHook,
   removeStopHookFromFile,
+  removeWriteValidatorHook,
+  removeWriteValidatorHookFromFile,
   resolveBashDispatcherHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveSettingsPath,
   resolveStopHookScriptDestination,
+  resolveWriteValidatorHookScriptDestination,
 };

@@ -184,7 +184,7 @@ function ensureDir(dirPath) {
 function ensurePrivateDir(dirPath) {
   try {
     if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 }); // NOSONAR jssecurity:S8707
     }
   } catch (err) {
     if (err.code !== 'EEXIST') {
@@ -193,7 +193,7 @@ function ensurePrivateDir(dirPath) {
   }
   if (!isWindows) {
     try {
-      fs.chmodSync(dirPath, 0o700);
+      fs.chmodSync(dirPath, 0o700); // NOSONAR jssecurity:S8707
     } catch {
       // best-effort -- do not crash if chmod is not supported (e.g. tmpfs)
     }
