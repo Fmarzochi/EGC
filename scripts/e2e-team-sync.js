@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -8,19 +8,15 @@ const REMOTE_REPO = path.join(TMP, 'remote-repo');
 const USER1_DIR = path.join(TMP, 'user1');
 const USER2_DIR = path.join(TMP, 'user2');
 
-const SHELL_OPTS = { stdio: 'pipe', encoding: 'utf-8', shell: 'cmd.exe' };
+const PROC_OPTS = { stdio: 'pipe', encoding: 'utf-8' };
 
-function run(cmd, opts = {}) {
-  console.log(`  $ ${cmd}`);
-  return execSync(cmd, Object.assign({}, SHELL_OPTS, opts));
+function run(file, args = [], opts = {}) {
+  console.log(`  $ ${file} ${args.join(' ')}`);
+  return execFileSync(file, args, Object.assign({}, PROC_OPTS, opts));
 }
 
-function runIn(dir, cmd) {
-  return run(cmd, { cwd: dir });
-}
-
-function runIn(dir, cmd) {
-  return run(cmd, { cwd: dir });
+function runIn(dir, file, args = []) {
+  return run(file, args, { cwd: dir });
 }
 
 async function main() {
@@ -30,14 +26,14 @@ async function main() {
   // Setup: Create a bare remote repo
   console.log('\n[Setup] Creating remote bare repo...');
   fs.mkdirSync(REMOTE_REPO, { recursive: true });
-  runIn(REMOTE_REPO, 'git init --bare');
+  runIn(REMOTE_REPO, 'git', ['init', '--bare']);
 
   // Simulate User 1: init team sync
   console.log('\n[User 1] Initializing team sync...');
   process.env.USER = 'User1';
   const scriptsDir = path.resolve(__dirname);
-  const egcCmd = `node ${path.join(scriptsDir, 'team.js')}`;
-  runIn(USER1_DIR, `${egcCmd} init --backend git --remote ${REMOTE_REPO} --branch main`);
+  const teamScript = path.join(scriptsDir, 'team.js');
+  runIn(USER1_DIR, 'node', [teamScript, 'init', '--backend', 'git', '--remote', REMOTE_REPO, '--branch', 'main']);
   const user1Config = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.egc', 'team.json'), 'utf-8'));
   console.log(`  Config: backend=${user1Config.backend}, remote=${user1Config.remote}, branch=${user1Config.branch}`);
 
@@ -60,11 +56,11 @@ async function main() {
   ].join('\n'), 'utf-8');
 
   console.log('[User 1] Running team sync...');
-  runIn(USER1_DIR, `${egcCmd} sync`);
+  runIn(USER1_DIR, 'node', [teamScript, 'sync']);
 
   // Verify User 1's push reached remote
   console.log('\n[Verify] Checking remote has User1 data...');
-  const remoteLog = runIn(REMOTE_REPO, 'git log --oneline --all 2>nul');
+  const remoteLog = runIn(REMOTE_REPO, 'git', ['log', '--oneline', '--all']);
   console.log(`  Remote commits: ${remoteLog.trim() || 'none'}`);
   if (remoteLog.trim()) {
     console.log('  PASS: User1 pushed to remote');
@@ -80,13 +76,13 @@ async function main() {
   fs.mkdirSync(USER2_DIR, { recursive: true });
 
   // User 2 does init from the same remote
-  runIn(USER2_DIR, `${egcCmd} init --backend git --remote ${REMOTE_REPO} --branch main`);
+  runIn(USER2_DIR, 'node', [teamScript, 'init', '--backend', 'git', '--remote', REMOTE_REPO, '--branch', 'main']);
   const user2Config = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.egc', 'team.json'), 'utf-8'));
   console.log(`  Config: backend=${user2Config.backend}, remote=${user2Config.remote}, branch=${user2Config.branch}`);
 
   // User 2: Sync should pull User1's data
   console.log('[User 2] Running team sync...');
-  runIn(USER2_DIR, `${egcCmd} sync`);
+  runIn(USER2_DIR, 'node', [teamScript, 'sync']);
 
   // Check that User1's state file exists in User2's local state
   console.log('\n[Verify] User2 has User1 state...');
@@ -110,7 +106,7 @@ async function main() {
   // User 1: Check team status
   console.log('\n[Verify] team status...');
   try {
-    const statusOut = runIn(USER1_DIR, `${egcCmd} status`);
+    const statusOut = runIn(USER1_DIR, 'node', [teamScript, 'status']);
     console.log(`  Status output includes last sync info`);
     console.log(`  PASS: team status works`);
   } catch (e) {
@@ -133,12 +129,12 @@ async function main() {
     ''
   ].join('\n'), 'utf-8');
 
-  runIn(USER2_DIR, `${egcCmd} sync`);
+  runIn(USER2_DIR, 'node', [teamScript, 'sync']);
 
   // User 1: Pull User2's changes
   console.log('\n[User 1] Pulling User2 changes...');
   process.env.USER = 'User1';
-  runIn(USER1_DIR, `${egcCmd} sync`);
+  runIn(USER1_DIR, 'node', [teamScript, 'sync']);
 
   const finalContent = fs.readFileSync(path.join(stateDir, 'test-project.md'), 'utf-8');
   console.log('[Verify] Latest state...');

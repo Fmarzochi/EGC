@@ -3,10 +3,18 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawnSync } = require('child_process');
+const { spawnSync, execFileSync } = require('child_process');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+
+function safeGit(args, cwd) {
+  return execFileSync('git', args, {
+    cwd,
+    stdio: 'pipe',
+    encoding: 'utf-8',
+  }).trim();
+}
 
 function showHelp() {
   console.log(`
@@ -204,8 +212,7 @@ async function main() {
         console.log(`Repo:    ${isRepo ? 'initialized' : 'not initialized'}`);
         if (isRepo) {
           try {
-            const { execSync } = require('child_process');
-            const log = execSync('git log -1 --format="%ai"', { cwd: syncDir, encoding: 'utf-8' }).trim();
+            const log = safeGit(['log', '-1', '--format=%ai'], syncDir);
             if (log) console.log(`Last commit: ${log}`);
           } catch {}
         }
@@ -221,7 +228,6 @@ async function main() {
 }
 
 async function directSync(config) {
-  const { execSync } = require('child_process');
   const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
   const stateDir = path.join(os.homedir(), '.egc', 'state');
 
@@ -232,39 +238,40 @@ async function directSync(config) {
   // Initialize git repo if needed.
   const isRepo = fs.existsSync(path.join(syncDir, '.git'));
   if (!isRepo) {
-    execSync('git init', { cwd: syncDir, stdio: 'pipe' });
-    execSync(`git remote add origin ${config.remote}`, { cwd: syncDir, stdio: 'pipe' });
+    safeGit(['init'], syncDir);
+    safeGit(['remote', 'add', 'origin', config.remote], syncDir);
   }
 
   // Pull.
   try {
-    execSync('git add -A', { cwd: syncDir, stdio: 'pipe' });
-    execSync('git stash', { cwd: syncDir, stdio: 'pipe' });
+    safeGit(['add', '-A'], syncDir);
+    safeGit(['stash'], syncDir);
   } catch {}
 
   try {
-    execSync(`git pull origin ${config.branch} --allow-unrelated-histories --no-rebase`, { cwd: syncDir, stdio: 'pipe' });
+    safeGit(['pull', 'origin', config.branch, '--allow-unrelated-histories', '--no-rebase'], syncDir);
     console.log('  Pulled remote changes.');
   } catch (err) {
-    console.log(`  Pull: ${err.stderr ? err.stderr.toString().trim() : 'first sync, no upstream yet'}`);
+    const msg = err.stderr ? err.stderr.toString().trim() : err.message;
+    console.log(`  Pull: ${msg.includes('no upstream') ? 'first sync, no upstream yet' : msg}`);
   }
 
   // Copy state files into sync repo.
   const syncStateDir = path.join(syncDir, 'state');
   if (!fs.existsSync(syncStateDir)) fs.mkdirSync(syncStateDir, { recursive: true });
   if (fs.existsSync(stateDir)) {
-    execSync(`robocopy "${stateDir}" "${syncStateDir}" /E /NP /NFL /NDL > nul 2>&1`, { cwd: syncDir, stdio: 'pipe' });
+    execFileSync('robocopy', [stateDir, syncStateDir, '/E', '/NP', '/NFL', '/NDL'], { stdio: 'pipe', encoding: 'utf-8' });
   }
 
   // Commit and push.
-  execSync('git add -A', { cwd: syncDir, stdio: 'pipe' });
+  safeGit(['add', '-A'], syncDir);
   try {
     const author = process.env.USER || process.env.USERNAME || 'unknown';
-    execSync(`git commit -m "sync: team memory update from ${author}"`, { cwd: syncDir, stdio: 'pipe' });
-    execSync(`git push origin ${config.branch}`, { cwd: syncDir, stdio: 'pipe' });
+    safeGit(['commit', '-m', `sync: team memory update from ${author}`], syncDir);
+    safeGit(['push', 'origin', config.branch], syncDir);
     console.log('  Pushed local changes.');
   } catch (err) {
-    const msg = err.stderr ? err.stderr.toString() : '';
+    const msg = err.stderr ? err.stderr.toString() : err.message;
     if (msg.includes('nothing to commit')) {
       console.log('  Nothing new to push.');
     } else {
