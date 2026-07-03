@@ -499,6 +499,7 @@ body.minimized footer{display:none!important;}
 
     <div class="rcard">
       <span class="eye">Economy</span>
+      <div class="eco-session" id="currentSessionEco" style="display:none;margin-bottom:6px;background:var(--canvas-soft);border:1px solid var(--primary-dim);border-radius:7px;padding:9px 12px;"></div>
       <div id="ecoContent"><div class="eco-empty">Waiting for provider events…</div></div>
     </div>
     <div class="rcard">
@@ -900,8 +901,33 @@ function updateMission(tool,file){
 /* ── ECONOMY — real telemetry only ─────────────────────── */
 function renderEconomy(telemetry){
   const wrap=document.getElementById('ecoContent');
+  const csWrap=document.getElementById('currentSessionEco');
   const active=Object.entries(telemetry).filter(([,p])=>p.running||p.sessions>0);
-  if(!active.length){wrap.innerHTML='<div class="eco-empty">No provider events received yet.</div>';return;}
+  if(!active.length){wrap.innerHTML='<div class="eco-empty">No provider events received yet.</div>';csWrap.style.display='none';return;}
+
+  // Current session counter — aggregate across all providers
+  let csInput=0,csOutput=0,csCalls=0,csRunning=false;
+  for(const [,p] of active){
+    if(p.currentSession&&p.currentSession.startedAt){
+      csInput+=p.currentSession.tokens.input;
+      csOutput+=p.currentSession.tokens.output;
+      csCalls+=p.currentSession.toolCalls;
+      csRunning=true;
+    }
+  }
+  if(csRunning||csInput+csOutput>0){
+    csWrap.style.display='';
+    csWrap.innerHTML=`
+      <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--primary);margin-bottom:4px;">Current Session</div>
+      <div class="eco-row"><span class="eco-lbl">Tokens</span><span class="eco-val" style="color:var(--primary);font-size:14px;">${(csInput+csOutput).toLocaleString()}</span></div>
+      ${csInput>0||csOutput>0?`<div class="eco-row"><span class="eco-lbl">In / Out</span><span class="eco-val">${csInput.toLocaleString()} / ${csOutput.toLocaleString()}</span></div>`:''}
+      <div class="eco-row"><span class="eco-lbl">Tool Calls</span><span class="eco-val">${csCalls.toLocaleString()}</span></div>
+      <div style="font-size:9px;color:var(--muted);margin-top:2px;">Live session in progress</div>
+    `;
+  } else {
+    csWrap.style.display='none';
+  }
+
   wrap.innerHTML=active.map(([ide,p])=>{
     const ic=IDES.find(i=>i.id===ide)||{label:ide,c:'#888'};
     const cap=p.capabilities||{};

@@ -47,6 +47,10 @@ function mapSessionRow(row) {
     endedAt: row.ended_at,
     snapshot,
     workerCount: Array.isArray(snapshot && snapshot.workers) ? snapshot.workers.length : 0,
+    inputTokens: row.input_tokens ?? null,
+    outputTokens: row.output_tokens ?? null,
+    totalTokens: row.total_tokens ?? null,
+    tokenCost: row.token_cost ?? null,
   };
 }
 
@@ -278,6 +282,10 @@ function normalizeSessionInput(session) {
     startedAt: session.startedAt ?? null,
     endedAt: session.endedAt ?? null,
     snapshot: session.snapshot ?? {},
+    inputTokens: Number.isFinite(session.inputTokens) ? session.inputTokens : null,
+    outputTokens: Number.isFinite(session.outputTokens) ? session.outputTokens : null,
+    totalTokens: Number.isFinite(session.totalTokens) ? session.totalTokens : null,
+    tokenCost: Number.isFinite(session.tokenCost) ? session.tokenCost : null,
   };
 }
 
@@ -586,7 +594,11 @@ function createQueryApi(db) {
       repo_root,
       started_at,
       ended_at,
-      snapshot
+      snapshot,
+      input_tokens,
+      output_tokens,
+      total_tokens,
+      token_cost
     ) VALUES (
       @id,
       @adapter_id,
@@ -595,7 +607,11 @@ function createQueryApi(db) {
       @repo_root,
       @started_at,
       @ended_at,
-      @snapshot
+      @snapshot,
+      @input_tokens,
+      @output_tokens,
+      @total_tokens,
+      @token_cost
     )
     ON CONFLICT(id) DO UPDATE SET
       adapter_id = excluded.adapter_id,
@@ -604,7 +620,11 @@ function createQueryApi(db) {
       repo_root = excluded.repo_root,
       started_at = excluded.started_at,
       ended_at = excluded.ended_at,
-      snapshot = excluded.snapshot
+      snapshot = excluded.snapshot,
+      input_tokens = excluded.input_tokens,
+      output_tokens = excluded.output_tokens,
+      total_tokens = excluded.total_tokens,
+      token_cost = excluded.token_cost
   `);
 
   const insertSkillRunStatement = db.prepare(`
@@ -988,6 +1008,10 @@ function createQueryApi(db) {
         started_at: normalized.startedAt,
         ended_at: normalized.endedAt,
         snapshot: stringifyJson(normalized.snapshot, 'session.snapshot'),
+        input_tokens: normalized.inputTokens,
+        output_tokens: normalized.outputTokens,
+        total_tokens: normalized.totalTokens,
+        token_cost: normalized.tokenCost,
       });
       return getSessionById(normalized.id);
     },
