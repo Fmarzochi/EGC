@@ -164,11 +164,20 @@ const server = http.createServer((req, res) => {
       if (cap.tokenUsage && cap.cost && p.tokens.input > 0) {
         cost = calcCost(ide, p.tokens, p.lastModel);
       }
+      const cs = p.currentSession;
+      const currentSession = cap.tokenUsage ? {
+        tokens:   cs.tokens,
+        toolCalls: cs.toolCalls,
+        startedAt: cs.startedAt,
+        totalTokens: cs.tokens.input + cs.tokens.output,
+      } : null;
+
       result[ide] = {
         running:      p.running,
         toolCalls:    p.toolCalls,
         sessions:     p.sessions,
         tokens:       cap.tokenUsage ? p.tokens : null,
+        currentSession,
         cost:         (cap.cost && cost !== null) ? cost : null,
         capabilities: cap,
       };

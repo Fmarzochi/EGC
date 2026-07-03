@@ -131,6 +131,22 @@
             "object",
             "array"
           ]
+        },
+        "inputTokens": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "outputTokens": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "totalTokens": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "tokenCost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
         }
       }
     },

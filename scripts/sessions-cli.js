@@ -63,6 +63,13 @@ function printSessionList(payload) {
     console.log(`  Started: ${session.startedAt || '(unknown)'}`);
     console.log(`  Ended: ${session.endedAt || '(active)'}`);
     console.log(`  Workers: ${session.workerCount}`);
+    if (session.totalTokens !== null) {
+      const inp = (session.inputTokens ?? 0).toLocaleString();
+      const out = (session.outputTokens ?? 0).toLocaleString();
+      const tot = session.totalTokens.toLocaleString();
+      const cost = session.tokenCost !== null ? ` $${session.tokenCost.toFixed(4)}` : '';
+      console.log(`  Tokens: ${tot} (in: ${inp}, out: ${out})${cost}`);
+    }
   }
 
   console.log(`\nTotal sessions: ${payload.totalCount}`);
@@ -119,6 +126,14 @@ function printSessionDetail(payload) {
   console.log(`Repo: ${payload.session.repoRoot || '(unknown)'}`);
   console.log(`Started: ${payload.session.startedAt || '(unknown)'}`);
   console.log(`Ended: ${payload.session.endedAt || '(active)'}`);
+  const s = payload.session;
+  if (s.totalTokens !== null) {
+    const inp = (s.inputTokens ?? 0).toLocaleString();
+    const out = (s.outputTokens ?? 0).toLocaleString();
+    const tot = s.totalTokens.toLocaleString();
+    const cost = s.tokenCost !== null ? ` $${s.tokenCost.toFixed(4)}` : '';
+    console.log(`Tokens: ${tot} (in: ${inp}, out: ${out})${cost}`);
+  }
   console.log();
   printWorkers(payload.workers);
   console.log();

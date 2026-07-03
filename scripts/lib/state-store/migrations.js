@@ -209,6 +209,16 @@ const MIGRATIONS = [
         ON events (compressed_at, timestamp DESC);
     `,
   },
+  {
+    version: 6,
+    name: '006_session_tokens',
+    sql: `
+      ALTER TABLE sessions ADD COLUMN input_tokens INTEGER;
+      ALTER TABLE sessions ADD COLUMN output_tokens INTEGER;
+      ALTER TABLE sessions ADD COLUMN total_tokens INTEGER;
+      ALTER TABLE sessions ADD COLUMN token_cost REAL;
+    `,
+  },
 ];
 
 function ensureMigrationTable(db) {

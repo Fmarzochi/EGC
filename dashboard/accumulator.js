@@ -60,6 +60,11 @@ function createAccumulator(externalPrices) {
         sessions:  0,
         lastModel: null,
         tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        currentSession: {
+          tokens: { input: 0, output: 0 },
+          toolCalls: 0,
+          startedAt: null,
+        },
       };
     }
     return providerState[ide];
@@ -78,7 +83,19 @@ function createAccumulator(externalPrices) {
     p.running  = true;
     if (ev.model) p.lastModel = ev.model;
 
-    if (ev.event === 'pre_tool') p.toolCalls++;
+    // Session lifecycle — reset current session counter on start or change
+    if (ev.event === 'session_start' || ev.event === 'session_begin') {
+      p.currentSession = {
+        tokens: { input: 0, output: 0 },
+        toolCalls: 0,
+        startedAt: Date.now(),
+      };
+    }
+
+    if (ev.event === 'pre_tool') {
+      p.toolCalls++;
+      p.currentSession.toolCalls++;
+    }
 
     if (ev.event === 'session_end') {
       const usage = ev.usage || {};
@@ -103,6 +120,13 @@ function createAccumulator(externalPrices) {
       });
 
       if (sessionHistory.length > MAX_SESSION_HISTORY) sessionHistory.shift();
+
+      // Reset current session counter for next session
+      p.currentSession = {
+        tokens: { input: 0, output: 0 },
+        toolCalls: 0,
+        startedAt: null,
+      };
     }
 
     if (ev.usage) {
@@ -111,6 +135,8 @@ function createAccumulator(externalPrices) {
       p.tokens.output += (ev.usage.output_tokens || 0);
       p.tokens.cacheRead += (ev.usage.cache_read_input_tokens || 0);
       p.tokens.cacheWrite += (ev.usage.cache_creation_input_tokens || 0);
+      p.currentSession.tokens.input += (ev.usage.input_tokens || 0);
+      p.currentSession.tokens.output += (ev.usage.output_tokens || 0);
     }
 
     return true;
