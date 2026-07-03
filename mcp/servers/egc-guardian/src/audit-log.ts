@@ -26,6 +26,16 @@ const SECRET_VALUE_RE = /^(ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_
  * Returns a shallow copy of `payload` with secret-looking values replaced by
  * the string "[REDACTED]". Nested objects and arrays are walked recursively.
  */
+function redactArrayItem(item: unknown): unknown {
+  if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+    return redactPayload(item as Record<string, unknown>);
+  }
+  if (typeof item === 'string' && SECRET_VALUE_RE.test(item)) {
+    return '[REDACTED]';
+  }
+  return item;
+}
+
 export function redactPayload(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -37,13 +47,7 @@ export function redactPayload(
     } else if (typeof v === 'string' && SECRET_VALUE_RE.test(v)) {
       out[k] = '[REDACTED]';
     } else if (Array.isArray(v)) {
-      out[k] = v.map((item) =>
-        item !== null && typeof item === 'object' && !Array.isArray(item)
-          ? redactPayload(item as Record<string, unknown>)
-          : typeof item === 'string' && SECRET_VALUE_RE.test(item)
-          ? '[REDACTED]'
-          : item,
-      );
+      out[k] = v.map(redactArrayItem);
     } else if (v !== null && typeof v === 'object') {
       out[k] = redactPayload(v as Record<string, unknown>);
     } else {
