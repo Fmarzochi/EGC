@@ -97,6 +97,10 @@ const COMMANDS = {
     script: 'dashboard.js',
     description: 'Start the EGC Dashboard (localhost:7890). Use "stop" or "status" as sub-args.',
   },
+  team: {
+    script: 'team.js',
+    description: 'Team memory sync: init, sync, or status. Share state across teammates.',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -118,6 +122,7 @@ const PRIMARY_COMMANDS = [
   'watch',
   'telemetry',
   'dashboard',
+  'team',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);

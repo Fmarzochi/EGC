@@ -23,6 +23,7 @@ import {
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
 import { sanitize, sanitizeStrings } from './sanitize.js';
+import { teamInit, teamSync, teamStatus, getTeamConfig } from './sync/TeamSync.js';
 
 function resolveStateStoreDbPath(): string {
   const envOverride = process.env.EGC_STATE_DB;
@@ -337,6 +338,13 @@ async function runMigrations(db: Database, dbDir: string) {
       await db.run('INSERT INTO schema_migrations (version) VALUES (8)');
     }
 
+    // Migration 9: author column in lessons and decisions for team memory attribution.
+    const hasV9 = await db.get('SELECT version FROM schema_migrations WHERE version = 9');
+    if (!hasV9) {
+      await db.exec('ALTER TABLE lessons ADD COLUMN author TEXT DEFAULT NULL');
+      await db.run('INSERT INTO schema_migrations (version) VALUES (9)');
+    }
+
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
     const bootCount = bootRow ? parseInt(bootRow.value, 10) + 1 : 1;
     await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['server_boot_count', String(bootCount)]);
@@ -407,6 +415,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
   preferences?: string[];
   next?: string[];
 }, existing: Record<string, string[]|string>, branch: string | null = null) {
+  const author = process.env.USER || process.env.USERNAME || 'unknown';
   const mergedDecisions = [
     ...(data.decisions || []).map(d => `- ${d.what}${d.why ? ': ' + d.why : ''}`),
     ...((existing['Active Decisions'] as string[]) || []).map(l => `- ${l}`)
@@ -430,6 +439,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
     `# Project State`,
     `project: ${projectPath}`,
     ...(branch ? [`branch: ${branch}`] : []),
+    `author: ${author}`,
     `updated: ${new Date().toISOString()}`,
     ``,
     `## Context`,
@@ -470,6 +480,7 @@ interface LessonRow {
   created_at: string;
   tags: string | null;
   archived: number;
+  author?: string | null;
 }
 
 function mapLessonRow(row: LessonRow) {
@@ -483,6 +494,7 @@ function mapLessonRow(row: LessonRow) {
     createdAt: row.created_at,
     tags: row.tags ?? null,
     archived: row.archived === 1,
+    author: row.author ?? null,
   };
 }
 
@@ -548,7 +560,8 @@ const LessonSaveSchema = z.object({
   content: z.string().min(1).max(5000),
   context: z.string().min(1).max(2000),
   tags: z.string().max(500).optional(),
-  initial_confidence: z.number().min(0).max(1).optional().default(0.7)
+  initial_confidence: z.number().min(0).max(1).optional().default(0.7),
+  author: z.string().max(100).optional()
 });
 
 const LessonRecallSchema = z.object({
@@ -606,6 +619,16 @@ const CompressObservationsSchema = z.object({
   since: z.string().datetime().optional(),
   limit: z.number().min(1).max(500).optional().default(50)
 });
+
+const TeamInitSchema = z.object({
+  backend: z.string().min(1).default('git'),
+  remote: z.string().min(1),
+  branch: z.string().min(1).default('main')
+});
+
+const TeamSyncSchema = z.object({});
+
+const TeamStatusSchema = z.object({});
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -684,7 +707,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             content: { type: "string", description: "The lesson text to store." },
             context: { type: "string", description: "Where this lesson applies, e.g. 'code review' or 'git workflow'." },
             tags: { type: "string", description: "Optional comma-separated tags for categorization." },
-            initial_confidence: { type: "number", description: "Starting confidence score between 0 and 1. Defaults to 0.7." }
+            initial_confidence: { type: "number", description: "Starting confidence score between 0 and 1. Defaults to 0.7." },
+            author: { type: "string", description: "Optional author name for team attribution. Defaults to the system username." }
           },
           required: ["content", "context"]
         }
@@ -744,13 +768,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           }
         }
+      },
+      {
+        name: "team_init",
+        description: "Initialize a sync backend for team memory sharing. Configures the team.json file and sets up the git repository for syncing state files across teammates. Call once per developer workstation after receiving the shared remote URL from a teammate.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            backend: { type: "string", description: "Sync backend type. Currently only 'git' is supported.", default: "git" },
+            remote: { type: "string", description: "Remote URL for the sync storage (e.g. git@github.com:org/egc-memory)." },
+            branch: { type: "string", description: "Git branch to use for syncing. Defaults to 'main'.", default: "main" }
+          },
+          required: ["remote"]
+        }
+      },
+      {
+        name: "team_sync",
+        description: "Synchronize team memory: pull remote lessons from teammates and push local lessons. Uses last-write-wins timestamp comparison to resolve conflicts. Run this periodically during a session to stay in sync with the team, or at session boundaries.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "team_status",
+        description: "Show team sync health: last sync time, uncommitted changes, conflict count, and configured remote URL. Use this to verify the sync backend is connected and working before or after a team_sync call.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
     ]
   };
 });
 
 async function handleLessonSave(db: Database, args: unknown) {
-  const { content, context, tags, initial_confidence } = LessonSaveSchema.parse(args);
+  const { content, context, tags, initial_confidence, author } = LessonSaveSchema.parse(args);
+  const authorName = author || process.env.USER || process.env.USERNAME || 'unknown';
 
   // Exact-match deduplication: reinforce an identical lesson instead of duplicating.
   const duplicate = await db.get<{id: string}>(
@@ -767,13 +821,13 @@ async function handleLessonSave(db: Database, args: unknown) {
   const projPath = resolveProjectPath();
   await writeArbitrator.enqueue(async () => {
     await db.run(
-      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0, ?)`,
-      [id, content, context, initial_confidence, now, tags ?? null, projPath]
+      `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path, author)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0, ?, ?)`,
+      [id, content, context, initial_confidence, now, tags ?? null, projPath, authorName]
     );
   });
-  log('INFO', 'Lesson saved', { id, context });
-  return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: tags ?? null, createdAt: now }, null, 2) }] };
+  log('INFO', 'Lesson saved', { id, context, author: authorName });
+  return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: tags ?? null, createdAt: now, author: authorName }, null, 2) }] };
 }
 
 async function handleLessonRecall(db: Database, args: unknown) {
@@ -1187,6 +1241,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case "team_init": {
+        const { backend, remote, branch } = TeamInitSchema.parse(request.params.arguments || {});
+        const config = await teamInit(backend, remote, branch);
+        log('INFO', 'Team sync initialized', { backend, remote, branch });
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, config }, null, 2) }] };
+      }
+
+      case "team_sync": {
+        const result = await teamSync();
+        const count = result.errors.length;
+        log('INFO', 'Team sync completed', { pulled: result.pulledCount, pushed: result.pushedCount, conflicts: result.conflictCount, errors: count });
+        return { content: [{ type: "text", text: JSON.stringify({ success: count === 0, result }, null, 2) }] };
+      }
+
+      case "team_status": {
+        const status = await teamStatus();
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, status }, null, 2) }] };
       }
 
       default:
