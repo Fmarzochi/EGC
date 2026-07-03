@@ -76,13 +76,20 @@ function hideEgcRootOnWindows(): void {
   }
 }
 
+function ensurePrivateDir(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(dirPath, 0o700); } catch { /* best-effort */ }
+  }
+}
+
 class PersistentLogger {
   private logPath: string;
   private maxSizeBytes = 5 * 1024 * 1024; // 5MB
 
   constructor(serviceName: string) {
     const logDir = path.join(os.homedir(), '.egc', 'logs');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    ensurePrivateDir(logDir);
     hideEgcRootOnWindows();
     this.logPath = path.join(logDir, `${serviceName}.log`);
   }
@@ -344,7 +351,7 @@ async function runMigrations(db: Database, dbDir: string) {
 async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
   const dbDir = path.join(os.homedir(), '.egc', 'memory');
-  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  ensurePrivateDir(dbDir);
   hideEgcRootOnWindows();
   
   const dbPath = path.join(dbDir, 'state.db');
@@ -363,7 +370,7 @@ const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" },
 
 function getStateDir(): string {
   const dir = path.join(os.homedir(), '.egc', 'state');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  ensurePrivateDir(dir);
   hideEgcRootOnWindows();
   return dir;
 }
