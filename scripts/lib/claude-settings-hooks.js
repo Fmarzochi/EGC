@@ -368,7 +368,6 @@ function buildPreToolUseMergeOperation(targetRoot, moduleId, sourceRelativePath,
     hookEvent: PRE_TOOL_USE_EVENT,
     hookMatcher: matcher,
     hookScriptPath,
-    hookCommand: buildHookCommand(hookScriptPath),
   };
 }
 
@@ -444,6 +443,7 @@ module.exports = {
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
+  applyHookEntryToFile,
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
@@ -461,6 +461,7 @@ module.exports = {
   hasStopHook,
   hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
+  inspectHookEntryFile,
   inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
@@ -468,6 +469,7 @@ module.exports = {
   readSettingsFile,
   removeBashDispatcherHook,
   removeBashDispatcherHookFromFile,
+  removeHookEntryFromFile,
   removeIntuitionHook,
   removeIntuitionHookFromFile,
   removeSessionStartHook,

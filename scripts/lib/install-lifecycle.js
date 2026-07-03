@@ -16,21 +16,18 @@ const {
   PRE_TOOL_USE_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
-  applyBashDispatcherHookToFile,
+  applyHookEntryToFile,
   applyIntuitionHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
-  applyWriteValidatorHookToFile,
-  inspectBashDispatcherHookFile,
+  inspectHookEntryFile,
   inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
-  inspectWriteValidatorHookFile,
-  removeBashDispatcherHookFromFile,
+  removeHookEntryFromFile,
   removeIntuitionHookFromFile,
   removeSessionStartHookFromFile,
   removeStopHookFromFile,
-  removeWriteValidatorHookFromFile,
 } = require('./claude-settings-hooks');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
@@ -336,15 +333,7 @@ function repairClaudeSettingsHook(operation) {
   } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
     applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    if (operation.hookMatcher === 'Bash') {
-      applyBashDispatcherHookToFile(operation.destinationPath, operation.hookScriptPath);
-    } else {
-      applyWriteValidatorHookToFile(
-        operation.destinationPath,
-        operation.hookScriptPath,
-        operation.hookMatcher
-      );
-    }
+    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -491,11 +480,7 @@ function uninstallClaudeSettingsHook(operation) {
   } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
     removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    if (operation.hookMatcher === 'Bash') {
-      removeBashDispatcherHookFromFile(operation.destinationPath, operation.hookScriptPath);
-    } else {
-      removeWriteValidatorHookFromFile(operation.destinationPath, operation.hookScriptPath);
-    }
+    removeHookEntryFromFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -601,10 +586,7 @@ function inspectManagedOperation(repoRoot, operation) {
       return inspectResult(inspectIntuitionHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
     }
     if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-      if (operation.hookMatcher === 'Bash') {
-        return inspectResult(inspectBashDispatcherHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-      }
-      return inspectResult(inspectWriteValidatorHookFile(destinationPath, operation.hookScriptPath, operation.hookMatcher), operation, destinationPath);
+      return inspectResult(inspectHookEntryFile(destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, operation.hookMatcher), operation, destinationPath);
     }
     return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }
