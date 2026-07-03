@@ -97,7 +97,8 @@ function areFilesEqual(leftPath, rightPath) {
 }
 
 function readFileUtf8(filePath) {
-  return fs.readFileSync(filePath, 'utf8');
+  const content = fs.readFileSync(filePath, 'utf8');
+  return content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
 }
 
 function isPlainObject(value) {

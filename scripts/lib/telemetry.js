@@ -31,7 +31,8 @@ const SCHEMA_VERSION = 1;
 function readConsent() {
   try {
     const raw = fs.readFileSync(TELEMETRY_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
+    const cleanRaw = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw;
+    const parsed = JSON.parse(cleanRaw);
     if (typeof parsed.enabled === 'boolean') {
       return parsed;
     }
