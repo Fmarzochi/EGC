@@ -181,6 +181,7 @@ EGCとネイティブに統合するAIコーディングツールです。パー
 #### Backers
 
 <a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+<a href="https://github.com/VIUK-XV"><img src="https://avatars.githubusercontent.com/u/216173586?v=4" width="52" height="52" alt="@VIUK-XV" title="@VIUK-XV · Japanese translation" /></a>
 
 #### Monthly sponsors · _be the first_
 

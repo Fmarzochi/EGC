@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**भाषा:** [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी** | [한국어](../ko/README.md)
+**भाषा:** [English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी** | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -13,7 +13,7 @@
 
 **Language / اللغة / Idioma / भाषा / 언어**
 
-[English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी** | [한국어](../ko/README.md)
+[English](../../README.md) | [العربية](../ar/README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | **हिन्दी** | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
 
 </div>
 <!-- CENTERED-LANGUAGE-SELECTOR-END -->
