@@ -89,6 +89,12 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json')),
       format: 'json',
     },
+    {
+      name: 'Zed',
+      path: path.join(homeDir, '.config', 'zed', 'settings.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.config', 'zed')),
+      format: 'zed-context-servers',
+    },
   ];
 }
 
@@ -229,6 +235,47 @@ function registerContinueYaml(targetDir, bins) {
 }
 
 /**
+ * Merges egc-guardian / egc-memory into Zed's settings.json under the
+ * context_servers key. Reads mcp-configs/zed-context-servers.json as a
+ * template, substitutes __GUARDIAN_BIN__ and __MEMORY_BIN__ with the
+ * resolved paths, then merges the result into the existing settings file
+ * without overwriting unrelated keys. Returns true if changed.
+ */
+function registerZedContextServers(targetPath, bins) {
+  const { guardianBin, memoryBin } = bins;
+  const templatePath = path.join(__dirname, '..', '..', 'mcp-configs', 'zed-context-servers.json');
+  const template = fs.readFileSync(templatePath, 'utf8')
+    .replaceAll('__GUARDIAN_BIN__', guardianBin)
+    .replaceAll('__MEMORY_BIN__', memoryBin);
+  const incoming = JSON.parse(template);
+
+  let settings = {};
+  if (fs.existsSync(targetPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
+      }
+      throw err;
+    }
+  }
+
+  if (!settings.context_servers) settings.context_servers = {};
+  let changed = false;
+  for (const [key, value] of Object.entries(incoming.context_servers)) {
+    if (!settings.context_servers[key]) {
+      settings.context_servers[key] = value;
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, JSON.stringify(settings, null, 2) + '\n');
+  return true;
+}
+
+/**
  * Walks every gated target for homeDir and registers egc-guardian /
  * egc-memory into whichever tools are actually installed. Callbacks let the
  * caller (scripts/init.js) drive its own console output without this module
@@ -252,6 +299,8 @@ function registerMcpServers(homeDir, bins, callbacks = {}) {
         registered = registerToml(target.path, bins);
       } else if (target.format === 'continue-yaml') {
         registered = registerContinueYaml(target.path, bins);
+      } else if (target.format === 'zed-context-servers') {
+        registered = registerZedContextServers(target.path, bins);
       }
       if (registered && onRegister) onRegister(target);
     } catch (err) {
@@ -267,5 +316,6 @@ module.exports = {
   registerJson,
   registerToml,
   registerContinueYaml,
+  registerZedContextServers,
   registerMcpServers,
 };
