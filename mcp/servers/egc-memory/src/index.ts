@@ -395,13 +395,20 @@ function resolveProjectPath(provided?: string): string {
   return path.resolve(raw);
 }
 
+const H2_RE = /^## (.+)/;
 function readStateDoc(filePath: string): Record<string, string[]|string> {
   if (!fs.existsSync(filePath)) return {};
-  const content = readStateFile(filePath, _encKey);
+  let content: string;
+  try {
+    content = readStateFile(filePath, _encKey);
+  } catch (err) {
+    log('ERROR', '[EGC encryption] Failed to decrypt state file', { file: filePath, error: String(err) });
+    return {};
+  }
   const result: Record<string, string[]|string> = {};
   let currentSection = '';
   for (const line of content.split('\n')) {
-    const h2 = line.match(/^## (.+)/);
+    const h2 = H2_RE.exec(line);
     if (h2) { currentSection = h2[1].trim(); result[currentSection] = result[currentSection] || []; continue; }
     if (currentSection && line.trim() && !line.startsWith('#')) {
       const arr = result[currentSection];
@@ -978,7 +985,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
         }
 
-        const content = readStateFile(resolved.filePath, _encKey);
+        let content: string;
+        try {
+          content = readStateFile(resolved.filePath, _encKey);
+        } catch (err) {
+          log('ERROR', '[EGC encryption] Failed to decrypt state file', { file: resolved.filePath, error: String(err) });
+          return { content: [{ type: "text", text: `State file exists but could not be decrypted. The encryption key may have changed.\nPath: ${resolved.filePath}` }] };
+        }
         const verify = verifyHmac(resolved.filePath, content, _integrityKey);
         if (!verify.ok) {
           log('WARN', '[EGC integrity] State file integrity check failed', { file: resolved.filePath, reason: (verify as { ok: false; reason: string }).reason });

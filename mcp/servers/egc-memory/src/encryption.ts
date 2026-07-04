@@ -25,29 +25,38 @@ const MAGIC = 'EGC1:';
 /**
  * Load or create the AES-256-GCM encryption key at ~/.egc/encryption.key.
  * The key is 32 random bytes stored as hex (64 hex chars on disk).
+ * Throws if the key file exists but cannot be read or is malformed —
+ * only generates a new key when the file genuinely does not exist.
  */
 export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
   const dir = path.dirname(keyPath);
   try {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try { fs.chmodSync(dir, 0o700); } catch { /* best-effort */ }
   } catch {
     // directory may already exist
   }
 
   if (fs.existsSync(keyPath)) {
-    try {
-      const hex = fs.readFileSync(keyPath, 'utf-8').trim();
-      if (hex.length === 64) return Buffer.from(hex, 'hex');
-    } catch {
-      // fall through to regenerate
+    // Key file exists — load it. Do NOT silently regenerate on error;
+    // that would destroy access to all previously encrypted state files.
+    const hex = fs.readFileSync(keyPath, 'utf-8').trim();
+    const key = Buffer.from(hex, 'hex');
+    if (key.length !== 32) {
+      throw new Error(`[EGC encryption] Key file at ${keyPath} is malformed (expected 32 bytes, got ${key.length}). Remove it to regenerate.`);
     }
+    try { fs.chmodSync(keyPath, 0o600); } catch { /* best-effort */ }
+    return key;
   }
 
+  // Key file does not exist — generate a fresh one.
   const key = crypto.randomBytes(32);
   try {
+    fs.chmodSync(dir, 0o700);
     fs.writeFileSync(keyPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
     fs.chmodSync(keyPath, 0o600);
-  } catch {
+  } catch (e) {
+    console.error('[EGC encryption] Failed to persist encryption key:', String(e));
     // best-effort: return key for this process lifetime
   }
   return key;
@@ -81,7 +90,7 @@ export function decryptState(data: Buffer, key: Buffer): string {
   const ciphertext = data.subarray(magicLen + IV_BYTES + AUTH_TAG_BYTES);
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
-  return decipher.update(ciphertext) + decipher.final('utf-8');
+  return decipher.update(ciphertext, undefined, 'utf-8') + decipher.final('utf-8');
 }
 
 /**
@@ -105,10 +114,13 @@ export function readStateFile(filePath: string, key: Buffer): string {
 }
 
 /**
- * Write a state file, always encrypting.
+ * Write a state file atomically, always encrypting.
+ * Writes to a temp file then renames to prevent partial-write corruption.
  */
 export function writeStateFile(filePath: string, plaintext: string, key: Buffer): void {
   const encrypted = encryptState(plaintext, key);
-  fs.writeFileSync(filePath, encrypted);
-  try { fs.chmodSync(filePath, 0o600); } catch { /* chmod not supported on Windows */ }
+  const tmpPath = `${filePath}.tmp`;
+  fs.writeFileSync(tmpPath, encrypted);
+  try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
+  fs.renameSync(tmpPath, filePath);
 }
