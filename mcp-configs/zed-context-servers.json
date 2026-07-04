@@ -1,0 +1,20 @@
+{
+  "context_servers": {
+    "egc-guardian": {
+      "command": {
+        "path": "node",
+        "args": ["__GUARDIAN_BIN__"],
+        "env": {}
+      },
+      "settings": {}
+    },
+    "egc-memory": {
+      "command": {
+        "path": "node",
+        "args": ["__MEMORY_BIN__"],
+        "env": {}
+      },
+      "settings": {}
+    }
+  }
+}
