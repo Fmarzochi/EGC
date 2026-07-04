@@ -56,8 +56,7 @@ export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
     fs.writeFileSync(keyPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
     fs.chmodSync(keyPath, 0o600);
   } catch (e) {
-    console.error('[EGC encryption] Failed to persist encryption key:', String(e));
-    // best-effort: return key for this process lifetime
+    throw new Error(`[EGC encryption] Failed to persist encryption key to ${keyPath}: ${String(e)}. Remove the file or fix permissions and restart.`);
   }
   return key;
 }

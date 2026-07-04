@@ -398,13 +398,7 @@ function resolveProjectPath(provided?: string): string {
 const H2_RE = /^## (.+)/;
 function readStateDoc(filePath: string): Record<string, string[]|string> {
   if (!fs.existsSync(filePath)) return {};
-  let content: string;
-  try {
-    content = readStateFile(filePath, _encKey);
-  } catch (err) {
-    log('ERROR', '[EGC encryption] Failed to decrypt state file', { file: filePath, error: String(err) });
-    return {};
-  }
+  const content = readStateFile(filePath, _encKey);
   const result: Record<string, string[]|string> = {};
   let currentSection = '';
   for (const line of content.split('\n')) {
@@ -1027,7 +1021,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Merge from the same file get_state would read, so the first
         // branch-scoped write inherits the pre-existing flat state
         const resolved = resolveStateRead(getStateDir(), projPath, branch);
-        const existing = readStateDoc(resolved.filePath);
+        let existing: Record<string, string[]|string>;
+        try {
+          existing = readStateDoc(resolved.filePath);
+        } catch (err) {
+          log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
+          throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}`);
+        }
         const filePath = resolveStateWrite(getStateDir(), projPath, branch);
 
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
