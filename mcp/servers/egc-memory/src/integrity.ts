@@ -34,7 +34,13 @@ export function loadOrCreateKey(): Buffer {
   if (fs.existsSync(KEY_PATH)) {
     try {
       const hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
-      if (hex.length === 64) return Buffer.from(hex, 'hex');
+      const key = Buffer.from(hex, 'hex');
+      if (key.length === 32) {
+        // Harden permissions even on existing key in case it was copied with wrong perms
+        try { fs.chmodSync(KEY_PATH, 0o600); } catch { /* best-effort */ }
+        try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
+        return key;
+      }
     } catch {
       // fall through to regenerate
     }
@@ -45,7 +51,8 @@ export function loadOrCreateKey(): Buffer {
   try {
     fs.writeFileSync(KEY_PATH, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
     fs.chmodSync(KEY_PATH, 0o600);
-  } catch {
+  } catch (e) {
+    console.error('[EGC integrity] Failed to persist HMAC key:', String(e));
     // best-effort: if we cannot persist the key we still return it for
     // this process lifetime (integrity checks will fail on next boot).
   }
@@ -103,13 +110,12 @@ export function verifyHmac(
     return { ok: false, reason: 'read_error' };
   }
 
+  if (storedHmac.length !== 64 || !/^[0-9a-f]{64}$/.test(storedHmac)) {
+    return { ok: false, reason: 'hmac_mismatch' };
+  }
   const expected = computeHmac(content, key);
-  // Use timingSafeEqual to prevent timing attacks.
-  const storedBuf = Buffer.from(storedHmac.padEnd(64, '0'), 'hex');
+  const storedBuf = Buffer.from(storedHmac, 'hex');
   const expectedBuf = Buffer.from(expected, 'hex');
-  const match =
-    storedBuf.length === expectedBuf.length &&
-    crypto.timingSafeEqual(storedBuf, expectedBuf);
-
+  const match = crypto.timingSafeEqual(storedBuf, expectedBuf);
   return match ? { ok: true } : { ok: false, reason: 'hmac_mismatch' };
 }
