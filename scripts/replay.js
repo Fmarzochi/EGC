@@ -88,7 +88,7 @@ async function main() {
   const sessions = await fetchJSON('/replay/sessions');
 
   if (opts.json) {
-    console.log(JSON.stringify(sessions, null, 2));
+    process.stdout.write(JSON.stringify(sessions, null, 2) + '\n');
     return;
   }
 
