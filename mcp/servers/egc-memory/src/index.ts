@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import { loadOrCreateKey, writeHmac, verifyHmac } from './integrity';
 import { propagateStateToTools } from './propagate';
 import {
   createWorkingMemoryTable,
@@ -375,6 +376,7 @@ async function getDb(): Promise<Database> {
 }
 
 const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" }, { capabilities: { tools: {} } });
+const _integrityKey: Buffer = loadOrCreateKey();
 
 function getStateDir(): string {
   const dir = path.join(os.homedir(), '.egc', 'state');
@@ -976,7 +978,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const content = fs.readFileSync(resolved.filePath, 'utf-8');
-        log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source });
+        const verify = verifyHmac(resolved.filePath, content, _integrityKey);
+        if (!verify.ok) {
+          log('WARN', '[EGC integrity] State file integrity check failed', { file: resolved.filePath, reason: (verify as { ok: false; reason: string }).reason });
+          log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: (verify as { ok: false; reason: string }).reason });
+        } else {
+          log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: 'ok' });
+        }
         return { content: [{ type: "text", text: content }] };
       }
 
@@ -1010,7 +1018,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
         writeStateDoc(filePath, projPath, args, existing, branch);
-
+        const writtenContent = fs.readFileSync(filePath, 'utf-8');
+        writeHmac(filePath, writtenContent, _integrityKey);
         const propagated = propagateStateToTools({
           projectPath: projPath,
           context: args.context,
