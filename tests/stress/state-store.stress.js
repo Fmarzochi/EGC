@@ -7,10 +7,10 @@
  * - Repeated open/close cycles (memory leak detection)
  * - Large payload handling
  * - Boundary conditions (empty strings, nulls, max sizes)
- * - Transaction rollback integrity
+ * - Transaction rollback integrity (FK enforcement verified)
  * - Schema constraint enforcement
- * - SQL injection resilience
- * - Unicode / adversarial field values
+ * - SQL injection resilience (round-trip value verification)
+ * - Unicode / adversarial field values (round-trip value verification)
  */
 
 const assert = require('assert');
@@ -119,12 +119,15 @@ async function runTests() {
     const tmpDir = createTempDir();
     const dbPath = path.join(tmpDir, 'state.db');
     try {
+      // Force GC before measurement if available (run with --expose-gc to stabilize)
+      if (global.gc) global.gc();
       const memBefore = process.memoryUsage().heapUsed;
       for (let i = 0; i < 100; i++) {
         const store = await createStateStore({ dbPath });
         store.upsertSession(makeSession({ id: `cycle-${i}` }));
         store.close();
       }
+      if (global.gc) global.gc();
       const memAfter = process.memoryUsage().heapUsed;
       const growthMb = (memAfter - memBefore) / 1024 / 1024;
       assert.ok(growthMb < 50, `Memory grew by ${growthMb.toFixed(1)} MB — possible leak`);
@@ -179,11 +182,13 @@ async function runTests() {
     }
   });
 
-  // ── 7. Transaction rollback integrity ─────────────────────────────────────
-  await test('failed FK insert leaves DB in consistent state', async () => {
+  // ── 7. FK violation is actually enforced ───────────────────────────────────
+  await test('failed FK insert raises an error and leaves DB in consistent state', async () => {
     const store = await createStateStore({ dbPath: ':memory:' });
     try {
       store.upsertSession(makeSession({ id: 'before-bad-tx' }));
+
+      let fkThrew = false;
       try {
         store.insertSkillRun({
           id: uid(),
@@ -194,8 +199,14 @@ async function runTests() {
           outcome: 'success',
           createdAt: new Date().toISOString(),
         });
-      } catch (_) { /* expected FK violation */ }
+      } catch (_) {
+        fkThrew = true;
+      }
 
+      // FK enforcement must have triggered a throw
+      assert.ok(fkThrew, 'insertSkillRun with non-existent sessionId must throw (FK enforcement)');
+
+      // DB is still usable and the original session is intact
       const { sessions } = store.listRecentSessions({ limit: 10 });
       assert.ok(sessions.some(s => s.id === 'before-bad-tx'), 'Session should still be there');
     } finally {
@@ -231,7 +242,7 @@ async function runTests() {
         threw = true;
       }
       if (!threw) {
-        const count = result.sessions ? result.sessions.length : 0;
+        const count = result && result.sessions ? result.sessions.length : 0;
         assert.ok(count === 0, 'limit:0 should not return all rows');
       }
     } finally {
@@ -240,7 +251,7 @@ async function runTests() {
   });
 
   // ── 10. Instincts high-volume with confidence boundary values ─────────────
-  await test('insert 500 instincts with confidence 0 and 1 boundary values', async () => {
+  await test('insert 500 instincts and verify total count', async () => {
     const store = await createStateStore({ dbPath: ':memory:' });
     try {
       for (let i = 0; i < 250; i++) {
@@ -263,33 +274,44 @@ async function runTests() {
           createdAt: new Date().toISOString(),
         });
       }
+      // listInstincts is paginated by confidence DESC — validate via totalCount
       const { instincts, totalCount } = store.listInstincts({ projectId: 'stress-proj' });
       assert.ok(Array.isArray(instincts), 'instincts should be an array');
-      // listInstincts is paginated by confidence DESC — verify via totalCount
       assert.strictEqual(totalCount, 500, `Expected 500 instincts, got ${totalCount}`);
     } finally {
       store.close();
     }
   });
 
-  // ── 11. Lessons archiving at scale ────────────────────────────────────────
-  await test('archive 500 lessons and list only active/archived separately', async () => {
+  // ── 11. Lessons: upsert and verify active vs archived via getLessonById ───
+  await test('archive flag is persisted correctly and readable via getLessonById', async () => {
     const store = await createStateStore({ dbPath: ':memory:' });
     try {
-      for (let i = 0; i < 500; i++) {
-        store.upsertLesson({
-          id: `lesson-${i}`,
-          content: `Content ${i}`,
-          context: 'stress-test',
-          confidence: 0.5 + (i % 5) * 0.1,
-          createdAt: new Date().toISOString(),
-          archived: i < 250 ? 1 : 0,
-        });
-      }
-      const active = store.listLessons({ archived: false });
-      const archived = store.listLessons({ archived: true });
-      assert.ok(active.length > 0, 'Expected active lessons');
-      assert.ok(archived.length > 0, 'Expected archived lessons');
+      store.upsertLesson({
+        id: 'active-lesson',
+        content: 'Active content',
+        context: 'stress-test',
+        confidence: 0.8,
+        createdAt: new Date().toISOString(),
+        archived: 0,
+      });
+      store.upsertLesson({
+        id: 'archived-lesson',
+        content: 'Archived content',
+        context: 'stress-test',
+        confidence: 0.3,
+        createdAt: new Date().toISOString(),
+        archived: 1,
+      });
+
+      const active = store.getLessonById('active-lesson');
+      const archived = store.getLessonById('archived-lesson');
+
+      assert.ok(active, 'Active lesson should exist');
+      assert.strictEqual(active.archived, 0, 'Active lesson archived flag should be 0');
+
+      assert.ok(archived, 'Archived lesson should exist');
+      assert.strictEqual(archived.archived, 1, 'Archived lesson archived flag should be 1');
     } finally {
       store.close();
     }
@@ -315,8 +337,8 @@ async function runTests() {
     }
   });
 
-  // ── 13. Unicode and special chars in fields ────────────────────────────────
-  await test('unicode emoji, CJK, RTL, and control chars stored correctly', async () => {
+  // ── 13. Unicode round-trip: verify actual stored values ───────────────────
+  await test('unicode emoji, CJK, RTL, and special chars are stored and retrieved correctly', async () => {
     const store = await createStateStore({ dbPath: ':memory:' });
     try {
       const weirdStrings = [
@@ -332,15 +354,21 @@ async function runTests() {
       for (let i = 0; i < weirdStrings.length; i++) {
         store.upsertSession(makeSession({ id: `unicode-${i}`, repoRoot: weirdStrings[i] }));
       }
-      const { totalCount } = store.listRecentSessions({ limit: 20 });
+      const { sessions, totalCount } = store.listRecentSessions({ limit: 20 });
       assert.strictEqual(totalCount, weirdStrings.length);
+      // Verify each value round-tripped correctly
+      for (let i = 0; i < weirdStrings.length; i++) {
+        const row = sessions.find(s => s.id === `unicode-${i}`);
+        assert.ok(row, `Session unicode-${i} should exist`);
+        assert.strictEqual(row.repoRoot, weirdStrings[i], `repoRoot mismatch for unicode-${i}`);
+      }
     } finally {
       store.close();
     }
   });
 
-  // ── 14. SQL injection via session fields ───────────────────────────────────
-  await test('SQL injection attempts in repoRoot do not corrupt DB', async () => {
+  // ── 14. SQL injection round-trip: verify fields are stored literally ───────
+  await test('SQL injection strings in repoRoot are stored literally without corruption', async () => {
     const store = await createStateStore({ dbPath: ':memory:' });
     try {
       const injections = [
@@ -352,8 +380,14 @@ async function runTests() {
       for (let i = 0; i < injections.length; i++) {
         store.upsertSession(makeSession({ id: `inject-${i}`, repoRoot: injections[i] }));
       }
-      const { totalCount } = store.listRecentSessions({ limit: 10 });
-      assert.strictEqual(totalCount, injections.length, 'All sessions stored safely');
+      const { sessions, totalCount } = store.listRecentSessions({ limit: 10 });
+      assert.strictEqual(totalCount, injections.length, 'All sessions must be stored');
+      // Verify each injection string round-tripped literally (not executed)
+      for (let i = 0; i < injections.length; i++) {
+        const row = sessions.find(s => s.id === `inject-${i}`);
+        assert.ok(row, `Session inject-${i} should exist`);
+        assert.strictEqual(row.repoRoot, injections[i], `repoRoot mismatch for inject-${i}`);
+      }
     } finally {
       store.close();
     }

@@ -68,15 +68,14 @@ async function runTests() {
     fs.writeFileSync(dbPath, 'this is definitely not sqlite data!!!!!');
     try {
       const db = await openDatabase(dbPath);
-      let threw = false;
       try {
         db.exec('SELECT 1');
       } catch (_) {
-        threw = true;
+        // Expected — file is not a database
       }
-      // Whether it throws or silently ignores — it must NOT crash the process
+      // Whether it throws or silently ignores — it must NOT crash the process.
+      // Test passes if we reach here (no segfault / unhandled exception).
       try { db.close(); } catch (_) { /* ignore */ }
-      // Test passes if we reach here (no segfault / unhandled exception)
     } finally {
       cleanup(tmpDir);
     }
@@ -143,10 +142,10 @@ async function runTests() {
     const db = await openDatabase(':memory:');
     try {
       db.exec('CREATE TABLE stable (id INTEGER PRIMARY KEY)');
-      db.exec("INSERT INTO stable VALUES (1)");
+      db.exec('INSERT INTO stable VALUES (1)');
 
       const badTx = db.transaction(() => {
-        db.exec("INSERT INTO stable VALUES (2)");
+        db.exec('INSERT INTO stable VALUES (2)');
         throw new Error('intentional rollback');
       });
 
@@ -166,8 +165,8 @@ async function runTests() {
       db.exec('CREATE TABLE t (id INTEGER)');
       for (let i = 0; i < 1000; i++) {
         const stmt = db.prepare('SELECT * FROM t WHERE id = ?');
+        // Statement is freed explicitly in the finally block of .all()
         stmt.all(i);
-        // Statement freed on garbage collect — sql.js frees on .all() implicitly
       }
     } finally {
       db.close();
@@ -203,7 +202,6 @@ async function runTests() {
       }
       db1.close();
 
-      // Verify file actually exists on disk
       assert.ok(fs.existsSync(dbPath), 'DB file must exist after close');
 
       // Re-open and verify
@@ -216,19 +214,39 @@ async function runTests() {
     }
   });
 
-  // ── 11. Concurrent transactions (simulated via nested tx calls) ────────────
-  await test('nested transaction() calls are handled without deadlock', async () => {
+  // ── 11. Nested db.transaction() inside an outer transaction ──────────────
+  await test('nested transaction() call inside outer transaction is handled cleanly', async () => {
     const db = await openDatabase(':memory:');
     try {
       db.exec('CREATE TABLE nest (id INTEGER)');
+
+      const inner = db.transaction(() => {
+        db.exec('INSERT INTO nest VALUES (2)');
+      });
+
       const outer = db.transaction(() => {
         db.exec('INSERT INTO nest VALUES (1)');
-        // sql.js does not support nested transactions — this should either
-        // work via savepoints or throw cleanly, NOT hang indefinitely
+        // Call a nested transaction — sql.js may throw or handle via savepoint.
+        // Either outcome is acceptable; the process must not hang or segfault.
+        inner();
       });
-      let threw = false;
-      try { outer(); } catch (_) { threw = true; }
-      // Either it worked or threw — but process must not hang
+
+      let outerThrew = false;
+      try {
+        outer();
+      } catch (_) {
+        outerThrew = true;
+      }
+
+      // If it succeeded, verify at least row 1 was inserted.
+      // If it threw, the DB must still be usable (not corrupted).
+      if (!outerThrew) {
+        const rows = db.prepare('SELECT COUNT(*) as c FROM nest').get();
+        assert.ok(rows.c >= 1, 'At least one row should be present on success');
+      } else {
+        // DB still usable after nested-tx failure
+        assert.doesNotThrow(() => db.prepare('SELECT 1').get());
+      }
     } finally {
       try { db.close(); } catch (_) { /* ignore */ }
     }

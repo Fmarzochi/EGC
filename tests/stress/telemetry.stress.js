@@ -232,8 +232,9 @@ async function runTests() {
   // ── 9. readConsent on read-only file ──────────────────────────────────────
   await test('readConsent handles read-only telemetry file', () => {
     if (process.platform === 'win32') {
+      // chmod is unreliable on Windows — skip without touching counters.
+      // test() will count this as a pass since no exception is thrown.
       console.log('    (skipped: chmod unreliable on Windows)');
-      passed++; failed--; // compensate
       return;
     }
     const tmpDir = createTempDir();
