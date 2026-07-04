@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
 import { loadOrCreateKey, writeHmac, verifyHmac } from './integrity';
+import { loadOrCreateEncKey, readStateFile, writeStateFile } from './encryption';
 import { propagateStateToTools } from './propagate';
 import {
   createWorkingMemoryTable,
@@ -377,6 +378,7 @@ async function getDb(): Promise<Database> {
 
 const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" }, { capabilities: { tools: {} } });
 const _integrityKey: Buffer = loadOrCreateKey();
+const _encKey: Buffer = loadOrCreateEncKey();
 
 function getStateDir(): string {
   const dir = path.join(os.homedir(), '.egc', 'state');
@@ -395,7 +397,7 @@ function resolveProjectPath(provided?: string): string {
 
 function readStateDoc(filePath: string): Record<string, string[]|string> {
   if (!fs.existsSync(filePath)) return {};
-  const content = fs.readFileSync(filePath, 'utf-8');
+  const content = readStateFile(filePath, _encKey);
   const result: Record<string, string[]|string> = {};
   let currentSection = '';
   for (const line of content.split('\n')) {
@@ -461,8 +463,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
     ``
   ];
 
-  fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
-  try { fs.chmodSync(filePath, 0o600); } catch { /* chmod not supported on Windows */ }
+  writeStateFile(filePath, lines.join('\n'), _encKey);
 }
 
 const LESSON_REINFORCE_DELTA = 0.15;
@@ -977,7 +978,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
         }
 
-        const content = fs.readFileSync(resolved.filePath, 'utf-8');
+        const content = readStateFile(resolved.filePath, _encKey);
         const verify = verifyHmac(resolved.filePath, content, _integrityKey);
         if (!verify.ok) {
           log('WARN', '[EGC integrity] State file integrity check failed', { file: resolved.filePath, reason: (verify as { ok: false; reason: string }).reason });
@@ -1018,7 +1019,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
         writeStateDoc(filePath, projPath, args, existing, branch);
-        const writtenContent = fs.readFileSync(filePath, 'utf-8');
+        const writtenContent = readStateFile(filePath, _encKey);
         writeHmac(filePath, writtenContent, _integrityKey);
         const propagated = propagateStateToTools({
           projectPath: projPath,
