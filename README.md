@@ -30,7 +30,7 @@
 
 ---
 
-EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own - no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, Zed, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own - no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, Zed, VS Code with GitHub Copilot, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
 
 ---
 
@@ -78,6 +78,17 @@ npx @egchq/egc install
 ```
 
 [Full installation guide](docs/installation.md)
+
+### VS Code + GitHub Copilot
+
+Use the Copilot target when you want EGC skills available in VS Code through GitHub Copilot Chat:
+
+```bash
+npm install -g @egchq/egc
+egc install --target copilot
+```
+
+This requires the GitHub Copilot Chat extension. EGC installs skills to `~/.github/skills/`, where Copilot discovers them automatically. The same memory state is shared with Claude Code, Cursor, Gemini CLI, Windsurf, and other EGC targets.
 
 ---
 
