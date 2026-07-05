@@ -45,7 +45,11 @@ if (mode === 'command') {
     process.stdout.write(JSON.stringify({ allowed: true }));
   }
 } else if (mode === 'route') {
-  process.stdout.write(JSON.stringify({ agents: ['code-reviewer'], skills: ['security-review'], provider: 'keyword' }));
+  if (process.env.FAKE_GUARDIAN_ROUTE === 'empty') {
+    process.stdout.write(JSON.stringify({ agents: [], skills: [], provider: 'keyword' }));
+  } else {
+    process.stdout.write(JSON.stringify({ agents: ['code-reviewer'], skills: ['security-review'], provider: 'keyword' }));
+  }
 } else if (mode === 'intent') {
   const intent = process.env.FAKE_GUARDIAN_INTENT || 'none';
   process.stdout.write(JSON.stringify({ intent, source: intent === 'none' ? 'none' : 'llm' }));

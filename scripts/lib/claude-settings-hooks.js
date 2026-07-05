@@ -23,6 +23,8 @@ const BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/bash-hoo
 const BASH_DISPATCHER_HOOK_MODULE_ID = 'claude-bash-dispatcher-hook';
 const WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-write-guardian-validate.js';
 const WRITE_VALIDATOR_HOOK_MODULE_ID = 'claude-write-validator-hook';
+const ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-router.js';
+const ROUTER_HOOK_MODULE_ID = 'claude-prompt-router-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -328,6 +330,50 @@ function createUserPromptSubmitHookMergeOperation(targetRoot) {
   };
 }
 
+function resolveRouterHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'prompt-router.js');
+}
+
+function hasRouterHook(settings, hookScriptPath) {
+  return hasHookEntry(settings, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function addRouterHook(settings, hookScriptPath) {
+  return addHookEntry(settings, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function removeRouterHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function applyRouterHookToFile(settingsPath, hookScriptPath) {
+  return applyHookEntryToFile(settingsPath, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function removeRouterHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function inspectRouterHookFile(settingsPath, hookScriptPath) {
+  return inspectHookEntryFile(settingsPath, USER_PROMPT_SUBMIT_EVENT, hookScriptPath);
+}
+
+function createUserPromptSubmitRouterHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveRouterHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: ROUTER_HOOK_MODULE_ID,
+    sourceRelativePath: ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: USER_PROMPT_SUBMIT_EVENT,
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
 function resolveBashDispatcherHookScriptDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', 'bash-hook-dispatcher.js');
 }
@@ -437,14 +483,18 @@ module.exports = {
   USER_PROMPT_SUBMIT_EVENT,
   WRITE_VALIDATOR_HOOK_MODULE_ID,
   WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  ROUTER_HOOK_MODULE_ID,
+  ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
   addIntuitionHook,
+  addRouterHook,
   addSessionStartHook,
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
+  applyRouterHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
   applyWriteValidatorHookToFile,
@@ -455,14 +505,17 @@ module.exports = {
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
+  createUserPromptSubmitRouterHookMergeOperation,
   hasBashDispatcherHook,
   hasIntuitionHook,
+  hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
   hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
+  inspectRouterHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
   inspectWriteValidatorHookFile,
@@ -472,6 +525,8 @@ module.exports = {
   removeHookEntryFromFile,
   removeIntuitionHook,
   removeIntuitionHookFromFile,
+  removeRouterHook,
+  removeRouterHookFromFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
   removeStopHook,
@@ -481,6 +536,7 @@ module.exports = {
   resolveBashDispatcherHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
+  resolveRouterHookScriptDestination,
   resolveSettingsPath,
   resolveStopHookScriptDestination,
   resolveWriteValidatorHookScriptDestination,
