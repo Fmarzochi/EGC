@@ -18,7 +18,7 @@
 
 ---
 
-EGC es un entorno de ejecución local que proporciona memoria persistente a todas las herramientas de programación con IA que utilizas. Al final de cada sesión, la IA guarda lo que aprendió sobre tu proyecto: las decisiones que tomaste, lo que falló, tus preferencias y los siguientes pasos. Al comienzo de la siguiente sesión, vuelve a cargar ese estado. Una sola instalación funciona para Claude Code, Cursor, Gemini CLI, Windsurf y más. Compatible con Claude, GPT-4o, Gemini y modelos de OpenRouter, incluidos DeepSeek, Qwen3 y Llama 4.
+EGC es un entorno de ejecución local que proporciona memoria persistente a todas las herramientas de programación con IA que utilizas. Al final de cada sesión, la IA guarda lo que aprendió sobre tu proyecto: las decisiones que tomaste, lo que falló, tus preferencias y los siguientes pasos. Al comienzo de la siguiente sesión, vuelve a cargar ese estado. Una sola instalación funciona para Claude Code, Cursor, Gemini CLI, Windsurf, VS Code con GitHub Copilot y más. Compatible con Claude, GPT-4o, Gemini y modelos de OpenRouter, incluidos DeepSeek, Qwen3 y Llama 4.
 
 ---
 
@@ -66,6 +66,17 @@ npx @egchq/egc install
 ```
 
 [Guía completa de instalación](../../docs/installation.md)
+
+### VS Code + GitHub Copilot
+
+Usa el target Copilot cuando quieras las skills de EGC disponibles en VS Code a través de GitHub Copilot Chat:
+
+```bash
+npm install -g @egchq/egc
+egc install --target copilot
+```
+
+Requiere la extensión GitHub Copilot Chat. EGC instala las skills en `~/.github/skills/`, donde Copilot las descubre automáticamente. El mismo estado de memoria se comparte con Claude Code, Cursor, Gemini CLI, Windsurf y otros targets de EGC.
 
 ---
 

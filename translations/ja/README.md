@@ -30,7 +30,7 @@
 
 ---
 
-EGCは、あなたが使うすべてのAIコーディングツールに永続メモリを提供するローカルランタイムです。各セッションの終わりに、AIは学んだことを保存します。下した決定、失敗したこと、あなたの好み、次に取りかかるべきことです。次のセッションの開始時には、その状態を自動で読み込みます。プロンプトは不要です。どの言語でも「続きをやろう」や「どこで止まった？」と言えば、AIはすでに何をすべきか分かっています。1回のインストールでClaude Code、Cursor、Gemini CLI、Windsurfなどをカバーします。Claude、GPT-4o、Geminiに加え、DeepSeek、Qwen3、Llama 4を含むOpenRouterモデルでも動作します。
+EGCは、あなたが使うすべてのAIコーディングツールに永続メモリを提供するローカルランタイムです。各セッションの終わりに、AIは学んだことを保存します。下した決定、失敗したこと、あなたの好み、次に取りかかるべきことです。次のセッションの開始時には、その状態を自動で読み込みます。プロンプトは不要です。どの言語でも「続きをやろう」や「どこで止まった？」と言えば、AIはすでに何をすべきか分かっています。1回のインストールでClaude Code、Cursor、Gemini CLI、Windsurf、VS Code（GitHub Copilot付き）などをカバーします。Claude、GPT-4o、Geminiに加え、DeepSeek、Qwen3、Llama 4を含むOpenRouterモデルでも動作します。
 
 ---
 
@@ -78,6 +78,17 @@ npx @egchq/egc install
 ```
 
 [Full installation guide](docs/installation.md)
+
+### VS Code + GitHub Copilot
+
+GitHub Copilot Chat経由でVS CodeでEGCのスキルを利用したい場合は、Copilotターゲットを使用します：
+
+```bash
+npm install -g @egchq/egc
+egc install --target copilot
+```
+
+GitHub Copilot Chat拡張機能が必要です。EGCはスキルを`~/.github/skills/`にインストールし、Copilotが自動でそれらを認識します。同じメモリ状態がClaude Code、Cursor、Gemini CLI、Windsurf、その他のEGCターゲットで共有されます。
 
 ---
 

@@ -30,7 +30,7 @@
 
 ---
 
-EGC는 사용하는 모든 AI 코딩 도구에 지속적으로 유지되는 메모리를 제공하는 로컬 런타임입니다. 각 세션이 끝나면 AI는 작업을 통해 학습한 내용을 저장합니다. 여기에는 내린 결정, 실패한 시도, 사용자의 선호도, 그리고 다음에 이어서 진행할 작업이 포함됩니다. 다음 세션이 시작되면 AI는 이전 작업 상태를 자동으로 불러옵니다. 별도의 프롬프트를 입력할 필요가 없습니다. 어떤 언어로든 "계속하자" 또는 "어디까지 했지?"라고 말하면 AI가 무엇을 해야 할지 이미 알고 있습니다. 한 번 설치하면 Claude Code, Cursor, Gemini CLI, Windsurf 등 다양한 도구에서 사용할 수 있습니다. Claude, GPT-4o, Gemini는 물론 DeepSeek, Qwen3, Llama 4를 비롯한 OpenRouter 모델과도 함께 사용할 수 있습니다.
+EGC는 사용하는 모든 AI 코딩 도구에 지속적으로 유지되는 메모리를 제공하는 로컬 런타임입니다. 각 세션이 끝나면 AI는 작업을 통해 학습한 내용을 저장합니다. 여기에는 내린 결정, 실패한 시도, 사용자의 선호도, 그리고 다음에 이어서 진행할 작업이 포함됩니다. 다음 세션이 시작되면 AI는 이전 작업 상태를 자동으로 불러옵니다. 별도의 프롬프트를 입력할 필요가 없습니다. 어떤 언어로든 "계속하자" 또는 "어디까지 했지?"라고 말하면 AI가 무엇을 해야 할지 이미 알고 있습니다. 한 번 설치하면 Claude Code, Cursor, Gemini CLI, Windsurf, VS Code(GitHub Copilot 포함) 등 다양한 도구에서 사용할 수 있습니다. Claude, GPT-4o, Gemini는 물론 DeepSeek, Qwen3, Llama 4를 비롯한 OpenRouter 모델과도 함께 사용할 수 있습니다.
 
 ---
 
@@ -78,6 +78,17 @@ npx @egchq/egc install
 ```
 
 [전체 설치 가이드](docs/installation.md)
+
+### VS Code + GitHub Copilot
+
+GitHub Copilot Chat를 통해 VS Code에서 EGC 스킬을 사용하려면 Copilot 타겟을 사용하세요:
+
+```bash
+npm install -g @egchq/egc
+egc install --target copilot
+```
+
+GitHub Copilot Chat 확장 프로그램이 필요합니다. EGC는 스킬을 `~/.github/skills/`에 설치하며, Copilot이 자동으로 인식합니다. 동일한 메모리 상태가 Claude Code, Cursor, Gemini CLI, Windsurf 및 다른 EGC 타겟과 공유됩니다.
 
 ---
 
