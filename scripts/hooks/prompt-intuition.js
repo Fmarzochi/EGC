@@ -32,6 +32,7 @@ const {
 } = require('../lib/state-snapshot');
 
 const INTENT_TIMEOUT_MS = 6000;
+const ROUTE_TIMEOUT_MS = 8000;
 const MINE_TIMEOUT_MS = 15000;
 const MAX_REMEMBER_CHARS = 400;
 const MAX_INJECT_CHARS = 1600;
@@ -108,7 +109,17 @@ function run(inputOrRaw) {
 
   const detection = callGuardian(cli, ['intent'], prompt, INTENT_TIMEOUT_MS);
   const intent = detection?.intent;
-  if (!intent || intent === 'none') return { exitCode: 0, stdout: '' };
+  if (!intent || intent === 'none') {
+    const routing = callGuardian(cli, ['route'], prompt, ROUTE_TIMEOUT_MS);
+    if (!routing || (!routing.agents?.length && !routing.skills?.length)) {
+      return { exitCode: 0, stdout: '' };
+    }
+    const lines = ['=== EGC Routing ==='];
+    if (routing.agents?.length) lines.push(`Agents: ${routing.agents.join(', ')}`);
+    if (routing.skills?.length) lines.push(`Skills: ${routing.skills.join(', ')}`);
+    lines.push('===');
+    return { exitCode: 0, stdout: lines.join('\n') };
+  }
 
   const projectPath = input?.cwd || process.env.PWD || process.cwd();
   const transcriptPath = typeof input?.transcript_path === 'string' ? input.transcript_path : '';
