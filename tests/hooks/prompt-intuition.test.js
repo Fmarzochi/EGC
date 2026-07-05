@@ -70,10 +70,18 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  if (test('stays silent when intent is none', () => {
-    const result = runHook({ prompt: 'implement the oauth login feature' }, { FAKE_GUARDIAN_INTENT: 'none' });
+  if (test('stays silent when intent is none and route returns no matches', () => {
+    const result = runHook({ prompt: 'implement the oauth login feature' }, { FAKE_GUARDIAN_INTENT: 'none', FAKE_GUARDIAN_ROUTE: 'empty' });
     assert.strictEqual(result.code, 0);
     assert.strictEqual(result.stdout, '', `Expected silence, got: ${result.stdout}`);
+  })) passed++; else failed++;
+
+  if (test('injects routing context when intent is none and route matches', () => {
+    const result = runHook({ prompt: 'implement the oauth login feature' }, { FAKE_GUARDIAN_INTENT: 'none' });
+    assert.strictEqual(result.code, 0);
+    assert.ok(result.stdout.includes('=== EGC Routing ==='), `Expected routing block, got: ${result.stdout}`);
+    assert.ok(result.stdout.includes('Agents:'), `Expected agents line, got: ${result.stdout}`);
+    assert.ok(result.stdout.includes('Skills:'), `Expected skills line, got: ${result.stdout}`);
   })) passed++; else failed++;
 
   if (test('session_end saves the state snapshot before the AI responds', () => {
@@ -152,7 +160,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('never leaks the raw input JSON into context', () => {
-    const result = runHook({ prompt: 'short greeting here' }, { FAKE_GUARDIAN_INTENT: 'none' });
+    const result = runHook({ prompt: 'short greeting here' }, { FAKE_GUARDIAN_INTENT: 'none', FAKE_GUARDIAN_ROUTE: 'empty' });
     assert.ok(!result.stdout.includes('"prompt"'), `Raw input leaked: ${result.stdout}`);
   })) passed++; else failed++;
 
