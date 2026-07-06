@@ -140,6 +140,7 @@ async function runTests() {
       const sessionId = uid();
       store.upsertSession(makeSession({ id: sessionId, snapshot: bigSnapshot }));
       const { sessions } = store.listRecentSessions({ limit: 1 });
+      assert.ok(sessions[0], 'expected session at index 0');
       assert.ok(sessions[0].snapshot.workers.length === 500);
     } finally {
       store.close();
@@ -153,6 +154,7 @@ async function runTests() {
       store.upsertSession(makeSession({ repoRoot: null, snapshot: {} }));
       const { sessions } = store.listRecentSessions({ limit: 1 });
       assert.ok(sessions.length === 1);
+      assert.ok(sessions[0], 'expected session at index 0');
       assert.strictEqual(sessions[0].repoRoot, null);
     } finally {
       store.close();
@@ -166,6 +168,7 @@ async function runTests() {
       const longId = 'a'.repeat(1000);
       store.upsertSession(makeSession({ id: longId }));
       const { sessions } = store.listRecentSessions({ limit: 1 });
+      assert.ok(sessions[0], 'expected session at index 0');
       assert.strictEqual(sessions[0].id, longId);
     } finally {
       store.close();

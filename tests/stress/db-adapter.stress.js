@@ -120,6 +120,7 @@ async function runTests() {
       });
       tx();
       const rows = db.prepare('SELECT COUNT(*) as c FROM stress').get();
+      assert.ok(rows, 'SELECT COUNT returned no rows');
       assert.strictEqual(rows.c, 5000);
     } finally {
       db.close();
@@ -141,6 +142,7 @@ async function runTests() {
       try { badTx(); } catch (_) { /* expected */ }
 
       const rows = db.prepare('SELECT COUNT(*) as c FROM stable').get();
+      assert.ok(rows, 'SELECT COUNT returned no rows');
       assert.strictEqual(rows.c, 1, 'Rolled-back insert should not persist');
     } finally {
       db.close();
@@ -171,6 +173,8 @@ async function runTests() {
       db.prepare('INSERT INTO p VALUES (?, ?)').run([2, 'positional']);
       const rows = db.prepare('SELECT * FROM p ORDER BY a').all();
       assert.strictEqual(rows.length, 2);
+      assert.ok(rows[0], 'expected row at index 0');
+      assert.ok(rows[1], 'expected row at index 1');
       assert.strictEqual(rows[0].b, 'named');
       assert.strictEqual(rows[1].b, 'positional');
     } finally {
@@ -197,6 +201,7 @@ async function runTests() {
       const db2 = await openDatabase(dbPath);
       const count = db2.prepare('SELECT COUNT(*) as c FROM r').get();
       db2.close();
+      assert.ok(count, 'SELECT COUNT returned no rows');
       assert.strictEqual(count.c, 100);
     } finally {
       cleanup(tmpDir);
@@ -231,6 +236,7 @@ async function runTests() {
       // If it threw, the DB must still be usable (not corrupted).
       if (!outerThrew) {
         const rows = db.prepare('SELECT COUNT(*) as c FROM nest').get();
+        assert.ok(rows, 'SELECT COUNT returned no rows');
         assert.ok(rows.c >= 1, 'At least one row should be present on success');
       } else {
         // DB still usable after nested-tx failure
