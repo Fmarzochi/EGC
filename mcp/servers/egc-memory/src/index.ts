@@ -381,8 +381,11 @@ async function getDb(): Promise<Database> {
       await runMigrations(dbInstance, dbDir);
       return dbInstance;
     } catch (error) {
+      if (dbInstance) {
+        try { await dbInstance.close(); } catch { /* best-effort cleanup */ }
+        dbInstance = null;
+      }
       dbInitPromise = null;
-      dbInstance = null;
       throw error;
     }
   })();

@@ -522,15 +522,39 @@ function runCommand(cmd, options = {}) {
     return { success: false, output: 'runCommand blocked: shell metacharacters not allowed' };
   }
 
+  const argsRegex = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|([^\s]+)/g;
+  const args = [];
+  let match;
+  while ((match = argsRegex.exec(cmd)) !== null) {
+    if (match[1] !== undefined) {
+      args.push(match[1].replace(/\\(.)/g, '$1'));
+    } else if (match[2] !== undefined) {
+      args.push(match[2]);
+    } else if (match[3] !== undefined) {
+      args.push(match[3]);
+    }
+  }
+  const [prog, ...progArgs] = args;
+
+  const isWindows = process.platform === 'win32';
+  const spawnOptions = { ...options };
+  // Ensure shell is explicitly false unless we're running npx on Windows, where the shim requires it
+  spawnOptions.shell = isWindows && prog === 'npx';
+  spawnOptions.encoding = spawnOptions.encoding || 'utf8';
+  spawnOptions.stdio = spawnOptions.stdio || ['pipe', 'pipe', 'pipe'];
+
   try {
-    const result = execSync(cmd, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      ...options
-    });
-    return { success: true, output: result.trim() };
+    const { spawnSync } = require('child_process');
+    const result = spawnSync(prog, progArgs, spawnOptions);
+    if (result.error) {
+      return { success: false, output: result.error.message };
+    }
+    if (result.status !== 0) {
+      return { success: false, output: result.stderr || result.stdout || `Command failed with exit code ${result.status}` };
+    }
+    return { success: true, output: (result.stdout || '').trim() };
   } catch (err) {
-    return { success: false, output: err.stderr || err.message };
+    return { success: false, output: err.message };
   }
 }
 
