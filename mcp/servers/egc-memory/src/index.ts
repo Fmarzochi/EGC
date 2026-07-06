@@ -388,10 +388,18 @@ function getStateDir(): string {
 }
 
 function resolveProjectPath(provided?: string): string {
-  const raw = provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
-  if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
-    throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
+  if (provided) {
+    if (provided.indexOf('\0') !== -1) {
+      throw new Error(`project_path must not contain null bytes`);
+    }
+    let decoded = provided;
+    try { decoded = decodeURIComponent(provided); } catch (e) {}
+    const isBadSegment = (s: string) => s === '..' || /^[A-Za-z]:\.\.$/.test(s);
+    if (decoded.split(/[/\\]/).some(isBadSegment) || provided.split(/[/\\]/).some(isBadSegment)) {
+      throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
+    }
   }
+  const raw = provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
   return path.resolve(raw);
 }
 
