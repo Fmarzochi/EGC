@@ -404,12 +404,38 @@ function getStateDir(): string {
   return dir;
 }
 
+function isProtectedPath(p: string): boolean {
+  const home = os.homedir();
+  const denied = [
+    path.join(home, '.ssh'),
+    path.join(home, '.aws'),
+    path.join(home, '.config'),
+    path.join(home, '.cursor'),
+    path.join(home, '.claude'),
+    path.join(home, '.gemini')
+  ];
+  const normalizedP = path.resolve(p);
+  for (const d of denied) {
+    if (normalizedP === d || normalizedP.startsWith(d + path.sep)) return true;
+  }
+  return false;
+}
+
 function resolveProjectPath(provided?: string): string {
   const raw = provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
   if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
-  return path.resolve(raw);
+  let resolved = path.resolve(raw);
+  try {
+    resolved = fs.realpathSync(resolved);
+  } catch (_e) {
+    // path does not exist yet -- fallback to path.resolve() result
+  }
+  if (isProtectedPath(resolved)) {
+    throw new Error(`project_path is protected and cannot be used: ${resolved}`);
+  }
+  return resolved;
 }
 
 const H2_RE = /^## (.+)/;
