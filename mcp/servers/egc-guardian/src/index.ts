@@ -248,6 +248,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const rawPayloads: string[] = [];
         
         let totalBytesLoaded = 0;
+        const AGGREGATE_LIMIT = 50 * 1024 * 1024;
+        const PER_FILE_LIMIT = 10 * 1024 * 1024;
         for (const filepath of filepaths) {
            try {
              const resolved = path.resolve(filepath);
@@ -262,26 +264,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
                continue;
              }
-             
-             // SEC-05: Enforce byte-load limits
-             const stats = fs.statSync(realResolved);
-             const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-             const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
-             
-             if (stats.size > MAX_FILE_SIZE) {
-               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
-               continue;
+           try {
+             let fileHandle;
+             try {
+               fileHandle = await fs.promises.open(realResolved, 'r');
+               const stat = await fileHandle.stat();
+               const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+               const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+               
+               if (stat.size > MAX_FILE_SIZE) {
+                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stat.size} bytes)` });
+                 continue;
+               }
+               if (totalBytesLoaded + stat.size > MAX_TOTAL_SIZE) {
+                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
+                 continue;
+               }
+               const content = await fileHandle.readFile('utf-8');
+               // Split context into chunks/paragraphs to allow granular pruning
+               const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
+               rawPayloads.push(...chunks);
+               totalBytesLoaded += Buffer.byteLength(content, 'utf8');
+             } finally {
+               if (fileHandle) {
+                 await fileHandle.close();
+               }
              }
-             if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
-               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
-               continue;
-             }
-
-             const content = await fs.promises.readFile(realResolved, 'utf-8');
-             // Split context into chunks/paragraphs to allow granular pruning
-             const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
-             rawPayloads.push(...chunks);
-             totalBytesLoaded += Buffer.byteLength(content, 'utf8');
            } catch(e: unknown) {
              const reason = e instanceof Error ? e.message : String(e);
              auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
@@ -337,9 +345,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "orchestrate_task": {
-        const parsed = OrchestrateTaskSchema.parse(request.params.arguments);
-        const prompt = parsed.prompt;
-        const files: string[] = parsed.filepaths ?? [];
+        const parsedArgs = OrchestrateTaskSchema.parse(request.params.arguments);
+        const prompt = parsedArgs.prompt;
+        const agents = parsedArgs.agents;
+        const skills = parsedArgs.skills;
+        const files: string[] = parsedArgs.filepaths ?? [];
 
         // Read any provided file payloads
         const rawPayloads: string[] = [];
@@ -348,8 +358,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const abs = path.resolve(filePath);
             const realAbs = fs.realpathSync(abs);
             if (!isProtectedPath(realAbs)) rawPayloads.push(fs.readFileSync(realAbs, 'utf8'));
-          } catch (err) {
-            console.error(`[EGC guardian] Failed to read file ${filePath}:`, err);
+          } catch (e: unknown) {
+            const reason = e instanceof Error ? e.message : String(e);
+            console.warn(`[EGC guardian] Failed to read file ${filePath}: ${reason}`);
           }
         }
 
@@ -385,6 +396,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (!projectPath) {
           throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
+        }
+
+        let realProjectAbs;
+        try {
+          realProjectAbs = fs.realpathSync(path.resolve(projectPath));
+        } catch {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path resolution failed');
+        }
+
+        if (isProtectedPath(realProjectAbs)) {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path is protected');
         }
 
         const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
