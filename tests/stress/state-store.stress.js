@@ -141,6 +141,7 @@ async function runTests() {
       store.upsertSession(makeSession({ id: sessionId, snapshot: bigSnapshot }));
       const { sessions } = store.listRecentSessions({ limit: 1 });
       assert.ok(sessions[0], 'expected session at index 0');
+      assert.ok(sessions[0].snapshot, 'expected snapshot on session');
       assert.ok(sessions[0].snapshot.workers.length === 500);
     } finally {
       store.close();

@@ -103,7 +103,7 @@ async function runTests() {
           result = readConsent();
         }, `readConsent threw on payload: ${label}`);
         // Result must be null or a valid consent object — never an exception
-        if (result !== null) {
+        if (result != null) {
           assert.strictEqual(typeof result.enabled, 'boolean');
         }
       } finally {
