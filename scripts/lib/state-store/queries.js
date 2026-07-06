@@ -24,7 +24,12 @@ function parseJsonColumn(value, fallback) {
     return fallback;
   }
 
-  return JSON.parse(value);
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    console.warn(`[StateStore] Failed to parse JSON column: ${e.message}`);
+    return fallback;
+  }
 }
 
 function stringifyJson(value, label) {
