@@ -387,8 +387,9 @@ async function readStdinJson(options = {}) {
         settled = true;
         process.stdin.removeAllListeners('data');
         process.stdin.removeAllListeners('end');
-        process.stdin.removeAllListeners('error');
         if (process.stdin.unref) process.stdin.unref();
+        if (process.stdin.destroy) process.stdin.destroy();
+        process.stdin.removeAllListeners('error');
         // Resolve with whatever we have so far rather than hanging
         try {
           resolve(data.trim() ? JSON.parse(data) : {});

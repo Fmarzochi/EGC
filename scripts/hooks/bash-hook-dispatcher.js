@@ -151,6 +151,7 @@ function runHooks(rawInput, hooks) {
     } catch (error) {
       trace('hook:dispatch:error', { id: hook.id, error: error.message });
       stderr += `[Hook] ${hook.id} failed: ${error.message}\n`;
+      return { output: currentRaw, stderr, exitCode: 1 };
     }
   }
 
