@@ -264,6 +264,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
                continue;
              }
+             
+             // SEC-05: Enforce byte-load limits
+             const stats = fs.statSync(realResolved);
+             const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+             const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+             
+             if (stats.size > MAX_FILE_SIZE) {
+               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
+               continue;
+             }
+             if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
+               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
+               continue;
+             }
+
              const content = await fs.promises.readFile(realResolved, 'utf-8');
              // Split context into chunks/paragraphs to allow granular pruning
              const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
