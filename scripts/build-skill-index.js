@@ -70,4 +70,4 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
 `;
 
 fs.writeFileSync(outFile, out, 'utf8');
-console.log(`build-skill-index: ${entries.length} entries written to catalog-index.ts`);
+process.stderr.write(`build-skill-index: ${entries.length} entries written to catalog-index.ts\n`);
