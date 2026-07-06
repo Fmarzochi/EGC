@@ -40,7 +40,7 @@ async function test(name, fn) {
 }
 
 function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${Date.now()}-${crypto.randomBytes(16).toString('hex')}`;
 }
 
 function makeSession(overrides = {}) {
