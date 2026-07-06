@@ -255,7 +255,7 @@ async function runTests() {
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
-  if (await test('ping fires fetch with correct URL when consent is enabled', () => {
+  if (await test('ping fires fetch with correct URL when consent is enabled', async () => {
     const dir = createTempDir();
     try {
       const egcDir = path.join(dir, '.egc');
@@ -269,6 +269,8 @@ async function runTests() {
 
       const { ping } = loadTelemetry(dir);
       ping('/cli/install', 'EGC Install');
+
+      await Promise.resolve(); // flush microtask queue so ping()'s .then() fires
 
       global.fetch = origFetch;
       assert.ok(capturedUrl !== null, 'fetch should have been called');
