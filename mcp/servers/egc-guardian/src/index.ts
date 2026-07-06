@@ -267,6 +267,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
                continue;
              }
+             const stats = fs.statSync(realResolved);
+             if (!stats.isFile()) {
+               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
+               continue;
+             }
+             if (stats.size > 10 * 1024 * 1024) { // 10MB per file max
+               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'exceeds per-file 10MB limit' });
+               continue;
+             }
+             if (totalBytesLoaded + stats.size > 50 * 1024 * 1024) { // 50MB aggregate max
+               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'exceeds aggregate 50MB limit' });
+               continue;
+             }
              const content = await fs.promises.readFile(realResolved, 'utf-8');
              // Split context into chunks/paragraphs to allow granular pruning
              const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
@@ -374,6 +387,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (!projectPath) {
           throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
+        }
+        let realProjectPath: string;
+        try {
+          realProjectPath = fs.realpathSync(path.resolve(projectPath));
+        } catch {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path resolution failed');
+        }
+        if (isProtectedPath(realProjectPath)) {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
         }
 
         const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });

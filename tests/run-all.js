@@ -100,6 +100,9 @@ for (const testFile of testFiles) {
 
   if (result.status !== 0) {
     console.log(`✗ ${displayPath} exited with status ${result.status}`);
+    if (!combined.trim()) {
+      console.log(`  ⚠ Script crashed with no output. Counted as 1 unknown failure.`);
+    }
     totalFailed += failedMatch ? 0 : 1;
   }
 }
