@@ -523,15 +523,37 @@ function runCommand(cmd, options = {}) {
     return { success: false, output: 'runCommand blocked: shell metacharacters not allowed' };
   }
 
+  const argsRegex = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|([^\s]+)/g;
+  const args = [];
+  let match;
+  while ((match = argsRegex.exec(cmd)) !== null) {
+    if (match[1] !== undefined) {
+      args.push(match[1].replace(/\\(.)/g, '$1'));
+    } else if (match[2] !== undefined) {
+      args.push(match[2].replace(/\\(.)/g, '$1'));
+    } else if (match[3] !== undefined) {
+      args.push(match[3]);
+    }
+  }
+  const [prog, ...progArgs] = args;
+
   try {
-    const result = execSync(cmd, {
+    const { spawnSync } = require('child_process');
+    const result = spawnSync(prog, progArgs, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: false,
       ...options
     });
-    return { success: true, output: result.trim() };
+    if (result.error) {
+      return { success: false, output: result.error.message };
+    }
+    if (result.status !== 0) {
+      return { success: false, output: result.stderr || result.stdout || `Command failed with exit code ${result.status}` };
+    }
+    return { success: true, output: (result.stdout || '').trim() };
   } catch (err) {
-    return { success: false, output: err.stderr || err.message };
+    return { success: false, output: err.message };
   }
 }
 
