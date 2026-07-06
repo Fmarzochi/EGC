@@ -282,8 +282,8 @@ async function runTests() {
       // Temporarily mock console.error to check if it's called
       const originalConsoleError = console.error;
       let errorLogged = false;
-      console.error = (msg, err) => {
-        if (msg.includes('Failed to persist database')) errorLogged = true;
+      console.error = (msg, _err) => {
+        if (msg && typeof msg === 'string' && msg.includes('Failed to persist database')) errorLogged = true;
       };
       
       db2.exec('INSERT INTO ro VALUES (1)');
