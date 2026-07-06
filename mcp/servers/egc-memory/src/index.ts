@@ -7,7 +7,7 @@ import { open, Database } from 'sqlite';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
@@ -72,11 +72,8 @@ function resolveStateStoreDbPath(): string {
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
   const egcRoot = path.join(os.homedir(), '.egc');
-  try {
-    execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
-  } catch (_) {
-    // non-critical: folder works even if attribute fails
-  }
+  const attribPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'attrib.exe');
+  spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 
 function ensurePrivateDir(dirPath: string): void {
@@ -242,10 +239,12 @@ async function runMigrations(db: Database, dbDir: string) {
   try {
     log('INFO', 'Running SQLite migrations');
     await db.exec(`
+      BEGIN;
       CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);
       INSERT OR IGNORE INTO schema_migrations (version) VALUES (1);
       CREATE TABLE IF NOT EXISTS operational_state (id TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, context TEXT, decision TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
+      COMMIT;
     `);
 
     // Migration 2: FTS5 index over decisions for BM25 keyword search.

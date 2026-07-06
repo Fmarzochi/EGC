@@ -5,17 +5,14 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { llmRoute, keywordRoute } from './llm-router.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
   const egcRoot = path.join(os.homedir(), '.egc');
-  try {
-    execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
-  } catch (_) {
-    // non-critical: folder works even if attribute fails
-  }
+  const attribPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'attrib.exe');
+  spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';

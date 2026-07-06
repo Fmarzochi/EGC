@@ -263,7 +263,6 @@ function applyMigrations(db) {
       if (appliedVersions.has(migration.version)) {
         continue;
       }
-
       db.exec(migration.sql);
       insertMigration.run({
         version: migration.version,
