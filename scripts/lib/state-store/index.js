@@ -49,7 +49,11 @@ async function createStateStore(options = {}) {
     appliedMigrations = applyMigrations(db);
     queryApi = createQueryApi(db);
   } catch (err) {
-    db.close();
+    try {
+      db.close();
+    } catch (_) {
+      // ignore close errors to preserve original initialization error
+    }
     throw err;
   }
 
