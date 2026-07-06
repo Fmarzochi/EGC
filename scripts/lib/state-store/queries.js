@@ -24,7 +24,12 @@ function parseJsonColumn(value, fallback) {
     return fallback;
   }
 
-  return JSON.parse(value);
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.warn('[EGC] Failed to parse JSON column:', error.message);
+    return fallback;
+  }
 }
 
 function stringifyJson(value, label) {

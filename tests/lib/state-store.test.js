@@ -817,6 +817,26 @@ async function runTests() {
     }
   })) passed += 1; else failed += 1;
 
+  if (await test('handles invalid JSON in database gracefully via parseJsonColumn fallback', async () => {
+    const testDir = createTempDir('egc-state-invalid-json-');
+    const dbPath = path.join(testDir, 'state.db');
+    
+    try {
+      const store = await createStateStore({ dbPath });
+      
+      store._db.exec(`INSERT INTO sessions (id, adapter_id, harness, state, snapshot) VALUES ('bad-json-session', 'test', 'egc', 'idle', '{bad json}')`);
+      
+      const session = store.getSession('bad-json-session');
+      assert.strictEqual(session.id, 'bad-json-session');
+      assert.deepStrictEqual(session.snapshot, {});
+      assert.strictEqual(session.workerCount, 0);
+
+      store.close();
+    } finally {
+      cleanupTempDir(testDir);
+    }
+  })) passed += 1; else failed += 1;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
