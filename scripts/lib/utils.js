@@ -721,7 +721,9 @@ function trace(event, data = {}) {
     event,
     ...data
   });
-  fs.appendFileSync(forensicLog, payload + '\n', 'utf8');
+  fs.appendFile(forensicLog, payload + '\n', 'utf8', (err) => {
+    if (err) console.error('trace write failed:', err);
+  });
 }
 
 module.exports = {
