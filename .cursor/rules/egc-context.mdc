@@ -5,17 +5,14 @@ alwaysApply: true
 
 ## EGC Project Memory
 
-**Context:** EGC v1.1.7 bump em andamento. Docs atualizados, package.json e VERSION já em 1.1.7. Falta: commit + tag + push EGC, commit + push EGCSite, Discord cleanup + novo anuncio v1.1.7, Obsidian.
+**Context:** EGC v1.1.7 released and published to npm. @egchq/egc@1.1.7 is live as latest.
 
 **Active decisions:**
-- v1.1.7 bump autorizado por Felipe em 2026-07-06
-- CHANGELOG.md [Unreleased] renomeado para [1.1.7] - 2026-07-06
-- EGCSite: stats 13->14 tools, terminal demo atualizado, Guardian desc melhorada
-- Discord: Felipe quer APAGAR todos os anuncios antigos e recriar para v1.1.7
+- v1.1.7 is the last authorized bump -- no further bumps without explicit Felipe authorization
+- build-skill-index.js fixed: console.log -> process.stderr.write (PR #639, merged)
+- EGCSite updated: 14 tools, v1.1.7 badge, terminal demo, Guardian desc, fuentes71
+- Discord #announcements #changelog #roadmap all updated to v1.1.7
 
 **Next session:**
-- 1. Update EGCSite index.astro: v1.1.6 -> v1.1.7 no badge
-- 2. git add + commit no EGC (todos os docs + bump)
-- 3. git tag v1.1.7 e push EGC
-- 4. CI do GitHub Actions vai publicar npm automaticamente
-- 5. git add + commit + push EGCSite
+- No pending release tasks -- v1.1.7 is complete
+- Monitor npm publish and GitHub Release page for any issues
