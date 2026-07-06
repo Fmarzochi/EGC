@@ -121,8 +121,10 @@ class SqlJsDatabase {
     if (!this._db) return;
     try {
       this._persist();
+    } catch (_) {
+      // Ignore persist errors on close to prevent masking original errors
     } finally {
-      this._db.close();
+      try { this._db.close(); } catch (_) { /* ignore close errors */ }
       this._db = null;
     }
   }

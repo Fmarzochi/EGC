@@ -31,7 +31,8 @@ const SCHEMA_VERSION = 1;
 function readConsent() {
   try {
     const raw = fs.readFileSync(TELEMETRY_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
+    const cleanRaw = raw.codePointAt(0) === 0xFEFF ? raw.slice(1) : raw;
+    const parsed = JSON.parse(cleanRaw);
     if (typeof parsed.enabled === 'boolean') {
       return parsed;
     }
@@ -117,10 +118,14 @@ function ping(pagePath, title) {
 
   const url = `${GOATCOUNTER_URL}?${params.toString()}`;
 
-  fetch(url, {
-    method: 'GET',
-    headers: { 'User-Agent': userAgent },
-  }).catch(() => {});
+  try {
+    fetch(url, {
+      method: 'GET',
+      headers: { 'User-Agent': userAgent },
+    }).catch(() => {});
+  } catch (_) {
+    // Telemetry must never break the CLI — swallow all errors silently
+  }
 }
 
 module.exports = {

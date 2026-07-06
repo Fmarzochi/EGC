@@ -17,10 +17,11 @@ function cleanup(dir) {
 }
 
 function loadTelemetry(homeDir) {
-  const HOME_KEY = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
-  const orig = process.env[HOME_KEY];
-  process.env[HOME_KEY] = homeDir;
-  if (process.platform !== 'win32') process.env.USERPROFILE = homeDir;
+  const origHome = process.env.HOME;
+  const origUser = process.env.USERPROFILE;
+  
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
 
   Object.keys(require.cache).forEach((k) => {
     if (k.includes('telemetry')) delete require.cache[k];
@@ -28,7 +29,8 @@ function loadTelemetry(homeDir) {
 
   const mod = require('../../scripts/lib/telemetry');
 
-  process.env[HOME_KEY] = orig;
+  if (origHome !== undefined) process.env.HOME = origHome; else delete process.env.HOME;
+  if (origUser !== undefined) process.env.USERPROFILE = origUser; else delete process.env.USERPROFILE;
 
   return mod;
 }
