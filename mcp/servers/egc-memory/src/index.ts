@@ -358,22 +358,36 @@ async function runMigrations(db: Database, dbDir: string) {
   }
 }
 
+let dbInitPromise: Promise<Database> | null = null;
+
 async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
-  const dbDir = path.join(os.homedir(), '.egc', 'memory');
-  ensurePrivateDir(dbDir);
-  hideEgcRootOnWindows();
-  
-  const dbPath = path.join(dbDir, 'state.db');
-  dbInstance = await open({ filename: dbPath, driver: sqlite3.Database });
-  
-  await dbInstance.exec('PRAGMA journal_mode = WAL;');
-  await dbInstance.exec('PRAGMA synchronous = NORMAL;');
-  await dbInstance.exec('PRAGMA foreign_keys = ON;');
-  await dbInstance.exec('PRAGMA busy_timeout = 5000;'); // Native fallback
-  
-  await runMigrations(dbInstance, dbDir);
-  return dbInstance;
+  if (dbInitPromise) return dbInitPromise;
+
+  dbInitPromise = (async () => {
+    try {
+      const dbDir = path.join(os.homedir(), '.egc', 'memory');
+      ensurePrivateDir(dbDir);
+      hideEgcRootOnWindows();
+      
+      const dbPath = path.join(dbDir, 'state.db');
+      dbInstance = await open({ filename: dbPath, driver: sqlite3.Database });
+      
+      await dbInstance.exec('PRAGMA journal_mode = WAL;');
+      await dbInstance.exec('PRAGMA synchronous = NORMAL;');
+      await dbInstance.exec('PRAGMA foreign_keys = ON;');
+      await dbInstance.exec('PRAGMA busy_timeout = 5000;'); // Native fallback
+      
+      await runMigrations(dbInstance, dbDir);
+      return dbInstance;
+    } catch (error) {
+      dbInitPromise = null;
+      dbInstance = null;
+      throw error;
+    }
+  })();
+
+  return dbInitPromise;
 }
 
 const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" }, { capabilities: { tools: {} } });
