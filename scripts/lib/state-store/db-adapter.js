@@ -131,9 +131,14 @@ class SqlJsDatabase {
 
   _persist() {
     if (this._path === ':memory:') return;
-    const data = this._db.export();
-    fs.mkdirSync(path.dirname(this._path), { recursive: true });
-    fs.writeFileSync(this._path, Buffer.from(data));
+    try {
+      const data = this._db.export();
+      fs.mkdirSync(path.dirname(this._path), { recursive: true });
+      fs.writeFileSync(this._path, Buffer.from(data));
+    } catch (e) {
+      console.error(`[StateStoreDbAdapter] Failed to persist state to ${this._path}: ${e.message}`);
+      throw e;
+    }
   }
 }
 
