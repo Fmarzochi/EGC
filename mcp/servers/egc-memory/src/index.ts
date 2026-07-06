@@ -358,6 +358,11 @@ async function runMigrations(db: Database, dbDir: string) {
   }
 }
 
+// Note (BUG-08): The MCP memory server uses `~/.egc/memory/state.db` whereas
+// the standard harness state-store logic (resolveStateStoreDbPath) uses
+// `~/.egc/egc/state.db`. This is a known architectural divergence where
+// CLI/harness telemetry and MCP memory state are stored in separate SQLite DBs.
+// A doctor check in scripts/doctor.js warns when these databases diverge.
 async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
   const dbDir = path.join(os.homedir(), '.egc', 'memory');
