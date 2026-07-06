@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "egc",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "source": {
         "source": "local",
         "path": "../.."
