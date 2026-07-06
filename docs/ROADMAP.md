@@ -29,35 +29,42 @@ This document describes the planned development direction for EGC (Extended Glob
 - State consolidation pipeline on each `update_state` call (issue #143)
 - SessionStart hook runs idempotently across harness reinstalls
 
-## v1.1.3 -- v1.1.6: Stability (Released 2026-07)
+## v1.1.3 -- v1.1.6: Stability and Ecosystem (Released 2026-07)
 
 What shipped in the 1.1.x patch series:
 
 - EGC Dashboard: real-time mission control at `localhost:7890` with live tool calls, token usage, provider comparison, and session export to CSV/JSON
 - IDE hook emitters: Cursor, Kiro, OpenCode, CodeBuddy now emit events to the dashboard in real time
 - Guardian Protocol deployed to all install targets: `orchestrate_task`, `validate_command`, `validate_write`, `auto_learn` ship by default
-- Hook wiring fix: all four Claude Code hooks (SessionStart, Stop, UserPromptSubmit, PreToolUse) now correctly registered after `egc install`
-- Continue.dev MCP registration (#564)
-- Security batch: audit.log chmod 600, path traversal guard, scoped rate limiter, POST /event body cap, XSS escaping
-- Community translations: Korean, Russian (7 languages total)
+- Guardian enforcement fully harness-level: UserPromptSubmit + PreToolUse hooks wired, prompt routing active on every session (#633)
+- `egc replay`: session playback with timeline scrubbing (#618, @Maqbool61)
+- `egc budget`: per-session token and cost limits enforced at the PreToolUse hook (#610, @Kunall7890)
+- `egc plugin`: community plugin registry -- `egc plugin install <name>` (#611, @Kunall7890)
+- Team memory sync via git backend (#606, @Kunall7890)
+- Native Zed IDE integration -- `egc install --target zed` (#626, @Maqbool61)
+- AES-256-GCM encryption for state files at rest (#627, @Maqbool61)
+- HMAC-SHA256 integrity check on state files (#625, @Maqbool61)
+- Continue.dev native MCP registration (#564, @Maqbool61)
+- VS Code + GitHub Copilot installation guide in all 8 language READMEs (#631)
+- Security batch: audit.log chmod 600, path traversal guard, scoped rate limiter per project, POST /event body cap at 256 KB, XSS escaping
+- Community translations: Arabic, Hindi, Korean, Russian, Japanese, Spanish, Portuguese -- 8 languages total
 - 14 supported AI coding tools
 
-## v1.2.0: Ecosystem
+## v1.2.0: Teams
 
-Expand what EGC can do through community-driven features:
+Multi-developer workflows and shared context:
 
-- `egc replay`: session playback with timeline scrubbing -- review any past session event by event (#598)
-- Budget guardian: per-session token and cost limits enforced at the PreToolUse hook (#599)
-- Plugin registry: `egc plugin install <name>` -- community skill/agent packs via npm (#600)
-- Team memory: sync lessons and decisions across teammates via git or S3 (#601)
-- Native IDE integrations: Zed, Amp, or Windsurf (#602, good first issue)
-- Validated Windows install experience with documented troubleshooting
+- Shared state between team members (multi-user installations beyond git-backend team memory)
+- Organization-level installations and role-based context scoping
+- Cross-project memory federation
+- Stable MCP server API with versioned interfaces
+- `egc-guardian` and `egc-memory` promoted to GA with backward-compatibility guarantees
 
 ## v1.3.0: Growth
 
-- Plugin registry: community-published agent and skill packs installable via npm
-- Community translations: German, French, Japanese, Chinese Simplified, Italian, Turkish, Ukrainian, Malay
+- Community translations: German, French, Chinese Simplified, Italian, Turkish, Ukrainian, Malay
 - Per-project skill profiles and overrides
+- OSS-Fuzz integration for continuous fuzz testing
 
 ## v2.0.0: Teams
 

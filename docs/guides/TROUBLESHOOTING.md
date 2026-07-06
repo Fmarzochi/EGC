@@ -1,14 +1,14 @@
 # Troubleshooting
 
-Community-reported workarounds for current gemini Code bugs that can affect egc users.
+Community-reported workarounds for current Claude Code bugs that can affect egc users.
 
-These are upstream gemini Code behaviors, not egc bugs. The entries below summarize the production-tested workarounds collected in [issue #644](https://github.com/Fmarzochi/EGC-code/issues/644) on gemini Code `v2.1.79` (macOS, heavy hook usage, MCP connectors enabled). Treat them as pragmatic stopgaps until upstream fixes land.
+These are upstream Claude Code behaviors, not egc bugs. The entries below summarize the production-tested workarounds collected in [issue #644](https://github.com/Fmarzochi/EGC-code/issues/644) on Claude Code `v2.1.79` (macOS, heavy hook usage, MCP connectors enabled). Treat them as pragmatic stopgaps until upstream fixes land.
 
-## Community Workarounds For Open gemini Code Bugs
+## Community Workarounds For Open Claude Code Bugs
 
 ### False "Hook Error" labels on otherwise successful hooks
 
-**Symptoms:** Hook runs successfully, but gemini Code still shows `Hook Error` in the transcript.
+**Symptoms:** Hook runs successfully, but Claude Code still shows `Hook Error` in the transcript.
 
 **What helps:**
 
@@ -26,14 +26,14 @@ echo "[BLOCKED] Reason here" >&2
 exit 2
 ```
 
-### Earlier-than-expected compaction with `gemini_AUTOCOMPACT_PCT_OVERRIDE`
+### Earlier-than-expected compaction with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`
 
-**Symptoms:** Lowering `gemini_AUTOCOMPACT_PCT_OVERRIDE` causes compaction to happen sooner, not later.
+**Symptoms:** Lowering `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` causes compaction to happen sooner, not later.
 
 **What helps:**
 
-- On some current gemini Code builds, lower values may reduce the compaction threshold instead of extending it.
-- If you want more working room, remove `gemini_AUTOCOMPACT_PCT_OVERRIDE` and prefer manual `/compact` at logical task boundaries.
+- On some current Claude Code builds, lower values may reduce the compaction threshold instead of extending it.
+- If you want more working room, remove `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` and prefer manual `/compact` at logical task boundaries.
 - Use egc's `strategic-compact` guidance instead of forcing a lower auto-compact threshold.
 
 ### MCP connectors look connected but fail after compaction
@@ -43,7 +43,7 @@ exit 2
 **What helps:**
 
 - Toggle the affected connector off and back on after compaction.
-- If your gemini Code build supports it, add a `PostCompact` reminder hook that warns you to re-check connector auth after compaction.
+- If your Claude Code build supports it, add a `PostCompact` reminder hook that warns you to re-check connector auth after compaction.
 - Treat this as an auth-state recovery step, not a permanent fix.
 
 ### Hook edits do not hot-reload
@@ -52,18 +52,18 @@ exit 2
 
 **What helps:**
 
-- Restart the gemini Code session after changing hooks.
+- Restart the Claude Code session after changing hooks.
 - Advanced users sometimes script a local `/reload` command around `kill -HUP $PPID`, but egc does not ship that because it is shell-dependent and not universally reliable.
 
 ### Repeated `529 Overloaded` responses
 
-**Symptoms:** gemini Code starts failing under high hook/tool/context pressure.
+**Symptoms:** Claude Code starts failing under high hook/tool/context pressure.
 
 **What helps:**
 
 - Reduce tool-definition pressure with `ENABLE_TOOL_SEARCH=auto:5` if your setup supports it.
 - Lower `MAX_THINKING_TOKENS` for routine work.
-- Route subagent work to a cheaper model such as `gemini_CODE_SUBAGENT_MODEL=haiku` if your setup exposes that knob.
+- Route subagent work to a cheaper model such as `CLAUDE_CODE_SUBAGENT_MODEL=haiku` if your setup exposes that knob.
 - Disable unused MCP servers per project.
 - Compact manually at natural breakpoints instead of waiting for auto-compaction.
 

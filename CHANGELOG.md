@@ -2,18 +2,48 @@
 
 All notable changes to EGC are documented here.
 
-## [Unreleased]
-
-### New Features
-
-- **Guardian enforcement at the harness level**: every Bash command and every Write/Edit/MultiEdit target is validated by the egc-guardian validator through PreToolUse hooks before it executes. Destructive commands, protected paths, and forbidden git flags are blocked even inside compound commands or behind sudo/env wrappers; allowlist misses stay advisory so normal workflows keep working. A new UserPromptSubmit hook routes every prompt through the component catalog and injects recommended skills and agents into context (local keyword routing by default; set `EGC_ROUTING_LLM=1` for semantic LLM routing when a provider key is available). All guards fail open silently when the validator is unavailable, so a broken install never locks you out. (#568)
-- **`orchestrate_task` now performs real skill/agent/rule routing**: a build-time generator indexes the full component catalog (260 skills, 63 agents, 109 rules) and the guardian classifies each task prompt against it. With an `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY` (model configurable via `OPENROUTER_MODEL`) in the environment, routing is semantic via the corresponding LLM; without any key it falls back to a local keyword scorer and keeps working, adding a `routing_hint` that explains how to enable semantic routing. LLM responses are validated against the catalog so models cannot invent component names, and every provider call has a 5s timeout. (#566)
-- **Dashboard session export**: session data can now be exported as CSV or JSON directly from the EGC Dashboard. (#595)
+## [1.1.7] - 2026-07-06
 
 ### Bug Fixes
 
-- **`egc install` now wires all four Claude Code hooks correctly**: UserPromptSubmit (auto-intuition) and PreToolUse with Bash matcher (guardian enforcement) were never registered in `~/.claude/settings.json` for any user. All four hooks -- SessionStart, Stop, UserPromptSubmit, and PreToolUse -- are now installed and active after `egc install` or `egc repair`. (#596)
-- **codebuddy-adapter: hybrid debounce and extension filter for `fs.watch`**: the watcher now fires `pre_tool/running` immediately on the first event (leading edge) and coalesces rapid follow-ups, emitting `post_tool/success` only after 200 ms of silence (trailing edge). Also filters out temp files (`.tmp`, `.swp`, `.lock`, `.bak`, `.orig`) and restricts emissions to recognized log extensions (`.log`, `.jsonl`, `.json`, `.txt`). Closes #506. (by @Maqbool61)
+- **stress-tests: null guards in db-adapter**: `.get()` results are now checked before property access in all db-adapter stress test assertions. (#635)
+- **stress-tests: null guards in state-store and telemetry**: snapshot existence guard added before `.workers.length` access; `!= null` replaces `!== null` to cover `undefined` returns. (#636)
+- **telemetry: `ping()` refactored to `Promise.resolve().then().catch()`**: the previous `try/catch` wrapping a `fetch().catch()` was flagged by SonarCloud S4822 as redundant -- promise rejection is already handled by the inner `.catch()`. Ping now uses `Promise.resolve().then(() => fetch(...)).catch(() => {})` which also fixes a subtle timing issue in tests. (#637)
+- **Windows crash fix consolidated**: idempotent DB close, BOM-safe JSON parsing, `ping()` async fix, and graceful process exit from the Windows libuv crash patch are combined in one clean commit with co-authorship credited to @fuentes71. (#634)
+
+## [1.1.6] - 2026-07
+
+### New Features
+
+- **`egc replay`**: session playback with timeline scrubbing. Replay any past session event by event with full timeline control. Files added: `scripts/replay.js`, `dashboard/public/replay.html`. (#618, contributed by @Maqbool61)
+- **`egc budget`**: per-session token and cost limits enforced at the PreToolUse hook. Commands are blocked when the budget is exceeded. (#610, contributed by @Kunall7890)
+- **`egc plugin`**: community plugin registry. Install, list, remove, and update skills/agents/rules from npm or a local path: `egc plugin install <name>`. (#611, contributed by @Kunall7890)
+- **Team memory sync via git backend**: `egc-memory` now supports syncing lessons and decisions across teammates via a git remote. Context that was previously trapped in a single developer's local session is now shareable. (#606, contributed by @Kunall7890)
+- **Native Zed IDE integration**: `egc install --target zed` registers `egc-guardian` and `egc-memory` directly into `~/.config/zed/settings.json` under `context_servers`. Paths are resolved at install time. Closes #602. (#626, contributed by @Maqbool61)
+- **AES-256-GCM encryption for state files at rest**: every `.egc/state/` file is now encrypted. Key lives at `~/.egc/egc.key` (mode 0600, auto-generated). Transparent to all existing workflows -- `get_state` and `update_state` handle encryption/decryption automatically. Pure Node.js built-in crypto. Closes #579. (#627, contributed by @Maqbool61)
+- **HMAC-SHA256 integrity check on state files**: a per-user key at `~/.egc/integrity.key` (mode 0600) and a sidecar `.hmac` file are written alongside every state file. `get_state` verifies on read (warns on mismatch, never blocks). Closes #580. (#625, contributed by @Maqbool61)
+- **Guardian enforcement at the harness level**: every Bash command and every Write/Edit/MultiEdit target is validated by the egc-guardian validator through PreToolUse hooks before it executes. A new UserPromptSubmit hook (`prompt-router.js`) routes every prompt through the component catalog and injects recommended skills and agents into context. (#568, #633)
+- **`orchestrate_task` now performs real skill/agent/rule routing**: a build-time generator indexes the full component catalog and the guardian classifies each task prompt against it. LLM-based semantic routing available when a provider API key is set; falls back to local keyword scorer otherwise. (#566)
+- **Dashboard session export**: session data can now be exported as CSV or JSON directly from the EGC Dashboard. (#595, contributed by @Kunall7890)
+- **Continue.dev native MCP registration**: `egc install` auto-detects Continue.dev and registers `egc-guardian` and `egc-memory` via standalone YAML block files in `~/.continue/mcpServers/`. (#564, contributed by @Maqbool61)
+- **Community translations**: Korean (#518, @minus43), Russian (#543, @Vile93), Japanese (#614, @VIUK-XV), Arabic, Hindi, Portuguese, Spanish -- 8 languages total.
+- **VS Code + GitHub Copilot installation guide**: setup section added to all 8 language READMEs. (#631)
+
+### Security
+
+- **`egc-guardian` scoped rate limiter per project path**: prevents DoS via request flooding from a single project. (#544, contributed by @developmentwithparth1311)
+- **POST /event body capped at 256 KB**: prevents memory exhaustion from oversized event payloads. (#551, contributed by @developmentwithparth1311)
+- **Path traversal guard**: static file server in the dashboard is protected against `../` traversal attacks. (#537, contributed by @Vile93)
+- **`audit.log` chmod 600**: audit log file now created with restrictive permissions. (#534, contributed by @Maqbool61)
+- **Guard clause against missing `ide` field in `accumulateEvent`**: prevents silent telemetry state corruption. 8 regression tests added. (#536, contributed by @BlackPool25)
+
+### Bug Fixes
+
+- **`egc install` now wires all four Claude Code hooks correctly**: UserPromptSubmit (auto-intuition) and PreToolUse (guardian enforcement) were never registered in `~/.claude/settings.json`. All four hooks are now active after `egc install` or `egc repair`. (#596)
+- **codebuddy-adapter: hybrid debounce and extension filter**: fires immediately on first event, coalesces follow-ups with 200 ms trailing edge, filters temp files and restricts to recognized log extensions. Closes #506. (#562, contributed by @Maqbool61)
+- **VS Code Copilot log detection by modification time**: EGC now picks the newest Copilot log file by `mtimeMs` instead of the first match, fixing incorrect session attribution. (#565, contributed by @Vile93)
+- **`egc replay` strict CLI flag validation**: unrecognized flags now surface a clear error message. Closes #620. (#621, contributed by @developmentwithparth1311)
+- **`egc replay` JSON output streamed to stdout**: fixes SonarCloud S5145 log-injection finding; `--json` branch now writes to `process.stdout.write` directly. (#622)
 
 ## [1.1.5] - 2026-06-24
 

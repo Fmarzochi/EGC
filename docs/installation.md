@@ -30,6 +30,32 @@ Memory is shared across EGC targets. Context saved while using Copilot is the sa
 
 ---
 
+### Zed
+
+EGC registers `egc-guardian` and `egc-memory` directly into Zed's `context_servers` config. Paths are resolved at install time so it works regardless of how EGC was installed.
+
+```bash
+npm install -g @egchq/egc
+egc install --target zed
+```
+
+The installer writes to `~/.config/zed/settings.json` under the `context_servers` key. No manual JSON editing required.
+
+---
+
+### Continue.dev
+
+EGC registers both MCP servers as standalone YAML block files in `~/.continue/mcpServers/`. If you already have Continue.dev installed, re-run `egc install` to pick it up automatically.
+
+```bash
+npm install -g @egchq/egc
+egc install
+```
+
+No `--target` flag is needed -- Continue.dev is auto-detected during install.
+
+---
+
 ## Linux / macOS (from source)
 
 Not sure if you have Node.js 20? Run `node --version`. If it shows 20 or higher, you're ready.
