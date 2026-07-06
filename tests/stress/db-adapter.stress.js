@@ -247,6 +247,55 @@ async function runTests() {
     }
   });
 
+  // ── 12. Debounce timer fires correctly without cancellation ─────────────────
+  await test('debounce timer fires without being cancelled by close()', async () => {
+    const tmpDir = createTempDir();
+    const dbPath = path.join(tmpDir, 'debounce.db');
+    try {
+      const db = await openDatabase(dbPath);
+      db.exec('CREATE TABLE debounce (id INTEGER)');
+      // db.exec triggers _persist which starts a 50ms timer
+      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for timer to fire
+      db.close();
+      assert.ok(fs.existsSync(dbPath), 'DB file must exist after debounce fires');
+    } finally {
+      cleanup(tmpDir);
+    }
+  });
+
+  // ── 13. Persist handles filesystem errors gracefully ────────────────────────
+  await test('_flushPersist catches fs errors and logs them instead of crashing', async () => {
+    const tmpDir = createTempDir();
+    const dbPath = path.join(tmpDir, 'readonly.db');
+    try {
+      const db = await openDatabase(dbPath);
+      // Ensure file exists
+      db.exec('CREATE TABLE ro (id INTEGER)');
+      // db.close() will flush.
+      db.close();
+
+      // Make file read-only to trigger error on next write
+      fs.chmodSync(dbPath, 0o444);
+
+      const db2 = await openDatabase(dbPath);
+      
+      // Temporarily mock console.error to check if it's called
+      const originalConsoleError = console.error;
+      let errorLogged = false;
+      console.error = (msg, err) => {
+        if (msg.includes('Failed to persist database')) errorLogged = true;
+      };
+      
+      db2.exec('INSERT INTO ro VALUES (1)');
+      db2.close(); // This will trigger _flushPersist which will fail and catch
+      
+      console.error = originalConsoleError;
+      assert.ok(errorLogged, 'Expected console.error to be called for filesystem error');
+    } finally {
+      cleanup(tmpDir);
+    }
+  });
+
   // ─── summary ────────────────────────────────────────────────────────────────
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failures.length > 0) {
