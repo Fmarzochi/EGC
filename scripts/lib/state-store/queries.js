@@ -13,7 +13,7 @@ function normalizeLimit(value, fallback) {
 
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`Invalid limit: ${value}`);
+    return fallback;
   }
 
   return parsed;
@@ -1182,4 +1182,5 @@ module.exports = {
   DECAY_GRACE_DAYS,
   ARCHIVE_THRESHOLD,
   createQueryApi,
+  normalizeLimit,
 };
