@@ -39,25 +39,23 @@ EGC is a local runtime that gives every AI coding tool you use a persistent memo
 You open Claude Code on a project you haven't touched in two weeks. Without typing anything:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projects-MyApp.md
+State loaded from egc-memory via ~/.egc/state/MyApp.md
 
-Context and preferences acknowledged (terse responses).
+Context and preferences acknowledged.
 
-Ready to pick up the next items:
-• Test full install on a clean machine
-• Add GEMINI.md with session memory protocol
-• Publish v1.0.1 fix to npm after clean install test passes
-• Add mcp_server_count to audit.js
+Ready to pick up:
+• Fix the rate limiter edge case on concurrent requests
+• Add integration tests for the new auth module
+• Review open PR from @contributor before merging
 
 === EGC Stack Briefing ===
-Stack: typescript, javascript
-Stack agents: typescript-reviewer, javascript-reviewer
-Always use: code-reviewer
-Skill: coding-standards (cyclomatic complexity) - apply to all code written this session
+Stack: typescript, node
+Skills: tdd-workflow, coding-standards
+Agents: code-reviewer
 ===
 ```
 
-The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started - on its own, without you asking. You didn't type anything. You just started working.
+The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started, on its own, without you asking. You didn't type anything. You just started working.
 
 <div align="center">
   <img src="assets/egc-terminal.gif" alt="EGC demo" width="700" />

@@ -27,21 +27,19 @@ EGC é um runtime local que oferece memória persistente para cada ferramenta de
 Você abre o Claude Code em um projeto que não tocou há duas semanas. Sem digitar nada:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projects-MyApp.md
+State loaded from egc-memory via ~/.egc/state/MyApp.md
 
-Context and preferences acknowledged (terse responses).
+Context and preferences acknowledged.
 
-Ready to pick up the next items:
-• Test full install on a clean machine
-• Add GEMINI.md with session memory protocol
-• Publish v1.0.1 fix to npm after clean install test passes
-• Add mcp_server_count to audit.js
+Ready to pick up:
+• Fix the rate limiter edge case on concurrent requests
+• Add integration tests for the new auth module
+• Review open PR from @contributor before merging
 
 === EGC Stack Briefing ===
-Stack: typescript, javascript
-Stack agents: typescript-reviewer, javascript-reviewer
-Always use: code-reviewer
-Skill: coding-standards (cyclomatic complexity) - apply to all code written this session
+Stack: typescript, node
+Skills: tdd-workflow, coding-standards
+Agents: code-reviewer
 ===
 ```
 

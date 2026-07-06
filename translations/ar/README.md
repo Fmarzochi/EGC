@@ -37,15 +37,20 @@ EGC هو وقت تشغيل محلي يمنح كل أداة برمجة تعتمد
 تفتح Claude Code في مشروع لم تلمسه منذ أسبوعين. دون كتابة أي شيء:
 
 ```
-State loaded from egc-memory via ~/.egc/state/Projects--MyApp.md
+State loaded from egc-memory via ~/.egc/state/MyApp.md
 
-Context and preferences acknowledged (terse responses).
+Context and preferences acknowledged.
 
-Ready to pick up the next items:
-• Test full install on a clean machine
-• Add GEMINI.md with session memory protocol
-• Publish v1.0.1 fix to npm after clean install test passes
-• Add mcp_server_count to audit.js
+Ready to pick up:
+• Fix the rate limiter edge case on concurrent requests
+• Add integration tests for the new auth module
+• Review open PR from @contributor before merging
+
+=== EGC Stack Briefing ===
+Stack: typescript, node
+Skills: tdd-workflow, coding-standards
+Agents: code-reviewer
+===
 ```
 
 يعرف الذكاء الاصطناعي بالفعل ما كنت تبنيه، والقرارات التي اتخذتها، وما فشل، وأين توقفت بالضبط. إنه يعرف لأن EGC حفظ تلك الحالة في نهاية جلستك الأخيرة وقام بتحميلها مرة أخرى عندما بدأت هذه الجلسة. لم تكتب أي شيء. لقد بدأت العمل فحسب.
