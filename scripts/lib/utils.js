@@ -226,7 +226,7 @@ function getTimeString() {
  * Get the git repository name
  */
 function getGitRepoName() {
-  const result = runCommand('git rev-parse --show-toplevel');
+  const result = runCommand('git', ['rev-parse', '--show-toplevel']);
   if (!result.success) return null;
   return path.basename(result.output);
 }
@@ -504,33 +504,38 @@ function commandExists(cmd) {
  * trusted, hardcoded commands. Never pass user-controlled input directly.
  * For user input, use spawnSync with argument arrays instead.
  *
- * @param {string} cmd - Command to execute (should be trusted/hardcoded)
- * @param {object} options - execSync options
+ * @param {string} program - The trusted program to execute (e.g. 'git', 'node')
+ * @param {string[]} args - Array of string arguments
+ * @param {object} options - spawnSync options
  */
-function runCommand(cmd, options = {}) {
+function runCommand(program, args = [], options = {}) {
   // Allowlist: only permit known-safe command prefixes
-  const allowedPrefixes = ['git ', 'node ', 'npx ', 'which ', 'where '];
-  if (!allowedPrefixes.some(prefix => cmd.startsWith(prefix))) {
-    return { success: false, output: 'runCommand blocked: unrecognized command prefix' };
+  const allowedPrograms = ['git', 'node', 'npx', 'which', 'where'];
+  if (!allowedPrograms.includes(program)) {
+    return { success: false, output: 'runCommand blocked: unrecognized program' };
   }
 
-  // Reject shell metacharacters. $() and backticks are evaluated inside
-  // double quotes, so block $ and ` anywhere in cmd. Other operators
-  // (;|&) are literal inside quotes, so only check unquoted portions.
-  const unquoted = cmd.replace(/"[^"]*"/g, '').replace(/'[^']*'/g, '');
-  if (/[;|&\n\r<>()]/.test(unquoted) || /[`$]/.test(cmd)) {
-    return { success: false, output: 'runCommand blocked: shell metacharacters not allowed' };
-  }
+  const isWindows = process.platform === 'win32';
 
   try {
-    const result = execSync(cmd, {
+    const result = spawnSync(program, args, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: isWindows && program === 'npx',
       ...options
     });
-    return { success: true, output: result.trim() };
+    
+    if (result.error) {
+      return { success: false, output: result.error.message };
+    }
+    
+    if (result.status !== 0) {
+      return { success: false, output: result.stderr || `Command failed with status ${result.status}` };
+    }
+
+    return { success: true, output: (result.stdout || '').trim() };
   } catch (err) {
-    return { success: false, output: err.stderr || err.message };
+    return { success: false, output: err.message };
   }
 }
 
@@ -538,7 +543,7 @@ function runCommand(cmd, options = {}) {
  * Check if current directory is a git repository
  */
 function isGitRepo() {
-  return runCommand('git rev-parse --git-dir').success;
+  return runCommand('git', ['rev-parse', '--git-dir']).success;
 }
 
 /**
@@ -550,7 +555,7 @@ function isGitRepo() {
 function getGitModifiedFiles(patterns = []) {
   if (!isGitRepo()) return [];
 
-  const result = runCommand('git diff --name-only HEAD');
+  const result = runCommand('git', ['diff', '--name-only', 'HEAD']);
   if (!result.success) return [];
 
   let files = result.output.split('\n').filter(Boolean);

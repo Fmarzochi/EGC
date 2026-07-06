@@ -3,7 +3,7 @@
  * Works on Windows, macOS, and Linux.
  */
 
-import type { ExecSyncOptions } from 'child_process';
+import type { SpawnSyncOptions } from 'child_process';
 
 // Platform detection
 export const isWindows: boolean;
@@ -181,10 +181,11 @@ export interface CommandResult {
 
 /**
  * Run a shell command and return the output.
- * SECURITY: Only use with trusted, hardcoded commands.
+ * SECURITY: Only use with trusted, hardcoded programs.
  * Never pass user-controlled input directly.
+ * For user input, use spawnSync with argument arrays instead.
  */
-export function runCommand(cmd: string, options?: ExecSyncOptions): CommandResult;
+export function runCommand(program: string, args?: string[], options?: SpawnSyncOptions): CommandResult;
 
 /** Check if the current directory is inside a git repository */
 export function isGitRepo(): boolean;
