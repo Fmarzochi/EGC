@@ -118,14 +118,12 @@ function ping(pagePath, title) {
 
   const url = `${GOATCOUNTER_URL}?${params.toString()}`;
 
-  try {
-    fetch(url, {
+  Promise.resolve()
+    .then(() => fetch(url, {
       method: 'GET',
       headers: { 'User-Agent': userAgent },
-    }).catch(() => {});
-  } catch (_) {
-    // Telemetry must never break the CLI — swallow all errors silently
-  }
+    }))
+    .catch(() => {});
 }
 
 module.exports = {
