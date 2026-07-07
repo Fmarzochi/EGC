@@ -62,6 +62,11 @@ async function createStateStore(options = {}) {
     close() {
       db.close();
     },
+    async flush() {
+      if (db.flush) {
+        await db.flush();
+      }
+    },
     getAppliedMigrations() {
       return getAppliedMigrations(db);
     },

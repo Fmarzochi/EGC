@@ -71,6 +71,7 @@ class SqlJsDatabase {
     this._supportsWal = false;
     this._db = new sqlJs.Database(fileData || null);
     this._persistTimeout = null;
+    this._initialPersistDone = false;
   }
 
   pragma(str) {
@@ -136,6 +137,11 @@ class SqlJsDatabase {
 
   _persist() {
     if (this._path === ':memory:') return;
+    if (!this._initialPersistDone) {
+      this._initialPersistDone = true;
+      this._flushPersist();
+      return;
+    }
     if (this._persistTimeout) {
       clearTimeout(this._persistTimeout);
     }
@@ -152,8 +158,16 @@ class SqlJsDatabase {
       fs.mkdirSync(path.dirname(this._path), { recursive: true });
       fs.writeFileSync(this._path, Buffer.from(data));
     } catch (error) {
-      console.error('[EGC] Failed to persist database:', error.message);
+      throw error;
     }
+  }
+
+  async flush() {
+    if (this._persistTimeout) {
+      clearTimeout(this._persistTimeout);
+      this._persistTimeout = null;
+    }
+    this._flushPersist();
   }
 }
 
