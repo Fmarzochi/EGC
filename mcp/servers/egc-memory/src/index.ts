@@ -1335,11 +1335,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (error instanceof z.ZodError) {
       throw new McpError(ErrorCode.InvalidParams, `Invalid arguments: ${error.message}`);
     }
+    log('ERROR', 'Tool execution failed', { tool: request.params.name, error: String(error) });
     if (error instanceof Error && error.message.includes('SQLITE_FULL')) {
-      log('ERROR', 'Tool execution failed', { tool: request.params.name, error: String(error) });
       throw new McpError(ErrorCode.InternalError, `Database disk image is full: ${error.message}`);
     }
-    log('ERROR', 'Tool execution failed', { tool: request.params.name, error: String(error) });
     throw error;
   }
 });
