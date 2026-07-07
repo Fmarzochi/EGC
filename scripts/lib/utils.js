@@ -528,7 +528,7 @@ function runCommand(cmd, options = {}) {
   let match;
   while ((match = argsRegex.exec(cmd)) !== null) {
     if (match[1] !== undefined) {
-      args.push(match[1].replace(/\\(.)/g, '$1'));
+      args.push(match[1].replace(/\\(["\\])/g, '$1'));
     } else if (match[2] !== undefined) {
       args.push(match[2].replace(/\\(.)/g, '$1'));
     } else if (match[3] !== undefined) {
