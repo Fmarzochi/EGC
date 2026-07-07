@@ -150,6 +150,11 @@ class SQLiteArbitrationQueue {
   }
 
   private async processNext() {
+    // SINGLE-THREADED INVARIANT:
+    // In Node.js, async functions run to the first await synchronously.
+    // This synchronous execution until the first await guarantees that
+    // checking and setting this.isProcessing is atomic and free of race conditions.
+    // This makes it safe even under concurrent SQLITE_BUSY retries.
     if (this.isProcessing || this.queue.length === 0) return;
     this.isProcessing = true;
 
