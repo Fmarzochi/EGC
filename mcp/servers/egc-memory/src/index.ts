@@ -427,10 +427,8 @@ function resolveProjectPath(provided?: string): string {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
   let resolved = path.resolve(raw);
-  try {
+  if (fs.existsSync(resolved)) {
     resolved = fs.realpathSync(resolved);
-  } catch (_e) {
-    // path does not exist yet -- fallback to path.resolve() result
   }
   if (isProtectedPath(resolved)) {
     throw new Error(`project_path is protected and cannot be used: ${resolved}`);
