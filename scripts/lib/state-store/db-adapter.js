@@ -153,13 +153,9 @@ class SqlJsDatabase {
 
   _flushPersist() {
     if (this._path === ':memory:' || !this._db) return;
-    try {
-      const data = this._db.export();
-      fs.mkdirSync(path.dirname(this._path), { recursive: true });
-      fs.writeFileSync(this._path, Buffer.from(data));
-    } catch (error) {
-      throw error;
-    }
+    const data = this._db.export();
+    fs.mkdirSync(path.dirname(this._path), { recursive: true });
+    fs.writeFileSync(this._path, Buffer.from(data));
   }
 
   async flush() {
