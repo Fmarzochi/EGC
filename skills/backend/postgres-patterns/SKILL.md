@@ -1,6 +1,6 @@
 ---
 name: postgres-patterns
-description: PostgreSQL database patterns for query optimization, schema design, indexing, and security. Based on Supabase best practices.
+description: PostgreSQL database patterns for query optimization, schema design, indexing, and security.
 origin: EGC
 ---
 
@@ -142,6 +142,3 @@ SELECT pg_reload_conf();
 - Skill: `clickhouse-io` - ClickHouse analytics patterns
 - Skill: `backend-patterns` - API and backend patterns
 
----
-
-*Based on Supabase Agent Skills (credit: Supabase team) (MIT License)*

@@ -3,10 +3,9 @@ name: postgres-patterns
 description: >
   PostgreSQL database patterns for query optimization, schema design, indexing,
   and security. Quick reference for common patterns, index types, data types,
-  and anti-pattern detection. Based on Supabase best practices.
+  and anti-pattern detection.
 metadata:
   origin: EGC
-  credit: Supabase team (MIT License)
 ---
 
 # PostgreSQL Patterns
@@ -156,6 +155,3 @@ SELECT pg_reload_conf();
 - Troubleshooting database issues
 - Setting up PostgreSQL configuration
 
----
-
-*Based on Supabase Agent Skills (credit: Supabase team) (MIT License)*

@@ -168,7 +168,7 @@
       }
     },
     "database-reviewer": {
-      "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Incorporates Supabase best practices.",
+      "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/database-reviewer.txt}",

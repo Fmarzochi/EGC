@@ -7,8 +7,6 @@ tools: Read, Write, Edit, Bash, Grep, Glob, Task
 
 # GAN-Style Harness Skill
 
-> Inspired by [Anthropic's Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps) (March 24, 2026)
-
 A multi-agent harness that separates **generation** from **evaluation**, creating an adversarial feedback loop that drives quality far beyond what a single agent can achieve.
 
 ## Core Insight
@@ -270,9 +268,3 @@ Based on Anthropic's published results:
 
 **The tradeoff is clear:** ~20x more time and cost for a qualitative leap in output quality. This is for projects where quality matters.
 
-## References
-
-- [Anthropic: Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps): Original paper by Prithvi Rajasekaran
-- [Epsilla: The GAN-Style Agent Loop](https://www.epsilla.com/blogs/anthropic-harness-engineering-multi-agent-gan-architecture): Architecture deconstruction
-- [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html): Broader industry context
-- [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/): OpenAI's parallel work

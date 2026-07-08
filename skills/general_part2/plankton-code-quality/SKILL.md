@@ -6,7 +6,7 @@ origin: community
 
 # Plankton Code Quality Skill
 
-Integration reference for Plankton (credit: @alxfazio), a write-time code quality enforcement system for Gemini Code. Plankton runs formatters and linters on every file edit via PostToolUse hooks, then spawns Gemini subprocesses to fix violations the agent didn't catch.
+Integration reference for Plankton, a write-time code quality enforcement system for Gemini Code. Plankton runs formatters and linters on every file edit via PostToolUse hooks, then spawns Gemini subprocesses to fix violations the agent didn't catch.
 
 ## When to Use
 
@@ -185,12 +185,6 @@ Plankton's `.gemini/hooks/config.json` controls all behavior:
 | `HOOK_SUBPROCESS_TIMEOUT=N` | Override tier timeout |
 | `HOOK_DEBUG_MODEL=1` | Log model selection decisions |
 | `HOOK_SKIP_PM=1` | Bypass package manager enforcement |
-
-## References
-
-- Plankton (credit: @alxfazio)
-- Plankton REFERENCE.md: Full architecture documentation (credit: @alxfazio)
-- Plankton SETUP.md: Detailed installation guide (credit: @alxfazio)
 
 ## EGC v1.8 Additions
 
