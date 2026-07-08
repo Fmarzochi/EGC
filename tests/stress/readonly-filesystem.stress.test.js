@@ -50,12 +50,15 @@ async function test(name, fn) {
     // Make the file read-only to simulate read-only filesystem
     fs.chmodSync(dbPath, 0o444);
     
+    const originalConsoleError = console.error;
+    console.error = () => {}; // silence expected error logs
     try {
       store.upsertSession({ ...validSession, snapshot: { foo: 'baz' } });
       assert.fail('upsertSession should have thrown an Error');
     } catch (err) {
       assert.ok(err.code === 'EPERM' || err.code === 'EACCES' || err.message.includes('readonly'), `Expected EPERM or EACCES, got: ${err.code || err.message}`);
     } finally {
+      console.error = originalConsoleError;
       // Restore permissions so we can clean up
       try { fs.chmodSync(dbPath, 0o666); } catch (_e) { /* ignore */ }
       try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_e) { /* ignore */ }

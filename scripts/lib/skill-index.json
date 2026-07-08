@@ -47,13 +47,13 @@
     },
     {
       "kind": "skill",
-      "name": "continuous-learning-v2",
-      "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination."
+      "name": "observer",
+      "description": "Background agent that analyzes session observations to detect patterns and create instincts. Uses Haiku for cost-efficiency. v2.1 adds project-scoped instincts."
     },
     {
       "kind": "skill",
-      "name": "observer",
-      "description": "Background agent that analyzes session observations to detect patterns and create instincts. Uses Haiku for cost-efficiency. v2.1 adds project-scoped instincts."
+      "name": "continuous-learning-v2",
+      "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination."
     },
     {
       "kind": "skill",
@@ -167,11 +167,6 @@
     },
     {
       "kind": "skill",
-      "name": "lead-intelligence",
-      "description": "AI-native lead intelligence and outreach pipeline. Replaces Apollo, Clay, and ZoomInfo with agent-powered signal scoring, mutual ranking, warm path discovery, source-derived voice modeling, and channel-specific outreach across email, LinkedIn, and X. Use when the user wants to find, qualify, and reach high-value contacts."
-    },
-    {
-      "kind": "skill",
       "name": "enrichment-agent",
       "description": "Pulls detailed profile, company, and activity data for qualified leads. Enriches prospects with recent news, funding data, content interests, and mutual overlap."
     },
@@ -189,6 +184,11 @@
       "kind": "skill",
       "name": "signal-scorer",
       "description": "Searches and ranks prospects by relevance signals across X, Exa, and LinkedIn. Assigns weighted scores based on role, industry, activity, influence, and location."
+    },
+    {
+      "kind": "skill",
+      "name": "lead-intelligence",
+      "description": "AI-native lead intelligence and outreach pipeline. Replaces Apollo, Clay, and ZoomInfo with agent-powered signal scoring, mutual ranking, warm path discovery, source-derived voice modeling, and channel-specific outreach across email, LinkedIn, and X. Use when the user wants to find, qualify, and reach high-value contacts."
     },
     {
       "kind": "skill",
@@ -572,11 +572,6 @@
     },
     {
       "kind": "skill",
-      "name": "remotion-video-creation",
-      "description": "Best practices for Remotion - Video creation in React. 29 domain-specific rules covering 3D, animations, audio, captions, charts, transitions, and more."
-    },
-    {
-      "kind": "skill",
       "name": "3d",
       "description": "3D content in Remotion using Three.js and React Three Fiber."
     },
@@ -714,6 +709,11 @@
       "kind": "skill",
       "name": "videos",
       "description": "Embedding videos in Remotion - trimming, volume, speed, looping, pitch"
+    },
+    {
+      "kind": "skill",
+      "name": "remotion-video-creation",
+      "description": "Best practices for Remotion - Video creation in React. 29 domain-specific rules covering 3D, animations, audio, captions, charts, transitions, and more."
     },
     {
       "kind": "skill",
