@@ -308,7 +308,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "postgres-patterns",
-    "description": "PostgreSQL database patterns for query optimization, schema design, indexing, and security. Based on Supabase best practices."
+    "description": "PostgreSQL database patterns for query optimization, schema design, indexing, and security."
   },
   {
     "kind": "skill",
@@ -1373,7 +1373,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "agent",
     "name": "database-reviewer",
-    "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance. Incorporates Supabase best practices."
+    "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance."
   },
   {
     "kind": "agent",
