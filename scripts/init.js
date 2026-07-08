@@ -156,6 +156,39 @@ function runStateDbBootstrap() {
   if (output) console.log('  ' + output.split('\n').join('\n  '));
 }
 
+/**
+ * Recorded-content repair restores files but never rewrites the recorded
+ * module resolution, so a resolution-drift finding survives `egc repair`
+ * forever. Reapply the manifest install for the affected targets instead.
+ */
+function reconcileResolutionDrift() {
+  let plans;
+  try {
+    const { buildDoctorReport } = require('./lib/install-lifecycle');
+    const { planDriftReinstalls } = require('./lib/init-remediation');
+    plans = planDriftReinstalls(buildDoctorReport({ repoRoot: ROOT_DIR }));
+  } catch (error) {
+    warn('drift reconciliation skipped', error.message);
+    return;
+  }
+
+  const applyScript = path.join(ROOT_DIR, 'scripts', 'install-apply.js');
+  for (const plan of plans) {
+    log(`\n  reapplying manifest install for ${plan.adapterId} (resolution drift)...`);
+    const result = spawnSync(
+      process.execPath,
+      [applyScript, ...plan.args, '--json'],
+      { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }
+    );
+    if (result.status === 0) {
+      ok(plan.adapterId, 'reinstalled from current manifests');
+    } else {
+      const stderrText = (result.stderr || '').trim();
+      warn(plan.adapterId, stderrText.split('\n').pop() || 'install-apply failed');
+    }
+  }
+}
+
 function runDoctor() {
   const doctorScript = path.join(ROOT_DIR, 'scripts', 'doctor.js');
   log(`\n${c.dim}  running egc doctor for final validation...${c.reset}`);
@@ -164,10 +197,20 @@ function runDoctor() {
     return;
   }
   const doctorResult = spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
-  if (doctorResult.status !== 0) {
-    const repairScript = path.join(ROOT_DIR, 'scripts', 'repair.js');
-    log(`\n  auto-repairing drift detected by doctor...`);
-    spawnSync(process.execPath, [repairScript], { stdio: 'inherit' });
+  if (doctorResult.status === 0) {
+    return;
+  }
+
+  reconcileResolutionDrift();
+
+  const repairScript = path.join(ROOT_DIR, 'scripts', 'repair.js');
+  log(`\n  auto-repairing drift detected by doctor...`);
+  spawnSync(process.execPath, [repairScript], { stdio: 'inherit' });
+
+  log(`\n${c.dim}  re-running egc doctor to confirm...${c.reset}`);
+  const verifyResult = spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
+  if (verifyResult.status !== 0) {
+    warn('doctor still reports issues', 'run `egc doctor` for details');
   }
 }
 

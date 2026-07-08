@@ -51,8 +51,8 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  if (test('injects routing context for a task-shaped prompt', () => {
-    const result = runHook('review this typescript pull request for security issues');
+  if (test('keyword mode injects routing context for a task-shaped prompt', () => {
+    const result = runHook('review this typescript pull request for security issues', { EGC_ROUTING_MODE: 'keyword' });
     assert.strictEqual(result.code, 0, `Expected exit 0, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('=== EGC Routing ==='), `Expected routing header, got: ${result.stdout}`);
     assert.ok(result.stdout.includes('Skills: security-review'), `Expected skills line, got: ${result.stdout}`);
@@ -69,16 +69,70 @@ function runTests() {
     assert.ok(!result.stdout.includes('"prompt"'), `Raw input leaked into stdout: ${result.stdout}`);
   })) passed++; else failed++;
 
-  if (test('stays silent when the router crashes', () => {
+  if (test('keyword mode stays silent when the router crashes', () => {
     const brokenCli = path.join(os.tmpdir(), `egc-broken-cli-${Date.now()}.js`);
     fs.writeFileSync(brokenCli, 'process.exit(1);\n');
     try {
-      const result = runHook('review this typescript pull request for security issues', { EGC_GUARDIAN_CLI: brokenCli });
+      const result = runHook('review this typescript pull request for security issues', {
+        EGC_ROUTING_MODE: 'keyword',
+        EGC_GUARDIAN_CLI: brokenCli,
+      });
       assert.strictEqual(result.code, 0, 'Expected exit 0 on router crash');
       assert.strictEqual(result.stdout, '', `Expected empty stdout, got: ${result.stdout}`);
     } finally {
       try { fs.rmSync(brokenCli, { force: true }); } catch { /* best-effort cleanup */ }
     }
+  })) passed++; else failed++;
+
+  if (test('catalog mode lists candidates from the skill index for the model to pick', () => {
+    const indexFile = path.join(os.tmpdir(), `egc-skill-index-${Date.now()}.json`);
+    fs.writeFileSync(indexFile, JSON.stringify({
+      entries: [
+        { kind: 'skill', name: 'security-review-fixture', description: 'Security review of pull request changes' },
+        { kind: 'skill', name: 'baking-recipes', description: 'Sourdough bread hydration tables' },
+        { kind: 'agent', name: 'security-reviewer-fixture', description: 'Reviews security sensitive typescript code' },
+      ],
+    }));
+    try {
+      const result = runHook('review this typescript pull request for security issues', {
+        [`EGC_SKILL_INDEX_PATH`]: indexFile,
+      });
+      assert.strictEqual(result.code, 0, `Expected exit 0, got stderr: ${result.stderr}`);
+      assert.ok(result.stdout.includes('=== EGC Catalog (in-session routing) ==='), `Expected catalog header, got: ${result.stdout}`);
+      assert.ok(result.stdout.includes('security-review-fixture'), `Expected matching skill, got: ${result.stdout}`);
+      assert.ok(result.stdout.includes('security-reviewer-fixture'), `Expected matching agent, got: ${result.stdout}`);
+      assert.ok(!result.stdout.includes('baking-recipes'), `Unrelated skill leaked in: ${result.stdout}`);
+      assert.ok(result.stdout.includes('If none fit, proceed without them.'), `Expected opt-out line, got: ${result.stdout}`);
+    } finally {
+      try { fs.rmSync(indexFile, { force: true }); } catch { /* best-effort cleanup */ }
+    }
+  })) passed++; else failed++;
+
+  if (test('catalog mode stays silent when nothing in the index matches', () => {
+    const indexFile = path.join(os.tmpdir(), `egc-skill-index-${Date.now()}.json`);
+    fs.writeFileSync(indexFile, JSON.stringify({
+      entries: [
+        { kind: 'skill', name: 'baking-recipes', description: 'Sourdough bread hydration tables' },
+      ],
+    }));
+    try {
+      const result = runHook('zzz qqq xxx unmatched wording here', {
+        [`EGC_SKILL_INDEX_PATH`]: indexFile,
+      });
+      assert.strictEqual(result.code, 0, 'Expected exit 0');
+      assert.strictEqual(result.stdout, '', `Expected empty stdout, got: ${result.stdout}`);
+    } finally {
+      try { fs.rmSync(indexFile, { force: true }); } catch { /* best-effort cleanup */ }
+    }
+  })) passed++; else failed++;
+
+  if (test('catalog mode falls back to keyword routing when the index is missing', () => {
+    const result = runHook('review this typescript pull request for security issues', {
+      [`EGC_SKILL_INDEX_PATH`]: path.join(os.tmpdir(), 'egc-missing-index.json'),
+      EGC_ROUTER_DISABLE_BUNDLED_INDEX: '1',
+    });
+    assert.strictEqual(result.code, 0, `Expected exit 0, got stderr: ${result.stderr}`);
+    assert.ok(result.stdout.includes('=== EGC Routing ==='), `Expected keyword fallback, got: ${result.stdout}`);
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

@@ -10,19 +10,22 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-let propagateStateContent = null;
-try {
-  propagateStateContent = require('../lib/propagate-state').propagateStateContent;
-} catch (_) {
-  // Lib not installed yet; run `egc repair` to restore it.
+// Optional libs: minimal installations may lack them, so a failed require
+// resolves to null and the dependent feature is skipped instead of failing
+// session startup. Run `egc repair` to restore missing libs.
+function tryRequire(modulePath) {
+  try {
+    return require(modulePath);
+  } catch {
+    return null;
+  }
 }
 
-let projectDetect = null;
-try {
-  projectDetect = require('../lib/project-detect');
-} catch (_) {
-  // Optional module - minimal installations without project-detect skip the briefing.
-}
+const propagateStateLib = tryRequire('../lib/propagate-state');
+const propagateStateContent = propagateStateLib ? propagateStateLib.propagateStateContent : null;
+const projectDetect = tryRequire('../lib/project-detect');
+const branchState = tryRequire('../lib/branch-state');
+const autoConsolidate = tryRequire('../lib/auto-consolidate');
 
 function readStdinJson() {
   try {
@@ -44,9 +47,12 @@ function resolveProjectPath(input) {
   return process.env.CLAUDE_PROJECT_DIR || process.env.PWD || process.cwd();
 }
 
+// Fallback slug for minimal installs without branch-state. Uses the same
+// double-hyphen join as branch-state.projectSlug; the previous single-hyphen
+// form never matched the files the memory server actually writes.
 function projectSlug(projectPath) {
   const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.slice(-2).join('-').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
+  return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
 function parseFrontmatterValue(val) {
@@ -159,9 +165,35 @@ function emitStackBriefing(projectPath) {
   process.stdout.write(buildBriefingLines(stack, stackSpecific, generic, missing).join('\n'));
 }
 
+// Consolidation must never block session startup: on any failure the
+// state file is simply loaded as-is.
+function consolidateBestEffort(stateFile) {
+  try {
+    return autoConsolidate.autoConsolidateStateFile(stateFile);
+  } catch {
+    return null;
+  }
+}
+
+function resolveStateFile(projectPath) {
+  if (branchState) {
+    const stateDir = branchState.getStateDir();
+    const branch = branchState.detectBranch(projectPath);
+    const resolved = branchState.resolveStateRead(stateDir, projectPath, branch);
+    return resolved.source === 'none' ? null : resolved.filePath;
+  }
+
+  const flatFile = path.join(os.homedir(), '.egc', 'state', `${projectSlug(projectPath)}.md`);
+  return fs.existsSync(flatFile) ? flatFile : null;
+}
+
 function loadAndPrintState(projectPath) {
-  const stateFile = path.join(os.homedir(), '.egc', 'state', `${projectSlug(projectPath)}.md`);
-  if (!fs.existsSync(stateFile)) return;
+  const stateFile = resolveStateFile(projectPath);
+  if (!stateFile) return;
+
+  if (autoConsolidate) {
+    consolidateBestEffort(stateFile);
+  }
 
   const content = fs.readFileSync(stateFile, 'utf8');
   if (!content.trim()) return;

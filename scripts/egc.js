@@ -65,6 +65,14 @@ const COMMANDS = {
     script: 'status.js',
     description: 'Query the EGC SQLite state store status summary',
   },
+  overview: {
+    script: 'overview.js',
+    description: 'Aggregated read-only view of every per-project memory state',
+  },
+  verify: {
+    script: 'verify.js',
+    description: 'Run the project verification command and record a receipt for the commit gate',
+  },
   sessions: {
     script: 'sessions-cli.js',
     description: 'List or inspect EGC sessions from the SQLite state store',
@@ -127,6 +135,8 @@ const PRIMARY_COMMANDS = [
   'repair',
   'auto-update',
   'status',
+  'overview',
+  'verify',
   'sessions',
   'replay',
   'session-inspect',
@@ -178,6 +188,10 @@ Examples:
   egc repair --dry-run
   egc auto-update --dry-run
   egc status --json
+  egc overview
+  egc overview --json
+  egc verify
+  egc verify -- npm run test:unit
   egc sessions
   egc sessions session-active --json
   egc session-inspect egc:latest

@@ -47,13 +47,13 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
-    "name": "observer",
-    "description": "Background agent that analyzes session observations to detect patterns and create instincts. Uses Haiku for cost-efficiency. v2.1 adds project-scoped instincts."
+    "name": "continuous-learning-v2",
+    "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination."
   },
   {
     "kind": "skill",
-    "name": "continuous-learning-v2",
-    "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination."
+    "name": "observer",
+    "description": "Background agent that analyzes session observations to detect patterns and create instincts. Uses Haiku for cost-efficiency. v2.1 adds project-scoped instincts."
   },
   {
     "kind": "skill",
@@ -167,6 +167,11 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
+    "name": "lead-intelligence",
+    "description": "AI-native lead intelligence and outreach pipeline. Replaces Apollo, Clay, and ZoomInfo with agent-powered signal scoring, mutual ranking, warm path discovery, source-derived voice modeling, and channel-specific outreach across email, LinkedIn, and X. Use when the user wants to find, qualify, and reach high-value contacts."
+  },
+  {
+    "kind": "skill",
     "name": "enrichment-agent",
     "description": "Pulls detailed profile, company, and activity data for qualified leads. Enriches prospects with recent news, funding data, content interests, and mutual overlap."
   },
@@ -184,11 +189,6 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
     "kind": "skill",
     "name": "signal-scorer",
     "description": "Searches and ranks prospects by relevance signals across X, Exa, and LinkedIn. Assigns weighted scores based on role, industry, activity, influence, and location."
-  },
-  {
-    "kind": "skill",
-    "name": "lead-intelligence",
-    "description": "AI-native lead intelligence and outreach pipeline. Replaces Apollo, Clay, and ZoomInfo with agent-powered signal scoring, mutual ranking, warm path discovery, source-derived voice modeling, and channel-specific outreach across email, LinkedIn, and X. Use when the user wants to find, qualify, and reach high-value contacts."
   },
   {
     "kind": "skill",
@@ -308,7 +308,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "postgres-patterns",
-    "description": "PostgreSQL database patterns for query optimization, schema design, indexing, and security. Based on Supabase best practices."
+    "description": "PostgreSQL database patterns for query optimization, schema design, indexing, and security."
   },
   {
     "kind": "skill",
@@ -572,6 +572,11 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
+    "name": "remotion-video-creation",
+    "description": "Best practices for Remotion - Video creation in React. 29 domain-specific rules covering 3D, animations, audio, captions, charts, transitions, and more."
+  },
+  {
+    "kind": "skill",
     "name": "3d",
     "description": "3D content in Remotion using Three.js and React Three Fiber."
   },
@@ -709,11 +714,6 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
     "kind": "skill",
     "name": "videos",
     "description": "Embedding videos in Remotion - trimming, volume, speed, looping, pitch"
-  },
-  {
-    "kind": "skill",
-    "name": "remotion-video-creation",
-    "description": "Best practices for Remotion - Video creation in React. 29 domain-specific rules covering 3D, animations, audio, captions, charts, transitions, and more."
   },
   {
     "kind": "skill",
@@ -1373,7 +1373,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "agent",
     "name": "database-reviewer",
-    "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance. Incorporates Supabase best practices."
+    "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance."
   },
   {
     "kind": "agent",

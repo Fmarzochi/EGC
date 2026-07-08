@@ -30,6 +30,7 @@ const {
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
   applyIntuitionHookToFile,
+  applyRouterHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
   applyWriteValidatorHookToFile,
@@ -42,6 +43,7 @@ const {
   createUserPromptSubmitHookMergeOperation,
   hasBashDispatcherHook,
   hasIntuitionHook,
+  hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
   hasWriteValidatorHook,
@@ -699,6 +701,152 @@ function runTests() {
     assert.strictEqual(operation.hookEvent, PRE_TOOL_USE_EVENT);
     assert.strictEqual(operation.hookMatcher, 'Edit');
     assert.strictEqual(operation.hookScriptPath, resolveWriteValidatorHookScriptDestination(targetRoot));
+  })) passed++; else failed++;
+
+  console.log('\n--- Stale entry migration (hook script relocation) ---\n');
+
+  const OLD_INTUITION_HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/prompt-intuition.js';
+  const REPO_ROUTER_HOOK_SCRIPT_PATH = '/home/user/Projects/EGC/scripts/hooks/prompt-router.js';
+  const ROUTER_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/prompt-router.js';
+
+  if (test('migrates a stale entry from an old install location in place', () => {
+    const base = {
+      hooks: {
+        [USER_PROMPT_SUBMIT_EVENT]: [
+          {
+            hooks: [{
+              type: 'command',
+              command: `node "${OLD_INTUITION_HOOK_SCRIPT_PATH}"`,
+              statusMessage: 'Detecting intent...',
+            }],
+          },
+        ],
+      },
+    };
+    const result = addIntuitionHook(base, INTUITION_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(result.changed, true);
+    const groups = result.settings.hooks[USER_PROMPT_SUBMIT_EVENT];
+    assert.strictEqual(groups.length, 1);
+    assert.strictEqual(groups[0].hooks.length, 1);
+    assert.ok(groups[0].hooks[0].command.includes(INTUITION_HOOK_SCRIPT_PATH));
+    assert.strictEqual(groups[0].hooks[0].statusMessage, 'Detecting intent...');
+    assert.ok(hasIntuitionHook(result.settings, INTUITION_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('drops stale duplicates when the current entry already exists', () => {
+    const base = {
+      hooks: {
+        [USER_PROMPT_SUBMIT_EVENT]: [
+          { hooks: [{ type: 'command', command: `node "${OLD_INTUITION_HOOK_SCRIPT_PATH}"` }] },
+          { hooks: [{ type: 'command', command: 'node "/somewhere/else/prompt-intuition.js"' }] },
+          { hooks: [{ type: 'command', command: buildSessionStartCommand(INTUITION_HOOK_SCRIPT_PATH) }] },
+        ],
+      },
+    };
+    const result = addIntuitionHook(base, INTUITION_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(result.changed, true);
+    const groups = result.settings.hooks[USER_PROMPT_SUBMIT_EVENT];
+    assert.strictEqual(groups.length, 1);
+    assert.ok(groups[0].hooks[0].command.includes(INTUITION_HOOK_SCRIPT_PATH));
+
+    const repeat = addIntuitionHook(result.settings, INTUITION_HOOK_SCRIPT_PATH);
+    assert.strictEqual(repeat.changed, false);
+  })) passed++; else failed++;
+
+  if (test('leaves hooks with different script basenames or plain commands untouched', () => {
+    const base = {
+      hooks: {
+        [USER_PROMPT_SUBMIT_EVENT]: [
+          { hooks: [{ type: 'command', command: 'node "/opt/tools/my-prompt-logger.js"' }] },
+          { hooks: [{ type: 'command', command: 'echo plain-command' }] },
+        ],
+      },
+    };
+    const result = addIntuitionHook(base, INTUITION_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(result.settings.hooks[USER_PROMPT_SUBMIT_EVENT].length, 3);
+    assert.strictEqual(
+      result.settings.hooks[USER_PROMPT_SUBMIT_EVENT][0].hooks[0].command,
+      'node "/opt/tools/my-prompt-logger.js"'
+    );
+    assert.strictEqual(
+      result.settings.hooks[USER_PROMPT_SUBMIT_EVENT][1].hooks[0].command,
+      'echo plain-command'
+    );
+  })) passed++; else failed++;
+
+  if (test('does not migrate entries under a different matcher', () => {
+    const base = {
+      hooks: {
+        [PRE_TOOL_USE_EVENT]: [
+          {
+            matcher: 'Edit',
+            hooks: [{ type: 'command', command: 'node "/old/place/pre-write-guardian-validate.js"' }],
+          },
+        ],
+      },
+    };
+    const added = addWriteValidatorHook(base, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Write');
+
+    assert.strictEqual(added.settings.hooks[PRE_TOOL_USE_EVENT].length, 2);
+    assert.ok(added.settings.hooks[PRE_TOOL_USE_EVENT][0].hooks[0].command.includes('/old/place/'));
+
+    const migrated = addWriteValidatorHook(added.settings, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit');
+    assert.strictEqual(migrated.changed, true);
+    assert.strictEqual(migrated.settings.hooks[PRE_TOOL_USE_EVENT].length, 2);
+    assert.ok(hasWriteValidatorHook(migrated.settings, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+  })) passed++; else failed++;
+
+  if (test('apply migrates the real-world duplicated UserPromptSubmit layout', () => {
+    const homeDir = createTempDir('claude-hook-migration-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          [USER_PROMPT_SUBMIT_EVENT]: [
+            {
+              hooks: [{
+                type: 'command',
+                command: `node "${OLD_INTUITION_HOOK_SCRIPT_PATH}"`,
+                statusMessage: 'Detecting intent...',
+              }],
+            },
+            {
+              hooks: [{
+                type: 'command',
+                command: `node "${REPO_ROUTER_HOOK_SCRIPT_PATH}"`,
+                statusMessage: 'Routing prompt...',
+              }],
+            },
+            { hooks: [{ type: 'command', command: buildSessionStartCommand(INTUITION_HOOK_SCRIPT_PATH) }] },
+            { hooks: [{ type: 'command', command: buildSessionStartCommand(ROUTER_HOOK_SCRIPT_PATH) }] },
+          ],
+        },
+      }, null, 2));
+
+      const intuitionResult = applyIntuitionHookToFile(settingsPath, INTUITION_HOOK_SCRIPT_PATH);
+      const routerResult = applyRouterHookToFile(settingsPath, ROUTER_HOOK_SCRIPT_PATH);
+      const settings = readJson(settingsPath);
+      const groups = settings.hooks[USER_PROMPT_SUBMIT_EVENT];
+
+      assert.strictEqual(intuitionResult.changed, true);
+      assert.strictEqual(routerResult.changed, true);
+      assert.strictEqual(groups.length, 2);
+      assert.ok(hasIntuitionHook(settings, INTUITION_HOOK_SCRIPT_PATH));
+      assert.ok(hasRouterHook(settings, ROUTER_HOOK_SCRIPT_PATH));
+      const commands = groups.map(group => group.hooks[0].command).join('\n');
+      assert.ok(!commands.includes(OLD_INTUITION_HOOK_SCRIPT_PATH));
+      assert.ok(!commands.includes(REPO_ROUTER_HOOK_SCRIPT_PATH));
+
+      const repeatIntuition = applyIntuitionHookToFile(settingsPath, INTUITION_HOOK_SCRIPT_PATH);
+      const repeatRouter = applyRouterHookToFile(settingsPath, ROUTER_HOOK_SCRIPT_PATH);
+      assert.strictEqual(repeatIntuition.changed, false);
+      assert.strictEqual(repeatRouter.changed, false);
+    } finally {
+      cleanup(homeDir);
+    }
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

@@ -96,11 +96,11 @@ Add to your `~/.gemini/settings.json`:
 
 ## Comparison Notes (Research: Jan 2025)
 
-### vs Homunculus
+### vs instinct-based observation (continuous-learning-v2)
 
-Homunculus v2 takes a more sophisticated approach:
+The instinct-based design in `continuous-learning-v2` takes a more granular approach:
 
-| Feature | Our Approach | Homunculus v2 |
+| Feature | This skill | Instinct-based v2 |
 |---------|--------------|---------------|
 | Observation | Stop hook (end of session) | PreToolUse/PostToolUse hooks (100% reliable) |
 | Analysis | Main context | Background agent (Haiku) |
@@ -109,8 +109,7 @@ Homunculus v2 takes a more sophisticated approach:
 | Evolution | Direct to skill | Instincts → cluster → skill/command/agent |
 | Sharing | None | Export/import instincts |
 
-**Key insight from homunculus:**
-> "v1 relied on skills to observe. Skills are probabilistic, they fire ~50-80% of the time. v2 uses hooks for observation (100% reliable) and instincts as the atomic unit of learned behavior."
+**Why the v2 design observes through hooks:** skill-triggered observation is probabilistic, firing on only part of the relevant events, while hook-driven observation fires on every tool call. Atomic instincts with confidence scores then become the unit of learned behavior instead of whole skills.
 
 ### Potential v2 Enhancements
 

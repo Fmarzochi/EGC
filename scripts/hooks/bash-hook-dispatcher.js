@@ -10,6 +10,7 @@ const { run: runAutoTmuxDev } = require('./auto-tmux-dev');
 const { run: runTmuxReminder } = require('./pre-bash-tmux-reminder');
 const { run: runGitPushReminder } = require('./pre-bash-git-push-reminder');
 const { run: runCommitQuality } = require('./pre-bash-commit-quality');
+const { run: runVerificationGate } = require('./pre-bash-verification-gate');
 const { run: runGateGuard } = require('./gateguard-fact-force');
 const { run: runBudgetCheck } = require('./pre-budget-check');
 const { run: runCommandLog } = require('./post-bash-command-log');
@@ -47,6 +48,11 @@ const PRE_BASH_HOOKS = [
     id: 'pre:bash:commit-quality',
     profiles: 'strict',
     run: rawInput => runCommitQuality(rawInput),
+  },
+  {
+    id: 'pre:bash:verification-gate',
+    profiles: 'standard,strict',
+    run: rawInput => runVerificationGate(rawInput),
   },
   {
     id: 'pre:bash:gateguard-fact-force',
@@ -151,6 +157,7 @@ function runHooks(rawInput, hooks) {
     } catch (error) {
       trace('hook:dispatch:error', { id: hook.id, error: error.message });
       stderr += `[Hook] ${hook.id} failed: ${error.message}\n`;
+      return { output: currentRaw, stderr, exitCode: 1 };
     }
   }
 

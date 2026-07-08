@@ -84,9 +84,19 @@ function printHuman(report) {
 }
 
 function checkStateDb() {
-  const dbPath = path.join(getEGCDir(), 'egc', 'state.db');
-  if (fs.existsSync(dbPath)) return null;
-  return { missing: true, dbPath };
+  const rootDir = getEGCDir();
+  const dbPath = path.join(rootDir, 'egc', 'state.db');
+  const memoryDbPath = path.join(rootDir, 'memory', 'state.db');
+  
+  const hasHarnessDb = fs.existsSync(dbPath);
+  const hasMemoryDb = fs.existsSync(memoryDbPath);
+  
+  if (hasHarnessDb && hasMemoryDb) {
+    return { divergent: true, dbPath, memoryDbPath };
+  } else if (!hasHarnessDb && !hasMemoryDb) {
+    return { missing: true, dbPath };
+  }
+  return null;
 }
 
 function main() {
@@ -112,8 +122,15 @@ function main() {
       printHuman(report);
       if (stateDb) {
         console.log('\nState store:');
-        console.log('  WARNING: state.db not found at ' + stateDb.dbPath);
-        console.log('  Run: egc init  to create the state store');
+        if (stateDb.divergent) {
+          console.log('  WARNING: Divergent database architecture detected!');
+          console.log(`  Harness DB: ${stateDb.dbPath}`);
+          console.log(`  Memory DB:  ${stateDb.memoryDbPath}`);
+          console.log('  (This is a known architectural limitation where the MCP memory server and harnesses log to separate databases)');
+        } else if (stateDb.missing) {
+          console.log('  WARNING: state.db not found at ' + stateDb.dbPath);
+          console.log('  Run: egc init  to create the state store');
+        }
       }
     }
 

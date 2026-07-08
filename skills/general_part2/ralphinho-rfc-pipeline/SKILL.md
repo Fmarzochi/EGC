@@ -6,8 +6,6 @@ origin: EGC
 
 # Ralphinho RFC Pipeline
 
-Inspired by [humanplane](https://github.com/humanplane) style RFC decomposition patterns and multi-unit orchestration workflows.
-
 Use this skill when a feature is too large for a single agent pass and must be split into independently verifiable work units.
 
 ## Pipeline Stages

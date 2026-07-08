@@ -67,7 +67,7 @@ function runTests() {
   if (test('prints the state file for the cwd received on stdin', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
-      writeStateFile(homeDir, 'workspace-demo', '# Project State\n- resume feature X\n');
+      writeStateFile(homeDir, 'workspace--demo', '# Project State\n- resume feature X\n');
 
       const result = runHook(
         homeDir,
@@ -85,7 +85,7 @@ function runTests() {
   if (test('uses the same slug sanitization as the egc-memory server', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
-      writeStateFile(homeDir, 'My_Projects-app_v2_0', 'sanitized slug state\n');
+      writeStateFile(homeDir, 'My_Projects--app_v2_0', 'sanitized slug state\n');
 
       const result = runHook(
         homeDir,
@@ -128,7 +128,7 @@ function runTests() {
   if (test('tolerates invalid stdin and falls back to environment paths', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
-      writeStateFile(homeDir, 'env-project', 'state from env fallback\n');
+      writeStateFile(homeDir, 'env--project', 'state from env fallback\n');
 
       const result = runHook(homeDir, 'not json at all', {
         CLAUDE_PROJECT_DIR: '/env/project',
@@ -171,7 +171,7 @@ function runTests() {
         JSON.stringify({ name: 'test', version: '1.0.0' })
       );
 
-      const slug = path.basename(os.tmpdir()) + '-' + path.basename(projectDir);
+      const slug = path.basename(os.tmpdir()) + '--' + path.basename(projectDir);
       const sanitized = slug.replace(/[^a-zA-Z0-9-_]/g, '_');
       writeStateFile(homeDir, sanitized, '# My Project State\n- resume task A\n');
 

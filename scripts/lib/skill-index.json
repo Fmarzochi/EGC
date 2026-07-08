@@ -1,0 +1,2164 @@
+{
+  "entries": [
+    {
+      "kind": "skill",
+      "name": "agent-eval",
+      "description": "Head-to-head comparison of coding agents (Gemini Code, Aider, Codex, etc.) on custom tasks with pass rate, cost, time, and consistency metrics"
+    },
+    {
+      "kind": "skill",
+      "name": "agent-harness-construction",
+      "description": "Design and optimize AI agent action spaces, tool definitions, and observation formatting for higher completion rates."
+    },
+    {
+      "kind": "skill",
+      "name": "agent-introspection-debugging",
+      "description": "Structured self-debugging workflow for AI agent failures using capture, diagnosis, contained recovery, and introspection reports."
+    },
+    {
+      "kind": "skill",
+      "name": "agent-sort",
+      "description": "Build an evidence-backed EGC install plan for a specific repo by sorting skills, commands, rules, hooks, and extras into DAILY vs LIBRARY buckets using parallel repo-aware review passes. Use when EGC should be trimmed to what a project actually needs instead of loading the full bundle."
+    },
+    {
+      "kind": "skill",
+      "name": "agentic-engineering",
+      "description": "Operate as an agentic engineer using eval-first execution, decomposition, and cost-aware model routing."
+    },
+    {
+      "kind": "skill",
+      "name": "ai-first-engineering",
+      "description": "Engineering operating model for teams where AI agents generate a large share of implementation output."
+    },
+    {
+      "kind": "skill",
+      "name": "autonomous-agent-harness",
+      "description": "Transform Gemini Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Gemini Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop."
+    },
+    {
+      "kind": "skill",
+      "name": "autonomous-loops",
+      "description": "Patterns and architectures for autonomous Gemini Code loops: from simple sequential pipelines to RFC-driven multi-agent DAG systems."
+    },
+    {
+      "kind": "skill",
+      "name": "continuous-learning",
+      "description": "Automatically extract reusable patterns from Gemini Code sessions and save them as learned skills for future use."
+    },
+    {
+      "kind": "skill",
+      "name": "continuous-learning-v2",
+      "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination."
+    },
+    {
+      "kind": "skill",
+      "name": "observer",
+      "description": "Background agent that analyzes session observations to detect patterns and create instincts. Uses Haiku for cost-efficiency. v2.1 adds project-scoped instincts."
+    },
+    {
+      "kind": "skill",
+      "name": "cost-aware-llm-pipeline",
+      "description": "Cost optimization patterns for LLM API usage: model routing by task complexity, budget tracking, retry logic, and prompt caching."
+    },
+    {
+      "kind": "skill",
+      "name": "deep-research",
+      "description": "Multi-source deep research using firecrawl and exa MCPs. Searches the web, synthesizes findings, and delivers cited reports with source attribution. Use when the user wants thorough research on any topic with evidence and citations."
+    },
+    {
+      "kind": "skill",
+      "name": "exa-search",
+      "description": "Neural search via Exa MCP for web, code, and company research. Use when the user needs web search, code examples, company intel, people lookup, or AI-powered deep research with Exa's neural search engine."
+    },
+    {
+      "kind": "skill",
+      "name": "fal-ai-media",
+      "description": "Unified media generation via fal.ai MCP: image, video, and audio. Covers text-to-image (Nano Banana), text/image-to-video (Seedance, Kling, Veo 3), text-to-speech (CSM-1B), and video-to-audio (ThinkSound). Use when the user wants to generate images, videos, or audio with AI."
+    },
+    {
+      "kind": "skill",
+      "name": "prompt-optimizer",
+      "description": ">-"
+    },
+    {
+      "kind": "skill",
+      "name": "regex-vs-llm-structured-text",
+      "description": "Decision framework for choosing between regex and LLM when parsing structured text: start with regex, add LLM only for low-confidence edge cases."
+    },
+    {
+      "kind": "skill",
+      "name": "token-budget-advisor",
+      "description": ">-"
+    },
+    {
+      "kind": "skill",
+      "name": "agent-architecture-audit",
+      "description": "Full-stack diagnostic for agent and LLM applications. Audits the 12-layer agent stack for wrapper regression, memory pollution, tool discipline failures, hidden repair loops, and rendering corruption. Produces severity-ranked findings with code-first fixes. Essential for developers building agent applications, autonomous loops, or any LLM-powered feature."
+    },
+    {
+      "kind": "skill",
+      "name": "agentic-os",
+      "description": "Build persistent multi-agent operating systems on Gemini CLI. Covers kernel architecture, specialist agents, slash commands, file-based memory, scheduled automation, and state management without external databases."
+    },
+    {
+      "kind": "skill",
+      "name": "android-clean-architecture",
+      "description": "Clean Architecture patterns for Android and Kotlin Multiplatform projects: module structure, dependency rules, UseCases, Repositories, and data layer patterns."
+    },
+    {
+      "kind": "skill",
+      "name": "architecture-decision-records",
+      "description": "Capture architectural decisions made during Gemini Code sessions as structured ADRs. Auto-detects decision moments, records context, alternatives considered, and rationale. Maintains an ADR log so future developers understand why the codebase is shaped the way it is."
+    },
+    {
+      "kind": "skill",
+      "name": "blueprint",
+      "description": ">-"
+    },
+    {
+      "kind": "skill",
+      "name": "compose-multiplatform-patterns",
+      "description": "Compose Multiplatform and Jetpack Compose patterns for KMP projects: state management, navigation, theming, performance, and platform-specific UI."
+    },
+    {
+      "kind": "skill",
+      "name": "foundation-models-on-device",
+      "description": "Apple FoundationModels framework for on-device LLM: text generation, guided generation with @Generable, tool calling, and snapshot streaming in iOS 26+."
+    },
+    {
+      "kind": "skill",
+      "name": "jpa-patterns",
+      "description": "JPA/Hibernate patterns for entity design, relationships, query optimization, transactions, auditing, indexing, pagination, and pooling in Spring Boot."
+    },
+    {
+      "kind": "skill",
+      "name": "liquid-glass-design",
+      "description": "iOS 26 Liquid Glass design system: dynamic glass material with blur, reflection, and interactive morphing for SwiftUI, UIKit, and WidgetKit."
+    },
+    {
+      "kind": "skill",
+      "name": "swiftui-patterns",
+      "description": "SwiftUI architecture patterns, state management with @Observable, view composition, navigation, performance optimization, and modern iOS/macOS UI best practices."
+    },
+    {
+      "kind": "skill",
+      "name": "carrier-relationship-management",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "customer-billing-ops",
+      "description": "Operate customer billing workflows such as subscriptions, refunds, churn triage, billing-portal recovery, and plan analysis using connected billing tools like Stripe. Use when the user needs to help a customer, inspect subscription state, or manage revenue-impacting billing operations."
+    },
+    {
+      "kind": "skill",
+      "name": "energy-procurement",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "finance-billing-ops",
+      "description": "Evidence-first revenue, pricing, refunds, team-billing, and billing-model truth workflow for EGC. Use when the user wants a sales snapshot, pricing comparison, duplicate-charge diagnosis, or code-backed billing reality instead of generic payments advice."
+    },
+    {
+      "kind": "skill",
+      "name": "inventory-demand-planning",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "lead-intelligence",
+      "description": "AI-native lead intelligence and outreach pipeline. Replaces Apollo, Clay, and ZoomInfo with agent-powered signal scoring, mutual ranking, warm path discovery, source-derived voice modeling, and channel-specific outreach across email, LinkedIn, and X. Use when the user wants to find, qualify, and reach high-value contacts."
+    },
+    {
+      "kind": "skill",
+      "name": "enrichment-agent",
+      "description": "Pulls detailed profile, company, and activity data for qualified leads. Enriches prospects with recent news, funding data, content interests, and mutual overlap."
+    },
+    {
+      "kind": "skill",
+      "name": "mutual-mapper",
+      "description": "Maps the user's social graph (X following, LinkedIn connections) against scored prospects to find mutual connections and rank them by introduction potential."
+    },
+    {
+      "kind": "skill",
+      "name": "outreach-drafter",
+      "description": "Generates personalized outreach messages for qualified leads. Creates warm intro requests, cold emails, X DMs, and follow-up sequences using enriched profile data."
+    },
+    {
+      "kind": "skill",
+      "name": "signal-scorer",
+      "description": "Searches and ranks prospects by relevance signals across X, Exa, and LinkedIn. Assigns weighted scores based on role, industry, activity, influence, and location."
+    },
+    {
+      "kind": "skill",
+      "name": "logistics-exception-management",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "nutrient-document-processing",
+      "description": "Process, convert, OCR, extract, redact, sign, and fill documents using the Nutrient DWS API. Works with PDFs, DOCX, XLSX, PPTX, HTML, and images."
+    },
+    {
+      "kind": "skill",
+      "name": "production-scheduling",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "quality-nonconformance",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "returns-reverse-logistics",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "api-design",
+      "description": "REST API design patterns including resource naming, status codes, pagination, filtering, error responses, versioning, and rate limiting for production APIs."
+    },
+    {
+      "kind": "skill",
+      "name": "backend-patterns",
+      "description": "Backend architecture patterns, API design, database optimization, and server-side best practices for Node.js, Express, and Next.js API routes."
+    },
+    {
+      "kind": "skill",
+      "name": "clickhouse-io",
+      "description": "ClickHouse database patterns, query optimization, analytics, and data engineering best practices for high-performance analytical workloads."
+    },
+    {
+      "kind": "skill",
+      "name": "database-migrations",
+      "description": "Database migration best practices for schema changes, data migrations, rollbacks, and zero-downtime deployments across PostgreSQL, MySQL, and common ORMs (Prisma, Drizzle, Kysely, Django, TypeORM, golang-migrate)."
+    },
+    {
+      "kind": "skill",
+      "name": "django-celery",
+      "description": "Django + Celery async task patterns: configuration, task design, beat scheduling, retries, canvas workflows, monitoring, and testing. Use when adding background jobs, scheduled tasks, or async processing to a Django app."
+    },
+    {
+      "kind": "skill",
+      "name": "django-patterns",
+      "description": "Django architecture patterns, REST API design with DRF, ORM best practices, caching, signals, middleware, and production-grade Django apps."
+    },
+    {
+      "kind": "skill",
+      "name": "django-security",
+      "description": "Django security best practices, authentication, authorization, CSRF protection, SQL injection prevention, XSS prevention, and secure deployment configurations."
+    },
+    {
+      "kind": "skill",
+      "name": "dotnet-patterns",
+      "description": "Idiomatic C# and .NET patterns, conventions, dependency injection, async/await, and best practices for building robust, maintainable .NET applications."
+    },
+    {
+      "kind": "skill",
+      "name": "evm-token-decimals",
+      "description": "Prevent silent decimal mismatch bugs across EVM chains. Covers runtime decimal lookup, chain-aware caching, bridged-token precision drift, and safe normalization for bots, dashboards, and DeFi tools."
+    },
+    {
+      "kind": "skill",
+      "name": "fastapi-patterns",
+      "description": "FastAPI patterns for async APIs, dependency injection, Pydantic request and response models, OpenAPI docs, tests, security, and production readiness."
+    },
+    {
+      "kind": "skill",
+      "name": "golang-patterns",
+      "description": "Idiomatic Go patterns, best practices, and conventions for building robust, efficient, and maintainable Go applications."
+    },
+    {
+      "kind": "skill",
+      "name": "java-coding-standards",
+      "description": "Java coding standards for Spring Boot services: naming, immutability, Optional usage, streams, exceptions, generics, and project layout."
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-patterns",
+      "description": "Laravel architecture patterns, routing/controllers, Eloquent ORM, service layers, queues, events, caching, and API resources for production apps."
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-security",
+      "description": "Laravel security best practices for authn/authz, validation, CSRF, mass assignment, file uploads, secrets, rate limiting, and secure deployment."
+    },
+    {
+      "kind": "skill",
+      "name": "mysql-patterns",
+      "description": "MySQL and MariaDB schema, query, indexing, transaction, replication, and connection-pool patterns for production backends."
+    },
+    {
+      "kind": "skill",
+      "name": "nestjs-patterns",
+      "description": "NestJS architecture patterns for modules, controllers, providers, DTO validation, guards, interceptors, config, and production-grade TypeScript backends."
+    },
+    {
+      "kind": "skill",
+      "name": "nodejs-keccak256",
+      "description": "Prevent Ethereum hashing bugs in JavaScript and TypeScript. Node's sha3-256 is NIST SHA3, not Ethereum Keccak-256, and silently breaks selectors, signatures, storage slots, and address derivation."
+    },
+    {
+      "kind": "skill",
+      "name": "perl-patterns",
+      "description": "Modern Perl 5.36+ idioms, best practices, and conventions for building robust, maintainable Perl applications."
+    },
+    {
+      "kind": "skill",
+      "name": "postgres-patterns",
+      "description": "PostgreSQL database patterns for query optimization, schema design, indexing, and security."
+    },
+    {
+      "kind": "skill",
+      "name": "python-patterns",
+      "description": "Pythonic idioms, PEP 8 standards, type hints, and best practices for building robust, efficient, and maintainable Python applications."
+    },
+    {
+      "kind": "skill",
+      "name": "quarkus-patterns",
+      "description": "Quarkus 3.x LTS architecture patterns with Camel for messaging, RESTful API design, CDI services, data access with Panache, and async processing. Use for Java Quarkus backend work with event-driven architectures."
+    },
+    {
+      "kind": "skill",
+      "name": "quarkus-security",
+      "description": "Quarkus Security best practices for authentication, authorization, JWT/OIDC, RBAC, input validation, CSRF, secrets management, and dependency security."
+    },
+    {
+      "kind": "skill",
+      "name": "quarkus-tdd",
+      "description": "Test-driven development for Quarkus 3.x LTS using JUnit 5, Mockito, REST Assured, Camel testing, and JaCoCo. Use when adding features, fixing bugs, or refactoring event-driven services."
+    },
+    {
+      "kind": "skill",
+      "name": "quarkus-verification",
+      "description": "Verification loop for Quarkus projects: build, static analysis, tests with coverage, security scans, native compilation, and diff review before release or PR."
+    },
+    {
+      "kind": "skill",
+      "name": "redis-patterns",
+      "description": "Redis data structure patterns, caching strategies, distributed locks, rate limiting, pub/sub, and connection management for production applications."
+    },
+    {
+      "kind": "skill",
+      "name": "rust-patterns",
+      "description": "Idiomatic Rust patterns, ownership, error handling, traits, concurrency, and best practices for building safe, performant applications."
+    },
+    {
+      "kind": "skill",
+      "name": "springboot-patterns",
+      "description": "Spring Boot architecture patterns, REST API design, layered services, data access, caching, async processing, and logging. Use for Java Spring Boot backend work."
+    },
+    {
+      "kind": "skill",
+      "name": "springboot-security",
+      "description": "Spring Security best practices for authn/authz, validation, CSRF, secrets, headers, rate limiting, and dependency security in Java Spring Boot services."
+    },
+    {
+      "kind": "skill",
+      "name": "tinystruct-patterns",
+      "description": "Use when developing application modules or microservices with the tinystruct Java framework. Covers routing, context management, JSON handling with Builder, and CLI/HTTP dual-mode patterns."
+    },
+    {
+      "kind": "skill",
+      "name": "automation-audit-ops",
+      "description": "Evidence-first automation inventory and overlap audit workflow for EGC. Use when the user wants to know which jobs, hooks, connectors, MCP servers, or wrappers are live, broken, redundant, or missing before fixing anything."
+    },
+    {
+      "kind": "skill",
+      "name": "bun-runtime",
+      "description": "Bun as runtime, package manager, bundler, and test runner. When to choose Bun vs Node, migration notes, and Vercel support."
+    },
+    {
+      "kind": "skill",
+      "name": "context-budget",
+      "description": "Audits Gemini Code context window consumption across agents, skills, MCP servers, and rules. Identifies bloat, redundant components, and produces prioritized token-savings recommendations."
+    },
+    {
+      "kind": "skill",
+      "name": "continuous-agent-loop",
+      "description": "Patterns for continuous autonomous agent loops with quality gates, evals, and recovery controls."
+    },
+    {
+      "kind": "skill",
+      "name": "cost-tracking",
+      "description": "Track and report Gemini CLI token usage, spending, and budgets from a local cost-tracking database. Use when the user asks about costs, spending, usage, tokens, budgets, or cost breakdowns by project, tool, session, or date."
+    },
+    {
+      "kind": "skill",
+      "name": "deployment-patterns",
+      "description": "Deployment workflows, CI/CD pipeline patterns, Docker containerization, health checks, rollback strategies, and production readiness checklists for web applications."
+    },
+    {
+      "kind": "skill",
+      "name": "docker-patterns",
+      "description": "Docker and Docker Compose patterns for local development, container security, networking, volume strategies, and multi-service orchestration."
+    },
+    {
+      "kind": "skill",
+      "name": "error-handling",
+      "description": "Patterns for robust error handling across TypeScript, Python, and Go. Covers typed errors, error boundaries, retries, circuit breakers, and user-facing error messages."
+    },
+    {
+      "kind": "skill",
+      "name": "flox-environments",
+      "description": "Create reproducible, cross-platform development environments with Flox: a declarative environment manager built on Nix. ALWAYS use this skill when the user needs to: set up a project with system-level dependencies (compilers, databases, native libraries like openssl, libvips, BLAS, LAPACK); configure reproducible toolchains for Python, Node.js, Rust, Go, C/C++, Java, Ruby, Elixir, PHP, or any language; manage environments that must work identically across macOS and Linux; pin exact package versions for a team; run local services (PostgreSQL, Redis, Kafka) alongside development tools; onboard new developers with a single command; or solve 'works on my machine' problems. Especially valuable for AI-assisted and vibe coding: Flox lets agents install tools into a project-scoped environment without sudo, system pollution, or sandbox restrictions, and the resulting environment is committed to the repo so anyone can reproduce it instantly. Use this skill even if the user doesn't mention Flox: if they describe needing reproducible, declarative, cross-platform dev environments with system packages, this is the right tool. Also use when the user mentions .flox/, manifest.toml, flox activate, or FloxHub."
+    },
+    {
+      "kind": "skill",
+      "name": "github-ops",
+      "description": "GitHub repository operations, automation, and management. Issue triage, PR management, CI/CD operations, release management, and security monitoring using the gh CLI. Use when the user wants to manage GitHub issues, PRs, CI status, releases, contributors, stale items, or any GitHub operational task beyond simple git commands."
+    },
+    {
+      "kind": "skill",
+      "name": "google-workspace-ops",
+      "description": "Operate across Google Drive, Docs, Sheets, and Slides as one workflow surface for plans, trackers, decks, and shared documents. Use when the user needs to find, summarize, edit, migrate, or clean up Google Workspace assets without dropping to raw tool calls."
+    },
+    {
+      "kind": "skill",
+      "name": "plan-orchestrate",
+      "description": "Read a plan document, decompose it into steps, design a per-step agent chain from the EGC catalogue, and emit ready-to-paste /orchestrate custom prompts. Generative only: never invokes /orchestrate itself. Use when the user has a multi-step plan and wants to drive it through orchestrate without composing chains by hand."
+    },
+    {
+      "kind": "skill",
+      "name": "production-audit",
+      "description": "Local-evidence production readiness audit for shipped apps, pre-launch reviews, post-merge checks, and \"what breaks in prod?\" questions without sending repo data to an external audit service."
+    },
+    {
+      "kind": "skill",
+      "name": "search-first",
+      "description": "Research-before-coding workflow. Search for existing tools, libraries, and patterns before writing custom code. Invokes the researcher agent."
+    },
+    {
+      "kind": "skill",
+      "name": "skill-scout",
+      "description": "Search existing local, marketplace, GitHub, and web skill sources before creating a new skill. Use when the user wants to create, build, fork, or find a skill for a workflow."
+    },
+    {
+      "kind": "skill",
+      "name": "terminal-ops",
+      "description": "Evidence-first repo execution workflow for EGC. Use when the user wants a command run, a repo checked, a CI failure debugged, or a narrow fix pushed with exact proof of what was executed and verified."
+    },
+    {
+      "kind": "skill",
+      "name": "article-writing",
+      "description": "Write articles, guides, blog posts, tutorials, newsletter issues, and other long-form content in a distinctive voice derived from supplied examples or brand guidance. Use when the user wants polished written content longer than a paragraph, especially when voice consistency, structure, and credibility matter."
+    },
+    {
+      "kind": "skill",
+      "name": "brand-voice",
+      "description": "Build a source-derived writing style profile from real posts, essays, launch notes, docs, or site copy, then reuse that profile across content, outreach, and social workflows. Use when the user wants voice consistency without generic AI writing tropes."
+    },
+    {
+      "kind": "skill",
+      "name": "content-engine",
+      "description": "Create platform-native content systems for X, LinkedIn, TikTok, YouTube, newsletters, and repurposed multi-platform campaigns. Use when the user wants social posts, threads, scripts, content calendars, or one source asset adapted cleanly across platforms."
+    },
+    {
+      "kind": "skill",
+      "name": "documentation-lookup",
+      "description": "Use up-to-date library and framework docs via Context7 MCP instead of training data. Activates for setup questions, API references, code examples, or when the user names a framework (e.g. React, Next.js, Prisma)."
+    },
+    {
+      "kind": "skill",
+      "name": "investor-materials",
+      "description": "Create and update pitch decks, one-pagers, investor memos, accelerator applications, financial models, and fundraising materials. Use when the user needs investor-facing documents, projections, use-of-funds tables, milestone plans, or materials that must stay internally consistent across multiple fundraising assets."
+    },
+    {
+      "kind": "skill",
+      "name": "investor-outreach",
+      "description": "Draft cold emails, warm intro blurbs, follow-ups, update emails, and investor communications for fundraising. Use when the user wants outreach to angels, VCs, strategic investors, or accelerators and needs concise, personalized, investor-facing messaging."
+    },
+    {
+      "kind": "skill",
+      "name": "market-research",
+      "description": "Conduct market research, competitive analysis, investor due diligence, and industry intelligence with source attribution and decision-oriented summaries. Use when the user wants market sizing, competitor comparisons, fund research, technology scans, or research that informs business decisions."
+    },
+    {
+      "kind": "skill",
+      "name": "mle-workflow",
+      "description": "Production machine-learning engineering workflow for data contracts, reproducible training, model evaluation, deployment, monitoring, and rollback. Use when building, reviewing, or hardening ML systems beyond one-off notebooks."
+    },
+    {
+      "kind": "skill",
+      "name": "pubmed-database",
+      "description": "Direct PubMed and NCBI E-utilities search workflows for biomedical literature, MeSH queries, PMID lookup, citation retrieval, and API-backed literature monitoring."
+    },
+    {
+      "kind": "skill",
+      "name": "uspto-database",
+      "description": "USPTO patent and trademark data workflow for official record lookup, PatentSearch queries, TSDR checks, assignment data, and reproducible IP research logs."
+    },
+    {
+      "kind": "skill",
+      "name": "gget",
+      "description": "gget CLI and Python workflow for quick genomic database queries, sequence lookup, BLAST-style searches, enrichment checks, and reproducible bioinformatics evidence logs."
+    },
+    {
+      "kind": "skill",
+      "name": "literature-review",
+      "description": "Systematic literature-review workflow for academic, biomedical, technical, and scientific topics, including search planning, source screening, synthesis, citation checks, and evidence logging."
+    },
+    {
+      "kind": "skill",
+      "name": "scholar-evaluation",
+      "description": "Structured scholarly-work evaluation for papers, proposals, literature reviews, methods sections, evidence quality, citation support, and research-writing feedback."
+    },
+    {
+      "kind": "skill",
+      "name": "seo",
+      "description": "Audit, plan, and implement SEO improvements across technical SEO, on-page optimization, structured data, Core Web Vitals, and content strategy. Use when the user wants better search visibility, SEO remediation, schema markup, sitemap/robots work, or keyword mapping."
+    },
+    {
+      "kind": "skill",
+      "name": "accessibility",
+      "description": "Design, implement, and audit inclusive digital products using WCAG 2.2 Level AA"
+    },
+    {
+      "kind": "skill",
+      "name": "angular-developer",
+      "description": "Generates Angular code and provides architectural guidance. Trigger when creating projects, components, or services, or for best practices on reactivity (signals, linkedSignal, resource), forms, dependency injection, routing, SSR, accessibility (ARIA), animations, styling (component styles, Tailwind CSS), testing, or CLI tooling."
+    },
+    {
+      "kind": "skill",
+      "name": "frontend-design-direction",
+      "description": "Set an EGC-specific frontend design direction for production UI work. Use when building or improving websites, dashboards, applications, components, landing pages, visual tools, or any web UI that needs stronger product-specific design judgment."
+    },
+    {
+      "kind": "skill",
+      "name": "frontend-patterns",
+      "description": "Frontend development patterns for React, Next.js, state management, performance optimization, and UI best practices."
+    },
+    {
+      "kind": "skill",
+      "name": "frontend-slides",
+      "description": "Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Use when the user wants to build a presentation, convert a PPT/PPTX to web, or create slides for a talk/pitch. Helps non-designers discover their aesthetic through visual exploration rather than abstract choices."
+    },
+    {
+      "kind": "skill",
+      "name": "ios-icon-gen",
+      "description": "Generate iOS app icons as PNG imagesets for Xcode asset catalogs from SF Symbols (5000+ Apple-native) or Iconify API (275k+ open source icons from 200+ collections). Use when generating icons, creating icon assets, adding icons to asset catalog, or searching for icons for iOS projects."
+    },
+    {
+      "kind": "skill",
+      "name": "make-interfaces-feel-better",
+      "description": "Apply concrete design-engineering details that make interfaces feel polished. Use when reviewing or improving UI spacing, typography, borders, shadows, motion, hit areas, icons, text wrapping, and interaction states."
+    },
+    {
+      "kind": "skill",
+      "name": "manim-video",
+      "description": "Build reusable Manim explainers for technical concepts, graphs, system diagrams, and product walkthroughs, then hand off to the wider EGC video stack if needed. Use when the user wants a clean animated explainer rather than a generic talking-head script."
+    },
+    {
+      "kind": "skill",
+      "name": "motion-advanced",
+      "description": "Advanced motion patterns for React / Next.js: drag & drop, gestures, text animations, SVG path drawing, custom hooks, imperative sequences (useAnimate), loaders, and the full API decision tree. Requires motion-foundations."
+    },
+    {
+      "kind": "skill",
+      "name": "motion-foundations",
+      "description": "Motion tokens, spring presets, performance rules, device adaptation, accessibility enforcement, and SSR safety for React / Next.js using motion/react. Foundation layer: all other motion skills depend on this."
+    },
+    {
+      "kind": "skill",
+      "name": "motion-patterns",
+      "description": "Production-ready animation patterns for React / Next.js: button, modal, toast, stagger, page transitions, exit animations, scroll, and layout: built on motion-foundations tokens and springs."
+    },
+    {
+      "kind": "skill",
+      "name": "motion-ui",
+      "description": "Production-ready UI motion system for React/Next.js. Use when implementing animations, transitions, or motion patterns."
+    },
+    {
+      "kind": "skill",
+      "name": "remotion-video-creation",
+      "description": "Best practices for Remotion - Video creation in React. 29 domain-specific rules covering 3D, animations, audio, captions, charts, transitions, and more."
+    },
+    {
+      "kind": "skill",
+      "name": "3d",
+      "description": "3D content in Remotion using Three.js and React Three Fiber."
+    },
+    {
+      "kind": "skill",
+      "name": "animations",
+      "description": "Fundamental animation skills for Remotion"
+    },
+    {
+      "kind": "skill",
+      "name": "assets",
+      "description": "Importing images, videos, audio, and fonts into Remotion"
+    },
+    {
+      "kind": "skill",
+      "name": "audio",
+      "description": "Using audio and sound in Remotion - importing, trimming, volume, speed, pitch"
+    },
+    {
+      "kind": "skill",
+      "name": "calculate-metadata",
+      "description": "Dynamically set composition duration, dimensions, and props"
+    },
+    {
+      "kind": "skill",
+      "name": "can-decode",
+      "description": "Check if a video can be decoded by the browser using Mediabunny"
+    },
+    {
+      "kind": "skill",
+      "name": "charts",
+      "description": "Chart and data visualization patterns for Remotion. Use when creating bar charts, pie charts, histograms, progress bars, or any data-driven animations."
+    },
+    {
+      "kind": "skill",
+      "name": "compositions",
+      "description": "Defining compositions, stills, folders, default props and dynamic metadata"
+    },
+    {
+      "kind": "skill",
+      "name": "display-captions",
+      "description": "Displaying captions in Remotion with TikTok-style pages and word highlighting"
+    },
+    {
+      "kind": "skill",
+      "name": "extract-frames",
+      "description": "Extract frames from videos at specific timestamps using Mediabunny"
+    },
+    {
+      "kind": "skill",
+      "name": "fonts",
+      "description": "Loading Google Fonts and local fonts in Remotion"
+    },
+    {
+      "kind": "skill",
+      "name": "get-audio-duration",
+      "description": "Getting the duration of an audio file in seconds with Mediabunny"
+    },
+    {
+      "kind": "skill",
+      "name": "get-video-dimensions",
+      "description": "Getting the width and height of a video file with Mediabunny"
+    },
+    {
+      "kind": "skill",
+      "name": "get-video-duration",
+      "description": "Getting the duration of a video file in seconds with Mediabunny"
+    },
+    {
+      "kind": "skill",
+      "name": "gif",
+      "description": "Displaying GIFs, APNG, AVIF and WebP in Remotion"
+    },
+    {
+      "kind": "skill",
+      "name": "images",
+      "description": "Embedding images in Remotion using the <Img> component"
+    },
+    {
+      "kind": "skill",
+      "name": "import-srt-captions",
+      "description": "Importing .srt subtitle files into Remotion using @remotion/captions"
+    },
+    {
+      "kind": "skill",
+      "name": "lottie",
+      "description": "Embedding Lottie animations in Remotion."
+    },
+    {
+      "kind": "skill",
+      "name": "measuring-dom-nodes",
+      "description": "Measuring DOM element dimensions in Remotion"
+    },
+    {
+      "kind": "skill",
+      "name": "measuring-text",
+      "description": "Measuring text dimensions, fitting text to containers, and checking overflow"
+    },
+    {
+      "kind": "skill",
+      "name": "sequencing",
+      "description": "Sequencing patterns for Remotion - delay, trim, limit duration of items"
+    },
+    {
+      "kind": "skill",
+      "name": "tailwind",
+      "description": "Using TailwindCSS in Remotion."
+    },
+    {
+      "kind": "skill",
+      "name": "text-animations",
+      "description": "Typography and text animation patterns for Remotion."
+    },
+    {
+      "kind": "skill",
+      "name": "timing",
+      "description": "Interpolation curves in Remotion - linear, easing, spring animations"
+    },
+    {
+      "kind": "skill",
+      "name": "transcribe-captions",
+      "description": "Transcribing audio to generate captions in Remotion"
+    },
+    {
+      "kind": "skill",
+      "name": "transitions",
+      "description": "Fullscreen scene transitions for Remotion."
+    },
+    {
+      "kind": "skill",
+      "name": "trimming",
+      "description": "Trimming patterns for Remotion - cut the beginning or end of animations"
+    },
+    {
+      "kind": "skill",
+      "name": "videos",
+      "description": "Embedding videos in Remotion - trimming, volume, speed, looping, pitch"
+    },
+    {
+      "kind": "skill",
+      "name": "ui-demo",
+      "description": "Record polished UI demo videos using Playwright. Use when the user asks to create a demo, walkthrough, screen recording, or tutorial video of a web application. Produces WebM videos with visible cursor, natural pacing, and professional feel."
+    },
+    {
+      "kind": "skill",
+      "name": "ui-to-vue",
+      "description": "Use when the user has UI screenshots or design exports that need batch conversion into Vue 3 components, especially with Vant, Element Plus, or Ant Design Vue."
+    },
+    {
+      "kind": "skill",
+      "name": "video-editing",
+      "description": "AI-assisted video editing workflows for cutting, structuring, and augmenting real footage. Covers the full pipeline from raw capture through FFmpeg, Remotion, ElevenLabs, fal.ai, and final polish in Descript or CapCut. Use when the user wants to edit video, cut footage, create vlogs, or build video content."
+    },
+    {
+      "kind": "skill",
+      "name": "videodb",
+      "description": "See, Understand, Act on video and audio. See- ingest from local files, URLs, RTSP/live feeds, or live record desktop; return realtime context and playable stream links. Understand- extract frames, build visual/semantic/temporal indexes, and search moments with timestamps and auto-clips. Act- transcode and normalize (codec, fps, resolution, aspect ratio), perform timeline edits (subtitles, text/image overlays, branding, audio overlays, dubbing, translation), generate media assets (image, audio, video), and create real time alerts for events from live streams or desktop capture."
+    },
+    {
+      "kind": "skill",
+      "name": "vite-patterns",
+      "description": "Vite build tool patterns including config, plugins, HMR, env variables, proxy setup, SSR, library mode, dependency pre-bundling, and build optimization. Activate when working with vite.config.ts, Vite plugins, or Vite-based projects."
+    },
+    {
+      "kind": "skill",
+      "name": "agent-payment-x402",
+      "description": "Add x402 payment execution to AI agents: per-task budgets, spending controls, and non-custodial wallets via MCP tools. Use when agents need to pay for APIs, services, or other agents."
+    },
+    {
+      "kind": "skill",
+      "name": "benchmark",
+      "description": "Use this skill to measure performance baselines, detect regressions before/after PRs, and compare stack alternatives."
+    },
+    {
+      "kind": "skill",
+      "name": "browser-qa",
+      "description": "Use this skill to automate visual testing and UI interaction verification using browser automation after deploying features."
+    },
+    {
+      "kind": "skill",
+      "name": "canary-watch",
+      "description": "Use this skill to monitor a deployed URL for regressions after deploys, merges, or dependency upgrades."
+    },
+    {
+      "kind": "skill",
+      "name": "ck",
+      "description": "Persistent per-project memory for Gemini Code. Auto-loads project context on session start, tracks sessions with git activity, and writes to native memory. Commands run deterministic Node.js scripts: behavior is consistent across model versions."
+    },
+    {
+      "kind": "skill",
+      "name": "click-path-audit",
+      "description": "Trace every user-facing button/touchpoint through its full state change sequence to find bugs where functions individually work but cancel each other out, produce wrong final state, or leave the UI in an inconsistent state. Use when: systematic debugging found no bugs but users report broken buttons, or after any major refactor touching shared state stores."
+    },
+    {
+      "kind": "skill",
+      "name": "code-tour",
+      "description": "Create CodeTour `.tour` files: persona-targeted, step-by-step walkthroughs with real file and line anchors. Use for onboarding tours, architecture walkthroughs, PR tours, RCA tours, and structured \"explain how this works\" requests."
+    },
+    {
+      "kind": "skill",
+      "name": "codebase-onboarding",
+      "description": "Analyze an unfamiliar codebase and generate a structured onboarding guide with architecture map, key entry points, conventions, and a starter GEMINI.md. Use when joining a new project or setting up Gemini Code for the first time in a repo."
+    },
+    {
+      "kind": "skill",
+      "name": "coding-standards",
+      "description": "Baseline cross-project coding conventions for naming, readability, immutability, and code-quality review. Use detailed frontend or backend skills for framework-specific patterns."
+    },
+    {
+      "kind": "skill",
+      "name": "configure-egc",
+      "description": "Interactive installer for EGC - Extended Global Context: guides users through selecting and installing skills and rules to user-level or project-level directories, verifies paths, and optionally optimizes installed files."
+    },
+    {
+      "kind": "skill",
+      "name": "content-hash-cache-pattern",
+      "description": "Cache expensive file processing results using SHA-256 content hashes: path-independent, auto-invalidating, with service layer separation."
+    },
+    {
+      "kind": "skill",
+      "name": "council",
+      "description": "Convene a four-voice council for ambiguous decisions, tradeoffs, and go/no-go calls. Use when multiple valid paths exist and you need structured disagreement before choosing."
+    },
+    {
+      "kind": "skill",
+      "name": "cpp-coding-standards",
+      "description": "C++ coding standards based on the C++ Core Guidelines (isocpp.github.io). Use when writing, reviewing, or refactoring C++ code to enforce modern, safe, and idiomatic practices."
+    },
+    {
+      "kind": "skill",
+      "name": "crosspost",
+      "description": "Multi-platform content distribution across X, LinkedIn, Threads, and Bluesky. Adapts content per platform using content-engine patterns. Never posts identical content cross-platform. Use when the user wants to distribute content across social platforms."
+    },
+    {
+      "kind": "skill",
+      "name": "dashboard-builder",
+      "description": "Build monitoring dashboards that answer real operator questions for Grafana, SigNoz, and similar platforms. Use when turning metrics into a working dashboard instead of a vanity board."
+    },
+    {
+      "kind": "skill",
+      "name": "data-scraper-agent",
+      "description": "Build a fully automated AI-powered data collection agent for any public source: job boards, prices, news, GitHub, sports, anything. Scrapes on a schedule, enriches data with a free LLM (Gemini Flash), stores results in Notion/Sheets/Supabase, and learns from user feedback. Runs 100% free on GitHub Actions. Use when the user wants to monitor, collect, or track any public data automatically."
+    },
+    {
+      "kind": "skill",
+      "name": "design-system",
+      "description": "Use this skill to generate or audit design systems, check visual consistency, and review PRs that touch styling."
+    },
+    {
+      "kind": "skill",
+      "name": "egc-devfleet",
+      "description": "Orchestrate multi-agent coding tasks via Gemini DevFleet: plan projects, dispatch parallel agents in isolated worktrees, monitor progress, and read structured reports."
+    },
+    {
+      "kind": "skill",
+      "name": "egc-tools-cost-audit",
+      "description": "Evidence-first EGC Tools burn and billing audit workflow. Use when investigating runaway PR creation, quota bypass, premium-model leakage, duplicate jobs, or GitHub App cost spikes in the EGC Tools repo."
+    },
+    {
+      "kind": "skill",
+      "name": "engineering-audit",
+      "description": "Engineering health assessment patterns, scoring thresholds, refactoring techniques, and observability guidelines for the engineering-auditor agent and commands."
+    },
+    {
+      "kind": "skill",
+      "name": "enterprise-agent-ops",
+      "description": "Operate long-lived agent workloads with observability, security boundaries, and lifecycle management."
+    },
+    {
+      "kind": "skill",
+      "name": "flutter-dart-code-review",
+      "description": "Library-agnostic Flutter/Dart code review checklist covering widget best practices, state management patterns (BLoC, Riverpod, Provider, GetX, MobX, Signals), Dart idioms, performance, accessibility, security, and clean architecture."
+    },
+    {
+      "kind": "skill",
+      "name": "gan-style-harness",
+      "description": "GAN-inspired Generator-Evaluator agent harness for building high-quality applications autonomously. "
+    },
+    {
+      "kind": "skill",
+      "name": "gateguard",
+      "description": "Fact-forcing gate that blocks Edit/Write/Bash (including MultiEdit) and demands concrete investigation (importers, data schemas, user instruction) before allowing the action. Measurably improves output quality by +2.25 points vs ungated agents."
+    },
+    {
+      "kind": "skill",
+      "name": "git-workflow",
+      "description": "Git workflow patterns including branching strategies, commit conventions, merge vs rebase, conflict resolution, and collaborative development best practices for teams of all sizes."
+    },
+    {
+      "kind": "skill",
+      "name": "healthcare-cdss-patterns",
+      "description": "Clinical Decision Support System (CDSS) development patterns. Drug interaction checking, dose validation, clinical scoring (NEWS2, qSOFA), alert severity classification, and integration into EMR workflows."
+    },
+    {
+      "kind": "skill",
+      "name": "healthcare-emr-patterns",
+      "description": "EMR/EHR development patterns for healthcare applications. Clinical safety, encounter workflows, prescription generation, clinical decision support integration, and accessibility-first UI for medical data entry."
+    },
+    {
+      "kind": "skill",
+      "name": "healthcare-eval-harness",
+      "description": "Patient safety evaluation harness for healthcare application deployments. Automated test suites for CDSS accuracy, PHI exposure, clinical workflow integrity, and integration compliance. Blocks deployments on safety failures."
+    },
+    {
+      "kind": "skill",
+      "name": "hermes-imports",
+      "description": "Convert local Hermes operator workflows into sanitized EGC skills and release-pack artifacts. Use when preparing a Hermes workflow for public EGC reuse without leaking private workspace state, credentials, or local-only paths."
+    },
+    {
+      "kind": "skill",
+      "name": "hexagonal-architecture",
+      "description": "Design, implement, and refactor Ports & Adapters systems with clear domain boundaries, dependency inversion, and testable use-case orchestration across TypeScript, Java, Kotlin, and Go services."
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-plugin-discovery",
+      "description": "Discover and evaluate Laravel packages via LaraPlugins.io MCP. Use when the user wants to find plugins, check package health, or assess Laravel/PHP compatibility."
+    },
+    {
+      "kind": "skill",
+      "name": "mcp-server-patterns",
+      "description": "Build MCP servers with Node/TypeScript SDK: tools, resources, prompts, Zod validation, stdio vs Streamable HTTP. Use Context7 or official MCP docs for latest API."
+    },
+    {
+      "kind": "skill",
+      "name": "nanoclaw-repl",
+      "description": "Operate and extend NanoClaw v2, EGC's zero-dependency session-aware REPL built on egc -p."
+    },
+    {
+      "kind": "skill",
+      "name": "nextjs-turbopack",
+      "description": "Next.js 16+ and Turbopack: incremental bundling, FS caching, dev speed, and when to use Turbopack vs webpack."
+    },
+    {
+      "kind": "skill",
+      "name": "nuxt4-patterns",
+      "description": "Nuxt 4 app patterns for hydration safety, performance, route rules, lazy loading, and SSR-safe data fetching with useFetch and useAsyncData."
+    },
+    {
+      "kind": "skill",
+      "name": "openclaw-persona-forge",
+      "description": "|-"
+    },
+    {
+      "kind": "skill",
+      "name": "opensource-pipeline",
+      "description": "Open-source pipeline: fork, sanitize, and package private projects for safe public release. Chains 3 agents (forker, sanitizer, packager). Triggers: '/opensource', 'open source this', 'make this public', 'prepare for open source'."
+    },
+    {
+      "kind": "skill",
+      "name": "perl-security",
+      "description": "Comprehensive Perl security covering taint mode, input validation, safe process execution, DBI parameterized queries, web security (XSS/SQLi/CSRF), and perlcritic security policies."
+    },
+    {
+      "kind": "skill",
+      "name": "plankton-code-quality",
+      "description": "Write-time code quality enforcement using Plankton: auto-formatting, linting, and Gemini-powered fixes on every file edit via hooks."
+    },
+    {
+      "kind": "skill",
+      "name": "product-capability",
+      "description": "Translate PRD intent, roadmap asks, or product discussions into an implementation-ready capability plan that exposes constraints, invariants, interfaces, and unresolved decisions before multi-service work starts. Use when the user needs an EGC-native PRD-to-SRS lane instead of vague planning prose."
+    },
+    {
+      "kind": "skill",
+      "name": "product-lens",
+      "description": "Use this skill to validate the \"why\" before building, run product diagnostics, and pressure-test product direction before the request becomes an implementation contract."
+    },
+    {
+      "kind": "skill",
+      "name": "pytorch-patterns",
+      "description": "PyTorch deep learning patterns and best practices for building robust, efficient, and reproducible training pipelines, model architectures, and data loading."
+    },
+    {
+      "kind": "skill",
+      "name": "ralphinho-rfc-pipeline",
+      "description": "RFC-driven multi-agent DAG execution pattern with quality gates, merge queues, and work unit orchestration."
+    },
+    {
+      "kind": "skill",
+      "name": "repo-scan",
+      "description": "Cross-stack source code asset audit: classifies every file, detects embedded third-party libraries, and delivers actionable four-level verdicts per module with interactive HTML reports."
+    },
+    {
+      "kind": "skill",
+      "name": "rules-distill",
+      "description": "Scan skills to extract cross-cutting principles and distill them into rules: append, revise, or create new rule files"
+    },
+    {
+      "kind": "skill",
+      "name": "safety-guard",
+      "description": "Use this skill to prevent destructive operations when working on production systems or running agents autonomously."
+    },
+    {
+      "kind": "skill",
+      "name": "santa-method",
+      "description": "Multi-agent adversarial verification with convergence loop. Two independent review agents must both pass before output ships."
+    },
+    {
+      "kind": "skill",
+      "name": "skill-comply",
+      "description": "Visualize whether skills, rules, and agent definitions are actually followed: auto-generates scenarios at 3 prompt strictness levels, runs agents, classifies behavioral sequences, and reports compliance rates with full tool call timelines"
+    },
+    {
+      "kind": "skill",
+      "name": "team-builder",
+      "description": "Interactive agent picker for composing and dispatching parallel teams"
+    },
+    {
+      "kind": "skill",
+      "name": "workspace-surface-audit",
+      "description": "Audit the active repo, MCP servers, plugins, connectors, env surfaces, and harness setup, then recommend the highest-value EGC-native skills, hooks, agents, and operator workflows. Use when the user wants help setting up Gemini Code or understanding what capabilities are actually available in their environment."
+    },
+    {
+      "kind": "skill",
+      "name": "api-connector-builder",
+      "description": "Build a new API connector or provider by matching the target repo's existing integration pattern exactly. Use when adding one more integration without inventing a second architecture."
+    },
+    {
+      "kind": "skill",
+      "name": "connections-optimizer",
+      "description": "Reorganize the user's X and LinkedIn network with review-first pruning, add/follow recommendations, and channel-specific warm outreach drafted in the user's real voice. Use when the user wants to clean up following lists, grow toward current priorities, or rebalance a social graph around higher-signal relationships."
+    },
+    {
+      "kind": "skill",
+      "name": "email-ops",
+      "description": "Evidence-first mailbox triage, drafting, send verification, and sent-mail-safe follow-up workflow for EGC. Use when the user wants to organize email, draft or send through the real mail surface, or prove what landed in Sent."
+    },
+    {
+      "kind": "skill",
+      "name": "jira-integration",
+      "description": "Use this skill when retrieving Jira tickets, analyzing requirements, updating ticket status, adding comments, or transitioning issues. Provides Jira API patterns via MCP or direct REST calls."
+    },
+    {
+      "kind": "skill",
+      "name": "messages-ops",
+      "description": "Evidence-first live messaging workflow for EGC. Use when the user wants to read texts or DMs, recover a recent one-time code, inspect a thread before replying, or prove which message source was actually checked."
+    },
+    {
+      "kind": "skill",
+      "name": "social-graph-ranker",
+      "description": "Weighted social-graph ranking for warm intro discovery, bridge scoring, and network gap analysis across X and LinkedIn. Use when the user wants the reusable graph-ranking engine itself, not the broader outreach or network-maintenance workflow layered on top of it."
+    },
+    {
+      "kind": "skill",
+      "name": "unified-notifications-ops",
+      "description": "Operate notifications as one EGC-native workflow across GitHub, Linear, desktop alerts, hooks, and connected communication surfaces. Use when the real problem is alert routing, deduplication, escalation, or inbox collapse."
+    },
+    {
+      "kind": "skill",
+      "name": "x-api",
+      "description": "X/Twitter API integration for posting tweets, threads, reading timelines, search, and analytics. Covers OAuth auth patterns, rate limits, and platform-native content posting. Use when the user wants to interact with X programmatically."
+    },
+    {
+      "kind": "skill",
+      "name": "dart-flutter-patterns",
+      "description": "Production-ready Dart and Flutter patterns covering null safety, immutable state, async composition, widget architecture, popular state management frameworks (BLoC, Riverpod, Provider), GoRouter navigation, Dio networking, Freezed code generation, and clean architecture."
+    },
+    {
+      "kind": "skill",
+      "name": "kotlin-coroutines-flows",
+      "description": "Kotlin Coroutines and Flow patterns for Android and KMP: structured concurrency, Flow operators, StateFlow, error handling, and testing."
+    },
+    {
+      "kind": "skill",
+      "name": "kotlin-exposed-patterns",
+      "description": "JetBrains Exposed ORM patterns including DSL queries, DAO pattern, transactions, HikariCP connection pooling, Flyway migrations, and repository pattern."
+    },
+    {
+      "kind": "skill",
+      "name": "kotlin-ktor-patterns",
+      "description": "Ktor server patterns including routing DSL, plugins, authentication, Koin DI, kotlinx.serialization, WebSockets, and testApplication testing."
+    },
+    {
+      "kind": "skill",
+      "name": "kotlin-patterns",
+      "description": "Idiomatic Kotlin patterns, best practices, and conventions for building robust, efficient, and maintainable Kotlin applications with coroutines, null safety, and DSL builders."
+    },
+    {
+      "kind": "skill",
+      "name": "swift-actor-persistence",
+      "description": "Thread-safe data persistence in Swift using actors: in-memory cache with file-backed storage, eliminating data races by design."
+    },
+    {
+      "kind": "skill",
+      "name": "swift-concurrency-6-2",
+      "description": "Swift 6.2 Approachable Concurrency: single-threaded by default, @concurrent for explicit background offloading, isolated conformances for main actor types."
+    },
+    {
+      "kind": "skill",
+      "name": "swift-protocol-di-testing",
+      "description": "Protocol-based dependency injection for testable Swift code: mock file system, network, and external APIs using focused protocols and Swift Testing."
+    },
+    {
+      "kind": "skill",
+      "name": "cisco-ios-patterns",
+      "description": "Cisco IOS and IOS-XE review patterns for show commands, config hierarchy, wildcard masks, ACL placement, interface hygiene, and safe change-window verification."
+    },
+    {
+      "kind": "skill",
+      "name": "customs-trade-compliance",
+      "description": ">"
+    },
+    {
+      "kind": "skill",
+      "name": "defi-amm-security",
+      "description": "Security checklist for Solidity AMM contracts, liquidity pools, and swap flows. Covers reentrancy, CEI ordering, donation or inflation attacks, oracle manipulation, slippage, admin controls, and integer math."
+    },
+    {
+      "kind": "skill",
+      "name": "healthcare-phi-compliance",
+      "description": "Protected Health Information (PHI) and Personally Identifiable Information (PII) compliance patterns for healthcare applications. Covers data classification, access control, audit trails, encryption, and common leak vectors."
+    },
+    {
+      "kind": "skill",
+      "name": "hipaa-compliance",
+      "description": "HIPAA-specific entrypoint for healthcare privacy and security work. Use when a task is explicitly framed around HIPAA, PHI handling, covered entities, BAAs, breach posture, or US healthcare compliance requirements."
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-network-readiness",
+      "description": "Readiness checklist for homelab VLAN segmentation, local DNS filtering, and WireGuard-style remote access before changing router, firewall, DHCP, or VPN configuration."
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-network-setup",
+      "description": "Practical home and homelab network planning for gateways, switches, access points, IP ranges, DHCP reservations, DNS, cabling, and common beginner mistakes."
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-pihole-dns",
+      "description": "Pi-hole installation, blocklist management, DNS-over-HTTPS setup, DHCP integration, local DNS records, and troubleshooting broken DNS resolution on a home network."
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-vlan-segmentation",
+      "description": "Segmenting home networks into VLANs for IoT, guest, trusted, and server traffic using UniFi, pfSense/OPNsense, and MikroTik: including switch trunk config, firewall rules, and wireless SSID mapping."
+    },
+    {
+      "kind": "skill",
+      "name": "homelab-wireguard-vpn",
+      "description": "WireGuard VPN server setup, peer configuration, key generation, split tunneling vs full tunnel routing, and remote access to a home network from mobile and laptop clients."
+    },
+    {
+      "kind": "skill",
+      "name": "llm-trading-agent-security",
+      "description": "Security patterns for autonomous trading agents with wallet or transaction authority. Covers prompt injection, spend limits, pre-send simulation, circuit breakers, MEV protection, and key handling."
+    },
+    {
+      "kind": "skill",
+      "name": "netmiko-ssh-automation",
+      "description": "Safe Python Netmiko patterns for read-only collection, bounded batch SSH, TextFSM parsing, guarded config changes, timeouts, and network automation error handling."
+    },
+    {
+      "kind": "skill",
+      "name": "network-bgp-diagnostics",
+      "description": "Diagnostics-only BGP troubleshooting patterns for neighbor state, route exchange, prefix policy, AS path inspection, and safe evidence collection."
+    },
+    {
+      "kind": "skill",
+      "name": "network-config-validation",
+      "description": "Pre-deployment checks for router and switch configuration, including dangerous commands, duplicate addresses, subnet overlaps, stale references, management-plane risk, and IOS-style security hygiene."
+    },
+    {
+      "kind": "skill",
+      "name": "network-interface-health",
+      "description": "Diagnose interface errors, drops, CRCs, duplex mismatches, flapping, speed negotiation issues, and counter trends on routers, switches, and Linux hosts."
+    },
+    {
+      "kind": "skill",
+      "name": "security-bounty-hunter",
+      "description": "Hunt for exploitable, bounty-worthy security issues in repositories. Focuses on remotely reachable vulnerabilities that qualify for real reports instead of noisy local-only findings."
+    },
+    {
+      "kind": "skill",
+      "name": "security-review",
+      "description": "Use this skill when adding authentication, handling user input, working with secrets, creating API endpoints, or implementing payment/sensitive features. Provides comprehensive security checklist and patterns."
+    },
+    {
+      "kind": "skill",
+      "name": "security-scan",
+      "description": "Scan your Gemini Code configuration (.gemini/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks GEMINI.md, settings.json, MCP servers, hooks, and agent definitions."
+    },
+    {
+      "kind": "skill",
+      "name": "visa-doc-translate",
+      "description": "Translate visa application documents (images) to English and create a bilingual PDF with original and translation"
+    },
+    {
+      "kind": "skill",
+      "name": "ai-regression-testing",
+      "description": "Regression testing strategies for AI-assisted development. Sandbox-mode API testing without database dependencies, automated bug-check workflows, and patterns to catch AI blind spots where the same model writes and reviews code."
+    },
+    {
+      "kind": "skill",
+      "name": "cpp-testing",
+      "description": "Use only when writing/updating/fixing C++ tests, configuring GoogleTest/CTest, diagnosing failing or flaky tests, or adding coverage/sanitizers."
+    },
+    {
+      "kind": "skill",
+      "name": "csharp-testing",
+      "description": "C# and .NET testing patterns with xUnit, FluentAssertions, mocking, integration tests, and test organization best practices."
+    },
+    {
+      "kind": "skill",
+      "name": "django-tdd",
+      "description": "Django testing strategies with pytest-django, TDD methodology, factory_boy, mocking, coverage, and testing Django REST Framework APIs."
+    },
+    {
+      "kind": "skill",
+      "name": "django-verification",
+      "description": "Verification loop for Django projects: migrations, linting, tests with coverage, security scans, and deployment readiness checks before release or PR."
+    },
+    {
+      "kind": "skill",
+      "name": "e2e-testing",
+      "description": "Playwright E2E testing patterns, Page Object Model, configuration, CI/CD integration, artifact management, and flaky test strategies."
+    },
+    {
+      "kind": "skill",
+      "name": "eval-harness",
+      "description": "Formal evaluation framework for Gemini Code sessions implementing eval-driven development (EDD) principles"
+    },
+    {
+      "kind": "skill",
+      "name": "fsharp-testing",
+      "description": "F# testing patterns with xUnit, FsUnit, Unquote, FsCheck property-based testing, integration tests, and test organization best practices."
+    },
+    {
+      "kind": "skill",
+      "name": "golang-testing",
+      "description": "Go testing patterns including table-driven tests, subtests, benchmarks, fuzzing, and test coverage. Follows TDD methodology with idiomatic Go practices."
+    },
+    {
+      "kind": "skill",
+      "name": "kotlin-testing",
+      "description": "Kotlin testing patterns with Kotest, MockK, coroutine testing, property-based testing, and Kover coverage. Follows TDD methodology with idiomatic Kotlin practices."
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-tdd",
+      "description": "Test-driven development for Laravel with PHPUnit and Pest, factories, database testing, fakes, and coverage targets."
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-verification",
+      "description": "Verification loop for Laravel projects: env checks, linting, static analysis, tests with coverage, security scans, and deployment readiness."
+    },
+    {
+      "kind": "skill",
+      "name": "perl-testing",
+      "description": "Perl testing patterns using Test2::V0, Test::More, prove runner, mocking, coverage with Devel::Cover, and TDD methodology."
+    },
+    {
+      "kind": "skill",
+      "name": "python-testing",
+      "description": "Python testing strategies using pytest, TDD methodology, fixtures, mocking, parametrization, and coverage requirements."
+    },
+    {
+      "kind": "skill",
+      "name": "rust-testing",
+      "description": "Rust testing patterns including unit tests, integration tests, async testing, property-based testing, mocking, and coverage. Follows TDD methodology."
+    },
+    {
+      "kind": "skill",
+      "name": "springboot-tdd",
+      "description": "Test-driven development for Spring Boot using JUnit 5, Mockito, MockMvc, Testcontainers, and JaCoCo. Use when adding features, fixing bugs, or refactoring."
+    },
+    {
+      "kind": "skill",
+      "name": "springboot-verification",
+      "description": "Verification loop for Spring Boot projects: build, static analysis, tests with coverage, security scans, and diff review before release or PR."
+    },
+    {
+      "kind": "skill",
+      "name": "tdd-workflow",
+      "description": "Use this skill when writing new features, fixing bugs, or refactoring code. Enforces test-driven development with 80%+ coverage including unit, integration, and E2E tests."
+    },
+    {
+      "kind": "skill",
+      "name": "verification-loop",
+      "description": "A comprehensive verification system for Gemini Code sessions."
+    },
+    {
+      "kind": "skill",
+      "name": "windows-desktop-e2e",
+      "description": "E2E testing for Windows native desktop apps (WPF, WinForms, Win32/MFC, Qt) using pywinauto and Windows UI Automation."
+    },
+    {
+      "kind": "skill",
+      "name": "dmux-workflows",
+      "description": "Multi-agent orchestration using dmux (tmux pane manager for AI agents). Patterns for parallel agent workflows across Gemini Code, Codex, OpenCode, and other harnesses. Use when running multiple agent sessions in parallel or coordinating multi-agent development workflows."
+    },
+    {
+      "kind": "skill",
+      "name": "hookify-rules",
+      "description": "This skill should be used when the user asks to create a hookify rule, write a hook rule, configure hookify, add a hookify rule, or needs guidance on hookify rule syntax and patterns."
+    },
+    {
+      "kind": "skill",
+      "name": "iterative-retrieval",
+      "description": "Pattern for progressively refining context retrieval to solve the subagent context problem"
+    },
+    {
+      "kind": "skill",
+      "name": "knowledge-ops",
+      "description": "Knowledge base management, ingestion, sync, and retrieval across multiple storage layers (local files, MCP memory, vector stores, Git repos). Use when the user wants to save, organize, sync, deduplicate, or search across their knowledge systems."
+    },
+    {
+      "kind": "skill",
+      "name": "project-flow-ops",
+      "description": "Operate execution flow across GitHub and Linear by triaging issues and pull requests, linking active work, and keeping GitHub public-facing while Linear remains the internal execution layer. Use when the user wants backlog control, PR triage, or GitHub-to-Linear coordination."
+    },
+    {
+      "kind": "skill",
+      "name": "research-ops",
+      "description": "Evidence-first current-state research workflow for EGC. Use when the user wants fresh facts, comparisons, enrichment, or a recommendation built from current public evidence and any supplied local context."
+    },
+    {
+      "kind": "skill",
+      "name": "strategic-compact",
+      "description": "Suggests manual context compaction at logical intervals to preserve context through task phases rather than arbitrary auto-compaction."
+    },
+    {
+      "kind": "agent",
+      "name": "a11y-architect",
+      "description": "Accessibility Architect specializing in WCAG 2.2 compliance for Web and Native platforms. Use PROACTIVELY when designing UI components, establishing design systems, or auditing code for inclusive user experiences."
+    },
+    {
+      "kind": "agent",
+      "name": "architect",
+      "description": "REPO-OWNED ARCHITECT for system design, scalability, and technical decision-making. Use PROACTIVELY when planning new features, refactoring large systems, or making architectural decisions."
+    },
+    {
+      "kind": "agent",
+      "name": "build-error-resolver",
+      "description": "Build and TypeScript error resolution specialist. Use PROACTIVELY when build fails or type errors occur. Fixes build/type errors only with minimal diffs, no architectural edits. Focuses on getting the build green quickly."
+    },
+    {
+      "kind": "agent",
+      "name": "chief-of-staff",
+      "description": "Personal communication chief of staff that triages email, Slack, LINE, and Messenger. Classifies messages into 4 tiers (skip/info_only/meeting_info/action_required), generates draft replies, and enforces post-send follow-through via hooks. Use when managing multi-channel communication workflows."
+    },
+    {
+      "kind": "agent",
+      "name": "code-architect",
+      "description": "Designs feature architectures by analyzing existing codebase patterns and conventions, then providing implementation blueprints with concrete files, interfaces, data flow, and build order."
+    },
+    {
+      "kind": "agent",
+      "name": "code-explorer",
+      "description": "Deeply analyzes existing codebase features by tracing execution paths, mapping architecture layers, and documenting dependencies to inform new development."
+    },
+    {
+      "kind": "agent",
+      "name": "code-reviewer",
+      "description": "Expert code review specialist. Proactively reviews code for quality, security, and maintainability. Use immediately after writing or modifying code. MUST BE USED for all code changes."
+    },
+    {
+      "kind": "agent",
+      "name": "code-simplifier",
+      "description": "Simplifies and refines code for clarity, consistency, and maintainability while preserving behavior. Focus on recently modified code unless instructed otherwise."
+    },
+    {
+      "kind": "agent",
+      "name": "comment-analyzer",
+      "description": "Analyze code comments for accuracy, completeness, maintainability, and comment rot risk."
+    },
+    {
+      "kind": "agent",
+      "name": "conversation-analyzer",
+      "description": "Use this agent when analyzing conversation transcripts to find behaviors worth preventing with hooks. Triggered by /hookify without arguments."
+    },
+    {
+      "kind": "agent",
+      "name": "cpp-build-resolver",
+      "description": "C++ build, CMake, and compilation error resolution specialist. Fixes build errors, linker issues, and template errors with minimal changes. Use when C++ builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "cpp-reviewer",
+      "description": "Expert C++ code reviewer specializing in memory safety, modern C++ idioms, concurrency, and performance. Use for all C++ code changes. MUST BE USED for C++ projects."
+    },
+    {
+      "kind": "agent",
+      "name": "csharp-reviewer",
+      "description": "Expert C# code reviewer specializing in .NET conventions, async patterns, security, nullable reference types, and performance. Use for all C# code changes. MUST BE USED for C# projects."
+    },
+    {
+      "kind": "agent",
+      "name": "dart-build-resolver",
+      "description": "Dart/Flutter build, analysis, and dependency error resolution specialist. Fixes `dart analyze` errors, Flutter compilation failures, pub dependency conflicts, and build_runner issues with minimal, surgical changes. Use when Dart/Flutter builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "database-reviewer",
+      "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance."
+    },
+    {
+      "kind": "agent",
+      "name": "django-build-resolver",
+      "description": "Django/Python build, migration, and dependency error resolution specialist. Fixes pip/Poetry errors, migration conflicts, import errors, Django configuration issues, and collectstatic failures with minimal changes. Use when Django setup or startup fails."
+    },
+    {
+      "kind": "agent",
+      "name": "django-reviewer",
+      "description": "Expert Django code reviewer specializing in ORM correctness, DRF patterns, migration safety, security misconfigurations, and production-grade Django practices. Use for all Django code changes. MUST BE USED for Django projects."
+    },
+    {
+      "kind": "agent",
+      "name": "doc-updater",
+      "description": "Documentation and codemap specialist. Use PROACTIVELY for updating codemaps and documentation. Runs /update-codemaps and /update-docs, generates docs/CODEMAPS/*, updates READMEs and guides."
+    },
+    {
+      "kind": "agent",
+      "name": "docs-lookup",
+      "description": "When the user asks how to use a library, framework, or API or needs up-to-date code examples, use Context7 MCP to fetch current documentation and return answers with examples. Invoke for docs/API/setup questions."
+    },
+    {
+      "kind": "agent",
+      "name": "e2e-runner",
+      "description": "End-to-end testing specialist using Vercel Agent Browser (preferred) with Playwright fallback. Use PROACTIVELY for generating, maintaining, and running E2E tests. Manages test journeys, quarantines flaky tests, uploads artifacts (screenshots, videos, traces), and ensures critical user flows work."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-auditor",
+      "description": "Full-spectrum engineering health auditor. Evaluates Cyclomatic Complexity, Cognitive Complexity, Nesting Depth, Function Length, File Length, Maintainability, Code Smells, Duplicate Code, Technical Debt, Type Safety, Test Coverage, Test Quality, Security Findings, Dependency Risk, Build Health, Lint Health, Documentation Coverage, and Architectural Smells. Produces a ranked issue list, an Engineering Score, and a concrete remediation plan. NEVER modifies files: audit and plan only."
+    },
+    {
+      "kind": "agent",
+      "name": "fastapi-reviewer",
+      "description": "Reviews FastAPI applications for async correctness, dependency injection, Pydantic schemas, security, OpenAPI quality, testing, and production readiness."
+    },
+    {
+      "kind": "agent",
+      "name": "flutter-reviewer",
+      "description": "Flutter and Dart code reviewer. Reviews Flutter code for widget best practices, state management patterns, Dart idioms, performance pitfalls, accessibility, and clean architecture violations. Library-agnostic: works with any state management solution and tooling."
+    },
+    {
+      "kind": "agent",
+      "name": "fsharp-reviewer",
+      "description": "Expert F# code reviewer specializing in functional idioms, type safety, pattern matching, computation expressions, and performance. Use for all F# code changes. MUST BE USED for F# projects."
+    },
+    {
+      "kind": "agent",
+      "name": "gan-evaluator",
+      "description": "GAN Harness: Evaluator agent. Tests the live running application via Playwright, scores against rubric, and provides actionable feedback to the Generator."
+    },
+    {
+      "kind": "agent",
+      "name": "gan-generator",
+      "description": "GAN Harness: Generator agent. Implements features according to the spec, reads evaluator feedback, and iterates until quality threshold is met."
+    },
+    {
+      "kind": "agent",
+      "name": "gan-planner",
+      "description": "GAN Harness: Planner agent. Expands a one-line prompt into a full product specification with features, sprints, evaluation criteria, and design direction."
+    },
+    {
+      "kind": "agent",
+      "name": "go-build-resolver",
+      "description": "Go build, vet, and compilation error resolution specialist. Fixes build errors, go vet issues, and linter warnings with minimal changes. Use when Go builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "go-reviewer",
+      "description": "Expert Go code reviewer specializing in idiomatic Go, concurrency patterns, error handling, and performance. Use for all Go code changes. MUST BE USED for Go projects."
+    },
+    {
+      "kind": "agent",
+      "name": "harmonyos-app-resolver",
+      "description": "HarmonyOS application development expert specializing in ArkTS and ArkUI. Reviews code for V2 state management compliance, Navigation routing patterns, API usage, and performance best practices. Use for HarmonyOS/OpenHarmony projects."
+    },
+    {
+      "kind": "agent",
+      "name": "harness-optimizer",
+      "description": "Analyze and improve the local agent harness configuration for reliability, cost, and throughput."
+    },
+    {
+      "kind": "agent",
+      "name": "healthcare-reviewer",
+      "description": "Reviews healthcare application code for clinical safety, CDSS accuracy, PHI compliance, and medical data integrity. Specialized for EMR/EHR, clinical decision support, and health information systems."
+    },
+    {
+      "kind": "agent",
+      "name": "homelab-architect",
+      "description": "Designs home and small-lab network plans from hardware inventory, goals, and operator experience level, with safe staged changes and rollback guidance."
+    },
+    {
+      "kind": "agent",
+      "name": "java-build-resolver",
+      "description": "Java/Maven/Gradle build, compilation, and dependency error resolution specialist. Fixes build errors, Java compiler errors, and Maven/Gradle issues with minimal changes. Use when Java or Spring Boot builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "java-reviewer",
+      "description": "Expert Java and Spring Boot code reviewer specializing in layered architecture, JPA patterns, security, and concurrency. Use for all Java code changes. MUST BE USED for Spring Boot projects."
+    },
+    {
+      "kind": "agent",
+      "name": "kotlin-build-resolver",
+      "description": "Kotlin/Gradle build, compilation, and dependency error resolution specialist. Fixes build errors, Kotlin compiler errors, and Gradle issues with minimal changes. Use when Kotlin builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "kotlin-reviewer",
+      "description": "Kotlin and Android/KMP code reviewer. Reviews Kotlin code for idiomatic patterns, coroutine safety, Compose best practices, clean architecture violations, and common Android pitfalls."
+    },
+    {
+      "kind": "agent",
+      "name": "loop-operator",
+      "description": "Operate autonomous agent loops, monitor progress, and intervene safely when loops stall."
+    },
+    {
+      "kind": "agent",
+      "name": "mle-reviewer",
+      "description": "Production machine-learning engineering reviewer for data contracts, feature pipelines, training reproducibility, offline/online evaluation, model serving, monitoring, and rollback. Use when ML, MLOps, model training, inference, feature store, or evaluation code changes."
+    },
+    {
+      "kind": "agent",
+      "name": "network-architect",
+      "description": "Designs enterprise or multi-site network architecture from requirements, using existing network skills for focused routing, validation, automation, and troubleshooting detail."
+    },
+    {
+      "kind": "agent",
+      "name": "network-config-reviewer",
+      "description": "Reviews router and switch configurations for security, correctness, stale references, risky change-window commands, and missing operational guardrails."
+    },
+    {
+      "kind": "agent",
+      "name": "network-troubleshooter",
+      "description": "Diagnoses network connectivity, routing, DNS, interface, and policy symptoms with a read-only OSI-layer workflow and evidence-backed root cause summary."
+    },
+    {
+      "kind": "agent",
+      "name": "opensource-forker",
+      "description": "Fork any project for open-sourcing. Copies files, strips secrets and credentials (20+ patterns), replaces internal references with placeholders, generates .env.example, and cleans git history. First stage of the opensource-pipeline skill."
+    },
+    {
+      "kind": "agent",
+      "name": "opensource-packager",
+      "description": "Generate complete open-source packaging for a sanitized project. Produces GEMINI.md, setup.sh, README.md, LICENSE, CONTRIBUTING.md, and GitHub issue templates. Makes any repo immediately usable with Gemini Code. Third stage of the opensource-pipeline skill."
+    },
+    {
+      "kind": "agent",
+      "name": "opensource-sanitizer",
+      "description": "Verify an open-source fork is fully sanitized before release. Scans for leaked secrets, PII, internal references, and dangerous files using 20+ regex patterns. Generates a PASS/FAIL/PASS-WITH-WARNINGS report. Second stage of the opensource-pipeline skill. Use PROACTIVELY before any public release."
+    },
+    {
+      "kind": "agent",
+      "name": "performance-optimizer",
+      "description": "Performance analysis and optimization specialist. Use PROACTIVELY for identifying bottlenecks, optimizing slow code, reducing bundle sizes, and improving runtime performance. Profiling, memory leaks, render optimization, and algorithmic improvements."
+    },
+    {
+      "kind": "agent",
+      "name": "planner",
+      "description": "Expert planning specialist for complex features and refactoring. Use PROACTIVELY when users request feature implementation, architectural changes, or complex refactoring. Automatically activated for planning tasks."
+    },
+    {
+      "kind": "agent",
+      "name": "pr-test-analyzer",
+      "description": "Review pull request test coverage quality and completeness, with emphasis on behavioral coverage and real bug prevention."
+    },
+    {
+      "kind": "agent",
+      "name": "python-reviewer",
+      "description": "Expert Python code reviewer specializing in PEP 8 compliance, Pythonic idioms, type hints, security, and performance. Use for all Python code changes. MUST BE USED for Python projects."
+    },
+    {
+      "kind": "agent",
+      "name": "pytorch-build-resolver",
+      "description": "PyTorch runtime, CUDA, and training error resolution specialist. Fixes tensor shape mismatches, device errors, gradient issues, DataLoader problems, and mixed precision failures with minimal changes. Use when PyTorch training or inference crashes."
+    },
+    {
+      "kind": "agent",
+      "name": "refactor-cleaner",
+      "description": "Dead code cleanup and consolidation specialist. Use PROACTIVELY for removing unused code, duplicates, and refactoring. Runs analysis tools (knip, depcheck, ts-prune) to identify dead code and safely removes it."
+    },
+    {
+      "kind": "agent",
+      "name": "reproduce-me",
+      "description": "Reproduce me please."
+    },
+    {
+      "kind": "agent",
+      "name": "researcher-test",
+      "description": "A simple test agent for native delegation experiments."
+    },
+    {
+      "kind": "agent",
+      "name": "rust-build-resolver",
+      "description": "Rust build, compilation, and dependency error resolution specialist. Fixes cargo build errors, borrow checker issues, and Cargo.toml problems with minimal changes. Use when Rust builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "rust-reviewer",
+      "description": "Expert Rust code reviewer specializing in ownership, lifetimes, error handling, unsafe usage, and idiomatic patterns. Use for all Rust code changes. MUST BE USED for Rust projects."
+    },
+    {
+      "kind": "agent",
+      "name": "security-reviewer",
+      "description": "Security vulnerability detection and remediation specialist. Use PROACTIVELY after writing code that handles user input, authentication, API endpoints, or sensitive data. Flags secrets, SSRF, injection, unsafe crypto, and OWASP Top 10 vulnerabilities."
+    },
+    {
+      "kind": "agent",
+      "name": "seo-specialist",
+      "description": "SEO specialist for technical SEO audits, on-page optimization, structured data, Core Web Vitals, and content/keyword mapping. Use for site audits, meta tag reviews, schema markup, sitemap and robots issues, and SEO remediation plans."
+    },
+    {
+      "kind": "agent",
+      "name": "silent-failure-hunter",
+      "description": "Review code for silent failures, swallowed errors, bad fallbacks, and missing error propagation."
+    },
+    {
+      "kind": "agent",
+      "name": "swift-build-resolver",
+      "description": "Swift/Xcode build, compilation, and dependency error resolution specialist. Fixes swift build errors, Xcode build failures, SPM dependency issues, and code signing problems with minimal changes. Use when Swift builds fail."
+    },
+    {
+      "kind": "agent",
+      "name": "swift-reviewer",
+      "description": "Expert Swift code reviewer specializing in protocol-oriented design, value semantics, ARC memory management, Swift Concurrency, and idiomatic patterns. Use for all Swift code changes. MUST BE USED for Swift projects."
+    },
+    {
+      "kind": "agent",
+      "name": "tdd-guide",
+      "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use PROACTIVELY when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage."
+    },
+    {
+      "kind": "agent",
+      "name": "type-design-analyzer",
+      "description": "Analyze type design for encapsulation, invariant expression, usefulness, and enforcement."
+    },
+    {
+      "kind": "agent",
+      "name": "typescript-reviewer",
+      "description": "Expert TypeScript/JavaScript code reviewer specializing in type safety, async correctness, Node/web security, and idiomatic patterns. Use for all TypeScript and JavaScript code changes. MUST BE USED for TypeScript/JavaScript projects."
+    },
+    {
+      "kind": "rule",
+      "name": "angular-coding-style",
+      "description": "Angular Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "angular-hooks",
+      "description": "Angular Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "angular-patterns",
+      "description": "Angular Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "angular-security",
+      "description": "Angular Security"
+    },
+    {
+      "kind": "rule",
+      "name": "angular-testing",
+      "description": "Angular Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "arkts-coding-style",
+      "description": "HarmonyOS / ArkTS Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "arkts-hooks",
+      "description": "HarmonyOS / ArkTS Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "arkts-patterns",
+      "description": "HarmonyOS / ArkTS Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "arkts-security",
+      "description": "HarmonyOS / ArkTS Security"
+    },
+    {
+      "kind": "rule",
+      "name": "arkts-testing",
+      "description": "HarmonyOS / ArkTS Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "common-agents",
+      "description": "Agent Orchestration"
+    },
+    {
+      "kind": "rule",
+      "name": "common-code-review",
+      "description": "Code Review Standards"
+    },
+    {
+      "kind": "rule",
+      "name": "common-coding-style",
+      "description": "Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "common-development-workflow",
+      "description": "Development Workflow"
+    },
+    {
+      "kind": "rule",
+      "name": "common-git-workflow",
+      "description": "Git Workflow"
+    },
+    {
+      "kind": "rule",
+      "name": "common-hooks",
+      "description": "Hooks System"
+    },
+    {
+      "kind": "rule",
+      "name": "common-memory",
+      "description": "Session Memory"
+    },
+    {
+      "kind": "rule",
+      "name": "common-patterns",
+      "description": "Common Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "common-performance",
+      "description": "Performance Optimization"
+    },
+    {
+      "kind": "rule",
+      "name": "common-security",
+      "description": "Security Guidelines"
+    },
+    {
+      "kind": "rule",
+      "name": "common-testing",
+      "description": "Testing Requirements"
+    },
+    {
+      "kind": "rule",
+      "name": "cpp-coding-style",
+      "description": "C++ Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "cpp-hooks",
+      "description": "C++ Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "cpp-patterns",
+      "description": "C++ Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "cpp-security",
+      "description": "C++ Security"
+    },
+    {
+      "kind": "rule",
+      "name": "cpp-testing",
+      "description": "C++ Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "csharp-coding-style",
+      "description": "C# Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "csharp-hooks",
+      "description": "C# Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "csharp-patterns",
+      "description": "C# Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "csharp-security",
+      "description": "C# Security"
+    },
+    {
+      "kind": "rule",
+      "name": "csharp-testing",
+      "description": "C# Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "dart-coding-style",
+      "description": "Dart/Flutter Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "dart-hooks",
+      "description": "Dart/Flutter Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "dart-patterns",
+      "description": "Dart/Flutter Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "dart-security",
+      "description": "Dart/Flutter Security"
+    },
+    {
+      "kind": "rule",
+      "name": "dart-testing",
+      "description": "Dart/Flutter Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "fsharp-coding-style",
+      "description": "F# Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "fsharp-hooks",
+      "description": "F# Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "fsharp-patterns",
+      "description": "F# Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "fsharp-security",
+      "description": "F# Security"
+    },
+    {
+      "kind": "rule",
+      "name": "fsharp-testing",
+      "description": "F# Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "golang-coding-style",
+      "description": "Go Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "golang-hooks",
+      "description": "Go Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "golang-patterns",
+      "description": "Go Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "golang-security",
+      "description": "Go Security"
+    },
+    {
+      "kind": "rule",
+      "name": "golang-testing",
+      "description": "Go Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "java-coding-style",
+      "description": "Java Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "java-hooks",
+      "description": "Java Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "java-patterns",
+      "description": "Java Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "java-security",
+      "description": "Java Security"
+    },
+    {
+      "kind": "rule",
+      "name": "java-testing",
+      "description": "Java Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "kotlin-coding-style",
+      "description": "Kotlin Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "kotlin-hooks",
+      "description": "Kotlin Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "kotlin-patterns",
+      "description": "Kotlin Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "kotlin-security",
+      "description": "Kotlin Security"
+    },
+    {
+      "kind": "rule",
+      "name": "kotlin-testing",
+      "description": "Kotlin Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "perl-coding-style",
+      "description": "Perl Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "perl-hooks",
+      "description": "Perl Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "perl-patterns",
+      "description": "Perl Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "perl-security",
+      "description": "Perl Security"
+    },
+    {
+      "kind": "rule",
+      "name": "perl-testing",
+      "description": "Perl Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "php-coding-style",
+      "description": "PHP Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "php-hooks",
+      "description": "PHP Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "php-patterns",
+      "description": "PHP Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "php-security",
+      "description": "PHP Security"
+    },
+    {
+      "kind": "rule",
+      "name": "php-testing",
+      "description": "PHP Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "python-coding-style",
+      "description": "Python Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "python-fastapi",
+      "description": "FastAPI Rules"
+    },
+    {
+      "kind": "rule",
+      "name": "python-hooks",
+      "description": "Python Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "python-patterns",
+      "description": "Python Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "python-security",
+      "description": "Python Security"
+    },
+    {
+      "kind": "rule",
+      "name": "python-testing",
+      "description": "Python Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "ruby-coding-style",
+      "description": "Ruby Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "ruby-hooks",
+      "description": "Ruby Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "ruby-patterns",
+      "description": "Ruby Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "ruby-security",
+      "description": "Ruby Security"
+    },
+    {
+      "kind": "rule",
+      "name": "ruby-testing",
+      "description": "Ruby Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "rust-coding-style",
+      "description": "Rust Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "rust-hooks",
+      "description": "Rust Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "rust-patterns",
+      "description": "Rust Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "rust-security",
+      "description": "Rust Security"
+    },
+    {
+      "kind": "rule",
+      "name": "rust-testing",
+      "description": "Rust Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "swift-coding-style",
+      "description": "Swift Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "swift-hooks",
+      "description": "Swift Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "swift-patterns",
+      "description": "Swift Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "swift-security",
+      "description": "Swift Security"
+    },
+    {
+      "kind": "rule",
+      "name": "swift-testing",
+      "description": "Swift Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "typescript-coding-style",
+      "description": "TypeScript/JavaScript Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "typescript-hooks",
+      "description": "TypeScript/JavaScript Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "typescript-patterns",
+      "description": "TypeScript/JavaScript Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "typescript-security",
+      "description": "TypeScript/JavaScript Security"
+    },
+    {
+      "kind": "rule",
+      "name": "typescript-testing",
+      "description": "TypeScript/JavaScript Testing"
+    },
+    {
+      "kind": "rule",
+      "name": "web-coding-style",
+      "description": "Web Coding Style"
+    },
+    {
+      "kind": "rule",
+      "name": "web-design-quality",
+      "description": "Web Design Quality Standards"
+    },
+    {
+      "kind": "rule",
+      "name": "web-hooks",
+      "description": "Web Hooks"
+    },
+    {
+      "kind": "rule",
+      "name": "web-patterns",
+      "description": "Web Patterns"
+    },
+    {
+      "kind": "rule",
+      "name": "web-performance",
+      "description": "Web Performance Rules"
+    },
+    {
+      "kind": "rule",
+      "name": "web-security",
+      "description": "Web Security Rules"
+    },
+    {
+      "kind": "rule",
+      "name": "web-testing",
+      "description": "Web Testing Rules"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-agents",
+      "description": "代理编排"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-code-review",
+      "description": "代码审查标准"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-coding-style",
+      "description": "编码风格"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-development-workflow",
+      "description": "开发工作流"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-git-workflow",
+      "description": "Git 工作流"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-hooks",
+      "description": "钩子系统"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-patterns",
+      "description": "常用模式"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-performance",
+      "description": "性能优化"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-security",
+      "description": "安全指南"
+    },
+    {
+      "kind": "rule",
+      "name": "zh-testing",
+      "description": "测试要求"
+    }
+  ]
+}

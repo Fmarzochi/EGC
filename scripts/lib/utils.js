@@ -387,8 +387,9 @@ async function readStdinJson(options = {}) {
         settled = true;
         process.stdin.removeAllListeners('data');
         process.stdin.removeAllListeners('end');
-        process.stdin.removeAllListeners('error');
         if (process.stdin.unref) process.stdin.unref();
+        if (process.stdin.destroy) process.stdin.destroy();
+        process.stdin.removeAllListeners('error');
         // Resolve with whatever we have so far rather than hanging
         try {
           resolve(data.trim() ? JSON.parse(data) : {});
@@ -721,7 +722,9 @@ function trace(event, data = {}) {
     event,
     ...data
   });
-  fs.appendFileSync(forensicLog, payload + '\n', 'utf8');
+  fs.appendFile(forensicLog, payload + '\n', 'utf8', (err) => {
+    if (err) console.error('trace write failed:', err);
+  });
 }
 
 module.exports = {

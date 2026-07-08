@@ -8,8 +8,6 @@ origin: EGC
 
 Create zero-dependency, animation-rich HTML presentations that run entirely in the browser.
 
-Inspired by the visual exploration approach showcased in work by [zarazhangrui](https://github.com/zarazhangrui).
-
 ## When to Activate
 
 - Creating a talk deck, pitch deck, workshop deck, or internal presentation

@@ -7,7 +7,7 @@ import { open, Database } from 'sqlite';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
@@ -72,11 +72,8 @@ function resolveStateStoreDbPath(): string {
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
   const egcRoot = path.join(os.homedir(), '.egc');
-  try {
-    execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
-  } catch (_) {
-    // non-critical: folder works even if attribute fails
-  }
+  const attribPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'attrib.exe');
+  spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 
 function ensurePrivateDir(dirPath: string): void {
@@ -153,6 +150,11 @@ class SQLiteArbitrationQueue {
   }
 
   private async processNext() {
+    // SINGLE-THREADED INVARIANT:
+    // In Node.js, async functions run to the first await synchronously.
+    // This synchronous execution until the first await guarantees that
+    // checking and setting this.isProcessing is atomic and free of race conditions.
+    // This makes it safe even under concurrent SQLITE_BUSY retries.
     if (this.isProcessing || this.queue.length === 0) return;
     this.isProcessing = true;
 
@@ -242,10 +244,12 @@ async function runMigrations(db: Database, dbDir: string) {
   try {
     log('INFO', 'Running SQLite migrations');
     await db.exec(`
+      BEGIN;
       CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);
       INSERT OR IGNORE INTO schema_migrations (version) VALUES (1);
       CREATE TABLE IF NOT EXISTS operational_state (id TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, context TEXT, decision TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
+      COMMIT;
     `);
 
     // Migration 2: FTS5 index over decisions for BM25 keyword search.
@@ -358,22 +362,40 @@ async function runMigrations(db: Database, dbDir: string) {
   }
 }
 
+// Note (BUG-08): The MCP memory server uses `~/.egc/memory/state.db` whereas
+// the standard harness state-store logic (resolveStateStoreDbPath) uses
+// `~/.egc/egc/state.db`. This is a known architectural divergence where
+// CLI/harness telemetry and MCP memory state are stored in separate SQLite DBs.
+// A doctor check in scripts/doctor.js warns when these databases diverge.
+let dbInitPromise: Promise<Database> | null = null;
 async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
-  const dbDir = path.join(os.homedir(), '.egc', 'memory');
-  ensurePrivateDir(dbDir);
-  hideEgcRootOnWindows();
-  
-  const dbPath = path.join(dbDir, 'state.db');
-  dbInstance = await open({ filename: dbPath, driver: sqlite3.Database });
-  
-  await dbInstance.exec('PRAGMA journal_mode = WAL;');
-  await dbInstance.exec('PRAGMA synchronous = NORMAL;');
-  await dbInstance.exec('PRAGMA foreign_keys = ON;');
-  await dbInstance.exec('PRAGMA busy_timeout = 5000;'); // Native fallback
-  
-  await runMigrations(dbInstance, dbDir);
-  return dbInstance;
+  if (dbInitPromise !== null) return dbInitPromise;
+
+  dbInitPromise = (async () => {
+    try {
+      const dbDir = path.join(os.homedir(), '.egc', 'memory');
+      ensurePrivateDir(dbDir);
+      hideEgcRootOnWindows();
+      
+      const dbPath = path.join(dbDir, 'state.db');
+      dbInstance = await open({ filename: dbPath, driver: sqlite3.Database });
+      
+      await dbInstance.exec('PRAGMA journal_mode = WAL;');
+      await dbInstance.exec('PRAGMA synchronous = NORMAL;');
+      await dbInstance.exec('PRAGMA foreign_keys = ON;');
+      await dbInstance.exec('PRAGMA busy_timeout = 5000;'); // Native fallback
+      
+      await runMigrations(dbInstance, dbDir);
+      return dbInstance;
+    } catch (error) {
+      dbInitPromise = null;
+      dbInstance = null;
+      throw error;
+    }
+  })();
+
+  return dbInitPromise;
 }
 
 const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" }, { capabilities: { tools: {} } });
@@ -387,12 +409,36 @@ function getStateDir(): string {
   return dir;
 }
 
+function isProtectedPath(p: string): boolean {
+  const home = os.homedir();
+  const denied = [
+    path.join(home, '.ssh'),
+    path.join(home, '.aws'),
+    path.join(home, '.config'),
+    path.join(home, '.cursor'),
+    path.join(home, '.claude'),
+    path.join(home, '.gemini')
+  ];
+  const normalizedP = path.resolve(p);
+  for (const d of denied) {
+    if (normalizedP === d || normalizedP.startsWith(d + path.sep)) return true;
+  }
+  return false;
+}
+
 function resolveProjectPath(provided?: string): string {
   const raw = provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
   if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
-  return path.resolve(raw);
+  let resolved = path.resolve(raw);
+  if (fs.existsSync(resolved)) {
+    resolved = fs.realpathSync(resolved);
+  }
+  if (isProtectedPath(resolved)) {
+    throw new Error(`project_path is protected and cannot be used: ${resolved}`);
+  }
+  return resolved;
 }
 
 const H2_RE = /^## (.+)/;
@@ -1293,6 +1339,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new McpError(ErrorCode.InvalidParams, `Invalid arguments: ${error.message}`);
     }
     log('ERROR', 'Tool execution failed', { tool: request.params.name, error: String(error) });
+    if (error instanceof Error && error.message.includes('SQLITE_FULL')) {
+      throw new McpError(ErrorCode.InternalError, `Database disk image is full: ${error.message}`);
+    }
     throw error;
   }
 });
