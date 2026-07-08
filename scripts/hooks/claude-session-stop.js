@@ -4,9 +4,59 @@
 // Claude Code Stop hook. Injects a prompt asking the AI to call update_state
 // via the egc-memory MCP tool before the session ends. Never blocks the Stop
 // event: missing stdin or parse errors are silently ignored and exit 0.
+//
+// The save prompt is throttled: firing it on every assistant stop made the
+// AI persist memory after each reply, stalling real work. One reminder per
+// project per interval (default 30 minutes, EGC_STOP_SAVE_INTERVAL_MINUTES)
+// keeps memory fresh without interrupting every exchange.
 
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+
+const DEFAULT_INTERVAL_MINUTES = 30;
+
+function saveIntervalMs() {
+  const parsed = Number.parseInt(process.env.EGC_STOP_SAVE_INTERVAL_MINUTES, 10);
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed * 60 * 1000;
+  return DEFAULT_INTERVAL_MINUTES * 60 * 1000;
+}
+
+function projectSlug(projectPath) {
+  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
+}
+
+function markerPath(input) {
+  const cwd = (typeof input.cwd === 'string' && input.cwd)
+    ? input.cwd
+    : (process.env.CLAUDE_PROJECT_DIR || process.env.PWD || process.cwd());
+  return path.join(os.homedir(), '.egc', 'state', `.save-prompt-${projectSlug(cwd)}`);
+}
+
+// One save prompt per project per interval. The marker mtime records the last
+// prompt; read or write failures fail open so a broken marker never silently
+// disables memory saves.
+function shouldPromptSave(input, nowMs) {
+  const interval = saveIntervalMs();
+  if (interval === 0) return true;
+
+  const marker = markerPath(input);
+  try {
+    if (nowMs - fs.statSync(marker).mtimeMs < interval) return false;
+  } catch {
+    // No marker yet: first stop for this project.
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, new Date(nowMs).toISOString(), 'utf8');
+  } catch {
+    // Marker is best-effort; still prompt.
+  }
+  return true;
+}
 
 function post(ev, done) {
   const body = JSON.stringify(ev);
@@ -41,7 +91,9 @@ function main() {
     + 'preferences, and next steps from this session. '
     + 'project_path is optional: omit it and it uses PWD automatically.';
 
-  const output = { ...input, promptForAssistant: prompt };
+  const output = shouldPromptSave(input, Date.now())
+    ? { ...input, promptForAssistant: prompt }
+    : { ...input };
 
   // Write the assistant prompt to stdout first (synchronous, always completes).
   // Then post the session_end event and exit only after the dashboard has
