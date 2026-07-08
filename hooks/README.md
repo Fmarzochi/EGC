@@ -42,6 +42,7 @@ That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Ge
 | **Tmux reminder** | `Bash` | Suggests tmux for long-running commands (npm test, cargo build, docker) | 0 (warns) |
 | **Git push reminder** | `Bash` | Reminds to review changes before `git push` | 0 (warns) |
 | **Pre-commit quality check** | `Bash` | Runs quality checks before `git commit`: lints staged files, validates commit message format when provided via `-m/--message`, detects console.log/debugger/secrets | 2 (blocks critical) / 0 (warns) |
+| **Verification gate** | `Bash` | Before `git commit`/`git push`, checks the `egc verify` receipt for the current tree: warns when it is missing, stale, or failed (default) and blocks with `EGC_VERIFY_GATE=block`, reinjecting the failing verification output | 0 (warns) / 2 (blocks) |
 | **Doc file warning** | `Write` | Warns about non-standard `.md`/`.txt` files (allows README, GEMINI, CONTRIBUTING, CHANGELOG, LICENSE, SKILL, docs/, skills/); cross-platform path handling | 0 (warns) |
 | **Strategic compact** | `Edit\|Write` | Suggests manual `/compact` at logical intervals (every ~50 tool calls) | 0 (warns) |
 
@@ -107,6 +108,9 @@ export EGC_DISABLED_HOOKS="pre:bash:tmux-reminder,post:edit:typecheck"
 
 # Disable only GateGuard during setup or recovery
 export EGC_GATEGUARD=off
+
+# Verification gate mode for git commit/push: off | warn | block (default: warn)
+export EGC_VERIFY_GATE=block
 
 # Cap SessionStart additional context (default: 8000 chars)
 export EGC_SESSION_START_MAX_CHARS=4000
