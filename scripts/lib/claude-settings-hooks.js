@@ -4,6 +4,10 @@
 // All merges are additive and idempotent: third-party hooks and unrelated
 // settings keys are always preserved, and the EGC entry is identified by the
 // installed hook script path so uninstall removes only what EGC added.
+// Within the same event and matcher, an entry whose command runs a script
+// with the same basename but a different path is treated as a stale copy of
+// the EGC hook (left behind when the install location or invocation form
+// changed) and is migrated in place instead of duplicated.
 
 const fs = require('fs');
 const path = require('path');
@@ -77,19 +81,91 @@ function hasHookEntry(settings, event, hookScriptPath, matcherFilter) {
     && groups.some(group => matcherGroupHasEgcEntry(group, hookScriptPath, matcherFilter));
 }
 
+function extractScriptBasename(command) {
+  const scriptPaths = String(command).match(/[^\s"']+\.js\b/g);
+  if (!scriptPaths || scriptPaths.length === 0) {
+    return null;
+  }
+  return path.basename(scriptPaths[scriptPaths.length - 1]);
+}
+
+function isStaleEgcHookEntry(entry, hookScriptPath) {
+  if (!isPlainObject(entry) || typeof entry.command !== 'string') {
+    return false;
+  }
+  if (entry.command.includes(hookScriptPath)) {
+    return false;
+  }
+  return extractScriptBasename(entry.command) === path.basename(hookScriptPath);
+}
+
+function migrateStaleGroupEntries(group, hookScriptPath, alreadyPresent) {
+  let present = alreadyPresent;
+  let groupChanged = false;
+  const entries = [];
+
+  for (const entry of group.hooks) {
+    if (!isStaleEgcHookEntry(entry, hookScriptPath)) {
+      entries.push(entry);
+      continue;
+    }
+    groupChanged = true;
+    if (!present) {
+      // Migrate in place so entry-level keys like statusMessage survive.
+      entries.push({ ...entry, command: buildHookCommand(hookScriptPath) });
+      present = true;
+    }
+  }
+
+  return { entries, groupChanged, present };
+}
+
 function addHookEntry(settings, event, hookScriptPath, options = {}) {
   const base = isPlainObject(settings) ? settings : {};
   const matcher = typeof options.matcher === 'string' && options.matcher ? options.matcher : undefined;
-  if (hasHookEntry(base, event, hookScriptPath, matcher)) {
+  const existingGroups = isPlainObject(base.hooks) && Array.isArray(base.hooks[event])
+    ? base.hooks[event]
+    : [];
+
+  let present = hasHookEntry(base, event, hookScriptPath, matcher);
+  let changed = false;
+  const groups = [];
+
+  for (const group of existingGroups) {
+    const sameMatcher = matcher === undefined
+      ? group?.matcher === undefined
+      : group?.matcher === matcher;
+    if (!isPlainObject(group) || !Array.isArray(group.hooks) || !sameMatcher) {
+      groups.push(group);
+      continue;
+    }
+
+    const migration = migrateStaleGroupEntries(group, hookScriptPath, present);
+    present = migration.present;
+    if (!migration.groupChanged) {
+      groups.push(group);
+    } else {
+      changed = true;
+      if (migration.entries.length > 0) {
+        groups.push({ ...group, hooks: migration.entries });
+      }
+    }
+  }
+
+  if (!present) {
+    const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
+    if (matcher) {
+      group.matcher = matcher;
+    }
+    groups.push(group);
+    changed = true;
+  }
+
+  if (!changed) {
     return { settings: base, changed: false };
   }
+
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
-  const groups = Array.isArray(hooks[event]) ? hooks[event].slice() : [];
-  const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
-  if (matcher) {
-    group.matcher = matcher;
-  }
-  groups.push(group);
   hooks[event] = groups;
   return { settings: { ...base, hooks }, changed: true };
 }
