@@ -30,25 +30,31 @@ function gateMode() {
 
 function buildMessage(evaluation, mode, action) {
   const prefix = mode === 'block' ? '[Hook] BLOCKED by verification gate' : '[Hook] Verification gate';
-  const lines = [];
+  let lines;
 
   if (evaluation.status === 'missing') {
-    lines.push(`${prefix}: no verification receipt for this project before "git ${action}".`);
-    lines.push('Run `egc verify` (defaults to npm test) or `egc verify -- <command>` first.');
+    lines = [
+      `${prefix}: no verification receipt for this project before "git ${action}".`,
+      'Run `egc verify` (defaults to npm test) or `egc verify -- <command>` first.',
+    ];
   } else if (evaluation.status === 'stale') {
-    lines.push(`${prefix}: the working tree changed after the last \`egc verify\` run.`);
-    lines.push('Re-run `egc verify` to bind a fresh receipt before "git ' + action + '".');
+    lines = [
+      `${prefix}: the working tree changed after the last \`egc verify\` run.`,
+      `Re-run \`egc verify\` to bind a fresh receipt before "git ${action}".`,
+    ];
   } else {
     const receipt = evaluation.receipt || {};
-    lines.push(`${prefix}: the last \`egc verify\` run FAILED (exit ${receipt.exitCode}, command: ${receipt.command}).`);
-    lines.push('Fix the failures and re-run `egc verify`. Last output:');
-    if (receipt.logTail) {
-      lines.push(String(receipt.logTail).trim());
-    }
+    lines = [
+      `${prefix}: the last \`egc verify\` run FAILED (exit ${receipt.exitCode}, command: ${receipt.command}).`,
+      'Fix the failures and re-run `egc verify`. Last output:',
+      ...(receipt.logTail ? [String(receipt.logTail).trim()] : []),
+    ];
   }
 
-  lines.push(`Set ${GATE_MODE_ENV}=off to disable this gate or ${GATE_MODE_ENV}=block to enforce it.`);
-  return lines.join('\n');
+  return [
+    ...lines,
+    `Set ${GATE_MODE_ENV}=off to disable this gate or ${GATE_MODE_ENV}=block to enforce it.`,
+  ].join('\n');
 }
 
 function evaluate(rawInput) {

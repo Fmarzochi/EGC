@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const { writeReceipt, receiptPath } = require('./lib/verify-receipt');
 
@@ -59,7 +59,7 @@ function resolveDefaultCommand(projectPath) {
   if (fs.existsSync(packageJsonPath)) {
     try {
       const manifest = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-      if (manifest && manifest.scripts && typeof manifest.scripts.test === 'string') {
+      if (typeof manifest?.scripts?.test === 'string') {
         return ['npm', 'test'];
       }
     } catch {
@@ -108,7 +108,8 @@ function main() {
   }
 
   const exitCode = result.error ? 1 : (result.status ?? 1);
-  const combined = `${stdout}${stderr}${result.error ? `\n${result.error.message}` : ''}`;
+  const errorSuffix = result.error ? `\n${result.error.message}` : '';
+  const combined = stdout + stderr + errorSuffix;
   const receipt = writeReceipt(projectPath, {
     command: command.join(' '),
     exitCode,

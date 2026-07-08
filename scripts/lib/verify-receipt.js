@@ -1,10 +1,10 @@
 'use strict';
 
-const crypto = require('crypto');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const { projectSlug } = require('./branch-state');
 
@@ -26,7 +26,8 @@ function receiptPath(projectPath, options = {}) {
 }
 
 function runGit(cwd, args) {
-  const result = spawnSync('git', args, {
+  const result = spawnSync('git', args, { // NOSONAR typescript:S4036 -- resolving git through PATH is the standard contract in developer environments, matching every other git invocation in this repo
+
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
