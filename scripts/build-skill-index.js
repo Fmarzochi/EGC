@@ -70,4 +70,12 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
 `;
 
 fs.writeFileSync(outFile, out, 'utf8');
-process.stderr.write(`build-skill-index: ${entries.length} entries written to catalog-index.ts\n`);
+
+// JSON twin of the catalog for plain-JS consumers: the prompt-router hook
+// reads it to offer in-session routing without depending on the guardian
+// build. Lives in scripts/lib so the hooks-runtime module installs it
+// alongside the hook libs.
+const jsonOutFile = path.join(root, 'scripts', 'lib', 'skill-index.json');
+fs.writeFileSync(jsonOutFile, `${JSON.stringify({ entries }, null, 2)}\n`, 'utf8');
+
+process.stderr.write(`build-skill-index: ${entries.length} entries written to catalog-index.ts and skill-index.json\n`);
