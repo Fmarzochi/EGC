@@ -99,4 +99,3 @@ If you are vendoring only this skill outside the full EGC install, copy the revi
 
 - Gemini Code (for `/blueprint` slash command)
 - Git + GitHub CLI (optional: enables full branch/PR/CI workflow; Blueprint detects absence and auto-switches to direct mode)
-

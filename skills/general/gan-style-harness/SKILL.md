@@ -267,4 +267,3 @@ Based on Anthropic's published results:
 | Design | Generic AI slop | Distinctive, polished | N/A |
 
 **The tradeoff is clear:** ~20x more time and cost for a qualitative leap in output quality. This is for projects where quality matters.
-
