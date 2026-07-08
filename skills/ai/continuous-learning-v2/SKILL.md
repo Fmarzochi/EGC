@@ -338,7 +338,6 @@ v2.1 is fully compatible with v2.0 and v1:
 ## Related
 
 - [EGC-Tools GitHub App](https://github.com/apps/egc-tools) - Generate instincts from repo history
-- Homunculus - Community project that inspired the v2 instinct-based architecture (atomic observations, confidence scoring, instinct evolution pipeline)
 - [Felipe Marzochi](https://x.com/MarzochiFelipe) - Continuous learning section
 
 ---
