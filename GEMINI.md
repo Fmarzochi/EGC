@@ -45,7 +45,7 @@ update_state({
 
 ## Where state is stored
 
-`~/.egc/state/<project-slug>.md`: one file per project, plain Markdown, human-readable.
+`~/.egc/state/<project-slug>/<branch>.md`: one file per project branch (flat `<project-slug>.md` files from older versions are still read). Files are encrypted at rest with AES-256-GCM (key at `~/.egc/encryption.key`); the memory server and session hooks decrypt them transparently.
 
 ## MCP servers required
 

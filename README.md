@@ -117,7 +117,7 @@ No commands to memorize. Your AI reads this table so you never have to. Say anyt
 | `compress_observations` | Compresses raw hook observations into typed summaries to reduce token usage |
 | `get_project_state` | Returns server health metadata and storage engine status |
 
-State files live at `~/.egc/state/<project-slug>.md`. One file per project, plain Markdown, human-readable.
+State files live at `~/.egc/state/<project-slug>/<branch>.md`, one per project branch (flat `<project-slug>.md` files from older versions are still read). They are encrypted at rest with AES-256-GCM and decrypted transparently by the memory server and session hooks; the key lives at `~/.egc/encryption.key`.
 
 ### Context and safety - 5 tools for when things get heavy
 
@@ -137,7 +137,7 @@ These tools run automatically in the background. Every shell command and every f
 
 Validation does not depend on the AI choosing to cooperate. EGC installs harness hooks that run on every tool call: each shell command and file write is validated before it executes, and destructive commands, credential paths, and force-pushes are blocked even inside compound commands. Every prompt is also routed against the component catalog so the right skills and agents are injected into context. If the validator is ever missing, hooks fail open so you are never locked out of your own tool.
 
-With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY`), EGC also understands session intent semantically, in any language, with no predefined phrases: say you are done for the night and your state is saved before the AI even answers; greet it the next morning and your next steps are already in context. At session end a memory miner distills the session's decisions and lessons into your project state. Without a key these LLM features honestly do nothing, and the lifecycle hooks still guarantee your state is saved.
+With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY`), EGC also understands session intent semantically, in any language, with no predefined phrases: say you are done for the night and your state is saved before the AI even answers; greet it the next morning and your next steps are already in context. At session end a memory miner distills the session's decisions and lessons into your project state. Without a key these LLM features honestly do nothing, and the lifecycle hooks still guarantee your state is saved. The end-of-reply save reminder is throttled to once per project every 30 minutes (`EGC_STOP_SAVE_INTERVAL_MINUTES` tunes it; `0` prompts on every stop), so memory stays fresh without interrupting the work.
 
 ### Always in sync - across every tool you use
 
