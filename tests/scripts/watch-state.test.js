@@ -311,6 +311,35 @@ async function runTests() {
     });
   })) passed++; else failed++;
 
+  if (await test('parseBlockToStateContent stamps updated when provided', () => {
+    const state = parseBlockToStateContent(SAMPLE_BLOCK, '2026-07-08T12:00:00.000Z');
+    assert.ok(state.includes('updated: 2026-07-08T12:00:00.000Z'), 'updated line missing');
+    assert.ok(state.includes('## Context'), 'sections still parsed');
+  })) passed++; else failed++;
+
+  if (await test('parseBlockToStateContent ignores marker comments', () => {
+    const stamped = `<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->\n${SAMPLE_BLOCK}`;
+    const state = parseBlockToStateContent(stamped);
+    assert.ok(!state.includes('egc:state-updated'), 'marker must not leak into state');
+    assert.ok(state.includes('EGC v1.1.1'), 'content still parsed');
+  })) passed++; else failed++;
+
+  if (await test('mergeBlockIntoStateFile refuses encrypted state files', () => {
+    const dir = mktemp();
+    try {
+      const stateFile = path.join(dir, 'main.md');
+      const payload = Buffer.concat([Buffer.from('EGC1:', 'utf-8'), Buffer.from('opaque-bytes')]);
+      fs.writeFileSync(stateFile, payload);
+
+      const changed = mergeBlockIntoStateFile(stateFile, SAMPLE_BLOCK);
+
+      assert.strictEqual(changed, false);
+      assert.ok(fs.readFileSync(stateFile).equals(payload), 'ciphertext must remain untouched');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

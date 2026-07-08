@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 
 const { consolidateState, backupStateFile, DEFAULT_THRESHOLD } = require('./state-consolidate');
+const { isEncryptedBuffer } = require('./state-crypto');
 
 const AUTO_CONSOLIDATE_ENV = 'EGC_AUTO_CONSOLIDATE';
 
@@ -23,7 +24,13 @@ function autoConsolidateStateFile(filePath, options = {}) {
 
   let content;
   try {
-    content = fs.readFileSync(filePath, 'utf8');
+    const raw = fs.readFileSync(filePath);
+    // Encrypted state belongs to the memory server; rewriting it here would
+    // destroy the ciphertext and its HMAC sidecar.
+    if (isEncryptedBuffer(raw)) {
+      return { consolidated: false, reason: 'encrypted' };
+    }
+    content = raw.toString('utf8');
   } catch {
     return { consolidated: false, reason: 'unreadable' };
   }

@@ -35,8 +35,10 @@ const {
 } = require('../claude-settings-hooks');
 
 const HOOK_LIB_SOURCES = [
-  'scripts/lib/propagate-state.js',
+  'scripts/lib/branch-state.js',
   'scripts/lib/project-detect.js',
+  'scripts/lib/propagate-state.js',
+  'scripts/lib/state-crypto.js',
 ];
 
 function createSessionStateHookOperations(adapter, targetRoot) {

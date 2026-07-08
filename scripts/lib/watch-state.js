@@ -6,6 +6,7 @@ const os = require('node:os');
 
 const { propagateStateContent } = require('./propagate-state');
 const { projectSlug, sanitizeBranchName, detectBranch } = require('./branch-state');
+const { isEncryptedBuffer } = require('./state-crypto');
 
 const EGC_START = '<!-- egc:start -->';
 const EGC_END = '<!-- egc:end -->';
@@ -68,14 +69,17 @@ function extractEgcBlock(content) {
   return content.slice(start + EGC_START.length, end).trim();
 }
 
-function parseBlockToStateContent(block) {
-  const lines = ['# Project State', ''];
+function parseBlockToStateContent(block, updatedIso) {
+  const lines = ['# Project State'];
+  if (updatedIso) lines.push(`updated: ${updatedIso}`);
+  lines.push('');
   let context = '';
   const decisions = [];
   const next = [];
 
   let section = '';
   for (const line of block.split('\n')) {
+    if (line.trimStart().startsWith('<!--')) continue;
     const h2 = line.match(/^\*\*(.+?):\*\*\s*(.*)/);
     if (h2) {
       const key = h2[1].trim();
@@ -136,7 +140,11 @@ function mergeBlockIntoStateFile(stateFilePath, block) {
   const parsed = parseBlockToStateContent(block);
   if (!parsed.trim()) return false;
 
-  const existing = fs.readFileSync(stateFilePath, 'utf-8');
+  const rawState = fs.readFileSync(stateFilePath);
+  // Encrypted state is owned by the memory server: appending plaintext here
+  // would corrupt the ciphertext and invalidate its HMAC sidecar.
+  if (isEncryptedBuffer(rawState)) return false;
+  const existing = rawState.toString('utf-8');
 
   // Only update Context and Next Session sections if they differ
   const contextMatch = parsed.match(/## Context\n([^\n]+)/);
@@ -256,7 +264,10 @@ class StateWatcher {
     const block = extractEgcBlock(content);
     if (!block) return;
 
-    const stateContent = parseBlockToStateContent(block);
+    // A manual edit to a mirror is the freshest source there is: stamping the
+    // synthetic state with "now" lets the freshness guard in propagate-state
+    // treat the fanned-out mirrors as newer than any stale state file.
+    const stateContent = parseBlockToStateContent(block, new Date().toISOString());
     if (!stateContent.includes('## Context') && !stateContent.includes('## Active Decisions')) return;
 
     // Propagate to all other tools

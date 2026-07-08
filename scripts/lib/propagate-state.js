@@ -42,7 +42,9 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks AI to learn from session errors → \`auto_learn\``;
 
 function parseStateContent(content) {
-  const result = { context: '', decisions: [], next: [] };
+  const result = { context: '', decisions: [], next: [], updated: '' };
+  const updatedMatch = content.match(/^updated:\s*(\S+)\s*$/m);
+  if (updatedMatch) result.updated = updatedMatch[1];
   let section = '';
 
   for (const line of content.split('\n')) {
@@ -61,7 +63,9 @@ function parseStateContent(content) {
 }
 
 function buildSummaryBlock(parsed) {
-  const lines = ['## EGC Project Memory'];
+  const lines = [];
+  if (parsed.updated) lines.push(`<!-- egc:state-updated:${parsed.updated} -->`);
+  lines.push('## EGC Project Memory');
 
   if (parsed.context) {
     lines.push('', `**Context:** ${parsed.context}`);
@@ -96,7 +100,27 @@ function upsertEgcSection(existing, block) {
   return existing ? `${existing.trimEnd()}\n\n${section}\n` : `${section}\n`;
 }
 
-function writeCursorContext(projectPath, block) {
+const STATE_UPDATED_RE = /<!-- egc:state-updated:(\S+) -->/;
+
+function extractStateUpdated(content) {
+  const match = typeof content === 'string' ? content.match(STATE_UPDATED_RE) : null;
+  return match ? match[1] : '';
+}
+
+// A mirror stamped by an equally new or newer state must not be overwritten:
+// stale sources (older update stamp, or no stamp at all) would silently roll
+// project memory back, as a leftover flat state file once did to AGENTS.md.
+function isStaleWrite(existingContent, stateUpdated) {
+  const existingUpdated = extractStateUpdated(existingContent || '');
+  if (!existingUpdated) return false;
+  if (!stateUpdated) return true;
+  const existingMs = Date.parse(existingUpdated);
+  const stateMs = Date.parse(stateUpdated);
+  if (Number.isNaN(existingMs) || Number.isNaN(stateMs)) return false;
+  return stateMs <= existingMs;
+}
+
+function writeCursorContext(projectPath, block, stateUpdated) {
   const cursorDir = path.join(projectPath, '.cursor');
   try {
     if (!fs.existsSync(cursorDir) || !fs.statSync(cursorDir).isDirectory()) return null;
@@ -108,12 +132,14 @@ function writeCursorContext(projectPath, block) {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const filePath = path.join(rulesDir, 'egc-context.mdc');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   const content = `---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n${block}\n`;
   fs.writeFileSync(filePath, content, 'utf-8');
   return filePath;
 }
 
-function writeCopilotContext(projectPath, block) {
+function writeCopilotContext(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, '.github', 'copilot-instructions.md');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -122,11 +148,12 @@ function writeCopilotContext(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeGeminiContext(projectPath, block) {
+function writeGeminiContext(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, 'GEMINI.md');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -135,11 +162,12 @@ function writeGeminiContext(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeWindsurfContext(projectPath, block) {
+function writeWindsurfContext(projectPath, block, stateUpdated) {
   const windsurfDir = path.join(projectPath, '.windsurf');
   try {
     if (!fs.existsSync(windsurfDir) || !fs.statSync(windsurfDir).isDirectory()) return null;
@@ -152,11 +180,12 @@ function writeWindsurfContext(projectPath, block) {
 
   const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeTraeContext(projectPath, block) {
+function writeTraeContext(projectPath, block, stateUpdated) {
   const traeDir = path.join(projectPath, '.trae');
   try {
     if (!fs.existsSync(traeDir) || !fs.statSync(traeDir).isDirectory()) return null;
@@ -169,11 +198,12 @@ function writeTraeContext(projectPath, block) {
 
   const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeZedContext(projectPath, block) {
+function writeZedContext(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, '.rules');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -182,11 +212,12 @@ function writeZedContext(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeClineContext(projectPath, block) {
+function writeClineContext(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, '.clinerules');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -195,11 +226,12 @@ function writeClineContext(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeAiderContext(projectPath, block) {
+function writeAiderContext(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, 'CONVENTIONS.md');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -208,11 +240,12 @@ function writeAiderContext(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeLegacyCursorRules(projectPath, block) {
+function writeLegacyCursorRules(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, '.cursorrules');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -221,11 +254,12 @@ function writeLegacyCursorRules(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
-function writeAgentsContext(projectPath, block) {
+function writeAgentsContext(projectPath, block, stateUpdated) {
   const filePath = path.join(projectPath, 'AGENTS.md');
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -234,6 +268,7 @@ function writeAgentsContext(projectPath, block) {
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
@@ -246,7 +281,10 @@ function writeLlmsTxt(projectPath, parsed) {
     return null;
   }
 
-  const lines = ['# EGC Project Memory'];
+  const stateUpdated = parsed.updated;
+  const lines = [];
+  if (stateUpdated) lines.push(`<!-- egc:state-updated:${stateUpdated} -->`);
+  lines.push('# EGC Project Memory');
   if (parsed.context) lines.push('', parsed.context);
   if (parsed.next.length > 0) {
     lines.push('', '## Next session');
@@ -256,6 +294,7 @@ function writeLlmsTxt(projectPath, parsed) {
   const block = lines.join('\n');
 
   const existing = fs.readFileSync(filePath, 'utf-8');
+  if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
@@ -264,17 +303,19 @@ function propagateStateContent(projectPath, stateContent) {
   const parsed = parseStateContent(stateContent);
   const block = buildSummaryBlock(parsed);
 
+  const stateUpdated = parsed.updated;
+
   return {
-    cursor: writeCursorContext(projectPath, block),
-    copilot: writeCopilotContext(projectPath, block),
-    gemini: writeGeminiContext(projectPath, block),
-    windsurf: writeWindsurfContext(projectPath, block),
-    trae: writeTraeContext(projectPath, block),
-    zed: writeZedContext(projectPath, block),
-    cline: writeClineContext(projectPath, block),
-    aider: writeAiderContext(projectPath, block),
-    cursorrules: writeLegacyCursorRules(projectPath, block),
-    agents: writeAgentsContext(projectPath, block),
+    cursor: writeCursorContext(projectPath, block, stateUpdated),
+    copilot: writeCopilotContext(projectPath, block, stateUpdated),
+    gemini: writeGeminiContext(projectPath, block, stateUpdated),
+    windsurf: writeWindsurfContext(projectPath, block, stateUpdated),
+    trae: writeTraeContext(projectPath, block, stateUpdated),
+    zed: writeZedContext(projectPath, block, stateUpdated),
+    cline: writeClineContext(projectPath, block, stateUpdated),
+    aider: writeAiderContext(projectPath, block, stateUpdated),
+    cursorrules: writeLegacyCursorRules(projectPath, block, stateUpdated),
+    agents: writeAgentsContext(projectPath, block, stateUpdated),
     llms: writeLlmsTxt(projectPath, parsed),
   };
 }

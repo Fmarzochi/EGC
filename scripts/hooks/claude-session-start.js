@@ -26,6 +26,7 @@ const propagateStateContent = propagateStateLib ? propagateStateLib.propagateSta
 const projectDetect = tryRequire('../lib/project-detect');
 const branchState = tryRequire('../lib/branch-state');
 const autoConsolidate = tryRequire('../lib/auto-consolidate');
+const stateCrypto = tryRequire('../lib/state-crypto');
 
 function readStdinJson() {
   try {
@@ -187,16 +188,33 @@ function resolveStateFile(projectPath) {
   return fs.existsSync(flatFile) ? flatFile : null;
 }
 
+// Encrypted state (EGC1 payloads written by the memory server) is decrypted
+// via state-crypto; without that lib the hook stays silent instead of
+// printing or propagating ciphertext. Consolidation only runs on plaintext:
+// the memory server owns maintenance of encrypted files.
+function readPlaintextState(stateFile) {
+  let raw = fs.readFileSync(stateFile);
+
+  const encrypted = stateCrypto
+    ? stateCrypto.isEncryptedBuffer(raw)
+    : raw.subarray(0, 5).toString('utf8') === 'EGC1:';
+  if (encrypted) {
+    return stateCrypto ? stateCrypto.decryptStateBuffer(raw) : null;
+  }
+
+  if (autoConsolidate) {
+    const result = consolidateBestEffort(stateFile);
+    if (result && result.consolidated) raw = fs.readFileSync(stateFile);
+  }
+  return raw.toString('utf8');
+}
+
 function loadAndPrintState(projectPath) {
   const stateFile = resolveStateFile(projectPath);
   if (!stateFile) return;
 
-  if (autoConsolidate) {
-    consolidateBestEffort(stateFile);
-  }
-
-  const content = fs.readFileSync(stateFile, 'utf8');
-  if (!content.trim()) return;
+  const content = readPlaintextState(stateFile);
+  if (content === null || !content.trim()) return;
 
   if (propagateStateContent) {
     try {

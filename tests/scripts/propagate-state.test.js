@@ -338,8 +338,95 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  const freshness = runFreshnessGuardTests();
+  passed += freshness.passed;
+  failed += freshness.failed;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
+}
+
+function runFreshnessGuardTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (test('stamps mirrors with the state updated timestamp', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      const content = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      assert.ok(
+        content.includes('<!-- egc:state-updated:2026-06-20T00:00:00.000Z -->'),
+        'freshness stamp missing'
+      );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('older state does not overwrite a mirror stamped by a newer one', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      const newerState = SAMPLE_STATE
+        .replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z')
+        .replace('EGC v1.1.1 stable on npm.', 'EGC v1.2.0 fresh context.');
+      propagateStateContent(dir, newerState);
+
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+
+      assert.ok(result.agents, 'mirror still reported as managed');
+      const content = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      assert.ok(content.includes('EGC v1.2.0 fresh context.'), 'newer content preserved');
+      assert.ok(!content.includes('EGC v1.1.1 stable'), 'stale content must not roll the mirror back');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('unstamped state does not downgrade a stamped mirror', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      const unstamped = SAMPLE_STATE
+        .replace('updated: 2026-06-20T00:00:00.000Z\n', '')
+        .replace('EGC v1.1.1 stable on npm.', 'anonymous rollback content');
+
+      propagateStateContent(dir, unstamped);
+
+      const content = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      assert.ok(content.includes('EGC v1.1.1 stable'), 'stamped content preserved');
+      assert.ok(!content.includes('anonymous rollback content'), 'undated source must not win');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('newer state overwrites an older stamped mirror', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      const newerState = SAMPLE_STATE
+        .replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z')
+        .replace('EGC v1.1.1 stable on npm.', 'EGC v1.2.0 fresh context.');
+
+      propagateStateContent(dir, newerState);
+
+      const content = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      assert.ok(content.includes('EGC v1.2.0 fresh context.'), 'newer content applied');
+      assert.ok(
+        content.includes('<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->'),
+        'stamp advanced to the newer timestamp'
+      );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  return { passed, failed };
 }
 
 runTests();

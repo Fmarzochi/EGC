@@ -3,6 +3,7 @@
  */
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -56,6 +57,15 @@ function writeStateFile(homeDir, slug, content) {
   const stateDir = path.join(homeDir, '.egc', 'state');
   fs.mkdirSync(stateDir, { recursive: true });
   fs.writeFileSync(path.join(stateDir, `${slug}.md`), content);
+}
+
+// Same payload layout the egc-memory server writes: EGC1 magic + IV + GCM tag
+// + ciphertext (see mcp/servers/egc-memory/src/encryption.ts).
+function encryptFixture(plaintext, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
+  return Buffer.concat([Buffer.from('EGC1:', 'utf-8'), iv, cipher.getAuthTag(), encrypted]);
 }
 
 function runTests() {
@@ -218,6 +228,45 @@ function runTests() {
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('stays silent for encrypted state when no key exists', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    try {
+      const key = crypto.randomBytes(32);
+      writeStateFile(homeDir, 'workspace--secret', encryptFixture('# Project State\nclassified\n', key));
+
+      const result = runHook(homeDir, JSON.stringify({ cwd: '/workspace/secret' }));
+
+      assert.strictEqual(result.code, 0);
+      assert.strictEqual(result.stdout, '');
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('prints decrypted state when the encryption key exists', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    try {
+      const key = crypto.randomBytes(32);
+      const egcDir = path.join(homeDir, '.egc');
+      fs.mkdirSync(egcDir, { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'encryption.key'), key.toString('hex'), 'utf-8');
+      writeStateFile(
+        homeDir,
+        'workspace--secret',
+        encryptFixture('# Project State\n- decrypted memory line\n', key)
+      );
+
+      const result = runHook(homeDir, JSON.stringify({ cwd: '/workspace/secret' }));
+
+      assert.strictEqual(result.code, 0);
+      assert.ok(result.stdout.includes('EGC persistent memory'), 'state header missing');
+      assert.ok(result.stdout.includes('decrypted memory line'), 'plaintext missing');
+      assert.ok(!result.stdout.includes('EGC1:'), 'ciphertext must not leak');
+    } finally {
+      cleanup(homeDir);
     }
   })) passed++; else failed++;
 

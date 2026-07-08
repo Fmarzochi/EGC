@@ -3,6 +3,7 @@
  */
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -188,6 +189,27 @@ function main() {
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('skips encrypted state files untouched', () => {
+    const homeDir = createTempDir('egc-autocons-home-');
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(stateDir, { recursive: true });
+      const filePath = path.join(stateDir, 'main.md');
+      const payload = Buffer.concat([Buffer.from('EGC1:', 'utf-8'), crypto.randomBytes(4096)]);
+      fs.writeFileSync(filePath, payload);
+
+      const result = withEnv({ EGC_AUTO_CONSOLIDATE: undefined }, () =>
+        autoConsolidateStateFile(filePath, { homeDir })
+      );
+
+      assert.strictEqual(result.consolidated, false);
+      assert.strictEqual(result.reason, 'encrypted');
+      assert.ok(fs.readFileSync(filePath).equals(payload), 'ciphertext must remain untouched');
+    } finally {
+      cleanup(homeDir);
     }
   })) passed++; else failed++;
 
