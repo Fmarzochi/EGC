@@ -24,6 +24,20 @@ try {
   // Optional module - minimal installations without project-detect skip the briefing.
 }
 
+let branchState = null;
+try {
+  branchState = require('../lib/branch-state');
+} catch (_) {
+  // Optional module - without it only the flat state layout is loaded.
+}
+
+let autoConsolidate = null;
+try {
+  autoConsolidate = require('../lib/auto-consolidate');
+} catch (_) {
+  // Optional module - oversized state files are then loaded as-is.
+}
+
 function readStdinJson() {
   try {
     const raw = fs.readFileSync(0, 'utf8');
@@ -44,9 +58,12 @@ function resolveProjectPath(input) {
   return process.env.CLAUDE_PROJECT_DIR || process.env.PWD || process.cwd();
 }
 
+// Fallback slug for minimal installs without branch-state. Uses the same
+// double-hyphen join as branch-state.projectSlug; the previous single-hyphen
+// form never matched the files the memory server actually writes.
 function projectSlug(projectPath) {
   const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.slice(-2).join('-').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
+  return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
 function parseFrontmatterValue(val) {
@@ -159,9 +176,29 @@ function emitStackBriefing(projectPath) {
   process.stdout.write(buildBriefingLines(stack, stackSpecific, generic, missing).join('\n'));
 }
 
+function resolveStateFile(projectPath) {
+  if (branchState) {
+    const stateDir = branchState.getStateDir();
+    const branch = branchState.detectBranch(projectPath);
+    const resolved = branchState.resolveStateRead(stateDir, projectPath, branch);
+    return resolved.source === 'none' ? null : resolved.filePath;
+  }
+
+  const flatFile = path.join(os.homedir(), '.egc', 'state', `${projectSlug(projectPath)}.md`);
+  return fs.existsSync(flatFile) ? flatFile : null;
+}
+
 function loadAndPrintState(projectPath) {
-  const stateFile = path.join(os.homedir(), '.egc', 'state', `${projectSlug(projectPath)}.md`);
-  if (!fs.existsSync(stateFile)) return;
+  const stateFile = resolveStateFile(projectPath);
+  if (!stateFile) return;
+
+  if (autoConsolidate) {
+    try {
+      autoConsolidate.autoConsolidateStateFile(stateFile);
+    } catch (_) {
+      // Consolidation is best-effort; never block session startup.
+    }
+  }
 
   const content = fs.readFileSync(stateFile, 'utf8');
   if (!content.trim()) return;
