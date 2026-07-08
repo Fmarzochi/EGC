@@ -149,7 +149,7 @@ function main() {
       const result = spawnSync(process.execPath, [hookPath], {
         input: JSON.stringify({ cwd: projectDir }),
         encoding: 'utf8',
-        env: { ...process.env, HOME: homeDir },
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
       });
 
       assert.strictEqual(result.status, 0, result.stderr);
@@ -180,7 +180,7 @@ function main() {
       const result = spawnSync(process.execPath, [hookPath], {
         input: JSON.stringify({ cwd: projectDir }),
         encoding: 'utf8',
-        env: { ...process.env, HOME: homeDir },
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
       });
 
       assert.strictEqual(result.status, 0, result.stderr);

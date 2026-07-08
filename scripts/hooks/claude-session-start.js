@@ -10,33 +10,22 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-let propagateStateContent = null;
-try {
-  propagateStateContent = require('../lib/propagate-state').propagateStateContent;
-} catch (_) {
-  // Lib not installed yet; run `egc repair` to restore it.
+// Optional libs: minimal installations may lack them, so a failed require
+// resolves to null and the dependent feature is skipped instead of failing
+// session startup. Run `egc repair` to restore missing libs.
+function tryRequire(modulePath) {
+  try {
+    return require(modulePath);
+  } catch {
+    return null;
+  }
 }
 
-let projectDetect = null;
-try {
-  projectDetect = require('../lib/project-detect');
-} catch (_) {
-  // Optional module - minimal installations without project-detect skip the briefing.
-}
-
-let branchState = null;
-try {
-  branchState = require('../lib/branch-state');
-} catch (_) {
-  // Optional module - without it only the flat state layout is loaded.
-}
-
-let autoConsolidate = null;
-try {
-  autoConsolidate = require('../lib/auto-consolidate');
-} catch (_) {
-  // Optional module - oversized state files are then loaded as-is.
-}
+const propagateStateLib = tryRequire('../lib/propagate-state');
+const propagateStateContent = propagateStateLib ? propagateStateLib.propagateStateContent : null;
+const projectDetect = tryRequire('../lib/project-detect');
+const branchState = tryRequire('../lib/branch-state');
+const autoConsolidate = tryRequire('../lib/auto-consolidate');
 
 function readStdinJson() {
   try {
@@ -176,6 +165,16 @@ function emitStackBriefing(projectPath) {
   process.stdout.write(buildBriefingLines(stack, stackSpecific, generic, missing).join('\n'));
 }
 
+// Consolidation must never block session startup: on any failure the
+// state file is simply loaded as-is.
+function consolidateBestEffort(stateFile) {
+  try {
+    return autoConsolidate.autoConsolidateStateFile(stateFile);
+  } catch {
+    return null;
+  }
+}
+
 function resolveStateFile(projectPath) {
   if (branchState) {
     const stateDir = branchState.getStateDir();
@@ -193,11 +192,7 @@ function loadAndPrintState(projectPath) {
   if (!stateFile) return;
 
   if (autoConsolidate) {
-    try {
-      autoConsolidate.autoConsolidateStateFile(stateFile);
-    } catch (_) {
-      // Consolidation is best-effort; never block session startup.
-    }
+    consolidateBestEffort(stateFile);
   }
 
   const content = fs.readFileSync(stateFile, 'utf8');
