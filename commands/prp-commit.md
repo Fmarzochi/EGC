@@ -5,108 +5,58 @@ argument-hint: "[target description] (blank = all changes)"
 
 # Smart Commit
 
-> Adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
-
 **Input**: $ARGUMENTS
 
----
+Turn "commit the parser fix" into the right `git add` set and a clean conventional commit, without the user naming a single path.
 
-## Phase 1: ASSESS
-
-```bash
-git status --short
-```
-
-If output is empty → stop: "Nothing to commit."
-
-Show the user a summary of what's changed (added, modified, deleted, untracked).
-
----
-
-## Phase 2: INTERPRET & STAGE
-
-Interpret `$ARGUMENTS` to determine what to stage:
-
-| Input | Interpretation | Git Command |
-|---|---|---|
-| *(blank / empty)* | Stage everything | `git add -A` |
-| `staged` | Use whatever is already staged | *(no git add)* |
-| `*.ts` or `*.py` etc. | Stage matching glob | `git add '*.ts'` |
-| `except tests` | Stage all, then unstage tests | `git add -A && git reset -- '**/*.test.*' '**/*.spec.*' '**/test_*' 2>/dev/null \|\| true` |
-| `only new files` | Stage untracked files only | `git ls-files --others --exclude-standard \| grep . && git ls-files --others --exclude-standard \| xargs git add` |
-| `the auth changes` | Interpret from status/diff: find auth-related files | `git add <matched files>` |
-| Specific filenames | Stage those files | `git add <files>` |
-
-For natural language inputs (like "the auth changes"), cross-reference the `git status` output and `git diff` to identify relevant files. Show the user which files you're staging and why.
+## Step 1: Inventory
 
 ```bash
-git add <determined files>
+git status --porcelain
+git diff --stat
 ```
 
-After staging, verify:
-```bash
-git diff --cached --stat
-```
+If there is nothing to commit, say so and stop.
 
-If nothing staged, stop: "No files matched your description."
+## Step 2: Resolve the target
 
----
-
-## Phase 3: COMMIT
-
-Craft a single-line commit message in imperative mood:
-
-```
-{type}: {description}
-```
-
-Types:
-- `feat`: New feature or capability
-- `fix`: Bug fix
-- `refactor`: Code restructuring without behavior change
-- `docs`: Documentation changes
-- `test`: Adding or updating tests
-- `chore`: Build, config, dependencies
-- `perf`: Performance improvement
-- `ci`: CI/CD changes
-
-Rules:
-- Imperative mood ("add feature" not "added feature")
-- Lowercase after the type prefix
-- No period at the end
-- Under 72 characters
-- Describe WHAT changed, not HOW
-
-```bash
-git commit -m "{type}: {description}"
-```
-
----
-
-## Phase 4: OUTPUT
-
-Report to user:
-
-```
-Committed: {hash_short}
-Message:   {type}: {description}
-Files:     {count} file(s) changed
-
-Next steps:
-  - git push           → push to remote
-  - /prp-pr            → create a pull request
-  - /code-review       → review before pushing
-```
-
----
-
-## Examples
-
-| You say | What happens |
+| `$ARGUMENTS` | Selection |
 |---|---|
-| `/prp-commit` | Stages all, auto-generates message |
-| `/prp-commit staged` | Commits only what's already staged |
-| `/prp-commit *.ts` | Stages all TypeScript files, commits |
-| `/prp-commit except tests` | Stages everything except test files |
-| `/prp-commit the database migration` | Finds DB migration files from status, stages them |
-| `/prp-commit only new files` | Stages untracked files only |
+| Blank | All modified and untracked files |
+| Plain-English description | Files whose path, directory, or diff content match the description |
+
+Matching is semantic, not string-based: "the parser fix" selects the files whose diff touches parsing logic, even if no path contains the word "parser". When the description matches nothing, show the changed files and ask; never guess into an empty commit.
+
+## Step 3: Split into atomic commits
+
+One commit = one concern. If the selected files mix concerns (a bug fix plus an unrelated rename), propose a split and create the commits in sequence. Never bundle unrelated changes to save a step.
+
+## Step 4: Guard
+
+Before staging, scan the selected diff for:
+
+- Secrets: keys, tokens, passwords, `.env` content. Finding one aborts the commit for that file with a warning.
+- Debug leftovers: `console.log`, commented-out blocks, stray TODO added by this change. Flag them; commit only if the user confirms.
+- Files that are clearly accidental: lockfile churn without dependency changes, editor artifacts.
+
+## Step 5: Commit
+
+Write a conventional commit message derived from the diff, not from the user's phrasing:
+
+```text
+{type}({scope}): {what changed, imperative, under 72 chars}
+
+{body only when the diff does not speak for itself: the why, not the what}
+```
+
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `perf`.
+
+Sign-off: run `git commit -s` when the repository enforces DCO (a DCO check in CI or a CONTRIBUTING requirement); plain `git commit` otherwise.
+
+## Output
+
+```text
+{n} commit(s) created:
+  {short-hash} {message}
+Not committed: {files left out and why, or "nothing"}
+```

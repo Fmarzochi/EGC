@@ -5,8 +5,6 @@ argument-hint: [pr-number | pr-url | blank for local review]
 
 # Code Review
 
-> PR review mode adapted from PRPs-agentic-eng by Wirasm. Part of the PRP workflow series.
-
 **Input**: $ARGUMENTS
 
 ---
@@ -75,215 +73,90 @@ Never approve code with security vulnerabilities.
 
 ## PR Review Mode
 
-Comprehensive GitHub PR review: fetches diff, reads full files, runs validation, posts review.
+Review a GitHub pull request through an evidence ledger: every finding carries proof (file, line, failure scenario), and the final decision is computed from the ledger, never from overall impression.
 
-### Phase 1: FETCH
+### Stage A: Resolve the PR
 
-Parse input to determine PR:
-
-| Input | Action |
+| `$ARGUMENTS` contains | Resolution |
 |---|---|
-| Number (e.g. `42`) | Use as PR number |
-| URL (`github.com/.../pull/42`) | Extract PR number |
-| Branch name | Find PR via `gh pr list --head <branch>` |
+| A number | That PR number |
+| A GitHub URL | The number extracted from the URL |
+| A branch name | `gh pr list --head <branch>` |
 
 ```bash
-gh pr view <NUMBER> --json number,title,body,author,baseRefName,headRefName,changedFiles,additions,deletions
+gh pr view <NUMBER> --json title,body,author,baseRefName,headRefName,isDraft,additions,deletions
+```
+
+Unresolvable input stops the command with the list of open PRs as a hint.
+
+### Stage B: Absorb the change
+
+1. Read the PR description for stated intent and linked issues; the review judges the diff against that intent.
+2. Read the project's contributing rules and agent instructions if present.
+3. Read `.gemini/PRPs/reports/` and `.gemini/PRPs/plans/` for artifacts related to this branch; a plan explains choices the diff alone cannot.
+4. Pull the diff and read every touched source file **at the head revision, in full**; diff hunks without surrounding context hide bugs:
+
+```bash
 gh pr diff <NUMBER>
+gh pr checkout <NUMBER>  # preferred when a local checkout is possible
 ```
 
-If PR not found, stop with error. Store PR metadata for later phases.
+### Stage C: Build the findings ledger
 
-### Phase 2: CONTEXT
+Hunt in two sweeps, recording each finding as a ledger row.
 
-Build review context:
+**Sweep 1, will it break**: logic errors, unhandled inputs, race conditions, security holes (injection, secret exposure, path traversal, missing authorization), data loss paths, performance cliffs on real data sizes.
 
-1. **Project rules**: Read `GEMINI.md`, `.gemini/docs/`, and any contributing guidelines
-2. **PRP artifacts**: Check `.gemini/PRPs/reports/` and `.gemini/PRPs/plans/` for implementation context related to this PR
-3. **PR intent**: Parse PR description for goals, linked issues, test plans
-4. **Changed files**: List all modified files and categorize by type (source, test, config, docs)
+**Sweep 2, will it rot**: convention drift from the surrounding code, missing tests for the new behavior, dead code, unclear naming, documentation the change makes stale.
 
-### Phase 3: REVIEW
+Ledger row format:
 
-Read each changed file **in full** (not just the diff hunks: you need surrounding context).
-
-For PR reviews, fetch the full file contents at the PR head revision:
-```bash
-gh pr diff <NUMBER> --name-only | while IFS= read -r file; do
-  gh api "repos/{owner}/{repo}/contents/$file?ref=<head-branch>" --jq '.content' | base64 -d
-done
+```text
+[severity] file:line
+  claim: what is wrong, one sentence
+  proof: input or state that triggers it, and the wrong result
+  fix: the smallest correct change
 ```
 
-Apply the review checklist across 7 categories:
+A finding without a concrete proof is an opinion; either construct the failing scenario or drop the row. Severity scale: `blocker` (exploitable or data-destroying), `major` (wrong behavior a user will hit), `minor` (quality debt), `note` (style, optional).
 
-| Category | What to Check |
+### Stage D: Independent verification
+
+Run the repository's own checks locally on the PR head when checked out (detect commands from the project's config files; run what exists: lint, typecheck, tests, build). Record each command and its result in the ledger footer. When a local run is impossible, record the CI status from `gh pr checks <NUMBER>` instead and mark it as second-hand evidence.
+
+### Stage E: Decide and deliver
+
+The decision is a function of the ledger:
+
+| Ledger state | Verdict |
 |---|---|
-| **Correctness** | Logic errors, off-by-ones, null handling, edge cases, race conditions |
-| **Type Safety** | Type mismatches, unsafe casts, `any` usage, missing generics |
-| **Pattern Compliance** | Matches project conventions (naming, file structure, error handling, imports) |
-| **Security** | Injection, auth gaps, secret exposure, SSRF, path traversal, XSS |
-| **Performance** | N+1 queries, missing indexes, unbounded loops, memory leaks, large payloads |
-| **Completeness** | Missing tests, missing error handling, incomplete migrations, missing docs |
-| **Maintainability** | Dead code, magic numbers, deep nesting, unclear naming, missing types |
+| Any `blocker` | Request changes, listing blockers first |
+| Any `major`, or any failed check | Request changes |
+| Only `minor`/`note`, checks pass | Approve, findings attached as comments |
+| Empty ledger, checks pass | Approve |
+| PR is a draft | Comment only, regardless of ledger |
 
-Assign severity to each finding:
-
-| Severity | Meaning | Action |
-|---|---|---|
-| **CRITICAL** | Security vulnerability or data loss risk | Must fix before merge |
-| **HIGH** | Bug or logic error likely to cause issues | Should fix before merge |
-| **MEDIUM** | Code quality issue or missing best practice | Fix recommended |
-| **LOW** | Style nit or minor suggestion | Optional |
-
-### Phase 4: VALIDATE
-
-Run available validation commands:
-
-Detect the project type from config files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.), then run the appropriate commands:
-
-**Node.js / TypeScript** (has `package.json`):
-```bash
-npm run typecheck 2>/dev/null || npx tsc --noEmit 2>/dev/null  # Type check
-npm run lint                                                    # Lint
-npm test                                                        # Tests
-npm run build                                                   # Build
-```
-
-**Rust** (has `Cargo.toml`):
-```bash
-cargo clippy -- -D warnings  # Lint
-cargo test                   # Tests
-cargo build                  # Build
-```
-
-**Go** (has `go.mod`):
-```bash
-go vet ./...    # Lint
-go test ./...   # Tests
-go build ./...  # Build
-```
-
-**Python** (has `pyproject.toml` / `setup.py`):
-```bash
-pytest  # Tests
-```
-
-Run only the commands that apply to the detected project type. Record pass/fail for each.
-
-### Phase 5: DECIDE
-
-Form recommendation based on findings:
-
-| Condition | Decision |
-|---|---|
-| Zero CRITICAL/HIGH issues, validation passes | **APPROVE** |
-| Only MEDIUM/LOW issues, validation passes | **APPROVE** with comments |
-| Any HIGH issues or validation failures | **REQUEST CHANGES** |
-| Any CRITICAL issues | **BLOCK**: must fix before merge |
-
-Special cases:
-- Draft PR → Always use **COMMENT** (not approve/block)
-- Only docs/config changes → Lighter review, focus on correctness
-- Explicit `--approve` or `--request-changes` flag → Override decision (but still report all findings)
-
-### Phase 6: REPORT
-
-Create review artifact at `.gemini/PRPs/reviews/pr-<NUMBER>-review.md`:
-
-```markdown
-# PR Review: #<NUMBER>: <TITLE>
-
-**Reviewed**: <date>
-**Author**: <author>
-**Branch**: <head> → <base>
-**Decision**: APPROVE | REQUEST CHANGES | BLOCK
-
-## Summary
-<1-2 sentence overall assessment>
-
-## Findings
-
-### CRITICAL
-<findings or "None">
-
-### HIGH
-<findings or "None">
-
-### MEDIUM
-<findings or "None">
-
-### LOW
-<findings or "None">
-
-## Validation Results
-
-| Check | Result |
-|---|---|
-| Type check | Pass / Fail / Skipped |
-| Lint | Pass / Fail / Skipped |
-| Tests | Pass / Fail / Skipped |
-| Build | Pass / Fail / Skipped |
-
-## Files Reviewed
-<list of files with change type: Added/Modified/Deleted>
-```
-
-### Phase 7: PUBLISH
-
-Post the review to GitHub:
+Save the ledger to `.gemini/PRPs/reviews/pr-<NUMBER>-review.md`, then publish:
 
 ```bash
-# If APPROVE
-gh pr review <NUMBER> --approve --body "<summary of review>"
-
-# If REQUEST CHANGES
-gh pr review <NUMBER> --request-changes --body "<summary with required fixes>"
-
-# If COMMENT only (draft PR or informational)
-gh pr review <NUMBER> --comment --body "<summary>"
+gh pr review <NUMBER> --approve --body "<ledger summary>"
+gh pr review <NUMBER> --request-changes --body "<ledger summary, blockers first>"
+gh pr review <NUMBER> --comment --body "<ledger summary>"
 ```
 
-For inline comments on specific lines, use the GitHub review comments API:
-```bash
-gh api "repos/{owner}/{repo}/pulls/<NUMBER>/comments" \
-  -f body="<comment>" \
-  -f path="<file>" \
-  -F line=<line-number> \
-  -f side="RIGHT" \
-  -f commit_id="$(gh pr view <NUMBER> --json headRefOid --jq .headRefOid)"
-```
+For line-anchored comments, submit one review carrying all inline comments:
 
-Alternatively, post a single review with multiple inline comments at once:
 ```bash
 gh api "repos/{owner}/{repo}/pulls/<NUMBER>/reviews" \
   -f event="COMMENT" \
-  -f body="<overall summary>" \
-  --input comments.json  # [{"path": "file", "line": N, "body": "comment"}, ...]
+  -f body="<summary>" \
+  --input comments.json
 ```
 
-### Phase 8: OUTPUT
+Close by telling the user the verdict, the ledger counts per severity, the verification results, and the saved ledger path.
 
-Report to user:
+### Degraded situations
 
-```
-PR #<NUMBER>: <TITLE>
-Decision: <APPROVE|REQUEST_CHANGES|BLOCK>
-
-Issues: <critical_count> critical, <high_count> high, <medium_count> medium, <low_count> low
-Validation: <pass_count>/<total_count> checks passed
-
-Artifacts:
-  Review: .gemini/PRPs/reviews/pr-<NUMBER>-review.md
-  GitHub: <PR URL>
-
-Next steps:
-  - <contextual suggestions based on decision>
-```
-
----
-
-## Edge Cases
-
-- **No `gh` CLI**: Fall back to local-only review (read the diff, skip GitHub publish). Warn user.
-- **Diverged branches**: Suggest `git fetch origin && git rebase origin/<base>` before review.
-- **Large PRs (>50 files)**: Warn about review scope. Focus on source changes first, then tests, then config/docs.
+- **`gh` missing or unauthenticated**: produce the ledger from a local diff only, skip publishing, and say so.
+- **PR far behind its base**: note it in the review and recommend a rebase before merge.
+- **Very large PR**: review source files first and say explicitly which files were not reviewed; a silent partial review is worse than a declared one.
