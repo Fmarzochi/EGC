@@ -13,8 +13,8 @@ function hideEgcRootOnWindows(): void {
   const egcRoot = path.join(os.homedir(), '.egc');
   try {
     execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
-  } catch (_) {
-    // non-critical: folder works even if attribute fails
+  } catch (error) {
+    console.error('non-critical: folder works even if attribute fails', error);
   }
 }
 import { z } from 'zod';
