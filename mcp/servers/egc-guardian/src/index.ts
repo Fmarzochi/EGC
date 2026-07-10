@@ -106,7 +106,9 @@ class PersistentLogger {
         // file might not exist
       }
       await fs.promises.appendFile(this.logPath, payload + '\n', 'utf-8');
-    } catch(e) {}
+    } catch (e) {
+      console.error('[EGC guardian] Log write failed (disk full?):', String(e));
+    }
   }
 }
 
