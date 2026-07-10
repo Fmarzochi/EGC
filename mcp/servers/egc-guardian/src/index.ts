@@ -343,8 +343,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "orchestrate_task": {
         const prompt = request.params.arguments?.prompt as string;
-        const agents: string[] = (request.params.arguments?.agents ?? []) as string[];
-        const skills: string[] = (request.params.arguments?.skills ?? []) as string[];
         const files: string[] = (request.params.arguments?.filepaths ?? []) as string[];
 
         // Read any provided file payloads
