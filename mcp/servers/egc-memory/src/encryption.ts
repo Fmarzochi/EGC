@@ -37,9 +37,7 @@ export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
     // directory may already exist
   }
 
-  if (fs.existsSync(keyPath)) {
-    // Key file exists — load it. Do NOT silently regenerate on error;
-    // that would destroy access to all previously encrypted state files.
+  const readExistingKey = (): Buffer => {
     const hex = fs.readFileSync(keyPath, 'utf-8').trim();
     const key = Buffer.from(hex, 'hex');
     if (key.length !== 32) {
@@ -47,18 +45,33 @@ export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
     }
     try { fs.chmodSync(keyPath, 0o600); } catch { /* best-effort */ }
     return key;
+  };
+
+  if (fs.existsSync(keyPath)) {
+    // Key file exists — load it. Do NOT silently regenerate on error;
+    // that would destroy access to all previously encrypted state files.
+    return readExistingKey();
   }
 
-  // Key file does not exist — generate a fresh one.
+  // Key file does not exist — generate a fresh one. Use an exclusive
+  // ('wx') write so a concurrent process racing to create the same key
+  // (e.g. a background agent's own egc-memory process starting up before
+  // ~/.egc/encryption.key exists) cannot silently overwrite a key another
+  // process has already generated. If we lose the race, EEXIST tells us
+  // to read back whichever key actually landed on disk instead of caching
+  // our own discarded one in memory for the lifetime of the process.
   const key = crypto.randomBytes(32);
   try {
     fs.chmodSync(dir, 0o700);
-    fs.writeFileSync(keyPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    fs.writeFileSync(keyPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
     fs.chmodSync(keyPath, 0o600);
+    return key;
   } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+      return readExistingKey();
+    }
     throw new Error(`[EGC encryption] Failed to persist encryption key to ${keyPath}: ${String(e)}. Remove the file or fix permissions and restart.`);
   }
-  return key;
 }
 
 /**

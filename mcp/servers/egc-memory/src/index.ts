@@ -427,7 +427,15 @@ function isProtectedPath(p: string): boolean {
 }
 
 function resolveProjectPath(provided?: string): string {
-  const raw = provided || process.env.EGC_PROJECT || process.env.PWD || os.homedir();
+  // process.cwd() reflects this process's actual working directory and is
+  // always accurate. process.env.PWD is a shell convention that is only
+  // updated by `cd` in an interactive shell — a process spawned
+  // programmatically with a different cwd (e.g. a background agent running
+  // in a git worktree) can inherit a stale PWD from its parent, silently
+  // resolving to the wrong project/branch and colliding with another
+  // process's state file. Prefer cwd(); keep PWD only as a last-resort
+  // fallback for environments where cwd() itself is unavailable.
+  const raw = provided || process.env.EGC_PROJECT || process.cwd() || process.env.PWD || os.homedir();
   if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
@@ -703,7 +711,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            project_path: { type: "string" },
+            project_path: { type: "string", description: "Absolute path to the project root (or worktree) to scope this state to. Always pass this explicitly when calling from an agent or worktree that is not the caller's own working directory — an omitted value falls back to this process's cwd, which can silently resolve to the wrong project/branch and collide with another process's state file." },
             context: { type: "string", description: "What this project is and its current phase." },
             decisions: { type: "array", items: { type: "object", properties: { what: { type: "string" }, why: { type: "string" } }, required: ["what"] }, description: "Decisions made this session." },
             avoid: { type: "array", items: { type: "object", properties: { what: { type: "string" }, why: { type: "string" } }, required: ["what"] }, description: "What failed and should not be repeated." },
