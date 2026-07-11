@@ -2,6 +2,24 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.8] - 2026-07-11
+
+### New Features
+
+- **Continue.dev support**: added as the 14th supported harness (Tier 1). Skills install flat at `~/.continue/skills/<name>/` in both home and project scope, matching the layout of the other Tier 1 targets. (#693)
+- **`autonomous-lesson-learning` skill**: orchestrates `continuous-agent-loop` patterns with the `egc-memory` lesson tools (`lesson_recall`, `lesson_save`, `lesson_reinforce`) so long-running autonomous loops recall known failure modes before acting and record new ones as they happen. (#692)
+
+### Security
+
+- **EGC Guardian: granular credential denylist**: whole-directory blocks on `~/.claude`, `~/.cursor`, `~/.gemini`, and `~/.config` were replaced with a denylist of the specific credential files each AI tool actually stores (OAuth tokens, session files, API keys). The old whole-directory block was breaking legitimate functionality -- native memory, skills, and EGC's own install -- in several harnesses without any real security gain, since the actual secret was always one specific file, never the whole directory. (#691)
+- **`runCommand`**: `execSync` replaced with `spawnSync` plus argv tokenization, removing a shell-injection surface in command execution. (#690)
+- **`reduce_context`**: file reads now go through a single file handle (open, stat, read, close) instead of separate `statSync`/`readFile` calls, closing a TOCTOU race on the byte-size limit check. (#690)
+- **`auto_learn`**: `project_path` is now resolved with `realpathSync` and checked against the protected-path list before use. (#690)
+
+### Bug Fixes
+
+- **State-store write debounce**: writes to the SQLite-backed state store are now debounced (50ms) with a synchronous flush on the first write, restoring error logging that a prior debounce attempt had dropped silently. (#690)
+
 ## [1.1.7] - 2026-07-06
 
 ### Bug Fixes
