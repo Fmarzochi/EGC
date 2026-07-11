@@ -98,6 +98,7 @@ function getEGCDir() {
     path.join(home, '.cursor'),
     path.join(home, '.agents'),
     path.join(home, '.amp'),
+    path.join(home, '.continue'),
     path.join(home, '.github'),
     path.join(home, '.kiro'),
     path.join(home, '.trae'),

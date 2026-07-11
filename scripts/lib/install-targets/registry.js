@@ -12,6 +12,8 @@ const ampHome = require('./amp-home');
 const ampProject = require('./amp-project');
 const copilotHome = require('./copilot-home');
 const zedHome = require('./zed-home');
+const continueHome = require('./continue-home');
+const continueProject = require('./continue-project');
 
 const ADAPTERS = Object.freeze([
   egcHome,
@@ -28,6 +30,8 @@ const ADAPTERS = Object.freeze([
   ampProject,
   copilotHome,
   zedHome,
+  continueHome,
+  continueProject,
 ]);
 
 function listInstallTargetAdapters() {

@@ -113,6 +113,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
+  continue:     { name: 'Continue.dev',      url: 'https://continue.dev' },
 });
 
 function defaultValidateAdapterInput(config, input = {}) {

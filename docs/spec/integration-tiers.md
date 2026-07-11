@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 13 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 14 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 ## Tier definitions
 
@@ -12,7 +12,7 @@ EGC supports 13 AI coding tools through 3 distinct integration mechanisms. This 
 | **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 13 harnesses
+## The 14 harnesses
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
@@ -27,8 +27,9 @@ EGC supports 13 AI coding tools through 3 distinct integration mechanisms. This 
 | 9 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat |
 | 10 | **VS Code Copilot** | 1 | `copilot` | `~/.github/skills/<name>/SKILL.md` | Skills installed flat |
 | 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); MCP via `context_servers` in `settings.json`; cognitive bootstrap into `~/.config/zed/AGENTS.md` |
-| 12 | **Kiro** | 2 | (none) | `~/.kiro/` via `.kiro/install.sh` | Session hooks installed to `~/.kiro/hooks/` |
-| 13 | **Trae** | 2 | (none) | `~/.trae/` (or `~/.trae-cn/` with `TRAE_ENV=cn`) via `.trae/install.sh` | Memory protocol written to `~/.trae/MEMORY.md` |
+| 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<name>/SKILL.md` | Skills installed flat; MCP via YAML block files in `~/.continue/mcpServers/`; memory protocol prompt in `~/.continue/prompts/`; rules discovered natively at workspace `.continue/rules/` |
+| 13 | **Kiro** | 2 | (none) | `~/.kiro/` via `.kiro/install.sh` | Session hooks installed to `~/.kiro/hooks/` |
+| 14 | **Trae** | 2 | (none) | `~/.trae/` (or `~/.trae-cn/` with `TRAE_ENV=cn`) via `.trae/install.sh` | Memory protocol written to `~/.trae/MEMORY.md` |
 
 ## Why three tiers (history, not aspiration)
 
@@ -36,11 +37,11 @@ Tier 1 (unified) is the canonical pipeline. It is the result of `install-plan.js
 
 Tier 2 (custom-script) exists because Kiro and Trae landed in EGC before the unified pipeline was stable. Their installers do roughly the same work as the unified pipeline, but the shape of the assets they ship differs enough that retrofitting them is non-trivial. They are first-class but technically isolated.
 
-Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude Code was previously Tier 3, but now supports `~/.claude/skills/<name>/SKILL.md` as a skill discovery path, so it has been promoted to Tier 1 with target id `claude`. Windsurf, Amp, and VS Code Copilot were added as Tier 1 targets in v1.0.2 following the same skill-discovery pattern.
+Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude Code was previously Tier 3, but now supports `~/.claude/skills/<name>/SKILL.md` as a skill discovery path, so it has been promoted to Tier 1 with target id `claude`. Windsurf, Amp, and VS Code Copilot were added as Tier 1 targets in v1.0.2 following the same skill-discovery pattern. Continue.dev followed the same pattern as the 14th harness (its MCP registration via `~/.continue/mcpServers/` YAML block files landed separately in #564).
 
 ## What "supported" guarantees
 
-For all 9 harnesses, EGC guarantees:
+For all 14 harnesses, EGC guarantees:
 
 - The install path is documented above
 - MCP server registration (if the tool supports MCP)
@@ -62,7 +63,7 @@ For Tier 1 only:
 
 `node scripts/harness-audit.js` produces a report scored against the 7 categories defined in `CATEGORIES`. The score reflects repo-level health, not per-harness health. A future enhancement is per-harness rollup (see `docs/spec/README.md` Next Steps).
 
-## Adding a 10th harness
+## Adding a 15th harness
 
 Choose tier based on what the target tool actually consumes:
 

@@ -2,7 +2,7 @@
 
 > O mapa honesto de como cada ferramenta de IA suportada se integra com o EGC.
 
-O EGC suporta 13 ferramentas de IA por meio de 3 mecanismos de integracao distintos. Este documento e a fonte de verdade sobre o que esta e nao esta integrado, e em qual profundidade.
+O EGC suporta 14 ferramentas de IA por meio de 3 mecanismos de integracao distintos. Este documento e a fonte de verdade sobre o que esta e nao esta integrado, e em qual profundidade.
 
 ## Definicoes de Nivel
 
@@ -12,7 +12,7 @@ O EGC suporta 13 ferramentas de IA por meio de 3 mecanismos de integracao distin
 | **2** | Script customizado | Ativos especificos da ferramenta via instalador dedicado | `.{ferramenta}/install.sh` chamado por `install.sh` |
 | **3** | Somente protocolo | Registro do servidor MCP + injecao de protocolo de memoria | `scripts/bootstrap-cognitive.js` + registro MCP em `install.sh` |
 
-## Os 13 Harnesses
+## Os 14 Harnesses
 
 | # | Ferramenta | Nivel | Target id | Caminho de instalacao | Notas |
 |---|------------|-------|-----------|----------------------|-------|
@@ -27,8 +27,9 @@ O EGC suporta 13 ferramentas de IA por meio de 3 mecanismos de integracao distin
 | 9 | **Amp** | 1 | `amp` | `~/.amp/skills/<nome>/SKILL.md` | Skills instaladas de forma plana |
 | 10 | **VS Code Copilot** | 1 | `copilot` | `~/.github/skills/<nome>/SKILL.md` | Skills instaladas de forma plana |
 | 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<nome>/` | Skills instaladas de forma plana (categoria removida); MCP via `context_servers` em `settings.json`; bootstrap cognitivo em `~/.config/zed/AGENTS.md` |
-| 12 | **Kiro** | 2 | (nenhum) | `~/.kiro/` via `.kiro/install.sh` | Hooks de sessao instalados em `~/.kiro/hooks/` |
-| 13 | **Trae** | 2 | (nenhum) | `~/.trae/` (ou `~/.trae-cn/` com `TRAE_ENV=cn`) via `.trae/install.sh` | Protocolo de memoria gravado em `~/.trae/MEMORY.md` |
+| 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<nome>/SKILL.md` | Skills instaladas de forma plana; MCP via arquivos de bloco YAML em `~/.continue/mcpServers/`; prompt do protocolo de memoria em `~/.continue/prompts/`; regras descobertas nativamente em `.continue/rules/` do workspace |
+| 13 | **Kiro** | 2 | (nenhum) | `~/.kiro/` via `.kiro/install.sh` | Hooks de sessao instalados em `~/.kiro/hooks/` |
+| 14 | **Trae** | 2 | (nenhum) | `~/.trae/` (ou `~/.trae-cn/` com `TRAE_ENV=cn`) via `.trae/install.sh` | Protocolo de memoria gravado em `~/.trae/MEMORY.md` |
 
 ## Por que tres niveis (historia, nao aspiracao)
 
@@ -36,11 +37,11 @@ O Nivel 1 (unificado) e o pipeline canonico. E o resultado de `install-plan.js` 
 
 O Nivel 2 (script customizado) existe porque Kiro e Trae chegaram ao EGC antes de o pipeline unificado estar estavel. Seus instaladores fazem aproximadamente o mesmo trabalho que o pipeline unificado, mas a forma dos ativos que publicam difere o suficiente para que a retrocompatibilizacao seja nao trivial. Sao de primeira classe, mas tecnicamente isolados.
 
-O Nivel 3 (somente protocolo) e o ponto de entrada para qualquer ferramenta que suporte MCP. O Claude Code era anteriormente Nivel 3, mas agora suporta `~/.claude/skills/<nome>/SKILL.md` como caminho de descoberta de skills, portanto foi promovido ao Nivel 1 com target id `claude`. Windsurf, Amp e VS Code Copilot foram adicionados como targets Nivel 1 na v1.0.2 seguindo o mesmo padrao de descoberta de skills.
+O Nivel 3 (somente protocolo) e o ponto de entrada para qualquer ferramenta que suporte MCP. O Claude Code era anteriormente Nivel 3, mas agora suporta `~/.claude/skills/<nome>/SKILL.md` como caminho de descoberta de skills, portanto foi promovido ao Nivel 1 com target id `claude`. Windsurf, Amp e VS Code Copilot foram adicionados como targets Nivel 1 na v1.0.2 seguindo o mesmo padrao de descoberta de skills. O Continue.dev seguiu o mesmo padrao como o 14o harness (o registro MCP via arquivos de bloco YAML em `~/.continue/mcpServers/` chegou separadamente na #564).
 
 ## O que "suportado" garante
 
-Para todos os 9 harnesses, o EGC garante:
+Para todos os 14 harnesses, o EGC garante:
 
 - O caminho de instalacao esta documentado acima
 - Registro do servidor MCP (se a ferramenta suportar MCP)
@@ -62,7 +63,7 @@ Somente para Nivel 1:
 
 `node scripts/harness-audit.js` produz um relatorio pontuado contra as 7 categorias definidas em `CATEGORIES`. A pontuacao reflete a saude no nivel do repositorio, nao a saude por harness. Uma melhoria futura e o rollup por harness (veja `docs/spec/README.md` Proximos Passos).
 
-## Adicionando um 14o harness
+## Adicionando um 15o harness
 
 Escolha o nivel com base no que a ferramenta target realmente consome:
 

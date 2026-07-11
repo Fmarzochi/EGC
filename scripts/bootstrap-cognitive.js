@@ -247,6 +247,25 @@ try {
   }
 })();
 
+// ── Continue.dev (~/.continue/prompts/egc-memory.prompt) ─────────────────────
+(function bootstrapContinue() {
+  try {
+    const continueDir = path.join(HOME, '.continue');
+    if (!fs.existsSync(continueDir)) return;
+    const promptsDir = path.join(continueDir, 'prompts');
+    const target = path.join(promptsDir, 'egc-memory.prompt');
+    if (fs.existsSync(target)) {
+      console.log('  [cognitive] Continue.dev: already configured');
+      return;
+    }
+    if (!fs.existsSync(promptsDir)) fs.mkdirSync(promptsDir, { recursive: true });
+    fs.writeFileSync(target, 'name: EGC Session Memory\ndescription: Restore and persist EGC cross-session memory\n---\nAt the start of every session call `get_state({})` via egc-memory to restore context. At the end call `update_state({...})` to save decisions.\n\n## Auto-Intuition\n\nAct on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save, what failed->search_history, review PR->review-pr. Judge by full context not literal words.\n\n## EGC Guardian Protocol\n\nThese calls are automatic and non-negotiable. Never wait for the user to ask.\n\n- Before every non-trivial task: call `orchestrate_task({ prompt: "<task>" })`\n- Before every shell/Bash command: call `validate_command({ command: "<cmd>" })`\n- Before every new file Write or Edit on a file not yet read: call `validate_write({ filepath: "<path>" })`\n- At the end of every significant work block: call `auto_learn({ project_path: "<cwd>" })`\n\nSkipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.\n');
+    console.log('  [cognitive] Continue.dev: memory protocol installed (~/.continue/prompts/egc-memory.prompt)');
+  } catch (e) {
+    console.log(`  [cognitive] Continue.dev: unexpected error: ${e.message}`);
+  }
+})();
+
 // ── Kiro (~/.kiro/hooks/) ─────────────────────────────────────────────────────
 (function bootstrapKiro() {
   try {

@@ -954,6 +954,92 @@ function runTests() {
     assert.ok(targets.includes('zed'), 'Should include zed target');
   })) passed++; else failed++;
 
+  if (test('resolves continue home adapter root to ~/.continue and install-state path', () => {
+    const adapter = getInstallTargetAdapter('continue');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'continue-home');
+    assert.strictEqual(adapter.target, 'continue');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.continue'));
+    assert.strictEqual(statePath, path.join(homeDir, '.continue', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('continue adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('continue');
+    const byId = getInstallTargetAdapter('continue-home');
+    const projectById = getInstallTargetAdapter('continue-project');
+
+    assert.strictEqual(byTarget.id, 'continue-home');
+    assert.strictEqual(byId.id, 'continue-home');
+    assert.strictEqual(projectById.id, 'continue-project');
+    assert.ok(byTarget.supports('continue'));
+    assert.ok(byTarget.supports('continue-home'));
+  })) passed++; else failed++;
+
+  if (test('continue adapter strips category from skill paths and installs flat under ~/.continue/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'continue',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'continue-home');
+    assert.strictEqual(plan.targetRoot, path.join(homeDir, '.continue'));
+    assert.strictEqual(plan.installStatePath, path.join(homeDir, '.continue', 'egc', 'install-state.json'));
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && op.destinationPath === path.join(homeDir, '.continue', 'skills', 'tdd-workflow')
+      ),
+      'Should strip category and install skill flat under ~/.continue/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('continue adapter handles already-flat skill paths without double-stripping', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'continue',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'skills/tdd-workflow'
+        && op.destinationPath === path.join(homeDir, '.continue', 'skills', 'tdd-workflow')
+      ),
+      'Should handle already-flat skill path without stripping anything'
+    );
+  })) passed++; else failed++;
+
+  if (test('continue-project adapter resolves root to <project>/.continue', () => {
+    const adapter = getInstallTargetAdapter('continue-project');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.target, 'continue');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.continue'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.continue', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('continue adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('continue'), 'Should include continue target');
+  })) passed++; else failed++;
+
   if (test('every schema target enum value has a matching adapter (regression guard)', () => {
     const schemaPath = path.join(__dirname, '..', '..', 'schemas', 'egc-install-config.schema.json');
     const schema = JSON.parse(require('fs').readFileSync(schemaPath, 'utf8'));

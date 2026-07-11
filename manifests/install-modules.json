@@ -165,7 +165,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "rules-core",
@@ -198,7 +199,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -241,7 +243,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -280,7 +283,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "workflow-quality"
@@ -309,7 +313,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -345,7 +350,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -388,7 +394,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -416,7 +423,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "business-content"
@@ -447,7 +455,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -506,7 +515,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -551,7 +561,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -579,7 +590,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -613,7 +625,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -641,7 +654,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
@@ -748,7 +762,8 @@
         "windsurf",
         "amp",
         "copilot",
-        "zed"
+        "zed",
+        "continue"
       ],
       "dependencies": [
         "platform-configs"
