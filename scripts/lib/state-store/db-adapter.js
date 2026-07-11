@@ -70,6 +70,8 @@ class SqlJsDatabase {
     this._inTransaction = false;
     this._supportsWal = false;
     this._db = new sqlJs.Database(fileData || null);
+    this._persistTimeout = null;
+    this._initialPersistDone = false;
   }
 
   pragma(str) {
@@ -119,8 +121,12 @@ class SqlJsDatabase {
 
   close() {
     if (!this._db) return;
+    if (this._persistTimeout) {
+      clearTimeout(this._persistTimeout);
+      this._persistTimeout = null;
+    }
     try {
-      this._persist();
+      this._flushPersist();
     } catch (_) {
       // Ignore persist errors on close to prevent masking original errors
     } finally {
@@ -129,8 +135,42 @@ class SqlJsDatabase {
     }
   }
 
+  // PERF-01: coalesce bursts of writes into a single disk write instead of
+  // re-serializing and rewriting the whole DB on every exec()/transaction().
+  // The very first persist still happens synchronously so the DB file exists
+  // on disk immediately after the first write, before any close()/flush().
   _persist() {
     if (this._path === ':memory:') return;
+    if (!this._initialPersistDone) {
+      this._initialPersistDone = true;
+      this._flushPersist();
+      return;
+    }
+    if (this._persistTimeout) {
+      clearTimeout(this._persistTimeout);
+    }
+    this._persistTimeout = setTimeout(() => {
+      this._persistTimeout = null;
+      try {
+        this._flushPersist();
+      } catch (_) {
+        // _flushPersist already logs the failure. Swallowing it here keeps a
+        // failed debounced write from becoming an unhandled exception inside
+        // a bare setTimeout callback, which would crash the process.
+      }
+    }, 50);
+  }
+
+  async flush() {
+    if (this._persistTimeout) {
+      clearTimeout(this._persistTimeout);
+      this._persistTimeout = null;
+    }
+    this._flushPersist();
+  }
+
+  _flushPersist() {
+    if (this._path === ':memory:' || !this._db) return;
     try {
       const data = this._db.export();
       fs.mkdirSync(path.dirname(this._path), { recursive: true });
