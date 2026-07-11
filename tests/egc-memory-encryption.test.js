@@ -40,7 +40,7 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { loadOrCreateEncKey, encryptState, decryptState, isEncrypted, writeStateFile, readStateFile } = require(buildPath);
+const { loadOrCreateEncKey, encryptState, decryptState, isEncrypted, writeStateFile, readStateFile, quarantineUndecryptableStateFile } = require(buildPath);
 
 console.log('\n=== Testing egc-memory encryption ===\n');
 
@@ -139,6 +139,25 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
     assert.ok(onDisk.equals(winnerKey), 'the winner\'s key on disk must remain untouched');
   } finally {
     fs.existsSync = origExistsSync;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+// ── quarantineUndecryptableStateFile ────────────────────────────────────────
+
+if (test('quarantineUndecryptableStateFile: renames the corrupted file to a backup path and leaves it readable', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  try {
+    const filePath = path.join(tmpDir, 'state.md');
+    fs.writeFileSync(filePath, 'garbage-not-decryptable', { mode: 0o600 });
+
+    const backupPath = quarantineUndecryptableStateFile(filePath);
+
+    assert.ok(!fs.existsSync(filePath), 'original path must no longer exist so a fresh write can take its place');
+    assert.ok(fs.existsSync(backupPath), 'backup must exist so the corrupted bytes are not lost');
+    assert.ok(backupPath.startsWith(`${filePath}.corrupted-backup-`), 'backup path must be a sibling of the original, clearly marked as corrupted');
+    assert.strictEqual(fs.readFileSync(backupPath, 'utf-8'), 'garbage-not-decryptable', 'backup must preserve the original bytes untouched');
+  } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
