@@ -1187,4 +1187,5 @@ module.exports = {
   DECAY_GRACE_DAYS,
   ARCHIVE_THRESHOLD,
   createQueryApi,
+  normalizeLimit,
 };
