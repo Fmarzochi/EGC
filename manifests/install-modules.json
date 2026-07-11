@@ -528,6 +528,7 @@
         "skills/general/egc-devfleet",
         "skills/general/content-hash-cache-pattern",
         "skills/devops/continuous-agent-loop",
+        "skills/ai/autonomous-lesson-learning",
         "skills/ai/cost-aware-llm-pipeline",
         "skills/general/data-scraper-agent",
         "skills/general/enterprise-agent-ops",

@@ -19,6 +19,7 @@ skills:
   - api-design
   - architecture-decision-records
   - article-writing
+  - autonomous-lesson-learning
   - autonomous-loops
   - backend-patterns
   - benchmark
@@ -145,6 +146,7 @@ skills:
 commands:
   - aside
   - auto-update
+  - autonomous-lesson-learning
   - build-fix
   - checkpoint
   - code-review
