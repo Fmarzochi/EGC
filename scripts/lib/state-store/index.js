@@ -58,6 +58,12 @@ async function createStateStore(options = {}) {
     close() {
       db.close();
     },
+    // Force any debounced write to disk now instead of waiting for the next
+    // write burst or close(). Unlike close(), this surfaces persist failures
+    // to the caller instead of swallowing them.
+    async flush() {
+      if (db.flush) await db.flush();
+    },
     getAppliedMigrations() {
       return getAppliedMigrations(db);
     },

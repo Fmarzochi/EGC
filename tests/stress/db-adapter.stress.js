@@ -247,6 +247,28 @@ async function runTests() {
     }
   });
 
+  // ── 12. Debounced persist eventually flushes without an explicit close/flush ──
+  await test('debounced write reaches disk on its own after the debounce window', async () => {
+    const tmpDir = createTempDir();
+    const dbPath = path.join(tmpDir, 'debounce.db');
+    try {
+      const db = await openDatabase(dbPath);
+      db.exec('CREATE TABLE debounce (id INTEGER)'); // first write: flushed synchronously
+      db.exec('INSERT INTO debounce VALUES (1)'); // second write: debounced ~50ms
+      await new Promise(resolve => setTimeout(resolve, 150)); // wait past the debounce window
+      const reopened = await openDatabase(dbPath);
+      try {
+        const row = reopened.prepare('SELECT COUNT(*) as c FROM debounce').get();
+        assert.strictEqual(row.c, 1, 'debounced insert must be visible after the window elapses');
+      } finally {
+        reopened.close();
+      }
+      db.close();
+    } finally {
+      cleanup(tmpDir);
+    }
+  });
+
   // ─── summary ────────────────────────────────────────────────────────────────
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failures.length > 0) {

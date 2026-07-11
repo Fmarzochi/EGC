@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 // Platform detection
 const isWindows = process.platform === 'win32';
@@ -501,12 +501,12 @@ function commandExists(cmd) {
 /**
  * Run a command and return output
  *
- * SECURITY NOTE: This function executes shell commands. Only use with
- * trusted, hardcoded commands. Never pass user-controlled input directly.
- * For user input, use spawnSync with argument arrays instead.
+ * SECURITY NOTE: This function executes commands via spawnSync with
+ * shell:false (no shell is spawned). Only use with trusted, hardcoded
+ * commands. Never pass user-controlled input directly.
  *
  * @param {string} cmd - Command to execute (should be trusted/hardcoded)
- * @param {object} options - execSync options
+ * @param {object} options - spawnSync options
  */
 function runCommand(cmd, options = {}) {
   // Allowlist: only permit known-safe command prefixes
@@ -523,15 +523,41 @@ function runCommand(cmd, options = {}) {
     return { success: false, output: 'runCommand blocked: shell metacharacters not allowed' };
   }
 
+  // SEC-02: tokenize into an argv array and use spawnSync with shell:false
+  // instead of execSync, which always spawns a shell even for hardcoded input.
+  const tokenRegex = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\S+)/g;
+  const args = [];
+  let match;
+  while ((match = tokenRegex.exec(cmd)) !== null) {
+    if (match[1] !== undefined) {
+      args.push(match[1].replace(/\\(["\\])/g, '$1'));
+    } else if (match[2] !== undefined) {
+      args.push(match[2].replace(/\\(['\\])/g, '$1'));
+    } else {
+      args.push(match[3]);
+    }
+  }
+  const [program, ...progArgs] = args;
+
+  // npx on Windows is a .cmd shim and needs a shell to resolve/execute.
+  const needsShell = isWindows && program === 'npx';
+
   try {
-    const result = execSync(cmd, {
+    const result = spawnSync(program, progArgs, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: needsShell,
       ...options
     });
-    return { success: true, output: result.trim() };
+    if (result.error) {
+      return { success: false, output: result.error.message };
+    }
+    if (result.status !== 0) {
+      return { success: false, output: result.stderr || result.stdout || `Command failed with exit code ${result.status}` };
+    }
+    return { success: true, output: (result.stdout || '').trim() };
   } catch (err) {
-    return { success: false, output: err.stderr || err.message };
+    return { success: false, output: err.message };
   }
 }
 

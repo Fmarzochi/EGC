@@ -31,6 +31,7 @@ export function buildDeniedPaths(): string[] {
     path.join(home, '.cursor'),
     path.join(home, '.claude'),
     path.join(home, '.gemini'),
+    path.join(home, '.egc'),
     '/etc',
   ];
 

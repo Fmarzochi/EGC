@@ -23,14 +23,15 @@ if (require.main === module) {
         process.stderr.write('[bootstrap-state-db] WARNING: state store could not be initialized.\n');
         process.stderr.write('  The EGC state store was not created. Hook-level memory persistence is disabled.\n');
         process.stderr.write('  Run: egc init  to retry initialization.\n');
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       }
       process.stderr.write(`[bootstrap-state-db] OK ${result.dbPath} (${result.migrations.length} migrations)\n`);
-      process.exit(0);
+      process.exitCode = 0;
     })
     .catch(err => {
       process.stderr.write(`[bootstrap-state-db] FAILED: ${err.message}\n`);
-      process.exit(1);
+      process.exitCode = 1;
     });
 }
 
