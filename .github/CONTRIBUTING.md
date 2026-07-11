@@ -163,6 +163,14 @@ If you are proposing changes to `scripts/`, `src/llm/`, or the underlying orches
 - **Registry Synchronization:** Ensure that the catalog and CI validators can still parse the registry after your modifications.
 - **Orchestration Layer Modifications:** These are strictly reviewed. If you add a new orchestrator (e.g., a new DAG parser or parallel execution loop), it must include fallback safety mechanisms and graceful degradation if a task fails.
 
+### Concurrent-Access Regression Tests
+
+Any change that reads or writes a file shared across concurrent EGC processes -- the encryption key (`~/.egc/encryption.key`), state files under `~/.egc/state/`, install-state files, or any other lockfile-like resource under `~/.egc/` -- must include a concurrent-access regression test before it can be merged. CI (CodeQL, SonarCloud, the full OS/Node/package-manager matrix) is strong at many bug classes but cannot reason about interleaving between two independent process executions, so races in this category slip through undetected unless a test forces the interleaving explicitly.
+
+Commit 905b4f64 is the concrete example: `mcp/servers/egc-memory/src/encryption.ts`'s `loadOrCreateEncKey()` had a TOCTOU (time-of-check-to-time-of-use) race where two concurrent `egc-memory` processes starting before `~/.egc/encryption.key` existed could each generate a different key, silently leaving the loser unable to decrypt state written under the winner's key. It shipped in a published release without being caught, because no tool in the pipeline simulates two processes racing on the same file.
+
+Follow the pattern in `tests/egc-memory-encryption.test.js`, test `"TOCTOU race -- a concurrent winner's key is read back, never silently overwritten"`: it simulates the race by making the loser observe the file as not-yet-existing while a winner has already written to disk, then asserts the loser reads back the winner's data instead of overwriting it.
+
 ---
 
 ## Contributing Skills
@@ -497,6 +505,7 @@ How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 - [ ] `npm audit --audit-level=high` shows no high or critical vulnerabilities
 - [ ] Markdownlint passes on all `.md` files you created or modified (agents, skills, commands, rules)
 - [ ] PR changes fewer than 150 code files
+- [ ] If this PR touches a file shared across concurrent EGC processes (encryption key, state files, install-state, lockfiles under `~/.egc/`), a concurrent-access test was added or updated
 - [ ] Tested on Linux/macOS/Windows (if applicable to your change)
 - [ ] Preserves EGC identity and formatting
 - [ ] No sensitive data committed

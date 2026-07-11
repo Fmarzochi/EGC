@@ -9,6 +9,7 @@
 - [ ] Manual testing completed
 - [ ] Automated tests pass locally (`node tests/run-all.js`)
 - [ ] Edge cases considered and tested
+- [ ] If this PR touches a file shared across concurrent EGC processes (encryption key, state files, install-state, lockfiles under `~/.egc/`), a concurrent-access test was added or updated
 
 ## Type of Change
 - [ ] `fix:` Bug fix
