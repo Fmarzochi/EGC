@@ -282,6 +282,62 @@ function createFlatRuleOperations(options) {
   return createFlatFileOperations(options);
 }
 
+/**
+ * Builds the install operation for a single module source path on a target
+ * whose native skill layout is flat (<root>/skills/<name>/, no category
+ * subfolder). Skill sources are remapped from skills/<category>/<name> to
+ * skills/<name>; every other path scaffolds through the adapter's default
+ * strategy. This is the one piece every flat-skill adapter shares -
+ * including Claude Code's, which layers its own extra path filter and
+ * hook-operation append around it - so it lives here instead of being
+ * copied into each adapter file.
+ */
+function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
+  const normalizedPath = normalizeRelativePath(sourceRelativePath);
+
+  if (normalizedPath.startsWith('skills/')) {
+    const parts = normalizedPath.slice('skills/'.length).split('/');
+    const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
+    return createRemappedOperation(
+      adapter,
+      moduleId,
+      sourceRelativePath,
+      path.join(targetRoot, 'skills', flatRemainder),
+      { strategy: 'preserve-relative-path' }
+    );
+  }
+
+  return adapter.createScaffoldOperation(moduleId, sourceRelativePath, planningInput);
+}
+
+/**
+ * Shared planOperations body for Tier 1 targets that discover skills flat
+ * and have no adapter-specific path filtering or extra operations beyond
+ * planFlatSkillOperation (Windsurf, Amp, Copilot, Zed, Continue.dev).
+ *
+ * Signature matches config.planOperations(input, adapter) so it can be
+ * assigned directly (e.g. `planOperations: createFlatSkillPlanOperations`)
+ * without a wrapper closure in each adapter file.
+ */
+function createFlatSkillPlanOperations(input = {}, adapter) {
+  const modules = Array.isArray(input.modules)
+    ? input.modules
+    : (input.module ? [input.module] : []);
+  const planningInput = {
+    repoRoot: input.repoRoot,
+    projectRoot: input.projectRoot,
+    homeDir: input.homeDir,
+  };
+  const targetRoot = adapter.resolveRoot(planningInput);
+
+  return modules.flatMap(module => {
+    const paths = Array.isArray(module.paths) ? module.paths : [];
+    return paths
+      .filter(p => !isForeignPlatformPath(p, adapter.target))
+      .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
+  });
+}
+
 function createInstallTargetAdapter(config) {
   const adapter = {
     id: config.id,
@@ -384,6 +440,7 @@ module.exports = {
   buildValidationIssue,
   createFlatFileOperations,
   createFlatRuleOperations,
+  createFlatSkillPlanOperations,
   createInstallTargetAdapter,
   createManagedOperation,
   createManagedScaffoldOperation: (moduleId, sourceRelativePath, destinationPath, strategy) => (
@@ -398,4 +455,5 @@ module.exports = {
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeRelativePath,
+  planFlatSkillOperation,
 };

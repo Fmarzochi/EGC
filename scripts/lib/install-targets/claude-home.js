@@ -5,6 +5,7 @@ const {
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeRelativePath,
+  planFlatSkillOperation,
 } = require('./helpers');
 
 const CLAUDE_EXCLUDED_SOURCE_PREFIXES = [
@@ -102,27 +103,7 @@ module.exports = createInstallTargetAdapter({
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target) && !isClaudeExcludedPath(p))
-        .flatMap(sourceRelativePath => {
-          const normalizedPath = normalizeRelativePath(sourceRelativePath);
-
-          // Claude Code discovers skills at ~/.claude/skills/<name>/ (flat).
-          // Strip the leading category segment to match the expected structure.
-          if (normalizedPath.startsWith('skills/')) {
-            const parts = normalizedPath.slice('skills/'.length).split('/');
-            const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-            return [
-              createRemappedOperation(
-                adapter,
-                module.id,
-                sourceRelativePath,
-                path.join(targetRoot, 'skills', flatRemainder),
-                { strategy: 'preserve-relative-path' }
-              ),
-            ];
-          }
-
-          return [adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput)];
-        });
+        .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
     });
 
     // Deterministic memory loading: every Claude Code install registers the
