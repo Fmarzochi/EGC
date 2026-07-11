@@ -6,16 +6,22 @@ All notable changes to EGC are documented here.
 
 ### Security
 
-- **`egc-memory`: TOCTOU race in encryption key generation eliminated**: `loadOrCreateEncKey` used to leave a window where a concurrent process (e.g. a background agent's own `egc-memory` server starting before `~/.egc/encryption.key` existed) could read a key file that was created but not yet fully written, or -- in the original exclusive-write approach -- silently generate and cache its own discarded key for the rest of the process lifetime. Key publication is now atomic (write-to-temp + `fs.linkSync`), so a racing reader either sees no file or a fully-written one, never a partial write. (#696)
+- **`egc-memory`: TOCTOU race in encryption key generation eliminated**: `loadOrCreateEncKey` used to leave a window where a concurrent process (e.g. a background agent's own `egc-memory` server starting before `~/.egc/encryption.key` existed) could read a key file that was created but not yet fully written. In the original exclusive-write approach, it could also silently generate and cache its own discarded key for the rest of the process lifetime. Key publication is now atomic (write-to-temp plus `fs.linkSync`), so a racing reader either sees no file or a fully-written one, never a partial write. (#696)
 - **`resolveProjectPath`: cwd/PWD fallback fixed**: `process.cwd() || process.env.PWD` never reached the `PWD` fallback, because `process.cwd()` throws rather than returning a falsy value when the working directory is unavailable. Now wrapped in try/catch so the documented fallback actually triggers. (#696)
 
 ### New Features
 
-- **`update_state`: recovery path for undecryptable state files**: a state file that fails to decrypt (corrupted, or encrypted under an orphaned key from a race) used to permanently block every future `get_state`/`update_state` call for that project, with no sanctioned way to recover -- not through the tool itself, and not through the EGC Guardian, which blocks raw shell access to `~/.egc/state/**` by design. `update_state` now accepts an optional `force: true`: when the existing file cannot be decrypted, it is quarantined (renamed to a `.corrupted-backup-<timestamp>` sibling, never deleted) and the call proceeds as a fresh write instead of aborting forever. (#697)
+- **`update_state`: recovery path for undecryptable state files**: a state file that fails to decrypt (corrupted, or encrypted under an orphaned key from a race) used to permanently block every future `get_state`/`update_state` call for that project, with no sanctioned way to recover: not through the tool itself, and not through the EGC Guardian, which blocks raw shell access to `~/.egc/state/**` by design. `update_state` now accepts an optional `force: true`: when the existing file cannot be decrypted, it is quarantined (renamed to a `.corrupted-backup-<timestamp>` sibling, never deleted) and the call proceeds as a fresh write instead of aborting forever. (#697)
 
 ### Contributing
 
-- **Concurrent-access regression tests required**: `CONTRIBUTING.md` and the PR template now require a concurrent-access regression test for any change touching a file shared across concurrent EGC processes (encryption key, state files, install-state, lockfiles under `~/.egc/`), citing the TOCTOU bug above as the motivating example -- this bug class is invisible to CodeQL, SonarCloud, and the full test matrix, since none of them reason about interleaving between separate process executions. (#697)
+- **Concurrent-access regression tests required**: `CONTRIBUTING.md` and the PR template now require a concurrent-access regression test for any change touching a file shared across concurrent EGC processes (encryption key, state files, install-state, lockfiles under `~/.egc/`), citing the TOCTOU bug above as the motivating example. This bug class is invisible to CodeQL, SonarCloud, and the full test matrix, since none of them reason about interleaving between separate process executions. (#697)
+
+## [1.1.10] - 2026-07-11
+
+### Bug Fixes
+
+- **`egc status`: install health now reflects reality**: `egc status` always reported "Install health: missing" regardless of actual install state, because `upsertInstallState()`, the function that populates the SQLite table `status` reads, was never called anywhere in the install pipeline. `doctor`, `repair`, `auto-update`, and `list-installed` were unaffected, since they read the JSON install-state files directly. Both real completion points (a fresh install and repair/auto-update) now sync into the status store right after writing the JSON file, fire-and-forget so a status-store write failure can never block or fail a real install. Verified end-to-end in a sandboxed environment: status went from "missing" to "healthy" immediately after a real install. (#699)
 
 ## [1.1.8] - 2026-07-11
 
