@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { writeInstallState } = require('../install-state');
+const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
@@ -185,6 +186,10 @@ function applyInstallPlan(plan) {
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
+
+  syncInstallStateToStore(plan.statePreview, {
+    onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
+  });
 
   return {
     ...plan,
