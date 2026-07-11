@@ -157,7 +157,7 @@ See every tool call, token, and cost your agents generate -- live in your browse
 
 ## Prompt library
 
-**479 components** included as a bonus. Install to get access to 63 agents, 229 skills, and 76 commands, plus 111 rules, all written from real engineering sessions. Skip them entirely and EGC still gives you persistent memory.
+**481 components** included as a bonus. Install to get access to 63 agents, 230 skills, and 77 commands, plus 111 rules, all written from real engineering sessions. Skip them entirely and EGC still gives you persistent memory.
 
 ---
 

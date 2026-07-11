@@ -37,6 +37,11 @@
     },
     {
       "kind": "skill",
+      "name": "autonomous-lesson-learning",
+      "description": "Autonomous loop that learns while it runs: recalls stored lessons before each iteration, saves new lessons on failures and wins, and reinforces known lessons instead of repeating mistakes. Orchestrates continuous-agent-loop patterns with the egc-memory lesson tools."
+    },
+    {
+      "kind": "skill",
       "name": "autonomous-loops",
       "description": "Patterns and architectures for autonomous Gemini Code loops: from simple sequential pipelines to RFC-driven multi-agent DAG systems."
     },
