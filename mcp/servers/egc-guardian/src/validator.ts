@@ -8,7 +8,16 @@ export const DANGEROUS = ['rm', 'mv'];
 
 export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
 
-// Protected file patterns (checked on full path string)
+// Protected file patterns (checked on full path string).
+//
+// AI coding tool home directories (~/.claude, ~/.cursor, ~/.gemini, ~/.config/*)
+// mix real credential files with functional data the tool's own assistant
+// legitimately writes (skills, agents, native memory, user-requested config
+// edits). Blocking the whole directory breaks that functional data for no
+// security gain, since the actual secret is always one specific file, not
+// the directory. Deny the credential file by pattern instead. Sources: each
+// tool's official docs, verified 2026-07-11 (see docs/architecture or the
+// PR that introduced this comment for the full per-tool research).
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.env$/,
   /\.env\./,
@@ -17,6 +26,29 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.p12$/,
   /\.npmrc$/,
   /\.pypirc$/,
+  // Claude Code: OAuth session lives in .credentials.json inside ~/.claude,
+  // and in ~/.claude.json at the home root (sibling of ~/.claude, not inside
+  // it). settings.json, skills, agents, and projects/*/memory/ are functional.
+  /\.claude[\\/]\.credentials\.json$/,
+  /(^|[\\/])\.claude\.json$/,
+  // Gemini CLI + Antigravity (share ~/.gemini). settings.json, GEMINI.md,
+  // skills/, extensions/, and antigravity/brain (native memory) are functional.
+  /\.gemini[\\/]oauth_creds\.json$/,
+  /\.gemini[\\/]google_accounts\.json$/,
+  /\.gemini[\\/].*mcp-oauth-tokens\.json$/,
+  /\.gemini[\\/]a2a-oauth-tokens\.json$/,
+  // Codex CLI: OAuth/API key auth file.
+  /\.codex[\\/]auth\.json$/,
+  // Amp: OAuth tokens live under this subfolder; config is elsewhere.
+  /\.amp[\\/]oauth([\\/]|$)/,
+  // Kiro: the CLI's token cache lives outside ~/.kiro, under XDG data dir.
+  /\.local[\\/]share[\\/]kiro-cli[\\/]data\.sqlite3$/,
+  // Continue.dev: not yet an EGC install target, but its real secret file is
+  // .env (already caught by the generic pattern above) plus these two
+  // environment dotfiles. config.yaml, prompts/, sessions/, and index/ are
+  // functional and must stay writable once Continue.dev is integrated.
+  /\.continue[\\/]\.local$/,
+  /\.continue[\\/]\.staging$/,
 ];
 
 export function buildDeniedPaths(): string[] {
@@ -24,14 +56,17 @@ export function buildDeniedPaths(): string[] {
   const isWindows = process.platform === 'win32';
 
   const paths = [
+    // Pure credential stores: no legitimate reason for an AI tool to write here.
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
     path.join(home, '.gnupg'),
-    path.join(home, '.config'),
-    path.join(home, '.cursor'),
-    path.join(home, '.claude'),
-    path.join(home, '.gemini'),
     path.join(home, '.egc'),
+    // ~/.config is XDG_CONFIG_HOME, shared by many unrelated apps and by
+    // OpenCode/Zed's functional (non-secret) config, which EGC itself
+    // installs into. Deny only the specific subdirectories confirmed to
+    // hold credentials for tools that don't expose them elsewhere.
+    path.join(home, '.config', 'github-copilot'),
+    path.join(home, '.config', 'Trae'),
     '/etc',
   ];
 

@@ -130,7 +130,7 @@ async function runTests() {
   run(`cat ~/.aws/credentials`,  () => assertDenied(`cat ${home}/.aws/credentials`));
   run(`cat ~/.ssh/id_rsa`,       () => assertDenied(`cat ${home}/.ssh/id_rsa`));
   run('grep -r "" /',            () => assertDenied('grep -r "" /'));
-  run(`find ~/.config -name "*.key"`, () => assertDenied(`find ${home}/.config -name "*.key"`));
+  run(`find ~/.config/github-copilot -name "*.json"`, () => assertDenied(`find ${home}/.config/github-copilot -name "*.json"`));
   run('curl https://example.com',() => assertDenied('curl https://example.com'));
   run('bash -c "ls"',            () => assertDenied('bash -c "ls"'));
   run('shell metachar: ls && id',() => assertDenied('ls && id'));
@@ -153,8 +153,27 @@ async function runTests() {
   run(`write .npmrc`,               () => assertWriteDenied('.npmrc'));
   run(`write .pypirc`,              () => assertWriteDenied('.pypirc'));
   run(`write .env.local`,           () => assertWriteDenied('.env.local'));
-  run(`write ${home}/.claude/x`,    () => assertWriteDenied(`${home}/.claude/settings.json`));
   run(`write /etc/hosts`,           () => assertWriteDenied('/etc/hosts'));
+
+  // ── validate_write: DENIED (granular per-tool credential files) ───────────
+  // ~/.claude, ~/.cursor, ~/.gemini, ~/.config/* used to be denied wholesale.
+  // Now only the specific file that actually holds a secret is denied, per
+  // official docs research (see validator.ts comment above PROTECTED_FILE_PATTERNS).
+
+  console.log('\n=== validate_write: DENIED (granular credential files) ===');
+
+  run(`write ~/.claude/.credentials.json`, () => assertWriteDenied(`${home}/.claude/.credentials.json`));
+  run(`write ~/.claude.json`,              () => assertWriteDenied(`${home}/.claude.json`));
+  run(`write ~/.gemini/oauth_creds.json`,  () => assertWriteDenied(`${home}/.gemini/oauth_creds.json`));
+  run(`write ~/.gemini/google_accounts.json`, () => assertWriteDenied(`${home}/.gemini/google_accounts.json`));
+  run(`write ~/.codex/auth.json`,          () => assertWriteDenied(`${home}/.codex/auth.json`));
+  run(`write ~/.amp/oauth/token.json`,     () => assertWriteDenied(`${home}/.amp/oauth/token.json`));
+  run(`write kiro-cli data.sqlite3`,       () => assertWriteDenied(`${home}/.local/share/kiro-cli/data.sqlite3`));
+  run(`write ~/.config/github-copilot/hosts.json`, () => assertWriteDenied(`${home}/.config/github-copilot/hosts.json`));
+  run(`write ~/.config/Trae/state.json`,   () => assertWriteDenied(`${home}/.config/Trae/state.json`));
+  run(`write ~/.continue/.local`,          () => assertWriteDenied(`${home}/.continue/.local`));
+  run(`write ~/.continue/.staging`,        () => assertWriteDenied(`${home}/.continue/.staging`));
+  run(`write ~/.continue/.env`,            () => assertWriteDenied(`${home}/.continue/.env`));
 
   // ── validate_write: ALLOWED ────────────────────────────────────────────────
 
@@ -164,6 +183,25 @@ async function runTests() {
   run(`write README.md`,            () => assertWriteAllowed('README.md'));
   run(`write /tmp/output.txt`,      () => assertWriteAllowed('/tmp/output.txt'));
   run(`write package.json`,         () => assertWriteAllowed('package.json'));
+
+  // ── validate_write: ALLOWED (previously blanket-denied, now functional) ───
+  // These directories used to be denied in full. They hold no credentials per
+  // official docs and the AI assistant legitimately writes here (native
+  // memory, skills/agents, user-requested settings edits, EGC's own install).
+
+  console.log('\n=== validate_write: ALLOWED (functional tool dirs) ===');
+
+  run(`write ~/.claude/settings.json`,          () => assertWriteAllowed(`${home}/.claude/settings.json`));
+  run(`write ~/.claude/CLAUDE.md`,               () => assertWriteAllowed(`${home}/.claude/CLAUDE.md`));
+  run(`write ~/.claude/skills/foo/SKILL.md`,     () => assertWriteAllowed(`${home}/.claude/skills/foo/SKILL.md`));
+  run(`write ~/.claude/projects/x/memory/MEMORY.md`, () => assertWriteAllowed(`${home}/.claude/projects/x/memory/MEMORY.md`));
+  run(`write ~/.cursor/mcp.json`,                () => assertWriteAllowed(`${home}/.cursor/mcp.json`));
+  run(`write ~/.gemini/settings.json`,           () => assertWriteAllowed(`${home}/.gemini/settings.json`));
+  run(`write ~/.gemini/GEMINI.md`,               () => assertWriteAllowed(`${home}/.gemini/GEMINI.md`));
+  run(`write ~/.gemini/antigravity/brain/x.md`,  () => assertWriteAllowed(`${home}/.gemini/antigravity/brain/x.md`));
+  run(`write ~/.config/opencode/opencode.json`,  () => assertWriteAllowed(`${home}/.config/opencode/opencode.json`));
+  run(`write ~/.config/zed/settings.json`,       () => assertWriteAllowed(`${home}/.config/zed/settings.json`));
+  run(`write ~/.continue/config.yaml`,           () => assertWriteAllowed(`${home}/.continue/config.yaml`));
 
   // ── isProtectedPath: spot checks ──────────────────────────────────────────
 
