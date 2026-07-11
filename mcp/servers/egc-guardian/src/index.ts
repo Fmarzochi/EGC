@@ -263,25 +263,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                continue;
              }
              
-             // SEC-05: Enforce byte-load limits
-             const stats = fs.statSync(realResolved);
+             // SEC-05/SEC-06: enforce byte-load limits against the same file handle
+             // used to read (stat-then-read on a path is a TOCTOU race if the file
+             // is swapped between the two calls).
              const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
              const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
-             
-             if (stats.size > MAX_FILE_SIZE) {
-               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
-               continue;
-             }
-             if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
-               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
-               continue;
-             }
 
-             const content = await fs.promises.readFile(realResolved, 'utf-8');
-             // Split context into chunks/paragraphs to allow granular pruning
-             const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
-             rawPayloads.push(...chunks);
-             totalBytesLoaded += Buffer.byteLength(content, 'utf8');
+             const fileHandle = await fs.promises.open(realResolved, 'r');
+             try {
+               const stats = await fileHandle.stat();
+               if (!stats.isFile()) {
+                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
+                 continue;
+               }
+               if (stats.size > MAX_FILE_SIZE) {
+                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
+                 continue;
+               }
+               if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
+                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
+                 continue;
+               }
+
+               const content = await fileHandle.readFile('utf-8');
+               // Split context into chunks/paragraphs to allow granular pruning
+               const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
+               rawPayloads.push(...chunks);
+               totalBytesLoaded += Buffer.byteLength(content, 'utf8');
+             } finally {
+               await fileHandle.close();
+             }
            } catch(e: unknown) {
              const reason = e instanceof Error ? e.message : String(e);
              auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
@@ -385,6 +396,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (!projectPath) {
           throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
+        }
+
+        let realProjectPath: string;
+        try {
+          realProjectPath = fs.realpathSync(path.resolve(projectPath));
+        } catch {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path resolution failed');
+        }
+        if (isProtectedPath(realProjectPath)) {
+          throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
         }
 
         const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
