@@ -1040,6 +1040,107 @@ function runTests() {
     assert.ok(targets.includes('continue'), 'Should include continue target');
   })) passed++; else failed++;
 
+  if (test('continue-project adapter strips category from skill paths and installs flat under .continue/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'continue-project',
+      repoRoot,
+      projectRoot,
+      homeDir: '/Users/example',
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'continue-project');
+    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.continue'));
+    assert.strictEqual(plan.installStatePath, path.join(projectRoot, '.continue', 'egc-install-state.json'));
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && op.destinationPath === path.join(projectRoot, '.continue', 'skills', 'tdd-workflow')
+      ),
+      'Should strip category and install skill flat under .continue/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('continue-project adapter handles already-flat skill paths without double-stripping', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'continue-project',
+      repoRoot,
+      projectRoot,
+      homeDir: '/Users/example',
+      modules: [{ id: 'workflow', paths: ['skills/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'skills/tdd-workflow'
+        && op.destinationPath === path.join(projectRoot, '.continue', 'skills', 'tdd-workflow')
+      ),
+      'Should handle already-flat skill path without stripping anything'
+    );
+  })) passed++; else failed++;
+
+  if (test('continue-project adapter passes non-skill paths through the default scaffold operation', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'continue-project',
+      repoRoot,
+      projectRoot,
+      homeDir: '/Users/example',
+      modules: [{ id: 'workflow', paths: ['AGENTS.md'] }],
+    });
+
+    assert.ok(
+      plan.operations.some(op =>
+        normalizedRelativePath(op.sourceRelativePath) === 'AGENTS.md'
+        && op.destinationPath === path.join(projectRoot, '.continue', 'AGENTS.md')
+        && op.strategy === 'preserve-relative-path'
+      ),
+      'Should pass non-skill paths through to the default scaffold operation'
+    );
+  })) passed++; else failed++;
+
+  if (test('continue-project adapter filters out foreign-platform source paths', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'continue-project',
+      repoRoot,
+      projectRoot,
+      homeDir: '/Users/example',
+      modules: [{ id: 'workflow', paths: ['.cursor', 'skills/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      !plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === '.cursor'),
+      'Should filter out paths owned by a different platform (.cursor belongs to the cursor target)'
+    );
+    assert.ok(
+      plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'skills/tdd-workflow'),
+      'Should still install the module\'s own skill path'
+    );
+  })) passed++; else failed++;
+
+  if (test('continue-project adapter exposes validate and planOperations with no blocking errors', () => {
+    const continueProjectAdapter = getInstallTargetAdapter('continue-project');
+
+    assert.strictEqual(typeof continueProjectAdapter.planOperations, 'function');
+    assert.strictEqual(typeof continueProjectAdapter.validate, 'function');
+    assert.ok(
+      !continueProjectAdapter.validate({ projectRoot: '/workspace/app', homeDir: '/Users/example' })
+        .some(i => i.severity === 'error'),
+      'continue-project adapter should have no blocking validation errors'
+    );
+  })) passed++; else failed++;
+
   if (test('every schema target enum value has a matching adapter (regression guard)', () => {
     const schemaPath = path.join(__dirname, '..', '..', 'schemas', 'egc-install-config.schema.json');
     const schema = JSON.parse(require('fs').readFileSync(schemaPath, 'utf8'));
