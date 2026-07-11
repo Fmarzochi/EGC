@@ -106,24 +106,45 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // A path that cannot be created on any OS: mkdir(recursive) must fail when
+  // a path segment it needs to create a directory at is already a plain
+  // file. Unlike relying on a permission error (EACCES), this failure mode
+  // is a filesystem invariant, not an OS-specific permission model, so it
+  // reproduces identically on Linux, macOS, and Windows CI runners.
+  function makeUnwritableDbPath(tmpDir) {
+    const blockerFile = path.join(tmpDir, 'blocker-file');
+    fs.writeFileSync(blockerFile, 'not a directory');
+    return path.join(blockerFile, 'nested', 'state.db');
+  }
+
   if (await test('syncInstallStateToStore never throws, even when the store cannot be created', async () => {
-    const unwritableDbPath = path.join('/nonexistent-root-that-cannot-be-created', 'nested', 'state.db');
-    const state = buildSampleState();
+    const tmpDir = createTempDir('install-state-store-sync-');
+    try {
+      const unwritableDbPath = makeUnwritableDbPath(tmpDir);
+      const state = buildSampleState();
 
-    let onErrorCalled = false;
-    await syncInstallStateToStore(state, {
-      dbPath: unwritableDbPath,
-      onError: () => { onErrorCalled = true; },
-    });
+      let onErrorCalled = false;
+      await syncInstallStateToStore(state, {
+        dbPath: unwritableDbPath,
+        onError: () => { onErrorCalled = true; },
+      });
 
-    assert.ok(onErrorCalled, 'onError must be invoked so callers can log, but the returned promise must still resolve cleanly');
+      assert.ok(onErrorCalled, 'onError must be invoked so callers can log, but the returned promise must still resolve cleanly');
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
   })) passed++; else failed++;
 
   if (await test('syncInstallStateToStore resolves without throwing when no onError callback is given', async () => {
-    const unwritableDbPath = path.join('/nonexistent-root-that-cannot-be-created', 'nested', 'state.db');
-    const state = buildSampleState();
+    const tmpDir = createTempDir('install-state-store-sync-');
+    try {
+      const unwritableDbPath = makeUnwritableDbPath(tmpDir);
+      const state = buildSampleState();
 
-    await syncInstallStateToStore(state, { dbPath: unwritableDbPath });
+      await syncInstallStateToStore(state, { dbPath: unwritableDbPath });
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
   })) passed++; else failed++;
 
   console.log(`\nPassed: ${passed}`);
