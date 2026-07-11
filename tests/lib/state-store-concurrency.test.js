@@ -255,7 +255,7 @@ async function runTests() {
   });
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
 runTests();
