@@ -1,13 +1,15 @@
-FROM node:24-slim@sha256:c2d5ade763cacfb03fe9cb8e8af5d1be5041ff331921fa26a9b231ca3a4f780a
+FROM node:24-trixie-slim@sha256:366fdef91728b1b7fa18c84fba63b6e79ed77b7e10cc206878e9705da4d7b169
 
 WORKDIR /app
 
 COPY docker/package.json docker/package-lock.json /tmp/mcp-proxy-install/
 RUN cd /tmp/mcp-proxy-install && npm ci --silent && \
-    cp -r node_modules/mcp-proxy /usr/local/lib/node_modules/mcp-proxy && \
+    mkdir -p /usr/local/lib/node_modules && \
+    cp -r node_modules/. /usr/local/lib/node_modules/ && \
     ln -sf /usr/local/lib/node_modules/mcp-proxy/dist/bin/mcp-proxy.mjs /usr/local/bin/mcp-proxy
 
 COPY package*.json ./
+COPY scripts/preinstall.js scripts/preinstall.js
 RUN npm ci
 
 COPY . .
