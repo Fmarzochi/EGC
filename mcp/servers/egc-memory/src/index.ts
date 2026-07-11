@@ -435,7 +435,9 @@ function resolveProjectPath(provided?: string): string {
   // resolving to the wrong project/branch and colliding with another
   // process's state file. Prefer cwd(); keep PWD only as a last-resort
   // fallback for environments where cwd() itself is unavailable.
-  const raw = provided || process.env.EGC_PROJECT || process.cwd() || process.env.PWD || os.homedir();
+  let cwd: string | undefined;
+  try { cwd = process.cwd(); } catch { /* cwd unavailable, e.g. a deleted directory */ }
+  const raw = provided || process.env.EGC_PROJECT || cwd || process.env.PWD || os.homedir();
   if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
