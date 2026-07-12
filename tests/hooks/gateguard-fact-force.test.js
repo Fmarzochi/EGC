@@ -1043,6 +1043,105 @@ function runTests() {
     assert.deepStrictEqual(JSON.parse(result.stdout), input);
   })) passed++; else failed++;
 
+  // --- Codex CLI apply_patch (freeform patch text, not a JSON object with
+  // file_path like Claude's Edit/Write) ---
+
+  clearState();
+  if (test('denies first apply_patch call and names the touched file', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/codex-patch-target.js',
+      '@@',
+      '-old',
+      '+new',
+      '*** End Patch',
+      ''
+    ].join('\n');
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: patch };
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0);
+    const output = parseOutput(result.stdout);
+    assert.ok(output, 'should produce JSON output');
+    assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('src/codex-patch-target.js'));
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('allows a second apply_patch call touching an already-checked file', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/codex-patch-target-2.js',
+      '@@',
+      '-old',
+      '+new',
+      '*** End Patch',
+      ''
+    ].join('\n');
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: patch };
+    runDirectHook(input);
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0);
+    const output = parseOutput(result.stdout);
+    assert.ok(!output.hookSpecificOutput, 'second call should pass raw input through, not a deny decision');
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('denies each new file in a multi-file apply_patch call one at a time', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Add File: src/codex-patch-new-a.js',
+      '+content a',
+      '*** Update File: src/codex-patch-new-b.js',
+      '@@',
+      '-old',
+      '+new',
+      '*** Delete File: src/codex-patch-new-c.js',
+      '*** End Patch',
+      ''
+    ].join('\n');
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: patch };
+    const first = parseOutput(runDirectHook(input).stdout);
+    assert.strictEqual(first.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(first.hookSpecificOutput.permissionDecisionReason.includes('src/codex-patch-new-a.js'));
+
+    const second = parseOutput(runDirectHook(input).stdout);
+    assert.strictEqual(second.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(second.hookSpecificOutput.permissionDecisionReason.includes('src/codex-patch-new-b.js'));
+
+    const third = parseOutput(runDirectHook(input).stdout);
+    assert.strictEqual(third.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(third.hookSpecificOutput.permissionDecisionReason.includes('src/codex-patch-new-c.js'));
+
+    const fourthResult = runDirectHook(input);
+    const fourth = parseOutput(fourthResult.stdout);
+    assert.ok(!fourth || !fourth.hookSpecificOutput, 'all three files checked, call should pass through');
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('allows apply_patch input that cannot be parsed as a patch (fails open)', () => {
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: 'not a real patch, no file markers' };
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0);
+    assert.deepStrictEqual(JSON.parse(result.stdout), input);
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('apply_patch on Claude settings path is never gated', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: .gemini/settings.json',
+      '@@',
+      '-old',
+      '+new',
+      '*** End Patch',
+      ''
+    ].join('\n');
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: patch };
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0);
+    assert.deepStrictEqual(JSON.parse(result.stdout), input);
+  })) passed++; else failed++;
+
   // Cleanup only the temp directory created by this test file.
   try {
     if (fs.existsSync(stateDir)) {

@@ -137,6 +137,57 @@ async function main() {
         )
       }),
     ],
+    [
+      "tool.execute.before blocks the first edit on a file with the GateGuard fact-forcing gate",
+      async () => withTempProject([], async (projectDir) => {
+        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
+        fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
+        fs.copyFileSync(
+          path.join(__dirname, "..", "scripts", "hooks", "gateguard-fact-force.js"),
+          path.join(projectDir, "scripts", "hooks", "gateguard-fact-force.js")
+        )
+        fs.copyFileSync(
+          path.join(__dirname, "..", "scripts", "lib", "utils.js"),
+          path.join(projectDir, "scripts", "lib", "utils.js")
+        )
+        const targetFile = path.join(projectDir, "gated-file.ts")
+        fs.writeFileSync(targetFile, "export const x = 1\n")
+
+        const client = createClient()
+        const $ = createFailingShell()
+        const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+
+        await assert.rejects(
+          () => hooks["tool.execute.before"]({ tool: "edit", callID: "call-1", args: { filePath: targetFile } }),
+          /Fact-Forcing Gate/
+        )
+
+        // Second call on the same file should be allowed through (gate already passed).
+        await hooks["tool.execute.before"]({ tool: "edit", callID: "call-2", args: { filePath: targetFile } })
+      }),
+    ],
+    [
+      "tool.execute.before ignores unmapped tools and args-less calls without throwing",
+      async () => withTempProject([], async (projectDir) => {
+        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
+        fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
+        fs.copyFileSync(
+          path.join(__dirname, "..", "scripts", "hooks", "gateguard-fact-force.js"),
+          path.join(projectDir, "scripts", "hooks", "gateguard-fact-force.js")
+        )
+        fs.copyFileSync(
+          path.join(__dirname, "..", "scripts", "lib", "utils.js"),
+          path.join(projectDir, "scripts", "lib", "utils.js")
+        )
+
+        const client = createClient()
+        const $ = createFailingShell()
+        const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+
+        await hooks["tool.execute.before"]({ tool: "read", callID: "call-1", args: { filePath: "/tmp/whatever" } })
+        await hooks["tool.execute.before"]({ tool: "edit", callID: "call-2", args: undefined })
+      }),
+    ],
   ]
 
   let passed = 0
