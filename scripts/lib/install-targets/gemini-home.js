@@ -1,4 +1,5 @@
-const path = require('path');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   createInstallTargetAdapter,
@@ -6,9 +7,27 @@ const {
   isForeignPlatformPath,
   normalizeRelativePath,
 } = require('./helpers');
+const {
+  createGlobalGateGuardHookMergeOperation,
+} = require('../antigravity-settings-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
 const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
+
+// Antigravity shares this home root (~/.gemini) for skill discovery (see
+// AGY_SKILLS_SUBDIR above) but reads its own hooks.json at
+// ~/.gemini/antigravity-cli/hooks.json, distinct from Gemini CLI's
+// ~/.gemini/hooks/hooks.json -- so Gemini CLI's existing GateGuard wiring
+// does not automatically cover Antigravity and needs this separate merge.
+// scripts/hooks/gateguard-fact-force.js is already scaffolded at
+// resolveGateGuardHookScriptDestination(targetRoot) for this target via the
+// hooks-runtime module (paths: scripts/hooks, scripts/lib), so this only
+// adds the hooks.json registration.
+function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir) {
+  return ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
+    createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher)
+  ));
+}
 
 function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
@@ -76,8 +95,10 @@ module.exports = createInstallTargetAdapter({
       projectRoot: input.projectRoot,
       homeDir: input.homeDir,
     };
+    const targetRoot = adapter.resolveRoot(planningInput);
+    const homeDir = input.homeDir || os.homedir();
 
-    return modules.flatMap(module => {
+    const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target))
@@ -121,5 +142,13 @@ module.exports = createInstallTargetAdapter({
           return ops;
         });
     });
+
+    // Deterministic: every egc-home install also registers the GateGuard
+    // fact-forcing gate for Antigravity's global hooks.json, even when no
+    // content modules are selected.
+    return [
+      ...moduleOperations,
+      ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir),
+    ];
   },
 });
