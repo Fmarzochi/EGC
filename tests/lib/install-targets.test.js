@@ -1256,6 +1256,153 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('copilot adapter registers the GateGuard fact-force hook at ~/.copilot/hooks/hooks.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'copilot',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.copilot', 'hooks', 'hooks.json');
+    const gateGuardScriptPath = path.join(
+      homeDir, '.github', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      )),
+      'Should scaffold the GateGuard script under the copilot home root even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+        && operation.destinationPath === path.join(homeDir, '.github', 'scripts', 'lib', 'utils.js')
+      )),
+      'Should scaffold the GateGuard utils.js dependency alongside the hook script'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for VS Code Copilot'
+    );
+  })) passed++; else failed++;
+
+  if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const settingsPath = path.join(projectRoot, '.codebuddy', 'settings.json');
+    const gateGuardScriptPath = path.join(
+      projectRoot, '.codebuddy', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === settingsPath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for CodeBuddy'
+    );
+  })) passed++; else failed++;
+
+  if (test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'antigravity',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const hooksFilePath = path.join(projectRoot, '.agents', 'hooks.json');
+    const gateGuardScriptPath = path.join(
+      projectRoot, '.agents', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      )),
+      'Should scaffold the GateGuard script under .agents/ even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'scripts', 'lib', 'utils.js')
+      )),
+      'Should scaffold the GateGuard utils.js dependency alongside the hook script'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity project scope'
+    );
+  })) passed++; else failed++;
+
+  if (test('egc-home adapter registers the GateGuard fact-force hook for Antigravity global scope too', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    const gateGuardScriptPath = path.join(
+      homeDir, '.gemini', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity global hooks.json, ' +
+      'separate from Gemini CLI\'s own ~/.gemini/hooks/hooks.json'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

@@ -7,6 +7,25 @@ const {
   isForeignPlatformPath,
   normalizeRelativePath,
 } = require('./helpers');
+const {
+  createPreToolUseGateGuardHookMergeOperation,
+} = require('../claude-settings-hooks');
+
+// CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
+// using the same {"hooks": {"PreToolUse": [{"matcher", "hooks"}]}} shape
+// Claude Code uses (https://www.codebuddy.ai/docs/cli/hooks), and this
+// adapter's own targetRoot already resolves to <project>/.codebuddy -- the
+// same root the hooks-runtime module scaffolds scripts/hooks/
+// gateguard-fact-force.js and scripts/lib/utils.js into. So the generic
+// Claude merge helper is reusable here without modification.
+function createGateGuardOperations(targetRoot) {
+  return [
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Bash'),
+  ];
+}
 
 module.exports = createInstallTargetAdapter({
   id: 'codebuddy-project',
@@ -31,7 +50,7 @@ module.exports = createInstallTargetAdapter({
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
-    return modules.flatMap(module => {
+    const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target))
@@ -66,5 +85,13 @@ module.exports = createInstallTargetAdapter({
           return [adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput)];
         });
     });
+
+    // Deterministic: every CodeBuddy install registers the GateGuard
+    // fact-forcing gate, even when no content modules are selected,
+    // mirroring Claude Code's always-on hook registration.
+    return [
+      ...moduleOperations,
+      ...createGateGuardOperations(targetRoot),
+    ];
   },
 });
