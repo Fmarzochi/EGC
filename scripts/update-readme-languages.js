@@ -71,7 +71,7 @@ function buildTopSelector(langs) {
     const name = LANGUAGE_NAMES[code] || code.toUpperCase();
     return `[${name}](translations/${code}/README.md)`;
   });
-  return `${TOP_START}\n🌐 **English** · ${links.join(" · ")}\n${TOP_END}`;
+  return `${TOP_START}\n\u{1F310} **English** · ${links.join(" · ")}\n${TOP_END}`;
 }
 
 function replaceBlock(content, start, end, block) {
