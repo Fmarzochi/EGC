@@ -9,8 +9,8 @@
 // the EGC hook (left behind when the install location or invocation form
 // changed) and is migrated in place instead of duplicated.
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -606,7 +606,6 @@ const GATEGUARD_LIB_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
  * @returns {object[]}
  */
 function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot) {
-  const path = require('path');
   return [
     createRemappedOperation(
       GATEGUARD_HOOK_MODULE_ID,

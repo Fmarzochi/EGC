@@ -9,8 +9,8 @@
 // addHookEntry(). Docs: https://docs.windsurf.com/windsurf/cascade/hooks
 // (redirects to https://docs.devin.ai/desktop/cascade/hooks).
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const PRE_WRITE_CODE_EVENT = 'pre_write_code';
 const PRE_RUN_COMMAND_EVENT = 'pre_run_command';

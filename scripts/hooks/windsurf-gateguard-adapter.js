@@ -18,7 +18,7 @@
 
 'use strict';
 
-const fs = require('fs');
+const fs = require('node:fs');
 const { run } = require('./gateguard-fact-force');
 
 function buildGateGuardInput(windsurfEvent) {
@@ -64,11 +64,14 @@ function extractDenyReason(result) {
   let parsed;
   try {
     parsed = JSON.parse(result.stdout);
-  } catch (_) {
+  } catch {
+    // Malformed stdout from run() is treated as "no deny decision" -- the
+    // same fail-open policy gateguard-fact-force.js applies to its own
+    // parse failures, so a non-JSON stdout never blocks Windsurf's action.
     return null;
   }
-  const output = parsed && parsed.hookSpecificOutput;
-  if (output && output.permissionDecision === 'deny') {
+  const output = parsed?.hookSpecificOutput;
+  if (output?.permissionDecision === 'deny') {
     return String(output.permissionDecisionReason || 'Blocked by the GateGuard Fact-Forcing Gate.');
   }
   return null;
@@ -87,8 +90,9 @@ function main() {
     let windsurfEvent;
     try {
       windsurfEvent = JSON.parse(raw);
-    } catch (_) {
-      process.exit(0); // allow on parse error, same fail-open policy as gateguard-fact-force.js
+    } catch {
+      // Allow on parse error: same fail-open policy as gateguard-fact-force.js.
+      process.exit(0);
     }
 
     const gateguardInput = buildGateGuardInput(windsurfEvent);
