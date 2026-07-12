@@ -15,6 +15,13 @@
         "description": "Persist session state and evaluate patterns"
       }
     ],
+    "preToolUse": [
+      {
+        "command": "node .cursor/hooks/before-tool-use.js",
+        "event": "preToolUse",
+        "description": "GateGuard Fact-Forcing Gate: require investigation before Write/Shell tool calls"
+      }
+    ],
     "beforeFileEdit": [
       {
         "command": "EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js",
