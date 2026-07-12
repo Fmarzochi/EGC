@@ -25,12 +25,13 @@ class MistralProvider(OpenAIProvider):
         if OpenAI is None:
             raise ImportError("openai package is required to use MistralProvider")
             
-        key = api_key or os.environ.get("MISTRAL_API_KEY")
-        if not key:
+        # Unify token capture to a singular value
+        resolved_key = api_key or os.environ.get("MISTRAL_API_KEY") or ""
+        if not resolved_key.strip():
             raise AuthenticationError("No Mistral API key provided", provider=ProviderType.MISTRAL)
 
         self.client = OpenAI(
-            api_key=key,
+            api_key=resolved_key,
             base_url=base_url or os.environ.get("MISTRAL_BASE_URL") or MISTRAL_BASE_URL,
         )
         
@@ -50,12 +51,8 @@ class MistralProvider(OpenAIProvider):
         return self._models.copy()
 
     def validate_config(self) -> bool:
-        """Validates configuration state. 
-        
-        Returns True if client initialization has successfully bound an API token.
-        """
-        api_key = getattr(self.client, "api_key", None)
-        return isinstance(api_key, str) and len(api_key.strip()) > 0
+        """Validates configuration state based on active client presence."""
+        return self.client is not None
 
     def get_default_model(self) -> str:
         return ModelResolver.resolve(None, provider="mistral")
