@@ -1,4 +1,4 @@
-const path = require('path');
+const path = require('node:path');
 
 const {
   createFlatRuleOperations,
@@ -6,6 +6,7 @@ const {
   createManagedScaffoldOperation,
   createRemappedOperation,
   normalizeRelativePath,
+  planFlatSkillOperation,
 } = require('./helpers');
 const {
   GATEGUARD_HOOK_MODULE_ID,
@@ -93,8 +94,6 @@ module.exports = createInstallTargetAdapter({
       return paths
         .filter(supportsAntigravitySourcePath)
         .flatMap(sourceRelativePath => {
-          const normalizedPath = normalizeRelativePath(sourceRelativePath);
-
           if (sourceRelativePath === 'rules') {
             return createFlatRuleOperations({
               moduleId: module.id,
@@ -126,24 +125,10 @@ module.exports = createInstallTargetAdapter({
             ];
           }
 
-          // AGY discovers project skills at .agent/skills/<name>/ (flat).
-          // Strip the leading category segment so repo layout does not leak
-          // into the discovery path.
-          if (normalizedPath.startsWith('skills/')) {
-            const parts = normalizedPath.slice('skills/'.length).split('/');
-            const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-            return [
-              createRemappedOperation(
-                adapter,
-                module.id,
-                sourceRelativePath,
-                path.join(targetRoot, 'skills', flatRemainder),
-                { strategy: 'preserve-relative-path' }
-              ),
-            ];
-          }
-
-          return [adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput)];
+          // AGY discovers project skills at .agent/skills/<name>/ (flat);
+          // planFlatSkillOperation strips the leading category segment for
+          // skills/** paths and scaffolds everything else as-is.
+          return [planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot)];
         });
     });
 
