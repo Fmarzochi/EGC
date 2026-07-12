@@ -8,6 +8,7 @@ from llm.core.interface import LLMProvider
 from llm.core.types import ProviderType
 from llm.providers.claude import ClaudeProvider
 from llm.providers.gemini import GeminiProvider
+from llm.providers.mistral import MistralProvider 
 from llm.providers.ollama import OllamaProvider
 from llm.providers.openai import OpenAIProvider
 from llm.providers.deepseek import DeepSeekProvider
@@ -20,6 +21,7 @@ _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
     ProviderType.GEMINI: GeminiProvider,
     ProviderType.OPENROUTER: OpenRouterProvider,
     ProviderType.DEEPSEEK: DeepSeekProvider,
+    ProviderType.MISTRAL: MistralProvider, 
 }
 
 
