@@ -622,6 +622,26 @@ function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot
   ];
 }
 
+// Same merge operation shape as above, but for targets whose hooks.json
+// location cannot be derived from resolveSettingsPath(targetRoot) the way
+// Claude Code's can (e.g. Copilot's ~/.copilot/hooks/hooks.json, or
+// Antigravity's project/global split): callers resolve destinationPath
+// themselves and pass it in directly.
+function createGateGuardHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: GATEGUARD_HOOK_MODULE_ID,
+    sourceRelativePath: GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+  };
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -660,6 +680,7 @@ module.exports = {
   applyWriteValidatorHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
+  createGateGuardHookMergeOperationForDestination,
   createPreToolUseBashDispatcherHookMergeOperation,
   createGateGuardScriptCopyOperations,
   createPreToolUseGateGuardHookMergeOperation,
