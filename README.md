@@ -142,7 +142,7 @@ See every tool call, token, and cost your agents generate, live in your browser.
 
 ## Prompt library
 
-As a bonus, EGC also ships a ready-to-use toolbox: specialists that review your code on their own (**63 agents**), best-practice guides for every language and situation (**230 skills**), shortcuts that run a whole sequence of tasks for you (**77 commands**), and style rules that keep your code consistent (**111 rules**). All written from real engineering sessions, not theory. Don't want to use any of it? Fine: EGC's persistent memory works exactly the same.
+As a bonus, EGC gives you access to 63 agents, 230 skills, and 77 commands, plus 111 rules: specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks for you, and style rules that keep your code consistent. All written from real engineering sessions, not theory. Don't want to use any of it? Fine: EGC's persistent memory works exactly the same.
 
 ---
 
