@@ -64,46 +64,41 @@ For all contributions, the two hard requirements are `git commit -s` (DCO) and s
 gh repo fork Fmarzochi/EGC --clone
 cd EGC
 
-# 2. Create a feature branch
+# 2. One-time setup: activate the auto sign-off hook (do this once per clone)
+git config core.hooksPath .githooks
+
+# 3. Create a feature branch
 git checkout -b feat/my-contribution
 
-# 3. Add your contribution following the architectural standards below
+# 4. Add your contribution following the architectural standards below
 
-# 4. Verify locally (all of these must pass before you open a PR)
+# 5. Verify locally (all of these must pass before you open a PR)
 npm ci
 node tests/run-all.js              # full test suite (runs on Linux, macOS, Windows)
 npm audit --audit-level=high       # must show 0 high/critical vulnerabilities
 
-# 5. Submit PR (note: -s adds the required DCO sign-off to your commit)
-git add . && git commit -s -m "feat: add my-feature" && git push -u origin feat/my-contribution
+# 6. Submit PR — Signed-off-by is added automatically by the hook
+git add . && git commit -m "feat: add my-feature" && git push -u origin feat/my-contribution
 ```
 
 ---
 
 ## Developer Certificate of Origin (DCO)
 
-Every commit in your pull request **must** include a `Signed-off-by` line. This certifies that you wrote the code and have the right to contribute it under the project's MIT license. The `dco.yml` workflow checks every commit in every PR and blocks the merge if any commit is missing the signature.
+Every commit in your pull request must include a `Signed-off-by` line. This certifies that you wrote the code and have the right to contribute it under the project's MIT license.
 
-**For new commits, always use the `-s` flag:**
-
-```bash
-git commit -s -m "feat: add my-feature"
-```
-
-This automatically appends the required line to your commit message:
-
-```
-Signed-off-by: Your Full Name <your@email.com>
-```
-
-**To sign an existing unsigned commit:**
+**Zero-friction setup — run once per clone, never again:**
 
 ```bash
-git commit --amend -s
-git push --force-with-lease
+git config core.hooksPath .githooks
 ```
 
-**To sign all commits in a branch at once:**
+That is it. The `.githooks/prepare-commit-msg` hook adds `Signed-off-by: Your Name <your@email.com>` to every commit automatically. You never need to type `-s` again.
+
+> Want it globally across all your repos? Run instead:
+> `git config --global commit.signoff true`
+
+**If you already have unsigned commits on your branch:**
 
 ```bash
 git rebase --signoff main
@@ -500,7 +495,7 @@ How you ensured this maintains Runtime Integrity and Cross-Platform stability.
 
 ## Checklist
 - [ ] CLA signed (first contribution only - reply to the bot comment)
-- [ ] All commits are signed off with `git commit -s` (required by DCO check)
+- [ ] All commits carry `Signed-off-by` (run `git config core.hooksPath .githooks` once and it is automatic)
 - [ ] `node tests/run-all.js` passes locally with zero failures
 - [ ] `npm audit --audit-level=high` shows no high or critical vulnerabilities
 - [ ] Markdownlint passes on all `.md` files you created or modified (agents, skills, commands, rules)

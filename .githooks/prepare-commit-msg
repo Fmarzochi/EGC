@@ -1,0 +1,11 @@
+#!/bin/sh
+# Auto-add Signed-off-by if missing. Runs once per commit -- zero friction.
+NAME=$(git config user.name)
+EMAIL=$(git config user.email)
+if [ -z "$NAME" ] || [ -z "$EMAIL" ]; then
+  exit 0
+fi
+SOB="Signed-off-by: $NAME <$EMAIL>"
+if ! grep -qF "$SOB" "$1"; then
+  printf '\n%s\n' "$SOB" >> "$1"
+fi
