@@ -29,6 +29,8 @@ const WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-writ
 const WRITE_VALIDATOR_HOOK_MODULE_ID = 'claude-write-validator-hook';
 const ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-router.js';
 const ROUTER_HOOK_MODULE_ID = 'claude-prompt-router-hook';
+const GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/gateguard-fact-force.js';
+const GATEGUARD_HOOK_MODULE_ID = 'claude-gateguard-fact-force-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -543,9 +545,54 @@ function createPreToolUseWriteValidatorHookMergeOperation(targetRoot, matcher) {
   );
 }
 
+// GateGuard fact-forcing gate: registered as its own PreToolUse entry
+// (alongside, not instead of, the write validator above) so Edit/Write/
+// MultiEdit get the same investigation gate that Bash already gets via
+// bash-hook-dispatcher.js. See scripts/hooks/gateguard-fact-force.js.
+function resolveGateGuardHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
+}
+
+function hasGateGuardHook(settings, hookScriptPath, matcher) {
+  return hasHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function addGateGuardHook(settings, hookScriptPath, matcher) {
+  return addHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeGateGuardHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function applyGateGuardHookToFile(settingsPath, hookScriptPath, matcher) {
+  return applyHookEntryToFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeGateGuardHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function inspectGateGuardHookFile(settingsPath, hookScriptPath, matcher) {
+  return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function createPreToolUseGateGuardHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveGateGuardHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    GATEGUARD_HOOK_MODULE_ID,
+    GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    matcher
+  );
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_HOOK_MODULE_ID,
+  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -562,12 +609,14 @@ module.exports = {
   ROUTER_HOOK_MODULE_ID,
   ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
+  addGateGuardHook,
   addIntuitionHook,
   addRouterHook,
   addSessionStartHook,
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
+  applyGateGuardHookToFile,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
   applyRouterHookToFile,
@@ -577,18 +626,21 @@ module.exports = {
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
   createUserPromptSubmitRouterHookMergeOperation,
   hasBashDispatcherHook,
+  hasGateGuardHook,
   hasIntuitionHook,
   hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
   hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
+  inspectGateGuardHookFile,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
   inspectRouterHookFile,
@@ -598,6 +650,8 @@ module.exports = {
   readSettingsFile,
   removeBashDispatcherHook,
   removeBashDispatcherHookFromFile,
+  removeGateGuardHook,
+  removeGateGuardHookFromFile,
   removeHookEntryFromFile,
   removeIntuitionHook,
   removeIntuitionHookFromFile,
@@ -610,6 +664,7 @@ module.exports = {
   removeWriteValidatorHook,
   removeWriteValidatorHookFromFile,
   resolveBashDispatcherHookScriptDestination,
+  resolveGateGuardHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveRouterHookScriptDestination,

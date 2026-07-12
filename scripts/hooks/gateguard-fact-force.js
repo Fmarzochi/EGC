@@ -539,3 +539,46 @@ function run(rawInput) {
 }
 
 module.exports = { run };
+
+// --- Direct CLI entrypoint ---
+//
+// Claude Code invokes PreToolUse hook scripts directly (`node <script>.js`
+// with the tool-call JSON on stdin), unlike Gemini's run-with-flags.js or
+// bash-hook-dispatcher.js, which both require() and call run() in-process.
+// This block only executes when the file is run as a standalone process, so
+// it does not change behavior for either of those existing callers.
+if (require.main === module) {
+  const MAX_STDIN = 1024 * 1024;
+  let raw = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    if (raw.length < MAX_STDIN) {
+      raw += chunk.substring(0, MAX_STDIN - raw.length);
+    }
+  });
+  process.stdin.on('end', () => {
+    const output = run(raw);
+
+    if (typeof output === 'string' || Buffer.isBuffer(output)) {
+      process.stdout.write(String(output));
+      process.exit(0);
+    }
+
+    if (output && typeof output === 'object') {
+      if (typeof output.stderr === 'string' && output.stderr) {
+        process.stderr.write(output.stderr.endsWith('\n') ? output.stderr : `${output.stderr}\n`);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(output, 'stdout')) {
+        process.stdout.write(String(output.stdout ?? ''));
+      } else if (!Number.isInteger(output.exitCode) || output.exitCode === 0) {
+        process.stdout.write(raw);
+      }
+
+      process.exit(Number.isInteger(output.exitCode) ? output.exitCode : 0);
+    }
+
+    process.stdout.write(raw);
+    process.exit(0);
+  });
+}

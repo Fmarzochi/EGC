@@ -10,6 +10,8 @@ const path = require('path');
 const {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_HOOK_MODULE_ID,
+  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -24,11 +26,13 @@ const {
   WRITE_VALIDATOR_HOOK_MODULE_ID,
   WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
+  addGateGuardHook,
   addIntuitionHook,
   addSessionStartHook,
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
+  applyGateGuardHookToFile,
   applyIntuitionHookToFile,
   applyRouterHookToFile,
   applySessionStartHookToFile,
@@ -37,22 +41,26 @@ const {
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
   hasBashDispatcherHook,
+  hasGateGuardHook,
   hasIntuitionHook,
   hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
   hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
+  inspectGateGuardHookFile,
   inspectIntuitionHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
   inspectWriteValidatorHookFile,
   removeBashDispatcherHook,
+  removeGateGuardHook,
   removeIntuitionHook,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
@@ -60,6 +68,7 @@ const {
   removeStopHookFromFile,
   removeWriteValidatorHook,
   resolveBashDispatcherHookScriptDestination,
+  resolveGateGuardHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveSettingsPath,
@@ -72,6 +81,7 @@ const STOP_HOOK_SCRIPT_PATH = '/home/user/.claude/egc/hooks/claude-session-stop.
 const INTUITION_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/prompt-intuition.js';
 const BASH_DISPATCHER_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/bash-hook-dispatcher.js';
 const WRITE_VALIDATOR_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/pre-write-guardian-validate.js';
+const GATEGUARD_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/gateguard-fact-force.js';
 
 function test(name, fn) {
   try {
@@ -701,6 +711,86 @@ function runTests() {
     assert.strictEqual(operation.hookEvent, PRE_TOOL_USE_EVENT);
     assert.strictEqual(operation.hookMatcher, 'Edit');
     assert.strictEqual(operation.hookScriptPath, resolveWriteValidatorHookScriptDestination(targetRoot));
+  })) passed++; else failed++;
+
+  console.log('\n--- PreToolUse GateGuard fact-force hook (Edit / Write / MultiEdit) ---\n');
+
+  if (test('addGateGuardHook adds PreToolUse hook with Edit matcher', () => {
+    const result = addGateGuardHook({}, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit');
+    assert.strictEqual(result.changed, true);
+    assert.ok(hasGateGuardHook(result.settings, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit'));
+    const group = result.settings.hooks[PRE_TOOL_USE_EVENT][0];
+    assert.strictEqual(group.matcher, 'Edit');
+  })) passed++; else failed++;
+
+  if (test('same script can be registered for Edit, Write, and MultiEdit as separate groups', () => {
+    let s = {};
+    s = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Write').settings;
+    s = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'MultiEdit').settings;
+
+    assert.strictEqual(s.hooks[PRE_TOOL_USE_EVENT].length, 3);
+    assert.ok(hasGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit'));
+    assert.ok(hasGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Write'));
+    assert.ok(hasGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'MultiEdit'));
+  })) passed++; else failed++;
+
+  if (test('addGateGuardHook is idempotent per matcher', () => {
+    let s = addGateGuardHook({}, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit').settings;
+    const result = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit');
+    assert.strictEqual(result.changed, false);
+    assert.strictEqual(result.settings.hooks[PRE_TOOL_USE_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('GateGuard hook coexists with write validator and Bash dispatcher under PreToolUse', () => {
+    let s = addBashDispatcherHook({}, BASH_DISPATCHER_HOOK_SCRIPT_PATH).settings;
+    s = addWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit').settings;
+
+    assert.strictEqual(s.hooks[PRE_TOOL_USE_EVENT].length, 3);
+    assert.ok(hasBashDispatcherHook(s, BASH_DISPATCHER_HOOK_SCRIPT_PATH));
+    assert.ok(hasWriteValidatorHook(s, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+    assert.ok(hasGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit'));
+  })) passed++; else failed++;
+
+  if (test('removeGateGuardHook strips all GateGuard groups for that script without touching the write validator', () => {
+    let s = addWriteValidatorHook({}, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit').settings;
+    s = addGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH, 'Write').settings;
+    const result = removeGateGuardHook(s, GATEGUARD_HOOK_SCRIPT_PATH);
+    assert.strictEqual(result.changed, true);
+    assert.ok(!hasGateGuardHook(result.settings, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit'));
+    assert.ok(!hasGateGuardHook(result.settings, GATEGUARD_HOOK_SCRIPT_PATH, 'Write'));
+    assert.ok(hasWriteValidatorHook(result.settings, WRITE_VALIDATOR_HOOK_SCRIPT_PATH, 'Edit'));
+  })) passed++; else failed++;
+
+  if (test('applyGateGuardHookToFile and inspectGateGuardHookFile work end-to-end', () => {
+    const homeDir = createTempDir('claude-gateguard-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      assert.strictEqual(inspectGateGuardHookFile(settingsPath, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit'), 'drifted');
+      applyGateGuardHookToFile(settingsPath, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit');
+      assert.strictEqual(inspectGateGuardHookFile(settingsPath, GATEGUARD_HOOK_SCRIPT_PATH, 'Edit'), 'ok');
+      applyGateGuardHookToFile(settingsPath, GATEGUARD_HOOK_SCRIPT_PATH, 'Write');
+      applyGateGuardHookToFile(settingsPath, GATEGUARD_HOOK_SCRIPT_PATH, 'MultiEdit');
+      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.strictEqual(data.hooks[PRE_TOOL_USE_EVENT].length, 3);
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('createPreToolUseGateGuardHookMergeOperation builds a managed operation per matcher', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit');
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, GATEGUARD_HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.hookEvent, PRE_TOOL_USE_EVENT);
+    assert.strictEqual(operation.hookMatcher, 'Edit');
+    assert.strictEqual(operation.hookScriptPath, resolveGateGuardHookScriptDestination(targetRoot));
   })) passed++; else failed++;
 
   console.log('\n--- Stale entry migration (hook script relocation) ---\n');

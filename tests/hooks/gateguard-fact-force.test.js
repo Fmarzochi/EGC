@@ -113,6 +113,31 @@ function runBashHook(input, env = {}) {
   };
 }
 
+function runDirectHook(input, env = {}) {
+  // Claude Code invokes PreToolUse hook scripts directly (`node <script>.js`
+  // with the tool-call JSON on stdin), unlike run-with-flags.js above. This
+  // exercises that same invocation shape against the require.main entrypoint.
+  const rawInput = typeof input === 'string' ? input : JSON.stringify(input);
+  const result = spawnSync('node', [hookScript], {
+    input: rawInput,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GATEGUARD_STATE_DIR: stateDir,
+      EGC_SESSION_ID: TEST_SESSION_ID,
+      ...env
+    },
+    timeout: 15000,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+
+  return {
+    code: Number.isInteger(result.status) ? result.status : 1,
+    stdout: result.stdout || '',
+    stderr: result.stderr || ''
+  };
+}
+
 function parseOutput(stdout) {
   try {
     return JSON.parse(stdout);
@@ -977,6 +1002,45 @@ function runTests() {
 
     assert.ok(!fs.existsSync(staleTmp), 'stale temp state file should be pruned');
     assert.ok(fs.existsSync(freshState), 'fresh state file should remain');
+  })) passed++; else failed++;
+
+  // --- Direct CLI entrypoint (Claude Code invokes the script directly,
+  // not via run-with-flags.js) ---
+
+  clearState();
+  if (test('direct invocation denies first Edit per file with fact-forcing message', () => {
+    const input = {
+      tool_name: 'Edit',
+      tool_input: { file_path: '/src/direct-invoke.js', old_string: 'foo', new_string: 'bar' }
+    };
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0, 'exit code should be 0');
+    const output = parseOutput(result.stdout);
+    assert.ok(output, 'should produce JSON output');
+    assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Fact-Forcing Gate'));
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('direct invocation allows the second Edit on the same file after being checked', () => {
+    const input = {
+      tool_name: 'Edit',
+      tool_input: { file_path: '/src/direct-invoke-2.js', old_string: 'foo', new_string: 'bar' }
+    };
+    runDirectHook(input);
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0, 'exit code should be 0');
+    const output = parseOutput(result.stdout);
+    assert.ok(!output.hookSpecificOutput, 'second call should pass raw input through, not a deny decision');
+    assert.deepStrictEqual(output, input, 'raw input should be echoed unchanged');
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('direct invocation passes through non-gated tools unchanged', () => {
+    const input = { tool_name: 'Read', tool_input: { file_path: '/src/direct-invoke.js' } };
+    const result = runDirectHook(input);
+    assert.strictEqual(result.code, 0);
+    assert.deepStrictEqual(JSON.parse(result.stdout), input);
   })) passed++; else failed++;
 
   // Cleanup only the temp directory created by this test file.

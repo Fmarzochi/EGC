@@ -636,6 +636,45 @@ function runTests() {
     assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
   })) passed++; else failed++;
 
+  if (test('claude adapter registers the GateGuard fact-force hook on Edit/Write/MultiEdit, not just Bash', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const gateGuardScriptPath = path.join(
+      homeDir, '.claude', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, and MultiEdit (Bash already gets it via the dispatcher)'
+    );
+
+    const writeValidatorScriptPath = path.join(
+      homeDir, '.claude', 'scripts', 'hooks', 'pre-write-guardian-validate.js'
+    );
+    const stillHasWriteValidator = plan.operations.some(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === writeValidatorScriptPath
+      && operation.hookMatcher === 'Edit'
+    ));
+    assert.ok(stillHasWriteValidator, 'GateGuard should be additive, not a replacement for the protected-path write validator');
+  })) passed++; else failed++;
+
   if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
     const adapter = getInstallTargetAdapter('codex');
     const homeDir = '/Users/example';
