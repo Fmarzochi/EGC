@@ -56,11 +56,13 @@ Guardian: active, every command checked before it runs
 
 ## 설치
 
-🪟 Windows &nbsp;&middot;&nbsp; 🍎 macOS &nbsp;&middot;&nbsp; 🐧 Linux, 어디서나 같은 명령어입니다.
+Windows, macOS, Linux 모두 설치 명령어는 같습니다.
 
 ```bash
 npm install -g @egchq/egc && egc install
 ```
+
+Windows에는 몇 가지 고유한 참고 사항이 있습니다 (PowerShell 버전, Antigravity CLI, 종료된 Gemini CLI 무료 등급). 예상치 못한 문제가 생기면 [Windows notes](../../docs/installation.md#windows-notes)를 확인하세요.
 
 또는 전역으로 설치하지 않고 실행할 수 있습니다:
 

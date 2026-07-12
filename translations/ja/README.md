@@ -56,11 +56,13 @@ Guardian: active, every command checked before it runs
 
 ## インストール
 
-🪟 Windows &nbsp;&middot;&nbsp; 🍎 macOS &nbsp;&middot;&nbsp; 🐧 Linux、どの環境でも同じコマンドです。
+Windows、macOS、Linuxでインストールコマンドは同じです。
 
 ```bash
 npm install -g @egchq/egc && egc install
 ```
+
+Windows特有の注意点もあります（PowerShellのバージョン、Antigravity CLI、Gemini CLIの無料枠終了など）。何か想定外のことが起きたら[Windows notes](../../docs/installation.md#windows-notes)を確認してください。
 
 グローバルにインストールせずに実行することもできます。
 
