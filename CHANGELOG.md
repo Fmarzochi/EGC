@@ -32,7 +32,7 @@ All notable changes to EGC are documented here.
 
 ### Security
 
-- **EGC Guardian: granular credential denylist**: whole-directory blocks on `~/.claude`, `~/.cursor`, `~/.gemini`, and `~/.config` were replaced with a denylist of the specific credential files each AI tool actually stores (OAuth tokens, session files, API keys). The old whole-directory block was breaking legitimate functionality -- native memory, skills, and EGC's own install -- in several harnesses without any real security gain, since the actual secret was always one specific file, never the whole directory. (#691)
+- **EGC Guardian: granular credential denylist**: whole-directory blocks on `~/.claude`, `~/.cursor`, `~/.gemini`, and `~/.config` were replaced with a denylist of the specific credential files each AI tool actually stores (OAuth tokens, session files, API keys). The old whole-directory block was breaking legitimate functionality (native memory, skills, and EGC's own install) in several harnesses without any real security gain, since the actual secret was always one specific file, never the whole directory. (#691)
 - **`runCommand`**: `execSync` replaced with `spawnSync` plus argv tokenization, removing a shell-injection surface in command execution. (#690)
 - **`reduce_context`**: file reads now go through a single file handle (open, stat, read, close) instead of separate `statSync`/`readFile` calls, closing a TOCTOU race on the byte-size limit check. (#690)
 - **`auto_learn`**: `project_path` is now resolved with `realpathSync` and checked against the protected-path list before use. (#690)
@@ -47,7 +47,7 @@ All notable changes to EGC are documented here.
 
 - **stress-tests: null guards in db-adapter**: `.get()` results are now checked before property access in all db-adapter stress test assertions. (#635)
 - **stress-tests: null guards in state-store and telemetry**: snapshot existence guard added before `.workers.length` access; `!= null` replaces `!== null` to cover `undefined` returns. (#636)
-- **telemetry: `ping()` refactored to `Promise.resolve().then().catch()`**: the previous `try/catch` wrapping a `fetch().catch()` was flagged by SonarCloud S4822 as redundant -- promise rejection is already handled by the inner `.catch()`. Ping now uses `Promise.resolve().then(() => fetch(...)).catch(() => {})` which also fixes a subtle timing issue in tests. (#637)
+- **telemetry: `ping()` refactored to `Promise.resolve().then().catch()`**: the previous `try/catch` wrapping a `fetch().catch()` was flagged by SonarCloud S4822 as redundant: promise rejection is already handled by the inner `.catch()`. Ping now uses `Promise.resolve().then(() => fetch(...)).catch(() => {})` which also fixes a subtle timing issue in tests. (#637)
 - **Windows crash fix consolidated**: idempotent DB close, BOM-safe JSON parsing, `ping()` async fix, and graceful process exit from the Windows libuv crash patch are combined in one clean commit with co-authorship credited to @fuentes71. (#634)
 
 ## [1.1.6] - 2026-07
@@ -59,13 +59,13 @@ All notable changes to EGC are documented here.
 - **`egc plugin`**: community plugin registry. Install, list, remove, and update skills/agents/rules from npm or a local path: `egc plugin install <name>`. (#611, contributed by @Kunall7890)
 - **Team memory sync via git backend**: `egc-memory` now supports syncing lessons and decisions across teammates via a git remote. Context that was previously trapped in a single developer's local session is now shareable. (#606, contributed by @Kunall7890)
 - **Native Zed IDE integration**: `egc install --target zed` registers `egc-guardian` and `egc-memory` directly into `~/.config/zed/settings.json` under `context_servers`. Paths are resolved at install time. Closes #602. (#626, contributed by @Maqbool61)
-- **AES-256-GCM encryption for state files at rest**: every `.egc/state/` file is now encrypted. Key lives at `~/.egc/egc.key` (mode 0600, auto-generated). Transparent to all existing workflows -- `get_state` and `update_state` handle encryption/decryption automatically. Pure Node.js built-in crypto. Closes #579. (#627, contributed by @Maqbool61)
+- **AES-256-GCM encryption for state files at rest**: every `.egc/state/` file is now encrypted. Key lives at `~/.egc/egc.key` (mode 0600, auto-generated). Transparent to all existing workflows: `get_state` and `update_state` handle encryption/decryption automatically. Pure Node.js built-in crypto. Closes #579. (#627, contributed by @Maqbool61)
 - **HMAC-SHA256 integrity check on state files**: a per-user key at `~/.egc/integrity.key` (mode 0600) and a sidecar `.hmac` file are written alongside every state file. `get_state` verifies on read (warns on mismatch, never blocks). Closes #580. (#625, contributed by @Maqbool61)
 - **Guardian enforcement at the harness level**: every Bash command and every Write/Edit/MultiEdit target is validated by the egc-guardian validator through PreToolUse hooks before it executes. A new UserPromptSubmit hook (`prompt-router.js`) routes every prompt through the component catalog and injects recommended skills and agents into context. (#568, #633)
 - **`orchestrate_task` now performs real skill/agent/rule routing**: a build-time generator indexes the full component catalog and the guardian classifies each task prompt against it. LLM-based semantic routing available when a provider API key is set; falls back to local keyword scorer otherwise. (#566)
 - **Dashboard session export**: session data can now be exported as CSV or JSON directly from the EGC Dashboard. (#595, contributed by @Kunall7890)
 - **Continue.dev native MCP registration**: `egc install` auto-detects Continue.dev and registers `egc-guardian` and `egc-memory` via standalone YAML block files in `~/.continue/mcpServers/`. (#564, contributed by @Maqbool61)
-- **Community translations**: Korean (#518, @minus43), Russian (#543, @Vile93), Japanese (#614, @VIUK-XV), Arabic, Hindi, Portuguese, Spanish -- 8 languages total.
+- **Community translations**: Korean (#518, @minus43), Russian (#543, @Vile93), Japanese (#614, @VIUK-XV), Arabic, Hindi, Portuguese, Spanish (8 languages total).
 - **VS Code + GitHub Copilot installation guide**: setup section added to all 8 language READMEs. (#631)
 
 ### Security
@@ -90,7 +90,7 @@ All notable changes to EGC are documented here.
 
 - **SessionStart hook no longer crashes on startup**: the install plan now copies `propagate-state.js` and `project-detect.js` into `~/.claude/egc/lib/` alongside the hook script. Both `require()` calls are also wrapped in try/catch so existing installs degrade gracefully until `egc repair` runs.
 - **`egc init` opens the browser automatically** after starting the dashboard, and also when the dashboard was already running.
-- **ESLint now ignores `.claude/worktrees/` and `dashboard/`** -- eliminates lint CI failures caused by Claude Code agent worktrees being scanned and service-worker browser globals in the dashboard files.
+- **ESLint now ignores `.claude/worktrees/` and `dashboard/`**: eliminates lint CI failures caused by Claude Code agent worktrees being scanned and service-worker browser globals in the dashboard files.
 
 ## [1.1.4] - 2026-06-24
 
