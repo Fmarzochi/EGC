@@ -16,12 +16,89 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import * as fs from "fs"
 import * as path from "path"
+import { createRequire } from "module"
+import { fileURLToPath } from "url"
 import {
   initStore,
   recordChange,
   clearChanges,
 } from "./lib/changed-files-store.js"
 import changedFilesTool from "../tools/changed-files.js"
+
+// GateGuard Fact-Forcing Gate bridge.
+//
+// OpenCode's tool.execute.before hook (docs: https://opencode.ai/docs/plugins/)
+// runs gateguard-fact-force.js's own run() function in-process and throws to
+// block, since OpenCode has no exit-code/stdout wire contract like Claude
+// Code or Codex - it is a real JS function call, not a subprocess.
+//
+// The compiled plugin can live in two different layouts relative to
+// scripts/hooks/gateguard-fact-force.js: this repo's own .opencode/plugins/
+// (dogfooding, two levels above the repo root) or an installed copy under
+// <opencode root>/plugins/ with gateguard-fact-force.js copied alongside at
+// <opencode root>/scripts/hooks/ (one level up). Try both.
+type GateGuardModule = { run: (rawInput: string) => unknown }
+
+let gateguardModule: GateGuardModule | null | undefined
+
+function resolveGateGuardModulePath(pluginDir: string, worktreePath: string): string | null {
+  const candidates = [
+    path.join(worktreePath, "scripts", "hooks", "gateguard-fact-force.js"),
+    path.join(pluginDir, "..", "scripts", "hooks", "gateguard-fact-force.js"),
+    path.join(pluginDir, "..", "..", "scripts", "hooks", "gateguard-fact-force.js"),
+  ]
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
+}
+
+function loadGateGuard(pluginDir: string, worktreePath: string): GateGuardModule | null {
+  if (gateguardModule !== undefined) return gateguardModule
+  const modulePath = resolveGateGuardModulePath(pluginDir, worktreePath)
+  if (!modulePath) {
+    gateguardModule = null
+    return null
+  }
+  try {
+    const req = createRequire(import.meta.url)
+    gateguardModule = req(modulePath) as GateGuardModule
+  } catch {
+    gateguardModule = null
+  }
+  return gateguardModule
+}
+
+const OPENCODE_TOOL_TO_GATEGUARD: Record<string, string> = {
+  edit: "Edit",
+  write: "Write",
+  bash: "Bash",
+}
+
+function buildGateGuardInput(tool: string, args: Record<string, unknown> | undefined): string | null {
+  const mappedTool = OPENCODE_TOOL_TO_GATEGUARD[tool]
+  if (!mappedTool) return null
+
+  if (mappedTool === "Bash") {
+    return JSON.stringify({ tool_name: "Bash", tool_input: { command: String(args?.command ?? "") } })
+  }
+
+  const filePath = (args?.filePath ?? args?.file_path ?? args?.path) as string | undefined
+  if (typeof filePath !== "string" || !filePath.trim()) return null
+  return JSON.stringify({ tool_name: mappedTool, tool_input: { file_path: filePath } })
+}
+
+function extractGateGuardDenyReason(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null
+  const stdout = (result as { stdout?: unknown }).stdout
+  if (typeof stdout !== "string") return null
+  try {
+    const parsed = JSON.parse(stdout)
+    if (parsed?.hookSpecificOutput?.permissionDecision === "deny") {
+      return String(parsed.hookSpecificOutput.permissionDecisionReason || "Blocked by the GateGuard Fact-Forcing Gate.")
+    }
+  } catch {
+    return null
+  }
+  return null
+}
 
 type EGCHooksPluginFn = (input: PluginInput) => Promise<Record<string, unknown>>
 
@@ -34,6 +111,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
   type HookProfile = "minimal" | "standard" | "strict"
 
   const worktreePath = worktree || directory
+  const pluginDir = path.dirname(fileURLToPath(import.meta.url))
   initStore(worktreePath)
 
   const editedFiles = new Set<string>()
@@ -223,6 +301,21 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
         req.on("error", ()=>{})
         req.end(body)
       } catch(_) {}
+
+      // Fact-Forcing Gate: block the first Edit/Write/Bash per file (or per
+      // session for Bash) and demand investigation before allowing it.
+      if (hookEnabled("pre:gateguard:fact-force", ["minimal", "standard", "strict"])) {
+        const gateguard = loadGateGuard(pluginDir, worktreePath)
+        if (gateguard) {
+          const payload = buildGateGuardInput(input.tool, input.args)
+          if (payload) {
+            const denyReason = extractGateGuardDenyReason(gateguard.run(payload))
+            if (denyReason) {
+              throw new Error(denyReason)
+            }
+          }
+        }
+      }
 
       if (input.tool === "write") {
         const filePath = getFilePath(input.args)

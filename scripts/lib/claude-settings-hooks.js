@@ -588,11 +588,47 @@ function createPreToolUseGateGuardHookMergeOperation(targetRoot, matcher) {
   );
 }
 
+// gateguard-fact-force.js's only internal dependency (require('../lib/utils')
+// resolved relative to itself), so any target that wires the gate outside the
+// generic module-scaffold path needs both files copied together.
+const GATEGUARD_LIB_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
+
+/**
+ * Builds copy operations that place gateguard-fact-force.js (and its one
+ * dependency) under `<targetRoot>/scripts/hooks/` and `<targetRoot>/scripts/lib/`,
+ * unconditionally (independent of module selection). Used by install targets
+ * whose own root does not already receive the shared "hooks-runtime" module
+ * scaffold (Codex, Windsurf) or that want the gate guaranteed regardless of
+ * profile (Continue).
+ *
+ * @param {(moduleId: string, sourceRelativePath: string, destinationPath: string, options?: object) => object} createRemappedOperation
+ * @param {string} targetRoot
+ * @returns {object[]}
+ */
+function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot) {
+  const path = require('path');
+  return [
+    createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveGateGuardHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+      path.join(targetRoot, 'scripts', 'lib', 'utils.js'),
+      { strategy: 'preserve-relative-path' }
+    ),
+  ];
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -626,6 +662,7 @@ module.exports = {
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createGateGuardScriptCopyOperations,
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,

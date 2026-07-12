@@ -675,6 +675,133 @@ function runTests() {
     assert.ok(stillHasWriteValidator, 'GateGuard should be additive, not a replacement for the protected-path write validator');
   })) passed++; else failed++;
 
+  if (test('codex adapter wires GateGuard into ~/.codex/hooks.json, not ~/.agents (Codex CLI does not read hooks from its skills root)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const codexHome = path.join(homeDir, '.codex');
+    const gateGuardScriptPath = path.join(codexHome, 'scripts', 'hooks', 'gateguard-fact-force.js');
+
+    const hooksJsonOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+
+    assert.ok(hooksJsonOperations.length > 0, 'Should plan at least one PreToolUse merge into ~/.codex/hooks.json');
+    for (const operation of hooksJsonOperations) {
+      assert.strictEqual(operation.destinationPath, path.join(codexHome, 'hooks.json'));
+    }
+
+    const matchers = hooksJsonOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'apply_patch'],
+      'Codex sends tool_name "apply_patch" for file edits (Edit/Write are matcher aliases only) and "Bash" for shell commands'
+    );
+
+    const scriptCopyOperation = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+      && operation.destinationPath === gateGuardScriptPath
+    ));
+    assert.ok(scriptCopyOperation, 'Should copy gateguard-fact-force.js into ~/.codex/scripts/hooks/');
+
+    const libCopyOperation = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+      && operation.destinationPath === path.join(codexHome, 'scripts', 'lib', 'utils.js')
+    ));
+    assert.ok(libCopyOperation, 'Should copy gateguard-fact-force.js\'s only dependency alongside it');
+  })) passed++; else failed++;
+
+  for (const [target, expectedRootSegments] of [['continue', ['.continue']], ['continue-project', ['.continue']]]) {
+    if (test(`${target} adapter wires GateGuard PreToolUse for Edit/Write/MultiEdit/Bash into settings.json`, () => {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const isProject = target === 'continue-project';
+      const homeDir = '/Users/example';
+      const projectRoot = '/workspace/app';
+
+      const plan = planInstallTargetScaffold({
+        target,
+        repoRoot,
+        homeDir,
+        projectRoot,
+        modules: [],
+      });
+
+      const targetRoot = path.join(isProject ? projectRoot : homeDir, ...expectedRootSegments);
+      const gateGuardScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
+
+      const gateGuardOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'PreToolUse'
+        && operation.hookScriptPath === gateGuardScriptPath
+      ));
+
+      const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+      assert.deepStrictEqual(matchers, ['Bash', 'Edit', 'MultiEdit', 'Write']);
+      for (const operation of gateGuardOperations) {
+        assert.strictEqual(operation.destinationPath, path.join(targetRoot, 'settings.json'));
+      }
+
+      const scriptCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      ));
+      assert.ok(scriptCopyOperation, 'Should copy gateguard-fact-force.js into Continue\'s own root, unconditional of module selection');
+    })) passed++; else failed++;
+  }
+
+  for (const [target, rootFn] of [
+    ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
+    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
+  ]) {
+    if (test(`${target} adapter wires GateGuard into hooks.json via the Windsurf-contract adapter script (pre_write_code + pre_run_command)`, () => {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const homeDir = '/Users/example';
+      const projectRoot = '/workspace/app';
+
+      const plan = planInstallTargetScaffold({
+        target,
+        repoRoot,
+        homeDir,
+        projectRoot,
+        modules: [],
+      });
+
+      const targetRoot = rootFn(homeDir, projectRoot);
+      const adapterScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'windsurf-gateguard-adapter.js');
+      const hooksJsonPath = path.join(targetRoot, 'hooks.json');
+
+      const hookOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookScriptPath === adapterScriptPath
+        && operation.destinationPath === hooksJsonPath
+      ));
+      const events = hookOperations.map(operation => operation.hookEvent).sort();
+      assert.deepStrictEqual(events, ['pre_run_command', 'pre_write_code']);
+
+      const adapterCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/windsurf-gateguard-adapter.js'
+        && operation.destinationPath === adapterScriptPath
+      ));
+      assert.ok(adapterCopyOperation, 'Should copy the Windsurf-contract adapter script');
+
+      const gateGuardScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
+      const gateGuardCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      ));
+      assert.ok(gateGuardCopyOperation, 'Should also copy gateguard-fact-force.js itself (the adapter requires it in-process)');
+    })) passed++; else failed++;
+  }
+
   if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
     const adapter = getInstallTargetAdapter('codex');
     const homeDir = '/Users/example';
