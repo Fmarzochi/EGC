@@ -147,3 +147,17 @@ export function writeStateFile(filePath: string, plaintext: string, key: Buffer)
   try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
   fs.renameSync(tmpPath, filePath);
 }
+
+/**
+ * Move a state file that can no longer be decrypted (corrupted, or
+ * encrypted with a key that no longer matches ~/.egc/encryption.key) out
+ * of the way so a caller can start writing fresh state in its place.
+ * Renames rather than deletes: the corrupted bytes are preserved at a
+ * sibling '.corrupted-backup-<timestamp>' path in case they turn out to
+ * be recoverable some other way. Returns the backup path.
+ */
+export function quarantineUndecryptableStateFile(filePath: string): string {
+  const backupPath = `${filePath}.corrupted-backup-${Date.now()}`;
+  fs.renameSync(filePath, backupPath);
+  return backupPath;
+}

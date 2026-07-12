@@ -636,6 +636,172 @@ function runTests() {
     assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
   })) passed++; else failed++;
 
+  if (test('claude adapter registers the GateGuard fact-force hook on Edit/Write/MultiEdit, not just Bash', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const gateGuardScriptPath = path.join(
+      homeDir, '.claude', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, and MultiEdit (Bash already gets it via the dispatcher)'
+    );
+
+    const writeValidatorScriptPath = path.join(
+      homeDir, '.claude', 'scripts', 'hooks', 'pre-write-guardian-validate.js'
+    );
+    const stillHasWriteValidator = plan.operations.some(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === writeValidatorScriptPath
+      && operation.hookMatcher === 'Edit'
+    ));
+    assert.ok(stillHasWriteValidator, 'GateGuard should be additive, not a replacement for the protected-path write validator');
+  })) passed++; else failed++;
+
+  if (test('codex adapter wires GateGuard into ~/.codex/hooks.json, not ~/.agents (Codex CLI does not read hooks from its skills root)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const codexHome = path.join(homeDir, '.codex');
+    const gateGuardScriptPath = path.join(codexHome, 'scripts', 'hooks', 'gateguard-fact-force.js');
+
+    const hooksJsonOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+
+    assert.ok(hooksJsonOperations.length > 0, 'Should plan at least one PreToolUse merge into ~/.codex/hooks.json');
+    for (const operation of hooksJsonOperations) {
+      assert.strictEqual(operation.destinationPath, path.join(codexHome, 'hooks.json'));
+    }
+
+    const matchers = hooksJsonOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'apply_patch'],
+      'Codex sends tool_name "apply_patch" for file edits (Edit/Write are matcher aliases only) and "Bash" for shell commands'
+    );
+
+    const scriptCopyOperation = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+      && operation.destinationPath === gateGuardScriptPath
+    ));
+    assert.ok(scriptCopyOperation, 'Should copy gateguard-fact-force.js into ~/.codex/scripts/hooks/');
+
+    const libCopyOperation = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+      && operation.destinationPath === path.join(codexHome, 'scripts', 'lib', 'utils.js')
+    ));
+    assert.ok(libCopyOperation, 'Should copy gateguard-fact-force.js\'s only dependency alongside it');
+  })) passed++; else failed++;
+
+  for (const [target, expectedRootSegments] of [['continue', ['.continue']], ['continue-project', ['.continue']]]) {
+    if (test(`${target} adapter wires GateGuard PreToolUse for Edit/Write/MultiEdit/Bash into settings.json`, () => {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const isProject = target === 'continue-project';
+      const homeDir = '/Users/example';
+      const projectRoot = '/workspace/app';
+
+      const plan = planInstallTargetScaffold({
+        target,
+        repoRoot,
+        homeDir,
+        projectRoot,
+        modules: [],
+      });
+
+      const targetRoot = path.join(isProject ? projectRoot : homeDir, ...expectedRootSegments);
+      const gateGuardScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
+
+      const gateGuardOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'PreToolUse'
+        && operation.hookScriptPath === gateGuardScriptPath
+      ));
+
+      const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+      assert.deepStrictEqual(matchers, ['Bash', 'Edit', 'MultiEdit', 'Write']);
+      for (const operation of gateGuardOperations) {
+        assert.strictEqual(operation.destinationPath, path.join(targetRoot, 'settings.json'));
+      }
+
+      const scriptCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      ));
+      assert.ok(scriptCopyOperation, 'Should copy gateguard-fact-force.js into Continue\'s own root, unconditional of module selection');
+    })) passed++; else failed++;
+  }
+
+  for (const [target, rootFn] of [
+    ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
+    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
+  ]) {
+    if (test(`${target} adapter wires GateGuard into hooks.json via the Windsurf-contract adapter script (pre_write_code + pre_run_command)`, () => {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const homeDir = '/Users/example';
+      const projectRoot = '/workspace/app';
+
+      const plan = planInstallTargetScaffold({
+        target,
+        repoRoot,
+        homeDir,
+        projectRoot,
+        modules: [],
+      });
+
+      const targetRoot = rootFn(homeDir, projectRoot);
+      const adapterScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'windsurf-gateguard-adapter.js');
+      const hooksJsonPath = path.join(targetRoot, 'hooks.json');
+
+      const hookOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookScriptPath === adapterScriptPath
+        && operation.destinationPath === hooksJsonPath
+      ));
+      const events = hookOperations.map(operation => operation.hookEvent).sort();
+      assert.deepStrictEqual(events, ['pre_run_command', 'pre_write_code']);
+
+      const adapterCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/windsurf-gateguard-adapter.js'
+        && operation.destinationPath === adapterScriptPath
+      ));
+      assert.ok(adapterCopyOperation, 'Should copy the Windsurf-contract adapter script');
+
+      const gateGuardScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
+      const gateGuardCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      ));
+      assert.ok(gateGuardCopyOperation, 'Should also copy gateguard-fact-force.js itself (the adapter requires it in-process)');
+    })) passed++; else failed++;
+  }
+
   if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
     const adapter = getInstallTargetAdapter('codex');
     const homeDir = '/Users/example';
@@ -1214,6 +1380,153 @@ function runTests() {
       platformConfigOps.length,
       0,
       'platform-configs must produce zero file operations for claude (all paths are egc-platform-specific)'
+    );
+  })) passed++; else failed++;
+
+  if (test('copilot adapter registers the GateGuard fact-force hook at ~/.copilot/hooks/hooks.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'copilot',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.copilot', 'hooks', 'hooks.json');
+    const gateGuardScriptPath = path.join(
+      homeDir, '.github', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      )),
+      'Should scaffold the GateGuard script under the copilot home root even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+        && operation.destinationPath === path.join(homeDir, '.github', 'scripts', 'lib', 'utils.js')
+      )),
+      'Should scaffold the GateGuard utils.js dependency alongside the hook script'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for VS Code Copilot'
+    );
+  })) passed++; else failed++;
+
+  if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const settingsPath = path.join(projectRoot, '.codebuddy', 'settings.json');
+    const gateGuardScriptPath = path.join(
+      projectRoot, '.codebuddy', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === settingsPath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for CodeBuddy'
+    );
+  })) passed++; else failed++;
+
+  if (test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'antigravity',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const hooksFilePath = path.join(projectRoot, '.agents', 'hooks.json');
+    const gateGuardScriptPath = path.join(
+      projectRoot, '.agents', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      )),
+      'Should scaffold the GateGuard script under .agents/ even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'scripts', 'lib', 'utils.js')
+      )),
+      'Should scaffold the GateGuard utils.js dependency alongside the hook script'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity project scope'
+    );
+  })) passed++; else failed++;
+
+  if (test('egc-home adapter registers the GateGuard fact-force hook for Antigravity global scope too', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    const gateGuardScriptPath = path.join(
+      homeDir, '.gemini', 'scripts', 'hooks', 'gateguard-fact-force.js'
+    );
+
+    const gateGuardOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === gateGuardScriptPath
+    ));
+    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
+    assert.deepStrictEqual(
+      matchers,
+      ['Bash', 'Edit', 'MultiEdit', 'Write'],
+      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity global hooks.json, ' +
+      'separate from Gemini CLI\'s own ~/.gemini/hooks/hooks.json'
     );
   })) passed++; else failed++;
 

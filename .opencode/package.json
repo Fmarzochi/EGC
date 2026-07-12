@@ -1,6 +1,6 @@
 {
   "name": "egc-universal",
-  "version": "1.1.8",
+  "version": "1.1.10",
   "description": "Extended Global Context (EGC) plugin for OpenCode - agents, commands, hooks, and skills",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

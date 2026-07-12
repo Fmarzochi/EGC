@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { writeInstallState } = require('../install-state');
+const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
@@ -15,6 +16,13 @@ const {
   applySessionStartHookToFile,
   applyStopHookToFile,
 } = require('../claude-settings-hooks');
+const {
+  PRE_RUN_COMMAND_EVENT,
+  PRE_WRITE_CODE_EVENT,
+  applyWindsurfGateGuardHookToFile,
+} = require('../windsurf-gateguard-hooks');
+
+const WINDSURF_HOOK_EVENTS = new Set([PRE_WRITE_CODE_EVENT, PRE_RUN_COMMAND_EVENT]);
 
 function readJsonObject(filePath, label) {
   let parsed;
@@ -139,6 +147,8 @@ function applyInstallPlan(plan) {
         applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
       } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
         applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
+      } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
+        applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
       } else {
         applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
       }
@@ -185,6 +195,10 @@ function applyInstallPlan(plan) {
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
+
+  syncInstallStateToStore(plan.statePreview, {
+    onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
+  });
 
   return {
     ...plan,

@@ -1,22 +1,12 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**Language:** English | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [日本語](translations/ja/README.md) | [한국어](translations/ko/README.md) | [Português (Brasil)](translations/pt/README.md) | [Русский](translations/ru/README.md)
+🌐 **English** · [العربية](translations/ar/README.md) · [Español](translations/es/README.md) · [हिन्दी](translations/hi/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
 <img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
-[![npm version](https://img.shields.io/npm/v/@egchq/egc?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@egchq/egc) [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![Discord](https://img.shields.io/discord/1513941515452416130?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/AtazrtxJ) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](.github/CONTRIBUTING.md) [![Stars](https://img.shields.io/github/stars/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/stargazers) [![Forks](https://img.shields.io/github/forks/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/network/members) [![Issues](https://img.shields.io/github/issues/Fmarzochi/EGC)](https://github.com/Fmarzochi/EGC/issues) [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen)](https://github.com/Fmarzochi/EGC/commits/main) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC) [![Featured on Product Hunt](https://img.shields.io/badge/Product%20Hunt-featured-DA552F?logo=producthunt&logoColor=white)](https://www.producthunt.com/posts/egc)
-
-<!-- CENTERED-LANGUAGE-SELECTOR-START -->
-<div align="center">
-
-**Language / اللغة / Idioma / भाषा / 言語 / 언어 / Язык**
-
-[**English**](README.md) | [العربية](translations/ar/README.md) | [Español](translations/es/README.md) | [हिन्दी](translations/hi/README.md) | [日本語](translations/ja/README.md) | [한국어](translations/ko/README.md) | [Português (Brasil)](translations/pt/README.md) | [Русский](translations/ru/README.md)
-
-</div>
-<!-- CENTERED-LANGUAGE-SELECTOR-END -->
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
 
 <div align="center">
 
@@ -24,22 +14,22 @@
 
 **Your AI agents never start from zero again.**
 
-*No commands to learn. Just work - EGC handles the rest.*
+*Zero setup. Zero commands. You work, EGC remembers.*
 
 </div>
 
 ---
 
-EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own - no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, Zed, VS Code with GitHub Copilot, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own, no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, Zed, VS Code with GitHub Copilot, and more. Works with Claude, GPT-4o, Gemini, and OpenRouter models including DeepSeek, Qwen3, and Llama 4.
 
 ---
 
-## This is what EGC looks like in practice
+## Your AI already knows
 
 You open Claude Code on a project you haven't touched in two weeks. Without typing anything:
 
 ```
-State loaded from egc-memory via ~/.egc/state/MyApp.md
+State loaded from egc-memory via ~/.egc/state/MyApp/main.md
 
 Context and preferences acknowledged.
 
@@ -52,10 +42,11 @@ Ready to pick up:
 Stack: typescript, node
 Skills: tdd-workflow, coding-standards
 Agents: code-reviewer
+Guardian: active, every command checked before it runs
 ===
 ```
 
-The AI already knows what you were building, what decisions you made, what failed, and exactly where you stopped. It knows because EGC saved that state at the end of your last session and loaded it back when this one started, on its own, without you asking. You didn't type anything. You just started working.
+This isn't a cache of your last chat. EGC remembers the decisions, the dead ends, and your preferences, and it stands guard the whole session, blocking the commands that would burn your codebase down before they run. You didn't ask for any of it. You just started working.
 
 <div align="center">
   <img src="assets/egc-terminal.gif" alt="EGC demo" width="700" />
@@ -65,9 +56,13 @@ The AI already knows what you were building, what decisions you made, what faile
 
 ## Install
 
+Same install command on Windows, macOS, and Linux:
+
 ```bash
 npm install -g @egchq/egc && egc install
 ```
+
+Windows has a few of its own caveats (PowerShell version, Antigravity CLI, Gemini CLI's discontinued free tier): see the [Windows notes](docs/installation.md#windows-notes) if you hit anything unexpected.
 
 Or run without installing globally:
 
@@ -75,51 +70,45 @@ Or run without installing globally:
 npx @egchq/egc install
 ```
 
-[Full installation guide](docs/installation.md)
-
-### VS Code + GitHub Copilot
-
-Use the Copilot target when you want EGC skills available in VS Code through GitHub Copilot Chat:
+**One brain, many tools.** With the GitHub Copilot Chat extension installed, Copilot finds the skills on its own, and the same memory you already have in Claude Code or Cursor shows up there too:
 
 ```bash
 npm install -g @egchq/egc
 egc install --target copilot
 ```
 
-This requires the GitHub Copilot Chat extension. EGC installs skills to `~/.github/skills/`, where Copilot discovers them automatically. The same memory state is shared with Claude Code, Cursor, Gemini CLI, Windsurf, and other EGC targets.
+[Full installation guide](docs/installation.md)
 
 ---
 
 ## What EGC gives your AI
 
-EGC ships two MCP servers that work together during every session.
+EGC always runs two things together, every session: a memory that keeps what matters, and a safety layer that blocks dangerous commands before they run. It all comes ready, no configuration needed.
 
-### Memory - 14 tools that your AI uses automatically
+### Memory: what your AI remembers on its own
 
-No commands to memorize. Your AI reads this table so you never have to. Say anything in any language - "continue from yesterday", "remember this decision", "what broke last time?" - and it calls the right tool. You just work. EGC handles the rest.
+You'll never memorize a single command. Say it in any language: "continue from yesterday", "remember this decision", "what broke last time", and your AI knows exactly what to do. The work is yours, the remembering is EGC's.
 
 **`egc-memory`**
 
 | Tool | What it does |
 |---|---|
-| `get_state` | Loads project memory at session start |
-| `update_state` | Saves decisions, preferences, and next steps |
-| `store_decision` | Persists a single decision to SQLite |
-| `query_history` | Returns past decisions by timestamp |
-| `search_history` | Full-text search with BM25 ranking |
-| `working_memory_set` | Stores transient context with a TTL |
-| `working_memory_get` | Reads a transient key |
-| `working_memory_list` | Lists all live transient entries for the current project |
-| `lesson_save` | Records cross-session knowledge with confidence decay |
-| `lesson_recall` | Retrieves active lessons above a confidence threshold |
-| `lesson_reinforce` | Boosts confidence on a lesson when the same pattern repeats |
-| `detect_patterns` | Surfaces repeated commands and recurring errors from hook events |
-| `compress_observations` | Compresses raw hook observations into typed summaries to reduce token usage |
-| `get_project_state` | Returns server health metadata and storage engine status |
+| `get_state` | Loads everything your AI already knew about the project the moment the session opens |
+| `update_state` | Saves what got decided today so nobody loses the thread tomorrow |
+| `store_decision` | Writes down one important decision, for good |
+| `query_history` | Shows past decisions in the order they happened |
+| `search_history` | Finds anything that was ever decided, even if you don't remember the date |
+| `working_memory_set` / `_get` / `_list` | Quick notes that expire on their own once they stop being useful |
+| `lesson_save` | Records something learned, which fades over time if nobody confirms it again |
+| `lesson_recall` | Brings back the lessons that are still worth acting on |
+| `lesson_reinforce` | Reinforces a lesson when it gets confirmed again |
+| `detect_patterns` | Notices when the same error or command keeps repeating |
+| `compress_observations` | Summarizes the raw history so you don't burn tokens for nothing |
+| `get_project_state` | Checks that memory is working the way it should |
 
-State files live at `~/.egc/state/<project-slug>/<branch>.md`, one per project branch (flat `<project-slug>.md` files from older versions are still read). They are encrypted at rest with AES-256-GCM and decrypted transparently by the memory server and session hooks; the key lives at `~/.egc/encryption.key`.
+Every branch of your project keeps its own memory, encrypted on your machine: nobody else has access, not even the cloud. Privacy by default, nothing to configure.
 
-### Context and safety - 5 tools for when things get heavy
+### Context and safety: what stands guard while you work
 
 **`egc-guardian`**
 
@@ -127,21 +116,19 @@ These tools run automatically in the background. Every shell command and every f
 
 | Tool | What it does |
 |---|---|
-| `validate_command` | Checks shell commands against project safety rules before execution |
-| `validate_write` | Validates file write paths to prevent unsafe writes |
-| `reduce_context` | Compresses file payloads to save your token budget |
-| `orchestrate_task` | Routes prompts with agent/skill context and returns compression metrics |
-| `auto_learn` | Mines session failures and writes actionable lessons to all AI tool config files in the project |
+| `validate_command` | Checks every command before it runs: blocks the ones that could cause damage |
+| `validate_write` | Stops the AI from writing to sensitive files by accident |
+| `reduce_context` | Shrinks large files so you don't burn your token budget for nothing |
+| `orchestrate_task` | Picks the right tools for each request, without you needing to know which ones exist |
+| `auto_learn` | Learns from the session's mistakes and writes it down so it doesn't repeat |
 
 ### Enforced, not requested
 
-Validation does not depend on the AI choosing to cooperate. EGC installs harness hooks that run on every tool call: each shell command and file write is validated before it executes, and destructive commands, credential paths, and force-pushes are blocked even inside compound commands. Every prompt is also routed against the component catalog so the right skills and agents are injected into context. If the validator is ever missing, hooks fail open so you are never locked out of your own tool.
+Security that doesn't depend on the AI being in a good mood: every command passes through EGC before it runs, always. [Full details on harness enforcement, session-intent detection, and the memory miner →](docs/installation.md#enforcement)
 
-With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY`), EGC also understands session intent semantically, in any language, with no predefined phrases: say you are done for the night and your state is saved before the AI even answers; greet it the next morning and your next steps are already in context. At session end a memory miner distills the session's decisions and lessons into your project state. Without a key these LLM features honestly do nothing, and the lifecycle hooks still guarantee your state is saved. The end-of-reply save reminder is throttled to once per project every 30 minutes (`EGC_STOP_SAVE_INTERVAL_MINUTES` tunes it; `0` prompts on every stop), so memory stays fresh without interrupting the work.
+### One memory. Every tool you use.
 
-### Always in sync - across every tool you use
-
-**`egc watch`** - run it once and every tool you use stays in sync. Edit context in Cursor and it appears in Gemini CLI, Copilot, Windsurf, Zed, and everywhere else automatically. When your state updates, all your tool config files update with it. No manual steps, no stale state.
+Run **`egc watch`** once and forget it exists. Change context in Cursor, it shows up on its own in Gemini CLI, Copilot, Windsurf, Zed: everywhere you work. No manual steps, no stale state anywhere.
 
 ```
 egc watch              # watch current project
@@ -149,15 +136,19 @@ egc watch /path/proj   # watch a specific project
 egc watch --quiet      # suppress output
 ```
 
-### Dashboard - real-time Mission Control
+### Dashboard: watch your agents work
 
-See every tool call, token, and cost your agents generate -- live in your browser. Starts automatically after `egc init`. [Full guide](docs/installation.md#dashboard)
+See every tool call, token, and cost your agents generate, live in your browser. Starts automatically after `egc init`. [Full guide](docs/installation.md#dashboard)
 
 ---
 
 ## Prompt library
 
-**481 components** included as a bonus. Install to get access to 63 agents, 230 skills, and 77 commands, plus 111 rules, all written from real engineering sessions. Skip them entirely and EGC still gives you persistent memory.
+As a bonus, EGC gives you access to 63 agents, 230 skills, and 77 commands, plus 111 rules: specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks for you, and style rules that keep your code consistent. All written from real engineering sessions, not theory. Don't want to use any of it? Fine: EGC's persistent memory works exactly the same.
+
+---
+
+🌐 **English** · [العربية](translations/ar/README.md) · [Español](translations/es/README.md) · [हिन्दी](translations/hi/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md)
 
 ---
 
@@ -197,7 +188,7 @@ AI coding tools that integrate natively with EGC. Partners get logo placement ac
 
 <div align="center">
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)](https://www.bestpractices.dev/projects/13099?level=baseline-1) [![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)](https://www.bestpractices.dev/projects/13099?level=baseline-1) [![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3)
 
 <br>
 

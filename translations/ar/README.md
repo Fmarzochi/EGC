@@ -1,22 +1,12 @@
 <!-- LANGUAGE-SELECTOR-START -->
-**اللغة:** [English](../../README.md) | **العربية** | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
+🌐 [English](../../README.md) · **العربية** · [Español](../es/README.md) · [हिन्दी](../hi/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
 <img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
-[![npm version](https://img.shields.io/npm/v/@egchq/egc?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@egchq/egc) [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![Discord](https://img.shields.io/discord/1513941515452416130?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/AtazrtxJ) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](../../.github/CONTRIBUTING.md) [![Stars](https://img.shields.io/github/stars/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/stargazers) [![Forks](https://img.shields.io/github/forks/Fmarzochi/EGC?style=flat)](https://github.com/Fmarzochi/EGC/network/members) [![Issues](https://img.shields.io/github/issues/Fmarzochi/EGC)](https://github.com/Fmarzochi/EGC/issues) [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen)](https://github.com/Fmarzochi/EGC/commits/main) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
-
-<!-- CENTERED-LANGUAGE-SELECTOR-START -->
-<div align="center">
-
-**Language / اللغة / Idioma / भाषا / 언어**
-
-[English](../../README.md) | [**العربية**](README.md) | [Español](../es/README.md) | [Português (Brasil)](../pt/README.md) | [हिन्दी](../hi/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [日本語](../ja/README.md)
-
-</div>
-<!-- CENTERED-LANGUAGE-SELECTOR-END -->
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
 
 <div align="center">
 
@@ -24,20 +14,22 @@
 
 **وكلاؤك الآليون لن يبدأوا من الصفر مرة أخرى أبدًا.**
 
+*بلا إعداد. بلا أوامر. أنت تعمل، وEGC يتذكر.*
+
 </div>
 
 ---
 
-EGC هو وقت تشغيل محلي يمنح كل أداة برمجة تعتمد على الذكاء الاصطناعي تستخدمها ذاكرة مستمرة. في نهاية كل جلسة، يحفظ الذكاء الاصطناعي ما تعلمه عن مشروعك: القرارات التي اتخذتها، وما فشل، وتفضيلاتك، وما سيأتي بعد ذلك. في بداية الجلسة التالية، يقوم بتحميل تلك الحالة مرة أخرى. تثبيت واحد يغطي Claude Code و Cursor و Gemini CLI و Windsurf و VS Code مع GitHub Copilot والمزيد.
+EGC هو وقت تشغيل محلي يمنح كل أداة برمجة تعتمد على الذكاء الاصطناعي تستخدمها ذاكرة مستمرة. في نهاية كل جلسة، يحفظ الذكاء الاصطناعي ما تعلمه عن مشروعك: القرارات التي اتخذتها، وما فشل، وتفضيلاتك، وما سيأتي بعد ذلك. في بداية الجلسة التالية، يقوم بتحميل تلك الحالة تلقائيًا دون أن تطلب ذلك. قل "لنكمل" أو "أين توقفنا؟" بأي لغة، وسيعرف الذكاء الاصطناعي بالفعل ما عليه فعله. تثبيت واحد يغطي Claude Code و Cursor و Gemini CLI و Windsurf و Zed و VS Code مع GitHub Copilot والمزيد. يعمل مع Claude وGPT-4o وGemini، بالإضافة إلى نماذج OpenRouter بما فيها DeepSeek وQwen3 وLlama 4.
 
 ---
 
-## كيف يبدو EGC في الممارسة العملية
+## ذكاؤك الاصطناعي يعرف بالفعل
 
 تفتح Claude Code في مشروع لم تلمسه منذ أسبوعين. دون كتابة أي شيء:
 
 ```
-State loaded from egc-memory via ~/.egc/state/MyApp.md
+State loaded from egc-memory via ~/.egc/state/MyApp/main.md
 
 Context and preferences acknowledged.
 
@@ -50,10 +42,11 @@ Ready to pick up:
 Stack: typescript, node
 Skills: tdd-workflow, coding-standards
 Agents: code-reviewer
+Guardian: active, every command checked before it runs
 ===
 ```
 
-يعرف الذكاء الاصطناعي بالفعل ما كنت تبنيه، والقرارات التي اتخذتها، وما فشل، وأين توقفت بالضبط. إنه يعرف لأن EGC حفظ تلك الحالة في نهاية جلستك الأخيرة وقام بتحميلها مرة أخرى عندما بدأت هذه الجلسة. لم تكتب أي شيء. لقد بدأت العمل فحسب.
+هذه ليست ذاكرة تخزين مؤقت لآخر محادثة. يتذكر EGC القرارات، والمحاولات الفاشلة، وتفضيلاتك، ويظل يقظًا طوال الجلسة، فيمنع الأوامر التي قد تدمر مشروعك قبل أن تُنفَّذ. لم تطلب أي شيء من هذا. لقد بدأت العمل فحسب.
 
 <div align="center">
   <img src="../../assets/egc-terminal.gif" alt="EGC demo" width="700" />
@@ -63,9 +56,13 @@ Agents: code-reviewer
 
 ## التثبيت
 
+نفس أمر التثبيت على Windows وmacOS وLinux:
+
 ```bash
 npm install -g @egchq/egc && egc install
 ```
+
+لدى Windows بعض الملاحظات الخاصة به (إصدار PowerShell، Antigravity CLI، توقف الخطة المجانية لـ Gemini CLI): راجع [ملاحظات Windows](../../docs/installation.md#windows-notes) إن واجهت أي شيء غير متوقع.
 
 أو التشغيل بدون تثبيت عالمي:
 
@@ -73,45 +70,45 @@ npm install -g @egchq/egc && egc install
 npx @egchq/egc install
 ```
 
-[دليل التثبيت الكامل](../../docs/installation.md)
-
-### VS Code + GitHub Copilot
-
-استخدم هدف Copilot عندما تريد توفر مهارات EGC في VS Code عبر GitHub Copilot Chat:
+**عقل واحد، أدوات متعددة.** بعد تثبيت امتداد GitHub Copilot Chat، يجد Copilot الـ skills بنفسه، وتظهر نفس الذاكرة الموجودة في Claude Code أو Cursor هناك أيضًا:
 
 ```bash
 npm install -g @egchq/egc
 egc install --target copilot
 ```
 
-يتطلب امتداد GitHub Copilot Chat. يقوم EGC بتثبيت المهارات في `~/.github/skills/`، حيث يكتشفها Copilot تلقائياً. يتم مشاركة نفس حالة الذاكرة مع Claude Code و Cursor و Gemini CLI و Windsurf وأهداف EGC الأخرى.
+[دليل التثبيت الكامل](../../docs/installation.md)
 
 ---
 
-## ما يمنحه خادم MCP للذكاء الاصطناعي الخاص بك
+## ما يقدمه EGC لذكائك الاصطناعي
 
-يأتي EGC مع `egc-memory`، وهو خادم MCP يعرض 14 أداة يمكن للذكاء الاصطناعي استدعاؤها خلال الجلسة:
+يشغّل EGC دائمًا شيئين معًا في كل جلسة: ذاكرة تحفظ ما يهم، وطبقة أمان تمنع الأوامر الخطرة قبل تنفيذها. كل ذلك جاهز دون أي إعداد.
+
+### الذاكرة: ما يتذكره ذكاؤك الاصطناعي بنفسه
+
+لن تحفظ أي أمر عن ظهر قلب أبدًا. قلها بأي لغة: "أكمل من الأمس"، "تذكر هذا القرار"، "ما الذي تعطّل آخر مرة؟"، وسيعرف ذكاؤك الاصطناعي بالضبط ما عليه فعله. العمل لك، والتذكر لـ EGC.
+
+**`egc-memory`**
 
 | الأداة | ماذا تفعل |
 |---|---|
-| `get_state` | يحمل ذاكرة المشروع عند بدء الجلسة |
-| `update_state` | يحفظ القرارات والتفضيلات والخطوات التالية |
-| `store_decision` | يحفظ قراراً واحداً في SQLite |
-| `query_history` | يعيد القرارات السابقة حسب الطابع الزمني |
-| `search_history` | بحث كامل في النص مع تصنيف BM25 |
-| `working_memory_set` | يخزن سياقاً عابراً مع وقت انتهاء الصلاحية (TTL) |
-| `working_memory_get` | يقرأ مفتاحاً عابراً |
-| `working_memory_list` | يسرد جميع الإدخالات العابرة الحية للمشروع الحالي |
-| `lesson_save` | يسجل المعرفة عبر الجلسات مع تضاؤل الثقة |
-| `lesson_recall` | يسترجع الدروس النشطة فوق عتبة ثقة معينة |
-| `lesson_reinforce` | يعزز الثقة في درس عندما يتكرر نفس النمط |
-| `detect_patterns` | يبرز الأوامر المتكررة والأخطاء المتكررة من أحداث الخطاف (hook events) |
-| `compress_observations` | يضغط ملاحظات الخطاف الخام إلى ملخصات مصنفة لتقليل استهلاك الرموز (tokens) |
-| `get_project_state` | يعيد البيانات الوصفية لصحة الخادم وحالة محرك التخزين |
+| `get_state` | يحمّل كل ما كان يعرفه ذكاؤك الاصطناعي عن المشروع لحظة فتح الجلسة |
+| `update_state` | يحفظ ما تقرر اليوم حتى لا يفقد أحد الخيط غدًا |
+| `store_decision` | يسجّل قرارًا مهمًا واحدًا، بشكل دائم |
+| `query_history` | يعرض القرارات السابقة بترتيب حدوثها |
+| `search_history` | يجد أي شيء تقرر يومًا ما، حتى لو لم تتذكر التاريخ |
+| `working_memory_set` / `_get` / `_list` | ملاحظات سريعة تنتهي صلاحيتها تلقائيًا عندما لا تعود مفيدة |
+| `lesson_save` | يسجل درسًا مستفادًا، تضعف قوته مع الوقت إن لم يتأكد منه أحد مجددًا |
+| `lesson_recall` | يستعيد الدروس التي لا تزال تستحق العمل بها |
+| `lesson_reinforce` | يعزز درسًا عند تأكيده مرة أخرى |
+| `detect_patterns` | يلاحظ عندما يتكرر نفس الخطأ أو الأمر كثيرًا |
+| `compress_observations` | يلخّص السجل الخام حتى لا تهدر الرموز (tokens) عبثًا |
+| `get_project_state` | يتأكد أن الذاكرة تعمل كما ينبغي |
 
-تعيش ملفات الحالة في `~/.egc/state/<project-slug>.md`. ملف واحد لكل مشروع، بصيغة Markdown بسيطة، وقابلة للقراءة من قبل البشر.
+كل فرع (branch) في مشروعك يحتفظ بذاكرته الخاصة، مشفّرة على جهازك: لا يستطيع أحد آخر الوصول إليها، ولا حتى السحابة. خصوصية افتراضية، دون إعداد أي شيء.
 
-### السياق والأمان - 5 أدوات للحالات الصعبة
+### السياق والأمان: ما يحرس عملك
 
 **`egc-guardian`**
 
@@ -119,21 +116,19 @@ egc install --target copilot
 
 | الأداة | ماذا تفعل |
 |---|---|
-| `validate_command` | يتحقق من أوامر shell مقابل قواعد أمان المشروع قبل التنفيذ |
-| `validate_write` | يتحقق من مسارات كتابة الملفات لمنع الكتابة غير الآمنة |
-| `reduce_context` | يضغط محتوى الملفات لتوفير ميزانية الرموز |
-| `orchestrate_task` | يوجه الأوامر مع سياق الوكيل والمهارة ويعيد مقاييس الضغط |
-| `auto_learn` | يستخرج إخفاقات الجلسة ويكتب دروساً قابلة للتنفيذ في جميع ملفات تكوين الأدوات |
+| `validate_command` | يفحص كل أمر قبل تنفيذه: يمنع ما قد يسبب ضررًا |
+| `validate_write` | يمنع ذكاءك الاصطناعي من الكتابة في ملفات حساسة عن طريق الخطأ |
+| `reduce_context` | يضغط الملفات الكبيرة حتى لا تهدر ميزانية الرموز عبثًا |
+| `orchestrate_task` | يختار الأدوات الصحيحة لكل طلب، دون أن تحتاج لمعرفة أيها موجود |
+| `auto_learn` | يتعلم من أخطاء الجلسة ويسجلها حتى لا تتكرر |
 
 ### مُطبَّق بالكود، لا بالطلب
 
-لا يعتمد التحقق على اختيار الذكاء الاصطناعي التعاون. يثبّت EGC خطافات في الـ harness تعمل مع كل استدعاء أداة: يتم التحقق من كل أمر shell وكل كتابة ملف قبل التنفيذ، وتُحظر الأوامر المدمرة ومسارات بيانات الاعتماد وforce-push حتى داخل الأوامر المركبة. كما يُوجَّه كل prompt عبر كتالوج المكوّنات لحقن الـ skills والـ agents المناسبة في السياق. وإذا غاب المدقق، تفشل الخطافات مفتوحةً: لن تُحبس أبدًا خارج أداتك.
+أمان لا يعتمد على مزاج الذكاء الاصطناعي: كل أمر يمر عبر EGC قبل تنفيذه، دائمًا. [تفاصيل كاملة عن تطبيق الـ harness، وكشف نية الجلسة، ومنقّب الذاكرة →](../../docs/installation.md#enforcement)
 
-مع مفتاح API لمزوّد (`ANTHROPIC_API_KEY` أو `GEMINI_API_KEY` أو `OPENAI_API_KEY` أو `OPENROUTER_API_KEY`)، يفهم EGC نية الجلسة دلاليًا بأي لغة ودون عبارات معرفة مسبقًا: قل إنك تنهي عملك اليوم فتُحفظ الحالة قبل أن يجيب الذكاء الاصطناعي؛ وألقِ التحية في الصباح التالي فتجد خطواتك التالية في السياق بالفعل. وفي نهاية الجلسة يستخلص منقّب الذاكرة قرارات الجلسة ودروسها إلى حالة مشروعك. وبدون مفتاح، لا تفعل ميزات LLM هذه شيئًا بصدق، وتظل خطافات دورة الحياة تضمن حفظ الحالة.
+### ذاكرة واحدة. لكل أدواتك.
 
-### دائماً متزامن - عبر جميع الأدوات التي تستخدمها
-
-**`egc watch`** - شغّله مرة واحدة وستبقى جميع الأدوات التي تستخدمها متزامنة. عندما تحرر السياق في أي ملف أداة، يتم مزامنته تلقائياً مع جميع الأدوات الأخرى.
+شغّل **`egc watch`** مرة واحدة وانسَه. غيّر السياق في Cursor، ويظهر تلقائيًا في Gemini CLI و Copilot و Windsurf و Zed: في كل ما تستخدمه. بلا خطوات يدوية، وبلا حالة قديمة في أي مكان.
 
 ```
 egc watch              # مراقبة المشروع الحالي
@@ -141,22 +136,19 @@ egc watch /path/proj   # مراقبة مشروع محدد
 egc watch --quiet      # كتم المخرجات
 ```
 
-### لوحة التحكم - مركز قيادة في الوقت الفعلي
+### لوحة التحكم: شاهد وكلاءك وهم يعملون
 
-شاهد كل استدعاء أداة وكل رمز وتكلفة يولدها وكلاؤك -- مباشرةً في المتصفح. تبدأ تلقائياً بعد `egc init`. [الدليل الكامل](docs/installation.md#dashboard)
+شاهد كل استدعاء أداة وكل رمز وتكلفة يولّدها وكلاؤك، مباشرةً في المتصفح. تبدأ تلقائياً بعد `egc init`. [الدليل الكامل](../../docs/installation.md#dashboard)
 
 ---
 
-## مكتبة الأوامر (Prompt library)
+## مكتبة الأوامر
 
-**479 مكوناً**: اختيارية. قم بتثبيتها للوصول إلى 63 وكيلاً و 229 مهارة و 76 أمراً مكتوبة من تجربة حقيقية. تخطاها وسيظل EGC يمنحك ذاكرة مستمرة.
+كمكافأة، يمنحك EGC أيضًا وصولًا إلى 63 agent و230 skill و77 command، بالإضافة إلى 111 rule: خبراء يراجعون كودك بأنفسهم، وأدلة أفضل الممارسات لكل لغة وموقف، واختصارات تنفذ سلسلة كاملة من المهام نيابة عنك، وقواعد أسلوب تحافظ على اتساق الكود. كلها مكتوبة من جلسات هندسة حقيقية، لا نظريات. لا تريد استخدام أي منها؟ لا بأس: تعمل ذاكرة EGC المستمرة بنفس الطريقة تمامًا.
 
-| المكون | الإجمالي | Claude Code | Gemini CLI | Claude Code native |
-|---|---|---|---|---|
-| الوكلاء (Agents) | 63 | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
-| الأوامر (Commands) | 76 | Shared | Instruction-based | 31 |
-| المهارات (Skills) | 229 | Shared | 10 (native format) | 37 |
-| القواعد (Rules) | 111 |: |: |: |
+---
+
+🌐 [English](../../README.md) · **العربية** · [Español](../es/README.md) · [हिन्दी](../hi/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md)
 
 ---
 
@@ -187,7 +179,7 @@ egc watch --quiet      # كتم المخرجات
 
 #### الداعمون
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/muhammadhasnain3031"><img src="https://avatars.githubusercontent.com/u/262106526?v=4" width="48" height="48" alt="@muhammadhasnain3031" title="@muhammadhasnain3031 -- Arabic translation" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/muhammadhasnain3031"><img src="https://avatars.githubusercontent.com/u/262106526?v=4" width="48" height="48" alt="@muhammadhasnain3031" title="@muhammadhasnain3031, Arabic translation" /></a>
 
 #### الرعاة الشهريون · _كن الأول_
 
@@ -195,7 +187,7 @@ egc watch --quiet      # كتم المخرجات
 
 <div align="center">
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)](https://www.bestpractices.dev/projects/13099?level=baseline-1) [![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)](https://www.bestpractices.dev/projects/13099?level=baseline-1) [![OpenSSF Baseline Level 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3)
 
 <br>
 

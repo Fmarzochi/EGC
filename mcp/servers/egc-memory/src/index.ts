@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
 import { loadOrCreateKey, writeHmac, verifyHmac } from './integrity';
-import { loadOrCreateEncKey, readStateFile, writeStateFile } from './encryption';
+import { loadOrCreateEncKey, readStateFile, writeStateFile, quarantineUndecryptableStateFile } from './encryption';
 import { propagateStateToTools } from './propagate';
 import {
   createWorkingMemoryTable,
@@ -650,7 +650,8 @@ const UpdateStateSchema = z.object({
     why: z.string().max(500).optional()
   })).max(20).optional(),
   preferences: z.array(z.string().max(300)).max(20).optional(),
-  next: z.array(z.string().max(500)).max(10).optional()
+  next: z.array(z.string().max(500)).max(10).optional(),
+  force: z.boolean().optional()
 });
 
 const WorkingMemorySetSchema = z.object({
@@ -718,7 +719,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             decisions: { type: "array", items: { type: "object", properties: { what: { type: "string" }, why: { type: "string" } }, required: ["what"] }, description: "Decisions made this session." },
             avoid: { type: "array", items: { type: "object", properties: { what: { type: "string" }, why: { type: "string" } }, required: ["what"] }, description: "What failed and should not be repeated." },
             preferences: { type: "array", items: { type: "string" }, description: "Coding style, workflow, or communication preferences discovered." },
-            next: { type: "array", items: { type: "string" }, description: "What to pick up in the next session." }
+            next: { type: "array", items: { type: "string" }, description: "What to pick up in the next session." },
+            force: { type: "boolean", description: "Recover from a state file that cannot be decrypted (corrupted or encrypted with an orphaned key). When true and the existing file fails to decrypt, the corrupted file is renamed to a '.corrupted-backup-<timestamp>' sibling instead of being read, and this call's data becomes the fresh state — nothing is merged in from the unreadable file, and nothing is deleted. Only set this after confirming the failure is persistent, not a transient lock from another process writing at the same moment." }
           }
         }
       },
@@ -1081,8 +1083,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         try {
           existing = readStateDoc(resolved.filePath);
         } catch (err) {
-          log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
-          throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}`);
+          if (args.force && fs.existsSync(resolved.filePath)) {
+            const backupPath = quarantineUndecryptableStateFile(resolved.filePath);
+            log('WARN', 'update_state: force=true, undecryptable state file backed up and replaced', { file: resolved.filePath, backup: backupPath, error: String(err) });
+            existing = {};
+          } else {
+            log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
+            throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}. Retry with force: true to back up the unreadable file and start fresh — only do this after confirming the failure is persistent, not a transient lock from another process.`);
+          }
         }
         const filePath = resolveStateWrite(getStateDir(), projPath, branch);
 

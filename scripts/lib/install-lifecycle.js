@@ -4,6 +4,7 @@ const path = require('path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
+const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
 } = require('./install-executor');
@@ -1029,6 +1030,10 @@ function repairInstalledStates(options = {}) {
       } else {
         writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
       }
+
+      syncInstallStateToStore(desiredPlan.statePreview, {
+        onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
+      });
 
       return {
         adapter: record.adapter,

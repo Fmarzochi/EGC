@@ -31,6 +31,7 @@ const {
   createUserPromptSubmitRouterHookMergeOperation,
   createPreToolUseBashDispatcherHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
+  createPreToolUseGateGuardHookMergeOperation,
   resolveHookScriptDestination,
   resolveStopHookScriptDestination,
 } = require('../claude-settings-hooks');
@@ -78,6 +79,13 @@ function createSessionStateHookOperations(adapter, targetRoot) {
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'MultiEdit'),
+    // GateGuard fact-forcing gate: Bash already gets this via
+    // bash-hook-dispatcher.js above. Edit/Write/MultiEdit only had the
+    // protected-path validator until now, so register GateGuard on them
+    // too (in addition to, not instead of, the write validator).
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
+    createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
   ];
 }
 

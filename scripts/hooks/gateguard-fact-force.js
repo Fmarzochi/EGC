@@ -10,6 +10,8 @@
  *
  * Gates:
  *   - Edit/Write: list importers, affected API, verify data schemas, quote instruction
+ *   - apply_patch (Codex CLI's freeform file-edit tool): same gate as Edit,
+ *     applied to every file path parsed out of the patch text
  *   - Bash (destructive): list targets, rollback plan, quote instruction
  *   - Bash (routine): quote current instruction (once per session)
  *
@@ -458,6 +460,63 @@ function handleMultiEdit(rawInput, toolName, toolInput) {
 }
 
 /**
+ * Extract file paths touched by a Codex `apply_patch` freeform patch.
+ *
+ * Codex's apply_patch tool is a single freeform-text argument (a patch in
+ * `*** Begin Patch` / `*** Update File: <path>` / `*** End Patch` format),
+ * not a JSON object with a file_path field like Claude's Edit/Write. Parse
+ * the patch header lines to recover the path(s) it touches so the same
+ * fact-forcing gate can apply per file.
+ *
+ * @param {string} patchText
+ * @returns {string[]}
+ */
+function extractApplyPatchFilePaths(patchText) {
+  const text = String(patchText || '');
+  const pattern = /^\*\*\* (?:Update|Add|Delete) File: (.+)$/gm;
+  const paths = [];
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match[1]) {
+      paths.push(match[1].trim());
+    }
+  }
+  return paths;
+}
+
+/**
+ * Handle the Codex `apply_patch` tool gate (freeform patch text, may touch
+ * multiple files in one call, so this mirrors handleMultiEdit's loop).
+ *
+ * @param {string} rawInput
+ * @param {*} rawPatchInput
+ * @returns {*}
+ */
+function handleApplyPatch(rawInput, rawPatchInput) {
+  const patchText = typeof rawPatchInput === 'string' ? rawPatchInput : '';
+  const filePaths = extractApplyPatchFilePaths(patchText);
+  if (filePaths.length === 0) {
+    trace('governance:allowed:apply_patch_unparsed');
+    return rawInput;
+  }
+
+  for (const filePath of filePaths) {
+    if (isClaudeSettingsPath(filePath) || isChecked(filePath)) {
+      continue;
+    }
+    if (!markChecked(filePath)) {
+      trace('governance:allowed:state_error', { toolName: 'apply_patch', filePath });
+      return allowWithStateWarning();
+    }
+    trace('governance:denied:fact_force', { toolName: 'apply_patch', filePath });
+    return denyResult(editGateMsg(filePath));
+  }
+
+  trace('governance:allowed:apply_patch');
+  return rawInput;
+}
+
+/**
  * Handle the Bash tool gate.
  *
  * @param {string} rawInput
@@ -519,8 +578,11 @@ function run(rawInput) {
 
   const rawToolName = data.tool_name || '';
   const toolInput = data.tool_input || {};
-  // Normalize: case-insensitive matching via lookup map
-  const TOOL_MAP = { edit: 'Edit', write: 'Write', multiedit: 'MultiEdit', bash: 'Bash' };
+  // Normalize: case-insensitive matching via lookup map.
+  // apply_patch is Codex CLI's canonical tool name for file edits (its
+  // freeform patch tool); Edit/Write/MultiEdit are only matcher aliases on
+  // the Codex side, the payload's tool_name stays "apply_patch".
+  const TOOL_MAP = { edit: 'Edit', write: 'Write', multiedit: 'MultiEdit', bash: 'Bash', apply_patch: 'ApplyPatch' };
   const toolName = TOOL_MAP[rawToolName.toLowerCase()] || rawToolName;
 
   if (toolName === 'Edit' || toolName === 'Write') {
@@ -531,6 +593,10 @@ function run(rawInput) {
     return handleMultiEdit(rawInput, toolName, toolInput);
   }
 
+  if (toolName === 'ApplyPatch') {
+    return handleApplyPatch(rawInput, data.tool_input);
+  }
+
   if (toolName === 'Bash') {
     return handleBash(rawInput, toolName, toolInput);
   }
@@ -539,3 +605,46 @@ function run(rawInput) {
 }
 
 module.exports = { run };
+
+// --- Direct CLI entrypoint ---
+//
+// Claude Code invokes PreToolUse hook scripts directly (`node <script>.js`
+// with the tool-call JSON on stdin), unlike Gemini's run-with-flags.js or
+// bash-hook-dispatcher.js, which both require() and call run() in-process.
+// This block only executes when the file is run as a standalone process, so
+// it does not change behavior for either of those existing callers.
+if (require.main === module) {
+  const MAX_STDIN = 1024 * 1024;
+  let raw = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    if (raw.length < MAX_STDIN) {
+      raw += chunk.substring(0, MAX_STDIN - raw.length);
+    }
+  });
+  process.stdin.on('end', () => {
+    const output = run(raw);
+
+    if (typeof output === 'string' || Buffer.isBuffer(output)) {
+      process.stdout.write(String(output));
+      process.exit(0);
+    }
+
+    if (output && typeof output === 'object') {
+      if (typeof output.stderr === 'string' && output.stderr) {
+        process.stderr.write(output.stderr.endsWith('\n') ? output.stderr : `${output.stderr}\n`);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(output, 'stdout')) {
+        process.stdout.write(String(output.stdout ?? ''));
+      } else if (!Number.isInteger(output.exitCode) || output.exitCode === 0) {
+        process.stdout.write(raw);
+      }
+
+      process.exit(Number.isInteger(output.exitCode) ? output.exitCode : 0);
+    }
+
+    process.stdout.write(raw);
+    process.exit(0);
+  });
+}

@@ -404,7 +404,7 @@ function runTests() {
       assert.strictEqual(settings.model, 'opus');
 
       const preToolUseGroups = settings.hooks.PreToolUse;
-      assert.strictEqual(preToolUseGroups.length, 5, 'Reinstall must not duplicate PreToolUse hooks');
+      assert.strictEqual(preToolUseGroups.length, 8, 'Reinstall must not duplicate PreToolUse hooks');
       assert.strictEqual(preToolUseGroups[0].hooks[0].command, 'echo guard');
       assert.ok(
         preToolUseGroups[1].hooks[0].command.includes('bash-hook-dispatcher.js'),
@@ -417,6 +417,13 @@ function runTests() {
       assert.strictEqual(preToolUseGroups[2].matcher, 'Edit');
       assert.strictEqual(preToolUseGroups[3].matcher, 'Write');
       assert.strictEqual(preToolUseGroups[4].matcher, 'MultiEdit');
+      assert.ok(
+        preToolUseGroups[5].hooks[0].command.includes('gateguard-fact-force.js'),
+        'EGC GateGuard fact-forcing gate should be registered for Edit'
+      );
+      assert.strictEqual(preToolUseGroups[5].matcher, 'Edit');
+      assert.strictEqual(preToolUseGroups[6].matcher, 'Write');
+      assert.strictEqual(preToolUseGroups[7].matcher, 'MultiEdit');
 
       const sessionStartGroups = settings.hooks.SessionStart;
       assert.strictEqual(sessionStartGroups.length, 2, 'Reinstall must not duplicate the EGC hook');

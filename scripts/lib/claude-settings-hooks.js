@@ -9,8 +9,8 @@
 // the EGC hook (left behind when the install location or invocation form
 // changed) and is migrated in place instead of duplicated.
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -29,6 +29,8 @@ const WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-writ
 const WRITE_VALIDATOR_HOOK_MODULE_ID = 'claude-write-validator-hook';
 const ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-router.js';
 const ROUTER_HOOK_MODULE_ID = 'claude-prompt-router-hook';
+const GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/gateguard-fact-force.js';
+const GATEGUARD_HOOK_MODULE_ID = 'claude-gateguard-fact-force-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -543,9 +545,109 @@ function createPreToolUseWriteValidatorHookMergeOperation(targetRoot, matcher) {
   );
 }
 
+// GateGuard fact-forcing gate: registered as its own PreToolUse entry
+// (alongside, not instead of, the write validator above) so Edit/Write/
+// MultiEdit get the same investigation gate that Bash already gets via
+// bash-hook-dispatcher.js. See scripts/hooks/gateguard-fact-force.js.
+function resolveGateGuardHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
+}
+
+function hasGateGuardHook(settings, hookScriptPath, matcher) {
+  return hasHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function addGateGuardHook(settings, hookScriptPath, matcher) {
+  return addHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeGateGuardHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function applyGateGuardHookToFile(settingsPath, hookScriptPath, matcher) {
+  return applyHookEntryToFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, { matcher });
+}
+
+function removeGateGuardHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath);
+}
+
+function inspectGateGuardHookFile(settingsPath, hookScriptPath, matcher) {
+  return inspectHookEntryFile(settingsPath, PRE_TOOL_USE_EVENT, hookScriptPath, matcher);
+}
+
+function createPreToolUseGateGuardHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveGateGuardHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    GATEGUARD_HOOK_MODULE_ID,
+    GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    matcher
+  );
+}
+
+// gateguard-fact-force.js's only internal dependency (require('../lib/utils')
+// resolved relative to itself), so any target that wires the gate outside the
+// generic module-scaffold path needs both files copied together.
+const GATEGUARD_LIB_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
+
+/**
+ * Builds copy operations that place gateguard-fact-force.js (and its one
+ * dependency) under `<targetRoot>/scripts/hooks/` and `<targetRoot>/scripts/lib/`,
+ * unconditionally (independent of module selection). Used by install targets
+ * whose own root does not already receive the shared "hooks-runtime" module
+ * scaffold (Codex, Windsurf) or that want the gate guaranteed regardless of
+ * profile (Continue).
+ *
+ * @param {(moduleId: string, sourceRelativePath: string, destinationPath: string, options?: object) => object} createRemappedOperation
+ * @param {string} targetRoot
+ * @returns {object[]}
+ */
+function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot) {
+  return [
+    createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveGateGuardHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+      path.join(targetRoot, 'scripts', 'lib', 'utils.js'),
+      { strategy: 'preserve-relative-path' }
+    ),
+  ];
+}
+
+// Same merge operation shape as above, but for targets whose hooks.json
+// location cannot be derived from resolveSettingsPath(targetRoot) the way
+// Claude Code's can (e.g. Copilot's ~/.copilot/hooks/hooks.json, or
+// Antigravity's project/global split): callers resolve destinationPath
+// themselves and pass it in directly.
+function createGateGuardHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: GATEGUARD_HOOK_MODULE_ID,
+    sourceRelativePath: GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+  };
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_HOOK_MODULE_ID,
+  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -562,12 +664,14 @@ module.exports = {
   ROUTER_HOOK_MODULE_ID,
   ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   addBashDispatcherHook,
+  addGateGuardHook,
   addIntuitionHook,
   addRouterHook,
   addSessionStartHook,
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
+  applyGateGuardHookToFile,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
   applyRouterHookToFile,
@@ -576,19 +680,24 @@ module.exports = {
   applyWriteValidatorHookToFile,
   buildSessionStartCommand,
   buildStopCommand,
+  createGateGuardHookMergeOperationForDestination,
   createPreToolUseBashDispatcherHookMergeOperation,
+  createGateGuardScriptCopyOperations,
+  createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
   createUserPromptSubmitRouterHookMergeOperation,
   hasBashDispatcherHook,
+  hasGateGuardHook,
   hasIntuitionHook,
   hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
   hasWriteValidatorHook,
   inspectBashDispatcherHookFile,
+  inspectGateGuardHookFile,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
   inspectRouterHookFile,
@@ -598,6 +707,8 @@ module.exports = {
   readSettingsFile,
   removeBashDispatcherHook,
   removeBashDispatcherHookFromFile,
+  removeGateGuardHook,
+  removeGateGuardHookFromFile,
   removeHookEntryFromFile,
   removeIntuitionHook,
   removeIntuitionHookFromFile,
@@ -610,6 +721,7 @@ module.exports = {
   removeWriteValidatorHook,
   removeWriteValidatorHookFromFile,
   resolveBashDispatcherHookScriptDestination,
+  resolveGateGuardHookScriptDestination,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveRouterHookScriptDestination,

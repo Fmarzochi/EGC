@@ -41,50 +41,11 @@ const LANGUAGE_NAMES = {
   ca: "Català",
 };
 
-const LANGUAGE_WORD = {
-  pt: "Idioma",
-  es: "Idioma",
-  fr: "Langue",
-  de: "Sprache",
-  it: "Lingua",
-  nl: "Taal",
-  pl: "Język",
-  ru: "Язык",
-  uk: "Мова",
-  tr: "Dil",
-  ar: "اللغة",
-  hi: "भाषा",
-  zh: "语言",
-  ja: "言語",
-  ko: "언어",
-  vi: "Ngôn ngữ",
-  th: "ภาษา",
-  id: "Bahasa",
-  sv: "Språk",
-  da: "Sprog",
-  no: "Språk",
-  fi: "Kieli",
-  cs: "Jazyk",
-  sk: "Jazyk",
-  ro: "Limbă",
-  hu: "Nyelv",
-  bg: "Език",
-  hr: "Jezik",
-  el: "Γλώσσα",
-  he: "שפה",
-  fa: "زبان",
-  bn: "ভাষা",
-  ms: "Bahasa",
-  ca: "Idioma",
-};
-
 const ROOT         = path.join(__dirname, "..");
 const TRANSLATIONS = path.join(ROOT, "translations");
 const README_PATH  = path.join(ROOT, "README.md");
 const TOP_START    = "<!-- LANGUAGE-SELECTOR-START -->";
 const TOP_END      = "<!-- LANGUAGE-SELECTOR-END -->";
-const CENTER_START = "<!-- CENTERED-LANGUAGE-SELECTOR-START -->";
-const CENTER_END   = "<!-- CENTERED-LANGUAGE-SELECTOR-END -->";
 
 // Markers for blocks that should be identical across all translations
 // Format: [startMarker, endMarker]
@@ -110,32 +71,7 @@ function buildTopSelector(langs) {
     const name = LANGUAGE_NAMES[code] || code.toUpperCase();
     return `[${name}](translations/${code}/README.md)`;
   });
-  return `${TOP_START}\n**Language:** English | ${links.join(" | ")}\n${TOP_END}`;
-}
-
-function buildCenteredSelector(langs) {
-  const titleWords  = ["Language", ...langs.map((c) => LANGUAGE_WORD[c] || c.toUpperCase())];
-  const uniqueWords = [...new Set(titleWords)];
-  const title       = `**${uniqueWords.join(" / ")}**`;
-  const links       = [
-    `[**English**](README.md)`,
-    ...langs.map((code) => {
-      const name = LANGUAGE_NAMES[code] || code.toUpperCase();
-      return `[${name}](translations/${code}/README.md)`;
-    }),
-  ].join(" | ");
-
-  return [
-    CENTER_START,
-    '<div align="center">',
-    "",
-    title,
-    "",
-    links,
-    "",
-    "</div>",
-    CENTER_END,
-  ].join("\n");
+  return `${TOP_START}\n\u{1F310} **English** · ${links.join(" · ")}\n${TOP_END}`;
 }
 
 function replaceBlock(content, start, end, block) {
@@ -156,12 +92,7 @@ function updateReadme() {
   const readme = fs.readFileSync(README_PATH, "utf8");
   const langs  = getAvailableLanguages();
 
-  const updated = replaceBlock(
-    replaceBlock(readme, TOP_START, TOP_END, buildTopSelector(langs)),
-    CENTER_START,
-    CENTER_END,
-    buildCenteredSelector(langs)
-  );
+  const updated = replaceBlock(readme, TOP_START, TOP_END, buildTopSelector(langs));
 
   if (updated !== readme) {
     fs.writeFileSync(README_PATH, updated, "utf8");
@@ -209,7 +140,6 @@ function checkDrift() {
 
   // Extract key fingerprints from the English README
   const enToolCount  = (enContent.match(/^\| `\w/gm) || []).length;
-  const enHasBadges  = enContent.includes("[![npm version");
   const enHasSocket  = enContent.includes("socket.dev/npm/package");
   const enHasOpenRouter = enContent.includes("OpenRouter");
 
@@ -220,9 +150,6 @@ function checkDrift() {
 
     if (toolCount !== enToolCount) {
       warnings.push(`[${lang}] tool count mismatch: has ${toolCount}, EN has ${enToolCount}`);
-    }
-    if (enHasBadges && !content.includes("[![npm version")) {
-      warnings.push(`[${lang}] missing shields.io badges`);
     }
     if (enHasSocket && !content.includes("socket.dev/npm/package")) {
       warnings.push(`[${lang}] missing Socket.dev badge`);

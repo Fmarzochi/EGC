@@ -154,7 +154,7 @@ egc telemetry status
 
 ## Dashboard
 
-After install, EGC starts a local dashboard server at `http://localhost:7890`. It streams everything your AI does in real time: tool calls, file edits, shell commands, token usage, cost per session, and agent status -- across every IDE you have running.
+After install, EGC starts a local dashboard server at `http://localhost:7890`. It streams everything your AI does in real time: tool calls, file edits, shell commands, token usage, cost per session, and agent status, across every IDE you have running.
 
 The dashboard starts automatically when you run `egc init`. You can also control it manually:
 
@@ -175,6 +175,14 @@ egc dashboard status   # check if it is running
 | Memory state | Decisions, lessons, and patterns saved this session |
 
 Cost tracking requires the Claude provider. Other IDEs show token usage where available.
+
+---
+
+## Enforcement
+
+Validation does not depend on the AI choosing to cooperate. EGC installs harness hooks that run on every tool call: each shell command and file write is validated before it executes, and destructive commands, credential paths, and force-pushes are blocked even inside compound commands. Every prompt is also routed against the component catalog so the right skills and agents are injected into context. If the validator is ever missing, hooks fail open so you are never locked out of your own tool.
+
+With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY`), EGC also understands session intent semantically, in any language, with no predefined phrases: say you are done for the night and your state is saved before the AI even answers; greet it the next morning and your next steps are already in context. At session end a memory miner distills the session's decisions and lessons into your project state. Without a key these LLM features honestly do nothing, and the lifecycle hooks still guarantee your state is saved. The end-of-reply save reminder is throttled to once per project every 30 minutes (`EGC_STOP_SAVE_INTERVAL_MINUTES` tunes it; `0` prompts on every stop), so memory stays fresh without interrupting the work.
 
 ---
 
