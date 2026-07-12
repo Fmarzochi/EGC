@@ -56,11 +56,13 @@ Isso não é um cache da sua última conversa. O EGC lembra das decisões, dos b
 
 ## Instalação
 
-🪟 Windows &nbsp;&middot;&nbsp; 🍎 macOS &nbsp;&middot;&nbsp; 🐧 Linux, o mesmo comando em qualquer sistema:
+Mesmo comando de instalação no Windows, macOS e Linux:
 
 ```bash
 npm install -g @egchq/egc && egc install
 ```
+
+O Windows tem algumas ressalvas próprias (versão do PowerShell, Antigravity CLI, fim do free tier do Gemini CLI): veja as [notas do Windows](../../docs/installation.md#windows-notes) se algo inesperado acontecer.
 
 Ou execute sem instalar globalmente:
 
