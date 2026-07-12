@@ -17,13 +17,10 @@
 // successfully today), so the generic Claude merge helpers apply unchanged;
 // this module only supplies Antigravity's two file locations.
 
-const path = require('path');
+const path = require('node:path');
 
 const {
-  GATEGUARD_HOOK_MODULE_ID,
-  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-  HOOK_OPERATION_KIND,
-  PRE_TOOL_USE_EVENT,
+  createGateGuardHookMergeOperationForDestination,
   resolveGateGuardHookScriptDestination,
 } = require('./claude-settings-hooks');
 
@@ -35,23 +32,8 @@ function resolveAntigravityGlobalHooksFilePath(homeDir) {
   return path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
 }
 
-function buildGateGuardMergeOperation(destinationPath, hookScriptPath, matcher) {
-  return {
-    kind: HOOK_OPERATION_KIND,
-    moduleId: GATEGUARD_HOOK_MODULE_ID,
-    sourceRelativePath: GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-    destinationPath,
-    strategy: HOOK_OPERATION_KIND,
-    ownership: 'managed',
-    scaffoldOnly: false,
-    hookEvent: PRE_TOOL_USE_EVENT,
-    hookMatcher: matcher,
-    hookScriptPath,
-  };
-}
-
 function createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, matcher) {
-  return buildGateGuardMergeOperation(
+  return createGateGuardHookMergeOperationForDestination(
     resolveAntigravityProjectHooksFilePath(projectRoot),
     resolveGateGuardHookScriptDestination(targetRoot),
     matcher
@@ -59,7 +41,7 @@ function createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, match
 }
 
 function createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher) {
-  return buildGateGuardMergeOperation(
+  return createGateGuardHookMergeOperationForDestination(
     resolveAntigravityGlobalHooksFilePath(homeDir),
     resolveGateGuardHookScriptDestination(targetRoot),
     matcher

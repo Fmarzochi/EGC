@@ -16,13 +16,10 @@
 // via the normal module path flow; this file's hooks.json merge just points
 // its "command" at that already-installed script.
 
-const path = require('path');
+const path = require('node:path');
 
 const {
-  GATEGUARD_HOOK_MODULE_ID,
-  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-  HOOK_OPERATION_KIND,
-  PRE_TOOL_USE_EVENT,
+  createGateGuardHookMergeOperationForDestination,
   resolveGateGuardHookScriptDestination,
 } = require('./claude-settings-hooks');
 
@@ -31,19 +28,11 @@ function resolveCopilotHooksFilePath(homeDir) {
 }
 
 function createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, matcher) {
-  const hookScriptPath = resolveGateGuardHookScriptDestination(targetRoot);
-  return {
-    kind: HOOK_OPERATION_KIND,
-    moduleId: GATEGUARD_HOOK_MODULE_ID,
-    sourceRelativePath: GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-    destinationPath: resolveCopilotHooksFilePath(homeDir),
-    strategy: HOOK_OPERATION_KIND,
-    ownership: 'managed',
-    scaffoldOnly: false,
-    hookEvent: PRE_TOOL_USE_EVENT,
-    hookMatcher: matcher,
-    hookScriptPath,
-  };
+  return createGateGuardHookMergeOperationForDestination(
+    resolveCopilotHooksFilePath(homeDir),
+    resolveGateGuardHookScriptDestination(targetRoot),
+    matcher
+  );
 }
 
 module.exports = {
