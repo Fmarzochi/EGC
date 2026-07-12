@@ -50,7 +50,12 @@ class MistralProvider(OpenAIProvider):
         return self._models.copy()
 
     def validate_config(self) -> bool:
-        return bool(getattr(self.client, "api_key", None))
+        """Validates configuration state. 
+        
+        Returns True if client initialization has successfully bound an API token.
+        """
+        api_key = getattr(self.client, "api_key", None)
+        return isinstance(api_key, str) and len(api_key.strip()) > 0
 
     def get_default_model(self) -> str:
         return ModelResolver.resolve(None, provider="mistral")
