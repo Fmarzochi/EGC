@@ -100,7 +100,7 @@ jobs:
           cat /tmp/gate-result/result.json
 
       - name: Upload result artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa9 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: gate-result-${{ github.event.pull_request.number }}
           path: /tmp/gate-result/result.json
