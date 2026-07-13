@@ -4,9 +4,16 @@ on:
   pull_request:
     branches: [main]
 
+# pull_request (not pull_request_target): fork PR code runs the checkout
+# here, so the token stays unprivileged. GitHub silently caps write
+# scopes to read-only for fork-originated pull_request runs regardless
+# of this block -- confirmed in production: the old inline "Post
+# guidance comment" step here 403'd on every fork PR (e.g. #718) and
+# never actually posted. Commenting now happens in dco-comment.yml via
+# workflow_run, which runs with the base branch's own privileges.
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   dco:
@@ -41,37 +48,24 @@ jobs:
           fi
           echo "All commits have DCO sign-off. OK"
 
-      - name: Post guidance comment
-        if: always() && steps.dco.outputs.missing == '1'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - name: Write result artifact
+        if: always()
+        env:
+          MISSING: ${{ steps.dco.outputs.missing || '0' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p /tmp/dco-result
+          cat > /tmp/dco-result/result.json <<EOF
+          {
+            "pr": ${PR_NUMBER},
+            "missing": "${MISSING}"
+          }
+          EOF
+
+      - name: Upload result artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa9 # v4.6.2
         with:
-          script: |
-            const marker = '<!-- dco-guidance -->';
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            if (comments.some(c => c.body.includes(marker))) return;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `${marker}
-            **DCO sign-off missing**
-
-            One or more commits in this PR are missing a \`Signed-off-by\` line (Developer Certificate of Origin).
-
-            **How to fix:**
-            \`\`\`bash
-            # Single commit
-            git commit --amend -s
-            git push --force-with-lease
-
-            # Multiple commits -- replace N with the number of commits in your PR
-            git rebase --signoff HEAD~N
-            git push --force-with-lease
-            \`\`\`
-
-            > Note: This check is **informational only** -- a maintainer can still merge your PR without sign-off.`
-            });
+          name: dco-result-${{ github.event.pull_request.number }}
+          path: /tmp/dco-result/result.json
+          retention-days: 1

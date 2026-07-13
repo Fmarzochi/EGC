@@ -6,7 +6,13 @@ reviews:
   high_level_summary: true
   review_status: true
   auto_review:
-    enabled: true
+    # Disabled: review is triggered conditionally by
+    # .github/workflows/first-time-contributor-gate.yml instead of firing
+    # on every PR open. Established contributors get an immediate
+    # @coderabbitai review comment; first-time contributors only get one
+    # after basic tests + DCO pass, so review quota isn't spent on PRs
+    # with no real chance of merging.
+    enabled: false
     drafts: false
 
   path_filters:

@@ -1,0 +1,107 @@
+name: First-Time Contributor Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: contributor-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# pull_request (not pull_request_target): PR code from forks runs here,
+# so the GITHUB_TOKEN must stay unprivileged. GitHub silently downgrades
+# write scopes to read-only for fork PRs regardless of what this block
+# declares, which is exactly why commenting happens in a separate
+# workflow_run job (first-time-contributor-gate-comment.yml) instead of
+# here. Never add pull-requests: write to this file.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    name: Contributor gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Check contributor history
+        id: history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          MERGED=$(gh pr list --repo "${{ github.repository }}" --author "$AUTHOR" --state merged --json number --jq 'length')
+          echo "Prior merged PRs by $AUTHOR: $MERGED"
+          if [ "$MERGED" -gt 0 ]; then
+            echo "established=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "established=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.history.outputs.established == 'false'
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies
+        if: steps.history.outputs.established == 'false'
+        run: npm ci
+
+      # Known limitation: a PR can neuter this check by rewriting the
+      # "test" script in its own package.json. Accepted tradeoff -- worst
+      # case matches today's behavior (CodeRabbit runs on a bad PR), it
+      # does not regress security. The DCO check below cannot be gamed
+      # the same way since it inspects commit trailers, not PR-controlled
+      # scripts.
+      - name: Run fast test check
+        if: steps.history.outputs.established == 'false'
+        id: test
+        continue-on-error: true
+        run: npm test
+
+      - name: Check DCO sign-off
+        if: steps.history.outputs.established == 'false'
+        id: dco
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          while IFS= read -r sha; do
+            body=$(git log -1 --format="%B" "$sha")
+            if ! echo "$body" | grep -qE "^Signed-off-by: .+ <.+>$"; then
+              missing=1
+            fi
+          done < <(git log --format="%H" "${BASE_SHA}..${HEAD_SHA}")
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+
+      - name: Write result artifact
+        env:
+          ESTABLISHED: ${{ steps.history.outputs.established }}
+          TEST_OUTCOME: ${{ steps.test.outcome || 'skipped' }}
+          DCO_MISSING: ${{ steps.dco.outputs.missing || '0' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p /tmp/gate-result
+          cat > /tmp/gate-result/result.json <<EOF
+          {
+            "pr": ${PR_NUMBER},
+            "established": "${ESTABLISHED}",
+            "testOutcome": "${TEST_OUTCOME}",
+            "dcoMissing": "${DCO_MISSING}"
+          }
+          EOF
+          cat /tmp/gate-result/result.json
+
+      - name: Upload result artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa9 # v4.6.2
+        with:
+          name: gate-result-${{ github.event.pull_request.number }}
+          path: /tmp/gate-result/result.json
+          retention-days: 1

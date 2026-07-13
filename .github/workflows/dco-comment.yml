@@ -1,0 +1,89 @@
+name: DCO Comment
+
+on:
+  workflow_run:
+    workflows: ["DCO"]
+    types: [completed]
+
+# Runs from the base branch's workflow definition -- workflow_run never
+# checks out or executes PR code, so write is safe here.
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Post DCO guidance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download result artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          pattern: dco-result-*
+          path: /tmp/dco-result
+
+      - name: Post guidance comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const resultDir = fs.readdirSync('/tmp/dco-result')[0];
+            const result = JSON.parse(
+              fs.readFileSync(path.join('/tmp/dco-result', resultDir, 'result.json'), 'utf8')
+            );
+            if (result.missing !== '1') return;
+
+            // The PR number in the artifact is untrusted: it is produced by
+            // the unprivileged pull_request job, whose own workflow YAML is
+            // read from the fork and can be rewritten by the PR author to
+            // claim any number. Validate it against the trusted
+            // workflow_run payload before using it for anything privileged.
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: result.pr,
+            });
+            if (
+              pr.head.ref !== context.payload.workflow_run.head_branch ||
+              pr.head.repo.full_name !== context.payload.workflow_run.head_repository.full_name
+            ) {
+              core.setFailed(`Artifact PR #${result.pr} does not match the workflow_run that produced it -- refusing to comment.`);
+              return;
+            }
+            const issue_number = pr.number;
+
+            const marker = '<!-- dco-guidance -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+            });
+            if (comments.some(c => c.body.includes(marker))) return;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body: `${marker}
+            **DCO sign-off missing**
+
+            One or more commits in this PR are missing a \`Signed-off-by\` line (Developer Certificate of Origin).
+
+            **How to fix:**
+            \`\`\`bash
+            # Single commit
+            git commit --amend -s
+            git push --force-with-lease
+
+            # Multiple commits -- replace N with the number of commits in your PR
+            git rebase --signoff HEAD~N
+            git push --force-with-lease
+            \`\`\`
+
+            > Note: This check is **informational only** -- a maintainer can still merge your PR without sign-off.`
+            });

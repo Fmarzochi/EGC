@@ -1,0 +1,155 @@
+name: First-Time Contributor Gate Comment
+
+on:
+  workflow_run:
+    workflows: ["First-Time Contributor Gate"]
+    types: [completed]
+
+# Runs from the base branch's workflow definition, not the fork's --
+# workflow_run never checks out or executes PR code, so it is safe to
+# grant write here. This is the only place in the gate that comments.
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Post gate result
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 5
+    steps:
+      - name: Download result artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          pattern: gate-result-*
+          path: /tmp/gate-result
+
+      - name: Post review trigger or guidance
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const resultDir = fs.readdirSync('/tmp/gate-result')[0];
+            const result = JSON.parse(
+              fs.readFileSync(path.join('/tmp/gate-result', resultDir, 'result.json'), 'utf8')
+            );
+
+            // The PR number in the artifact is untrusted: it is produced by
+            // the unprivileged pull_request job, whose own workflow YAML is
+            // read from the fork and can be rewritten by the PR author to
+            // claim any number. Validate it against the trusted
+            // workflow_run payload (head branch + head repo full name,
+            // always populated correctly by GitHub regardless of fork)
+            // before using it for anything privileged.
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: result.pr,
+            });
+            if (
+              pr.head.ref !== context.payload.workflow_run.head_branch ||
+              pr.head.repo.full_name !== context.payload.workflow_run.head_repository.full_name
+            ) {
+              core.setFailed(`Artifact PR #${result.pr} does not match the workflow_run that produced it -- refusing to comment.`);
+              return;
+            }
+            const issue_number = pr.number;
+
+            const { data: search } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} type:pr author:${pr.user.login} is:merged`,
+            });
+            const established = search.total_count > 0;
+
+            // testOutcome/dcoMissing ARE read from the artifact and can be
+            // spoofed by the same fork -- but the only effect of spoofing
+            // them is triggering @coderabbitai review on the attacker's own
+            // PR, identical to today's baseline behavior before this gate
+            // existed. Accepted tradeoff, not a privilege escalation.
+            const testFailed = result.testOutcome !== 'success';
+            const dcoMissing = result.dcoMissing === '1';
+
+            if (established || (!testFailed && !dcoMissing)) {
+              // Dedup by head SHA: a new push (new SHA) should re-trigger
+              // review, but a workflow re-run for the same commit must not
+              // spam a second "@coderabbitai review" comment.
+              const triggerMarker = `<!-- coderabbitai-triggered:${pr.head.sha} -->`;
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+              });
+              if (comments.some(c => c.body.includes(triggerMarker))) return;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body: `${triggerMarker}\n@coderabbitai review`,
+              });
+              return;
+            }
+
+            const marker = '<!-- first-time-contributor-gate -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            const sections = [];
+            if (testFailed) {
+              sections.push([
+                '**Tests are failing.**',
+                'Run them locally before pushing again:',
+                '```bash',
+                'npm ci',
+                'npm test',
+                '```',
+                'Fix any failures shown in the "Run fast test check" step log on this PR.',
+              ].join('\n'));
+            }
+            if (dcoMissing) {
+              sections.push([
+                '**DCO sign-off missing.**',
+                '```bash',
+                'git commit --amend -s',
+                'git push --force-with-lease',
+                '```',
+                '(multiple commits: `git rebase --signoff HEAD~N && git push --force-with-lease`)',
+              ].join('\n'));
+            }
+
+            const body = [
+              marker,
+              '**Welcome! A couple of things to fix before this gets a full review.**',
+              '',
+              'EGC is a large project (hooks, Guardian, DCO, conventions) -- this is normal for a first PR, not a rejection.',
+              '',
+              sections.join('\n\n'),
+              '',
+              'Make sure your branch is on your own fork (not a branch on this repo directly) -- see [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the full guide.',
+              '',
+              'Push your fixes and this check re-runs automatically. Once it passes, CodeRabbit reviews the PR in full.',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
