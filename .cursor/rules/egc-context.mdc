@@ -5,13 +5,12 @@ alwaysApply: true
 
 ## EGC Project Memory
 
-**Context:** Sessao encerrada 2026-07-13. Hero banner (PR #726) e provedor Mistral nativo (PR #718) mergeados, Multica corrigido de vez (workspace EGC), 2 issues-isca novas abertas (#728 Vertex AI, #729 Cohere).
+**Context:** Sessao encerrada 2026-07-13. Hero banner (PR #726) e provedor Mistral nativo (PR #718) mergeados, 2 issues-isca novas abertas (#728 Vertex AI, #729 Cohere).
 
 **Active decisions:**
-- Multica: card canonico EGC-90 (Parth) atualizado de 'IN REVIEW' pra 'Hall of Fame' (4 PRs, PR #718 mergeada), status done. Card pai EGC-86 atualizado: secao Active zerada, tabela Hall of Fame com 16 contributors.
 - Issues-isca #728 (Vertex AI) e #729 (Cohere) criadas no lugar do pedido original ambiguo 'Google Gemini provider' -- Gemini direto ja e provider nativo desde o inicio, entao a issue foi reinterpretada como Vertex AI (caminho enterprise/ADC do Google, mesmo SDK google-genai, auth diferente)
 - Issue #716 (Mistral) confirmada fechada automaticamente pela PR #718 -- removida da lista de 'aguardando resposta'
 
 **Next session:**
 - Proxima sessao: conferir se #715 (Groq), #728 (Vertex AI) ou #729 (Cohere) receberam resposta de algum contribuidor
-- Backlog sem mudanca: EGC-109 (issue #725), EGC-110 (revisao do Vault, 523+ arquivos)
+- Backlog sem mudanca: issue #725, revisao do Vault (523+ arquivos)
