@@ -17,7 +17,7 @@ EGC supports 14 AI coding tools through 3 distinct integration mechanisms. This 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
 | 1 | **Claude Code** | 1 | `claude` | `~/.claude/skills/<name>/SKILL.md` | Skills installed flat; MCP + cognitive bootstrap via `~/.claude/CLAUDE.md` |
-| 2 | **Antigravity (AGY)** | 1 | `antigravity` | `~/.gemini/` (shared with Gemini CLI) | Reuses GEMINI.md from Gemini CLI |
+| 2 | **Antigravity (AGY)** | 1 | `antigravity` | `.agents/` (project-scoped, per repo) | Skills, agents, rules, and commands installed per-project; GateGuard hooks registered; no home-level target (Antigravity has no global rule discovery) |
 | 3 | **Gemini CLI** | 1 | `gemini` | `~/.gemini/` | Cognitive bootstrap into `GEMINI.md` |
 | 4 | **Cursor** | 1 | `cursor` | `~/.cursor/` | Rules injected into global cursor.rules |
 | 5 | **Codex CLI** | 1 | `codex` | `~/.agents/skills/<name>/SKILL.md` | Skills installed flat; `persistent_instructions` appended |
