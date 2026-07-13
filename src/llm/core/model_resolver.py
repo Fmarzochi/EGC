@@ -232,6 +232,21 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
+        # --- Mistral AI ---
+        "mistral-large-latest": {
+            "provider": "mistral",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+            ],
+            "fallback": None,
+            "context_window": 128000,
+            "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
         # --- DeepSeek via OpenRouter ---
         "deepseek/deepseek-r1": {
             "provider": "openrouter",
@@ -425,6 +440,7 @@ class ModelResolver:
         "openai": "gpt-4o",
         "ollama": "llama3.2",
         "openrouter": "openrouter/auto",
+        "mistral": "mistral-large-latest",
     }
 
     # Per-provider default model ID (single place provider defaults live).
@@ -434,6 +450,7 @@ class ModelResolver:
         "openai": "gpt-4o",
         "ollama": "llama3.2",
         "openrouter": "openrouter/auto",
+        "mistral": "mistral-large-latest",
     }
 
     _DEFAULT_PROVIDER = "gemini"
@@ -448,7 +465,8 @@ class ModelResolver:
             "gemini-" in v
             or "gemma" in v
             or "claude-" in v
-            or v.startswith(("gpt-", "o1", "o3", "o4"))
+            or "mistral-" in v
+            or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-"))
             or "/models/" in v          # Vertex AI fully-qualified path
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
@@ -466,6 +484,8 @@ class ModelResolver:
             return "claude"
         if v.startswith(("gpt-", "o1", "o3", "o4")):
             return "openai"
+        if "mistral" in v or v.startswith(("ministral-", "codestral-")):
+            return "mistral"
         if "gemini" in v or "gemma" in v:
             return "gemini"
         return cls._DEFAULT_PROVIDER
@@ -673,6 +693,7 @@ class ModelResolver:
             "claude-haiku-4-7": "Claude Haiku 4.7 - fast",
             "gpt-4o": "GPT-4o - most capable",
             "gpt-4o-mini": "GPT-4o-mini - fast & affordable",
+            "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
             "llama3.2": "Llama 3.2 - local general purpose",
             "openrouter/auto": "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
@@ -699,7 +720,7 @@ class ModelResolver:
 
         Returns provider / strategy / preferred-capability instead of a fixed
         model string, so the dashboard never shows ``Model: sonnet`` or
-        ``Model: gemini-2.0-flash`` as if it were pinned.
+        ``Model: gemini-2.0-flash``` as if it were pinned.
         """
         resolved = cls.resolve(model_hint, provider)
         prov = cls._provider_for(resolved)
@@ -707,6 +728,7 @@ class ModelResolver:
             "gemini": "Google Gemini",
             "claude": "Anthropic Claude",
             "openai": "OpenAI",
+            "mistral": "Mistral AI",
             "ollama": "Ollama (local)",
             "openrouter": "OpenRouter (broker)",
         }.get(prov, prov.title())
