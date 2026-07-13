@@ -10,6 +10,7 @@ from llm.providers.claude import ClaudeProvider
 from llm.providers.gemini import GeminiProvider
 from llm.providers.ollama import OllamaProvider
 from llm.providers.openai import OpenAIProvider
+from llm.providers.deepseek import DeepSeekProvider
 from llm.providers.openrouter import OpenRouterProvider
 
 _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
@@ -18,6 +19,7 @@ _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
     ProviderType.OLLAMA: OllamaProvider,
     ProviderType.GEMINI: GeminiProvider,
     ProviderType.OPENROUTER: OpenRouterProvider,
+    ProviderType.DEEPSEEK: DeepSeekProvider,
 }
 
 
