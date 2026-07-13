@@ -1,16 +1,20 @@
 """Tests for MistralProvider content extraction and model resolution integration."""
 
+from __future__ import annotations
+
 import sys
 import types
-import unittest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from llm.core.interface import LLMError
 from llm.core.model_resolver import ModelResolver, ModelCapability
 from llm.core.types import ProviderType
+from llm.providers.mistral import MistralProvider
 
 
-def _make_mistral_stub():
+def _make_mistral_stub() -> types.ModuleType:
     stub = types.ModuleType("mistralai")
     stub.Mistral = MagicMock
     stub.MistralClient = MagicMock
@@ -25,124 +29,130 @@ def _simple_input():
     )
 
 
-class TestMistralProviderIntegration(unittest.TestCase):
-    def setUp(self):
-        self._patch = patch.dict(sys.modules, {"mistralai": _make_mistral_stub()})
-        self._patch.start()
-        from llm.providers.mistral import MistralProvider
-        
-        self.provider = MistralProvider.__new__(MistralProvider)
-        
-        # Build out standard chat.completions.create structure hierarchy
-        self.provider.client = MagicMock()
-        self.mock_create = MagicMock()
-        self.provider.client.chat.completions.create = self.mock_create
-        
-        self.provider._models = []
-
-    def tearDown(self):
-        self._patch.stop()
-
-    def _make_response(self, choices, stop_reason="stop"):
-        response = MagicMock()
-        response.choices = choices
-        response.model = "mistral-large-latest"
-        response.usage.prompt_tokens = 10
-        response.usage.completion_tokens = 5
-        return response
-
-    def _text_choice(self, text, index=0):
-        choice = MagicMock()
-        choice.index = index
-        choice.message.role = "assistant"
-        choice.message.content = text
-        choice.message.tool_calls = None
-        choice.finish_reason = "stop"
-        return choice
-
-    def _tool_choice(self, name="some_tool", tool_id="call_1", arguments=None, index=0):
-        choice = MagicMock()
-        choice.index = index
-        choice.message.role = "assistant"
-        choice.message.content = ""
-        choice.finish_reason = "tool_calls"
-        
-        # Build out a specific tool call instance structure
-        tool_call = MagicMock()
-        tool_call.id = tool_id
-        tool_call.type = "function"
-        
-        # Explicitly configure function properties so they return strings instead of fresh mocks
-        func_mock = MagicMock()
-        func_mock.name = name
-        func_mock.arguments = arguments or '{"key": "value"}'
-        
-        tool_call.function = func_mock
-        choice.message.tool_calls = [tool_call]
-        return choice
-
-    # --- Content Extraction Tests ---
-
-    def test_text_response_returns_content(self):
-        self.mock_create.return_value = self._make_response(
-            [self._text_choice("hello mistral")]
-        )
-        result = self.provider.generate(_simple_input())
-        self.assertEqual(result.content, "hello mistral")
-
-    def test_tool_use_extracts_calls_properly(self):
-        self.mock_create.return_value = self._make_response(
-            [self._tool_choice("calculator", "call_99", '{"expr": "2+2"}')],
-            stop_reason="tool_calls"
-        )
-        result = self.provider.generate(_simple_input())
-        self.assertIsNotNone(result.tool_calls)
-        self.assertEqual(result.tool_calls[0].name, "calculator")
-        self.assertIn("2+2", str(result.tool_calls[0].arguments))
-
-    def test_empty_choices_raise_llm_error(self):
-        self.mock_create.return_value = self._make_response([])
-        with self.assertRaises(LLMError) as context:
-            self.provider.generate(_simple_input())
-        
-        self.assertEqual(context.exception.provider, ProviderType.MISTRAL)
-        self.assertIn("empty choices", str(context.exception))
-
-    # --- Configuration Tests ---
-
-    def test_validate_config_true(self):
-        self.provider.client.api_key = "valid-key"
-        self.assertTrue(self.provider.validate_config())
-
-    def test_validate_config_false(self):
-        self.provider.client.api_key = None
-        self.assertFalse(self.provider.validate_config())
-
-    # --- Core Resolver Capability Verification Tests ---
-
-    def test_resolver_mistral_metadata(self):
-        info = ModelResolver.get_model_info("mistral-large-latest")
-        self.assertEqual(info["provider"], "mistral")
-        self.assertEqual(info["context_window"], 128000)
-        self.assertEqual(info["max_tokens"], 8192)
-        self.assertTrue(info["supports_vision"])
-        self.assertTrue(info["supports_tools"])
-        self.assertIn(ModelCapability.REASONING, info["capabilities"])
-
-    def test_resolver_mistral_aliases(self):
-        self.assertEqual(ModelResolver.resolve("mistral"), "mistral-large-latest")
-        self.assertEqual(ModelResolver.resolve("mistral-large-latest"), "mistral-large-latest")
-        self.assertEqual(ModelResolver.default_model(provider="mistral"), "mistral-large-latest")
-
-    def test_resolver_menu_and_strategy(self):
-        choices = ModelResolver.menu_choices(provider="mistral")
-        self.assertEqual(len(choices), 1)
-        self.assertEqual(choices[0][0], "mistral-large-latest")
-        
-        desc = ModelResolver.describe_strategy(model_hint="mistral")
-        self.assertEqual(desc["provider"], "Mistral AI")
-        self.assertEqual(desc["provider_id"], "mistral")
+def _make_response(choices, stop_reason="stop"):
+    response = MagicMock()
+    response.choices = choices
+    response.model = "mistral-large-latest"
+    response.usage.prompt_tokens = 10
+    response.usage.completion_tokens = 5
+    return response
 
 
-if __name__ == "__main__":
-    unittest.main()
+def _text_choice(text, index=0):
+    choice = MagicMock()
+    choice.index = index
+    choice.message.role = "assistant"
+    choice.message.content = text
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    return choice
+
+
+def _tool_choice(name="some_tool", tool_id="call_1", arguments=None, index=0):
+    choice = MagicMock()
+    choice.index = index
+    choice.message.role = "assistant"
+    choice.message.content = ""
+    choice.finish_reason = "tool_calls"
+    
+    tool_call = MagicMock()
+    tool_call.id = tool_id
+    tool_call.type = "function"
+    
+    func_mock = MagicMock()
+    func_mock.name = name
+    func_mock.arguments = arguments or '{"key": "value"}'
+    
+    tool_call.function = func_mock
+    choice.message.tool_calls = [tool_call]
+    return choice
+
+
+@pytest.fixture
+def provider():
+    """Fixture to handle environment module patching and build dynamic provider stubs."""
+    with patch.dict(sys.modules, {"mistralai": _make_mistral_stub()}):
+        # Instantiate without running full initialization blockers
+        p = MistralProvider.__new__(MistralProvider)
+        p.client = MagicMock()
+        p.mock_create = MagicMock()
+        p.client.chat.completions.create = p.mock_create
+        p._models = []
+        yield p
+
+
+# --- Content Extraction Tests ---
+
+def test_text_response_returns_content(provider):
+    provider.mock_create.return_value = _make_response(
+        [_text_choice("hello mistral")]
+    )
+    result = provider.generate(_simple_input())
+    assert result.content == "hello mistral"
+
+
+def test_tool_use_extracts_calls_properly(provider):
+    provider.mock_create.return_value = _make_response(
+        [_tool_choice("calculator", "call_99", '{"expr": "2+2"}')],
+        stop_reason="tool_calls"
+    )
+    result = provider.generate(_simple_input())
+    assert result.tool_calls is not None
+    assert result.tool_calls[0].name == "calculator"
+    assert "2+2" in str(result.tool_calls[0].arguments)
+
+
+def test_empty_choices_raise_llm_error(provider):
+    provider.mock_create.return_value = _make_response([])
+    with pytest.raises(LLMError) as exc_info:
+        provider.generate(_simple_input())
+    
+    assert exc_info.value.provider == ProviderType.MISTRAL
+    assert "empty choices" in str(exc_info.value).lower()
+
+
+# --- Configuration Tests ---
+
+def test_validate_config_true(provider):
+    provider.client.api_key = "valid-key"
+    assert provider.validate_config() is True
+
+
+def test_validate_config_false(provider):
+    # Test explicitly against missing, blank or non-string inputs
+    provider.client.api_key = None
+    assert provider.validate_config() is False
+
+    provider.client.api_key = ""
+    assert provider.validate_config() is False
+
+    provider.client.api_key = "   "
+    assert provider.validate_config() is False
+
+
+# --- Core Resolver Capability Verification Tests ---
+
+def test_resolver_mistral_metadata():
+    info = ModelResolver.get_model_info("mistral-large-latest")
+    assert info["provider"] == "mistral"
+    assert info["context_window"] == 128000
+    assert info["max_tokens"] == 8192
+    assert info["supports_vision"] is True
+    assert info["supports_tools"] is True
+    assert ModelCapability.REASONING in info["capabilities"]
+
+
+def test_resolver_mistral_aliases():
+    assert ModelResolver.resolve("mistral") == "mistral-large-latest"
+    assert ModelResolver.resolve("mistral-large-latest") == "mistral-large-latest"
+    assert ModelResolver.default_model(provider="mistral") == "mistral-large-latest"
+
+
+def test_resolver_menu_and_strategy():
+    choices = ModelResolver.menu_choices(provider="mistral")
+    assert len(choices) == 1
+    assert choices[0][0] == "mistral-large-latest"
+    
+    desc = ModelResolver.describe_strategy(model_hint="mistral")
+    assert desc["provider"] == "Mistral AI"
+    assert desc["provider_id"] == "mistral"

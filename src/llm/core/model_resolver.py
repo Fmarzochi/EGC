@@ -466,7 +466,7 @@ class ModelResolver:
             or "gemma" in v
             or "claude-" in v
             or "mistral-" in v
-            or v.startswith(("gpt-", "o1", "o3", "o4"))
+            or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-"))
             or "/models/" in v          # Vertex AI fully-qualified path
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
@@ -484,7 +484,7 @@ class ModelResolver:
             return "claude"
         if v.startswith(("gpt-", "o1", "o3", "o4")):
             return "openai"
-        if "mistral" in v:
+        if "mistral" in v or v.startswith(("ministral-", "codestral-")):
             return "mistral"
         if "gemini" in v or "gemma" in v:
             return "gemini"

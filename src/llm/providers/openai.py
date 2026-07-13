@@ -84,8 +84,8 @@ class OpenAIProvider(LLMProvider):
             response = self.client.chat.completions.create(**params)
             if not response.choices:
                 raise LLMError(
-                    "OpenAI returned an empty choices list",
-                    provider=ProviderType.OPENAI,
+                    "The provider returned an empty choices list",
+                    provider=self.provider_type,
                 )
             choice = response.choices[0]
 
@@ -119,11 +119,11 @@ class OpenAIProvider(LLMProvider):
         except Exception as e:
             msg = str(e)
             if "401" in msg or "authentication" in msg.lower():
-                raise AuthenticationError(msg, provider=ProviderType.OPENAI) from e
+                raise AuthenticationError(msg, provider=self.provider_type) from e
             if "429" in msg or "rate_limit" in msg.lower():
-                raise RateLimitError(msg, provider=ProviderType.OPENAI) from e
+                raise RateLimitError(msg, provider=self.provider_type) from e
             if "context" in msg.lower() and "length" in msg.lower():
-                raise ContextLengthError(msg, provider=ProviderType.OPENAI) from e
+                raise ContextLengthError(msg, provider=self.provider_type) from e
             raise
 
     def list_models(self) -> list[ModelInfo]:
