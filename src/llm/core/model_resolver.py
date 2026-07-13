@@ -445,12 +445,13 @@ class ModelResolver:
 
     # Per-provider default model ID (single place provider defaults live).
     _PROVIDER_DEFAULTS: Dict[str, str] = {
-        "gemini": "gemini-2.5-pro",
-        "claude": "claude-sonnet-4-7",
-        "openai": "gpt-4o",
-        "ollama": "llama3.2",
-        "openrouter": "openrouter/auto",
-        "mistral": "mistral-large-latest",
+    "gemini": "gemini-2.5-pro",
+    "claude": "claude-sonnet-4-7",
+    "openai": "gpt-4o",
+    "ollama": "llama3.2",
+    "openrouter": "openrouter/auto",
+    "mistral": "mistral-large-latest",
+    "deepseek": "deepseek-chat",
     }
 
     _DEFAULT_PROVIDER = "gemini"
@@ -466,7 +467,7 @@ class ModelResolver:
             or "gemma" in v
             or "claude-" in v
             or "mistral-" in v
-            or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-"))
+            or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-", "deepseek-"))
             or "/models/" in v          # Vertex AI fully-qualified path
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
@@ -488,6 +489,8 @@ class ModelResolver:
             return "mistral"
         if "gemini" in v or "gemma" in v:
             return "gemini"
+        if v.startswith("deepseek-"):
+            return "deepseek"
         return cls._DEFAULT_PROVIDER
 
     # ------------------------------------------------------------------ #

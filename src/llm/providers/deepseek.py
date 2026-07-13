@@ -17,13 +17,17 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     OpenAI = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMProvider
+from llm.core.interface import AuthenticationError, LLMError, LLMProvider
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 _DEFAULT_MODEL = "deepseek-chat"
+
+# deepseek-reasoner (R1) only accepts temperature at or near 1.0.
+# Passing any other value causes the API to reject the request.
+_REASONER_TEMPERATURE = 1.0
 
 
 class DeepSeekProvider(OpenAIProvider):
@@ -60,31 +64,38 @@ class DeepSeekProvider(OpenAIProvider):
 
     def generate(self, llm_input: "LLMInput") -> "LLMOutput":  # type: ignore[override]
         from llm.core.types import LLMInput, LLMOutput
-        # deepseek-reasoner does not support tool calls — strip them to avoid
-        # sending an unsupported request to the API.
         model = llm_input.model or self.get_default_model()
-        if model == "deepseek-reasoner" and llm_input.tools:
-            llm_input = LLMInput(
-                messages=llm_input.messages,
-                session_id=llm_input.session_id,
-                model=llm_input.model,
-                temperature=llm_input.temperature,
-                max_tokens=llm_input.max_tokens,
-                tools=None,
-                stream=llm_input.stream,
-                metadata=llm_input.metadata,
-            )
+        if model == "deepseek-reasoner":
+            # deepseek-reasoner does not support tool calls or custom
+            # temperature values — normalize both to avoid API rejections.
+            if llm_input.tools or llm_input.temperature != _REASONER_TEMPERATURE:
+                llm_input = LLMInput(
+                    messages=llm_input.messages,
+                    session_id=llm_input.session_id,
+                    model=llm_input.model,
+                    temperature=_REASONER_TEMPERATURE,  # fix #1: force to 1.0
+                    max_tokens=llm_input.max_tokens,
+                    tools=None,
+                    stream=llm_input.stream,
+                    metadata=llm_input.metadata,
+                )
         try:
             return super().generate(llm_input)
+        except LLMError as exc:
+            # Re-tag LLMErrors so telemetry sees ProviderType.DEEPSEEK.
+            raise LLMError(
+                str(exc),
+                provider=ProviderType.DEEPSEEK,
+            ) from exc
         except Exception as exc:
-            # Re-tag any LLMError so telemetry sees ProviderType.DEEPSEEK.
-            from llm.core.interface import LLMError
-            if isinstance(exc, LLMError):
-                raise LLMError(
-                    str(exc),
-                    provider=ProviderType.DEEPSEEK,
-                ) from exc
-            raise
+            # fix #2: native OpenAI SDK exceptions (RateLimitError,
+            # APIConnectionError, AuthenticationError, etc.) propagate here
+            # unwrapped when OpenAIProvider.generate() hits the bare `raise`.
+            # Wrap them so telemetry always attributes to DEEPSEEK, never OPENAI.
+            raise LLMError(
+                str(exc),
+                provider=ProviderType.DEEPSEEK,
+            ) from exc
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()
@@ -94,9 +105,10 @@ class DeepSeekProvider(OpenAIProvider):
 
     def get_default_model(self) -> str:
         resolved = ModelResolver.resolve(None, provider="deepseek")
-        # ModelResolver returns the registry default (may be Gemini) when
-        # "deepseek" has no registered default; guard against cross-provider bleed.
-        if resolved and resolved.startswith("deepseek"):
+        # fix #3: use _provider_for() instead of a fragile string prefix check.
+        # Guards against ModelResolver returning a cross-provider default
+        # (e.g. gemini-2.5-pro) when no deepseek env override is set.
+        if resolved and ModelResolver._provider_for(resolved) == "deepseek":
             return resolved
         return _DEFAULT_MODEL
 

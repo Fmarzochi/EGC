@@ -159,3 +159,114 @@ def test_get_default_model_returns_deepseek_chat_when_resolver_bleeds(monkeypatc
         mock_openai.return_value = MagicMock()
         p = DeepSeekProvider()
     assert p.get_default_model() == "deepseek-chat"
+
+# ── Tests added for issue #725 ────────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_reasoner_forces_temperature_to_one(provider: DeepSeekProvider) -> None:
+    """fix #1: deepseek-reasoner must always receive temperature=1.0."""
+    from llm.core.types import LLMInput, Message, Role
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = "answer"
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.model = "deepseek-reasoner"
+    usage = MagicMock()
+    usage.prompt_tokens = 10
+    usage.completion_tokens = 5
+    usage.total_tokens = 15
+    response.usage = usage
+    provider.client.chat.completions.create.return_value = response
+
+    llm_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model="deepseek-reasoner",
+        temperature=0.0,  # non-default — would be rejected by the API
+    )
+    provider.generate(llm_input)
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert kwargs["temperature"] == 1.0
+
+
+@pytest.mark.unit
+def test_reasoner_leaves_temperature_unchanged_when_already_one(provider: DeepSeekProvider) -> None:
+    """fix #1: no unnecessary LLMInput rebuild when temperature is already 1.0."""
+    from llm.core.types import LLMInput, Message, Role
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = "answer"
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.model = "deepseek-reasoner"
+    usage = MagicMock()
+    usage.prompt_tokens = 10
+    usage.completion_tokens = 5
+    usage.total_tokens = 15
+    response.usage = usage
+    provider.client.chat.completions.create.return_value = response
+
+    llm_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model="deepseek-reasoner",
+        temperature=1.0,
+    )
+    provider.generate(llm_input)
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert kwargs["temperature"] == 1.0
+
+
+@pytest.mark.unit
+def test_native_sdk_exception_is_retagged_as_deepseek(provider: DeepSeekProvider) -> None:
+    """fix #2: raw SDK exceptions that bypass OpenAIProvider wrapping must still
+    surface as LLMError with provider=DEEPSEEK, not as bare SDK errors."""
+    provider.client.chat.completions.create.side_effect = RuntimeError("connection reset")
+    with pytest.raises(LLMError) as exc:
+        provider.generate(_simple_input())
+    assert exc.value.provider == ProviderType.DEEPSEEK
+
+
+@pytest.mark.unit
+def test_provider_for_deepseek_model_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fix #3: ModelResolver._provider_for must return 'deepseek' for both
+    current and hypothetical future DeepSeek native model names."""
+    from llm.core.model_resolver import ModelResolver
+    assert ModelResolver._provider_for("deepseek-chat") == "deepseek"
+    assert ModelResolver._provider_for("deepseek-reasoner") == "deepseek"
+    # Hypothetical future name that doesn't start with "deepseek" won't be
+    # caught by this heuristic, but current names must be correct.
+    assert ModelResolver._provider_for("gemini-2.5-pro") != "deepseek"
+
+
+@pytest.mark.unit
+def test_model_resolver_default_for_deepseek_provider() -> None:
+    """fix #3: ModelResolver.resolve(None, provider='deepseek') must return a
+    deepseek model, not bleed into gemini or another provider's default."""
+    from llm.core.model_resolver import ModelResolver
+    resolved = ModelResolver.resolve(None, provider="deepseek")
+    assert ModelResolver._provider_for(resolved) == "deepseek"
+
+# ── Tests added to address cubic-dev-ai P2 review comments ───────────────────
+
+@pytest.mark.unit
+def test_resolve_deepseek_reasoner_is_not_replaced_by_default() -> None:
+    """P2 fix: deepseek-reasoner passed as a hint must resolve to itself,
+    not silently collapse to deepseek-chat via _PROVIDER_DEFAULTS."""
+    from llm.core.model_resolver import ModelResolver
+    resolved = ModelResolver.resolve("deepseek-reasoner", provider="deepseek")
+    assert resolved == "deepseek-reasoner"
+
+
+@pytest.mark.unit
+def test_bare_deepseek_alias_does_not_claim_deepseek_provider() -> None:
+    """P2 fix: the bare token 'deepseek' is an alias, not a model ID.
+    _provider_for must not return 'deepseek' for it, so LLM_MODEL=deepseek
+    does not bypass the alias resolution path."""
+    from llm.core.model_resolver import ModelResolver
+    # bare alias token — must NOT be classified as a native deepseek model
+    assert ModelResolver._provider_for("deepseek") != "deepseek"
+    # real model IDs — must be classified correctly
+    assert ModelResolver._provider_for("deepseek-chat") == "deepseek"
+    assert ModelResolver._provider_for("deepseek-reasoner") == "deepseek"
