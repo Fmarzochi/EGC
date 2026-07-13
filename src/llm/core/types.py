@@ -21,6 +21,7 @@ class ProviderType(str, Enum):
     OLLAMA = "ollama"
     GEMINI = "gemini"
     OPENROUTER = "openrouter"
+    DEEPSEEK = "deepseek"
 
 
 @dataclass(frozen=True)
