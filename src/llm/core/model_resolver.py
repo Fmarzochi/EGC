@@ -237,15 +237,40 @@ class ModelResolver:
             "provider": "mistral",
             "capabilities": [
                 ModelCapability.REASONING,
-                ModelCapability.MULTIMODAL,
                 ModelCapability.TOOL_CALLING,
                 ModelCapability.CODE,
             ],
             "fallback": None,
             "context_window": 128000,
             "max_tokens": 8192,
-            "supports_vision": True,
+            "supports_vision": False,   # Large is text-only; Pixtral is the vision model
             "supports_tools": True,
+        },
+        # --- DeepSeek native (api.deepseek.com) ---
+        "deepseek-chat": {
+            "provider": "deepseek",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+            ],
+            "fallback": None,
+            "context_window": 64000,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        "deepseek-reasoner": {
+            "provider": "deepseek",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.CODE,
+            ],
+            "fallback": "deepseek-chat",
+            "context_window": 64000,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": False,   # R1 does not support tool calls
         },
         # --- DeepSeek via OpenRouter ---
         "deepseek/deepseek-r1": {
@@ -445,13 +470,13 @@ class ModelResolver:
 
     # Per-provider default model ID (single place provider defaults live).
     _PROVIDER_DEFAULTS: Dict[str, str] = {
-    "gemini": "gemini-2.5-pro",
-    "claude": "claude-sonnet-4-7",
-    "openai": "gpt-4o",
-    "ollama": "llama3.2",
-    "openrouter": "openrouter/auto",
-    "mistral": "mistral-large-latest",
-    "deepseek": "deepseek-chat",
+        "gemini": "gemini-2.5-pro",
+        "claude": "claude-sonnet-4-7",
+        "openai": "gpt-4o",
+        "ollama": "llama3.2",
+        "openrouter": "openrouter/auto",
+        "mistral": "mistral-large-latest",
+        "deepseek": "deepseek-chat",
     }
 
     _DEFAULT_PROVIDER = "gemini"
@@ -467,7 +492,8 @@ class ModelResolver:
             or "gemma" in v
             or "claude-" in v
             or "mistral-" in v
-            or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-", "deepseek-"))
+            or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-",
+                              "deepseek-"))  # native DeepSeek IDs
             or "/models/" in v          # Vertex AI fully-qualified path
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
@@ -489,6 +515,9 @@ class ModelResolver:
             return "mistral"
         if "gemini" in v or "gemma" in v:
             return "gemini"
+        # Native DeepSeek model IDs: deepseek-chat, deepseek-reasoner, etc.
+        # The bare alias token "deepseek" is excluded — it has no "-" suffix
+        # and is resolved via _ALIASES before _provider_for is ever called.
         if v.startswith("deepseek-"):
             return "deepseek"
         return cls._DEFAULT_PROVIDER

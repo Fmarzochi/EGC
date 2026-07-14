@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,13 +10,6 @@ from llm.core.interface import LLMError
 from llm.core.model_resolver import ModelResolver, ModelCapability
 from llm.core.types import ProviderType
 from llm.providers.mistral import MistralProvider
-
-
-def _make_mistral_stub() -> types.ModuleType:
-    stub = types.ModuleType("mistralai")
-    stub.Mistral = MagicMock
-    stub.MistralClient = MagicMock
-    return stub
 
 
 def _simple_input():
@@ -70,15 +61,13 @@ def _tool_choice(name="some_tool", tool_id="call_1", arguments=None, index=0):
 
 @pytest.fixture
 def provider():
-    """Fixture to handle environment module patching and build dynamic provider stubs."""
-    with patch.dict(sys.modules, {"mistralai": _make_mistral_stub()}):
-        # Instantiate without running full initialization blockers
-        p = MistralProvider.__new__(MistralProvider)
-        p.client = MagicMock()
-        p.mock_create = MagicMock()
-        p.client.chat.completions.create = p.mock_create
-        p._models = []
-        yield p
+    """Build a MistralProvider with a mocked OpenAI client — no real SDK calls."""
+    p = MistralProvider.__new__(MistralProvider)
+    p.client = MagicMock()
+    p.mock_create = MagicMock()
+    p.client.chat.completions.create = p.mock_create
+    p._models = []
+    return p
 
 
 # --- Content Extraction Tests ---
@@ -137,9 +126,10 @@ def test_resolver_mistral_metadata():
     assert info["provider"] == "mistral"
     assert info["context_window"] == 128000
     assert info["max_tokens"] == 8192
-    assert info["supports_vision"] is True
+    assert info["supports_vision"] is False   # Large is text-only; Pixtral is the vision model
     assert info["supports_tools"] is True
     assert ModelCapability.REASONING in info["capabilities"]
+    assert ModelCapability.MULTIMODAL not in info["capabilities"]
 
 
 def test_resolver_mistral_aliases():

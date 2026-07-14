@@ -41,7 +41,7 @@ class MistralProvider(OpenAIProvider):
                 name="mistral-large-latest",
                 provider=ProviderType.MISTRAL,
                 supports_tools=True,
-                supports_vision=True,
+                supports_vision=False,   # Large is text-only; Pixtral is the vision model
                 max_tokens=8192,
                 context_window=128000,
             ),
