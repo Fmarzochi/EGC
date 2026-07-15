@@ -54,11 +54,12 @@ class GroqProvider(OpenAIProvider):
         try:
             return super().generate(llm_input)
         except LLMError as exc:
-            # Re-tag LLMErrors so telemetry sees ProviderType.GROQ.
-            raise LLMError(
-                str(exc),
-                provider=ProviderType.GROQ,
-            ) from exc
+            # Re-tag in place so telemetry attributes to GROQ, while
+            # preserving the original exception subclass (AuthenticationError,
+            # RateLimitError, ContextLengthError, ...) — constructing a new
+            # plain LLMError here would discard that subclass information.
+            exc.provider = ProviderType.GROQ
+            raise
         except Exception as exc:
             # Native OpenAI SDK exceptions (RateLimitError, APIConnectionError,
             # AuthenticationError, etc.) propagate here unwrapped when

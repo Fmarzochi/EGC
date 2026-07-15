@@ -51,11 +51,12 @@ class MistralProvider(OpenAIProvider):
         try:
             return super().generate(llm_input)
         except LLMError as exc:
-            # Re-tag LLMErrors so telemetry sees ProviderType.MISTRAL.
-            raise LLMError(
-                str(exc),
-                provider=ProviderType.MISTRAL,
-            ) from exc
+            # Re-tag in place so telemetry attributes to MISTRAL, while
+            # preserving the original exception subclass (AuthenticationError,
+            # RateLimitError, ContextLengthError, ...) — constructing a new
+            # plain LLMError here would discard that subclass information.
+            exc.provider = ProviderType.MISTRAL
+            raise
         except Exception as exc:
             # Native OpenAI SDK exceptions (RateLimitError, APIConnectionError,
             # AuthenticationError, etc.) propagate here unwrapped when

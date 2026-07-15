@@ -144,6 +144,20 @@ def test_native_sdk_exception_is_retagged_as_groq(provider: GroqProvider) -> Non
 
 
 @pytest.mark.unit
+def test_retagging_preserves_exception_subclass(provider: GroqProvider) -> None:
+    """Regression test for audit EGC-128 F4: re-tagging an already-typed
+    LLMError (AuthenticationError, RateLimitError, ...) by constructing a
+    new plain LLMError(str(exc), provider=...) discards the subclass. The
+    fix mutates .provider on the original exception and re-raises it, so
+    the subclass — and anything a caller might match on via
+    except AuthenticationError — survives re-tagging."""
+    provider.client.chat.completions.create.side_effect = Exception("401 Unauthorized")
+    with pytest.raises(AuthenticationError) as exc:
+        provider.generate(_simple_input())
+    assert exc.value.provider == ProviderType.GROQ
+
+
+@pytest.mark.unit
 def test_provider_for_groq_model_name() -> None:
     from llm.core.model_resolver import ModelResolver
     assert ModelResolver._provider_for("openai/gpt-oss-120b") == "groq"

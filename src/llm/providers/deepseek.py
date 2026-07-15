@@ -82,11 +82,12 @@ class DeepSeekProvider(OpenAIProvider):
         try:
             return super().generate(llm_input)
         except LLMError as exc:
-            # Re-tag LLMErrors so telemetry sees ProviderType.DEEPSEEK.
-            raise LLMError(
-                str(exc),
-                provider=ProviderType.DEEPSEEK,
-            ) from exc
+            # Re-tag in place so telemetry attributes to DEEPSEEK, while
+            # preserving the original exception subclass (AuthenticationError,
+            # RateLimitError, ContextLengthError, ...) — constructing a new
+            # plain LLMError here would discard that subclass information.
+            exc.provider = ProviderType.DEEPSEEK
+            raise
         except Exception as exc:
             # fix #2: native OpenAI SDK exceptions (RateLimitError,
             # APIConnectionError, AuthenticationError, etc.) propagate here
