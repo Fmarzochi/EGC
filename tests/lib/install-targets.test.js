@@ -1530,6 +1530,94 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('resolves kiro home adapter root to ~/.kiro and install-state path', () => {
+    const adapter = getInstallTargetAdapter('kiro');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'kiro-home');
+    assert.strictEqual(adapter.target, 'kiro');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.kiro'));
+    assert.strictEqual(statePath, path.join(homeDir, '.kiro', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('resolves kiro project adapter root to .kiro and install-state path', () => {
+    const adapter = getInstallTargetAdapter('kiro-project');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'kiro-project');
+    assert.strictEqual(adapter.target, 'kiro');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.kiro'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.kiro', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('kiro adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('kiro');
+    const byId = getInstallTargetAdapter('kiro-home');
+    const projectById = getInstallTargetAdapter('kiro-project');
+
+    assert.strictEqual(byTarget.id, 'kiro-home');
+    assert.strictEqual(byId.id, 'kiro-home');
+    assert.strictEqual(projectById.id, 'kiro-project');
+    assert.ok(byTarget.supports('kiro'));
+    assert.ok(byTarget.supports('kiro-home'));
+    assert.ok(projectById.supports('kiro'));
+    assert.ok(projectById.supports('kiro-project'));
+  })) passed++; else failed++;
+
+  if (test('kiro home adapter strips category from skill paths and installs flat under ~/.kiro/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'kiro',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'kiro-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.kiro', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.kiro/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('kiro project adapter strips category from skill paths and installs flat under .kiro/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'kiro-project',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'kiro-project');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(projectRoot, '.kiro', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under .kiro/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('kiro adapters are included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('kiro'), 'Should include kiro target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

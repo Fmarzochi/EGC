@@ -40,8 +40,11 @@ echo "Source:  $SOURCE_KIRO"
 echo "Target:  $TARGET/.kiro/"
 echo ""
 
-# Subdirectories to create and populate
-SUBDIRS="agents skills steering hooks scripts settings"
+# Subdirectories to create and populate. Skills are NOT handled here: they
+# ship through the unified Tier 1 pipeline (`egc install --target kiro`),
+# which stays in sync with the full skill library instead of this script's
+# old hand-curated snapshot.
+SUBDIRS="agents steering hooks scripts settings"
 
 # Create all required .kiro/ subdirectories
 for dir in $SUBDIRS; do
@@ -49,7 +52,7 @@ for dir in $SUBDIRS; do
 done
 
 # Counters for summary
-agents=0; skills=0; steering=0; hooks=0; scripts=0; settings=0
+agents=0; steering=0; hooks=0; scripts=0; settings=0
 
 # Copy agents (JSON for CLI, Markdown for IDE)
 if [ -d "$SOURCE_KIRO/agents" ]; then
@@ -59,19 +62,6 @@ if [ -d "$SOURCE_KIRO/agents" ]; then
     if [ ! -f "$TARGET/.kiro/agents/$local_name" ]; then
       cp "$f" "$TARGET/.kiro/agents/" 2>/dev/null || true
       agents=$((agents + 1))
-    fi
-  done
-fi
-
-# Copy skills (directories with SKILL.md)
-if [ -d "$SOURCE_KIRO/skills" ]; then
-  for d in "$SOURCE_KIRO/skills"/*/; do
-    [ -d "$d" ] || continue
-    skill_name="$(basename "$d")"
-    if [ ! -d "$TARGET/.kiro/skills/$skill_name" ]; then
-      mkdir -p "$TARGET/.kiro/skills/$skill_name"
-      cp "$d"* "$TARGET/.kiro/skills/$skill_name/" 2>/dev/null || true
-      skills=$((skills + 1))
     fi
   done
 fi
@@ -125,16 +115,19 @@ echo "Installation complete!"
 echo ""
 echo "Components installed:"
 echo "  Agents:    $agents"
-echo "  Skills:    $skills"
 echo "  Steering:  $steering"
 echo "  Hooks:     $hooks"
 echo "  Scripts:   $scripts"
 echo "  Settings:  $settings"
 echo ""
+echo "Note: skills are not installed by this script anymore. Run"
+echo "  'egc install --target kiro' to install skills from the full,"
+echo "  always up-to-date EGC skill library."
+echo ""
 echo "Next steps:"
 echo "  1. Open your project in Kiro"
 echo "  2. Agents: Automatic in IDE, /agent swap in CLI"
-echo "  3. Skills: Available via / menu in chat"
+echo "  3. Skills: run 'egc install --target kiro', then available via / menu in chat"
 echo "  4. Steering files with 'auto' inclusion load automatically"
 echo "  5. Toggle hooks in the Agent Hooks panel"
 echo "  6. Copy desired MCP servers from .kiro/settings/mcp.json.example to .kiro/settings/mcp.json"

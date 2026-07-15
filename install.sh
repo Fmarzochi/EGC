@@ -149,6 +149,7 @@ if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
     fi
     if [ -d "$HOME/.kiro" ] || command -v kiro >/dev/null 2>&1; then
       echo "  installing to Kiro..."
+      node "$ROOT_DIR/scripts/install-apply.js" --target kiro --profile full
       bash "$ROOT_DIR/.kiro/install.sh" ~
     fi
     if [ -d "$HOME/.trae" ] || [ -d "$HOME/.trae-cn" ] || command -v trae >/dev/null 2>&1; then

@@ -5,6 +5,8 @@ const codebuddyProject = require('./codebuddy-project');
 const codexHome = require('./codex-home');
 const cursorProject = require('./cursor-project');
 const geminiProject = require('./gemini-project');
+const kiroHome = require('./kiro-home');
+const kiroProject = require('./kiro-project');
 const opencodeHome = require('./opencode-home');
 const windsurfHome = require('./windsurf-home');
 const windsurfProject = require('./windsurf-project');
@@ -24,6 +26,8 @@ const ADAPTERS = Object.freeze([
   geminiProject,
   opencodeHome,
   codebuddyProject,
+  kiroHome,
+  kiroProject,
   windsurfHome,
   windsurfProject,
   ampHome,
