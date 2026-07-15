@@ -104,8 +104,11 @@ do_install() {
     echo "Target:  $trae_full_path/"
     echo ""
 
-    # Subdirectories to create
-    SUBDIRS="commands agents skills rules"
+    # Subdirectories to create. Skills are NOT handled here: they ship
+    # through the unified Tier 1 pipeline (`egc install --target trae`),
+    # which stays in sync with the full skill library instead of this
+    # script copying its own snapshot.
+    SUBDIRS="commands agents rules"
 
     for dir in $SUBDIRS; do
         mkdir -p "$trae_full_path/$dir"
@@ -118,7 +121,6 @@ do_install() {
     # Counters for summary
     commands=0
     agents=0
-    skills=0
     rules=0
     other=0
 
@@ -140,29 +142,6 @@ do_install() {
             target_path="$trae_full_path/agents/$local_name"
             if copy_managed_file "$f" "$target_path" "$MANIFEST" "agents/$local_name"; then
                 agents=$((agents + 1))
-            fi
-        done
-    fi
-
-    if [ -d "$REPO_ROOT/skills" ]; then
-        for d in "$REPO_ROOT/skills"/*/; do
-            [ -d "$d" ] || continue
-            skill_name="$(basename "$d")"
-            target_skill_dir="$trae_full_path/skills/$skill_name"
-            skill_copied=0
-
-            while IFS= read -r source_file; do
-                relative_path="${source_file#$d}"
-                target_path="$target_skill_dir/$relative_path"
-
-                mkdir -p "$(dirname "$target_path")"
-                if copy_managed_file "$source_file" "$target_path" "$MANIFEST" "skills/$skill_name/$relative_path"; then
-                    skill_copied=1
-                fi
-            done < <(find "$d" -type f | sort)
-
-            if [ "$skill_copied" -eq 1 ]; then
-                skills=$((skills + 1))
             fi
         done
     fi
@@ -207,8 +186,11 @@ do_install() {
     echo "Components installed:"
     echo "  Commands:  $commands"
     echo "  Agents:    $agents"
-    echo "  Skills:    $skills"
     echo "  Rules:     $rules"
+    echo ""
+    echo "Note: skills are not installed by this script anymore. Run"
+    echo "  'egc install --target trae' to install skills from the full,"
+    echo "  always up-to-date EGC skill library."
     echo ""
     echo "Directory:   $(basename "$trae_full_path")"
     echo ""

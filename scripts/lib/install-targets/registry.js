@@ -16,6 +16,7 @@ const copilotHome = require('./copilot-home');
 const zedHome = require('./zed-home');
 const continueHome = require('./continue-home');
 const continueProject = require('./continue-project');
+const traeProject = require('./trae-project');
 
 const ADAPTERS = Object.freeze([
   egcHome,
@@ -36,6 +37,7 @@ const ADAPTERS = Object.freeze([
   zedHome,
   continueHome,
   continueProject,
+  traeProject,
 ]);
 
 function listInstallTargetAdapters() {

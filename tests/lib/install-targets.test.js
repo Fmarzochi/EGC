@@ -1618,6 +1618,56 @@ function runTests() {
     assert.ok(targets.includes('kiro'), 'Should include kiro target');
   })) passed++; else failed++;
 
+  if (test('resolves trae adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('trae');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'trae-project');
+    assert.strictEqual(adapter.target, 'trae');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.trae'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.trae', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('trae adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('trae');
+    const byId = getInstallTargetAdapter('trae-project');
+
+    assert.strictEqual(byTarget.id, 'trae-project');
+    assert.strictEqual(byId.id, 'trae-project');
+    assert.ok(byTarget.supports('trae'));
+    assert.ok(byTarget.supports('trae-project'));
+  })) passed++; else failed++;
+
+  if (test('trae adapter preserves category structure under .trae/skills/ (default scaffold, no flat stripping)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'trae',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'trae-project');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(projectRoot, '.trae', 'skills', 'workflow', 'tdd-workflow')
+      )),
+      'Should preserve skills/<category>/<name> structure under .trae/skills/, same default scaffold as gemini-project'
+    );
+  })) passed++; else failed++;
+
+  if (test('trae adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('trae'), 'Should include trae target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

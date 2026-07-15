@@ -29,13 +29,13 @@ EGC supports 14 AI coding tools through 3 distinct integration mechanisms. This 
 | 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); MCP via `context_servers` in `settings.json`; cognitive bootstrap into `~/.config/zed/AGENTS.md` |
 | 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<name>/SKILL.md` | Skills installed flat; MCP via YAML block files in `~/.continue/mcpServers/`; memory protocol prompt in `~/.continue/prompts/`; rules discovered natively at workspace `.continue/rules/` |
 | 13 | **Kiro** | 1 | `kiro` | `~/.kiro/skills/<name>/` (home) and `.kiro/skills/<name>/` (project) | Skills installed flat via the unified pipeline; the legacy `.kiro/install.sh` script still handles project-local agents, steering docs, hooks, scripts, and settings (a separate concern from skill distribution, not yet migrated) |
-| 14 | **Trae** | 2 | (none) | `~/.trae/` (or `~/.trae-cn/` with `TRAE_ENV=cn`) via `.trae/install.sh` | Memory protocol written to `~/.trae/MEMORY.md` |
+| 14 | **Trae** | 1 | `trae` | `.trae/skills/<name>/` (project only, no home target) | Skills installed flat via the unified pipeline; the legacy `.trae/install.sh` script still handles commands, agents, rules, and the `~/.trae/MEMORY.md` memory protocol (project-scoped only; `TRAE_ENV=cn` for `~/.trae-cn/`) |
 
 ## Why three tiers (history, not aspiration)
 
 Tier 1 (unified) is the canonical pipeline. It is the result of `install-plan.js` resolving install manifests against `SUPPORTED_INSTALL_TARGETS`, then `install-apply.js` materializing files. The pipeline emits provenance, supports dry-run, and is covered by 200+ tests under `tests/`.
 
-Tier 2 (custom-script) exists because Kiro and Trae landed in EGC before the unified pipeline was stable. Their installers do roughly the same work as the unified pipeline, but the shape of the assets they ship differs enough that retrofitting them is non-trivial. They are first-class but technically isolated. Kiro's skill distribution was migrated to Tier 1 (target id `kiro`); its agents/steering/hooks/settings assets still ship through the original `.kiro/install.sh` script.
+Tier 2 (custom-script) exists because Kiro and Trae landed in EGC before the unified pipeline was stable. Their installers do roughly the same work as the unified pipeline, but the shape of the assets they ship differs enough that retrofitting them is non-trivial. They are first-class but technically isolated. Both Kiro's and Trae's skill distribution have since been migrated to Tier 1 (target ids `kiro` and `trae`); their non-skill assets (Kiro: agents/steering/hooks/settings; Trae: commands/agents/rules/memory protocol) still ship through their original `.{tool}/install.sh` scripts.
 
 Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude Code was previously Tier 3, but now supports `~/.claude/skills/<name>/SKILL.md` as a skill discovery path, so it has been promoted to Tier 1 with target id `claude`. Windsurf, Amp, and VS Code Copilot were added as Tier 1 targets in v1.0.2 following the same skill-discovery pattern. Continue.dev followed the same pattern as the 14th harness (its MCP registration via `~/.continue/mcpServers/` YAML block files landed separately in #564).
 
@@ -75,5 +75,5 @@ Tier 1 is preferred when possible. Tier 2 is acceptable for tools with non-stand
 
 ## Known gaps (audit findings 2026-06-10)
 
-- Trae is still Tier 2 because it predates the unified pipeline. It could be migrated to Tier 1 with ~6-8h of work. Kiro's skill distribution made the same move (see row 13); its non-skill assets (agents, steering, hooks, settings) remain on the legacy `.kiro/install.sh` path
+- Both Kiro's and Trae's skill distribution moved to Tier 1 (see rows 13-14); each tool's non-skill assets remain on its legacy `.{tool}/install.sh` path
 - `harness-audit` scores the repo, not individual harnesses - per-harness rollup is the next maturation step

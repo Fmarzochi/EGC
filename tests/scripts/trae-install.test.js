@@ -102,7 +102,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('records nested skill files and the full rules tree in the manifest', () => {
+  if (test('records the full rules tree in the manifest', () => {
     const homeDir = createTempDir('trae-home-');
     const projectRoot = createTempDir('trae-project-');
 
@@ -110,14 +110,28 @@ function runTests() {
       runInstall({ cwd: projectRoot, homeDir });
 
       const manifestLines = readManifestLines(projectRoot);
-      assert.ok(manifestLines.includes('skills/general_part2/skill-comply/pyproject.toml'));
       assert.ok(manifestLines.includes('rules/common/code-review.md'));
       assert.ok(manifestLines.includes('rules/python/coding-style.md'));
       assert.ok(manifestLines.includes('rules/zh/README.md'));
 
-      assert.ok(fs.existsSync(path.join(projectRoot, '.trae', 'skills', 'general_part2', 'skill-comply', 'pyproject.toml')));
       assert.ok(fs.existsSync(path.join(projectRoot, '.trae', 'rules', 'python', 'coding-style.md')));
       assert.ok(fs.existsSync(path.join(projectRoot, '.trae', 'rules', 'zh', 'README.md')));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not copy skills -- they ship through the unified Tier 1 pipeline instead', () => {
+    const homeDir = createTempDir('trae-home-');
+    const projectRoot = createTempDir('trae-project-');
+
+    try {
+      runInstall({ cwd: projectRoot, homeDir });
+
+      const manifestLines = readManifestLines(projectRoot);
+      assert.ok(!manifestLines.some((line) => line.startsWith('skills/')));
+      assert.ok(!fs.existsSync(path.join(projectRoot, '.trae', 'skills')));
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
