@@ -1,0 +1,11 @@
+# Python dependencies for src/llm/ (native LLM provider integrations) and
+# their test suite in tests/. Each provider SDK is imported lazily inside
+# its own module, so a missing optional SDK only affects that one
+# provider at runtime — but the test suite exercises all of them, so all
+# are installed here for CI.
+anthropic>=0.100,<1
+openai>=2.0,<3
+cohere>=5.0,<6
+google-genai>=2.0,<3
+
+pytest>=8,<10

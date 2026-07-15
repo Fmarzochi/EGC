@@ -206,13 +206,23 @@ def main() -> None:
 
     # Wrap SDK calls so an internal error does not crash the hook
     try:
-        # Dynamically resolve model ID via EGC ModelResolver if available
-        llm_id = os.environ.get("INSAITS_MODEL", DEFAULT_MODEL)
-        try:
-            from llm.core.model_resolver import ModelResolver
-            llm_id = ModelResolver.resolve(llm_id)
-        except Exception:
-            pass
+        # An explicit INSAITS_MODEL is a user-chosen identifier for this
+        # security-monitoring SDK's own catalog, not necessarily one of
+        # EGC's LLM provider aliases, so it is passed through verbatim: an
+        # unrecognized value silently rewritten by ModelResolver would
+        # attribute audit events to the wrong model without any error.
+        # Only the DEFAULT_MODEL alias ("pro") goes through ModelResolver,
+        # since that alias is meant to be resolved.
+        env_model = os.environ.get("INSAITS_MODEL")
+        if env_model:
+            llm_id = env_model
+        else:
+            llm_id = DEFAULT_MODEL
+            try:
+                from llm.core.model_resolver import ModelResolver
+                llm_id = ModelResolver.resolve(llm_id)
+            except Exception:
+                pass
 
         monitor: insAItsMonitor = insAItsMonitor(
             session_name="everything-gemini-hook",
