@@ -22,20 +22,9 @@ jobs:
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '20.x'
-      - name: Run security audit
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-            npm audit --audit-level=high
-          else
-            echo "No package-lock.json found; skipping npm audit"
-          fi
+    uses: ./.github/workflows/reusable-security-audit.yml
+    permissions:
+      contents: read
 
   stale:
     name: Stale Issues/PRs

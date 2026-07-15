@@ -1,0 +1,30 @@
+name: Reusable Security Audit
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20.x'
+
+      - name: Run npm audit
+        run: |
+          if [ -f package-lock.json ]; then
+            npm audit --audit-level=high
+          else
+            echo "No package-lock.json found; skipping npm audit"
+          fi
