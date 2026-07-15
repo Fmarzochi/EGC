@@ -1668,6 +1668,73 @@ function runTests() {
     assert.ok(targets.includes('trae'), 'Should include trae target');
   })) passed++; else failed++;
 
+  if (test('resolves goose adapter root to ~/.agents (shared with Codex) and its own install-state path', () => {
+    const adapter = getInstallTargetAdapter('goose');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'goose-home');
+    assert.strictEqual(adapter.target, 'goose');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.agents'));
+    assert.strictEqual(statePath, path.join(homeDir, '.agents', 'egc', 'goose-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('goose adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('goose');
+    const byId = getInstallTargetAdapter('goose-home');
+
+    assert.strictEqual(byTarget.id, 'goose-home');
+    assert.strictEqual(byId.id, 'goose-home');
+    assert.ok(byTarget.supports('goose'));
+    assert.ok(byTarget.supports('goose-home'));
+  })) passed++; else failed++;
+
+  if (test('goose adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'goose',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'goose-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.agents/skills/, same root Codex writes to'
+    );
+  })) passed++; else failed++;
+
+  if (test('goose adapter has no GateGuard hook wiring (unlike codex-home)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'goose',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      !plan.operations.some(operation => operation.kind === 'merge-claude-settings-hooks'),
+      'Goose adapter should not register any hook merge operations'
+    );
+  })) passed++; else failed++;
+
+  if (test('goose adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('goose'), 'Should include goose target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

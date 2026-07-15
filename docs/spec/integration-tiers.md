@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 14 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 15 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 ## Tier definitions
 
@@ -12,7 +12,7 @@ EGC supports 14 AI coding tools through 3 distinct integration mechanisms. This 
 | **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 14 harnesses
+## The 15 harnesses
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
@@ -30,6 +30,7 @@ EGC supports 14 AI coding tools through 3 distinct integration mechanisms. This 
 | 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<name>/SKILL.md` | Skills installed flat; MCP via YAML block files in `~/.continue/mcpServers/`; memory protocol prompt in `~/.continue/prompts/`; rules discovered natively at workspace `.continue/rules/` |
 | 13 | **Kiro** | 1 | `kiro` | `~/.kiro/skills/<name>/` (home) and `.kiro/skills/<name>/` (project) | Skills installed flat via the unified pipeline; the legacy `.kiro/install.sh` script still handles project-local agents, steering docs, hooks, scripts, and settings (a separate concern from skill distribution, not yet migrated) |
 | 14 | **Trae** | 1 | `trae` | `.trae/skills/<name>/` (project only, no home target) | Skills installed flat via the unified pipeline; the legacy `.trae/install.sh` script still handles commands, agents, rules, and the `~/.trae/MEMORY.md` memory protocol (project-scoped only; `TRAE_ENV=cn` for `~/.trae-cn/`) |
+| 15 | **Goose** | 1 | `goose` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex) | Skills installed flat; no GateGuard hook wiring (Goose has no documented hook API); discoverability-only adapter over the same `~/.agents` root `codex-home.js` already writes to |
 
 ## Why three tiers (history, not aspiration)
 

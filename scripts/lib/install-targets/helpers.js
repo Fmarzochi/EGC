@@ -111,6 +111,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   codebuddy:    { name: 'CodeBuddy',          url: 'https://copilot.tencent.com' },
   kiro:         { name: 'Kiro',               url: 'https://kiro.dev' },
   trae:         { name: 'Trae',               url: 'https://www.trae.ai' },
+  goose:        { name: 'Goose',              url: 'https://block.github.io/goose/' },
   windsurf:     { name: 'Windsurf',           url: 'https://windsurf.ai' },
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
