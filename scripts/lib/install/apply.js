@@ -25,6 +25,10 @@ const {
   MERGE_YAML_READ_LIST_KIND,
   mergeAiderConfigReadList,
 } = require('../aider-config-merge');
+const {
+  MERGE_MARKDOWN_INDEX_KIND,
+  mergeSkillIndexEntry,
+} = require('../warp-agents-merge');
 
 const WINDSURF_HOOK_EVENTS = new Set([PRE_WRITE_CODE_EVENT, PRE_RUN_COMMAND_EVENT]);
 
@@ -188,6 +192,19 @@ function applyInstallPlan(plan) {
         ? fs.readFileSync(operation.destinationPath, 'utf8')
         : null;
       const nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+      fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+      continue;
+    }
+
+    if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+      const existingContent = fs.existsSync(operation.destinationPath)
+        ? fs.readFileSync(operation.destinationPath, 'utf8')
+        : null;
+      const nextContent = mergeSkillIndexEntry(existingContent, {
+        name: operation.skillName,
+        description: operation.skillDescription,
+        relativePath: operation.relativePath,
+      });
       fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
       continue;
     }

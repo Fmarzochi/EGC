@@ -115,6 +115,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   amazonq:      { name: 'Amazon Q Developer CLI', url: 'https://aws.amazon.com/q/developer/' },
   openhands:    { name: 'OpenHands',          url: 'https://docs.openhands.dev' },
   aider:        { name: 'Aider',              url: 'https://aider.chat' },
+  warp:         { name: 'Warp',               url: 'https://www.warp.dev' },
   windsurf:     { name: 'Windsurf',           url: 'https://windsurf.ai' },
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },

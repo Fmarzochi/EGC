@@ -36,6 +36,11 @@ const {
   mergeAiderConfigReadList,
   removeAiderConfigReadEntry,
 } = require('./aider-config-merge');
+const {
+  MERGE_MARKDOWN_INDEX_KIND,
+  mergeSkillIndexEntry,
+  removeSkillIndexEntry,
+} = require('./warp-agents-merge');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
 
@@ -413,6 +418,20 @@ function executeRepairOperation(repoRoot, operation) {
     return;
   }
 
+  if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+    const existingContent = fs.existsSync(operation.destinationPath)
+      ? fs.readFileSync(operation.destinationPath, 'utf8')
+      : null;
+    const nextContent = mergeSkillIndexEntry(existingContent, {
+      name: operation.skillName,
+      description: operation.skillDescription,
+      relativePath: operation.relativePath,
+    });
+    ensureParentDir(operation.destinationPath);
+    fs.writeFileSync(operation.destinationPath, nextContent);
+    return;
+  }
+
   throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
 }
 
@@ -516,6 +535,22 @@ function uninstallAiderConfigReadList(operation) {
   return { removedPaths: [], cleanupTargets: [] };
 }
 
+function uninstallWarpAgentsIndexEntry(operation) {
+  // Strips only the EGC-added index entry from the marked block. AGENTS.md
+  // itself is never deleted, even if the block becomes empty -- it is an
+  // increasingly common cross-tool convention file the user's other tools
+  // may also rely on.
+  if (!operation.skillName || !fs.existsSync(operation.destinationPath)) {
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+
+  const existingContent = fs.readFileSync(operation.destinationPath, 'utf8');
+  const nextContent = removeSkillIndexEntry(existingContent, operation.skillName);
+  ensureParentDir(operation.destinationPath);
+  fs.writeFileSync(operation.destinationPath, nextContent);
+  return { removedPaths: [], cleanupTargets: [] };
+}
+
 function uninstallClaudeSettingsHook(operation) {
   // Strips only the EGC-managed hook entry. The settings file itself is never
   // deleted because Claude Code and the user own its other keys.
@@ -538,6 +573,7 @@ const UNINSTALL_HANDLERS = {
   'remove': uninstallRemove,
   [HOOK_OPERATION_KIND]: uninstallClaudeSettingsHook,
   [MERGE_YAML_READ_LIST_KIND]: uninstallAiderConfigReadList,
+  [MERGE_MARKDOWN_INDEX_KIND]: uninstallWarpAgentsIndexEntry,
 };
 
 function executeUninstallOperation(operation) {

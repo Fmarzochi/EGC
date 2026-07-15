@@ -1909,6 +1909,99 @@ function runTests() {
     assert.ok(targets.includes('aider'), 'Should include aider target');
   })) passed++; else failed++;
 
+  if (test('resolves warp adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('warp');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'warp-project');
+    assert.strictEqual(adapter.target, 'warp');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.warp'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('warp adapter emits a flat skill copy plus a merge-markdown-skill-index operation per skill', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'warp',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'testing', paths: ['skills/testing/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'warp-project');
+
+    const copyOp = plan.operations.find(op => op.kind === 'copy-path');
+    assert.ok(copyOp, 'Should emit a copy-path operation for the skill file');
+    assert.strictEqual(normalizedRelativePath(copyOp.sourceRelativePath), 'skills/testing/tdd-workflow/SKILL.md');
+    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'skills', 'tdd-workflow.md'));
+
+    const mergeOp = plan.operations.find(op => op.kind === 'merge-markdown-skill-index');
+    assert.ok(mergeOp, 'Should emit a merge-markdown-skill-index operation for AGENTS.md');
+    assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
+    assert.strictEqual(mergeOp.skillName, 'tdd-workflow');
+    assert.strictEqual(mergeOp.relativePath, path.join('.warp', 'skills', 'tdd-workflow.md'));
+    assert.ok(mergeOp.skillDescription.startsWith('Use this skill when writing new features'));
+    assert.ok(mergeOp.skillDescription.length <= 110, 'Description should be truncated to the shared max length');
+  })) passed++; else failed++;
+
+  if (test('warp adapter extracts a description from a multiline YAML block-scalar frontmatter field', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'warp',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'ai', paths: ['skills/ai/token-budget-advisor'] }],
+    });
+
+    const mergeOp = plan.operations.find(op => op.kind === 'merge-markdown-skill-index');
+    assert.ok(mergeOp, 'Should emit a merge operation for a skill with a block-scalar description');
+    assert.ok(mergeOp.skillDescription.length > 0, 'Description should not be empty for a valid block scalar');
+    assert.ok(!mergeOp.skillDescription.includes('\n'), 'Description should be collapsed onto one line');
+  })) passed++; else failed++;
+
+  if (test('warp adapter falls back to an empty description when SKILL.md has no frontmatter', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'warp',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/nonexistent-skill'] }],
+    });
+
+    const mergeOp = plan.operations.find(op => op.kind === 'merge-markdown-skill-index');
+    assert.ok(mergeOp, 'Should still emit a merge operation even without a real source file');
+    assert.strictEqual(mergeOp.skillDescription, '');
+  })) passed++; else failed++;
+
+  if (test('warp adapter filters out non-skill module paths (rules, agents, commands)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'warp',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    assert.strictEqual(plan.operations.length, 0, 'Non-skill module paths should not produce operations');
+  })) passed++; else failed++;
+
+  if (test('warp adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('warp'), 'Should include warp target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
