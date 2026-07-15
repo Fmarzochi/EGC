@@ -10,7 +10,7 @@ try:
 except ImportError: 
     OpenAI = None 
 
-from llm.core.interface import AuthenticationError
+from llm.core.interface import AuthenticationError, LLMError
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
@@ -46,6 +46,25 @@ class MistralProvider(OpenAIProvider):
                 context_window=128000,
             ),
         ]
+
+    def generate(self, llm_input: "LLMInput") -> "LLMOutput":  # type: ignore[override]
+        try:
+            return super().generate(llm_input)
+        except LLMError as exc:
+            # Re-tag LLMErrors so telemetry sees ProviderType.MISTRAL.
+            raise LLMError(
+                str(exc),
+                provider=ProviderType.MISTRAL,
+            ) from exc
+        except Exception as exc:
+            # Native OpenAI SDK exceptions (RateLimitError, APIConnectionError,
+            # AuthenticationError, etc.) propagate here unwrapped when
+            # OpenAIProvider.generate() hits the bare `raise`. Wrap them so
+            # telemetry always attributes to MISTRAL, never OPENAI.
+            raise LLMError(
+                str(exc),
+                provider=ProviderType.MISTRAL,
+            ) from exc
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()

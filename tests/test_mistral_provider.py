@@ -100,6 +100,21 @@ def test_empty_choices_raise_llm_error(provider):
     assert "empty choices" in str(exc_info.value).lower()
 
 
+def test_native_sdk_exception_is_retagged_as_mistral(provider):
+    """Raw SDK exceptions that bypass OpenAIProvider wrapping must still
+    surface as LLMError with provider=MISTRAL, not as bare SDK errors.
+
+    Regression test for audit EGC-128 F3: MistralProvider had no generate()
+    override, so OpenAIProvider.generate()'s bare `raise` for unmapped SDK
+    exceptions (timeouts, connection errors) propagated as native openai
+    exceptions instead of LLMError, with no `.provider` attribute at all.
+    """
+    provider.mock_create.side_effect = RuntimeError("connection reset")
+    with pytest.raises(LLMError) as exc:
+        provider.generate(_simple_input())
+    assert exc.value.provider == ProviderType.MISTRAL
+
+
 # --- Configuration Tests ---
 
 def test_validate_config_true(provider):
