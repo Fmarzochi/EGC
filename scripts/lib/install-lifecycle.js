@@ -30,6 +30,12 @@ const {
   removeSessionStartHookFromFile,
   removeStopHookFromFile,
 } = require('./claude-settings-hooks');
+const {
+  MERGE_YAML_READ_LIST_KIND,
+  REMOVE_SENTINEL: AIDER_REMOVE_SENTINEL,
+  mergeAiderConfigReadList,
+  removeAiderConfigReadEntry,
+} = require('./aider-config-merge');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
 
@@ -394,6 +400,19 @@ function executeRepairOperation(repoRoot, operation) {
     return;
   }
 
+  if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
+    if (!operation.readEntry) {
+      throw new Error(`Missing readEntry for repair: ${operation.destinationPath}`);
+    }
+    const existingContent = fs.existsSync(operation.destinationPath)
+      ? fs.readFileSync(operation.destinationPath, 'utf8')
+      : null;
+    const nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+    ensureParentDir(operation.destinationPath);
+    fs.writeFileSync(operation.destinationPath, nextContent);
+    return;
+  }
+
   throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
 }
 
@@ -474,6 +493,29 @@ function uninstallRemove(operation) {
   return { removedPaths: [], cleanupTargets: [] };
 }
 
+function uninstallAiderConfigReadList(operation) {
+  // Strips only the EGC-added read: entry. .aider.conf.yml is only deleted
+  // if EGC's entry was the last thing keeping it non-empty -- the user's own
+  // model settings, lint commands, etc are never touched.
+  if (!operation.readEntry || !fs.existsSync(operation.destinationPath)) {
+    return { removedPaths: [], cleanupTargets: [] };
+  }
+
+  const existingContent = fs.readFileSync(operation.destinationPath, 'utf8');
+  const nextContent = removeAiderConfigReadEntry(existingContent, operation.readEntry);
+  if (nextContent === AIDER_REMOVE_SENTINEL) {
+    fs.rmSync(operation.destinationPath, { force: true });
+    return {
+      removedPaths: [operation.destinationPath],
+      cleanupTargets: [operation.destinationPath],
+    };
+  }
+
+  ensureParentDir(operation.destinationPath);
+  fs.writeFileSync(operation.destinationPath, nextContent);
+  return { removedPaths: [], cleanupTargets: [] };
+}
+
 function uninstallClaudeSettingsHook(operation) {
   // Strips only the EGC-managed hook entry. The settings file itself is never
   // deleted because Claude Code and the user own its other keys.
@@ -495,6 +537,7 @@ const UNINSTALL_HANDLERS = {
   'merge-json': uninstallMergeJson,
   'remove': uninstallRemove,
   [HOOK_OPERATION_KIND]: uninstallClaudeSettingsHook,
+  [MERGE_YAML_READ_LIST_KIND]: uninstallAiderConfigReadList,
 };
 
 function executeUninstallOperation(operation) {

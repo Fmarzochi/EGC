@@ -1852,6 +1852,63 @@ function runTests() {
     assert.ok(targets.includes('openhands'), 'Should include openhands target');
   })) passed++; else failed++;
 
+  if (test('resolves aider adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('aider');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'aider-project');
+    assert.strictEqual(adapter.target, 'aider');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.aider'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.aider', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('aider adapter emits a flat skill copy plus a merge-yaml-read-list operation per skill', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'aider',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'aider-project');
+
+    const copyOp = plan.operations.find(op => op.kind === 'copy-path');
+    assert.ok(copyOp, 'Should emit a copy-path operation for the skill file');
+    assert.strictEqual(normalizedRelativePath(copyOp.sourceRelativePath), 'skills/workflow/tdd-workflow/SKILL.md');
+    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.aider', 'skills', 'tdd-workflow.md'));
+
+    const mergeOp = plan.operations.find(op => op.kind === 'merge-yaml-read-list');
+    assert.ok(mergeOp, 'Should emit a merge-yaml-read-list operation for .aider.conf.yml');
+    assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, '.aider.conf.yml'));
+    assert.strictEqual(mergeOp.readEntry, path.join('.aider', 'skills', 'tdd-workflow.md'));
+  })) passed++; else failed++;
+
+  if (test('aider adapter filters out non-skill module paths (rules, agents, commands)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'aider',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    assert.strictEqual(plan.operations.length, 0, 'Non-skill module paths should not produce operations');
+  })) passed++; else failed++;
+
+  if (test('aider adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('aider'), 'Should include aider target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

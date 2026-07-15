@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 17 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 18 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 ## Tier definitions
 
@@ -12,7 +12,7 @@ EGC supports 17 AI coding tools through 3 distinct integration mechanisms. This 
 | **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 17 harnesses
+## The 18 harnesses
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
@@ -33,6 +33,7 @@ EGC supports 17 AI coding tools through 3 distinct integration mechanisms. This 
 | 15 | **Goose** | 1 | `goose` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex) | Skills installed flat; no GateGuard hook wiring (Goose has no documented hook API); discoverability-only adapter over the same `~/.agents` root `codex-home.js` already writes to |
 | 16 | **Amazon Q Developer CLI** | 1 | `amazonq` | `.amazonq/rules/` (project only, no home target) | Default scaffold (category preserved), same template as `gemini-project.js`; no hook wiring |
 | 17 | **OpenHands** | 1 | `openhands` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex/Goose) | Skills installed flat; no GateGuard hook wiring; discoverability-only adapter -- the issue asked for `.openhands/microagents/`, but current OpenHands docs recommend the AgentSkills-standard `.agents/skills/<name>/SKILL.md` path (legacy `.openhands/microagents/` still works but isn't the documented target), so this mirrors the Goose adapter instead |
+| 18 | **Aider** | 1 | `aider` | `.aider/skills/<name>.md` (project only, no home target) | Skills copied flat as single `.md` files (Aider does not scan a skill-folder convention); each file's path is merged into the `read:` list of `.aider.conf.yml` via a new `merge-yaml-read-list` operation kind, preserving any unrelated existing keys; install/repair/uninstall all wired |
 
 ## Why three tiers (history, not aspiration)
 

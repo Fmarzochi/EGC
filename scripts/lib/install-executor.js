@@ -13,6 +13,7 @@ const {
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
+const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const GEMINI_EGC_NAMESPACE = 'egc';
@@ -586,6 +587,10 @@ function createLegacyCompatInstallPlan(options = {}) {
 
 function materializeScaffoldOperation(sourceRoot, operation) {
   if (operation.kind === HOOK_OPERATION_KIND) {
+    return [{ ...operation, scaffoldOnly: false }];
+  }
+
+  if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
     return [{ ...operation, scaffoldOnly: false }];
   }
 

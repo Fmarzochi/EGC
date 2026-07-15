@@ -21,6 +21,10 @@ const {
   PRE_WRITE_CODE_EVENT,
   applyWindsurfGateGuardHookToFile,
 } = require('../windsurf-gateguard-hooks');
+const {
+  MERGE_YAML_READ_LIST_KIND,
+  mergeAiderConfigReadList,
+} = require('../aider-config-merge');
 
 const WINDSURF_HOOK_EVENTS = new Set([PRE_WRITE_CODE_EVENT, PRE_RUN_COMMAND_EVENT]);
 
@@ -172,6 +176,19 @@ function applyInstallPlan(plan) {
         : {};
       const mergedValue = deepMergeJson(currentValue, filteredPayload);
       fs.writeFileSync(operation.destinationPath, formatJson(mergedValue), 'utf8');
+      continue;
+    }
+
+    if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
+      if (!operation.readEntry) {
+        throw new Error(`Missing readEntry for ${operation.destinationPath}`);
+      }
+
+      const existingContent = fs.existsSync(operation.destinationPath)
+        ? fs.readFileSync(operation.destinationPath, 'utf8')
+        : null;
+      const nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+      fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
       continue;
     }
 
