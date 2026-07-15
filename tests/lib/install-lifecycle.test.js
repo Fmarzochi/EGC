@@ -25,6 +25,14 @@ const {
   resolveHookScriptDestination,
   resolveSettingsPath,
 } = require('../../scripts/lib/claude-settings-hooks');
+const {
+  MERGE_YAML_READ_LIST_KIND,
+  mergeAiderConfigReadList,
+} = require('../../scripts/lib/aider-config-merge');
+const {
+  MERGE_MARKDOWN_INDEX_KIND,
+  mergeSkillIndexEntry,
+} = require('../../scripts/lib/warp-agents-merge');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const CURRENT_PACKAGE_VERSION = JSON.parse(
@@ -1704,6 +1712,98 @@ function runTests() {
       assert.ok(report.results[0].issues.some(issue => issue.code === 'missing-managed-files'));
     } finally {
       cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('doctor reports drift when the Aider YAML read-list entry is manually removed (audit EGC-128)', () => {
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    const targetRoot = path.join(projectRoot, '.aider');
+    const installStatePath = path.join(targetRoot, 'egc-install-state.json');
+    const configPath = path.join(projectRoot, '.aider.conf.yml');
+    const readEntry = 'AGENTS.md';
+
+    try {
+      fs.writeFileSync(configPath, mergeAiderConfigReadList(null, readEntry));
+      writeState(installStatePath, {
+        adapter: { id: 'aider-project', target: 'aider', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: null, modules: [], includeComponents: [], excludeComponents: [], legacyLanguages: [], legacyMode: true },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [{
+          kind: MERGE_YAML_READ_LIST_KIND,
+          moduleId: 'agents-md',
+          sourceRelativePath: readEntry,
+          destinationPath: configPath,
+          readEntry,
+          strategy: MERGE_YAML_READ_LIST_KIND,
+          ownership: 'managed',
+          scaffoldOnly: false,
+        }],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      let report = buildDoctorReport({ homeDir: os.homedir(), projectRoot, targets: ['aider'] });
+      assert.strictEqual(report.results[0].status, 'ok', 'freshly-merged config should report ok');
+
+      // Simulate the user editing the file by hand and dropping the entry.
+      fs.writeFileSync(configPath, 'schema_version: 1\n');
+
+      report = buildDoctorReport({ homeDir: os.homedir(), projectRoot, targets: ['aider'] });
+      assert.strictEqual(report.results[0].status, 'warning', 'manually-edited config missing the entry should now be flagged, not unverified');
+      assert.ok(
+        report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'),
+        'should report drift instead of silently treating this as unverified'
+      );
+    } finally {
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('doctor reports drift when the Warp skill-index entry is manually removed (audit EGC-128)', () => {
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    const targetRoot = path.join(projectRoot, '.warp');
+    const installStatePath = path.join(targetRoot, 'egc-install-state.json');
+    const agentsPath = path.join(projectRoot, 'AGENTS.md');
+    const skillEntry = { name: 'tdd-workflow', description: 'Test-driven development workflow.', relativePath: '.warp/skills/tdd-workflow.md' };
+
+    try {
+      fs.writeFileSync(agentsPath, mergeSkillIndexEntry(null, skillEntry));
+      writeState(installStatePath, {
+        adapter: { id: 'warp-project', target: 'warp', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: null, modules: [], includeComponents: [], excludeComponents: [], legacyLanguages: [], legacyMode: true },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [{
+          kind: MERGE_MARKDOWN_INDEX_KIND,
+          moduleId: 'tdd-workflow',
+          sourceRelativePath: skillEntry.relativePath,
+          destinationPath: agentsPath,
+          skillName: skillEntry.name,
+          skillDescription: skillEntry.description,
+          relativePath: skillEntry.relativePath,
+          strategy: MERGE_MARKDOWN_INDEX_KIND,
+          ownership: 'managed',
+          scaffoldOnly: false,
+        }],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      let report = buildDoctorReport({ homeDir: os.homedir(), projectRoot, targets: ['warp'] });
+      assert.strictEqual(report.results[0].status, 'ok', 'freshly-merged index should report ok');
+
+      // Simulate the user editing the file by hand and dropping the block.
+      fs.writeFileSync(agentsPath, '# AGENTS.md\n');
+
+      report = buildDoctorReport({ homeDir: os.homedir(), projectRoot, targets: ['warp'] });
+      assert.strictEqual(report.results[0].status, 'warning', 'manually-edited index missing the entry should now be flagged, not unverified');
+      assert.ok(
+        report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'),
+        'should report drift instead of silently treating this as unverified'
+      );
+    } finally {
       cleanup(projectRoot);
     }
   })) passed++; else failed++;
