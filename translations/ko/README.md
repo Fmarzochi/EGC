@@ -20,7 +20,7 @@
 
 ---
 
-EGC는 사용하는 모든 AI 코딩 도구에 지속적으로 유지되는 메모리를 제공하는 로컬 런타임입니다. 각 세션이 끝나면 AI는 작업을 통해 학습한 내용을 저장합니다. 여기에는 내린 결정, 실패한 시도, 사용자의 선호도, 그리고 다음에 이어서 진행할 작업이 포함됩니다. 다음 세션이 시작되면 AI는 이전 작업 상태를 아무 요청 없이 자동으로 불러옵니다. 어떤 언어로든 "계속하자" 또는 "어디까지 했지?"라고 말하면 AI가 무엇을 해야 할지 이미 알고 있습니다. 한 번 설치하면 Claude Code, Cursor, Gemini CLI, Windsurf, Zed, VS Code(GitHub Copilot 포함) 등 다양한 도구에서 사용할 수 있습니다. Claude, GPT-4o, Gemini는 물론 DeepSeek, Qwen3, Llama 4를 비롯한 OpenRouter 모델과도 함께 사용할 수 있습니다.
+EGC는 사용하는 모든 AI 코딩 도구에 지속적으로 유지되는 메모리를 제공하는 로컬 런타임입니다. 각 세션이 끝나면 AI는 작업을 통해 학습한 내용을 저장합니다. 여기에는 내린 결정, 실패한 시도, 사용자의 선호도, 그리고 다음에 이어서 진행할 작업이 포함됩니다. 다음 세션이 시작되면 AI는 이전 작업 상태를 아무 요청 없이 자동으로 불러옵니다. 어떤 언어로든 "계속하자" 또는 "어디까지 했지?"라고 말하면 AI가 무엇을 해야 할지 이미 알고 있습니다. 한 번 설치하면 Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Warp, VS Code(GitHub Copilot 포함) 등 다양한 도구(총 19개)에서 사용할 수 있습니다. Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, Vertex AI를 네이티브로 지원하며, Qwen3, Llama 4 등은 OpenRouter를 통해 지원합니다.
 
 ---
 

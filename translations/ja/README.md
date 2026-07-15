@@ -20,7 +20,7 @@
 
 ---
 
-EGCは、あなたが使うすべてのAIコーディングツールに永続メモリを提供するローカルランタイムです。各セッションの終わりに、AIは学んだことを保存します。下した決定、失敗したこと、あなたの好み、次に取りかかるべきことです。次のセッションの開始時には、その状態を自動で読み込みます。プロンプトは不要です。どの言語でも「続きをやろう」や「どこで止まった？」と言えば、AIはすでに何をすべきか分かっています。1回のインストールでClaude Code、Cursor、Gemini CLI、Windsurf、Zed、VS Code（GitHub Copilot付き）などをカバーします。Claude、GPT-4o、Geminiに加え、DeepSeek、Qwen3、Llama 4を含むOpenRouterモデルでも動作します。
+EGCは、あなたが使うすべてのAIコーディングツールに永続メモリを提供するローカルランタイムです。各セッションの終わりに、AIは学んだことを保存します。下した決定、失敗したこと、あなたの好み、次に取りかかるべきことです。次のセッションの開始時には、その状態を自動で読み込みます。プロンプトは不要です。どの言語でも「続きをやろう」や「どこで止まった？」と言えば、AIはすでに何をすべきか分かっています。1回のインストールでClaude Code、Cursor、Gemini CLI、Windsurf、Zed、Warp、VS Code（GitHub Copilot付き）など（合計19ツール）をカバーします。Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere、Vertex AIにネイティブ対応し、さらにQwen3やLlama 4などにはOpenRouter経由で対応します。
 
 ---
 

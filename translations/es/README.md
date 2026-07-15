@@ -20,7 +20,7 @@
 
 ---
 
-EGC es un entorno de ejecución local que proporciona memoria persistente a todas las herramientas de programación con IA que utilizas. Al final de cada sesión, la IA guarda lo que aprendió sobre tu proyecto: las decisiones que tomaste, lo que falló, tus preferencias y los siguientes pasos. Al comienzo de la siguiente sesión, vuelve a cargar ese estado por sí sola, sin que tengas que pedirlo. Di "sigamos" o "¿dónde quedamos?" en cualquier idioma y tu IA ya sabe qué hacer. Una sola instalación funciona para Claude Code, Cursor, Gemini CLI, Windsurf, Zed, VS Code con GitHub Copilot y más. Compatible con Claude, GPT-4o, Gemini y modelos de OpenRouter, incluidos DeepSeek, Qwen3 y Llama 4.
+EGC es un entorno de ejecución local que proporciona memoria persistente a todas las herramientas de programación con IA que utilizas. Al final de cada sesión, la IA guarda lo que aprendió sobre tu proyecto: las decisiones que tomaste, lo que falló, tus preferencias y los siguientes pasos. Al comienzo de la siguiente sesión, vuelve a cargar ese estado por sí sola, sin que tengas que pedirlo. Di "sigamos" o "¿dónde quedamos?" en cualquier idioma y tu IA ya sabe qué hacer. Una sola instalación funciona para Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Warp, VS Code con GitHub Copilot y más (19 herramientas en total). Compatible de forma nativa con Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere y Vertex AI, además de OpenRouter para Qwen3, Llama 4 y más.
 
 ---
 
