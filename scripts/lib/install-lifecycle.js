@@ -412,7 +412,15 @@ function executeRepairOperation(repoRoot, operation) {
     const existingContent = fs.existsSync(operation.destinationPath)
       ? fs.readFileSync(operation.destinationPath, 'utf8')
       : null;
-    const nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+    let nextContent;
+    try {
+      nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+    } catch (error) {
+      throw new Error(
+        `Failed to parse Aider config at ${operation.destinationPath}: ${error.message}`,
+        { cause: error },
+      );
+    }
     ensureParentDir(operation.destinationPath);
     fs.writeFileSync(operation.destinationPath, nextContent);
     return;

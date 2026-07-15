@@ -167,6 +167,34 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('applyInstallPlan raises an actionable error on malformed existing YAML instead of a bare crash (audit EGC-128)', () => {
+    const projectRoot = createTempDir('aider-apply-malformed-');
+    try {
+      const destinationPath = path.join(projectRoot, '.aider.conf.yml');
+      // Unbalanced flow-sequence bracket — a real mistake from hand-editing.
+      fs.writeFileSync(destinationPath, 'model: gpt-4o\nread: [unterminated\n');
+      const installStatePath = path.join(projectRoot, '.aider', 'egc-install-state.json');
+      const plan = buildMinimalPlan(destinationPath, '.aider/skills/tdd-workflow.md', installStatePath);
+
+      assert.throws(
+        () => applyInstallPlan(plan),
+        error => {
+          assert.ok(
+            error.message.includes(destinationPath),
+            `Error should name the file that failed to parse, got: ${error.message}`
+          );
+          assert.ok(
+            error.message.includes('Failed to parse Aider config'),
+            `Error should say what went wrong, not just relay the raw js-yaml message, got: ${error.message}`
+          );
+          return true;
+        }
+      );
+    } finally {
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

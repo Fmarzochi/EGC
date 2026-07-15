@@ -191,7 +191,18 @@ function applyInstallPlan(plan) {
       const existingContent = fs.existsSync(operation.destinationPath)
         ? fs.readFileSync(operation.destinationPath, 'utf8')
         : null;
-      const nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+      let nextContent;
+      try {
+        nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+      } catch (error) {
+        // js-yaml's raw SyntaxError gives no indication of which file or
+        // that it's a YAML problem at all — matches readJsonObject's
+        // actionable-error convention above instead of a bare crash.
+        throw new Error(
+          `Failed to parse Aider config at ${operation.destinationPath}: ${error.message}`,
+          { cause: error },
+        );
+      }
       fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
       continue;
     }
