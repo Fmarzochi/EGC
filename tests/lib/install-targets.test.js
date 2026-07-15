@@ -1735,6 +1735,56 @@ function runTests() {
     assert.ok(targets.includes('goose'), 'Should include goose target');
   })) passed++; else failed++;
 
+  if (test('resolves amazonq adapter root to .amazonq/rules and install-state path', () => {
+    const adapter = getInstallTargetAdapter('amazonq');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'amazonq-project');
+    assert.strictEqual(adapter.target, 'amazonq');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.amazonq', 'rules'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.amazonq', 'rules', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('amazonq adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('amazonq');
+    const byId = getInstallTargetAdapter('amazonq-project');
+
+    assert.strictEqual(byTarget.id, 'amazonq-project');
+    assert.strictEqual(byId.id, 'amazonq-project');
+    assert.ok(byTarget.supports('amazonq'));
+    assert.ok(byTarget.supports('amazonq-project'));
+  })) passed++; else failed++;
+
+  if (test('amazonq adapter preserves category structure under .amazonq/rules/ (default scaffold, no flat stripping)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'amazonq',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'amazonq-project');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(projectRoot, '.amazonq', 'rules', 'skills', 'workflow', 'tdd-workflow')
+      )),
+      'Should preserve skills/<category>/<name> structure under .amazonq/rules/, same default scaffold as gemini-project'
+    );
+  })) passed++; else failed++;
+
+  if (test('amazonq adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
