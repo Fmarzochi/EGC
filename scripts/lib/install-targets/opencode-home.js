@@ -3,6 +3,7 @@ const path = require('path');
 const {
   createInstallTargetAdapter,
   createRemappedOperation,
+  isForeignPlatformPath,
   normalizeRelativePath,
 } = require('./helpers');
 
@@ -25,7 +26,8 @@ module.exports = createInstallTargetAdapter({
     const targetRoot = adapter.resolveRoot(planningInput);
 
     return modules.flatMap(module => {
-      const paths = Array.isArray(module.paths) ? module.paths : [];
+      const paths = (Array.isArray(module.paths) ? module.paths : [])
+        .filter(p => !isForeignPlatformPath(p, adapter.target));
       return paths.flatMap(sourceRelativePath => {
         const normalizedPath = normalizeRelativePath(sourceRelativePath);
 

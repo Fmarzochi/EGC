@@ -4,6 +4,7 @@ const path = require('node:path');
 const {
   createInstallTargetAdapter,
   createRemappedOperation,
+  isForeignPlatformPath,
   planFlatSkillOperation,
 } = require('./helpers');
 const {
@@ -91,7 +92,8 @@ module.exports = createInstallTargetAdapter({
     const targetRoot = adapter.resolveRoot(planningInput);
 
     const moduleOperations = modules.flatMap(module => {
-      const paths = Array.isArray(module.paths) ? module.paths : [];
+      const paths = (Array.isArray(module.paths) ? module.paths : [])
+        .filter(p => !isForeignPlatformPath(p, adapter.target));
       return paths.map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
     });
 

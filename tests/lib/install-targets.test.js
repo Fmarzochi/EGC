@@ -840,6 +840,34 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('codex adapter filters out foreign-platform source paths (audit EGC-128)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['.cursor', '.opencode', '.gemini', '.gemini-plugin', 'skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    for (const foreign of ['.cursor', '.opencode', '.gemini', '.gemini-plugin']) {
+      assert.ok(
+        !plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === foreign),
+        `Should filter out ${foreign} (owned by a different platform) instead of copying it into ~/.agents/`
+      );
+    }
+    assert.ok(
+      plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
+      'Should still install the module\'s own skill path'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves opencode adapter root to ~/.config/opencode and install-state path', () => {
     const adapter = getInstallTargetAdapter('opencode');
     const homeDir = '/Users/example';
@@ -875,6 +903,34 @@ function runTests() {
         && operation.destinationPath === path.join(homeDir, '.config', 'opencode', 'skills', 'tdd-workflow')
       )),
       'Should strip category and install skill flat under ~/.config/opencode/skills/'
+    );
+  })) passed++; else failed++;
+
+  if (test('opencode adapter filters out foreign-platform source paths (audit EGC-128)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'opencode',
+      repoRoot,
+      homeDir,
+      modules: [
+        {
+          id: 'workflow',
+          paths: ['.cursor', '.codex', '.gemini', '.gemini-plugin', 'skills/workflow/tdd-workflow'],
+        },
+      ],
+    });
+
+    for (const foreign of ['.cursor', '.codex', '.gemini', '.gemini-plugin']) {
+      assert.ok(
+        !plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === foreign),
+        `Should filter out ${foreign} (owned by a different platform) instead of copying it into ~/.config/opencode/`
+      );
+    }
+    assert.ok(
+      plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
+      'Should still install the module\'s own skill path'
     );
   })) passed++; else failed++;
 
