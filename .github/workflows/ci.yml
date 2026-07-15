@@ -202,6 +202,10 @@ jobs:
         run: node scripts/ci/catalog.js --text
         continue-on-error: false
 
+      - name: Validate LLM provider claims
+        run: node scripts/ci/validate-llm-providers.js
+        continue-on-error: false
+
       - name: Check unicode safety
         run: node scripts/ci/check-unicode-safety.js
         continue-on-error: false

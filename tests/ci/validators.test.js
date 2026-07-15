@@ -2797,6 +2797,58 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  console.log('\nvalidate-llm-providers.js:');
+
+  if (test('passes against the real repository', () => {
+    const result = runValidator('validate-llm-providers');
+    assert.strictEqual(result.code, 0, `Expected success, got: ${result.stderr}`);
+    assert.ok(result.stdout.includes('Validated'), 'Should report how many providers were validated');
+  })) passed++; else failed++;
+
+  if (test('fails when README claims a provider with no matching file', () => {
+    const testDir = createTestDir();
+    const providersDir = path.join(testDir, 'providers');
+    fs.mkdirSync(providersDir, { recursive: true });
+    // Every mapped provider file except cohere.py, but README still claims Cohere.
+    for (const file of ['claude.py', 'openai.py', 'gemini.py', 'deepseek.py', 'mistral.py', 'groq.py', 'vertex_ai.py']) {
+      fs.writeFileSync(path.join(providersDir, file), '');
+    }
+    fs.writeFileSync(
+      path.join(testDir, 'README.md'),
+      'Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter.\n'
+    );
+
+    const result = runValidatorWithDirs('validate-llm-providers', {
+      README_PATH: path.join(testDir, 'README.md'),
+      PROVIDERS_DIR: providersDir,
+    });
+    assert.strictEqual(result.code, 1, 'Should fail when a claimed provider has no file');
+    assert.ok(result.stderr.includes('Cohere') && result.stderr.includes('cohere.py'));
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when a mapped provider file exists but is not mentioned in README', () => {
+    const testDir = createTestDir();
+    const providersDir = path.join(testDir, 'providers');
+    fs.mkdirSync(providersDir, { recursive: true });
+    for (const file of ['claude.py', 'openai.py', 'gemini.py', 'deepseek.py', 'mistral.py', 'groq.py', 'cohere.py', 'vertex_ai.py']) {
+      fs.writeFileSync(path.join(providersDir, file), '');
+    }
+    // README omits Cohere from the sentence even though cohere.py exists.
+    fs.writeFileSync(
+      path.join(testDir, 'README.md'),
+      'Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, and Vertex AI, plus OpenRouter.\n'
+    );
+
+    const result = runValidatorWithDirs('validate-llm-providers', {
+      README_PATH: path.join(testDir, 'README.md'),
+      PROVIDERS_DIR: providersDir,
+    });
+    assert.strictEqual(result.code, 1, 'Should fail when a shipped provider is not advertised');
+    assert.ok(result.stderr.includes('cohere.py') && result.stderr.includes('not mentioned'));
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
