@@ -13,6 +13,7 @@ just through GCP service-account/ADC auth instead of an API key.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from typing import Any
 
 try:
@@ -49,7 +50,12 @@ class VertexAIProvider(GeminiProvider):
         # instead of duplicating registry entries under a second provider key.
         self._default_model = ModelResolver.default_model("gemini")
         self._fallback_chain = ModelResolver.fallback_map(self._default_model)
-        self._models = ModelResolver.model_infos("gemini")
+        # model_infos("gemini") returns ModelInfo entries tagged
+        # provider=GEMINI (the registry key they're stored under) — re-tag
+        # each one to VERTEX_AI so callers grouping usage/cost by
+        # ModelInfo.provider don't attribute Vertex AI traffic to Gemini.
+        # ModelInfo is a frozen dataclass, so this is a copy, not a mutation.
+        self._models = [replace(m, provider=ProviderType.VERTEX_AI) for m in ModelResolver.model_infos("gemini")]
 
     def generate(self, input: LLMInput) -> LLMOutput:  # type: ignore[override]
         try:

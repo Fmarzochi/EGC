@@ -99,6 +99,22 @@ def test_explicit_project_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
+def test_list_models_reports_vertex_ai_not_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression test for audit EGC-128 (medium): model_infos("gemini") is
+    reused for the shared catalog, but each ModelInfo comes back tagged
+    provider=GEMINI from the registry. Any usage/cost telemetry grouping by
+    ModelInfo.provider must see VERTEX_AI, not GEMINI, for Vertex traffic."""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-gcp-project")
+    with patch("llm.providers.vertex_ai.genai") as mock_genai:
+        mock_genai.Client.return_value = MagicMock()
+        provider = VertexAIProvider()
+
+    models = provider.list_models()
+    assert len(models) > 0
+    assert all(m.provider == ProviderType.VERTEX_AI for m in models)
+
+
+@pytest.mark.unit
 def test_validate_config_true_when_project_and_location_set(provider: VertexAIProvider) -> None:
     assert provider.validate_config() is True
 

@@ -24,6 +24,21 @@ try {
   // Handled per-call below: falls back to the substring check.
 }
 
+// A single read instead of existsSync() + readFileSync() closes the window
+// where a concurrent process (an IDE, a cloud sync client) deletes or
+// recreates the file between the two calls — existsSync() can say true and
+// readFileSync() still throw ENOENT a moment later. Any other read error
+// (permissions, a directory at that path) still propagates; only "genuinely
+// absent" is treated as the same "start fresh" case as "never existed".
+function readFileIfExists(targetPath) {
+  try {
+    return fs.readFileSync(targetPath, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 // Whether an active (uncommented, correctly-tabled) mcp_servers entry with
 // the given name already exists. A plain string search matches commented-out
 // lines too (`# name = "egc-guardian"` still contains the substring), which
@@ -137,9 +152,10 @@ function buildMcpRegistrationTargets(homeDir) {
 function registerJson(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   let obj = { mcpServers: {} };
-  if (fs.existsSync(targetPath)) {
+  const existingContent = readFileIfExists(targetPath);
+  if (existingContent !== null) {
     try {
-      obj = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+      obj = JSON.parse(existingContent);
     } catch (err) {
       if (err instanceof SyntaxError) {
         throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
@@ -182,7 +198,7 @@ function tomlEscape(p) {
  */
 function registerToml(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
-  let content = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
+  let content = readFileIfExists(targetPath) ?? '';
   let appended = false;
   if (!tomlHasActiveServer(content, 'egc-guardian')) {
     content += `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
