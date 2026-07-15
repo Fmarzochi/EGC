@@ -68,7 +68,7 @@ For Tier 1 only:
 
 `node scripts/harness-audit.js` produces a report scored against the 7 categories defined in `CATEGORIES`. The score reflects repo-level health, not per-harness health. A future enhancement is per-harness rollup (see `docs/spec/README.md` Next Steps).
 
-## Adding a 15th harness
+## Adding a new harness
 
 Choose tier based on what the target tool actually consumes:
 

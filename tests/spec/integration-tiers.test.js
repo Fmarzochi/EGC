@@ -1,6 +1,6 @@
 /**
  * Validates docs/spec/integration-tiers.md matches reality:
- *   - All 9 harnesses are listed
+ *   - All harnesses are listed, and the list's length matches SUPPORTED_INSTALL_TARGETS
  *   - Every Tier 1 target named in the doc is in SUPPORTED_INSTALL_TARGETS
  *   - Every Tier 2 harness has a real installer script
  *   - Tier 3 entries reference real injection paths in bootstrap-cognitive.js
@@ -32,6 +32,7 @@ const EXPECTED_HARNESSES = [
   'Amp',
   'VS Code Copilot',
   'Continue.dev',
+  'Zed',
 ];
 
 const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'continue', 'kiro', 'trae', 'goose', 'amazonq', 'openhands', 'aider', 'warp'];
@@ -42,7 +43,7 @@ function loadDoc() {
   return fs.readFileSync(DOC_PATH, 'utf8');
 }
 
-function testDocListsAll9Harnesses() {
+function testDocListsAllHarnesses() {
   const doc = loadDoc();
   for (const harness of EXPECTED_HARNESSES) {
     assert.ok(
@@ -50,7 +51,27 @@ function testDocListsAll9Harnesses() {
       `integration-tiers.md must list harness "${harness}"`,
     );
   }
-  console.log(`  ✓ integration-tiers.md lists all ${EXPECTED_HARNESSES.length} harnesses`);
+
+  // EXPECTED_HARNESSES is a hand-maintained list of *display names*, which
+  // can't be derived automatically from SUPPORTED_INSTALL_TARGETS' slugs
+  // (e.g. 'amazonq' -> 'Amazon Q Developer CLI') without another lookup
+  // table to keep in sync. What CAN be checked automatically: its length
+  // must match the real target count, so adding a harness to the registry
+  // without adding it here fails loudly instead of this test silently
+  // covering one fewer harness than actually exist. 'egc' itself isn't a
+  // third-party harness name, so it's excluded from the count.
+  const { SUPPORTED_INSTALL_TARGETS } = require(
+    path.join(REPO_ROOT, 'scripts', 'lib', 'install-manifests.js'),
+  );
+  const realHarnessCount = SUPPORTED_INSTALL_TARGETS.filter(t => t !== 'egc').length;
+  assert.strictEqual(
+    EXPECTED_HARNESSES.length,
+    realHarnessCount,
+    `EXPECTED_HARNESSES has ${EXPECTED_HARNESSES.length} entries but SUPPORTED_INSTALL_TARGETS has ` +
+    `${realHarnessCount} real harnesses (excluding 'egc') — a harness was added or removed without updating this test.`,
+  );
+
+  console.log(`  ✓ integration-tiers.md lists all ${EXPECTED_HARNESSES.length} harnesses (count verified against SUPPORTED_INSTALL_TARGETS)`);
 }
 
 function testTier1TargetsMatchSupportedInstallTargets() {
@@ -103,7 +124,7 @@ console.log('=== Testing docs/spec/integration-tiers.md ===\n');
 let passed = 0;
 let failed = 0;
 for (const test of [
-  testDocListsAll9Harnesses,
+  testDocListsAllHarnesses,
   testTier1TargetsMatchSupportedInstallTargets,
   testTier2InstallersExist,
   testClaudeCodeProtocolInjectionExists,
