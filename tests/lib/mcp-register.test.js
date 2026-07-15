@@ -218,6 +218,47 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
+  (test('registerToml restores a commented-out entry instead of treating it as already registered (audit EGC-128)', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // A plain substring check for '"egc-guardian"' would match this
+    // commented-out line and wrongly conclude the server is registered.
+    fs.writeFileSync(
+      target,
+      '# [[mcp_servers]]\n# name = "egc-guardian"\n# command = "node"\n# args = ["/old/path.js"]\n'
+    );
+
+    const changed = registerToml(target, bins);
+
+    assert.strictEqual(changed, true, 'should re-register egc-guardian since the only entry is commented out');
+    const content = fs.readFileSync(target, 'utf8');
+    const activeLines = content
+      .split('\n')
+      .filter(line => !line.trim().startsWith('#'));
+    assert.ok(
+      activeLines.some(line => line.includes('name = "egc-guardian"')),
+      'an active (uncommented) egc-guardian entry should now exist'
+    );
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml treats an existing active entry as already registered (no duplicate)', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    registerToml(target, bins);
+    const firstWrite = fs.readFileSync(target, 'utf8');
+
+    const changed = registerToml(target, bins);
+
+    assert.strictEqual(changed, false, 'should be a no-op the second time');
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), firstWrite, 'should not duplicate the entries');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
   // ── registerContinueYaml ─────────────────────────────────────────
 
   (test('registerContinueYaml writes two files, one server each', () => {

@@ -17,6 +17,33 @@
 const fs = require('fs');
 const path = require('path');
 
+let TOML = null;
+try {
+  TOML = require('@iarna/toml');
+} catch {
+  // Handled per-call below: falls back to the substring check.
+}
+
+// Whether an active (uncommented, correctly-tabled) mcp_servers entry with
+// the given name already exists. A plain string search matches commented-out
+// lines too (`# name = "egc-guardian"` still contains the substring), which
+// would make registerToml believe the server is registered when the user
+// disabled it, and skip restoring it on the next `egc init`. Parsing catches
+// that; if the file doesn't parse (mid-edit, genuinely malformed), fall back
+// to the substring check rather than block registration entirely.
+function tomlHasActiveServer(content, serverName) {
+  if (TOML) {
+    try {
+      const parsed = TOML.parse(content);
+      const servers = Array.isArray(parsed.mcp_servers) ? parsed.mcp_servers : [];
+      return servers.some(server => server && server.name === serverName);
+    } catch {
+      // Fall through to the substring check below.
+    }
+  }
+  return content.includes(`"${serverName}"`) || content.includes(`'${serverName}'`);
+}
+
 /**
  * Tool configs that get egc-guardian / egc-memory registered into them,
  * relative to a given home directory. Each target is only written to if
@@ -157,11 +184,11 @@ function registerToml(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   let content = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
   let appended = false;
-  if (!content.includes('"egc-guardian"') && !content.includes("'egc-guardian'")) {
+  if (!tomlHasActiveServer(content, 'egc-guardian')) {
     content += `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
     appended = true;
   }
-  if (!content.includes('"egc-memory"') && !content.includes("'egc-memory'")) {
+  if (!tomlHasActiveServer(content, 'egc-memory')) {
     content += `\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
     appended = true;
   }
