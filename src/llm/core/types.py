@@ -23,6 +23,7 @@ class ProviderType(str, Enum):
     OPENROUTER = "openrouter"
     DEEPSEEK = "deepseek"
     MISTRAL = "mistral"
+    GROQ = "groq"
 
 
 @dataclass(frozen=True)

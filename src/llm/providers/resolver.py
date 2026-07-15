@@ -12,6 +12,7 @@ from llm.providers.mistral import MistralProvider
 from llm.providers.ollama import OllamaProvider
 from llm.providers.openai import OpenAIProvider
 from llm.providers.deepseek import DeepSeekProvider
+from llm.providers.groq import GroqProvider
 from llm.providers.openrouter import OpenRouterProvider
 
 _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
@@ -21,7 +22,8 @@ _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
     ProviderType.GEMINI: GeminiProvider,
     ProviderType.OPENROUTER: OpenRouterProvider,
     ProviderType.DEEPSEEK: DeepSeekProvider,
-    ProviderType.MISTRAL: MistralProvider, 
+    ProviderType.MISTRAL: MistralProvider,
+    ProviderType.GROQ: GroqProvider,
 }
 
 

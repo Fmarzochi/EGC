@@ -1,6 +1,7 @@
 from llm.providers.claude import ClaudeProvider
 from llm.providers.deepseek import DeepSeekProvider
 from llm.providers.gemini import GeminiProvider
+from llm.providers.groq import GroqProvider
 from llm.providers.mistral import MistralProvider
 from llm.providers.ollama import OllamaProvider
 from llm.providers.openai import OpenAIProvider
@@ -11,6 +12,7 @@ __all__ = (
     "ClaudeProvider",
     "DeepSeekProvider",
     "GeminiProvider",
+    "GroqProvider",
     "MistralProvider",
     "OllamaProvider",
     "OpenAIProvider",

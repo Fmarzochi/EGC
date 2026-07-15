@@ -246,6 +246,21 @@ class ModelResolver:
             "supports_vision": False,   # Large is text-only; Pixtral is the vision model
             "supports_tools": True,
         },
+        # --- Groq ---
+        "openai/gpt-oss-120b": {
+            "provider": "groq",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.SPEED,
+            ],
+            "fallback": None,
+            "context_window": 131072,
+            "max_tokens": 65536,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
         # --- DeepSeek native (api.deepseek.com) ---
         "deepseek-chat": {
             "provider": "deepseek",
@@ -466,6 +481,7 @@ class ModelResolver:
         "ollama": "llama3.2",
         "openrouter": "openrouter/auto",
         "mistral": "mistral-large-latest",
+        "groq": "openai/gpt-oss-120b",
     }
 
     # Per-provider default model ID (single place provider defaults live).
@@ -477,6 +493,7 @@ class ModelResolver:
         "openrouter": "openrouter/auto",
         "mistral": "mistral-large-latest",
         "deepseek": "deepseek-chat",
+        "groq": "openai/gpt-oss-120b",
     }
 
     _DEFAULT_PROVIDER = "gemini"
@@ -504,7 +521,12 @@ class ModelResolver:
         if info and info.get("provider"):
             return str(info["provider"])
         v = model_id.lower()
-        # OpenRouter brokers everything under "vendor/model" IDs.
+        # OpenRouter brokers everything under "vendor/model" IDs. Note: this is
+        # no longer exclusive to OpenRouter — Groq also hosts "vendor/model"
+        # IDs (e.g. "openai/gpt-oss-120b", registered above). Any *unregistered*
+        # Groq model with a "/" (e.g. a newer "openai/gpt-oss-20b") will still
+        # misroute to "openrouter" here; only registered IDs are exempt via the
+        # _REGISTRY lookup above.
         if "/" in v and not v.startswith("/") and "/models/" not in v:
             return "openrouter"
         if "claude-" in v:
@@ -726,6 +748,7 @@ class ModelResolver:
             "gpt-4o": "GPT-4o - most capable",
             "gpt-4o-mini": "GPT-4o-mini - fast & affordable",
             "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
+            "openai/gpt-oss-120b": "GPT-OSS 120B via Groq - fast inference, tool calling",
             "llama3.2": "Llama 3.2 - local general purpose",
             "openrouter/auto": "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
