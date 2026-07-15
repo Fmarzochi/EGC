@@ -261,6 +261,21 @@ class ModelResolver:
             "supports_vision": False,
             "supports_tools": True,
         },
+        # --- Cohere ---
+        "command-a-plus-05-2026": {
+            "provider": "cohere",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": None,
+            "context_window": 128000,
+            "max_tokens": 65536,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
         # --- DeepSeek native (api.deepseek.com) ---
         "deepseek-chat": {
             "provider": "deepseek",
@@ -482,6 +497,7 @@ class ModelResolver:
         "openrouter": "openrouter/auto",
         "mistral": "mistral-large-latest",
         "groq": "openai/gpt-oss-120b",
+        "cohere": "command-a-plus-05-2026",
     }
 
     # Per-provider default model ID (single place provider defaults live).
@@ -494,6 +510,7 @@ class ModelResolver:
         "mistral": "mistral-large-latest",
         "deepseek": "deepseek-chat",
         "groq": "openai/gpt-oss-120b",
+        "cohere": "command-a-plus-05-2026",
     }
 
     _DEFAULT_PROVIDER = "gemini"
@@ -510,7 +527,8 @@ class ModelResolver:
             or "claude-" in v
             or "mistral-" in v
             or v.startswith(("gpt-", "o1", "o3", "o4", "ministral-", "codestral-",
-                              "deepseek-"))  # native DeepSeek IDs
+                              "deepseek-",   # native DeepSeek IDs
+                              "command-"))   # native Cohere IDs
             or "/models/" in v          # Vertex AI fully-qualified path
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
@@ -542,6 +560,11 @@ class ModelResolver:
         # and is resolved via _ALIASES before _provider_for is ever called.
         if v.startswith("deepseek-"):
             return "deepseek"
+        # Native Cohere model IDs: command-a-plus-05-2026, command-r-plus, etc.
+        # The bare alias token "cohere" is excluded — no "-" suffix, resolved
+        # via _ALIASES before _provider_for is ever called.
+        if v.startswith("command-"):
+            return "cohere"
         return cls._DEFAULT_PROVIDER
 
     # ------------------------------------------------------------------ #
@@ -749,6 +772,7 @@ class ModelResolver:
             "gpt-4o-mini": "GPT-4o-mini - fast & affordable",
             "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
             "openai/gpt-oss-120b": "GPT-OSS 120B via Groq - fast inference, tool calling",
+            "command-a-plus-05-2026": "Command A+ (Cohere) - agentic tool use, vision, multilingual",
             "llama3.2": "Llama 3.2 - local general purpose",
             "openrouter/auto": "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",

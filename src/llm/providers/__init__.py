@@ -1,4 +1,5 @@
 from llm.providers.claude import ClaudeProvider
+from llm.providers.cohere import CohereProvider
 from llm.providers.deepseek import DeepSeekProvider
 from llm.providers.gemini import GeminiProvider
 from llm.providers.groq import GroqProvider
@@ -11,6 +12,7 @@ from llm.providers.vertex_ai import VertexAIProvider
 
 __all__ = (
     "ClaudeProvider",
+    "CohereProvider",
     "DeepSeekProvider",
     "GeminiProvider",
     "GroqProvider",

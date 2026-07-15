@@ -25,6 +25,7 @@ class ProviderType(str, Enum):
     MISTRAL = "mistral"
     GROQ = "groq"
     VERTEX_AI = "vertex_ai"
+    COHERE = "cohere"
 
 
 @dataclass(frozen=True)
