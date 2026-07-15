@@ -113,6 +113,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   trae:         { name: 'Trae',               url: 'https://www.trae.ai' },
   goose:        { name: 'Goose',              url: 'https://block.github.io/goose/' },
   amazonq:      { name: 'Amazon Q Developer CLI', url: 'https://aws.amazon.com/q/developer/' },
+  openhands:    { name: 'OpenHands',          url: 'https://docs.openhands.dev' },
   windsurf:     { name: 'Windsurf',           url: 'https://windsurf.ai' },
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },

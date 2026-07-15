@@ -8,6 +8,7 @@ const cursorProject = require('./cursor-project');
 const geminiProject = require('./gemini-project');
 const gooseHome = require('./goose-home');
 const kiroHome = require('./kiro-home');
+const openhandsHome = require('./openhands-home');
 const kiroProject = require('./kiro-project');
 const opencodeHome = require('./opencode-home');
 const windsurfHome = require('./windsurf-home');
@@ -28,6 +29,7 @@ const ADAPTERS = Object.freeze([
   amazonqProject,
   codexHome,
   gooseHome,
+  openhandsHome,
   geminiProject,
   opencodeHome,
   codebuddyProject,

@@ -1785,6 +1785,73 @@ function runTests() {
     assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
   })) passed++; else failed++;
 
+  if (test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {
+    const adapter = getInstallTargetAdapter('openhands');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'openhands-home');
+    assert.strictEqual(adapter.target, 'openhands');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.agents'));
+    assert.strictEqual(statePath, path.join(homeDir, '.agents', 'egc', 'openhands-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('openhands adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('openhands');
+    const byId = getInstallTargetAdapter('openhands-home');
+
+    assert.strictEqual(byTarget.id, 'openhands-home');
+    assert.strictEqual(byId.id, 'openhands-home');
+    assert.ok(byTarget.supports('openhands'));
+    assert.ok(byTarget.supports('openhands-home'));
+  })) passed++; else failed++;
+
+  if (test('openhands adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'openhands',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'openhands-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.agents/skills/, same AgentSkills-standard root Codex/Goose write to'
+    );
+  })) passed++; else failed++;
+
+  if (test('openhands adapter has no GateGuard hook wiring', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'openhands',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      !plan.operations.some(operation => operation.kind === 'merge-claude-settings-hooks'),
+      'OpenHands adapter should not register any hook merge operations'
+    );
+  })) passed++; else failed++;
+
+  if (test('openhands adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('openhands'), 'Should include openhands target');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
