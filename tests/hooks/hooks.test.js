@@ -153,7 +153,20 @@ function runShellScript(scriptPath, args = [], input = '', env = {}, cwd = proce
   return new Promise((resolve, reject) => {
     const proc = spawn('bash', [toBashPath(scriptPath), ...args], {
       cwd,
-      env: { ...process.env, ...env },
+      env: {
+        ...process.env,
+        // Cleared by default: these hooks scripts read EGC_HOOK_PROFILE/
+        // EGC_DISABLED_HOOKS (with an ECC_ legacy fallback), which the real
+        // EGC harness sets for every session. Running this suite from
+        // inside a live session would otherwise leak that session's
+        // profile/disabled-hooks into the subprocess under test. Tests that
+        // want a specific value still get it via their own `env` argument.
+        EGC_HOOK_PROFILE: '',
+        EGC_DISABLED_HOOKS: '',
+        ECC_HOOK_PROFILE: '',
+        ECC_DISABLED_HOOKS: '',
+        ...env,
+      },
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
@@ -2942,7 +2955,7 @@ async function runTests() {
     await asyncTest('observe.sh skips minimal hook profile before project detection side effects', async () => {
       await assertObserveSkipBeforeProjectDetection({
         name: 'minimal hook profile',
-        env: { GEMINI_CODE_ENTRYPOINT: 'cli', ECC_HOOK_PROFILE: 'minimal' }
+        env: { GEMINI_CODE_ENTRYPOINT: 'cli', EGC_HOOK_PROFILE: 'minimal' }
       });
     })
   )

@@ -69,7 +69,7 @@ function runHook(input, env = {}) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      ECC_HOOK_PROFILE: 'standard',
+      EGC_HOOK_PROFILE: 'standard',
       GATEGUARD_STATE_DIR: stateDir,
       EGC_SESSION_ID: TEST_SESSION_ID,
       ...env
@@ -97,7 +97,7 @@ function runBashHook(input, env = {}) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      ECC_HOOK_PROFILE: 'standard',
+      EGC_HOOK_PROFILE: 'standard',
       GATEGUARD_STATE_DIR: stateDir,
       EGC_SESSION_ID: TEST_SESSION_ID,
       ...env
@@ -409,15 +409,15 @@ function runTests() {
     assert.ok(!reason.includes('\ninjected'), 'injected content must not appear on its own line');
   })) passed++; else failed++;
 
-  // --- Test 9: respects ECC_DISABLED_HOOKS ---
+  // --- Test 9: respects EGC_DISABLED_HOOKS ---
   clearState();
-  if (test('respects ECC_DISABLED_HOOKS (skips when disabled)', () => {
+  if (test('respects EGC_DISABLED_HOOKS (skips when disabled)', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/disabled.js', old_string: 'a', new_string: 'b' }
     };
     const result = runHook(input, {
-      ECC_DISABLED_HOOKS: 'pre:edit-write:gateguard-fact-force'
+      EGC_DISABLED_HOOKS: 'pre:edit-write:gateguard-fact-force'
     });
 
     assert.strictEqual(result.code, 0, 'exit code should be 0');

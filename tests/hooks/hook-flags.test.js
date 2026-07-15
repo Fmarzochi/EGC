@@ -113,49 +113,52 @@ function runTests() {
   console.log('\ngetHookProfile:');
 
   if (test('defaults to standard when env var not set', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined }, () => {
+    // hook-flags.js checks EGC_HOOK_PROFILE first, ECC_HOOK_PROFILE as a
+    // legacy fallback (pre-rename alias) — both must be cleared for this to
+    // actually exercise the "nothing set" default, not just the primary.
+    withEnv({ EGC_HOOK_PROFILE: undefined, ECC_HOOK_PROFILE: undefined }, () => {
       assert.strictEqual(getHookProfile(), 'standard');
     });
   })) passed++; else failed++;
 
   if (test('returns minimal when set to minimal', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'minimal' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'minimal' }, () => {
       assert.strictEqual(getHookProfile(), 'minimal');
     });
   })) passed++; else failed++;
 
   if (test('returns standard when set to standard', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'standard' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'standard' }, () => {
       assert.strictEqual(getHookProfile(), 'standard');
     });
   })) passed++; else failed++;
 
   if (test('returns strict when set to strict', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'strict' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'strict' }, () => {
       assert.strictEqual(getHookProfile(), 'strict');
     });
   })) passed++; else failed++;
 
   if (test('is case-insensitive', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'STRICT' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'STRICT' }, () => {
       assert.strictEqual(getHookProfile(), 'strict');
     });
   })) passed++; else failed++;
 
   if (test('trims whitespace from env var', () => {
-    withEnv({ ECC_HOOK_PROFILE: '  minimal  ' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: '  minimal  ' }, () => {
       assert.strictEqual(getHookProfile(), 'minimal');
     });
   })) passed++; else failed++;
 
   if (test('defaults to standard for invalid value', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'invalid' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'invalid' }, () => {
       assert.strictEqual(getHookProfile(), 'standard');
     });
   })) passed++; else failed++;
 
   if (test('defaults to standard for empty string', () => {
-    withEnv({ ECC_HOOK_PROFILE: '' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: '' }, () => {
       assert.strictEqual(getHookProfile(), 'standard');
     });
   })) passed++; else failed++;
@@ -164,7 +167,7 @@ function runTests() {
   console.log('\ngetDisabledHookIds:');
 
   if (test('returns empty Set when env var not set', () => {
-    withEnv({ ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: undefined, ECC_DISABLED_HOOKS: undefined }, () => {
       const result = getDisabledHookIds();
       assert.ok(result instanceof Set);
       assert.strictEqual(result.size, 0);
@@ -172,19 +175,19 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('returns empty Set for empty string', () => {
-    withEnv({ ECC_DISABLED_HOOKS: '' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: '' }, () => {
       assert.strictEqual(getDisabledHookIds().size, 0);
     });
   })) passed++; else failed++;
 
   if (test('returns empty Set for whitespace-only string', () => {
-    withEnv({ ECC_DISABLED_HOOKS: '   ' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: '   ' }, () => {
       assert.strictEqual(getDisabledHookIds().size, 0);
     });
   })) passed++; else failed++;
 
   if (test('parses single hook id', () => {
-    withEnv({ ECC_DISABLED_HOOKS: 'my-hook' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: 'my-hook' }, () => {
       const result = getDisabledHookIds();
       assert.strictEqual(result.size, 1);
       assert.ok(result.has('my-hook'));
@@ -192,7 +195,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('parses multiple comma-separated hook ids', () => {
-    withEnv({ ECC_DISABLED_HOOKS: 'hook-a,hook-b,hook-c' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: 'hook-a,hook-b,hook-c' }, () => {
       const result = getDisabledHookIds();
       assert.strictEqual(result.size, 3);
       assert.ok(result.has('hook-a'));
@@ -202,7 +205,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('trims whitespace around hook ids', () => {
-    withEnv({ ECC_DISABLED_HOOKS: ' hook-a , hook-b ' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: ' hook-a , hook-b ' }, () => {
       const result = getDisabledHookIds();
       assert.strictEqual(result.size, 2);
       assert.ok(result.has('hook-a'));
@@ -211,7 +214,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('normalizes hook ids to lowercase', () => {
-    withEnv({ ECC_DISABLED_HOOKS: 'MyHook,ANOTHER' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: 'MyHook,ANOTHER' }, () => {
       const result = getDisabledHookIds();
       assert.ok(result.has('myhook'));
       assert.ok(result.has('another'));
@@ -219,7 +222,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('filters out empty entries from trailing commas', () => {
-    withEnv({ ECC_DISABLED_HOOKS: 'hook-a,,hook-b,' }, () => {
+    withEnv({ EGC_DISABLED_HOOKS: 'hook-a,,hook-b,' }, () => {
       const result = getDisabledHookIds();
       assert.strictEqual(result.size, 2);
       assert.ok(result.has('hook-a'));
@@ -304,85 +307,85 @@ function runTests() {
   console.log('\nisHookEnabled:');
 
   if (test('returns true by default for a hook (standard profile)', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined, ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: undefined, EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), true);
     });
   })) passed++; else failed++;
 
   if (test('returns true for empty hookId', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined, ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: undefined, EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled(''), true);
     });
   })) passed++; else failed++;
 
   if (test('returns true for null hookId', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined, ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: undefined, EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled(null), true);
     });
   })) passed++; else failed++;
 
   if (test('returns false when hook is in disabled list', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined, ECC_DISABLED_HOOKS: 'my-hook' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: undefined, EGC_DISABLED_HOOKS: 'my-hook' }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), false);
     });
   })) passed++; else failed++;
 
   if (test('disabled check is case-insensitive', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined, ECC_DISABLED_HOOKS: 'MY-HOOK' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: undefined, EGC_DISABLED_HOOKS: 'MY-HOOK' }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), false);
     });
   })) passed++; else failed++;
 
   if (test('returns true when hook is not in disabled list', () => {
-    withEnv({ ECC_HOOK_PROFILE: undefined, ECC_DISABLED_HOOKS: 'other-hook' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: undefined, EGC_DISABLED_HOOKS: 'other-hook' }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), true);
     });
   })) passed++; else failed++;
 
   if (test('returns false when current profile is not in allowed profiles', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'minimal', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'minimal', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook', { profiles: 'strict' }), false);
     });
   })) passed++; else failed++;
 
   if (test('returns true when current profile is in allowed profiles', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'strict', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'strict', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook', { profiles: 'standard,strict' }), true);
     });
   })) passed++; else failed++;
 
   if (test('returns true when current profile matches single allowed profile', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'minimal', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'minimal', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook', { profiles: 'minimal' }), true);
     });
   })) passed++; else failed++;
 
   if (test('disabled hooks take precedence over profile match', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'strict', ECC_DISABLED_HOOKS: 'my-hook' }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'strict', EGC_DISABLED_HOOKS: 'my-hook' }, () => {
       assert.strictEqual(isHookEnabled('my-hook', { profiles: 'strict' }), false);
     });
   })) passed++; else failed++;
 
   if (test('uses default profiles (standard, strict) when none specified', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'minimal', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'minimal', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), false);
     });
   })) passed++; else failed++;
 
   if (test('allows standard profile by default', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'standard', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'standard', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), true);
     });
   })) passed++; else failed++;
 
   if (test('allows strict profile by default', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'strict', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'strict', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook'), true);
     });
   })) passed++; else failed++;
 
   if (test('accepts array profiles option', () => {
-    withEnv({ ECC_HOOK_PROFILE: 'minimal', ECC_DISABLED_HOOKS: undefined }, () => {
+    withEnv({ EGC_HOOK_PROFILE: 'minimal', EGC_DISABLED_HOOKS: undefined }, () => {
       assert.strictEqual(isHookEnabled('my-hook', { profiles: ['minimal', 'standard'] }), true);
     });
   })) passed++; else failed++;
