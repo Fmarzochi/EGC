@@ -24,6 +24,7 @@ class ProviderType(str, Enum):
     DEEPSEEK = "deepseek"
     MISTRAL = "mistral"
     GROQ = "groq"
+    VERTEX_AI = "vertex_ai"
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ from llm.providers.openai import OpenAIProvider
 from llm.providers.deepseek import DeepSeekProvider
 from llm.providers.groq import GroqProvider
 from llm.providers.openrouter import OpenRouterProvider
+from llm.providers.vertex_ai import VertexAIProvider
 
 _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
     ProviderType.CLAUDE: ClaudeProvider,
@@ -24,6 +25,7 @@ _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
     ProviderType.DEEPSEEK: DeepSeekProvider,
     ProviderType.MISTRAL: MistralProvider,
     ProviderType.GROQ: GroqProvider,
+    ProviderType.VERTEX_AI: VertexAIProvider,
 }
 
 

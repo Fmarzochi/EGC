@@ -7,6 +7,7 @@ from llm.providers.ollama import OllamaProvider
 from llm.providers.openai import OpenAIProvider
 from llm.providers.openrouter import OpenRouterProvider
 from llm.providers.resolver import get_provider, register_provider
+from llm.providers.vertex_ai import VertexAIProvider
 
 __all__ = (
     "ClaudeProvider",
@@ -17,6 +18,7 @@ __all__ = (
     "OllamaProvider",
     "OpenAIProvider",
     "OpenRouterProvider",
+    "VertexAIProvider",
     "get_provider",
     "register_provider",
 )
