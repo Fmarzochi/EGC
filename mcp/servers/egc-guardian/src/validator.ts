@@ -8,6 +8,36 @@ export const DANGEROUS = ['rm', 'mv'];
 
 export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
 
+// find flags that perform an action (delete, run arbitrary commands) rather
+// than just filtering results. These bypass the DANGEROUS ['rm', 'mv'] check
+// entirely because the base command is 'find', which is SAFE_READONLY.
+export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprintf', '-fls'];
+
+// Interpreters/shells whose inline-eval flags let an agent execute arbitrary
+// code that bypasses every path- and content-based check in this file (the
+// interpreter reads/writes/execs whatever the inline string tells it to,
+// independent of the guardian's allowlist for base commands). Denied
+// regardless of whether the interpreter itself is otherwise allowlisted,
+// because 'allowed to run node' must not imply 'allowed to eval anything'.
+const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
+  node: ['-e', '--eval', '-p', '--print'],
+  nodejs: ['-e', '--eval', '-p', '--print'],
+  python: ['-c'],
+  python2: ['-c'],
+  python3: ['-c'],
+  perl: ['-e', '-E'],
+  ruby: ['-e'],
+  php: ['-r'],
+  bash: ['-c'],
+  sh: ['-c'],
+  zsh: ['-c'],
+  dash: ['-c'],
+  ksh: ['-c'],
+  pwsh: ['-c', '-command', '-Command'],
+  powershell: ['-c', '-command', '-Command'],
+  'powershell.exe': ['-c', '-command', '-Command'],
+};
+
 // Protected file patterns (checked on full path string).
 //
 // AI coding tool home directories (~/.claude, ~/.cursor, ~/.gemini, ~/.config/*)
@@ -126,15 +156,16 @@ export function validateCommandArgs(
 
   switch (baseCommand) {
     case 'git': {
-      // Block force pushes
-      if (
-        args.includes('--force') ||
-        args.includes('-f') ||
-        (args.includes('push') && (args.includes('--force') || args.includes('-f')))
-      ) {
+      // Block force pushes, including --force-with-lease/--force-if-includes
+      // (startsWith, not includes, so these are caught even though their
+      // second character is '-' and they carry a value after '=').
+      const hasForceFlag = args.some(
+        a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
+      );
+      if (hasForceFlag) {
         return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
       }
-      // Additional check for combined flags like -fu, --force-with-lease used destructively
+      // Additional check for combined short flags like -fu used destructively
       if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
         return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
       }
@@ -208,6 +239,18 @@ export function validateCommandArgs(
     }
 
     case 'find': {
+      // -delete/-exec/etc. make find perform an action instead of just
+      // filtering, which reproduces 'rm -rf' through a base command that
+      // isn't in the DANGEROUS list. Deny regardless of path.
+      const actionFlag = args.find(a => FIND_ACTION_FLAGS.includes(a));
+      if (actionFlag) {
+        return {
+          allowed: false,
+          reason: `find with action flag '${actionFlag}' is forbidden (use a read-only find, then a separate reviewed command)`,
+          trust_level: 'DANGEROUS',
+        };
+      }
+
       // First non-flag arg is typically the search root
       const pathArgs = args.filter(a => !a.startsWith('-'));
       for (const p of pathArgs) {
@@ -242,6 +285,33 @@ export function validateCommandArgs(
     case 'npx':
     case 'node':
     case 'tsc': {
+      // node -e/-p can read, write, or exfiltrate anything the process can
+      // touch, including files DENIED_PATHS protects (e.g. the state
+      // encryption key) — inline eval is caught by the interpreter check in
+      // validateCommand, but a defense-in-depth check here means this branch
+      // is still safe even if it's ever reached directly.
+      const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
+      if (evalFlags && args.some(a => evalFlags.includes(a))) {
+        return {
+          allowed: false,
+          reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
+          trust_level: 'DANGEROUS',
+        };
+      }
+
+      // Any argument that resolves to a protected path (a script path, a
+      // require target, etc.) is denied the same way 'cat'/'find' deny it —
+      // being in SAFE_DEV means "safe to run", not "exempt from path checks".
+      for (const arg of args) {
+        if (!arg.startsWith('-') && isProtectedPath(arg)) {
+          return {
+            allowed: false,
+            reason: `${baseCommand} on protected path '${arg}' is forbidden`,
+            trust_level: 'SAFE_DEV',
+          };
+        }
+      }
+
       return { allowed: true, trust_level: 'SAFE_DEV' };
     }
 
@@ -273,7 +343,26 @@ export function validateCommand(command: string): ValidationResult {
     };
   }
 
-  // 3. Not in any allowlist: blocked
+  // 3. Inline code execution (python3 -c, bash -c, node -e, etc.) is a hard
+  // deny, not an allowlist check. This runs before the allowlist-membership
+  // check on purpose: the base command being outside SAFE_READONLY/SAFE_DEV
+  // (e.g. 'python3', 'bash') is only advisory at the enforcement hook layer,
+  // by design, so that legitimate commands outside this tiny allowlist
+  // (docker, pytest, cargo, go...) don't get hard-blocked wholesale. Inline
+  // eval is different: it lets ANY base command execute arbitrary code that
+  // bypasses every other check in this file, so it must hard-block
+  // regardless of allowlist status. Using DANGEROUS here (not BLOCKED) keeps
+  // the reason string out of the hook's advisory-reason list.
+  const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand];
+  if (evalFlagsForBase && args.some(a => evalFlagsForBase.includes(a))) {
+    return {
+      allowed: false,
+      reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+
+  // 4. Not in any allowlist: blocked
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
     return {
       allowed: false,
@@ -282,7 +371,7 @@ export function validateCommand(command: string): ValidationResult {
     };
   }
 
-  // 4. In allowlist: validate args
+  // 5. In allowlist: validate args
   return validateCommandArgs(baseCommand, args);
 }
 

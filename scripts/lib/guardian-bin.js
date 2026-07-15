@@ -24,12 +24,27 @@ function fromPackageLayout() {
   return fs.existsSync(candidate) ? candidate : null;
 }
 
+// A repo-local .mcp.json is untrusted content: it travels with whatever
+// repository the user happens to have open, so a malicious repo could ship
+// one that points egc-guardian's entry at a payload script it also ships,
+// which fromMcpConfigs() would then execute as this process's own security
+// validator (RCE). Only ~/.claude.json and ~/.gemini/settings.json are
+// trusted here, because writes to those two files are already denied by
+// validate_write's PROTECTED_FILE_PATTERNS/DENIED_PATHS — a repo cannot get
+// content into them just by being cloned. A project's own .mcp.json is
+// deliberately never consulted for this resolution.
 function fromMcpConfigs() {
   const configPaths = [
-    path.join(process.env.PWD || process.cwd(), '.mcp.json'),
     path.join(os.homedir(), '.claude.json'),
     path.join(os.homedir(), '.gemini', 'settings.json'),
   ];
+
+  // Resolved candidates must live under the user's home directory. This
+  // blocks a tampered home config from pointing at a script planted in the
+  // current project (or /tmp, or anywhere else reachable by whatever
+  // repository is open) even if the config file itself were ever
+  // compromised by some other means.
+  const home = path.resolve(os.homedir());
 
   for (const configPath of configPaths) {
     try {
@@ -40,7 +55,8 @@ function fromMcpConfigs() {
         a => typeof a === 'string' && a.endsWith(path.join('egc-guardian', 'build', 'index.js')),
       );
       if (!indexJs) continue;
-      const candidate = path.join(path.dirname(indexJs), 'guardian-cli.js');
+      const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');
+      if (candidate !== home && !candidate.startsWith(home + path.sep)) continue;
       if (fs.existsSync(candidate)) return candidate;
     } catch (_) { /* unreadable or malformed config: try the next one */ }
   }
@@ -71,4 +87,4 @@ function callGuardian(cli, args, input, timeoutMs) {
   }
 }
 
-module.exports = { resolveGuardianCli, callGuardian };
+module.exports = { resolveGuardianCli, callGuardian, fromEnv, fromPackageLayout, fromMcpConfigs };
