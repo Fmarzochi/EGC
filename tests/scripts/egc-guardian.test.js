@@ -260,6 +260,20 @@ async function runTests() {
   run('git push --force-with-lease',   () => assertDenied('git push --force-with-lease origin main'));
   run('git push --force-if-includes',  () => assertDenied('git push --force-if-includes'));
 
+  // ── validate_write: DENIED (PATH/persistence hijack, audit EGC-128) ───────
+
+  console.log('\n=== validate_write: DENIED (PATH/persistence hijack) ===');
+
+  run(`write ~/.local/bin/git`,        () => assertWriteDenied(`${home}/.local/bin/git`));
+  run(`write ~/.local/bin/node`,       () => assertWriteDenied(`${home}/.local/bin/node`));
+  run(`write ~/.bashrc`,               () => assertWriteDenied(`${home}/.bashrc`));
+  run(`write ~/.zshrc`,                () => assertWriteDenied(`${home}/.zshrc`));
+  run(`write ~/.bash_profile`,         () => assertWriteDenied(`${home}/.bash_profile`));
+  run(`write ~/.zprofile`,             () => assertWriteDenied(`${home}/.zprofile`));
+  run(`write ~/.profile`,              () => assertWriteDenied(`${home}/.profile`));
+  run(`write ~/.gitconfig`,            () => assertWriteDenied(`${home}/.gitconfig`));
+  run(`write ~/.config/systemd/user/x.service`, () => assertWriteDenied(`${home}/.config/systemd/user/x.service`));
+
   // ── validate_command: ALLOWED (must still work — no regression) ───────────
 
   console.log('\n=== validate_command: ALLOWED (no regression from audit fixes) ===');

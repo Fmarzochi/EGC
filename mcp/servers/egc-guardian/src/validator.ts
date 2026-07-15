@@ -79,6 +79,17 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // functional and must stay writable once Continue.dev is integrated.
   /\.continue[\\/]\.local$/,
   /\.continue[\\/]\.staging$/,
+  // Shell startup files and git config: not credential stores, but a
+  // write here is a persistence mechanism — code planted here runs on
+  // every new shell (rc files) or every git invocation that hits an
+  // aliased subcommand (gitconfig aliases can run arbitrary shell via
+  // `alias.x = "!sh -c ..."`), long after the current session ends.
+  /(^|[\\/])\.bashrc$/,
+  /(^|[\\/])\.zshrc$/,
+  /(^|[\\/])\.bash_profile$/,
+  /(^|[\\/])\.zprofile$/,
+  /(^|[\\/])\.profile$/,
+  /(^|[\\/])\.gitconfig$/,
 ];
 
 export function buildDeniedPaths(): string[] {
@@ -91,6 +102,14 @@ export function buildDeniedPaths(): string[] {
     path.join(home, '.aws'),
     path.join(home, '.gnupg'),
     path.join(home, '.egc'),
+    // A binary planted here (named e.g. 'git' or 'node') sits ahead of
+    // /usr/bin on most PATH configurations, silently hijacking every
+    // "safe, allowlisted" command this same guardian trusts by name.
+    path.join(home, '.local', 'bin'),
+    // User-level systemd units auto-run on login without any further
+    // action from the agent that planted one — a persistence mechanism
+    // equivalent in effect to a shell rc file.
+    path.join(home, '.config', 'systemd', 'user'),
     // ~/.config is XDG_CONFIG_HOME, shared by many unrelated apps and by
     // OpenCode/Zed's functional (non-secret) config, which EGC itself
     // installs into. Deny only the specific subdirectories confirmed to
