@@ -371,12 +371,7 @@ function resolveLegacyCompatibilitySelection(options = {}) {
   };
 }
 
-function resolveInstallPlan(options = {}) {
-  const manifests = loadInstallManifests(options);
-  const profileId = options.profileId || null;
-  const explicitModuleIds = dedupeStrings(options.moduleIds);
-  const includedComponentIds = dedupeStrings(options.includeComponentIds);
-  const excludedComponentIds = dedupeStrings(options.excludeComponentIds);
+function collectRequestedModuleIds(options, manifests, profileId) {
   const requestedModuleIds = [];
 
   if (profileId) {
@@ -387,11 +382,18 @@ function resolveInstallPlan(options = {}) {
     requestedModuleIds.push(...profile.modules);
   }
 
-  requestedModuleIds.push(...explicitModuleIds);
-  requestedModuleIds.push(...expandComponentIdsToModuleIds(includedComponentIds, manifests));
+  requestedModuleIds.push(...dedupeStrings(options.moduleIds));
+  requestedModuleIds.push(
+    ...expandComponentIdsToModuleIds(dedupeStrings(options.includeComponentIds), manifests)
+  );
 
+  return requestedModuleIds;
+}
+
+function resolveExcludedModules(excludedComponentIds, manifests) {
   const excludedModuleIds = expandComponentIdsToModuleIds(excludedComponentIds, manifests);
   const excludedModuleOwners = new Map();
+
   for (const componentId of excludedComponentIds) {
     const component = manifests.componentsById.get(componentId);
     if (!component) {
@@ -404,12 +406,16 @@ function resolveInstallPlan(options = {}) {
     }
   }
 
-  const target = options.target || null;
+  return { excludedModuleIds, excludedModuleOwners };
+}
+
+function resolveInstallTargetContext(options, manifests, target) {
   if (target && !SUPPORTED_INSTALL_TARGETS.includes(target)) {
     throw new Error(
       `Unknown install target: ${target}. Expected one of ${SUPPORTED_INSTALL_TARGETS.join(', ')}`
     );
   }
+
   const validatedProjectRoot = readOptionalStringOption(options, 'projectRoot');
   const validatedHomeDir = readOptionalStringOption(options, 'homeDir');
   const targetPlanningInput = target
@@ -421,21 +427,19 @@ function resolveInstallPlan(options = {}) {
     : null;
   const targetAdapter = target ? getInstallTargetAdapter(target) : null;
 
-  const effectiveRequestedIds = dedupeStrings(
-    requestedModuleIds.filter(moduleId => !excludedModuleOwners.has(moduleId))
-  );
+  return { targetPlanningInput, targetAdapter };
+}
 
-  if (requestedModuleIds.length === 0) {
-    throw new Error('No install profile, module IDs, or included component IDs were provided');
-  }
-
-  if (effectiveRequestedIds.length === 0) {
-    throw new Error('Selection excludes every requested install module');
-  }
-
+function resolveModuleDependencyGraph({
+  manifests,
+  target,
+  targetAdapter,
+  targetPlanningInput,
+  excludedModuleOwners,
+  effectiveRequestedIds,
+}) {
   const selectedIds = new Set();
   const skippedTargetIds = new Set();
-  const excludedIds = new Set(excludedModuleIds);
   const visitingIds = new Set();
   const resolvedIds = new Set();
 
@@ -503,6 +507,23 @@ function resolveInstallPlan(options = {}) {
     resolveModule(moduleId, null, moduleId);
   }
 
+  return { selectedIds, skippedTargetIds };
+}
+
+function buildInstallPlanResult({
+  manifests,
+  profileId,
+  target,
+  targetPlanningInput,
+  effectiveRequestedIds,
+  explicitModuleIds,
+  includedComponentIds,
+  excludedComponentIds,
+  excludedModuleIds,
+  selectedIds,
+  skippedTargetIds,
+}) {
+  const excludedIds = new Set(excludedModuleIds);
   const selectedModules = manifests.modules.filter(module => selectedIds.has(module.id));
   const skippedModules = manifests.modules.filter(module => skippedTargetIds.has(module.id));
   const excludedModules = manifests.modules.filter(module => excludedIds.has(module.id));
@@ -536,6 +557,61 @@ function resolveInstallPlan(options = {}) {
     validationIssues: scaffoldPlan ? scaffoldPlan.validationIssues : [],
     operations: scaffoldPlan ? scaffoldPlan.operations : [],
   };
+}
+
+function resolveInstallPlan(options = {}) {
+  const manifests = loadInstallManifests(options);
+  const profileId = options.profileId || null;
+  const explicitModuleIds = dedupeStrings(options.moduleIds);
+  const includedComponentIds = dedupeStrings(options.includeComponentIds);
+  const excludedComponentIds = dedupeStrings(options.excludeComponentIds);
+  const target = options.target || null;
+
+  const requestedModuleIds = collectRequestedModuleIds(options, manifests, profileId);
+  const { excludedModuleIds, excludedModuleOwners } = resolveExcludedModules(
+    excludedComponentIds,
+    manifests
+  );
+  const { targetPlanningInput, targetAdapter } = resolveInstallTargetContext(
+    options,
+    manifests,
+    target
+  );
+
+  const effectiveRequestedIds = dedupeStrings(
+    requestedModuleIds.filter(moduleId => !excludedModuleOwners.has(moduleId))
+  );
+
+  if (requestedModuleIds.length === 0) {
+    throw new Error('No install profile, module IDs, or included component IDs were provided');
+  }
+
+  if (effectiveRequestedIds.length === 0) {
+    throw new Error('Selection excludes every requested install module');
+  }
+
+  const { selectedIds, skippedTargetIds } = resolveModuleDependencyGraph({
+    manifests,
+    target,
+    targetAdapter,
+    targetPlanningInput,
+    excludedModuleOwners,
+    effectiveRequestedIds,
+  });
+
+  return buildInstallPlanResult({
+    manifests,
+    profileId,
+    target,
+    targetPlanningInput,
+    effectiveRequestedIds,
+    explicitModuleIds,
+    includedComponentIds,
+    excludedComponentIds,
+    excludedModuleIds,
+    selectedIds,
+    skippedTargetIds,
+  });
 }
 
 module.exports = {
