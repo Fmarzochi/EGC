@@ -35,6 +35,18 @@ def test_missing_api_key_raises_authentication_error(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
+def test_unauthorized_exception_raises_authentication_error(provider: DeepSeekProvider) -> None:
+    """Regression test for audit EGC-128 (medium): only the client-side
+    missing-key check was covered before this; a real 401 rejection from
+    the API itself (the actual OpenAIProvider.generate() classification
+    path) had no test for DeepSeek specifically."""
+    provider.client.chat.completions.create.side_effect = RuntimeError("401 unauthorized: invalid api key")
+    with pytest.raises(AuthenticationError) as exc:
+        provider.generate(_simple_input())
+    assert exc.value.provider == ProviderType.DEEPSEEK
+
+
+@pytest.mark.unit
 def test_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-key")
     with patch("llm.providers.deepseek.OpenAI") as mock_openai:
