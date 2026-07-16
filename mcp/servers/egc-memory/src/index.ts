@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
@@ -212,7 +212,7 @@ async function runMigrations(db: Database, dbDir: string) {
   // Remove stale lock from a previous crashed process
   if (fs.existsSync(lockFile)) {
     try {
-      const storedPid = parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
+      const storedPid = Number.parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
       if (!isNaN(storedPid) && storedPid !== process.pid) {
         // Check if the PID is still alive (POSIX: signal 0 = probe only)
         let alive = false;
@@ -352,7 +352,7 @@ async function runMigrations(db: Database, dbDir: string) {
     }
 
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
-    const bootCount = bootRow ? parseInt(bootRow.value, 10) + 1 : 1;
+    const bootCount = bootRow ? Number.parseInt(bootRow.value, 10) + 1 : 1;
     await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['server_boot_count', String(bootCount)]);
   } finally {
     try { fs.unlinkSync(lockFile); } catch(e) {

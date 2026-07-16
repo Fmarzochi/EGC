@@ -17,8 +17,8 @@
  *   node merge-mcp-config.js <config.toml> [--dry-run] [--update-mcp]
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { parseDisabledMcpServers } = require('../lib/mcp-config');
 
 let TOML;
@@ -47,7 +47,7 @@ try {
 let resolvedExecCmd = pmConfig.config.execCmd;
 if (pmConfig.name === 'yarn' && resolvedExecCmd === 'yarn dlx') {
   try {
-    const { execFileSync } = require('child_process');
+    const { execFileSync } = require('node:child_process');
     const ver = execFileSync('yarn', ['--version'], { encoding: 'utf8', timeout: 5000 }).trim();
     if (ver.startsWith('1.')) {
       resolvedExecCmd = 'npx';
@@ -77,7 +77,7 @@ const GH_BOOTSTRAP = `token=$(gh auth token 2>/dev/null || true); if [ -n "$toke
 function dlxServer(name, pkg, extraFields, extraToml) {
   const args = [...PM_EXEC_PARTS.slice(1), pkg];
   const fields = { command: PM_EXEC_PARTS[0], args, ...extraFields };
-  const argsStr = JSON.stringify(args).replace(/,/g, ', ');
+  const argsStr = JSON.stringify(args).replaceAll(',', ', ');
   let toml = `[mcp_servers.${name}]\ncommand = "${PM_EXEC_PARTS[0]}"\nargs = ${argsStr}`;
   if (extraToml) toml += '\n' + extraToml;
   return { fields, toml };

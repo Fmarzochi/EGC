@@ -20,8 +20,8 @@
  *   docs/CODEMAPS/workers.md
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -221,7 +221,7 @@ ${entrySection}
 
 \`\`\`
 ${area.name} Directory Structure
-${dirSection.replace(/- `/g, '').replace(/`\/$/gm, '/')}
+${dirSection.replaceAll('- `', '').replace(/`\/$/gm, '/')}
 \`\`\`
 
 ## Key Modules
