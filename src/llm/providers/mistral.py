@@ -12,6 +12,7 @@ except ImportError:
 
 from llm.core.interface import AuthenticationError, LLMError
 from llm.core.model_resolver import ModelResolver
+from llm.core.redact import redact_secrets
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
@@ -61,9 +62,10 @@ class MistralProvider(OpenAIProvider):
             # Native OpenAI SDK exceptions (RateLimitError, APIConnectionError,
             # AuthenticationError, etc.) propagate here unwrapped when
             # OpenAIProvider.generate() hits the bare `raise`. Wrap them so
-            # telemetry always attributes to MISTRAL, never OPENAI.
+            # telemetry always attributes to MISTRAL, never OPENAI. Redacted:
+            # a raw SDK exception message can embed the HTTP response body.
             raise LLMError(
-                str(exc),
+                redact_secrets(str(exc)),
                 provider=ProviderType.MISTRAL,
             ) from exc
 

@@ -229,6 +229,19 @@ def test_native_sdk_exception_is_retagged_as_deepseek(provider: DeepSeekProvider
 
 
 @pytest.mark.unit
+def test_native_sdk_exception_secrets_are_redacted(provider: DeepSeekProvider) -> None:
+    """Regression test for audit EGC-128 (medium): a raw SDK exception can
+    embed the HTTP response body, which may echo request headers/payloads
+    back — that text must not reach LLMError verbatim."""
+    provider.client.chat.completions.create.side_effect = RuntimeError(
+        'connection failed, request had Authorization: Bearer sk-leaked-value-123456'
+    )
+    with pytest.raises(LLMError) as exc:
+        provider.generate(_simple_input())
+    assert "sk-leaked-value-123456" not in str(exc.value)
+
+
+@pytest.mark.unit
 def test_provider_for_deepseek_model_names(monkeypatch: pytest.MonkeyPatch) -> None:
     """fix #3: ModelResolver._provider_for must return 'deepseek' for both
     current and hypothetical future DeepSeek native model names."""

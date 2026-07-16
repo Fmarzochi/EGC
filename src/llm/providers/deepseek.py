@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - SDK optional
 
 from llm.core.interface import AuthenticationError, LLMError, LLMProvider
 from llm.core.model_resolver import ModelResolver
+from llm.core.redact import redact_secrets
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
@@ -93,8 +94,10 @@ class DeepSeekProvider(OpenAIProvider):
             # APIConnectionError, AuthenticationError, etc.) propagate here
             # unwrapped when OpenAIProvider.generate() hits the bare `raise`.
             # Wrap them so telemetry always attributes to DEEPSEEK, never OPENAI.
+            # Redacted: a raw SDK exception message can embed the HTTP
+            # response body, which may echo request headers/payloads back.
             raise LLMError(
-                str(exc),
+                redact_secrets(str(exc)),
                 provider=ProviderType.DEEPSEEK,
             ) from exc
 
