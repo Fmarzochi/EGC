@@ -730,17 +730,31 @@ class ModelResolver:
         return names + [n for n in cls._ALIASES if n not in names]
 
     @classmethod
-    def model_infos(cls, provider: Optional[str] = None) -> List["ModelInfo"]:
-        """``ModelInfo`` objects for use by provider ``list_models()``."""
+    def model_infos(
+        cls,
+        provider: Optional[str] = None,
+        tag_as: Optional["ProviderType"] = None,
+    ) -> List["ModelInfo"]:
+        """``ModelInfo`` objects for use by provider ``list_models()``.
+
+        ``tag_as`` overrides the provider tag on every returned ``ModelInfo``.
+        Needed when a provider borrows another provider's registry alias
+        (e.g. Vertex AI reusing the "gemini" catalog) instead of registering
+        its own rows -- without it, the borrowed rows would carry the
+        alias's own provider tag rather than the caller's.
+        """
         if ModelInfo is None or ProviderType is None:  # pragma: no cover
             return []
         out: List[ModelInfo] = []
         for model_id in cls.list_models(provider):
             info = cls.get_model_info(model_id)
-            try:
-                prov_enum = ProviderType(info.get("provider", cls._DEFAULT_PROVIDER))
-            except Exception:
-                prov_enum = ProviderType(cls._DEFAULT_PROVIDER)
+            if tag_as is not None:
+                prov_enum = tag_as
+            else:
+                try:
+                    prov_enum = ProviderType(info.get("provider", cls._DEFAULT_PROVIDER))
+                except Exception:
+                    prov_enum = ProviderType(cls._DEFAULT_PROVIDER)
             out.append(
                 ModelInfo(
                     name=model_id,
