@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const { getEGCDir } = require(path.join(__dirname, '..', 'lib', 'utils.js'));
 
 function resolveStateDbPath() {

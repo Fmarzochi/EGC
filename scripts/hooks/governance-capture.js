@@ -18,7 +18,7 @@
 
 'use strict';
 
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 
 const MAX_STDIN = 1024 * 1024;
 

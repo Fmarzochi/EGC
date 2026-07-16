@@ -9,9 +9,9 @@
  * and reports only errors related to the edited file.
  */
 
-const { execFileSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = "";

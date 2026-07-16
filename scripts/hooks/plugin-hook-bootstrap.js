@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const SAFE_SHELL_BASENAMES = new Set(['bash', 'bash.exe', 'sh', 'sh.exe']);
 

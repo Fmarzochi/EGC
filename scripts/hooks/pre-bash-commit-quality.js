@@ -15,9 +15,9 @@
  *   2 - Block commit (quality issues found)
  */
 
-const { spawnSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const fs = require('node:fs');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 

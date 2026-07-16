@@ -9,8 +9,8 @@
  * session file for cross-session continuity.
  */
 
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
+const fs = require('node:fs');
 const {
   getSessionsDir,
   getDateString,
@@ -293,7 +293,7 @@ function buildSummarySection(summary) {
   // Tasks (from user messages: collapse newlines and escape backticks to prevent markdown breaks)
   section += '### Tasks\n';
   for (const msg of summary.userMessages) {
-    section += `- ${msg.replace(/\\/g, '\\\\').replace(/\n/g, ' ').replace(/`/g, '\\`')}\n`;
+    section += `- ${msg.replace(/\\/g, '\\\\').replace(/\n/g, ' ').replaceAll('`', '\\`')}\n`;
   }
   section += '\n';
 
@@ -301,14 +301,14 @@ function buildSummarySection(summary) {
   if (summary.filesModified.length > 0) {
     section += '### Files Modified\n';
     for (const f of summary.filesModified) {
-      section += `- ${f.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\n`;
+      section += `- ${f.replace(/\\/g, '\\\\').replaceAll('`', '\\`')}\n`;
     }
     section += '\n';
   }
 
   // Tools used
   if (summary.toolsUsed.length > 0) {
-    section += `### Tools Used\n${summary.toolsUsed.map(t => t.replace(/\\/g, '\\\\').replace(/`/g, '\\`')).join(', ')}\n\n`;
+    section += `### Tools Used\n${summary.toolsUsed.map(t => t.replace(/\\/g, '\\\\').replaceAll('`', '\\`')).join(', ')}\n\n`;
   }
 
   section += `### Stats\n- Total user messages: ${summary.totalMessages}\n`;

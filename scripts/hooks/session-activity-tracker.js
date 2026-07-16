@@ -8,9 +8,9 @@
 
 'use strict';
 
-const crypto = require('crypto');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const {
   appendFile,
   getEGCDir,

@@ -25,8 +25,8 @@
  * - Allows multiple dev servers to run simultaneously
  */
 
-const path = require('path');
-const { spawnSync } = require('child_process');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 let data = '';
@@ -49,7 +49,7 @@ function run(rawInput) {
       if (process.platform === 'win32') {
         // Windows: open in a new cmd window (non-blocking)
         // Escape double quotes in cmd for cmd /k syntax
-        const escapedCmd = cmd.replace(/"/g, '""');
+        const escapedCmd = cmd.replaceAll('"', '""');
         return JSON.stringify({
           ...input,
           tool_input: {
@@ -62,7 +62,7 @@ function run(rawInput) {
         const tmuxCheck = spawnSync('which', ['tmux'], { encoding: 'utf8' });
         if (tmuxCheck.status === 0) {
           // Escape single quotes for shell safety: 'text' -> 'text'\''text'
-          const escapedCmd = cmd.replace(/'/g, "'\\''");
+          const escapedCmd = cmd.replaceAll("'", "'\\''");
 
           // 1. Kill existing session (silent if doesn't exist)
           // 2. Create new detached session with the dev command

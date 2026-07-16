@@ -17,8 +17,8 @@
  * Fails silently if no formatter is found or installed.
  */
 
-const { execFileSync, spawnSync } = require('child_process');
-const path = require('path');
+const { execFileSync, spawnSync } = require('node:child_process');
+const path = require('node:path');
 
 // Shell metacharacters that cmd.exe interprets as command separators/operators.
 // Includes spaces and parentheses to guard paths like "C:\Users\John Doe\...".

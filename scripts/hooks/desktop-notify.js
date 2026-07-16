@@ -15,7 +15,7 @@
 
 'use strict';
 
-const { spawnSync } = require('child_process');
+const { spawnSync } = require('node:child_process');
 const { isMacOS, log } = require('../lib/utils');
 
 const TITLE = 'Gemini Code';
@@ -27,7 +27,7 @@ const MAX_BODY_LENGTH = 100;
 let isWSL = false;
 if (process.platform === 'linux') {
   try {
-    isWSL = require('fs').readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft');
+    isWSL = require('node:fs').readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft');
   } catch {
     isWSL = false;
   }
@@ -67,8 +67,8 @@ function findPowerShell() {
  * reason is null on success, or contains error detail on failure.
  */
 function notifyWindows(pwshPath, title, body) {
-  const safeBody = body.replace(/'/g, "''");
-  const safeTitle = title.replace(/'/g, "''");
+  const safeBody = body.replaceAll("'", "''");
+  const safeTitle = title.replaceAll("'", "''");
   const command = `Import-Module BurntToast; New-BurntToastNotification -Text '${safeTitle}', '${safeBody}'`;
   const result = spawnSync(pwshPath, ['-Command', command],
     { stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 });
@@ -104,8 +104,8 @@ function extractSummary(message) {
  * double quotes with curly quotes and strip backslashes before embedding.
  */
 function notifyMacOS(title, body) {
-  const safeBody = body.replace(/\\/g, '').replace(/"/g, '\u201C');
-  const safeTitle = title.replace(/\\/g, '').replace(/"/g, '\u201C');
+  const safeBody = body.replace(/\\/g, '').replaceAll('"', '\u201C');
+  const safeTitle = title.replace(/\\/g, '').replaceAll('"', '\u201C');
   const script = `display notification "${safeBody}" with title "${safeTitle}"`;
   const result = spawnSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 5000 });
   if (result.error || result.status !== 0) {

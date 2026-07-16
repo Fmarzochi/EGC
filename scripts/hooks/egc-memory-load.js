@@ -1,6 +1,6 @@
 'use strict';
 
-const fs = require('fs');
+const fs = require('node:fs');
 const { getStateDir, detectBranch, resolveStateRead } = require('../lib/branch-state');
 
 function main() {

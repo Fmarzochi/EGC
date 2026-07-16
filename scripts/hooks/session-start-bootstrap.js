@@ -26,9 +26,9 @@
  *      through unchanged so Gemini Code can continue normally.
  */
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const CURRENT_PLUGIN_SLUG = 'egc';
 const LEGACY_PLUGIN_SLUG = 'everything-gemini';
@@ -75,7 +75,7 @@ function resolvePluginRoot() {
     return path.resolve(envRoot.trim());
   }
 
-  const home = require('os').homedir();
+  const home = require('node:os').homedir();
   const claudeDir = path.join(home, '.gemini');
 
   if (hasRunnerRoot(claudeDir)) {

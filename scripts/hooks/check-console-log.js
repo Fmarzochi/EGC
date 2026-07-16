@@ -13,7 +13,7 @@
  * console.log is often intentional).
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 const { isGitRepo, getGitModifiedFiles, readFile, log } = require('../lib/utils');
 
 // Files where console.log is expected and should not trigger warnings

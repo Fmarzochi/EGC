@@ -13,8 +13,8 @@
  * - Compact after completing a milestone, before starting next
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   getTempDir,
   writeFile,
@@ -27,7 +27,7 @@ async function main() {
   // or parent PID as fallback
   const sessionId = (process.env.EGC_SESSION_ID || process.env.ECC_SESSION_ID || 'default').replace(/[^a-zA-Z0-9_-]/g, '') || 'default';
   const counterFile = path.join(getTempDir(), `egc-tool-count-${sessionId}`);
-  const rawThreshold = parseInt(process.env.COMPACT_THRESHOLD || '50', 10);
+  const rawThreshold = Number.parseInt(process.env.COMPACT_THRESHOLD || '50', 10);
   const threshold = Number.isFinite(rawThreshold) && rawThreshold > 0 && rawThreshold <= 10000
     ? rawThreshold
     : 50;
@@ -42,9 +42,9 @@ async function main() {
       const buf = Buffer.alloc(64);
       const bytesRead = fs.readSync(fd, buf, 0, 64, 0);
       if (bytesRead > 0) {
-        const parsed = parseInt(buf.toString('utf8', 0, bytesRead).trim(), 10);
+        const parsed = Number.parseInt(buf.toString('utf8', 0, bytesRead).trim(), 10);
         // Clamp to reasonable range: corrupted files could contain huge values
-        // that pass Number.isFinite() (e.g., parseInt('9'.repeat(30)) => 1e+29)
+        // that pass Number.isFinite() (e.g., Number.parseInt('9'.repeat(30)) => 1e+29)
         count = (Number.isFinite(parsed) && parsed > 0 && parsed <= 1000000)
           ? parsed + 1
           : 1;

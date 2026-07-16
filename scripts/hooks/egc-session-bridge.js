@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const HOOK_ID = 'egc-session-bridge';
 const DEFAULT_TIMEOUT_MS = 5000;

@@ -112,7 +112,7 @@ function normalizeHookResult(previousRaw, output) {
   }
 
   if (output && typeof output === 'object') {
-    const nextRaw = Object.prototype.hasOwnProperty.call(output, 'stdout')
+    const nextRaw = Object.hasOwn(output, 'stdout')
       ? String(output.stdout ?? '')
       : !Number.isInteger(output.exitCode) || output.exitCode === 0
         ? previousRaw

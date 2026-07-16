@@ -24,9 +24,9 @@
 
 'use strict';
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // Session state: scoped per session to avoid cross-session races.
 const STATE_DIR = process.env.GATEGUARD_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.gateguard');
@@ -635,7 +635,7 @@ if (require.main === module) {
         process.stderr.write(output.stderr.endsWith('\n') ? output.stderr : `${output.stderr}\n`);
       }
 
-      if (Object.prototype.hasOwnProperty.call(output, 'stdout')) {
+      if (Object.hasOwn(output, 'stdout')) {
         process.stdout.write(String(output.stdout ?? ''));
       } else if (!Number.isInteger(output.exitCode) || output.exitCode === 0) {
         process.stdout.write(raw);

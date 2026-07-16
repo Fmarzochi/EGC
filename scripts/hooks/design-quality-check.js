@@ -9,8 +9,8 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const FRONTEND_EXTENSIONS = /\.(astro|css|html|jsx|scss|svelte|tsx|vue)$/i;
 const MAX_STDIN = 1024 * 1024;

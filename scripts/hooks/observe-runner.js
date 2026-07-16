@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync, spawn } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync, spawn } = require('node:child_process');
 
 const OBSERVE_RELATIVE_PATH = path.join('skills', 'ai', 'continuous-learning-v2', 'hooks', 'observe.sh');
 const DEFAULT_TIMEOUT_MS = 9000;
@@ -213,7 +213,7 @@ function emitHookResult(raw, output) {
     if (output.stderr) {
       process.stderr.write(String(output.stderr).endsWith('\n') ? String(output.stderr) : `${output.stderr}\n`);
     }
-    if (Object.prototype.hasOwnProperty.call(output, 'stdout')) {
+    if (Object.hasOwn(output, 'stdout')) {
       process.stdout.write(String(output.stdout ?? ''));
     } else if (!Number.isInteger(output.exitCode) || output.exitCode === 0) {
       process.stdout.write(raw);

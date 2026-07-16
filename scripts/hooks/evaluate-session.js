@@ -12,8 +12,8 @@
  * - UserPromptSubmit runs every message (heavy, adds latency)
  */
 
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
+const fs = require('node:fs');
 const {
   getLearnedSkillsDir,
   ensureDir,
@@ -64,7 +64,7 @@ async function main() {
       minSessionLength = config.min_session_length ?? 10;
 
       if (config.learned_skills_path) {
-        learnedSkillsPath = config.learned_skills_path.replace(/^~/, require('os').homedir());
+        learnedSkillsPath = config.learned_skills_path.replace(/^~/, require('node:os').homedir());
       }
     } catch (err) {
       log(`[ContinuousLearning] Failed to parse config: ${err.message}, using defaults`);

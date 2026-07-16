@@ -25,8 +25,8 @@ const { resolveProjectContext, writeSessionLease, resolveSessionId } = require('
 const { getPackageManager, getSelectionPrompt } = require('../lib/package-manager');
 const { listAliases } = require('../lib/session-aliases');
 const { detectProjectType } = require('../lib/project-detect');
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
+const fs = require('node:fs');
 
 const INSTINCT_CONFIDENCE_THRESHOLD = 0.7;
 const MAX_INJECTED_INSTINCTS = 6;

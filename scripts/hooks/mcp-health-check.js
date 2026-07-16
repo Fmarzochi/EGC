@@ -12,12 +12,12 @@
  * survives compaction and later turns.
  */
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const http = require('http');
-const https = require('https');
-const { spawn, spawnSync } = require('child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const https = require('node:https');
+const { spawn, spawnSync } = require('node:child_process');
 
 const MAX_STDIN = 1024 * 1024;
 const DEFAULT_TTL_MS = 2 * 60 * 1000;

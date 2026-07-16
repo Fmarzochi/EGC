@@ -2,7 +2,7 @@
 'use strict';
 
 const MAX_STDIN = 1024 * 1024;
-const path = require('path');
+const path = require('node:path');
 const { splitShellSegments } = require('../lib/shell-split');
 
 const DEV_COMMAND_WORDS = new Set([

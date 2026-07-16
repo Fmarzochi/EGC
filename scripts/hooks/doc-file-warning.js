@@ -13,7 +13,7 @@
 
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 const MAX_STDIN = 1024 * 1024;
 let data = '';

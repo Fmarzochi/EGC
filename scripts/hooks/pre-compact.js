@@ -8,8 +8,8 @@
  * preserve important state that might get lost in summarization.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   getSessionsDir,
   getDateTimeString,
