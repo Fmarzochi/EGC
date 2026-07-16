@@ -1,8 +1,8 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 
 const BUDGET_CONFIG_PATH = path.join(os.homedir(), '.egc', 'budget.json');
 const BUDGET_USAGE_PATH = path.join(os.homedir(), '.egc', 'state', 'budget-usage.json');
@@ -76,7 +76,7 @@ function recordToolCall(toolName, extraTokens) {
   const cost = getToolCost(toolName);
   const tokens = cost.tokens + (extraTokens || 0);
   usage.tokens_used += tokens;
-  usage.cost_usd = parseFloat((usage.cost_usd + cost.cost).toFixed(6));
+  usage.cost_usd = Number.parseFloat((usage.cost_usd + cost.cost).toFixed(6));
   usage.tool_calls += 1;
   writeBudgetUsage(usage);
   return usage;

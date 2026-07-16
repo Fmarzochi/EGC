@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const { getEGCDir, ensureDir, sanitizeSessionId } = require('./utils');
 
 function getHomunculusDir() {

@@ -1,7 +1,7 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { execFileSync } = require('child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const { toCursorAgentRelativePath } = require('./cursor-agent-names');
 const { LEGACY_INSTALL_TARGETS, parseInstallArgs } = require('./install/request');

@@ -1,6 +1,6 @@
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 function toCursorAgentFileName(fileName) {
   if (!fileName || fileName.startsWith('egc-')) {

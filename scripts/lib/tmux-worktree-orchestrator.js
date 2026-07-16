@@ -1,8 +1,8 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 function slugify(value, fallback = 'worker') {
   const normalized = String(value || '')
@@ -27,7 +27,7 @@ function renderTemplate(template, variables) {
 }
 
 function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+  return `'${String(value).replaceAll("'", `'\\''`)}'`;
 }
 
 function formatCommand(program, args) {

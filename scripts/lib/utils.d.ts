@@ -3,7 +3,7 @@
  * Works on Windows, macOS, and Linux.
  */
 
-import type { ExecSyncOptions } from 'child_process';
+import type { ExecSyncOptions } from 'node:child_process';
 
 // Platform detection
 export const isWindows: boolean;

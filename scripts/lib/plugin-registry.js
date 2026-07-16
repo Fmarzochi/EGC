@@ -1,9 +1,9 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 
 const PLUGINS_DIR = path.join(os.homedir(), '.egc', 'plugins');
 const PLUGINS_LOCK_PATH = path.join(PLUGINS_DIR, 'plugins.json');

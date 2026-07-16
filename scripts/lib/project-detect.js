@@ -7,8 +7,8 @@
  * Resolves: https://github.com/Fmarzochi/EGC/issues/293
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 /**
  * Language detection rules.
@@ -245,7 +245,7 @@ function getPythonDeps(projectDir) {
         const block = depMatches[1];
         block.match(/"([^"]+)"/g)?.forEach(m => {
           const name = m
-            .replace(/"/g, '')
+            .replaceAll('"', '')
             .split(/[>=<![;]/)[0]
             .trim()
             .toLowerCase();

@@ -1,6 +1,6 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
@@ -230,7 +230,7 @@ function jsonContainsSubset(actualValue, expectedValue) {
     }
 
     return Object.entries(expectedValue).every(([key, value]) => (
-      Object.prototype.hasOwnProperty.call(actualValue, key)
+      Object.hasOwn(actualValue, key)
       && jsonContainsSubset(actualValue[key], value)
     ));
   }
@@ -256,7 +256,7 @@ function deepRemoveJsonSubset(currentValue, managedValue) {
 
     const nextValue = { ...currentValue };
     for (const [key, value] of Object.entries(managedValue)) {
-      if (!Object.prototype.hasOwnProperty.call(nextValue, key)) {
+      if (!Object.hasOwn(nextValue, key)) {
         continue;
       }
 

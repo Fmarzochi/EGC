@@ -3,11 +3,11 @@
  * Works on Windows, macOS, and Linux
  */
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
 // Platform detection
 const isWindows = process.platform === 'win32';
