@@ -83,6 +83,10 @@ function readTranscriptLast(transcriptPath) {
   const resolved = path.resolve(transcriptPath);
   if (!SAFE_TRANSCRIPT_ROOTS.some(r => resolved.startsWith(r + path.sep) || resolved.startsWith(r + '/'))) return {};
   try {
+    const real = fs.realpathSync(resolved);
+    if (!SAFE_TRANSCRIPT_ROOTS.some(r => real.startsWith(r + path.sep) || real.startsWith(r + '/'))) return {};
+  } catch { return {}; }
+  try {
     const stat = fs.statSync(resolved);
     const readSize = Math.min(stat.size, MAX_TRANSCRIPT_TAIL);
     const offset = stat.size - readSize;

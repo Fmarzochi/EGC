@@ -368,12 +368,12 @@ const grandTotal = Object.values(byIde).reduce(
 
     const egcStats = queryEgcStats();
     if (egcStats) {
-      stats.decisions = egcStats.decisions;
+      stats.decisions = egcStats.decisions || countStateFileDecisions();
       stats.lessons   = egcStats.lessons;
       stats.patterns  = egcStats.patterns;
+    } else {
+      stats.decisions = countStateFileDecisions();
     }
-    // Also count decisions from markdown state files (written by update_state).
-    stats.decisions += countStateFileDecisions();
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(stats));
