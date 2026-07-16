@@ -35,6 +35,30 @@ function extractFrontmatter(content) {
   return frontmatter;
 }
 
+function readAgentContent(file, filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    console.error(`ERROR: ${file} - ${err.message}`);
+    return null;
+  }
+}
+
+function validateAgentFrontmatter(file, frontmatter) {
+  let hasErrors = false;
+  for (const field of REQUIRED_FIELDS) {
+    if (!frontmatter[field] || (typeof frontmatter[field] === 'string' && !frontmatter[field].trim())) {
+      console.error(`ERROR: ${file} - Missing required field: ${field}`);
+      hasErrors = true;
+    }
+  }
+  if (frontmatter.model && !VALID_MODELS.includes(frontmatter.model)) {
+    console.error(`ERROR: ${file} - Invalid model '${frontmatter.model}'. Must be one of: ${VALID_MODELS.join(', ')}`);
+    hasErrors = true;
+  }
+  return hasErrors;
+}
+
 function validateAgents() {
   if (!fs.existsSync(AGENTS_DIR)) {
     console.log('No agents directory found, skipping validation');
@@ -45,34 +69,17 @@ function validateAgents() {
   let hasErrors = false;
 
   for (const file of files) {
-    const filePath = path.join(AGENTS_DIR, file);
-    let content;
-    try {
-      content = fs.readFileSync(filePath, 'utf-8');
-    } catch (err) {
-      console.error(`ERROR: ${file} - ${err.message}`);
-      hasErrors = true;
-      continue;
-    }
-    const frontmatter = extractFrontmatter(content);
+    const content = readAgentContent(file, path.join(AGENTS_DIR, file));
+    if (content === null) { hasErrors = true; continue; }
 
+    const frontmatter = extractFrontmatter(content);
     if (!frontmatter) {
       console.error(`ERROR: ${file} - Missing frontmatter`);
       hasErrors = true;
       continue;
     }
 
-    for (const field of REQUIRED_FIELDS) {
-      if (!frontmatter[field] || (typeof frontmatter[field] === 'string' && !frontmatter[field].trim())) {
-        console.error(`ERROR: ${file} - Missing required field: ${field}`);
-        hasErrors = true;
-      }
-    }
-
-    if (frontmatter.model && !VALID_MODELS.includes(frontmatter.model)) {
-      console.error(`ERROR: ${file} - Invalid model '${frontmatter.model}'. Must be one of: ${VALID_MODELS.join(', ')}`);
-      hasErrors = true;
-    }
+    if (validateAgentFrontmatter(file, frontmatter)) hasErrors = true;
   }
 
   if (hasErrors) {

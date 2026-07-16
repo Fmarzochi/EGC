@@ -59,6 +59,120 @@ function validateFrontmatter(file, content) {
   return errors;
 }
 
+const RESERVED_SKILL_ROOTS = new Set(['learned', 'imported']);
+
+function collectValidAgents() {
+  const validAgents = new Set();
+  if (!fs.existsSync(AGENTS_DIR)) return validAgents;
+  for (const f of fs.readdirSync(AGENTS_DIR)) {
+    if (f.endsWith('.md')) validAgents.add(f.replace(/\.md$/, ''));
+  }
+  return validAgents;
+}
+
+function collectValidSkills() {
+  const validSkills = new Set();
+  if (!fs.existsSync(SKILLS_DIR)) return validSkills;
+  for (const f of fs.readdirSync(SKILLS_DIR)) {
+    const skillPath = path.join(SKILLS_DIR, f);
+    try {
+      if (fs.statSync(skillPath).isDirectory()) validSkills.add(f);
+    } catch {
+      // skip unreadable entries
+    }
+  }
+  return validSkills;
+}
+
+function checkCommandXrefs(file, contentNoCodeBlocks, validCommands) {
+  const errors = [];
+  for (const line of contentNoCodeBlocks.split('\n')) {
+    if (/creates:|would create:/i.test(line)) continue;
+    for (const match of line.matchAll(/`\/([a-z][-a-z0-9]*)`/g)) {
+      if (!validCommands.has(match[1])) {
+        errors.push(`${file} - references non-existent command /${match[1]}`);
+      }
+    }
+  }
+  return errors;
+}
+
+function checkAgentPathXrefs(file, contentNoCodeBlocks, validAgents) {
+  const errors = [];
+  for (const match of contentNoCodeBlocks.matchAll(/agents\/([a-z][-a-z0-9]*)\.md/g)) {
+    if (!validAgents.has(match[1])) {
+      errors.push(`${file} - references non-existent agent agents/${match[1]}.md`);
+    }
+  }
+  return errors;
+}
+
+function checkSkillDirXrefs(file, contentNoCodeBlocks, validSkills) {
+  const warns = [];
+  for (const match of contentNoCodeBlocks.matchAll(/skills\/([a-z][-a-z0-9]*)\//g)) {
+    if (RESERVED_SKILL_ROOTS.has(match[1]) || validSkills.has(match[1])) continue;
+    warns.push(`${file} - references skill directory skills/${match[1]}/ (not found locally)`);
+  }
+  return warns;
+}
+
+function checkWorkflowXrefs(file, contentNoCodeBlocks, validAgents) {
+  const errors = [];
+  for (const match of contentNoCodeBlocks.matchAll(/^([a-z][-a-z0-9]*(?:\s*->\s*[a-z][-a-z0-9]*)+)$/gm)) {
+    for (const agent of match[1].split(/\s*->\s*/)) {
+      if (!validAgents.has(agent)) {
+        errors.push(`${file} - workflow references non-existent agent "${agent}"`);
+      }
+    }
+  }
+  return errors;
+}
+
+function validateCommandFile(file, validCommands, validAgents, validSkills) {
+  const filePath = path.join(COMMANDS_DIR, file);
+  let content;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    console.error(`ERROR: ${file} - ${err.message}`);
+    return { hasErrors: true, warnCount: 0 };
+  }
+
+  if (content.trim().length === 0) {
+    console.error(`ERROR: ${file} - Empty command file`);
+    return { hasErrors: true, warnCount: 0 };
+  }
+
+  let hasErrors = false;
+  for (const error of validateFrontmatter(file, content)) {
+    console.error(`ERROR: ${error}`);
+    hasErrors = true;
+  }
+
+  // Strip fenced code blocks before checking cross-references.
+  // Examples/templates inside ``` blocks are not real references.
+  const contentNoCodeBlocks = content.replace(/```[\s\S]*?```/g, '');
+
+  for (const error of checkCommandXrefs(file, contentNoCodeBlocks, validCommands)) {
+    console.error(`ERROR: ${error}`);
+    hasErrors = true;
+  }
+  for (const error of checkAgentPathXrefs(file, contentNoCodeBlocks, validAgents)) {
+    console.error(`ERROR: ${error}`);
+    hasErrors = true;
+  }
+  const warns = checkSkillDirXrefs(file, contentNoCodeBlocks, validSkills);
+  for (const warn of warns) {
+    console.warn(`WARN: ${warn}`);
+  }
+  for (const error of checkWorkflowXrefs(file, contentNoCodeBlocks, validAgents)) {
+    console.error(`ERROR: ${error}`);
+    hasErrors = true;
+  }
+
+  return { hasErrors, warnCount: warns.length };
+}
+
 function validateCommands() {
   if (!fs.existsSync(COMMANDS_DIR)) {
     console.log('No commands directory found, skipping validation');
@@ -66,107 +180,17 @@ function validateCommands() {
   }
 
   const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith('.md'));
+  const validCommands = new Set(files.map(f => f.replace(/\.md$/, '')));
+  const validAgents = collectValidAgents();
+  const validSkills = collectValidSkills();
+
   let hasErrors = false;
   let warnCount = 0;
 
-  const validCommands = new Set(files.map(f => f.replace(/\.md$/, '')));
-
-  const validAgents = new Set();
-  if (fs.existsSync(AGENTS_DIR)) {
-    for (const f of fs.readdirSync(AGENTS_DIR)) {
-      if (f.endsWith('.md')) {
-        validAgents.add(f.replace(/\.md$/, ''));
-      }
-    }
-  }
-
-  const validSkills = new Set();
-  if (fs.existsSync(SKILLS_DIR)) {
-    for (const f of fs.readdirSync(SKILLS_DIR)) {
-      const skillPath = path.join(SKILLS_DIR, f);
-      try {
-        if (fs.statSync(skillPath).isDirectory()) {
-          validSkills.add(f);
-        }
-      } catch {
-        // skip unreadable entries
-      }
-    }
-  }
-
   for (const file of files) {
-    const filePath = path.join(COMMANDS_DIR, file);
-    let content;
-    try {
-      content = fs.readFileSync(filePath, 'utf-8');
-    } catch (err) {
-      console.error(`ERROR: ${file} - ${err.message}`);
-      hasErrors = true;
-      continue;
-    }
-
-    if (content.trim().length === 0) {
-      console.error(`ERROR: ${file} - Empty command file`);
-      hasErrors = true;
-      continue;
-    }
-
-    for (const error of validateFrontmatter(file, content)) {
-      console.error(`ERROR: ${error}`);
-      hasErrors = true;
-    }
-
-    // Strip fenced code blocks before checking cross-references.
-    // Examples/templates inside ``` blocks are not real references.
-    const contentNoCodeBlocks = content.replace(/```[\s\S]*?```/g, '');
-
-    // Check cross-references to other commands (e.g., `/build-fix`)
-    // Skip lines that describe hypothetical output (e.g., "→ Creates: `/new-table`")
-    // (previous anchored regex /^.*`\/...`.*$/gm only matched the last ref per line)
-    for (const line of contentNoCodeBlocks.split('\n')) {
-      if (/creates:|would create:/i.test(line)) continue;
-      const lineRefs = line.matchAll(/`\/([a-z][-a-z0-9]*)`/g);
-      for (const match of lineRefs) {
-        const refName = match[1];
-        if (!validCommands.has(refName)) {
-          console.error(`ERROR: ${file} - references non-existent command /${refName}`);
-          hasErrors = true;
-        }
-      }
-    }
-
-    // Check agent references (e.g., "agents/planner.md" or "`planner` agent")
-    const agentPathRefs = contentNoCodeBlocks.matchAll(/agents\/([a-z][-a-z0-9]*)\.md/g);
-    for (const match of agentPathRefs) {
-      const refName = match[1];
-      if (!validAgents.has(refName)) {
-        console.error(`ERROR: ${file} - references non-existent agent agents/${refName}.md`);
-        hasErrors = true;
-      }
-    }
-
-    // Check skill directory references (e.g., "skills/testing/tdd-workflow/")
-    // learned and imported are reserved roots (~/.gemini/skills/); no local dir expected
-    const reservedSkillRoots = new Set(['learned', 'imported']);
-    const skillRefs = contentNoCodeBlocks.matchAll(/skills\/([a-z][-a-z0-9]*)\//g);
-    for (const match of skillRefs) {
-      const refName = match[1];
-      if (reservedSkillRoots.has(refName) || validSkills.has(refName)) continue;
-      console.warn(`WARN: ${file} - references skill directory skills/${refName}/ (not found locally)`);
-      warnCount++;
-    }
-
-    // Check agent name references in workflow diagrams (e.g., "planner -> tdd-guide")
-    const workflowLines = contentNoCodeBlocks.matchAll(/^([a-z][-a-z0-9]*(?:\s*->\s*[a-z][-a-z0-9]*)+)$/gm);
-    for (const match of workflowLines) {
-      const agents = match[1].split(/\s*->\s*/);
-      for (const agent of agents) {
-        if (!validAgents.has(agent)) {
-          console.error(`ERROR: ${file} - workflow references non-existent agent "${agent}"`);
-          hasErrors = true;
-        }
-      }
-    }
+    const result = validateCommandFile(file, validCommands, validAgents, validSkills);
+    if (result.hasErrors) hasErrors = true;
+    warnCount += result.warnCount;
   }
 
   if (hasErrors) {
