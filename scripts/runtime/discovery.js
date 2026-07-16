@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { listInstallProfiles, listInstallModules, listInstallComponents } = require('../lib/install-manifests');
 
 const REPO_ROOT = path.join(__dirname, '../..');

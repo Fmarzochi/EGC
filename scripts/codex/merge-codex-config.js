@@ -11,8 +11,8 @@
  * - Missing tables are appended to the end of the file.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 let TOML;
 try {

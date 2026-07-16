@@ -65,7 +65,7 @@ export class GitBackend extends SyncBackend {
     }
 
     const commitCount = await this.git.raw(['rev-list', '--count', 'HEAD']);
-    if (parseInt(commitCount.trim(), 10) <= 1) {
+    if (Number.parseInt(commitCount.trim(), 10) <= 1) {
       const show = await this.git.show(['--name-only', '--pretty=format:', log.latest.hash]);
       return show.split('\n').filter(Boolean);
     }

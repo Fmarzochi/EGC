@@ -1,5 +1,5 @@
-import path from 'path';
-import os from 'os';
+import path from 'node:path';
+import os from 'node:os';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];

@@ -83,9 +83,8 @@ class SessionRecorder:
                 f.write(json.dumps(event) + "\n")
                 f.flush()  # Garantia de persistencia imediata
                 os.fsync(f.fileno())  # Garantia de escrita no disco
-        except Exception as e:
-            logger.error(f"Falha ao persistir evento {event_type}: {e}")
-            # Fail-silent: persistencia falha, mas o runtime continua.
+        except Exception:
+            logger.exception(f"Falha ao persistir evento {event_type}")
 
         # Best-effort tee into the continuous-learning observations log.
         self._tee_observation(event_type, event)

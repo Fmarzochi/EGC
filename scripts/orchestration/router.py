@@ -40,14 +40,14 @@ class AGENT_ROUTER:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading {path}: {str(e)}")
+        except Exception:
+            logger.exception(f"Error loading {path}")
             return {}
 
     def _detect_domain(self, task_description: str) -> str:
         import re
         task_lower = task_description.lower()
-        scores = {domain: 0 for domain in self.domain_keywords}
+        scores = dict.fromkeys(self.domain_keywords, 0)
         
         for domain, keywords in self.domain_keywords.items():
             for kw in keywords:
@@ -61,7 +61,7 @@ class AGENT_ROUTER:
             return "general"
         return best_domain
 
-    def get_best_agent(self, task_description: str, confidence_threshold: int = 1) -> Optional[Dict]:
+    def get_best_agent(self, task_description: str) -> Optional[Dict]:
         """
         Selects the best physical agent for the task.
         """

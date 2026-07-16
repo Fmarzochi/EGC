@@ -27,11 +27,7 @@ async def run_command(cmd: List[str], timeout: int = 30, env: Optional[Dict[str,
     """Safely executes a command as a subprocess."""
 
     base_cmd = cmd[0]
-    is_allowed = False
-    for group in ALLOWED_COMMANDS.values():
-        if base_cmd in group:
-            is_allowed = True
-            break
+    is_allowed = any(base_cmd in group for group in ALLOWED_COMMANDS.values())
 
     if not is_allowed:
         logger.error(f"Command blocked: {base_cmd}")
@@ -47,13 +43,14 @@ async def run_command(cmd: List[str], timeout: int = 30, env: Optional[Dict[str,
     )
 
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        async with asyncio.timeout(timeout):
+            stdout, stderr = await process.communicate()
         return ExecutionResult(
             stdout.decode().strip(),
             stderr.decode().strip(),
             process.returncode
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         process.terminate()
         return ExecutionResult("", "Command timed out", -1, timed_out=True)
     except Exception as e:

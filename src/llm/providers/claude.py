@@ -59,48 +59,52 @@ class ClaudeProvider(LLMProvider):
             ),
         ]
 
+    @staticmethod
+    def _extract_tool_calls(blocks) -> list[ToolCall] | None:
+        calls = []
+        for block in blocks:
+            if getattr(block, "type", None) != "tool_use":
+                continue
+            tool_input = getattr(block, "input", {})
+            calls.append(ToolCall(
+                id=getattr(block, "id", ""),
+                name=getattr(block, "name", ""),
+                arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
+            ))
+        return calls or None
+
+    @staticmethod
+    def _map_error(e: Exception) -> None:
+        msg = str(e)
+        if "401" in msg or "authentication" in msg.lower():
+            raise AuthenticationError(msg, provider=ProviderType.CLAUDE) from e
+        if "429" in msg or "rate_limit" in msg.lower():
+            raise RateLimitError(msg, provider=ProviderType.CLAUDE) from e
+        if "context" in msg.lower() and "length" in msg.lower():
+            raise ContextLengthError(msg, provider=ProviderType.CLAUDE) from e
+        raise e
+
     def generate(self, input: LLMInput) -> LLMOutput:
         try:
             params: dict[str, Any] = {
                 "model": input.model or self.get_default_model(),
                 "messages": [msg.to_dict() for msg in input.messages],
                 "temperature": input.temperature,
+                "max_tokens": input.max_tokens if input.max_tokens else 8192,
             }
-            if input.max_tokens:
-                params["max_tokens"] = input.max_tokens
-            else:
-                params["max_tokens"] = 8192  # required by Anthropic API
             if input.tools:
                 params["tools"] = [
                     {"name": t.name, "description": t.description, "input_schema": t.parameters}
                     for t in input.tools
                 ]
-
             response = self.client.messages.create(**params)
-
-            tool_calls = []
-            for block in response.content:
-                if getattr(block, "type", None) != "tool_use":
-                    continue
-                tool_input = getattr(block, "input", {})
-                tool_calls.append(
-                    ToolCall(
-                        id=getattr(block, "id", ""),
-                        name=getattr(block, "name", ""),
-                        arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
-                    )
-                )
-            if not tool_calls:
-                tool_calls = None
-
             content = next(
                 (block.text or "" for block in response.content if block.type == "text"),
                 "",
             )
-
             return LLMOutput(
                 content=content,
-                tool_calls=tool_calls,
+                tool_calls=self._extract_tool_calls(response.content),
                 model=response.model,
                 usage={
                     "input_tokens": response.usage.input_tokens,
@@ -109,14 +113,7 @@ class ClaudeProvider(LLMProvider):
                 stop_reason=response.stop_reason,
             )
         except Exception as e:
-            msg = str(e)
-            if "401" in msg or "authentication" in msg.lower():
-                raise AuthenticationError(msg, provider=ProviderType.CLAUDE) from e
-            if "429" in msg or "rate_limit" in msg.lower():
-                raise RateLimitError(msg, provider=ProviderType.CLAUDE) from e
-            if "context" in msg.lower() and "length" in msg.lower():
-                raise ContextLengthError(msg, provider=ProviderType.CLAUDE) from e
-            raise
+            self._map_error(e)
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()

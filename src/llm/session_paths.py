@@ -79,20 +79,22 @@ def migrate_legacy_sessions(dry_run: bool = True) -> Dict[str, object]:
         target.mkdir(parents=True, exist_ok=True)
     for src in sources:
         for f in sorted(src.glob("*.jsonl")):
-            dst = target / f.name
-            rel = str(f)
-            if dst.exists():
-                plan["skipped_existing"].append(rel)  # type: ignore[union-attr]
-                continue
-            if dry_run:
-                plan["would_copy"].append(rel)  # type: ignore[union-attr]
-            else:
-                try:
-                    shutil.copy2(f, dst)
-                    plan["copied"].append(rel)  # type: ignore[union-attr]
-                except Exception as e:  # pragma: no cover - defensive
-                    plan["errors"].append(f"{rel}: {e}")  # type: ignore[union-attr]
+            _copy_session_file(f, target / f.name, plan, dry_run, str(f))
     return plan
+
+
+def _copy_session_file(f: Path, dst: Path, plan: Dict, dry_run: bool, rel: str) -> None:
+    if dst.exists():
+        plan["skipped_existing"].append(rel)  # type: ignore[union-attr]
+        return
+    if dry_run:
+        plan["would_copy"].append(rel)  # type: ignore[union-attr]
+        return
+    try:
+        shutil.copy2(f, dst)
+        plan["copied"].append(rel)  # type: ignore[union-attr]
+    except Exception as e:  # pragma: no cover - defensive
+        plan["errors"].append(f"{rel}: {e}")  # type: ignore[union-attr]
 
 
 __all__ = ["session_root", "legacy_session_dirs", "migrate_legacy_sessions"]

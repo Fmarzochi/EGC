@@ -24,7 +24,7 @@ class WorkflowEngine:
     async def run(self, main_task: str, session_id: str, *, parallel: bool = False, max_concurrent: int = 5):
         plan = self.planner.plan(main_task)
         state = WorkflowState()
-        ctx = RuntimeContext(session_id, state.workflow_id)
+        RuntimeContext(session_id, state.workflow_id)
 
         state.state = "running"
 

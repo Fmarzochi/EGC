@@ -52,9 +52,25 @@ def _first_env(*names: str) -> Optional[str]:
 class ModelResolver:
     """Centralized model resolution / routing layer for EGC."""
 
-    # OpenRouter model IDs that are reused across the registry, fallback
-    # chains and menu_choices() -- centralized here as the single source
-    # of truth to avoid typo-prone string duplication.
+    # Model IDs reused across the registry, fallback chains and menu_choices()
+    # -- centralized here as the single source of truth to avoid typo-prone
+    # string duplication (SonarCloud S1192).
+    _GEMINI_25_PRO = "gemini-2.5-pro"
+    _GEMINI_25_FLASH = "gemini-2.5-flash"
+    _GEMINI_25_FLASH_LITE = "gemini-2.5-flash-lite"
+    _GEMINI_20_FLASH_LITE = "gemini-2.0-flash-lite"
+    _GEMINI_15_FLASH = "gemini-1.5-flash"
+    _GEMINI_15_FLASH_8B = "gemini-1.5-flash-8b"
+    _OPENAI_GPT_4O_MINI = "openai/gpt-4o-mini"
+    _GPT_4O = "gpt-4o"
+    _CLAUDE_SONNET = "claude-sonnet-4-7"
+    _OPENROUTER_AUTO = "openrouter/auto"
+    _OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b"
+    _LLAMA32 = "llama3.2"
+    _GOOGLE_GEMINI_25_FLASH = "google/gemini-2.5-flash"
+    _CLAUDE_HAIKU = "claude-haiku-4-7"
+    _GPT_4O_MINI = "gpt-4o-mini"
+    _OPENAI_GPT_4O_OR = "openai/gpt-4o"
     _DEEPSEEK_CHAT_V3 = "deepseek/deepseek-chat-v3-0324"
     _QWEN3_32B = "qwen/qwen3-32b"
     _LLAMA4_SCOUT = "meta-llama/llama-4-scout"
@@ -75,7 +91,7 @@ class ModelResolver:
                 ModelCapability.LONG_CONTEXT,
                 ModelCapability.CODE,
             ],
-            "fallback": "gemini-2.5-flash",
+            "fallback": _GEMINI_25_FLASH,
             "context_window": 2000000,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -91,7 +107,7 @@ class ModelResolver:
                 ModelCapability.LOW_LATENCY,
                 ModelCapability.COST_EFFICIENT,
             ],
-            "fallback": "gemini-2.5-flash-lite",
+            "fallback": _GEMINI_25_FLASH_LITE,
             "context_window": 1000000,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -105,7 +121,7 @@ class ModelResolver:
                 ModelCapability.COST_EFFICIENT,
                 ModelCapability.TOOL_CALLING,
             ],
-            "fallback": "gemini-2.0-flash-lite",
+            "fallback": _GEMINI_20_FLASH_LITE,
             "context_window": 1000000,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -122,7 +138,7 @@ class ModelResolver:
                 ModelCapability.LOW_LATENCY,
                 ModelCapability.COST_EFFICIENT,
             ],
-            "fallback": "gemini-2.0-flash-lite",
+            "fallback": _GEMINI_20_FLASH_LITE,
             "context_window": 1000000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -136,7 +152,7 @@ class ModelResolver:
                 ModelCapability.COST_EFFICIENT,
                 ModelCapability.TOOL_CALLING,
             ],
-            "fallback": "gemini-1.5-flash",
+            "fallback": _GEMINI_15_FLASH,
             "context_window": 1000000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -151,7 +167,7 @@ class ModelResolver:
                 ModelCapability.TOOL_CALLING,
                 ModelCapability.LONG_CONTEXT,
             ],
-            "fallback": "gemini-2.5-flash",  # Prioritize SOTA flash over legacy flash
+            "fallback": _GEMINI_25_FLASH,  # Prioritize SOTA flash over legacy flash
             "context_window": 2000000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -166,7 +182,7 @@ class ModelResolver:
                 ModelCapability.LOW_LATENCY,
                 ModelCapability.COST_EFFICIENT,
             ],
-            "fallback": "gemini-1.5-flash-8b",
+            "fallback": _GEMINI_15_FLASH_8B,
             "context_window": 1000000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -190,7 +206,7 @@ class ModelResolver:
         "claude-opus-4-5": {
             "provider": "claude",
             "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
-            "fallback": "claude-sonnet-4-7",
+            "fallback": _CLAUDE_SONNET,
             "context_window": 200000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -199,7 +215,7 @@ class ModelResolver:
         "claude-sonnet-4-7": {
             "provider": "claude",
             "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
-            "fallback": "claude-haiku-4-7",
+            "fallback": _CLAUDE_HAIKU,
             "context_window": 200000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -217,7 +233,7 @@ class ModelResolver:
         "gpt-4o": {
             "provider": "openai",
             "capabilities": [ModelCapability.REASONING, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING],
-            "fallback": "gpt-4o-mini",
+            "fallback": _GPT_4O_MINI,
             "context_window": 128000,
             "max_tokens": 16384,
             "supports_vision": True,
@@ -323,7 +339,7 @@ class ModelResolver:
                 ModelCapability.CODE,
                 ModelCapability.COST_EFFICIENT,
             ],
-            "fallback": "openai/gpt-4o-mini",
+            "fallback": _OPENAI_GPT_4O_MINI,
             "context_window": 164000,
             "max_tokens": 8192,
             "supports_vision": False,
@@ -352,7 +368,7 @@ class ModelResolver:
                 ModelCapability.COST_EFFICIENT,
                 ModelCapability.TOOL_CALLING,
             ],
-            "fallback": "openai/gpt-4o-mini",
+            "fallback": _OPENAI_GPT_4O_MINI,
             "context_window": 131072,
             "max_tokens": 8192,
             "supports_vision": False,
@@ -381,7 +397,7 @@ class ModelResolver:
                 ModelCapability.TOOL_CALLING,
                 ModelCapability.LONG_CONTEXT,
             ],
-            "fallback": "openai/gpt-4o-mini",
+            "fallback": _OPENAI_GPT_4O_MINI,
             "context_window": 1048576,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -395,7 +411,7 @@ class ModelResolver:
                 ModelCapability.COST_EFFICIENT,
                 ModelCapability.TOOL_CALLING,
             ],
-            "fallback": "openai/gpt-4o-mini",
+            "fallback": _OPENAI_GPT_4O_MINI,
             "context_window": 131072,
             "max_tokens": 8192,
             "supports_vision": False,
@@ -414,7 +430,7 @@ class ModelResolver:
         "openrouter/auto": {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING],
-            "fallback": "google/gemini-2.5-flash",
+            "fallback": _GOOGLE_GEMINI_25_FLASH,
             "context_window": 128000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -423,7 +439,7 @@ class ModelResolver:
         "google/gemini-2.5-pro": {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING, ModelCapability.LONG_CONTEXT, ModelCapability.CODE],
-            "fallback": "google/gemini-2.5-flash",
+            "fallback": _GOOGLE_GEMINI_25_FLASH,
             "context_window": 1048576,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -432,7 +448,7 @@ class ModelResolver:
         "google/gemini-2.5-flash": {
             "provider": "openrouter",
             "capabilities": [ModelCapability.SPEED, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING, ModelCapability.LOW_LATENCY, ModelCapability.COST_EFFICIENT],
-            "fallback": "openai/gpt-4o-mini",
+            "fallback": _OPENAI_GPT_4O_MINI,
             "context_window": 1048576,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -441,7 +457,7 @@ class ModelResolver:
         "anthropic/claude-sonnet-4.5": {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
-            "fallback": "openai/gpt-4o",
+            "fallback": _OPENAI_GPT_4O_OR,
             "context_window": 200000,
             "max_tokens": 8192,
             "supports_vision": True,
@@ -450,7 +466,7 @@ class ModelResolver:
         "openai/gpt-4o": {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING],
-            "fallback": "openai/gpt-4o-mini",
+            "fallback": _OPENAI_GPT_4O_MINI,
             "context_window": 128000,
             "max_tokens": 16384,
             "supports_vision": True,
@@ -471,45 +487,45 @@ class ModelResolver:
     # previous EGC symbolic names (pro/flash/flash-legacy/ultra) valid.
     _ALIASES: Dict[str, str] = {
         # Generic capability tiers.
-        "reasoning": "gemini-2.5-pro",
-        "balanced": "gemini-2.5-flash",
-        "fast": "gemini-2.5-flash",
-        "low-latency": "gemini-2.5-flash-lite",
-        "low_latency": "gemini-2.5-flash-lite",
-        "cheap": "gemini-2.5-flash-lite",
-        "lite": "gemini-2.5-flash-lite",
+        "reasoning": _GEMINI_25_PRO,
+        "balanced": _GEMINI_25_FLASH,
+        "fast": _GEMINI_25_FLASH,
+        "low-latency": _GEMINI_25_FLASH_LITE,
+        "low_latency": _GEMINI_25_FLASH_LITE,
+        "cheap": _GEMINI_25_FLASH_LITE,
+        "lite": _GEMINI_25_FLASH_LITE,
         # Previous EGC symbolic names.
-        "pro": "gemini-2.5-pro",
-        "flash": "gemini-2.5-flash",
-        "flash-lite": "gemini-2.5-flash-lite",
-        "flash-legacy": "gemini-1.5-flash",
-        "ultra": "gemini-2.5-pro",
+        "pro": _GEMINI_25_PRO,
+        "flash": _GEMINI_25_FLASH,
+        "flash-lite": _GEMINI_25_FLASH_LITE,
+        "flash-legacy": _GEMINI_15_FLASH,
+        "ultra": _GEMINI_25_PRO,
         # Legacy ECC / Anthropic-style tier names used in older agent frontmatter.
-        "opus": "gemini-2.5-pro",
-        "sonnet": "gemini-2.5-flash",
-        "haiku": "gemini-2.5-flash-lite",
+        "opus": _GEMINI_25_PRO,
+        "sonnet": _GEMINI_25_FLASH,
+        "haiku": _GEMINI_25_FLASH_LITE,
         # Common provider defaults referenced symbolically.
-        "default": "gemini-2.5-pro",
-        "gemini": "gemini-2.5-pro",
-        "claude": "claude-sonnet-4-7",
-        "openai": "gpt-4o",
-        "ollama": "llama3.2",
-        "openrouter": "openrouter/auto",
+        "default": _GEMINI_25_PRO,
+        "gemini": _GEMINI_25_PRO,
+        "claude": _CLAUDE_SONNET,
+        "openai": _GPT_4O,
+        "ollama": _LLAMA32,
+        "openrouter": _OPENROUTER_AUTO,
         "mistral": "mistral-large-latest",
-        "groq": "openai/gpt-oss-120b",
+        "groq": _OPENAI_GPT_OSS_120B,
         "cohere": "command-a-plus-05-2026",
     }
 
     # Per-provider default model ID (single place provider defaults live).
     _PROVIDER_DEFAULTS: Dict[str, str] = {
-        "gemini": "gemini-2.5-pro",
-        "claude": "claude-sonnet-4-7",
-        "openai": "gpt-4o",
-        "ollama": "llama3.2",
-        "openrouter": "openrouter/auto",
+        "gemini": _GEMINI_25_PRO,
+        "claude": _CLAUDE_SONNET,
+        "openai": _GPT_4O,
+        "ollama": _LLAMA32,
+        "openrouter": _OPENROUTER_AUTO,
         "mistral": "mistral-large-latest",
         "deepseek": "deepseek-chat",
-        "groq": "openai/gpt-oss-120b",
+        "groq": _OPENAI_GPT_OSS_120B,
         "cohere": "command-a-plus-05-2026",
     }
 
@@ -641,7 +657,7 @@ class ModelResolver:
         for model_id in extra_models:
             if model_id and model_id not in mapping and model_id not in cls._REGISTRY:
                 # Point unknown models at the strongest in-generation fallback.
-                seed = "gemini-2.5-flash" if "gemini" in model_id.lower() else None
+                seed = cls._GEMINI_25_FLASH if "gemini" in model_id.lower() else None
                 if seed and seed in cls._REGISTRY:
                     mapping[model_id] = seed
         return mapping

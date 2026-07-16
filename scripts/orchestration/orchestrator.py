@@ -13,9 +13,9 @@ from typing import Dict, Any, List, Optional
 from execution.tool_runner import run_command, ExecutionResult
 from execution.sandbox import SandboxController
 from execution.agent_executor import AgentExecutor
-from orchestration.router import AGENT_ROUTER
+from orchestration.router import AgentRouter
 from runtime.tracer import TRACER
-from runtime.async_task_queue import EXECUTION_QUEUE
+from runtime.async_task_queue import ExecutionQueue
 
 class TaskState(Enum):
     PENDING = "pending"
@@ -46,17 +46,17 @@ class ExecutionOrchestrator:
         self.root = workspace_root
         self.sandbox = SandboxController(workspace_root)
         self.executor = AgentExecutor(workspace_root)
-        self.router = AGENT_ROUTER(workspace_root)
+        self.router = AgentRouter(workspace_root)
         self.tracer = TRACER(workspace_root)
         self.active_tasks: Dict[str, asyncio.Task] = {}
         self.sessions: Dict[str, ExecutionSession] = {}
-        self.queue = EXECUTION_QUEUE(max_concurrent=max_concurrent)
+        self.queue = ExecutionQueue(max_concurrent=max_concurrent)
         self._worker_count = worker_count
         self._workers: List[asyncio.Task] = []
         self._results: Dict[str, asyncio.Future] = {}
         self._dead_letters: deque = deque(maxlen=100)
 
-    async def dispatch(self, task_description: str) -> Dict[str, Any]:
+    def dispatch(self, task_description: str) -> Dict[str, Any]:
         execution_id = str(uuid.uuid4())
         domain = self.router._detect_domain(task_description)
         agents = self.router.affinity_map.get("domains", {}).get(domain, [])
@@ -178,12 +178,12 @@ class ExecutionOrchestrator:
     def get_dead_letters(self, limit: int = 50) -> List[Dict[str, Any]]:
         return list(self._dead_letters)[-limit:]
 
-    async def _ensure_workers(self) -> None:
+    def _ensure_workers(self) -> None:
         if not self._workers:
-            self._workers = await self.queue.start_workers(self._worker_count)
+            self._workers = self.queue.start_workers(self._worker_count)
 
     async def submit_task(self, task_description: str, agent_id: str, prompt: str, session_id: str, priority: int = 5) -> str:
-        await self._ensure_workers()
+        self._ensure_workers()
         task_id = str(uuid.uuid4())
         loop = asyncio.get_running_loop()
         future = loop.create_future()
@@ -233,7 +233,8 @@ class ExecutionOrchestrator:
             return {"status": "failed", "error": f"Unknown task_id {task_id}"}
         try:
             if timeout is not None:
-                return await asyncio.wait_for(future, timeout=timeout)
+                async with asyncio.timeout(timeout):
+                    return await future
             return await future
         finally:
             self._results.pop(task_id, None)
@@ -282,10 +283,9 @@ class ExecutionOrchestrator:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop_event.set)
 
-        # Logic wrapper
         task = asyncio.create_task(self.execute_task(task_description, agent_id, prompt, session_id))
 
-        done, pending = await asyncio.wait(
+        await asyncio.wait(
             [task, asyncio.create_task(stop_event.wait())],
             return_when=asyncio.FIRST_COMPLETED
         )
@@ -300,3 +300,5 @@ class ExecutionOrchestrator:
 
 
 ORCHESTRATOR = ExecutionOrchestrator
+AGENT_ROUTER = AgentRouter
+EXECUTION_QUEUE = ExecutionQueue

@@ -2,10 +2,10 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import path from 'path';
-import os from 'os';
-import fs from 'fs';
-import { spawnSync } from 'child_process';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { llmRoute, keywordRoute } from './llm-router.js';
 
 function hideEgcRootOnWindows(): void {
