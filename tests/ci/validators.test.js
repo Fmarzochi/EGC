@@ -2849,6 +2849,188 @@ function runTests() {
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
+  // ==========================================
+  // ==========================================
+  console.log('\nvalidate-skill-frontmatter.js:');
+
+  if (test('passes on real project skills', () => {
+    const result = runValidator('validate-skill-frontmatter');
+    assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
+    assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
+  })) passed++; else failed++;
+
+  if (test('fails on skill with no frontmatter block', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'no-frontmatter'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'no-frontmatter', 'SKILL.md'), '# No Frontmatter\n\nJust content.');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for missing frontmatter');
+    assert.ok(result.stderr.includes('Missing frontmatter'), `Should report missing frontmatter, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails on skill with unterminated frontmatter block', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'unterminated'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'unterminated', 'SKILL.md'), '---\nname: unterminated\ndescription: no closing marker\n\n# Body');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for unterminated frontmatter');
+    assert.ok(result.stderr.includes('Malformed frontmatter'), `Should report malformed frontmatter, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails on skill missing the name field', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'no-name'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'no-name', 'SKILL.md'), '---\ndescription: Has a description but no name\n---\n# Body');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for missing name field');
+    assert.ok(result.stderr.includes("Missing required frontmatter field: name"),
+      `Should report missing name field, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails on skill missing the description field', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'no-description'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'no-description', 'SKILL.md'), '---\nname: no-description\n---\n# Body');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for missing description field');
+    assert.ok(result.stderr.includes('Missing required frontmatter field: description'),
+      `Should report missing description field, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when name does not match its directory', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'my-skill-dir'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'my-skill-dir', 'SKILL.md'), '---\nname: unrelated-name\ndescription: A skill\n---\n# Body');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for name/directory mismatch');
+    assert.ok(result.stderr.includes("does not match directory 'my-skill-dir'"),
+      `Should report name/directory mismatch, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('allows name to be a suffix of a category-prefixed directory', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'topic-my-thing'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'topic-my-thing', 'SKILL.md'), '---\nname: my-thing\ndescription: A skill grouped under a shared topic prefix\n---\n# Body');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 0, `Should pass for suffix-matched name, got stderr: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails on non-kebab-case name', () => {
+    const testDir = createTestDir();
+    fs.mkdirSync(path.join(testDir, 'Bad_Name'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'Bad_Name', 'SKILL.md'), '---\nname: Bad_Name\ndescription: A skill\n---\n# Body');
+
+    const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for non-kebab-case name');
+    assert.ok(result.stderr.includes('not lowercase kebab-case'), `Should report kebab-case violation, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  // ==========================================
+  // ==========================================
+  console.log('\nvalidate-translation-structure.js:');
+
+  if (test('passes on real project translations', () => {
+    const result = runValidator('validate-translation-structure');
+    assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
+    assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
+  })) passed++; else failed++;
+
+  if (test('fails when a translation is missing a heading present in README.md', () => {
+    const testDir = createTestDir();
+    fs.writeFileSync(path.join(testDir, 'README.md'), [
+      '## Intro',
+      '## Install',
+      '### Sub A',
+      '## Outro',
+      ''
+    ].join('\n'));
+    fs.mkdirSync(path.join(testDir, 'translations', 'es'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'translations', 'es', 'README.md'), [
+      '## Introduccion',
+      '## Instalacion',
+      '## Cierre',
+      ''
+    ].join('\n'));
+
+    const result = runValidatorWithDirs('validate-translation-structure', { ROOT: testDir, LANGUAGES: ['es'] });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for missing heading');
+    assert.ok(result.stderr.includes('MISSING heading at source position 2'),
+      `Should report the missing heading position, got: ${result.stderr}`);
+    assert.ok(result.stderr.includes('### "Sub A"'), `Should name the missing heading, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when a translation has an extra heading not in README.md', () => {
+    const testDir = createTestDir();
+    fs.writeFileSync(path.join(testDir, 'README.md'), [
+      '## Intro',
+      '## Outro',
+      ''
+    ].join('\n'));
+    fs.mkdirSync(path.join(testDir, 'translations', 'es'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'translations', 'es', 'README.md'), [
+      '## Introduccion',
+      '### Extra local-only section',
+      '## Cierre',
+      ''
+    ].join('\n'));
+
+    const result = runValidatorWithDirs('validate-translation-structure', { ROOT: testDir, LANGUAGES: ['es'] });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for extra heading');
+    assert.ok(result.stderr.includes('EXTRA heading at translation position 1'),
+      `Should report the extra heading position, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('fails when a translation README.md is missing entirely', () => {
+    const testDir = createTestDir();
+    fs.writeFileSync(path.join(testDir, 'README.md'), '## Intro\n');
+    fs.mkdirSync(path.join(testDir, 'translations'), { recursive: true });
+
+    const result = runValidatorWithDirs('validate-translation-structure', { ROOT: testDir, LANGUAGES: ['es'] });
+    assert.strictEqual(result.code, 1, 'Should exit 1 for missing translation file');
+    assert.ok(result.stderr.includes('File not found'), `Should report file not found, got: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('passes when translation headings match in level and order', () => {
+    const testDir = createTestDir();
+    fs.writeFileSync(path.join(testDir, 'README.md'), [
+      '## Intro',
+      '## Install',
+      '### Sub A',
+      '### Sub B',
+      '## Outro',
+      ''
+    ].join('\n'));
+    fs.mkdirSync(path.join(testDir, 'translations', 'es'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'translations', 'es', 'README.md'), [
+      '## Introduccion (texto distinto)',
+      '## Instalacion',
+      '### Sub A traducida',
+      '### Sub B traducida',
+      '## Cierre',
+      ''
+    ].join('\n'));
+
+    const result = runValidatorWithDirs('validate-translation-structure', { ROOT: testDir, LANGUAGES: ['es'] });
+    assert.strictEqual(result.code, 0, `Should pass when structure matches despite different text, got stderr: ${result.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -1302,6 +1302,16 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
+    "name": "skill-router",
+    "description": "Describes how skills and agents from the EGC library are surfaced to a target harness, and how to inspect or install the catalog. Use when the user asks which skills/agents EGC ships, or wants to discover or install a curated profile."
+  },
+  {
+    "kind": "skill",
+    "name": "skill-stocktake",
+    "description": "Use when auditing Gemini skills and commands for quality. Supports Quick Scan (changed skills only) and Full Stocktake modes with sequential subagent batch evaluation."
+  },
+  {
+    "kind": "skill",
     "name": "strategic-compact",
     "description": "Suggests manual context compaction at logical intervals to preserve context through task phases rather than arbitrary auto-compaction."
   },

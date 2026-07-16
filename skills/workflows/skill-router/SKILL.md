@@ -1,3 +1,9 @@
+---
+name: skill-router
+description: Describes how skills and agents from the EGC library are surfaced to a target harness, and how to inspect or install the catalog. Use when the user asks which skills/agents EGC ships, or wants to discover or install a curated profile.
+origin: EGC
+---
+
 # Skill Router
 
 The **Skill Router** describes how skills and agents from the EGC library

@@ -187,6 +187,14 @@ jobs:
         run: node scripts/ci/validate-skills.js
         continue-on-error: false
 
+      - name: Validate skill frontmatter
+        run: node scripts/ci/validate-skill-frontmatter.js
+        continue-on-error: false
+
+      - name: Validate translation structure
+        run: node scripts/ci/validate-translation-structure.js
+        continue-on-error: false
+
       - name: Validate install manifests
         run: node scripts/ci/validate-install-manifests.js
         continue-on-error: false
