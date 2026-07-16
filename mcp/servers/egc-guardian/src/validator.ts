@@ -4,7 +4,13 @@ import os from 'os';
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
 export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc'];
-export const DANGEROUS = ['rm', 'mv'];
+// dd/shred/truncate have no legitimate small/safe use in an agent workflow
+// (unlike e.g. chmod, which is mostly benign and only dangerous with
+// specific destructive flags — a blanket ban there would be a false-positive
+// magnet, not a security fix). rm/mv are the two most obviously reachable
+// destructive commands; these three round out the same tier now that the
+// allowlist-miss path is advisory-only by design (see validateCommand).
+export const DANGEROUS = ['rm', 'mv', 'dd', 'shred', 'truncate'];
 
 export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
 
