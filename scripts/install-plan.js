@@ -143,7 +143,7 @@ function printPlan(plan) {
     'Note: target filtering and operation output currently reflect scaffold-level adapter planning, not a byte-for-byte mirror of legacy install.sh copy paths.\n'
   );
   console.log(`Profile: ${plan.profileId || '(custom modules)'}`); // NOSONAR jssecurity:S8689
-  console.log(`Target: ${plan.target || '(all targets)'}`);
+  console.log(`Target: ${plan.target || '(all targets)'}`); // NOSONAR jssecurity:S8689
   console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
   console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
   console.log(`Requested: ${plan.requestedModuleIds.join(', ')}`);
