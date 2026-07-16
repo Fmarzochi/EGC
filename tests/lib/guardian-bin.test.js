@@ -142,6 +142,45 @@ function main() {
     }
   });
 
+  run('args-path match no longer depends on path.join\'s platform-specific separator (audit EGC-128)', () => {
+    // The bug this fixes only reproduces when path.join()'s separator (OS-
+    // dependent) differs from the separator already in the config value —
+    // e.g. a '/'-separated config read by a path.join() that would itself
+    // produce '\' (Windows). That specific mismatch can't be forced in a
+    // portable test without mocking the platform-dependent path module
+    // itself, so this checks the actual invariant the fix establishes: the
+    // match no longer goes through path.join() at all, for any separator
+    // style the config value already uses. A forward-slash args path (the
+    // portable, common case, and the shape a synced/cross-OS config would
+    // have) must always match, independent of what OS reads it.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const forwardSlashIndexJsPath = path.join(installDir, 'index.js').split(path.sep).join('/');
+      fs.writeFileSync(
+        path.join(fakeHome, '.claude.json'),
+        JSON.stringify({
+          mcpServers: {
+            'egc-guardian': {
+              command: 'node',
+              args: [forwardSlashIndexJsPath],
+            },
+          },
+        }),
+      );
+
+      withEnv({ HOME: fakeHome }, () => {
+        const { fromMcpConfigs } = freshGuardianBin();
+        const resolved = fromMcpConfigs();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   run('rejects a ~/.claude.json entry pointing outside the home directory', () => {
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     const outsideDir = createTempDir('egc-guardian-bin-outside-');

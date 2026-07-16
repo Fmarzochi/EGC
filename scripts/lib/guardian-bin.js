@@ -51,8 +51,15 @@ function fromMcpConfigs() {
       const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const server = data?.mcpServers?.['egc-guardian'];
       const args = Array.isArray(server?.args) ? server.args : [];
+      // Compare against a fixed forward-slash suffix instead of building it
+      // with path.join(), which bakes in the *running* OS's separator
+      // ('\' on Windows). A config value stored with '/' (common even in
+      // Windows configs, and how a config synced from another OS would
+      // read) would never match a '\'-joined suffix, silently disabling
+      // this whole fallback on Windows. Normalizing the candidate's own
+      // separators before comparing means either style in the config matches.
       const indexJs = [server?.command, ...args].find(
-        a => typeof a === 'string' && a.endsWith(path.join('egc-guardian', 'build', 'index.js')),
+        a => typeof a === 'string' && a.replace(/\\/g, '/').endsWith('egc-guardian/build/index.js'),
       );
       if (!indexJs) continue;
       const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');
