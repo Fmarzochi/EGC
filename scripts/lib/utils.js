@@ -330,6 +330,15 @@ function findFiles(dir, pattern, options = {}) {
     .replace(/\?/g, '.');
   const regex = new RegExp(`^${regexPattern}$`);
 
+  function collectIfInAge(fullPath, stats) {
+    if (maxAge === null) {
+      results.push({ path: fullPath, mtime: stats.mtimeMs });
+      return;
+    }
+    const ageInDays = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
+    if (ageInDays <= maxAge) results.push({ path: fullPath, mtime: stats.mtimeMs });
+  }
+
   function searchDir(currentDir) {
     try {
       const entries = fs.readdirSync(currentDir, { withFileTypes: true });
@@ -342,17 +351,9 @@ function findFiles(dir, pattern, options = {}) {
           try {
             stats = fs.statSync(fullPath);
           } catch {
-            continue; // File deleted between readdir and stat
+            continue;
           }
-
-          if (maxAge !== null) {
-            const ageInDays = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
-            if (ageInDays <= maxAge) {
-              results.push({ path: fullPath, mtime: stats.mtimeMs });
-            }
-          } else {
-            results.push({ path: fullPath, mtime: stats.mtimeMs });
-          }
+          collectIfInAge(fullPath, stats);
         } else if (entry.isDirectory() && recursive) {
           searchDir(fullPath);
         }

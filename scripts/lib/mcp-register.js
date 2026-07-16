@@ -318,6 +318,24 @@ function registerZedContextServers(targetPath, bins) {
   return true;
 }
 
+const FORMAT_HANDLERS = {
+  'json': registerJson,
+  'toml': registerToml,
+  'continue-yaml': registerContinueYaml,
+  'zed-context-servers': registerZedContextServers,
+};
+
+function registerTarget(target, bins, onRegister, onWarn) {
+  const handler = FORMAT_HANDLERS[target.format];
+  if (!handler) return;
+  try {
+    const registered = handler(target.path, bins);
+    if (registered && onRegister) onRegister(target);
+  } catch (err) {
+    if (onWarn) onWarn(target, err);
+  }
+}
+
 /**
  * Walks every gated target for homeDir and registers egc-guardian /
  * egc-memory into whichever tools are actually installed. Callbacks let the
@@ -334,21 +352,7 @@ function registerMcpServers(homeDir, bins, callbacks = {}) {
       if (onSkip) onSkip(target);
       continue;
     }
-    try {
-      let registered = false;
-      if (target.format === 'json') {
-        registered = registerJson(target.path, bins);
-      } else if (target.format === 'toml') {
-        registered = registerToml(target.path, bins);
-      } else if (target.format === 'continue-yaml') {
-        registered = registerContinueYaml(target.path, bins);
-      } else if (target.format === 'zed-context-servers') {
-        registered = registerZedContextServers(target.path, bins);
-      }
-      if (registered && onRegister) onRegister(target);
-    } catch (err) {
-      if (onWarn) onWarn(target, err);
-    }
+    registerTarget(target, bins, onRegister, onWarn);
   }
 
   return targets;
