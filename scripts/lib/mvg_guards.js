@@ -4,7 +4,7 @@
  * MVG Guards - Pragmatic runtime protection for EGC
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 const { log } = require('./utils');
 
 const MAX_ACTIVATION_DEPTH = 3;
@@ -21,7 +21,7 @@ function checkRecursion(sessionId) {
 
   try {
     if (fs.existsSync(lockFile)) {
-      depth = parseInt(fs.readFileSync(lockFile, 'utf8')) || 0;
+      depth = Number.parseInt(fs.readFileSync(lockFile, 'utf8')) || 0;
     }
 
     if (depth >= MAX_ACTIVATION_DEPTH) {

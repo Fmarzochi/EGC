@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 let Ajv = null;
 try {
@@ -96,7 +96,7 @@ function validateStateRequest(request, pushError) {
     ['profile', 'modules', 'includeComponents', 'excludeComponents', 'legacyLanguages', 'legacyMode'],
     pushError
   );
-  if (!(Object.prototype.hasOwnProperty.call(request, 'profile') && (request.profile === null || typeof request.profile === 'string'))) {
+  if (!(Object.hasOwn(request, 'profile') && (request.profile === null || typeof request.profile === 'string'))) {
     pushError('/request/profile', 'must be string or null');
   }
   validateStringArray(request.modules, '/request/modules', pushError);

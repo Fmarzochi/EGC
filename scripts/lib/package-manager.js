@@ -5,8 +5,8 @@
  * Supports: npm, pnpm, yarn, bun
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { commandExists, getEGCDir, readFile, writeFile } = require('./utils');
 
 // Package manager definitions

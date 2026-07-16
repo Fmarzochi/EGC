@@ -9,10 +9,10 @@
  * the file.
  */
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const readline = require('readline');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const readline = require('node:readline');
 const { ensurePrivateDir } = require('./utils');
 
 const TELEMETRY_FILE = path.join(
