@@ -11,9 +11,6 @@ class DAG_VALIDATOR:
     MAX_RECURSION_DEPTH = 2
     MAX_AGENT_CHAIN = 5
 
-    def __init__(self):
-        pass
-
     def validate_workflow(self, workflow_chain: list) -> bool:
         """
         Validates a proposed agent execution chain.

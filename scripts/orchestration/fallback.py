@@ -40,7 +40,7 @@ class FALLBACK_MANAGER:
 if __name__ == "__main__":
     async def main():
         async def failing_tool():
-            raise Exception("Tool Timeout")
+            raise TimeoutError("Tool Timeout")
 
         fm = FALLBACK_MANAGER()
         try:

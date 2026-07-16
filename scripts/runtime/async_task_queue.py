@@ -37,13 +37,13 @@ class EXECUTION_QUEUE:
                 self.active_tasks += 1
                 logger.info(f"Worker processing task {task_id} (Priority {priority}). Active: {self.active_tasks}/{self.max_concurrent}")
                 try:
-                    # Timeout management
-                    result = await asyncio.wait_for(coro(*args, **kwargs), timeout=300.0)
+                    async with asyncio.timeout(300.0):
+                        result = await coro(*args, **kwargs)
                     logger.info(f"Task {task_id} completed successfully.")
-                except asyncio.TimeoutError:
-                    logger.error(f"Task {task_id} timed out.")
-                except Exception as e:
-                    logger.error(f"Task {task_id} failed: {str(e)}")
+                except TimeoutError:
+                    logger.exception(f"Task {task_id} timed out.")
+                except Exception:
+                    logger.exception(f"Task {task_id} failed.")
                 finally:
                     self.active_tasks -= 1
                     self.queue.task_done()

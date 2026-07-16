@@ -34,8 +34,8 @@ class TRACER:
             try:
                 with open(self.log_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(event) + "\n")
-            except Exception as e:
-                logger.error(f"Failed to write trace event: {e}")
+            except Exception:
+                logger.exception("Failed to write trace event")
 
     def get_traces(self, execution_id: Optional[str] = None) -> list:
         """
@@ -52,7 +52,7 @@ class TRACER:
                         entry = json.loads(line)
                         if execution_id is None or entry.get("execution_id") == execution_id:
                             traces.append(entry)
-            except Exception as e:
-                logger.error(f"Failed to read traces: {e}")
+            except Exception:
+                logger.exception("Failed to read traces")
             
         return traces

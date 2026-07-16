@@ -73,8 +73,8 @@ class SESSION_MANAGER:
         try:
             with open(self.session_file, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save session state: {e}")
+        except Exception:
+            logger.exception("Failed to save session state")
 
     def close_session(self):
         with self.lock:
