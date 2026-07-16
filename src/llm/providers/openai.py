@@ -70,6 +70,30 @@ class OpenAIProvider(LLMProvider):
             ),
         ]
 
+    @staticmethod
+    def _extract_tool_calls(choice) -> list[ToolCall] | None:
+        if not choice.message.tool_calls:
+            return None
+        calls = []
+        for tc in choice.message.tool_calls:
+            try:
+                args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+            except json.JSONDecodeError:
+                args = {}
+            calls.append(ToolCall(id=tc.id or "", name=tc.function.name, arguments=args))
+        return calls
+
+    def _map_error(self, e: Exception) -> None:
+        msg = str(e)
+        safe_msg = redact_secrets(msg)
+        if "401" in msg or "authentication" in msg.lower():
+            raise AuthenticationError(safe_msg, provider=self.provider_type) from e
+        if "429" in msg or "rate_limit" in msg.lower():
+            raise RateLimitError(safe_msg, provider=self.provider_type) from e
+        if "context" in msg.lower() and "length" in msg.lower():
+            raise ContextLengthError(safe_msg, provider=self.provider_type) from e
+        raise e
+
     def generate(self, input: LLMInput) -> LLMOutput:
         try:
             params: dict[str, Any] = {
@@ -81,40 +105,16 @@ class OpenAIProvider(LLMProvider):
                 params["max_tokens"] = input.max_tokens
             if input.tools:
                 params["tools"] = [tool.to_dict() for tool in input.tools]
-
             response = self.client.chat.completions.create(**params)
             if not response.choices:
-                raise LLMError(
-                    "The provider returned an empty choices list",
-                    provider=self.provider_type,
-                )
+                raise LLMError("The provider returned an empty choices list", provider=self.provider_type)
             choice = response.choices[0]
-
-            tool_calls = None
-            if choice.message.tool_calls:
-                tool_calls = []
-                for tc in choice.message.tool_calls:
-                    try:
-                        args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                    except json.JSONDecodeError:
-                        args = {}
-                    tool_calls.append(
-                        ToolCall(
-                            id=tc.id or "",
-                            name=tc.function.name,
-                            arguments=args,
-                        )
-                    )
-
-            # Some responses omit usage entirely (observed on certain
-            # proxy/gateway responses upstream of this provider). Missing
-            # usage stats are a lesser problem than an unclassified
-            # AttributeError bypassing the 401/429/context-length mapping
-            # below — degrade to zeros rather than crash.
+            # Some responses omit usage entirely (proxy/gateway upstream of this provider).
+            # Degrade to zeros rather than crash.
             usage = response.usage
             return LLMOutput(
                 content=choice.message.content or "",
-                tool_calls=tool_calls,
+                tool_calls=self._extract_tool_calls(choice),
                 model=response.model,
                 usage={
                     "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
@@ -124,22 +124,7 @@ class OpenAIProvider(LLMProvider):
                 stop_reason=choice.finish_reason,
             )
         except Exception as e:
-            msg = str(e)
-            # openai SDK exceptions (APIStatusError and friends) can embed
-            # the raw HTTP response body in their message, which may echo
-            # request headers/payloads back — redact before it reaches
-            # LLMError, which downstream code may log or persist verbatim.
-            # Classification below runs on the original msg (a recognizable
-            # secret pattern could in principle overlap "401"/"rate_limit",
-            # so redact only what actually gets stored in the exception).
-            safe_msg = redact_secrets(msg)
-            if "401" in msg or "authentication" in msg.lower():
-                raise AuthenticationError(safe_msg, provider=self.provider_type) from e
-            if "429" in msg or "rate_limit" in msg.lower():
-                raise RateLimitError(safe_msg, provider=self.provider_type) from e
-            if "context" in msg.lower() and "length" in msg.lower():
-                raise ContextLengthError(safe_msg, provider=self.provider_type) from e
-            raise
+            self._map_error(e)
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()

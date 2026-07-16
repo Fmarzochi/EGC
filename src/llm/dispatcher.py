@@ -54,7 +54,7 @@ class Dispatcher:
             with open(hooks_json_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            logger.error(f"Failed to load hooks.json: {e}")
+            logger.exception("Failed to load hooks.json")
             return {"hooks": {}}
 
     def _match(self, matcher: str, tool_name: str) -> bool:
@@ -64,6 +64,57 @@ class Dispatcher:
         parts = matcher.split('|')
         return tool_name in parts
 
+    def _build_hook_payload(
+        self,
+        event_type: str,
+        tool_name: str,
+        current_tool_call: Optional[ToolCall],
+        session_id: Optional[str],
+        extra_payload: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "event": event_type,
+            "tool": tool_name,
+            "tool_name": tool_name,
+            "params": current_tool_call.arguments if current_tool_call else {},
+            "tool_input": current_tool_call.arguments if current_tool_call else {},
+            "context": {
+                "session_id": session_id or "default",
+                "runtime_source": "egc-python-dispatcher",
+            },
+        }
+        if extra_payload:
+            payload.update(extra_payload)
+            if "transcript_path" in extra_payload:
+                payload["transcript_path"] = extra_payload["transcript_path"]
+        return payload
+
+    def _apply_hook_result(
+        self,
+        result: HookResult,
+        entry: Dict[str, Any],
+        event_type: str,
+        tool_name: str,
+        current_tool_call: Optional[ToolCall],
+        cumulative_outputs: Dict[str, Any],
+    ) -> tuple:
+        if not result.success:
+            logger.warning(f"Hook {entry.get('id', 'unnamed')} vetoed or failed: {result.error}")
+            self.recorder.record("veto", {"event": event_type, "tool": tool_name, "reason": result.error})
+            return None, current_tool_call, cumulative_outputs
+        if result.data and isinstance(result.data, dict):
+            hook_out = result.data.get("hookSpecificOutput")
+            if hook_out and isinstance(hook_out, dict):
+                cumulative_outputs.update(hook_out)
+        if result.data and current_tool_call:
+            validated = self._validate_and_reconstruct(result.data, current_tool_call)
+            if validated:
+                if validated.arguments != current_tool_call.arguments:
+                    self.recorder.record("mutation", {"original": current_tool_call.arguments, "mutated": validated.arguments})
+                    logger.info(f"Mutation applied by hook {entry.get('id', 'unnamed')}")
+                current_tool_call = validated
+        return True, current_tool_call, cumulative_outputs
+
     def dispatch(self, event_type: str, tool_call: Optional[ToolCall] = None, session_id: Optional[str] = None, extra_payload: Optional[Dict[str, Any]] = None) -> DispatchResult:
         """
         Dispatch an event to the hook mesh.
@@ -71,57 +122,25 @@ class Dispatcher:
         hook-specific outputs, and veto status.
         """
         tool_name = tool_call.name if tool_call else "*"
-        
         trace_id = f"{session_id or 'default'}-{event_type}-{tool_name}-{os.getpid()}"
         trace_uri = f"egc://trace/{trace_id}"
-        
         logger.info(f"Evento: {event_type} | Alvo: {tool_name} | Trace: {format_osc8(trace_id, trace_uri)}")
-        
+
         relevant_hooks = self.hooks_config.get("hooks", {}).get(event_type, [])
-        
         current_tool_call = tool_call
-        cumulative_hook_outputs = {}
+        cumulative_hook_outputs: Dict[str, Any] = {}
 
         for entry in relevant_hooks:
-            matcher = entry.get("matcher", "*")
-            if self._match(matcher, tool_name):
-                for hook_def in entry.get("hooks", []):
-                    payload = {
-                        "event": event_type,
-                        "tool": tool_name,
-                        "tool_name": tool_name, # Mirroring for Node parity
-                        "params": current_tool_call.arguments if current_tool_call else {},
-                        "tool_input": current_tool_call.arguments if current_tool_call else {}, # Mirroring for Node parity
-                        "context": {
-                            "session_id": session_id or "default",
-                            "runtime_source": "egc-python-dispatcher"
-                        }
-                    }
-
-                    if extra_payload:
-                        payload.update(extra_payload)
-                        if "transcript_path" in extra_payload:
-                            payload["transcript_path"] = extra_payload["transcript_path"]
-
-                    result = self._execute_hook_command(hook_def.get("command"), payload, session_id)
-
-                    if not result.success:
-                        logger.warning(f"Hook {entry.get('id', 'unnamed')} vetoed or failed: {result.error}")
-                        self.recorder.record("veto", {"event": event_type, "tool": tool_name, "reason": result.error})
-                        return DispatchResult(vetoed=True, error=result.error)
-
-                    if result.data and isinstance(result.data, dict):
-                        hook_out = result.data.get("hookSpecificOutput")
-                        if hook_out and isinstance(hook_out, dict):
-                            cumulative_hook_outputs.update(hook_out)
-
-                    if result.data and current_tool_call:
-                        validated = self._validate_and_reconstruct(result.data, current_tool_call)
-                        if validated:
-                            if validated.arguments != current_tool_call.arguments:
-                                self.recorder.record("mutation", {"original": current_tool_call.arguments, "mutated": validated.arguments})
-                                logger.info(f"Mutation applied by hook {entry.get('id', 'unnamed')}")
-                            current_tool_call = validated
+            if not self._match(entry.get("matcher", "*"), tool_name):
+                continue
+            for hook_def in entry.get("hooks", []):
+                payload = self._build_hook_payload(event_type, tool_name, current_tool_call, session_id, extra_payload)
+                result = self._execute_hook_command(hook_def.get("command"), payload, session_id)
+                ok, current_tool_call, cumulative_hook_outputs = self._apply_hook_result(
+                    result, entry, event_type, tool_name, current_tool_call, cumulative_hook_outputs
+                )
+                if ok is None:
+                    return DispatchResult(vetoed=True, error=result.error)
 
         return DispatchResult(tool_call=current_tool_call, hook_outputs=cumulative_hook_outputs)
 

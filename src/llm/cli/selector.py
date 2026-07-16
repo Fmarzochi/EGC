@@ -118,7 +118,7 @@ def interactive_select(
                 name: ModelResolver.menu_choices(name) for name, _ in providers
             }
             # Always offer a symbolic "auto" entry that defers to dynamic routing.
-            for name in list(models_per_provider):
+            for name in models_per_provider:
                 models_per_provider[name].insert(0, ("default", f"Auto - dynamic routing ({ModelResolver.default_model(name)})"))
         else:  # pragma: no cover - only when the resolver cannot be imported
             # Fallback when ModelResolver is unavailable: only offer symbolic "Auto".

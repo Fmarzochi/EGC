@@ -98,6 +98,39 @@ class CohereProvider(LLMProvider):
             return None
         return [tool.to_dict() for tool in tools]
 
+    def _parse_tool_calls(self, response) -> list[ToolCall] | None:
+        raw = getattr(response.message, "tool_calls", None)
+        if not raw:
+            return None
+        return [
+            ToolCall(id=tc.id, name=tc.function.name, arguments=_json_loads(tc.function.arguments))
+            for tc in raw
+        ]
+
+    def _parse_usage(self, response) -> dict | None:
+        meta = getattr(response, "usage", None) or getattr(response, "meta", None)
+        tokens = getattr(meta, "tokens", None) if meta else None
+        if tokens is None:
+            return None
+        return {
+            "input_tokens": getattr(tokens, "input_tokens", 0) or 0,
+            "output_tokens": getattr(tokens, "output_tokens", 0) or 0,
+        }
+
+    def _parse_response(self, response, model: str) -> LLMOutput:
+        if response.message is None:
+            raise LLMError("Cohere returned an empty response", provider=ProviderType.COHERE)
+        content_blocks = response.message.content or []
+        text = "".join(block.text for block in content_blocks if getattr(block, "text", None))
+        tool_calls = self._parse_tool_calls(response)
+        return LLMOutput(
+            content=text,
+            tool_calls=tool_calls,
+            model=model,
+            usage=self._parse_usage(response),
+            stop_reason=_map_finish_reason(response.finish_reason, bool(tool_calls)),
+        )
+
     def generate(self, input: LLMInput) -> LLMOutput:  # type: ignore[override]
         try:
             model = ModelResolver.resolve(input.model, provider="cohere")
@@ -112,43 +145,7 @@ class CohereProvider(LLMProvider):
             tools_mapped = self._map_tools(input.tools)
             if tools_mapped:
                 kwargs["tools"] = tools_mapped
-
-            response = self.client.chat(**kwargs)
-
-            if response.message is None:
-                raise LLMError("Cohere returned an empty response", provider=ProviderType.COHERE)
-
-            content_blocks = response.message.content or []
-            text = "".join(block.text for block in content_blocks if getattr(block, "text", None))
-
-            tool_calls: list[ToolCall] | None = None
-            raw_tool_calls = getattr(response.message, "tool_calls", None)
-            if raw_tool_calls:
-                tool_calls = [
-                    ToolCall(
-                        id=tc.id,
-                        name=tc.function.name,
-                        arguments=_json_loads(tc.function.arguments),
-                    )
-                    for tc in raw_tool_calls
-                ]
-
-            usage = None
-            meta = getattr(response, "usage", None) or getattr(response, "meta", None)
-            tokens = getattr(meta, "tokens", None) if meta else None
-            if tokens is not None:
-                usage = {
-                    "input_tokens": getattr(tokens, "input_tokens", 0) or 0,
-                    "output_tokens": getattr(tokens, "output_tokens", 0) or 0,
-                }
-
-            return LLMOutput(
-                content=text,
-                tool_calls=tool_calls,
-                model=model,
-                usage=usage,
-                stop_reason=_map_finish_reason(response.finish_reason, bool(tool_calls)),
-            )
+            return self._parse_response(self.client.chat(**kwargs), model)
         except LLMError:
             raise
         except Exception as exc:
