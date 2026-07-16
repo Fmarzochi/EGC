@@ -567,7 +567,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
       const contextBlock = [
         "# EGC Context (preserve across compaction)",
         "",
-        "## Active Plugin: EGC - Extended Global Context v1.1.10",
+        "## Active Plugin: EGC - Extended Global Context v1.1.11",
         "- Hooks: file.edited, tool.execute.before/after, session.created/idle/deleted, shell.env, compacting, permission.ask",
         "- Tools: run-tests, check-coverage, security-audit, format-code, lint-check, git-summary, changed-files",
         "- Agents: 13 specialized (planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, e2e-runner, refactor-cleaner, doc-updater, go-reviewer, go-build-resolver, database-reviewer, python-reviewer)",
