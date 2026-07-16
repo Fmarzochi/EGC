@@ -778,26 +778,8 @@ function determineStatus(issues) {
   return 'ok';
 }
 
-function analyzeRecord(record, context) {
+function checkTargetRootHealth(state, record) {
   const issues = [];
-
-  if (record.error) {
-    issues.push(buildIssue('error', 'invalid-install-state', record.error));
-    return {
-      ...record,
-      status: determineStatus(issues),
-      issues,
-    };
-  }
-
-  const state = record.state;
-  if (!state) {
-    return {
-      ...record,
-      status: 'missing',
-      issues,
-    };
-  }
 
   if (!fs.existsSync(state.target.root)) {
     issues.push(buildIssue(
@@ -831,17 +813,21 @@ function analyzeRecord(record, context) {
     ));
   }
 
+  return issues;
+}
+
+function checkManagedOperationHealth(state, context) {
+  const issues = [];
   const managedOperations = getManagedOperations(state);
   const operationHealth = summarizeManagedOperationHealth(context.repoRoot, managedOperations);
-  const missingManagedOperations = operationHealth.missing;
 
-  if (missingManagedOperations.length > 0) {
+  if (operationHealth.missing.length > 0) {
     issues.push(buildIssue(
       'error',
       'missing-managed-files',
-      `${missingManagedOperations.length} managed file(s) are missing`,
+      `${operationHealth.missing.length} managed file(s) are missing`,
       {
-        paths: missingManagedOperations.map(entry => entry.destinationPath),
+        paths: operationHealth.missing.map(entry => entry.destinationPath),
       }
     ));
   }
@@ -879,6 +865,12 @@ function analyzeRecord(record, context) {
     ));
   }
 
+  return issues;
+}
+
+function checkVersionDrift(state, context) {
+  const issues = [];
+
   if (state.source.manifestVersion !== context.manifestVersion) {
     issues.push(buildIssue(
       'warning',
@@ -899,43 +891,74 @@ function analyzeRecord(record, context) {
     ));
   }
 
-  if (!state.request.legacyMode) {
-    try {
-      const desiredPlan = resolveInstallPlan({
-        repoRoot: context.repoRoot,
-        projectRoot: context.projectRoot,
-        homeDir: context.homeDir,
-        target: record.adapter.target,
-        profileId: state.request.profile || null,
-        moduleIds: state.request.modules || [],
-        includeComponentIds: state.request.includeComponents || [],
-        excludeComponentIds: state.request.excludeComponents || [],
-      });
+  return issues;
+}
 
-      if (
-        !compareStringArrays(desiredPlan.selectedModuleIds, state.resolution.selectedModules)
-        || !compareStringArrays(desiredPlan.skippedModuleIds, state.resolution.skippedModules)
-      ) {
-        issues.push(buildIssue(
-          'warning',
-          'resolution-drift',
-          'Current manifest resolution differs from recorded install-state',
-          {
-            expectedSelectedModules: desiredPlan.selectedModuleIds,
-            recordedSelectedModules: state.resolution.selectedModules,
-            expectedSkippedModules: desiredPlan.skippedModuleIds,
-            recordedSkippedModules: state.resolution.skippedModules,
-          }
-        ));
-      }
-    } catch (error) {
-      issues.push(buildIssue(
-        'error',
-        'resolution-unavailable',
-        error.message
-      ));
-    }
+function checkResolutionDrift(record, state, context) {
+  if (state.request.legacyMode) {
+    return [];
   }
+
+  try {
+    const desiredPlan = resolveInstallPlan({
+      repoRoot: context.repoRoot,
+      projectRoot: context.projectRoot,
+      homeDir: context.homeDir,
+      target: record.adapter.target,
+      profileId: state.request.profile || null,
+      moduleIds: state.request.modules || [],
+      includeComponentIds: state.request.includeComponents || [],
+      excludeComponentIds: state.request.excludeComponents || [],
+    });
+
+    if (
+      !compareStringArrays(desiredPlan.selectedModuleIds, state.resolution.selectedModules)
+      || !compareStringArrays(desiredPlan.skippedModuleIds, state.resolution.skippedModules)
+    ) {
+      return [buildIssue(
+        'warning',
+        'resolution-drift',
+        'Current manifest resolution differs from recorded install-state',
+        {
+          expectedSelectedModules: desiredPlan.selectedModuleIds,
+          recordedSelectedModules: state.resolution.selectedModules,
+          expectedSkippedModules: desiredPlan.skippedModuleIds,
+          recordedSkippedModules: state.resolution.skippedModules,
+        }
+      )];
+    }
+
+    return [];
+  } catch (error) {
+    return [buildIssue('error', 'resolution-unavailable', error.message)];
+  }
+}
+
+function analyzeRecord(record, context) {
+  if (record.error) {
+    const issues = [buildIssue('error', 'invalid-install-state', record.error)];
+    return {
+      ...record,
+      status: determineStatus(issues),
+      issues,
+    };
+  }
+
+  const state = record.state;
+  if (!state) {
+    return {
+      ...record,
+      status: 'missing',
+      issues: [],
+    };
+  }
+
+  const issues = [
+    ...checkTargetRootHealth(state, record),
+    ...checkManagedOperationHealth(state, context),
+    ...checkVersionDrift(state, context),
+    ...checkResolutionDrift(record, state, context),
+  ];
 
   return {
     ...record,
