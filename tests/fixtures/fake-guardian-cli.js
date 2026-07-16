@@ -34,9 +34,11 @@ try { payload = fs.readFileSync(0, 'utf8'); } catch { payload = ''; }
 if (mode === 'command') {
   process.stdout.write(JSON.stringify(verdictForCommand(payload)));
 } else if (mode === 'command-batch') {
-  let segments;
-  try { segments = JSON.parse(payload); } catch { segments = []; }
-  if (!Array.isArray(segments)) segments = [];
+  let parsed;
+  try { parsed = JSON.parse(payload); } catch { parsed = []; }
+  const segments = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed && parsed.commands) ? parsed.commands : [];
   process.stdout.write(JSON.stringify(segments.map(verdictForCommand)));
 } else if (mode === 'write') {
   if (PROTECTED_RE.test(payload)) {

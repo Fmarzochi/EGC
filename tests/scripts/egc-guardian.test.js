@@ -222,6 +222,25 @@ async function runTests() {
   run(`not protected: src/index.ts`,() => assert.strictEqual(isProtectedPath('src/index.ts'), false));
   run(`not protected: README.md`,   () => assert.strictEqual(isProtectedPath('README.md'), false));
 
+  // ── isProtectedPath: baseDir threading (audit EGC-128) ─────────────────────
+  // A relative path must be judged against the caller-supplied baseDir, not
+  // this process's own cwd — otherwise a hook running from one directory can
+  // clear a relative path that actually resolves into a protected directory
+  // from the real invocation directory of the command being checked.
+
+  console.log('\n=== isProtectedPath: baseDir threading ===');
+
+  run('relative path resolves against explicit baseDir, not process.cwd()', () => {
+    assert.strictEqual(isProtectedPath('.ssh/id_rsa', home), true);
+    assert.strictEqual(isProtectedPath('.ssh/id_rsa', '/tmp/somewhere-unrelated'), false);
+  });
+  run('validateCommand threads cwd into path checks for cat/find/etc.', () => {
+    const blocked = validateCommand('cat .ssh/id_rsa', home);
+    assert.strictEqual(blocked.allowed, false);
+    const allowed = validateCommand('cat .ssh/id_rsa', '/tmp/somewhere-unrelated');
+    assert.strictEqual(allowed.allowed, true);
+  });
+
   // ── trust_level checks ────────────────────────────────────────────────────
 
   console.log('\n=== trust_level field ===');

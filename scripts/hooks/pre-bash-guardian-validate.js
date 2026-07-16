@@ -75,7 +75,13 @@ function run(inputOrRaw) {
     return { exitCode: 0 };
   }
 
-  const verdicts = callGuardian(cli, ['command-batch'], JSON.stringify(segments), VALIDATE_TIMEOUT_MS);
+  const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
+  const verdicts = callGuardian(
+    cli,
+    ['command-batch'],
+    JSON.stringify({ commands: segments, cwd }),
+    VALIDATE_TIMEOUT_MS,
+  );
   if (!Array.isArray(verdicts)) return { exitCode: 0 };
 
   for (let i = 0; i < verdicts.length; i++) {

@@ -144,13 +144,20 @@ export function buildDeniedPaths(): string[] {
 
 export const DENIED_PATHS: string[] = buildDeniedPaths();
 
-export function isProtectedPath(p: string): boolean {
+// baseDir defaults to process.cwd() (path.resolve's own implicit behavior
+// when given one argument) so existing callers are unaffected. Callers that
+// know the real invocation directory of the command being checked (e.g. the
+// PreToolUse hook, which receives it from the harness on every call) should
+// pass it explicitly -- otherwise a relative path is judged against this
+// process's own cwd, which is not guaranteed to match the shell the command
+// actually runs in.
+export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
   // Expand ~ at the start
   const expanded = p.startsWith('~')
     ? path.join(os.homedir(), p.slice(1))
     : p;
 
-  const normalizedP = path.resolve(expanded);
+  const normalizedP = path.resolve(baseDir, expanded);
 
   for (const denied of DENIED_PATHS) {
     if (normalizedP === denied || normalizedP.startsWith(denied + path.sep)) {
@@ -180,6 +187,7 @@ export interface ValidationResult {
 export function validateCommandArgs(
   baseCommand: string,
   args: string[],
+  cwd?: string,
 ): ValidationResult {
   const allArgs = args.join(' ');
 
@@ -221,7 +229,7 @@ export function validateCommandArgs(
 
       if (isRecursive) {
         for (const p of pathArgs) {
-          if (p === '/' || p === home || isProtectedPath(p)) {
+          if (p === '/' || p === home || isProtectedPath(p, cwd)) {
             return {
               allowed: false,
               reason: `grep recursive over protected path '${p}' is forbidden`,
@@ -231,7 +239,7 @@ export function validateCommandArgs(
         }
         // If no explicit path args, grep defaults to '.', which is fine.
         // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-        if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0]))) {
+        if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
           return {
             allowed: false,
             reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
@@ -242,7 +250,7 @@ export function validateCommandArgs(
 
       // Even without -r, block explicit protected paths
       for (const p of pathArgs) {
-        if (isProtectedPath(p)) {
+        if (isProtectedPath(p, cwd)) {
           return {
             allowed: false,
             reason: `grep over protected path '${p}' is forbidden`,
@@ -256,7 +264,7 @@ export function validateCommandArgs(
 
     case 'cat': {
       for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg)) {
+        if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
           return {
             allowed: false,
             reason: `cat of protected path '${arg}' is forbidden`,
@@ -283,7 +291,7 @@ export function validateCommandArgs(
       // First non-flag arg is typically the search root
       const pathArgs = args.filter(a => !a.startsWith('-'));
       for (const p of pathArgs) {
-        if (isProtectedPath(p)) {
+        if (isProtectedPath(p, cwd)) {
           return {
             allowed: false,
             reason: `find over protected path '${p}' is forbidden`,
@@ -299,7 +307,7 @@ export function validateCommandArgs(
     case 'ls': {
       // These are read-only but we still block protected paths
       for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg)) {
+        if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
           return {
             allowed: false,
             reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -332,7 +340,7 @@ export function validateCommandArgs(
       // require target, etc.) is denied the same way 'cat'/'find' deny it —
       // being in SAFE_DEV means "safe to run", not "exempt from path checks".
       for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg)) {
+        if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
           return {
             allowed: false,
             reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -349,7 +357,7 @@ export function validateCommandArgs(
   }
 }
 
-export function validateCommand(command: string): ValidationResult {
+export function validateCommand(command: string, cwd?: string): ValidationResult {
   // 1. Shell metacharacters check
   if (SHELL_META_REGEX.test(command)) {
     return {
@@ -401,7 +409,7 @@ export function validateCommand(command: string): ValidationResult {
   }
 
   // 5. In allowlist: validate args
-  return validateCommandArgs(baseCommand, args);
+  return validateCommandArgs(baseCommand, args, cwd);
 }
 
 export function validateWrite(filepath: string): ValidationResult {

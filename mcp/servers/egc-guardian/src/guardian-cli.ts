@@ -14,11 +14,18 @@ const MAX_ROUTE_ITEMS = { agents: 3, skills: 5 };
 
 function commandBatch(payload: string): unknown {
   let commands: string[] = [];
+  let cwd: string | undefined;
   try {
     const parsed = JSON.parse(payload);
-    if (Array.isArray(parsed)) commands = parsed.filter((c): c is string => typeof c === 'string');
+    if (Array.isArray(parsed)) {
+      // Legacy shape: a bare array of command strings, no cwd available.
+      commands = parsed.filter((c): c is string => typeof c === 'string');
+    } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.commands)) {
+      commands = parsed.commands.filter((c: unknown): c is string => typeof c === 'string');
+      if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
+    }
   } catch { /* malformed batch payload: validate nothing, return empty */ }
-  return commands.map(c => validateCommand(c));
+  return commands.map(c => validateCommand(c, cwd));
 }
 
 async function route(payload: string): Promise<unknown> {
