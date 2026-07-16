@@ -32,10 +32,17 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            const resultDir = fs.readdirSync('/tmp/dco-result')[0];
-            const result = JSON.parse(
-              fs.readFileSync(path.join('/tmp/dco-result', resultDir, 'result.json'), 'utf8')
-            );
+            // download-artifact extracts a single-file artifact directly
+            // into the download path (no per-artifact subdirectory) when
+            // exactly one artifact matches the pattern, which is always the
+            // case here (one dco-result-<PR#> artifact per workflow run).
+            // Handle both shapes defensively: a bare result.json, or a
+            // subdirectory (named for the artifact) containing it.
+            const firstEntry = path.join('/tmp/dco-result', fs.readdirSync('/tmp/dco-result')[0]);
+            const resultJsonPath = fs.statSync(firstEntry).isDirectory()
+              ? path.join(firstEntry, 'result.json')
+              : firstEntry;
+            const result = JSON.parse(fs.readFileSync(resultJsonPath, 'utf8'));
             if (result.missing !== '1') return;
 
             // The PR number in the artifact is untrusted: it is produced by

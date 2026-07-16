@@ -66,15 +66,7 @@ Multi-developer workflows and shared context:
 - Per-project skill profiles and overrides
 - OSS-Fuzz integration for continuous fuzz testing
 
-## v2.0.0: Teams
-
-- Shared state between team members (multi-user installations)
-- Team and organization-level installations
-- Cross-project memory federation
-- Stable MCP server API with versioned interfaces
-- egc-guardian and egc-memory promoted to GA
-
-## v3.0.0: Enterprise
+## v2.0.0: Enterprise
 
 - Formal security review by an independent party
 - SBOM (Software Bill of Materials) generation
