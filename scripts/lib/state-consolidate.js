@@ -161,25 +161,22 @@ function parseStateDocument(content) {
   return { header, sections };
 }
 
-function consolidateSection(section, now, stats) {
-  const bodyLines = section.lines.filter(line => line.trim() !== '');
-
-  if (VERBATIM_SECTIONS.has(section.title) || bodyLines.some(line => !line.startsWith('- '))) {
-    const seen = new Set();
-    const kept = [];
-    for (const line of bodyLines) {
-      const key = normalizeKey(line.replace(/^- /, ''));
-      if (seen.has(key)) {
-        stats.duplicatesRemoved += 1;
-        continue;
-      }
-      seen.add(key);
-      kept.push(line);
-    }
-    return kept;
-  }
-
+function deduplicateLines(bodyLines, stats) {
   const seen = new Set();
+  const kept = [];
+  for (const line of bodyLines) {
+    const key = normalizeKey(line.replace(/^- /, ''));
+    if (seen.has(key)) {
+      stats.duplicatesRemoved += 1;
+      continue;
+    }
+    seen.add(key);
+    kept.push(line);
+  }
+  return kept;
+}
+
+function bucketLines(bodyLines, now, seen, stats) {
   const working = [];
   const episodicByWeek = new Map();
   const semantic = [];
@@ -205,6 +202,38 @@ function consolidateSection(section, now, stats) {
       semantic.push(coreFact(text));
     }
   }
+  return { working, episodicByWeek, semantic };
+}
+
+function buildSemanticOutput(semantic, stats) {
+  const out = [];
+  const seen = new Set();
+  const deduped = [];
+  for (const fact of semantic) {
+    const key = normalizeKey(fact);
+    if (!fact || seen.has(key)) {
+      if (fact) stats.duplicatesRemoved += 1;
+      continue;
+    }
+    seen.add(key);
+    deduped.push(fact);
+  }
+  for (const group of chunk(deduped, SEMANTIC_FACTS_PER_LINE)) {
+    out.push(`- ${group.join('; ')}`);
+  }
+  stats.semanticFacts += deduped.length;
+  return out;
+}
+
+function consolidateSection(section, now, stats) {
+  const bodyLines = section.lines.filter(line => line.trim() !== '');
+
+  if (VERBATIM_SECTIONS.has(section.title) || bodyLines.some(line => !line.startsWith('- '))) {
+    return deduplicateLines(bodyLines, stats);
+  }
+
+  const seen = new Set();
+  const { working, episodicByWeek, semantic } = bucketLines(bodyLines, now, seen, stats);
 
   const output = [...working];
 
@@ -214,22 +243,7 @@ function consolidateSection(section, now, stats) {
     stats.episodicWeeks += 1;
   }
 
-  const semanticDeduped = [];
-  const semanticSeen = new Set();
-  for (const fact of semantic) {
-    const key = normalizeKey(fact);
-    if (!fact || semanticSeen.has(key)) {
-      if (fact) stats.duplicatesRemoved += 1;
-      continue;
-    }
-    semanticSeen.add(key);
-    semanticDeduped.push(fact);
-  }
-
-  for (const group of chunk(semanticDeduped, SEMANTIC_FACTS_PER_LINE)) {
-    output.push(`- ${group.join('; ')}`);
-  }
-  stats.semanticFacts += semanticDeduped.length;
+  output.push(...buildSemanticOutput(semantic, stats));
 
   return output;
 }

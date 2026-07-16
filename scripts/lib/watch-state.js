@@ -69,50 +69,54 @@ function extractEgcBlock(content) {
   return content.slice(start + EGC_START.length, end).trim();
 }
 
-function parseBlockToStateContent(block, updatedIso) {
-  const lines = ['# Project State'];
-  if (updatedIso) lines.push(`updated: ${updatedIso}`);
+function processH2Line(h2, state) {
+  const key = h2[1].trim();
+  const val = h2[2].trim();
+  if (key === 'Context') { state.context = val; state.section = 'context'; return true; }
+  if (key === 'Active decisions') { state.section = 'decisions'; return true; }
+  if (key === 'Next session') { state.section = 'next'; return true; }
+  return false;
+}
+
+function appendStateSection(lines, title, items, asText = false) {
+  if (!items || (Array.isArray(items) ? items.length === 0 : !items)) return;
+  lines.push(`## ${title}`);
+  if (asText) {
+    lines.push(items);
+  } else {
+    for (const item of items) lines.push(`- ${item}`);
+  }
   lines.push('');
-  let context = '';
+}
+
+function parseBlockToStateContent(block, updatedIso) {
+  const header = ['# Project State'];
+  if (updatedIso) header.push(`updated: ${updatedIso}`);
+  header.push('');
+
+  const state = { context: '', section: '' };
   const decisions = [];
   const next = [];
 
-  let section = '';
   for (const line of block.split('\n')) {
     if (line.trimStart().startsWith('<!--')) continue;
     const h2 = line.match(/^\*\*(.+?):\*\*\s*(.*)/);
-    if (h2) {
-      const key = h2[1].trim();
-      const val = h2[2].trim();
-      if (key === 'Context') { context = val; section = 'context'; continue; }
-      if (key === 'Active decisions') { section = 'decisions'; continue; }
-      if (key === 'Next session') { section = 'next'; continue; }
-    }
-    if (section === 'context' && !context && line.trim()) {
-      context = line.trim();
+    if (h2 && processH2Line(h2, state)) continue;
+
+    if (state.section === 'context' && !state.context && line.trim()) {
+      state.context = line.trim();
       continue;
     }
     const item = line.replace(/^-\s*/, '').trim();
     if (!item) continue;
-    if (section === 'decisions') decisions.push(item);
-    if (section === 'next') next.push(item);
+    if (state.section === 'decisions') decisions.push(item);
+    if (state.section === 'next') next.push(item);
   }
 
-  if (context) {
-    lines.push('## Context');
-    lines.push(context);
-    lines.push('');
-  }
-  if (decisions.length > 0) {
-    lines.push('## Active Decisions');
-    for (const d of decisions) lines.push(`- ${d}`);
-    lines.push('');
-  }
-  if (next.length > 0) {
-    lines.push('## Next Session');
-    for (const n of next) lines.push(`- ${n}`);
-    lines.push('');
-  }
+  const lines = [...header];
+  appendStateSection(lines, 'Context', state.context, true);
+  appendStateSection(lines, 'Active Decisions', decisions);
+  appendStateSection(lines, 'Next Session', next);
 
   return lines.join('\n');
 }

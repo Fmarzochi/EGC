@@ -219,22 +219,16 @@ function renderFailureClusterPanel(records, options = {}) {
   };
 }
 
-function renderAmendmentPanel(skillsById, options = {}) {
-  const width = options.width || DEFAULT_PANEL_WIDTH;
+function collectPendingAmendments(skillsById) {
   const amendments = [];
-
   for (const [skillId, skill] of skillsById) {
-    if (!skill.skill_dir) {
-      continue;
-    }
-
+    if (!skill.skill_dir) continue;
     const log = versioning.getEvolutionLog(skill.skill_dir, 'amendments');
     for (const entry of log) {
       const status = typeof entry.status === 'string' ? entry.status : null;
       const isPending = status
         ? health.PENDING_AMENDMENT_STATUSES.has(status)
         : entry.event === 'proposal';
-
       if (isPending) {
         amendments.push({
           skill_id: skillId,
@@ -245,12 +239,17 @@ function renderAmendmentPanel(skillsById, options = {}) {
       }
     }
   }
-
   amendments.sort((a, b) => {
     const timeA = a.created_at ? Date.parse(a.created_at) : 0;
     const timeB = b.created_at ? Date.parse(b.created_at) : 0;
     return timeB - timeA;
   });
+  return amendments;
+}
+
+function renderAmendmentPanel(skillsById, options = {}) {
+  const width = options.width || DEFAULT_PANEL_WIDTH;
+  const amendments = collectPendingAmendments(skillsById);
 
   const lines = [];
   if (amendments.length === 0) {
@@ -263,7 +262,6 @@ function renderAmendmentPanel(skillsById, options = {}) {
       const time = amendment.created_at ? amendment.created_at.slice(0, 19) : '-';
       lines.push(`${name} ${event} ${status} ${time}`);
     }
-
     lines.push('');
     lines.push(`${amendments.length} amendment${amendments.length === 1 ? '' : 's'} pending review`);
   }
@@ -274,28 +272,23 @@ function renderAmendmentPanel(skillsById, options = {}) {
   };
 }
 
-function renderVersionTimelinePanel(skillsById, options = {}) {
-  const width = options.width || DEFAULT_PANEL_WIDTH;
+function buildReasonMap(skillDir) {
+  const reasonByVersion = new Map();
+  for (const entry of versioning.getEvolutionLog(skillDir, 'amendments')) {
+    if (entry.version && entry.reason) {
+      reasonByVersion.set(entry.version, entry.reason);
+    }
+  }
+  return reasonByVersion;
+}
+
+function collectSkillVersionHistory(skillsById) {
   const skillVersions = [];
-
   for (const [skillId, skill] of skillsById) {
-    if (!skill.skill_dir) {
-      continue;
-    }
-
+    if (!skill.skill_dir) continue;
     const versions = versioning.listVersions(skill.skill_dir);
-    if (versions.length === 0) {
-      continue;
-    }
-
-    const amendmentLog = versioning.getEvolutionLog(skill.skill_dir, 'amendments');
-    const reasonByVersion = new Map();
-    for (const entry of amendmentLog) {
-      if (entry.version && entry.reason) {
-        reasonByVersion.set(entry.version, entry.reason);
-      }
-    }
-
+    if (versions.length === 0) continue;
+    const reasonByVersion = buildReasonMap(skill.skill_dir);
     skillVersions.push({
       skill_id: skillId,
       versions: versions.map(v => ({
@@ -305,8 +298,13 @@ function renderVersionTimelinePanel(skillsById, options = {}) {
       })),
     });
   }
-
   skillVersions.sort((a, b) => a.skill_id.localeCompare(b.skill_id));
+  return skillVersions;
+}
+
+function renderVersionTimelinePanel(skillsById, options = {}) {
+  const width = options.width || DEFAULT_PANEL_WIDTH;
+  const skillVersions = collectSkillVersionHistory(skillsById);
 
   const lines = [];
   if (skillVersions.length === 0) {

@@ -55,6 +55,15 @@ function parseBullets(section) {
     .map(line => stripCodeTicks(line.replace(/^- /, '').trim()));
 }
 
+const STATUS_FIELD_MAP = {
+  state: 'state',
+  updated: 'updated',
+  branch: 'branch',
+  worktree: 'worktree',
+  taskfile: 'taskFile',
+  handofffile: 'handoffFile',
+};
+
 function parseWorkerStatus(content) {
   const status = {
     state: null,
@@ -71,19 +80,11 @@ function parseWorkerStatus(content) {
 
   for (const line of content.split('\n')) {
     const match = line.match(/^- ([A-Za-z ]+):\s*(.+)$/);
-    if (!match) {
-      continue;
-    }
+    if (!match) continue;
 
     const key = match[1].trim().toLowerCase().replace(/\s+/g, '');
-    const value = stripCodeTicks(match[2]);
-
-    if (key === 'state') status.state = value;
-    if (key === 'updated') status.updated = value;
-    if (key === 'branch') status.branch = value;
-    if (key === 'worktree') status.worktree = value;
-    if (key === 'taskfile') status.taskFile = value;
-    if (key === 'handofffile') status.handoffFile = value;
+    const field = STATUS_FIELD_MAP[key];
+    if (field) status[field] = stripCodeTicks(match[2]);
   }
 
   return status;

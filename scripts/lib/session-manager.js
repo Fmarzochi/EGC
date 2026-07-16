@@ -68,68 +68,69 @@ function getSessionPath(filename) {
   return path.join(getSessionsDir(), filename);
 }
 
-function getSessionCandidates(options = {}) {
-  const {
-    date = null,
-    search = null
-  } = options;
+function tryReadDir(sessionsDir) {
+  try {
+    return fs.readdirSync(sessionsDir, { withFileTypes: true });
+  } catch (error) {
+    log(`[SessionManager] Error reading sessions directory ${sessionsDir}: ${error.message}`);
+    return null;
+  }
+}
 
+function tryStatFile(sessionPath) {
+  try {
+    return fs.statSync(sessionPath);
+  } catch (error) {
+    log(`[SessionManager] Error stating session ${sessionPath}: ${error.message}`);
+    return null;
+  }
+}
+
+function collectCandidatesFromDir(sessionsDir, date, search) {
+  const collected = [];
+  if (!fs.existsSync(sessionsDir)) return collected;
+
+  const entries = tryReadDir(sessionsDir);
+  if (!entries) return collected;
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.tmp')) continue;
+
+    const metadata = parseSessionFilename(entry.name);
+    if (!metadata) continue;
+    if (date && metadata.date !== date) continue;
+    if (search && !metadata.shortId.includes(search)) continue;
+
+    const sessionPath = path.join(sessionsDir, entry.name);
+    const stats = tryStatFile(sessionPath);
+    if (!stats) continue;
+
+    collected.push({
+      ...metadata,
+      sessionPath,
+      hasContent: stats.size > 0,
+      size: stats.size,
+      modifiedTime: stats.mtime,
+      createdTime: stats.birthtime || stats.ctime
+    });
+  }
+  return collected;
+}
+
+function getSessionCandidates(options = {}) {
+  const { date = null, search = null } = options;
   const candidates = [];
 
   for (const sessionsDir of getSessionSearchDirs()) {
-    if (!fs.existsSync(sessionsDir)) {
-      continue;
-    }
-
-    let entries;
-    try {
-      entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
-    } catch (error) {
-      log(`[SessionManager] Error reading sessions directory ${sessionsDir}: ${error.message}`);
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.tmp')) continue;
-
-      const filename = entry.name;
-      const metadata = parseSessionFilename(filename);
-
-      if (!metadata) continue;
-      if (date && metadata.date !== date) continue;
-      if (search && !metadata.shortId.includes(search)) continue;
-
-      const sessionPath = path.join(sessionsDir, filename);
-
-      let stats;
-      try {
-        stats = fs.statSync(sessionPath);
-      } catch (error) {
-        log(`[SessionManager] Error stating session ${sessionPath}: ${error.message}`);
-        continue;
-      }
-
-      candidates.push({
-        ...metadata,
-        sessionPath,
-        hasContent: stats.size > 0,
-        size: stats.size,
-        modifiedTime: stats.mtime,
-        createdTime: stats.birthtime || stats.ctime
-      });
-    }
+    candidates.push(...collectCandidatesFromDir(sessionsDir, date, search));
   }
 
-  const deduped = [];
   const seenFilenames = new Set();
-
-  for (const session of candidates) {
-    if (seenFilenames.has(session.filename)) {
-      continue;
-    }
-    seenFilenames.add(session.filename);
-    deduped.push(session);
-  }
+  const deduped = candidates.filter(s => {
+    if (seenFilenames.has(s.filename)) return false;
+    seenFilenames.add(s.filename);
+    return true;
+  });
 
   deduped.sort((a, b) => b.modifiedTime - a.modifiedTime);
   return deduped;
@@ -163,44 +164,36 @@ function sessionMatchesId(metadata, normalizedSessionId) {
   return shortIdMatch || filenameMatch || noIdMatch;
 }
 
+function collectMatchingFromDir(sessionsDir, normalizedSessionId, seenFilenames) {
+  const found = [];
+  if (!fs.existsSync(sessionsDir)) return found;
+
+  const entries = tryReadDir(sessionsDir);
+  if (!entries) return found;
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.tmp')) continue;
+
+    const metadata = parseSessionFilename(entry.name);
+    if (!metadata || !sessionMatchesId(metadata, normalizedSessionId)) continue;
+    if (seenFilenames.has(metadata.filename)) continue;
+
+    const sessionPath = path.join(sessionsDir, metadata.filename);
+    const sessionRecord = buildSessionRecord(sessionPath, metadata);
+    if (!sessionRecord) continue;
+
+    seenFilenames.add(metadata.filename);
+    found.push(sessionRecord);
+  }
+  return found;
+}
+
 function getMatchingSessionCandidates(normalizedSessionId) {
-  const matches = [];
   const seenFilenames = new Set();
+  const matches = [];
 
   for (const sessionsDir of getSessionSearchDirs()) {
-    if (!fs.existsSync(sessionsDir)) {
-      continue;
-    }
-
-    let entries;
-    try {
-      entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
-    } catch (error) {
-      log(`[SessionManager] Error reading sessions directory ${sessionsDir}: ${error.message}`);
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.tmp')) continue;
-
-      const metadata = parseSessionFilename(entry.name);
-      if (!metadata || !sessionMatchesId(metadata, normalizedSessionId)) {
-        continue;
-      }
-
-      if (seenFilenames.has(metadata.filename)) {
-        continue;
-      }
-
-      const sessionPath = path.join(sessionsDir, metadata.filename);
-      const sessionRecord = buildSessionRecord(sessionPath, metadata);
-      if (!sessionRecord) {
-        continue;
-      }
-
-      seenFilenames.add(metadata.filename);
-      matches.push(sessionRecord);
-    }
+    matches.push(...collectMatchingFromDir(sessionsDir, normalizedSessionId, seenFilenames));
   }
 
   matches.sort((a, b) => b.modifiedTime - a.modifiedTime);
@@ -221,6 +214,18 @@ function getSessionContent(sessionPath) {
  * @param {string} content - Session markdown content
  * @returns {object} Parsed metadata
  */
+function extractField(content, regex, group = 1) {
+  const m = content.match(regex);
+  return m ? m[group].trim() : null;
+}
+
+function extractListItems(content, sectionRegex, itemRegex, strip) {
+  const section = content.match(sectionRegex);
+  if (!section) return [];
+  const items = section[1].match(itemRegex);
+  return items ? items.map(item => item.replace(strip, '').trim()) : [];
+}
+
 function parseSessionMetadata(content) {
   const metadata = {
     title: null,
@@ -238,66 +243,32 @@ function parseSessionMetadata(content) {
 
   if (!content) return metadata;
 
-  const titleMatch = content.match(/^#\s+(.+)$/m);
-  if (titleMatch) {
-    metadata.title = titleMatch[1].trim();
-  }
+  metadata.title = extractField(content, /^#\s+(.+)$/m);
+  metadata.date = extractField(content, /\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})/);
+  metadata.started = extractField(content, /\*\*Started:\*\*\s*([\d:]+)/);
+  metadata.lastUpdated = extractField(content, /\*\*Last Updated:\*\*\s*([\d:]+)/);
+  metadata.project = extractField(content, /\*\*Project:\*\*\s*(.+)$/m);
+  metadata.branch = extractField(content, /\*\*Branch:\*\*\s*(.+)$/m);
+  metadata.worktree = extractField(content, /\*\*Worktree:\*\*\s*(.+)$/m);
 
-  const dateMatch = content.match(/\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})/);
-  if (dateMatch) {
-    metadata.date = dateMatch[1];
-  }
-
-  const startedMatch = content.match(/\*\*Started:\*\*\s*([\d:]+)/);
-  if (startedMatch) {
-    metadata.started = startedMatch[1];
-  }
-
-  const updatedMatch = content.match(/\*\*Last Updated:\*\*\s*([\d:]+)/);
-  if (updatedMatch) {
-    metadata.lastUpdated = updatedMatch[1];
-  }
-
-  const projectMatch = content.match(/\*\*Project:\*\*\s*(.+)$/m);
-  if (projectMatch) {
-    metadata.project = projectMatch[1].trim();
-  }
-
-  const branchMatch = content.match(/\*\*Branch:\*\*\s*(.+)$/m);
-  if (branchMatch) {
-    metadata.branch = branchMatch[1].trim();
-  }
-
-  const worktreeMatch = content.match(/\*\*Worktree:\*\*\s*(.+)$/m);
-  if (worktreeMatch) {
-    metadata.worktree = worktreeMatch[1].trim();
-  }
-
-  const completedSection = content.match(/### Completed\s*\n([\s\S]*?)(?=###|\n\n|$)/);
-  if (completedSection) {
-    const items = completedSection[1].match(/- \[x\]\s*(.+)/g);
-    if (items) {
-      metadata.completed = items.map(item => item.replace(/- \[x\]\s*/, '').trim());
-    }
-  }
-
-  const progressSection = content.match(/### In Progress\s*\n([\s\S]*?)(?=###|\n\n|$)/);
-  if (progressSection) {
-    const items = progressSection[1].match(/- \[ \]\s*(.+)/g);
-    if (items) {
-      metadata.inProgress = items.map(item => item.replace(/- \[ \]\s*/, '').trim());
-    }
-  }
+  metadata.completed = extractListItems(
+    content,
+    /### Completed\s*\n([\s\S]*?)(?=###|\n\n|$)/,
+    /- \[x\]\s*(.+)/g,
+    /- \[x\]\s*/
+  );
+  metadata.inProgress = extractListItems(
+    content,
+    /### In Progress\s*\n([\s\S]*?)(?=###|\n\n|$)/,
+    /- \[ \]\s*(.+)/g,
+    /- \[ \]\s*/
+  );
 
   const notesSection = content.match(/### Notes for Next Session\s*\n([\s\S]*?)(?=###|\n\n|$)/);
-  if (notesSection) {
-    metadata.notes = notesSection[1].trim();
-  }
+  if (notesSection) metadata.notes = notesSection[1].trim();
 
   const contextSection = content.match(/### Context to Load\s*\n```\n([\s\S]*?)```/);
-  if (contextSection) {
-    metadata.context = contextSection[1].trim();
-  }
+  if (contextSection) metadata.context = contextSection[1].trim();
 
   return metadata;
 }

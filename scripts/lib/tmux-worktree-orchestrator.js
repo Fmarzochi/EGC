@@ -423,6 +423,33 @@ function cleanupExisting(plan) {
   }
 }
 
+function tryRun(fn, errors) {
+  try {
+    fn();
+  } catch (error) {
+    errors.push(error.message);
+  }
+}
+
+function rollbackSingleWorker(workerPlan, repoRoot, runCommandImpl, listWorktreesImpl, branchExistsImpl, errors) {
+  const expectedWorktreePath = canonicalizePath(workerPlan.worktreePath);
+  const existingWorktree = listWorktreesImpl(repoRoot).find(
+    worktree => worktree.canonicalPath === expectedWorktreePath
+  );
+
+  if (existingWorktree) {
+    tryRun(() => runCommandImpl('git', ['worktree', 'remove', '--force', existingWorktree.listedPath], { cwd: repoRoot }), errors);
+  } else if (fs.existsSync(workerPlan.worktreePath)) {
+    fs.rmSync(workerPlan.worktreePath, { force: true, recursive: true });
+  }
+
+  tryRun(() => runCommandImpl('git', ['worktree', 'prune', '--expire', 'now'], { cwd: repoRoot }), errors);
+
+  if (branchExistsImpl(repoRoot, workerPlan.branchName)) {
+    tryRun(() => runCommandImpl('git', ['branch', '-D', workerPlan.branchName], { cwd: repoRoot }), errors);
+  }
+}
+
 function rollbackCreatedResources(plan, createdState, runtime = {}) {
   const runCommandImpl = runtime.runCommand || runCommand;
   const listWorktreesImpl = runtime.listWorktrees || listWorktrees;
@@ -430,44 +457,11 @@ function rollbackCreatedResources(plan, createdState, runtime = {}) {
   const errors = [];
 
   if (createdState.sessionCreated) {
-    try {
-      runCommandImpl('tmux', ['kill-session', '-t', plan.sessionName], { cwd: plan.repoRoot });
-    } catch (error) {
-      errors.push(error.message);
-    }
+    tryRun(() => runCommandImpl('tmux', ['kill-session', '-t', plan.sessionName], { cwd: plan.repoRoot }), errors);
   }
 
   for (const workerPlan of [...createdState.workerPlans].reverse()) {
-    const expectedWorktreePath = canonicalizePath(workerPlan.worktreePath);
-    const existingWorktree = listWorktreesImpl(plan.repoRoot).find(
-      worktree => worktree.canonicalPath === expectedWorktreePath
-    );
-
-    if (existingWorktree) {
-      try {
-        runCommandImpl('git', ['worktree', 'remove', '--force', existingWorktree.listedPath], {
-          cwd: plan.repoRoot
-        });
-      } catch (error) {
-        errors.push(error.message);
-      }
-    } else if (fs.existsSync(workerPlan.worktreePath)) {
-      fs.rmSync(workerPlan.worktreePath, { force: true, recursive: true });
-    }
-
-    try {
-      runCommandImpl('git', ['worktree', 'prune', '--expire', 'now'], { cwd: plan.repoRoot });
-    } catch (error) {
-      errors.push(error.message);
-    }
-
-    if (branchExistsImpl(plan.repoRoot, workerPlan.branchName)) {
-      try {
-        runCommandImpl('git', ['branch', '-D', workerPlan.branchName], { cwd: plan.repoRoot });
-      } catch (error) {
-        errors.push(error.message);
-      }
-    }
+    rollbackSingleWorker(workerPlan, plan.repoRoot, runCommandImpl, listWorktreesImpl, branchExistsImpl, errors);
   }
 
   if (createdState.removeCoordinationDir && fs.existsSync(plan.coordinationDir)) {

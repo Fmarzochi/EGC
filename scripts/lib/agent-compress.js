@@ -41,6 +41,24 @@ function parseFrontmatter(content) {
   return { frontmatter, body: match[2] || '' };
 }
 
+function isSkippableLine(trimmed) {
+  return (
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('- ') ||
+    trimmed.startsWith('* ') ||
+    /^\d+\.\s/.test(trimmed) ||
+    trimmed.startsWith('|')
+  );
+}
+
+function flushParagraph(current, paragraphs) {
+  if (current.length > 0) {
+    paragraphs.push(current.join(' '));
+    return [];
+  }
+  return current;
+}
+
 /**
  * Extract the first meaningful paragraph from agent body as a summary.
  * Skips headings, list items, code blocks, and table rows.
@@ -54,7 +72,6 @@ function extractSummary(body, maxSentences = 1) {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Track fenced code blocks
     if (trimmed.startsWith('```')) {
       inCodeBlock = !inCodeBlock;
       continue;
@@ -62,33 +79,18 @@ function extractSummary(body, maxSentences = 1) {
     if (inCodeBlock) continue;
 
     if (trimmed === '') {
-      if (current.length > 0) {
-        paragraphs.push(current.join(' '));
-        current = [];
-      }
+      current = flushParagraph(current, paragraphs);
       continue;
     }
 
-    // Skip headings, list items (bold, plain, asterisk), numbered lists, table rows
-    if (
-      trimmed.startsWith('#') ||
-      trimmed.startsWith('- ') ||
-      trimmed.startsWith('* ') ||
-      /^\d+\.\s/.test(trimmed) ||
-      trimmed.startsWith('|')
-    ) {
-      if (current.length > 0) {
-        paragraphs.push(current.join(' '));
-        current = [];
-      }
+    if (isSkippableLine(trimmed)) {
+      current = flushParagraph(current, paragraphs);
       continue;
     }
 
     current.push(trimmed);
   }
-  if (current.length > 0) {
-    paragraphs.push(current.join(' '));
-  }
+  flushParagraph(current, paragraphs);
 
   const firstParagraph = paragraphs.find(p => p.length > 0);
   if (!firstParagraph) return '';

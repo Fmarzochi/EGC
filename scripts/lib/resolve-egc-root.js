@@ -35,14 +35,48 @@ const PLUGIN_ROOT_SEGMENTS = [
  *                                    contains EGC scripts. Default: 'scripts/lib/utils.js'
  * @returns {string} Resolved EGC root path
  */
-function resolveEGCRoot(options = {}) {
+function getEnvRoot(options) {
   const envRoot = options.envRoot !== undefined
     ? options.envRoot
     : (process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT || '');
+  return envRoot && envRoot.trim() ? envRoot.trim() : null;
+}
 
-  if (envRoot && envRoot.trim()) {
-    return envRoot.trim();
+function findInOrgDir(orgPath, probe) {
+  let versionDirs;
+  try {
+    versionDirs = fs.readdirSync(orgPath, { withFileTypes: true });
+  } catch {
+    return null;
   }
+  for (const verEntry of versionDirs) {
+    if (!verEntry.isDirectory()) continue;
+    const candidate = path.join(orgPath, verEntry.name);
+    if (fs.existsSync(path.join(candidate, probe))) return candidate;
+  }
+  return null;
+}
+
+function findInPluginCache(claudeDir, probe) {
+  try {
+    for (const slug of PLUGIN_CACHE_SLUGS) {
+      const cacheBase = path.join(claudeDir, 'plugins', 'cache', slug);
+      const orgDirs = fs.readdirSync(cacheBase, { withFileTypes: true });
+      for (const orgEntry of orgDirs) {
+        if (!orgEntry.isDirectory()) continue;
+        const found = findInOrgDir(path.join(cacheBase, orgEntry.name), probe);
+        if (found) return found;
+      }
+    }
+  } catch {
+    // Plugin cache doesn't exist or isn't readable: continue to fallback
+  }
+  return null;
+}
+
+function resolveEGCRoot(options = {}) {
+  const envRoot = getEnvRoot(options);
+  if (envRoot) return envRoot;
 
   const homeDir = options.homeDir || os.homedir();
   const claudeDir = path.join(homeDir, '.gemini');
@@ -55,46 +89,15 @@ function resolveEGCRoot(options = {}) {
 
   // Exact legacy plugin install locations. These preserve backwards
   // compatibility without scanning arbitrary plugin trees.
-  const legacyPluginRoots = PLUGIN_ROOT_SEGMENTS.map((segments) =>
-    path.join(claudeDir, 'plugins', ...segments)
-  );
-
-  for (const candidate of legacyPluginRoots) {
-    if (fs.existsSync(path.join(candidate, probe))) {
-      return candidate;
-    }
+  for (const segments of PLUGIN_ROOT_SEGMENTS) {
+    const candidate = path.join(claudeDir, 'plugins', ...segments);
+    if (fs.existsSync(path.join(candidate, probe))) return candidate;
   }
 
   // Plugin cache: Gemini Code stores marketplace plugins under
   // ~/.gemini/plugins/cache/<plugin-name>/<org>/<version>/
-  try {
-    for (const slug of PLUGIN_CACHE_SLUGS) {
-      const cacheBase = path.join(claudeDir, 'plugins', 'cache', slug);
-      const orgDirs = fs.readdirSync(cacheBase, { withFileTypes: true });
-
-      for (const orgEntry of orgDirs) {
-        if (!orgEntry.isDirectory()) continue;
-        const orgPath = path.join(cacheBase, orgEntry.name);
-
-        let versionDirs;
-        try {
-          versionDirs = fs.readdirSync(orgPath, { withFileTypes: true });
-        } catch {
-          continue;
-        }
-
-        for (const verEntry of versionDirs) {
-          if (!verEntry.isDirectory()) continue;
-          const candidate = path.join(orgPath, verEntry.name);
-          if (fs.existsSync(path.join(candidate, probe))) {
-            return candidate;
-          }
-        }
-      }
-    }
-  } catch {
-    // Plugin cache doesn't exist or isn't readable: continue to fallback
-  }
+  const cacheFound = findInPluginCache(claudeDir, probe);
+  if (cacheFound) return cacheFound;
 
   return claudeDir;
 }
