@@ -93,7 +93,10 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome }, () => {
+      // os.homedir() reads USERPROFILE on Windows, not HOME -- both must be
+      // overridden together or the fake home is silently ignored there and
+      // resolution falls through to the real (nonexistent in CI) user home.
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
         withCwd(fakeRepo, () => {
           // Test fromMcpConfigs() directly, not resolveGuardianCli(): the
           // full resolution chain would mask this specific check whenever
@@ -132,7 +135,10 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome }, () => {
+      // os.homedir() reads USERPROFILE on Windows, not HOME -- both must be
+      // overridden together or the fake home is silently ignored there and
+      // resolution falls through to the real (nonexistent in CI) user home.
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
         const { fromMcpConfigs } = freshGuardianBin();
         const resolved = fromMcpConfigs();
         assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
@@ -171,7 +177,10 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome }, () => {
+      // os.homedir() reads USERPROFILE on Windows, not HOME -- both must be
+      // overridden together or the fake home is silently ignored there and
+      // resolution falls through to the real (nonexistent in CI) user home.
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
         const { fromMcpConfigs } = freshGuardianBin();
         const resolved = fromMcpConfigs();
         assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
@@ -200,7 +209,10 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome }, () => {
+      // os.homedir() reads USERPROFILE on Windows, not HOME -- both must be
+      // overridden together or the fake home is silently ignored there and
+      // resolution falls through to the real (nonexistent in CI) user home.
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
         const { fromMcpConfigs } = freshGuardianBin();
         const resolved = fromMcpConfigs();
         assert.notStrictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
