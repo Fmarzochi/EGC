@@ -67,7 +67,7 @@ function listSkillLeaves(root) {
 // Distinguishes "no frontmatter block at all" from "frontmatter block opened
 // but never closed" so the error message points at the actual problem.
 function extractFrontmatter(content) {
-  const cleanContent = content.replace(/^﻿/, '');
+  const cleanContent = content.replace(/^\uFEFF/, '');
   const opensFrontmatter = /^---\r?\n/.test(cleanContent);
 
   if (!opensFrontmatter) {
