@@ -4,8 +4,8 @@
  * from privileged events such as workflow_run or pull_request_target.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const DEFAULT_WORKFLOWS_DIR = path.join(__dirname, '../../.github/workflows');
 

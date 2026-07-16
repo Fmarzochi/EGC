@@ -3,9 +3,9 @@
  * Validate hooks.json schema and hook entry rules.
  */
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const Ajv = require('ajv');
 
 const HOOKS_FILE = path.join(__dirname, '../../hooks/hooks.json');

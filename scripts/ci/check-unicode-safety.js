@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // EGC_UNICODE_SCAN_ROOT is canonical; ECC_UNICODE_SCAN_ROOT is the legacy bridge.
 const scanRootEnv = process.env.EGC_UNICODE_SCAN_ROOT || process.env.ECC_UNICODE_SCAN_ROOT;

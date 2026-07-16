@@ -3,8 +3,8 @@
  * Validate rule markdown files
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const RULES_DIR = path.join(__dirname, '../../rules');
 

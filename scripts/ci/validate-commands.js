@@ -4,8 +4,8 @@
  * and have valid cross-references to other commands, agents, and skills.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const ROOT_DIR = path.join(__dirname, '../..');
 const COMMANDS_DIR = path.join(ROOT_DIR, 'commands');
