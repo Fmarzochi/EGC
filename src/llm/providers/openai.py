@@ -106,14 +106,20 @@ class OpenAIProvider(LLMProvider):
                         )
                     )
 
+            # Some responses omit usage entirely (observed on certain
+            # proxy/gateway responses upstream of this provider). Missing
+            # usage stats are a lesser problem than an unclassified
+            # AttributeError bypassing the 401/429/context-length mapping
+            # below — degrade to zeros rather than crash.
+            usage = response.usage
             return LLMOutput(
                 content=choice.message.content or "",
                 tool_calls=tool_calls,
                 model=response.model,
                 usage={
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
+                    "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                    "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                    "total_tokens": getattr(usage, "total_tokens", 0) or 0,
                 },
                 stop_reason=choice.finish_reason,
             )
