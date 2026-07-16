@@ -246,6 +246,11 @@ jobs:
       - name: Run pytest
         run: python -m pytest
 
+      - name: Audit Python dependencies
+        run: |
+          pip install --quiet pip-audit
+          pip-audit -r requirements.txt
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
