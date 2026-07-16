@@ -73,11 +73,24 @@ function post(ev, done) {
 
 // The Claude Code Stop hook payload does not include usage or model.
 // Extract them from the last assistant message in the transcript JSONL.
+const SAFE_TRANSCRIPT_ROOTS = [
+  path.join(os.homedir(), '.claude', 'projects'),
+];
+const MAX_TRANSCRIPT_TAIL = 64 * 1024; // read at most 64 KB from end
+
 function readTranscriptLast(transcriptPath) {
   if (typeof transcriptPath !== 'string' || !transcriptPath) return {};
+  const resolved = path.resolve(transcriptPath);
+  if (!SAFE_TRANSCRIPT_ROOTS.some(r => resolved.startsWith(r + path.sep) || resolved.startsWith(r + '/'))) return {};
   try {
-    const content = fs.readFileSync(transcriptPath, 'utf8');
-    const lines = content.trim().split('\n').filter(Boolean);
+    const stat = fs.statSync(resolved);
+    const readSize = Math.min(stat.size, MAX_TRANSCRIPT_TAIL);
+    const offset = stat.size - readSize;
+    const buf = Buffer.alloc(readSize);
+    const fd = fs.openSync(resolved, 'r');
+    fs.readSync(fd, buf, 0, readSize, offset);
+    fs.closeSync(fd);
+    const lines = buf.toString('utf8').split('\n').filter(Boolean);
     for (let i = lines.length - 1; i >= 0; i--) {
       let entry;
       try { entry = JSON.parse(lines[i]); } catch { continue; }
