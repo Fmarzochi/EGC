@@ -8,6 +8,7 @@
 // session. Missing or unreadable state exits silently with code 0.
 
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 // Optional libs: minimal installations may lack them, so a failed require
@@ -227,9 +228,23 @@ function loadAndPrintState(projectPath) {
   process.stdout.write('EGC persistent memory for this project (restored automatically):\n\n' + content);
 }
 
+function postSessionStart(sessionId) {
+  const body = JSON.stringify({ ide: 'claude', event: 'session_start', session_id: sessionId });
+  const req = http.request(
+    { hostname: '127.0.0.1', port: 7890, path: '/event', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: 200 },
+    () => process.exit(0)
+  );
+  req.on('error', () => process.exit(0));
+  req.on('timeout', () => { req.destroy(); process.exit(0); });
+  req.end(body);
+}
+
 function main() {
+  let input = {};
   try {
-    const input = readStdinJson();
+    input = readStdinJson();
     const projectPath = resolveProjectPath(input);
     loadAndPrintState(projectPath);
     emitStackBriefing(projectPath);
@@ -237,7 +252,7 @@ function main() {
     // Never break session startup because of memory loading.
   }
 
-  process.exit(0);
+  postSessionStart(input.session_id || null);
 }
 
 main();
