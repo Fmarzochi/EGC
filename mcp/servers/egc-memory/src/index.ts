@@ -619,10 +619,23 @@ const QueryHistorySchema = z.object({
 const LessonSaveSchema = z.object({
   content: z.string().min(1).max(5000),
   context: z.string().min(1).max(2000),
-  tags: z.string().max(500).optional(),
+  // Accepts either a comma-separated string (legacy) or an array of tags
+  // (preferred). Both are normalized to the same comma-joined TEXT column
+  // on write via normalizeTags() -- the stored format never changes, so
+  // existing rows and existing readers are unaffected either way.
+  tags: z.union([z.string(), z.array(z.string())]).optional(),
   initial_confidence: z.number().min(0).max(1).optional().default(0.7),
   author: z.string().max(100).optional()
 });
+
+function normalizeTags(tags: string | string[] | undefined): string | null {
+  if (tags === undefined) return null;
+  if (Array.isArray(tags)) {
+    const cleaned = tags.map(t => t.trim()).filter(Boolean);
+    return cleaned.length > 0 ? cleaned.join(',') : null;
+  }
+  return tags;
+}
 
 const LessonRecallSchema = z.object({
   query: z.string().min(1).max(1000),
@@ -768,7 +781,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             content: { type: "string", description: "The lesson text to store." },
             context: { type: "string", description: "Where this lesson applies, e.g. 'code review' or 'git workflow'." },
-            tags: { type: "string", description: "Optional comma-separated tags for categorization." },
+            tags: {
+              description: "Optional tags for categorization. Accepts an array of tag strings (preferred) or a single comma-separated string (legacy).",
+              oneOf: [
+                { type: "string" },
+                { type: "array", items: { type: "string" } }
+              ]
+            },
             initial_confidence: { type: "number", description: "Starting confidence score between 0 and 1. Defaults to 0.7." },
             author: { type: "string", description: "Optional author name for team attribution. Defaults to the system username." }
           },
@@ -881,15 +900,16 @@ async function handleLessonSave(db: Database, args: unknown) {
   const id = generateLessonId();
   const now = new Date().toISOString();
   const projPath = resolveProjectPath();
+  const normalizedTags = normalizeTags(tags);
   await writeArbitrator.enqueue(async () => {
     await db.run(
       `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path, author)
        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, 0, ?, ?)`,
-      [id, content, context, initial_confidence, now, tags ?? null, projPath, authorName]
+      [id, content, context, initial_confidence, now, normalizedTags, projPath, authorName]
     );
   });
   log('INFO', 'Lesson saved', { id, context, author: authorName });
-  return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: tags ?? null, createdAt: now, author: authorName }, null, 2) }] };
+  return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: normalizedTags, createdAt: now, author: authorName }, null, 2) }] };
 }
 
 async function handleLessonRecall(db: Database, args: unknown) {
