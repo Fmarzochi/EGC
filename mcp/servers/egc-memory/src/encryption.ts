@@ -43,7 +43,17 @@ export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
     if (key.length !== 32) {
       throw new Error(`[EGC encryption] Key file at ${keyPath} is malformed (expected 32 bytes, got ${key.length}). Remove it to regenerate.`);
     }
-    try { fs.chmodSync(keyPath, 0o600); } catch { /* best-effort */ }
+    try {
+      fs.chmodSync(keyPath, 0o600);
+    } catch (chmodErr) {
+      // Best-effort: some filesystems (FAT/exFAT mounts, certain network
+      // shares) don't support Unix permission bits at all, and that's a
+      // legitimate no-op. But on a filesystem that DOES support them, a
+      // failure here means the encryption key may be sitting world- or
+      // group-readable with no signal to the user that it happened —
+      // worth a warning even though it's not worth failing the read over.
+      console.error(`[EGC encryption] Warning: could not set 0600 permissions on ${keyPath}: ${(chmodErr as Error).message}`);
+    }
     return key;
   };
 
@@ -72,7 +82,11 @@ export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
     fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
     try {
       fs.linkSync(tmpPath, keyPath);
-      fs.chmodSync(keyPath, 0o600);
+      try {
+        fs.chmodSync(keyPath, 0o600);
+      } catch (chmodErr) {
+        console.error(`[EGC encryption] Warning: could not set 0600 permissions on ${keyPath}: ${(chmodErr as Error).message}`);
+      }
       return key;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'EEXIST') {

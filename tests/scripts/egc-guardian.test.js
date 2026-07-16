@@ -153,6 +153,7 @@ async function runTests() {
   run(`write .npmrc`,               () => assertWriteDenied('.npmrc'));
   run(`write .pypirc`,              () => assertWriteDenied('.pypirc'));
   run(`write .env.local`,           () => assertWriteDenied('.env.local'));
+  run(`write .env.production`,      () => assertWriteDenied('.env.production'));
   run(`write /etc/hosts`,           () => assertWriteDenied('/etc/hosts'));
 
   // ── validate_write: DENIED (granular per-tool credential files) ───────────
@@ -183,6 +184,11 @@ async function runTests() {
   run(`write README.md`,            () => assertWriteAllowed('README.md'));
   run(`write /tmp/output.txt`,      () => assertWriteAllowed('/tmp/output.txt'));
   run(`write package.json`,         () => assertWriteAllowed('package.json'));
+  // .env.example/.sample/.template are template files, never real secrets
+  // (audit EGC-128, low: previously blocked by mistake, confirmed live).
+  run(`write .env.example`,         () => assertWriteAllowed('.env.example'));
+  run(`write .env.sample`,          () => assertWriteAllowed('.env.sample'));
+  run(`write .env.template`,        () => assertWriteAllowed('.env.template'));
 
   // ── validate_write: ALLOWED (previously blanket-denied, now functional) ───
   // These directories used to be denied in full. They hold no credentials per

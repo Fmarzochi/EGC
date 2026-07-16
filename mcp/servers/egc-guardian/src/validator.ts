@@ -50,7 +50,11 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // PR that introduced this comment for the full per-tool research).
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.env$/,
-  /\.env\./,
+  // .env.example/.sample/.template are conventionally committed templates
+  // with placeholder values, never real secrets — excluded so they're
+  // readable/writable like any other file. .env.local/.production/.staging
+  // and everything else still match (real per-environment secret files).
+  /\.env\.(?!example$|sample$|template$)/,
   /\.pem$/,
   /\.key$/,
   /\.p12$/,

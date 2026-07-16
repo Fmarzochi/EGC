@@ -92,6 +92,34 @@ if (test('loadOrCreateEncKey: returns a 32-byte Buffer and creates the file with
   }
 })) passed++; else failed++;
 
+if (test('loadOrCreateEncKey: warns (does not throw) when chmod on the key file fails (audit EGC-128, low)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  const keyPath = path.join(tmpDir, 'encryption.key');
+  const originalChmodSync = fs.chmodSync;
+  const originalConsoleError = console.error;
+  const errorLines = [];
+  console.error = (...args) => errorLines.push(args.join(' '));
+  fs.chmodSync = (target, mode) => {
+    if (target === keyPath) {
+      throw new Error('EPERM: simulated filesystem without permission bit support');
+    }
+    return originalChmodSync(target, mode);
+  };
+  try {
+    const key = loadOrCreateEncKey(keyPath);
+    assert.ok(Buffer.isBuffer(key), 'should still return a usable key despite the chmod failure');
+    assert.strictEqual(key.length, 32);
+    assert.ok(
+      errorLines.some(line => line.includes(keyPath) && line.includes('0600')),
+      `expected a warning naming the key path and the intended mode, got: ${JSON.stringify(errorLines)}`
+    );
+  } finally {
+    fs.chmodSync = originalChmodSync;
+    console.error = originalConsoleError;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
 if (test('loadOrCreateEncKey: returns the same key on a second call (loads, does not regenerate)', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
   try {
