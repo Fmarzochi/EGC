@@ -5,7 +5,7 @@ const http    = require('http');
 const path    = require('path');
 const fs      = require('fs');
 const os      = require('os');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
 
 const PORT   = 7890;
@@ -23,6 +23,33 @@ const MIME = {
 };
 
 const SERVER_START = Date.now();
+
+const EGC_DB_CANDIDATES = [
+  path.join(os.homedir(), '.claude', 'egc', 'state.db'),
+  path.join(os.homedir(), '.gemini', 'egc', 'state.db'),
+  path.join(os.homedir(), '.egc', 'egc', 'state.db'),
+  path.join(os.homedir(), '.cursor', 'egc', 'state.db'),
+  path.join(os.homedir(), '.kiro', 'egc', 'state.db'),
+];
+
+function queryEgcStats() {
+  for (const dbPath of EGC_DB_CANDIDATES) {
+    if (!fs.existsSync(dbPath)) continue;
+    try {
+      const q = (sql) => {
+        const out = execSync(`sqlite3 "${dbPath.replace(/"/g, '')}" "${sql}"`,
+          { encoding: 'utf8', timeout: 2000, stdio: ['pipe', 'pipe', 'pipe'] });
+        return parseInt(out.trim(), 10) || 0;
+      };
+      return {
+        decisions: q('SELECT COUNT(*) FROM decisions'),
+        lessons:   q('SELECT COUNT(*) FROM lessons WHERE archived = 0'),
+        patterns:  q('SELECT COUNT(*) FROM patterns'),
+      };
+    } catch (_) {}
+  }
+  return null;
+}
 
 function buildStaticManifest(dir) {
   const manifest = new Map();
@@ -319,22 +346,12 @@ const grandTotal = Object.values(byIde).reduce(
       longTermPct: null, workingPct: null,
     };
 
-    try {
-      const dir = path.join(os.homedir(), '.egc', 'state');
-      if (fs.existsSync(dir)) {
-        const files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).slice(0, 6);
-        let d = 0, l = 0, p = 0;
-        for (const f of files) {
-          const c = fs.readFileSync(path.join(dir, f), 'utf8');
-          d += (c.match(/^- What:/gm)      || []).length;
-          l += (c.match(/^- Lesson:/gm)    || []).length;
-          p += (c.match(/^- Pattern:/gm)   || []).length;
-        }
-        stats.decisions = d;
-        stats.lessons   = l;
-        stats.patterns  = p;
-      }
-    } catch (_) {}
+    const egcStats = queryEgcStats();
+    if (egcStats) {
+      stats.decisions = egcStats.decisions;
+      stats.lessons   = egcStats.lessons;
+      stats.patterns  = egcStats.patterns;
+    }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(stats));
