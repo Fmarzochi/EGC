@@ -71,6 +71,26 @@ function post(ev, done) {
   req.end(body);
 }
 
+// The Claude Code Stop hook payload does not include usage or model.
+// Extract them from the last assistant message in the transcript JSONL.
+function readTranscriptLast(transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath) return {};
+  try {
+    const content = fs.readFileSync(transcriptPath, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let entry;
+      try { entry = JSON.parse(lines[i]); } catch { continue; }
+      const msg = entry.message || entry;
+      const usage = msg.usage;
+      if (usage && typeof usage.input_tokens === 'number') {
+        return { usage, model: typeof msg.model === 'string' ? msg.model : null };
+      }
+    }
+  } catch { /* unreadable or missing transcript */ }
+  return {};
+}
+
 function main() {
   let raw = '';
   try {
@@ -95,6 +115,8 @@ function main() {
     ? { ...input, promptForAssistant: prompt }
     : { ...input };
 
+  const transcript = readTranscriptLast(input.transcript_path);
+
   // Write the assistant prompt to stdout first (synchronous, always completes).
   // Then post the session_end event and exit only after the dashboard has
   // acknowledged it (or the 300ms timeout fires). This prevents process.exit()
@@ -106,7 +128,8 @@ function main() {
     agent: 'main',
     session_id: input.session_id,
     stop_reason: input.stop_reason || null,
-    usage: input.usage || null,
+    model: input.model || transcript.model || null,
+    usage: input.usage || transcript.usage || null,
   }, () => process.exit(0));
 }
 
