@@ -111,7 +111,7 @@ function queryDatabaseTables(db) {
     for (const row of tableRows) {
         const name = row && row.name ? String(row.name) : null;
         if (!name) continue;
-        let rowCount = null;
+        let rowCount;
         try {
             const countRow = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get();
             rowCount = countRow && typeof countRow.c === 'number' ? countRow.c : Number(countRow ? countRow.c : 0);
