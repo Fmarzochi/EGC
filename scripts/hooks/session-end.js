@@ -180,27 +180,22 @@ function mergeSessionHeader(content, today, currentTime, metadata) {
   return `${nextHeader}${SESSION_SEPARATOR}${body}`;
 }
 
-async function main() {
+function resolveTranscriptPath(stdin) {
   // Parse stdin JSON to get transcript_path; fall back to env var on missing,
   // empty, or non-string values as well as on malformed JSON.
-  let transcriptPath = null;
   try {
-    const input = JSON.parse(stdinData);
+    const input = JSON.parse(stdin);
     if (input && typeof input.transcript_path === 'string' && input.transcript_path.length > 0) {
-      transcriptPath = input.transcript_path;
+      return input.transcript_path;
     }
   } catch {
     // Malformed stdin: fall through to the env-var fallback below.
   }
-  if (!transcriptPath) {
-    const envTranscriptPath = process.env.GEMINI_TRANSCRIPT_PATH;
-    if (typeof envTranscriptPath === 'string' && envTranscriptPath.length > 0) {
-      transcriptPath = envTranscriptPath;
-    }
-  }
+  const envPath = process.env.GEMINI_TRANSCRIPT_PATH;
+  return typeof envPath === 'string' && envPath.length > 0 ? envPath : null;
+}
 
-  const sessionsDir = getSessionsDir();
-  const today = getDateString();
+function resolveShortId(transcriptPath) {
   // Derive shortId from transcript_path UUID when available, using the SAME
   // last-8-chars convention as getSessionIdShort(sessionId.slice(-8)). This keeps
   // backward compatibility for normal sessions (the derived shortId matches what
@@ -210,15 +205,66 @@ async function main() {
   // Without this, a parent session and any `egc -p ...` subprocess spawned by
   // another Stop hook share the project-name fallback filename, and the subprocess
   // overwrites the parent's summary. See issue #1494 for full repro details.
-  let shortId = null;
   if (transcriptPath) {
     const m = path.basename(transcriptPath).match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
     if (m) {
-      // getSessionIdShort(sessionId.slice(-8)).
-      shortId = sanitizeSessionId(m[1].slice(-8).toLowerCase());
+      return sanitizeSessionId(m[1].slice(-8).toLowerCase());
     }
   }
-  if (!shortId) { shortId = getSessionIdShort(); }
+  return getSessionIdShort();
+}
+
+function injectSummaryIntoContent(updatedContent, summary) {
+  const summaryBlock = buildSummaryBlock(summary);
+  if (updatedContent.includes(SUMMARY_START_MARKER) && updatedContent.includes(SUMMARY_END_MARKER)) {
+    return updatedContent.replace(
+      new RegExp(`${escapeRegExp(SUMMARY_START_MARKER)}[\\s\\S]*?${escapeRegExp(SUMMARY_END_MARKER)}`),
+      summaryBlock
+    );
+  }
+  // Migration path for files created before summary markers existed.
+  return updatedContent.replace(
+    /## (?:Session Summary|Current State)[\s\S]*?$/,
+    `${summaryBlock}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\`\n`
+  );
+}
+
+function updateExistingSession(sessionFile, today, currentTime, sessionMetadata, summary) {
+  const existing = readFile(sessionFile);
+  let updatedContent = existing;
+
+  if (existing) {
+    const merged = mergeSessionHeader(existing, today, currentTime, sessionMetadata);
+    if (merged) {
+      updatedContent = merged;
+    } else {
+      log('[SessionEnd] Failed to normalize session file header');
+    }
+  }
+
+  if (summary && updatedContent) {
+    updatedContent = injectSummaryIntoContent(updatedContent, summary);
+  }
+
+  if (updatedContent) writeFile(sessionFile, updatedContent);
+  log('[SessionEnd] Updated session file');
+}
+
+function createNewSession(sessionFile, today, currentTime, sessionMetadata, summary) {
+  const summarySection = summary
+    ? `${buildSummaryBlock(summary)}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``
+    : `## Current State\n\n[Session context goes here]\n\n### Completed\n- [ ]\n\n### In Progress\n- [ ]\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``;
+
+  const template = `${buildSessionHeader(today, currentTime, sessionMetadata)}${SESSION_SEPARATOR}${summarySection}\n`;
+  writeFile(sessionFile, template);
+  log('[SessionEnd] Created session file');
+}
+
+async function main() {
+  const transcriptPath = resolveTranscriptPath(stdinData);
+  const sessionsDir = getSessionsDir();
+  const today = getDateString();
+  const shortId = resolveShortId(transcriptPath);
   const sessionFile = path.join(sessionsDir, `${today}-${shortId}-session.tmp`);
   const sessionMetadata = getSessionMetadata();
 
@@ -226,9 +272,7 @@ async function main() {
 
   const currentTime = getTimeString();
 
-  // Try to extract summary from transcript
   let summary = null;
-
   if (transcriptPath) {
     if (fs.existsSync(transcriptPath)) {
       summary = extractSessionSummary(transcriptPath);
@@ -238,50 +282,9 @@ async function main() {
   }
 
   if (fs.existsSync(sessionFile)) {
-    const existing = readFile(sessionFile);
-    let updatedContent = existing;
-
-    if (existing) {
-      const merged = mergeSessionHeader(existing, today, currentTime, sessionMetadata);
-      if (merged) {
-        updatedContent = merged;
-      } else {
-        log('[SessionEnd] Failed to normalize session file header');
-      }
-    }
-
-    if (summary && updatedContent) {
-      const summaryBlock = buildSummaryBlock(summary);
-
-      if (updatedContent.includes(SUMMARY_START_MARKER) && updatedContent.includes(SUMMARY_END_MARKER)) {
-        updatedContent = updatedContent.replace(
-          new RegExp(`${escapeRegExp(SUMMARY_START_MARKER)}[\\s\\S]*?${escapeRegExp(SUMMARY_END_MARKER)}`),
-          summaryBlock
-        );
-      } else {
-        // Migration path for files created before summary markers existed.
-        updatedContent = updatedContent.replace(
-          /## (?:Session Summary|Current State)[\s\S]*?$/,
-          `${summaryBlock}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\`\n`
-        );
-      }
-    }
-
-    if (updatedContent) {
-      writeFile(sessionFile, updatedContent);
-    }
-
-    log('[SessionEnd] Updated session file');
+    updateExistingSession(sessionFile, today, currentTime, sessionMetadata, summary);
   } else {
-    const summarySection = summary
-      ? `${buildSummaryBlock(summary)}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``
-      : `## Current State\n\n[Session context goes here]\n\n### Completed\n- [ ]\n\n### In Progress\n- [ ]\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\``;
-
-    const template = `${buildSessionHeader(today, currentTime, sessionMetadata)}${SESSION_SEPARATOR}${summarySection}
-`;
-
-    writeFile(sessionFile, template);
-    log('[SessionEnd] Created session file');
+    createNewSession(sessionFile, today, currentTime, sessionMetadata, summary);
   }
 
   process.exit(0);

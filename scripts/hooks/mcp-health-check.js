@@ -312,119 +312,78 @@ function requestHttp(urlString, headers, timeoutMs) {
   });
 }
 
-function probeCommandServer(serverName, config) {
-  return new Promise(resolve => {
-    const command = config.command;
-    const args = Array.isArray(config.args) ? config.args.map(arg => String(arg)) : [];
-    const timeoutMs = envNumber('EGC_MCP_HEALTH_TIMEOUT_MS', DEFAULT_TIMEOUT_MS);
-    const mergedEnv = {
-      ...process.env,
-      ...(config.env && typeof config.env === 'object' && !Array.isArray(config.env) ? config.env : {})
-    };
-
-    let stderr = '';
-    let done = false;
-    let timer = null;
-    let exited = false;
-
-    function finish(result) {
-      if (done) return;
-      done = true;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
+function createProbeState(resolve) {
+  const ps = {
+    done: false,
+    timer: null,
+    finish(result) {
+      if (ps.done) return;
+      ps.done = true;
+      if (ps.timer) { clearTimeout(ps.timer); ps.timer = null; }
       resolve(result);
     }
+  };
+  return ps;
+}
+
+function isValidEnvObject(env) {
+  return env && typeof env === 'object' && !Array.isArray(env);
+}
+
+function scheduleGraceTimer(timeoutMs, child, serverName, ps) {
+  const graceTimer = setTimeout(() => {
+    if (ps.done) return;
+    // Process survived the full grace window: healthy stdio server.
+    try { child.kill('SIGTERM'); } catch { /* ignore */ }
+    const killTimer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    }, 200);
+    if (typeof killTimer.unref === 'function') killTimer.unref();
+    ps.finish({ ok: true, statusCode: null, reason: `${serverName} accepted a new stdio process` });
+  }, timeoutMs);
+  if (typeof graceTimer.unref === 'function') graceTimer.unref();
+}
+
+function probeCommandServer(serverName, config) {
+  return new Promise(resolve => {
+    const args = Array.isArray(config.args) ? config.args.map(arg => String(arg)) : [];
+    const timeoutMs = envNumber('EGC_MCP_HEALTH_TIMEOUT_MS', DEFAULT_TIMEOUT_MS);
+    const mergedEnv = { ...process.env, ...(isValidEnvObject(config.env) ? config.env : {}) };
+    const ps = createProbeState(resolve);
+    let stderr = '';
+    let exited = false;
 
     let child;
     try {
-      child = spawn(command, args, {
-        env: mergedEnv,
-        cwd: process.cwd(),
-        stdio: ['pipe', 'ignore', 'pipe']
-      });
+      child = spawn(config.command, args, { env: mergedEnv, cwd: process.cwd(), stdio: ['pipe', 'ignore', 'pipe'] });
     } catch (error) {
-      finish({
-        ok: false,
-        statusCode: null,
-        reason: error.message
-      });
+      ps.finish({ ok: false, statusCode: null, reason: error.message });
       return;
     }
 
     child.stderr.on('data', chunk => {
-      if (stderr.length < 4000) {
-        const remaining = 4000 - stderr.length;
-        stderr += String(chunk).slice(0, remaining);
-      }
+      if (stderr.length < 4000) stderr += String(chunk).slice(0, 4000 - stderr.length);
     });
 
-    child.on('error', error => {
-      exited = true;
-      finish({
-        ok: false,
-        statusCode: null,
-        reason: error.message
-      });
-    });
+    child.on('error', error => { exited = true; ps.finish({ ok: false, statusCode: null, reason: error.message }); });
 
     child.on('exit', (code, signal) => {
       exited = true;
-      finish({
-        ok: false,
-        statusCode: code,
-        reason: stderr.trim() || `process exited before handshake (${signal || code || 'unknown'})`
-      });
+      ps.finish({ ok: false, statusCode: code, reason: stderr.trim() || `process exited before handshake (${signal || code || 'unknown'})` });
     });
 
-    timer = setTimeout(() => {
-      // If the process already exited (exit event fired before timer), mark unhealthy.
+    // If the process already exited (exit event fired before timer), mark unhealthy.
+    // Otherwise allow an additional grace window before declaring healthy: any non-zero
+    // exit during the grace period is treated as an early failure. See scheduleGraceTimer.
+    ps.timer = setTimeout(() => {
       if (exited || child.exitCode !== null || child.signalCode !== null) {
-        finish({
-          ok: false,
-          statusCode: child.exitCode,
-          reason: stderr.trim() || `process exited before handshake (${child.signalCode || child.exitCode || 'unknown'})`
-        });
+        ps.finish({ ok: false, statusCode: child.exitCode, reason: stderr.trim() || `process exited before handshake (${child.signalCode || child.exitCode || 'unknown'})` });
         return;
       }
-
-      // The process appears alive at timeout. On loaded machines or with slow-starting
-      // runtimes (e.g. Node.js on cold CI), the process may still be in its startup
-      // phase and about to exit with a non-zero code. Allow an additional grace window
-      // equal to timeoutMs before declaring healthy: any non-zero exit during the
-      // grace period is treated as an early failure, preserving correct classification
-      // without blocking indefinitely.
-      const graceTimer = setTimeout(() => {
-        if (done) return;
-        // Process survived the full grace window: healthy stdio server.
-        try {
-          child.kill('SIGTERM');
-        } catch {
-          // ignore
-        }
-        setTimeout(() => {
-          try {
-            child.kill('SIGKILL');
-          } catch {
-            // ignore
-          }
-        }, 200).unref?.();
-        finish({
-          ok: true,
-          statusCode: null,
-          reason: `${serverName} accepted a new stdio process`
-        });
-      }, timeoutMs);
-
-      if (typeof graceTimer.unref === 'function') {
-        graceTimer.unref();
-      }
+      scheduleGraceTimer(timeoutMs, child, serverName, ps);
     }, timeoutMs);
 
-    if (typeof timer.unref === 'function') {
-      timer.unref();
-    }
+    if (typeof ps.timer.unref === 'function') ps.timer.unref();
   });
 }
 
@@ -545,6 +504,17 @@ async function attemptRecovery(serverName, resolvedConfig, state, statePathValue
   return { restored: false, reconnect, reprobeReason: reprobe.reason };
 }
 
+async function tryRecoveryAfterProbeFailure(probe, target, resolvedConfig, state, statePathValue, now, previousStatus) {
+  if (!probe.failureCode && previousStatus !== 'unhealthy') {
+    return { recovered: false, reconnect: { attempted: false, success: false, reason: 'probe failed' } };
+  }
+  const recovery = await attemptRecovery(target.server, resolvedConfig, state, statePathValue, now);
+  if (recovery.reprobeReason) {
+    probe.reason = `${probe.reason}; reconnect reprobe failed: ${recovery.reprobeReason}`;
+  }
+  return { recovered: recovery.restored, reconnect: recovery.reconnect };
+}
+
 async function handlePreToolUse(rawInput, input, target, statePathValue, now) {
   const logs = [];
   const state = loadState(statePathValue);
@@ -555,9 +525,7 @@ async function handlePreToolUse(rawInput, input, target, statePathValue, now) {
   }
 
   if (previous.status === 'unhealthy' && Number(previous.nextRetryAt || 0) > now) {
-    logs.push(
-      `[MCPHealthCheck] ${target.server} is marked unhealthy until ${new Date(previous.nextRetryAt).toISOString()}; skipping ${target.tool || 'tool'}`
-    );
+    logs.push(`[MCPHealthCheck] ${target.server} is marked unhealthy until ${new Date(previous.nextRetryAt).toISOString()}; skipping ${target.tool || 'tool'}`);
     return { rawInput, exitCode: shouldFailOpen() ? 0 : 2, logs };
   }
 
@@ -571,37 +539,21 @@ async function handlePreToolUse(rawInput, input, target, statePathValue, now) {
   if (probe.ok) {
     markHealthy(state, target.server, now, { source: resolvedConfig.source });
     saveState(statePathValue, state);
-
-    if (previous.status === 'unhealthy') {
-      logs.push(`[MCPHealthCheck] ${target.server} connection restored`);
-    }
-
+    if (previous.status === 'unhealthy') logs.push(`[MCPHealthCheck] ${target.server} connection restored`);
     return { rawInput, exitCode: 0, logs };
   }
 
-  let reconnect = { attempted: false, success: false, reason: 'probe failed' };
-  if (probe.failureCode || previous.status === 'unhealthy') {
-    const recovery = await attemptRecovery(target.server, resolvedConfig, state, statePathValue, now);
-    if (recovery.restored) {
-      logs.push(`[MCPHealthCheck] ${target.server} connection restored after reconnect`);
-      return { rawInput, exitCode: 0, logs };
-    }
-    reconnect = recovery.reconnect;
-    if (recovery.reprobeReason) {
-      probe.reason = `${probe.reason}; reconnect reprobe failed: ${recovery.reprobeReason}`;
-    }
+  const { recovered, reconnect } = await tryRecoveryAfterProbeFailure(probe, target, resolvedConfig, state, statePathValue, now, previous.status);
+  if (recovered) {
+    logs.push(`[MCPHealthCheck] ${target.server} connection restored after reconnect`);
+    return { rawInput, exitCode: 0, logs };
   }
 
   markUnhealthy(state, target.server, now, probe.failureCode, probe.reason);
   saveState(statePathValue, state);
 
-  const reconnectSuffix = reconnect.attempted
-    ? ` Reconnect attempt: ${reconnect.success ? 'ok' : reconnect.reason}.`
-    : '';
-  logs.push(
-    `[MCPHealthCheck] ${target.server} is unavailable (${probe.reason}). Blocking ${target.tool || 'tool'} so Gemini can fall back to non-MCP tools.${reconnectSuffix}`
-  );
-
+  const reconnectSuffix = reconnect.attempted ? ` Reconnect attempt: ${reconnect.success ? 'ok' : reconnect.reason}.` : '';
+  logs.push(`[MCPHealthCheck] ${target.server} is unavailable (${probe.reason}). Blocking ${target.tool || 'tool'} so Gemini can fall back to non-MCP tools.${reconnectSuffix}`);
   return { rawInput, exitCode: shouldFailOpen() ? 0 : 2, logs };
 }
 

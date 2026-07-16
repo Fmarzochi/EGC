@@ -142,61 +142,55 @@ function pruneCheckedEntries(checked) {
   return [...preserved, ...cappedSession, ...cappedFiles];
 }
 
+function mergeStateWithDisk(stateFile, checked, lastActive) {
+  try {
+    if (!fs.existsSync(stateFile)) return { checked, lastActive };
+    const diskState = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    return {
+      checked: Array.isArray(diskState.checked) ? Array.from(new Set([...diskState.checked, ...checked])) : checked,
+      lastActive: typeof diskState.last_active === 'number' ? Math.max(lastActive, diskState.last_active) : lastActive,
+    };
+  } catch (_) {
+    return { checked, lastActive };
+  }
+}
+
+function atomicRenameFile(tmpFile, stateFile) {
+  try {
+    fs.renameSync(tmpFile, stateFile);
+  } catch (error) {
+    if (error && (error.code === 'EEXIST' || error.code === 'EPERM')) {
+      try { fs.unlinkSync(stateFile); } catch (_) { /* ignore */ }
+      fs.renameSync(tmpFile, stateFile);
+    } else {
+      throw error;
+    }
+  }
+}
+
 function saveState(state) {
   const stateFile = getStateFile();
   let tmpFile = null;
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
 
-    let mergedChecked = Array.isArray(state.checked) ? state.checked : [];
-    let mergedLastActive = typeof state.last_active === 'number' ? state.last_active : 0;
-
-    try {
-      if (fs.existsSync(stateFile)) {
-        const diskState = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-        if (Array.isArray(diskState.checked)) {
-          mergedChecked = Array.from(new Set([...diskState.checked, ...mergedChecked]));
-        }
-        if (typeof diskState.last_active === 'number') {
-          mergedLastActive = Math.max(mergedLastActive, diskState.last_active);
-        }
-      }
-    } catch (_) {
-      /* ignore malformed or transient disk state */
-    }
+    const rawChecked = Array.isArray(state.checked) ? state.checked : [];
+    const rawLastActive = typeof state.last_active === 'number' ? state.last_active : 0;
+    const merged = mergeStateWithDisk(stateFile, rawChecked, rawLastActive);
 
     const finalState = {
-      checked: pruneCheckedEntries(mergedChecked),
-      last_active: Math.max(mergedLastActive, Date.now())
+      checked: pruneCheckedEntries(merged.checked),
+      last_active: Math.max(merged.lastActive, Date.now()),
     };
 
     // Atomic write: temp file + rename prevents partial reads
     tmpFile = `${stateFile}.tmp.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
     fs.writeFileSync(tmpFile, JSON.stringify(finalState, null, 2), 'utf8');
-    try {
-      fs.renameSync(tmpFile, stateFile);
-    } catch (error) {
-      if (error && (error.code === 'EEXIST' || error.code === 'EPERM')) {
-        try {
-          fs.unlinkSync(stateFile);
-        } catch (_) {
-          /* ignore */
-        }
-        fs.renameSync(tmpFile, stateFile);
-      } else {
-        throw error;
-      }
-    }
+    atomicRenameFile(tmpFile, stateFile);
     tmpFile = null;
     return true;
   } catch (_) {
-    if (tmpFile) {
-      try {
-        fs.unlinkSync(tmpFile);
-      } catch (_) {
-        /* ignore */
-      }
-    }
+    if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_2) { /* ignore */ } }
     return false;
   }
 }
@@ -267,45 +261,24 @@ function isClaudeSettingsPath(filePath) {
   return /(^|\/)\.gemini\/settings(?:\.[^/]+)?\.json$/.test(normalized);
 }
 
+const SAFE_GIT_SUBCOMMANDS = {
+  status: (args) => args.every(arg => ['--porcelain', '--short', '--branch'].includes(arg)),
+  diff: (args) => args.length <= 1 && args.every(arg => ['--name-only', '--name-status'].includes(arg)),
+  log: (args) => args.every(arg => arg === '--oneline' || /^--max-count=\d+$/.test(arg)),
+  show: (args) => args.length === 1 && !args[0].startsWith('--') && /^[a-zA-Z0-9._:/-]+$/.test(args[0]),
+  branch: (args) => args.length === 1 && args[0] === '--show-current',
+  'rev-parse': (args) => args.length === 2 && args[0] === '--abbrev-ref' && /^head$/i.test(args[1]),
+};
+
 function isReadOnlyGitIntrospection(command) {
   const trimmed = String(command || '').trim();
-  if (!trimmed || /[\r\n;&|><`$()]/.test(trimmed)) {
-    return false;
-  }
+  if (!trimmed || /[\r\n;&|><`$()]/.test(trimmed)) return false;
 
   const tokens = trimmed.split(/\s+/);
-  if (tokens[0] !== 'git' || tokens.length < 2) {
-    return false;
-  }
+  if (tokens[0] !== 'git' || tokens.length < 2) return false;
 
-  const subcommand = tokens[1].toLowerCase();
-  const args = tokens.slice(2);
-
-  if (subcommand === 'status') {
-    return args.every(arg => ['--porcelain', '--short', '--branch'].includes(arg));
-  }
-
-  if (subcommand === 'diff') {
-    return args.length <= 1 && args.every(arg => ['--name-only', '--name-status'].includes(arg));
-  }
-
-  if (subcommand === 'log') {
-    return args.every(arg => arg === '--oneline' || /^--max-count=\d+$/.test(arg));
-  }
-
-  if (subcommand === 'show') {
-    return args.length === 1 && !args[0].startsWith('--') && /^[a-zA-Z0-9._:/-]+$/.test(args[0]);
-  }
-
-  if (subcommand === 'branch') {
-    return args.length === 1 && args[0] === '--show-current';
-  }
-
-  if (subcommand === 'rev-parse') {
-    return args.length === 2 && args[0] === '--abbrev-ref' && /^head$/i.test(args[1]);
-  }
-
-  return false;
+  const checker = SAFE_GIT_SUBCOMMANDS[tokens[1].toLowerCase()];
+  return checker ? checker(tokens.slice(2)) : false;
 }
 
 // --- Gate messages ---

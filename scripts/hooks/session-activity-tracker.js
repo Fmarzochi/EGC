@@ -467,10 +467,20 @@ function enrichFileEventFromWorkingTree(toolName, event) {
   return event;
 }
 
-function collectFileEvents(toolName, value, events, key = null, parentValue = null) {
-  if (!value) {
-    return;
+function collectFileEventsFromObject(toolName, value, events) {
+  for (const [nestedKey, nested] of Object.entries(value)) {
+    if (FILE_PATH_KEYS.has(nestedKey)) {
+      collectFileEvents(toolName, nested, events, nestedKey, value);
+      continue;
+    }
+    if (nested && (Array.isArray(nested) || typeof nested === 'object')) {
+      collectFileEvents(toolName, nested, events, null, nested);
+    }
   }
+}
+
+function collectFileEvents(toolName, value, events, key = null, parentValue = null) {
+  if (!value) return;
 
   if (Array.isArray(value)) {
     for (const entry of value) {
@@ -482,31 +492,14 @@ function collectFileEvents(toolName, value, events, key = null, parentValue = nu
   if (typeof value === 'string') {
     if (key && FILE_PATH_KEYS.has(key)) {
       const action = actionForFileKey(toolName, key);
-      pushFileEvent(
-        events,
-        value,
-        action,
-        fileEventDiffPreview(toolName, parentValue, action),
-        fileEventPatchPreview(parentValue, action)
-      );
+      pushFileEvent(events, value, action, fileEventDiffPreview(toolName, parentValue, action), fileEventPatchPreview(parentValue, action));
     }
     return;
   }
 
-  if (typeof value !== 'object') {
-    return;
-  }
+  if (typeof value !== 'object') return;
 
-  for (const [nestedKey, nested] of Object.entries(value)) {
-    if (FILE_PATH_KEYS.has(nestedKey)) {
-      collectFileEvents(toolName, nested, events, nestedKey, value);
-      continue;
-    }
-
-    if (nested && (Array.isArray(nested) || typeof nested === 'object')) {
-      collectFileEvents(toolName, nested, events, null, nested);
-    }
-  }
+  collectFileEventsFromObject(toolName, value, events);
 }
 
 function extractFileEvents(toolName, toolInput) {
@@ -518,29 +511,25 @@ function extractFileEvents(toolName, toolInput) {
   return events;
 }
 
-function summarizeInput(toolName, toolInput, filePaths) {
-  if (toolName === 'Bash') {
-    return truncateSummary(toolInput?.command || 'bash');
-  }
-
-  if (filePaths.length > 0) {
-    return truncateSummary(`${toolName} ${filePaths.join(', ')}`);
-  }
-
-  if (toolInput && typeof toolInput === 'object') {
-    const shallow = {};
-    for (const [key, value] of Object.entries(toolInput)) {
-      if (value === null || value === undefined) {
-        continue;
-      }
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        shallow[key] = value;
-      }
+function buildShallowParams(toolInput) {
+  const shallow = {};
+  for (const [key, value] of Object.entries(toolInput)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      shallow[key] = value;
     }
+  }
+  return shallow;
+}
+
+function summarizeInput(toolName, toolInput, filePaths) {
+  if (toolName === 'Bash') return truncateSummary(toolInput?.command || 'bash');
+  if (filePaths.length > 0) return truncateSummary(`${toolName} ${filePaths.join(', ')}`);
+  if (toolInput && typeof toolInput === 'object') {
+    const shallow = buildShallowParams(toolInput);
     const serialized = Object.keys(shallow).length > 0 ? JSON.stringify(shallow) : toolName;
     return truncateSummary(serialized);
   }
-
   return truncateSummary(toolName);
 }
 

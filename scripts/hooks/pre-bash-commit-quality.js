@@ -282,69 +282,72 @@ function reportCommitMessageIssues(messageValidation) {
   return { totalIssues, warningCount };
 }
 
+function tryRunPylint(pyFiles) {
+  try {
+    const pylintPath = resolveCommand('pylint');
+    if (!pylintPath) return null;
+    const result = runLinterCommand(pylintPath, ['--output-format=text', ...pyFiles]);
+    return { success: result.status === 0, output: commandOutput(result) };
+  } catch {
+    return null;
+  }
+}
+
+function tryRunGolint(goFiles) {
+  try {
+    const golintPath = resolveCommand('golint');
+    if (!golintPath) return null;
+    const result = runLinterCommand(golintPath, goFiles);
+    return { success: !result.stdout || result.stdout.trim() === '', output: commandOutput(result) };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run linter on staged files
- * @param {string[]} files 
+ * @param {string[]} files
  * @returns {object} Lint results
  */
 function runLinter(files) {
   const jsFiles = files.filter(f => /\.(js|jsx|ts|tsx)$/.test(f));
-  const pyFiles = files.filter(f => f.endsWith('.py'));
-  const goFiles = files.filter(f => f.endsWith('.go'));
-  
-  const results = {
-    eslint: null,
-    pylint: null,
-    golint: null
-  };
-  
+  const results = { eslint: null, pylint: null, golint: null };
+
   if (jsFiles.length > 0) {
     const eslintBin = process.platform === 'win32' ? 'eslint.cmd' : 'eslint';
     const eslintPath = path.join(process.cwd(), 'node_modules', '.bin', eslintBin);
     if (fs.existsSync(eslintPath)) {
       const result = runLinterCommand(eslintPath, ['--format', 'compact', ...jsFiles]);
-      results.eslint = {
-        success: result.status === 0,
-        output: commandOutput(result)
-      };
+      results.eslint = { success: result.status === 0, output: commandOutput(result) };
     }
   }
-  
-  if (pyFiles.length > 0) {
-    try {
-      const pylintPath = resolveCommand('pylint');
-      if (!pylintPath) {
-        results.pylint = null;
-      } else {
-        const result = runLinterCommand(pylintPath, ['--output-format=text', ...pyFiles]);
-        results.pylint = {
-          success: result.status === 0,
-          output: commandOutput(result)
-        };
-      }
-    } catch {
-      // Pylint not available
-    }
-  }
-  
-  if (goFiles.length > 0) {
-    try {
-      const golintPath = resolveCommand('golint');
-      if (!golintPath) {
-        results.golint = null;
-      } else {
-        const result = runLinterCommand(golintPath, goFiles);
-        results.golint = {
-          success: !result.stdout || result.stdout.trim() === '',
-          output: commandOutput(result)
-        };
-      }
-    } catch {
-      // golint not available
-    }
-  }
-  
+
+  const pyFiles = files.filter(f => f.endsWith('.py'));
+  if (pyFiles.length > 0) results.pylint = tryRunPylint(pyFiles);
+
+  const goFiles = files.filter(f => f.endsWith('.go'));
+  if (goFiles.length > 0) results.golint = tryRunGolint(goFiles);
+
   return results;
+}
+
+function reportLinterErrors(lintResults) {
+  let totalIssues = 0;
+  let errorCount = 0;
+  const linters = [
+    { key: 'eslint', label: 'ESLint' },
+    { key: 'pylint', label: 'Pylint' },
+    { key: 'golint', label: 'golint' },
+  ];
+  for (const { key, label } of linters) {
+    if (lintResults[key] && !lintResults[key].success) {
+      console.error(`\n${label} Issues:`);
+      console.error(lintResults[key].output);
+      totalIssues++;
+      errorCount++;
+    }
+  }
+  return { totalIssues, errorCount };
 }
 
 /**
@@ -389,48 +392,26 @@ function evaluate(rawInput) {
     warningCount += msgCounts.warningCount;
     
     const lintResults = runLinter(filesToCheck);
-    
-    if (lintResults.eslint && !lintResults.eslint.success) {
-      console.error('\nESLint Issues:');
-      console.error(lintResults.eslint.output);
-      totalIssues++;
-      errorCount++;
-    }
-    
-    if (lintResults.pylint && !lintResults.pylint.success) {
-      console.error('\nPylint Issues:');
-      console.error(lintResults.pylint.output);
-      totalIssues++;
-      errorCount++;
-    }
-    
-    if (lintResults.golint && !lintResults.golint.success) {
-      console.error('\ngolint Issues:');
-      console.error(lintResults.golint.output);
-      totalIssues++;
-      errorCount++;
-    }
-    
-    // Summary
+    const linterErrors = reportLinterErrors(lintResults);
+    totalIssues += linterErrors.totalIssues;
+    errorCount += linterErrors.errorCount;
+
     if (totalIssues > 0) {
       console.error(`\nSummary: ${totalIssues} issue(s) found (${errorCount} error(s), ${warningCount} warning(s), ${infoCount} info)`);
-      
       if (errorCount > 0) {
         console.error('\n[Hook] ERROR: Commit blocked due to critical issues. Fix them before committing.');
         return { output: rawInput, exitCode: 2 };
-      } else {
-        console.error('\n[Hook] WARNING: Warnings found. Consider fixing them, but commit is allowed.');
-        console.error('[Hook] To bypass these checks, use: git commit --no-verify');
       }
+      console.error('\n[Hook] WARNING: Warnings found. Consider fixing them, but commit is allowed.');
+      console.error('[Hook] To bypass these checks, use: git commit --no-verify');
     } else {
       console.error('\n[Hook] PASS: All checks passed!');
     }
-    
+
   } catch (error) {
     console.error(`[Hook] Error: ${error.message}`);
-    // Non-blocking on error
   }
-  
+
   return { output: rawInput, exitCode: 0 };
 }
 

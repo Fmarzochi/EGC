@@ -37,6 +37,8 @@ const VALID_BEFORE_GIT = ' \t\n\r;&|$`(<{!"\']/.~\\';
 
 const GIT_CONFIG_KEY_PREFIX = 'core.hooksPath=';
 
+const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix']);
+
 const COMMIT_OPTIONS_WITH_VALUE = new Set([
   '-m',
   '--message',
@@ -69,69 +71,53 @@ const COMMIT_OPTIONS_WITH_INLINE_VALUE = [
 
 const COMMIT_SHORT_OPTIONS_WITH_VALUE = new Set(['m', 'F', 'C', 'c']);
 
+function handleQuotedChar(char, i, ref, beginToken) {
+  if (char === ref.quote) { ref.quote = null; return; }
+  if (ref.quote === '"' && char === '\\') { beginToken(i); ref.escaped = true; return; }
+  beginToken(i);
+  ref.value += char;
+}
+
 function tokenizeShellWords(input, start = 0, end = input.length) {
   const tokens = [];
-  let value = '';
+  const ref = { value: '', quote: null, escaped: false };
   let tokenStart = null;
-  let quote = null;
-  let escaped = false;
 
   function beginToken(index) {
-    if (tokenStart === null) {
-      tokenStart = index;
-    }
+    if (tokenStart === null) tokenStart = index;
   }
 
   function pushToken(index) {
-    if (tokenStart === null) {
-      return;
-    }
-
-    tokens.push({
-      value,
-      start: tokenStart,
-      end: index,
-    });
-    value = '';
+    if (tokenStart === null) return;
+    tokens.push({ value: ref.value, start: tokenStart, end: index });
+    ref.value = '';
     tokenStart = null;
   }
 
   for (let i = start; i < end; i++) {
     const char = input.charAt(i);
 
-    if (escaped) {
+    if (ref.escaped) {
       beginToken(i - 1);
-      value += char;
-      escaped = false;
+      ref.value += char;
+      ref.escaped = false;
       continue;
     }
 
-    if (quote) {
-      if (char === quote) {
-        quote = null;
-        continue;
-      }
-
-      if (quote === '"' && char === '\\') {
-        beginToken(i);
-        escaped = true;
-        continue;
-      }
-
-      beginToken(i);
-      value += char;
+    if (ref.quote) {
+      handleQuotedChar(char, i, ref, beginToken);
       continue;
     }
 
     if (char === '"' || char === "'") {
       beginToken(i);
-      quote = char;
+      ref.quote = char;
       continue;
     }
 
     if (char === '\\') {
       beginToken(i);
-      escaped = true;
+      ref.escaped = true;
       continue;
     }
 
@@ -141,12 +127,10 @@ function tokenizeShellWords(input, start = 0, end = input.length) {
     }
 
     beginToken(i);
-    value += char;
+    ref.value += char;
   }
 
-  if (escaped) {
-    value += '\\';
-  }
+  if (ref.escaped) ref.value += '\\';
   pushToken(end);
 
   return tokens;
@@ -306,10 +290,7 @@ function onlyFlagsBeforeCandidate(tokens) {
   for (const t of tokens) {
     if (expectFlagArg) { expectFlagArg = false; continue; }
     if (t.startsWith('-')) {
-      if (t === '-c' || t === '-C' || t === '--work-tree' || t === '--git-dir' ||
-          t === '--namespace' || t === '--super-prefix') {
-        expectFlagArg = true;
-      }
+      if (GIT_GLOBAL_FLAGS_WITH_ARG.has(t)) expectFlagArg = true;
       continue;
     }
     return false;
@@ -387,6 +368,12 @@ function detectGitCommand(input, start = 0) {
   return null;
 }
 
+function getCommitTokenAction(value) {
+  if (commitOptionConsumesNextValue(value)) return 'next';
+  if (commitOptionContainsInlineValue(value)) return 'skip';
+  return null;
+}
+
 /**
  * Check if the input contains a --no-verify flag for a specific git command.
  * Only inspects the portion of the input starting at `offset` (the position
@@ -400,33 +387,15 @@ function hasNoVerifyFlag(input, command, offset) {
 
   for (const token of tokens) {
     const value = token.value;
+    if (skipNext) { skipNext = false; continue; }
+    if (value === '--') break;
 
-    if (skipNext) {
-      skipNext = false;
-      continue;
-    }
-
-    if (value === '--') {
-      break;
-    }
-
-    if (command === 'commit') {
-      if (commitOptionConsumesNextValue(value)) {
-        skipNext = true;
-        continue;
-      }
-
-      if (commitOptionContainsInlineValue(value)) {
-        continue;
-      }
-    }
-
-    if (value === '--no-verify') return true;
+    const commitAction = command === 'commit' ? getCommitTokenAction(value) : null;
+    if (commitAction === 'next') { skipNext = true; continue; }
+    if (commitAction === 'skip') continue;
 
     // For commit, -n is shorthand for --no-verify.
-    if (command === 'commit' && isCommitNoVerifyShortFlag(value)) {
-      return true;
-    }
+    if (value === '--no-verify' || (command === 'commit' && isCommitNoVerifyShortFlag(value))) return true;
   }
 
   return false;
