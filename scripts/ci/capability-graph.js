@@ -215,6 +215,16 @@ function buildCommands() {
   return commands;
 }
 
+function buildHookEntry(event, matcher, blockId, h, i) {
+  if (!h || typeof h !== 'object') return null;
+  const command = typeof h.command === 'string' ? h.command : '';
+  const handlerId = typeof h.id === 'string' ? h.id : null;
+  const id = handlerId || blockId || `${event.toLowerCase()}:${matcher || 'any'}:${i}`;
+  const scriptMatch = command.match(HOOK_SCRIPT_RE);
+  const scriptPath = scriptMatch ? `scripts/hooks/${scriptMatch[1]}` : null;
+  return { id, event, matcher, command, scriptPath };
+}
+
 function buildHooks() {
   const raw = readFileSafe(HOOKS_JSON);
   if (!raw) return [];
@@ -235,20 +245,8 @@ function buildHooks() {
       const blockId = typeof block.id === 'string' ? block.id : null;
       const handlers = Array.isArray(block.hooks) ? block.hooks : [];
       for (let i = 0; i < handlers.length; i++) {
-        const h = handlers[i];
-        if (!h || typeof h !== 'object') continue;
-        const command = typeof h.command === 'string' ? h.command : '';
-        const handlerId = typeof h.id === 'string' ? h.id : null;
-        const id = handlerId || blockId || `${event.toLowerCase()}:${matcher || 'any'}:${i}`;
-        const scriptMatch = command.match(HOOK_SCRIPT_RE);
-        const scriptPath = scriptMatch ? `scripts/hooks/${scriptMatch[1]}` : null;
-        results.push({
-          id,
-          event,
-          matcher,
-          command,
-          scriptPath
-        });
+        const entry = buildHookEntry(event, matcher, blockId, handlers[i], i);
+        if (entry) results.push(entry);
       }
     }
   }

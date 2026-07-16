@@ -103,6 +103,26 @@ function buildTracerBlock(opts) {
     };
 }
 
+function queryDatabaseTables(db) {
+    const tableRows = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+        .all();
+    const tables = [];
+    for (const row of tableRows) {
+        const name = row && row.name ? String(row.name) : null;
+        if (!name) continue;
+        let rowCount;
+        try {
+            const countRow = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get();
+            rowCount = countRow && typeof countRow.c === 'number' ? countRow.c : Number(countRow ? countRow.c : 0);
+        } catch (_err) {
+            rowCount = null;
+        }
+        tables.push({ name, rowCount });
+    }
+    return tables;
+}
+
 async function buildStateStoreBlock(opts) {
     const dbPath = opts.dbPath
         ? path.resolve(opts.dbPath)
@@ -117,24 +137,7 @@ async function buildStateStoreBlock(opts) {
     let store = null;
     try {
         store = await createStateStore({ dbPath });
-        const db = store._database;
-        const tableRows = db
-            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-            .all();
-        const tables = [];
-        for (const row of tableRows) {
-            const name = row && row.name ? String(row.name) : null;
-            if (!name) continue;
-            let rowCount = null;
-            try {
-                const countRow = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get();
-                rowCount = countRow && typeof countRow.c === 'number' ? countRow.c : Number(countRow ? countRow.c : 0);
-            } catch (_err) {
-                rowCount = null;
-            }
-            tables.push({ name, rowCount });
-        }
-        block.tables = tables;
+        block.tables = queryDatabaseTables(store._database);
     } catch (err) {
         block.error = err && err.message ? String(err.message) : String(err);
     } finally {

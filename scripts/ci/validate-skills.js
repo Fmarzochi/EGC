@@ -19,6 +19,22 @@ function isCategoryRoot(dir) {
   }
 }
 
+function collectSkillEntriesFromCategory(entryPath, entryName) {
+  const leaves = [];
+  const skillEntries = fs.readdirSync(entryPath, { withFileTypes: true });
+  for (const skill of skillEntries) {
+    if (!skill.isDirectory()) continue;
+    const skillPath = path.join(entryPath, skill.name);
+    const relPath = path.join(entryName, skill.name);
+    if (hasSkillMd(skillPath)) {
+      leaves.push({ relPath, fullPath: skillPath });
+    } else {
+      leaves.push({ relPath, fullPath: skillPath, missing: true });
+    }
+  }
+  return leaves;
+}
+
 function listSkillLeaves(root) {
   const leaves = [];
   const entries = fs.readdirSync(root, { withFileTypes: true });
@@ -33,31 +49,11 @@ function listSkillLeaves(root) {
     }
 
     if (isCategoryRoot(entryPath)) {
-      const skillEntries = fs.readdirSync(entryPath, { withFileTypes: true });
-      for (const skill of skillEntries) {
-        if (!skill.isDirectory()) continue;
-        const skillPath = path.join(entryPath, skill.name);
-        if (hasSkillMd(skillPath)) {
-          leaves.push({
-            relPath: path.join(entry.name, skill.name),
-            fullPath: skillPath,
-          });
-        } else {
-          leaves.push({
-            relPath: path.join(entry.name, skill.name),
-            fullPath: skillPath,
-            missing: true,
-          });
-        }
-      }
+      leaves.push(...collectSkillEntriesFromCategory(entryPath, entry.name));
       continue;
     }
 
-    leaves.push({
-      relPath: entry.name,
-      fullPath: entryPath,
-      missing: true,
-    });
+    leaves.push({ relPath: entry.name, fullPath: entryPath, missing: true });
   }
 
   return leaves;
