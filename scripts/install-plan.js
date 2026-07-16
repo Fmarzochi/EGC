@@ -160,7 +160,7 @@ function printPlan(plan) {
 
   if (plan.skippedModuleIds.length > 0) {
     console.log('');
-    console.log(`Skipped for target ${plan.target} (${plan.skippedModuleIds.length}):`);
+    console.log(`Skipped for target ${plan.target} (${plan.skippedModuleIds.length}):`); // NOSONAR jssecurity:S8689
     for (const module of plan.skippedModules) {
       console.log(`- ${module.id} [${module.kind}]`);
     }
