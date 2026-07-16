@@ -9,8 +9,8 @@
  * it. A skill silently missing either field is invisible to both.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -24,7 +24,7 @@ function isCategoryRoot(dir) {
   try {
     const children = fs.readdirSync(dir, { withFileTypes: true });
     return children.some(c => c.isDirectory() && hasSkillMd(path.join(dir, c.name)));
-  } catch (_err) {
+  } catch (_) { /* unreadable directory: not a category root */
     return false;
   }
 }
@@ -102,6 +102,53 @@ function nameMatchesDirectory(name, dirName) {
   return dirName.endsWith(`-${name}`);
 }
 
+// Returns { skip: true } on fatal parse error (caller skips validCount++),
+// or { skip: false, hasError: boolean } when frontmatter was parsed.
+function validateLeafFrontmatter(leaf) {
+  const skillMdPath = path.join(leaf.fullPath, 'SKILL.md');
+  let content;
+  try {
+    content = fs.readFileSync(skillMdPath, 'utf-8');
+  } catch (err) {
+    console.error(`ERROR: ${leaf.relPath}/SKILL.md - ${err.message}`);
+    return { skip: true };
+  }
+
+  const { frontmatter, error } = extractFrontmatter(content);
+
+  if (error === 'missing') {
+    console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing frontmatter (no leading --- block)`);
+    return { skip: true };
+  }
+  if (error === 'unterminated') {
+    console.error(`ERROR: ${leaf.relPath}/SKILL.md - Malformed frontmatter (opening --- found but no closing ---)`);
+    return { skip: true };
+  }
+
+  let hasError = false;
+
+  if (!frontmatter.name?.trim()) {
+    console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing required frontmatter field: name`);
+    hasError = true;
+  } else {
+    if (!SLUG_PATTERN.test(frontmatter.name)) {
+      console.error(`ERROR: ${leaf.relPath}/SKILL.md - name '${frontmatter.name}' is not lowercase kebab-case (expected pattern: ${SLUG_PATTERN})`);
+      hasError = true;
+    }
+    if (!nameMatchesDirectory(frontmatter.name, leaf.dirName)) {
+      console.error(`ERROR: ${leaf.relPath}/SKILL.md - name '${frontmatter.name}' does not match directory '${leaf.dirName}' (expected exact match, or the directory to end with '-${frontmatter.name}')`);
+      hasError = true;
+    }
+  }
+
+  if (!frontmatter.description?.trim()) {
+    console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing required frontmatter field: description`);
+    hasError = true;
+  }
+
+  return { skip: false, hasError };
+}
+
 function validateSkillFrontmatter() {
   if (!fs.existsSync(SKILLS_DIR)) {
     console.log('No skills directory found, skipping validation');
@@ -118,49 +165,12 @@ function validateSkillFrontmatter() {
       continue;
     }
 
-    const skillMdPath = path.join(leaf.fullPath, 'SKILL.md');
-    let content;
-    try {
-      content = fs.readFileSync(skillMdPath, 'utf-8');
-    } catch (err) {
-      console.error(`ERROR: ${leaf.relPath}/SKILL.md - ${err.message}`);
+    const { skip, hasError } = validateLeafFrontmatter(leaf);
+    if (skip) {
       hasErrors = true;
       continue;
     }
-
-    const { frontmatter, error } = extractFrontmatter(content);
-
-    if (error === 'missing') {
-      console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing frontmatter (no leading --- block)`);
-      hasErrors = true;
-      continue;
-    }
-
-    if (error === 'unterminated') {
-      console.error(`ERROR: ${leaf.relPath}/SKILL.md - Malformed frontmatter (opening --- found but no closing ---)`);
-      hasErrors = true;
-      continue;
-    }
-
-    if (!frontmatter.name || !frontmatter.name.trim()) {
-      console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing required frontmatter field: name`);
-      hasErrors = true;
-    } else {
-      if (!SLUG_PATTERN.test(frontmatter.name)) {
-        console.error(`ERROR: ${leaf.relPath}/SKILL.md - name '${frontmatter.name}' is not lowercase kebab-case (expected pattern: ${SLUG_PATTERN})`);
-        hasErrors = true;
-      }
-      if (!nameMatchesDirectory(frontmatter.name, leaf.dirName)) {
-        console.error(`ERROR: ${leaf.relPath}/SKILL.md - name '${frontmatter.name}' does not match directory '${leaf.dirName}' (expected exact match, or the directory to end with '-${frontmatter.name}')`);
-        hasErrors = true;
-      }
-    }
-
-    if (!frontmatter.description || !frontmatter.description.trim()) {
-      console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing required frontmatter field: description`);
-      hasErrors = true;
-    }
-
+    if (hasError) hasErrors = true;
     validCount++;
   }
 

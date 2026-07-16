@@ -10,8 +10,8 @@
  * dropped/reordered a section in one language and not the others.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const ROOT = path.join(__dirname, '../..');
 const README_PATH = path.join(ROOT, 'README.md');
@@ -21,7 +21,7 @@ const LANGUAGES = ['ar', 'es', 'hi', 'ja', 'ko', 'pt', 'ru'];
 // Only ## and ### are part of the README's structural outline; deeper
 // headings are free-form prose inside a section, not the skeleton being
 // compared here.
-const HEADING_PATTERN = /^(#{2,3})\s+(.*)$/;
+const HEADING_PATTERN = /^(#{2,3})\s+(\S.*)?$/;
 
 function extractHeadings(content) {
   const lines = content.split(/\r?\n/);
@@ -29,7 +29,7 @@ function extractHeadings(content) {
   let inFence = false;
 
   for (const line of lines) {
-    if (/^```/.test(line.trim())) {
+    if (line.trim().startsWith('```')) {
       inFence = !inFence;
       continue;
     }
@@ -37,7 +37,7 @@ function extractHeadings(content) {
 
     const match = line.match(HEADING_PATTERN);
     if (match) {
-      headings.push({ level: match[1], text: match[2].trim() });
+      headings.push({ level: match[1], text: (match[2] || '').trim() });
     }
   }
 
@@ -92,6 +92,47 @@ function diffHeadingLevels(sourceHeadings, targetHeadings) {
   return { missing, extra };
 }
 
+function validateTranslationFile(lang, sourceHeadings) {
+  const translationPath = path.join(TRANSLATIONS_DIR, lang, 'README.md');
+
+  if (!fs.existsSync(translationPath)) {
+    console.error(`ERROR: translations/${lang}/README.md - File not found`);
+    return { valid: false };
+  }
+
+  let translationContent;
+  try {
+    translationContent = fs.readFileSync(translationPath, 'utf-8');
+  } catch (err) {
+    console.error(`ERROR: translations/${lang}/README.md - ${err.message}`);
+    return { valid: false };
+  }
+
+  const targetHeadings = extractHeadings(translationContent);
+
+  if (targetHeadings.length === sourceHeadings.length
+    && targetHeadings.every((h, idx) => h.level === sourceHeadings[idx].level)) {
+    return { valid: true };
+  }
+
+  console.error(`ERROR: translations/${lang}/README.md - Heading structure diverges from README.md (source has ${sourceHeadings.length} headings, translation has ${targetHeadings.length})`);
+
+  const { missing, extra } = diffHeadingLevels(sourceHeadings, targetHeadings);
+
+  for (const { index, heading } of missing) {
+    console.error(`  - MISSING heading at source position ${index}: ${heading.level} "${heading.text}" has no counterpart in translations/${lang}/README.md`);
+  }
+  for (const { index, heading } of extra) {
+    console.error(`  - EXTRA heading at translation position ${index}: ${heading.level} "${heading.text}" in translations/${lang}/README.md has no counterpart in README.md`);
+  }
+  if (missing.length === 0 && extra.length === 0) {
+    // Same multiset of levels, different order.
+    console.error(`  - ORDER mismatch: same heading levels present but in a different order than README.md`);
+  }
+
+  return { valid: false };
+}
+
 function validateTranslationStructure() {
   if (!fs.existsSync(README_PATH)) {
     console.error('ERROR: README.md not found at repo root');
@@ -115,45 +156,11 @@ function validateTranslationStructure() {
   let validCount = 0;
 
   for (const lang of LANGUAGES) {
-    const translationPath = path.join(TRANSLATIONS_DIR, lang, 'README.md');
-
-    if (!fs.existsSync(translationPath)) {
-      console.error(`ERROR: translations/${lang}/README.md - File not found`);
-      hasErrors = true;
-      continue;
-    }
-
-    let translationContent;
-    try {
-      translationContent = fs.readFileSync(translationPath, 'utf-8');
-    } catch (err) {
-      console.error(`ERROR: translations/${lang}/README.md - ${err.message}`);
-      hasErrors = true;
-      continue;
-    }
-
-    const targetHeadings = extractHeadings(translationContent);
-
-    if (targetHeadings.length === sourceHeadings.length
-      && targetHeadings.every((h, idx) => h.level === sourceHeadings[idx].level)) {
+    const { valid } = validateTranslationFile(lang, sourceHeadings);
+    if (valid) {
       validCount++;
-      continue;
-    }
-
-    hasErrors = true;
-    console.error(`ERROR: translations/${lang}/README.md - Heading structure diverges from README.md (source has ${sourceHeadings.length} headings, translation has ${targetHeadings.length})`);
-
-    const { missing, extra } = diffHeadingLevels(sourceHeadings, targetHeadings);
-
-    for (const { index, heading } of missing) {
-      console.error(`  - MISSING heading at source position ${index}: ${heading.level} "${heading.text}" has no counterpart in translations/${lang}/README.md`);
-    }
-    for (const { index, heading } of extra) {
-      console.error(`  - EXTRA heading at translation position ${index}: ${heading.level} "${heading.text}" in translations/${lang}/README.md has no counterpart in README.md`);
-    }
-    if (missing.length === 0 && extra.length === 0) {
-      // Same multiset of levels, different order.
-      console.error(`  - ORDER mismatch: same heading levels present but in a different order than README.md`);
+    } else {
+      hasErrors = true;
     }
   }
 

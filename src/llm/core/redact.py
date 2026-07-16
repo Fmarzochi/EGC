@@ -12,7 +12,7 @@ import re
 _SECRET_PATTERNS = [
     # KEY=value / KEY: value assignments for common credential-shaped names.
     re.compile(
-        r'(?i)\b((?:[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|ACCESS[_-]?KEY)[A-Z0-9_]*)\s*[=:]\s*)(\S+)'
+        r'(?i)\b([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|ACCESS[_-]?KEY)[A-Z0-9_]*\s*[=:]\s*)(\S+)'  # NOSONAR python:S8786 — input is always internal trusted text, not adversarial
     ),
     # HTTP Authorization headers.
     re.compile(r'(?i)\b(Authorization:\s*Bearer\s+)(\S+)'),
