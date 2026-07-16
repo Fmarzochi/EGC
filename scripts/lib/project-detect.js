@@ -402,6 +402,37 @@ function getElixirDeps(projectDir) {
   }
 }
 
+const FRONTEND_SIGNALS = ['react', 'vue', 'angular', 'svelte', 'nextjs', 'nuxt', 'astro', 'remix'];
+const BACKEND_SIGNALS = ['django', 'fastapi', 'flask', 'express', 'nestjs', 'rails', 'spring', 'laravel', 'phoenix', 'gin', 'echo', 'actix', 'axum'];
+
+function buildDepMap(projectDir) {
+  return {
+    python: getPythonDeps(projectDir),
+    typescript: getPackageJsonDeps(projectDir),
+    javascript: getPackageJsonDeps(projectDir),
+    golang: getGoDeps(projectDir),
+    rust: getRustDeps(projectDir),
+    php: getComposerDeps(projectDir),
+    elixir: getElixirDeps(projectDir),
+    dart: getDartDeps(projectDir),
+    cpp: getCppDeps(projectDir),
+  };
+}
+
+function hasDepMatch(rule, depMap) {
+  if (rule.packageKeys.length === 0) return false;
+  const depList = depMap[rule.language] || [];
+  return rule.packageKeys.some(key => depList.some(dep => dep.toLowerCase().includes(key.toLowerCase())));
+}
+
+function determinePrimary(frameworks, languages) {
+  let primary = frameworks.length > 0 ? frameworks[0] : (languages.length > 0 ? languages[0] : 'unknown');
+  if (frameworks.some(f => FRONTEND_SIGNALS.includes(f)) && frameworks.some(f => BACKEND_SIGNALS.includes(f))) {
+    primary = 'fullstack';
+  }
+  return primary;
+}
+
 /**
  * Detect project languages and frameworks
  * @param {string} [projectDir] - Project directory (defaults to cwd)
@@ -412,94 +443,30 @@ function detectProjectType(projectDir) {
   const languages = [];
   const frameworks = [];
 
-  // Step 1: Detect languages
   for (const rule of LANGUAGE_RULES) {
     const hasMarker = rule.markers.some(m => fileExists(projectDir, m));
     const hasExt = rule.extensions.length > 0 && hasFileWithExtension(projectDir, rule.extensions);
-
-    if (hasMarker || hasExt) {
-      languages.push(rule.type);
-    }
+    if (hasMarker || hasExt) languages.push(rule.type);
   }
 
-  // Deduplicate: if both typescript and javascript detected, keep typescript
   if (languages.includes('typescript') && languages.includes('javascript')) {
     const idx = languages.indexOf('javascript');
     if (idx !== -1) languages.splice(idx, 1);
   }
 
-  // Step 2: Detect frameworks based on markers and dependencies
-  const npmDeps = getPackageJsonDeps(projectDir);
-  const pyDeps = getPythonDeps(projectDir);
-  const goDeps = getGoDeps(projectDir);
-  const rustDeps = getRustDeps(projectDir);
-  const composerDeps = getComposerDeps(projectDir);
-  const elixirDeps = getElixirDeps(projectDir);
-  const dartDeps = getDartDeps(projectDir);
-  const cppDeps = getCppDeps(projectDir);
+  const depMap = buildDepMap(projectDir);
 
   for (const rule of FRAMEWORK_RULES) {
     const hasMarker = rule.markers.some(m => fileExists(projectDir, m));
-
-    let hasDep = false;
-    if (rule.packageKeys.length > 0) {
-      let depList = [];
-      switch (rule.language) {
-        case 'python':
-          depList = pyDeps;
-          break;
-        case 'typescript':
-        case 'javascript':
-          depList = npmDeps;
-          break;
-        case 'golang':
-          depList = goDeps;
-          break;
-        case 'rust':
-          depList = rustDeps;
-          break;
-        case 'php':
-          depList = composerDeps;
-          break;
-        case 'elixir':
-          depList = elixirDeps;
-          break;
-        case 'dart':
-          depList = dartDeps;
-          break;
-        case 'cpp':
-          depList = cppDeps;
-          break;
-      }
-      hasDep = rule.packageKeys.some(key => depList.some(dep => dep.toLowerCase().includes(key.toLowerCase())));
-    }
-
-    if (hasMarker || hasDep) {
+    if (hasMarker || hasDepMatch(rule, depMap)) {
       frameworks.push(rule.framework);
     }
-  }
-
-  // Step 3: Determine primary type
-  let primary = 'unknown';
-  if (frameworks.length > 0) {
-    primary = frameworks[0];
-  } else if (languages.length > 0) {
-    primary = languages[0];
-  }
-
-  const frontendSignals = ['react', 'vue', 'angular', 'svelte', 'nextjs', 'nuxt', 'astro', 'remix'];
-  const backendSignals = ['django', 'fastapi', 'flask', 'express', 'nestjs', 'rails', 'spring', 'laravel', 'phoenix', 'gin', 'echo', 'actix', 'axum'];
-  const hasFrontend = frameworks.some(f => frontendSignals.includes(f));
-  const hasBackend = frameworks.some(f => backendSignals.includes(f));
-
-  if (hasFrontend && hasBackend) {
-    primary = 'fullstack';
   }
 
   return {
     languages,
     frameworks,
-    primary,
+    primary: determinePrimary(frameworks, languages),
     projectDir
   };
 }

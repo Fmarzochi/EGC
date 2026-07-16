@@ -122,6 +122,17 @@ function migrateStaleGroupEntries(group, hookScriptPath, alreadyPresent) {
   return { entries, groupChanged, present };
 }
 
+function isMatcherGroup(group, matcher) {
+  if (!isPlainObject(group) || !Array.isArray(group.hooks)) return false;
+  return matcher === undefined ? group?.matcher === undefined : group?.matcher === matcher;
+}
+
+function buildNewGroup(hookScriptPath, matcher) {
+  const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
+  if (matcher) group.matcher = matcher;
+  return group;
+}
+
 function addHookEntry(settings, event, hookScriptPath, options = {}) {
   const base = isPlainObject(settings) ? settings : {};
   const matcher = typeof options.matcher === 'string' && options.matcher ? options.matcher : undefined;
@@ -134,10 +145,7 @@ function addHookEntry(settings, event, hookScriptPath, options = {}) {
   const groups = [];
 
   for (const group of existingGroups) {
-    const sameMatcher = matcher === undefined
-      ? group?.matcher === undefined
-      : group?.matcher === matcher;
-    if (!isPlainObject(group) || !Array.isArray(group.hooks) || !sameMatcher) {
+    if (!isMatcherGroup(group, matcher)) {
       groups.push(group);
       continue;
     }
@@ -155,11 +163,7 @@ function addHookEntry(settings, event, hookScriptPath, options = {}) {
   }
 
   if (!present) {
-    const group = { hooks: [{ type: 'command', command: buildHookCommand(hookScriptPath) }] };
-    if (matcher) {
-      group.matcher = matcher;
-    }
-    groups.push(group);
+    groups.push(buildNewGroup(hookScriptPath, matcher));
     changed = true;
   }
 

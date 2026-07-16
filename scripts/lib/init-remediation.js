@@ -2,6 +2,30 @@
 
 const RESOLUTION_DRIFT_ISSUE_CODE = 'resolution-drift';
 
+function hasDriftIssue(result) {
+  const issues = Array.isArray(result.issues) ? result.issues : [];
+  return issues.some(issue => issue.code === RESOLUTION_DRIFT_ISSUE_CODE);
+}
+
+function buildModuleArgs(request) {
+  if (request.profile) return ['--profile', request.profile];
+  if (Array.isArray(request.modules) && request.modules.length > 0) {
+    return ['--modules', request.modules.join(',')];
+  }
+  return null;
+}
+
+function buildComponentFlags(request) {
+  const flags = [];
+  for (const componentId of request.includeComponents || []) {
+    flags.push('--with', componentId);
+  }
+  for (const componentId of request.excludeComponents || []) {
+    flags.push('--without', componentId);
+  }
+  return flags;
+}
+
 /**
  * Builds install-apply argv for every doctor result whose issues include
  * resolution drift. Recorded-content repair restores files but never
@@ -15,36 +39,14 @@ function planDriftReinstalls(report) {
   for (const result of results) {
     const request = result?.state?.request;
     const target = result?.adapter?.target;
-    if (!request || !target || request.legacyMode) {
-      continue;
-    }
+    if (!request || !target || request.legacyMode) continue;
+    if (!hasDriftIssue(result)) continue;
 
-    const issues = Array.isArray(result.issues) ? result.issues : [];
-    if (!issues.some(issue => issue.code === RESOLUTION_DRIFT_ISSUE_CODE)) {
-      continue;
-    }
+    const moduleArgs = buildModuleArgs(request);
+    if (!moduleArgs) continue;
 
-    const args = ['--target', target];
-    if (request.profile) {
-      args.push('--profile', request.profile);
-    } else if (Array.isArray(request.modules) && request.modules.length > 0) {
-      args.push('--modules', request.modules.join(','));
-    } else {
-      continue;
-    }
-
-    for (const componentId of request.includeComponents || []) {
-      args.push('--with', componentId);
-    }
-    for (const componentId of request.excludeComponents || []) {
-      args.push('--without', componentId);
-    }
-
-    plans.push({
-      adapterId: result.adapter.id,
-      target,
-      args,
-    });
+    const args = ['--target', target, ...moduleArgs, ...buildComponentFlags(request)];
+    plans.push({ adapterId: result.adapter.id, target, args });
   }
 
   return plans;

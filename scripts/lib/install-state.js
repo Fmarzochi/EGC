@@ -133,6 +133,26 @@ function validateStateSource(source, pushError) {
   }
 }
 
+const OPERATION_STRING_FIELDS = [
+  'kind',
+  'moduleId',
+  'sourceRelativePath',
+  'destinationPath',
+  'strategy',
+  'ownership',
+];
+
+function validateOperation(operation, instancePath, pushError) {
+  for (const field of OPERATION_STRING_FIELDS) {
+    if (!isNonEmptyString(operation[field])) {
+      pushError(`${instancePath}/${field}`, 'must be non-empty string');
+    }
+  }
+  if (typeof operation.scaffoldOnly !== 'boolean') {
+    pushError(`${instancePath}/scaffoldOnly`, 'must be boolean');
+  }
+}
+
 function validateStateOperations(operations, pushError) {
   if (!Array.isArray(operations)) {
     pushError('/operations', 'must be array');
@@ -148,27 +168,7 @@ function validateStateOperations(operations, pushError) {
       continue;
     }
 
-    if (!isNonEmptyString(operation.kind)) {
-      pushError(`${instancePath}/kind`, 'must be non-empty string');
-    }
-    if (!isNonEmptyString(operation.moduleId)) {
-      pushError(`${instancePath}/moduleId`, 'must be non-empty string');
-    }
-    if (!isNonEmptyString(operation.sourceRelativePath)) {
-      pushError(`${instancePath}/sourceRelativePath`, 'must be non-empty string');
-    }
-    if (!isNonEmptyString(operation.destinationPath)) {
-      pushError(`${instancePath}/destinationPath`, 'must be non-empty string');
-    }
-    if (!isNonEmptyString(operation.strategy)) {
-      pushError(`${instancePath}/strategy`, 'must be non-empty string');
-    }
-    if (!isNonEmptyString(operation.ownership)) {
-      pushError(`${instancePath}/ownership`, 'must be non-empty string');
-    }
-    if (typeof operation.scaffoldOnly !== 'boolean') {
-      pushError(`${instancePath}/scaffoldOnly`, 'must be boolean');
-    }
+    validateOperation(operation, instancePath, pushError);
   }
 }
 
