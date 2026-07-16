@@ -224,8 +224,8 @@ function runTests() {
       fs.mkdirSync(targetRoot, { recursive: true });
       const normalizedTargetRoot = fs.realpathSync(targetRoot);
       const statePath = path.join(normalizedTargetRoot, 'egc-install-state.json');
-      const renderedPath = path.join(normalizedTargetRoot, 'generated.md');
-      fs.writeFileSync(renderedPath, '# generated\n');
+      const generatedPath = path.join(normalizedTargetRoot, 'generated.md');
+      fs.writeFileSync(generatedPath, '# generated\n');
 
       writeState(statePath, {
         adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
@@ -245,14 +245,13 @@ function runTests() {
         },
         operations: [
           {
-            kind: 'render-template',
+            kind: 'copy-file',
             moduleId: 'platform-configs',
-            sourceRelativePath: '.cursor/generated.md.template',
-            destinationPath: renderedPath,
-            strategy: 'render-template',
+            sourceRelativePath: '.cursor/generated.md',
+            destinationPath: generatedPath,
+            strategy: 'copy-file',
             ownership: 'managed',
             scaffoldOnly: false,
-            renderedContent: '# generated\n',
           },
         ],
         source: {
@@ -270,8 +269,8 @@ function runTests() {
 
       const parsed = JSON.parse(uninstallResult.stdout);
       assert.strictEqual(parsed.dryRun, true);
-      assert.ok(parsed.results[0].plannedRemovals.includes(renderedPath));
-      assert.ok(fs.existsSync(renderedPath));
+      assert.ok(parsed.results[0].plannedRemovals.includes(generatedPath));
+      assert.ok(fs.existsSync(generatedPath));
       assert.ok(fs.existsSync(statePath));
     } finally {
       cleanup(homeDir);

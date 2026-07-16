@@ -422,16 +422,14 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('doctor verifies render-template and merge-json operations by content', () => {
+  if (test('doctor verifies merge-json operations by content', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
     try {
       const targetRoot = path.join(projectRoot, '.cursor');
-      const templatePath = path.join(targetRoot, 'generated.txt');
       const jsonPath = path.join(targetRoot, 'settings.json');
       fs.mkdirSync(targetRoot, { recursive: true });
-      fs.writeFileSync(templatePath, 'generated\n');
       fs.writeFileSync(jsonPath, JSON.stringify({
         keep: true,
         nested: {
@@ -442,9 +440,6 @@ function runTests() {
 
       writeCursorState(projectRoot, {
         operations: [
-          managedOperation('render-template', templatePath, {
-            renderedContent: 'generated\n',
-          }),
           managedOperation('merge-json', jsonPath, {
             mergePayload: {
               nested: {
@@ -470,25 +465,25 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('doctor classifies remove, unverified template/json, and invalid JSON operation health', () => {
+  if (test('doctor classifies remove, unknown-kind, unverified merge-json, and invalid JSON operation health', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
     try {
       const targetRoot = path.join(projectRoot, '.cursor');
-      const templatePath = path.join(targetRoot, 'template.txt');
+      const unknownKindPath = path.join(targetRoot, 'template.txt');
       const missingPayloadJsonPath = path.join(targetRoot, 'missing-payload.json');
       const invalidJsonPath = path.join(targetRoot, 'invalid.json');
       const removedPath = path.join(targetRoot, 'already-removed.txt');
       fs.mkdirSync(targetRoot, { recursive: true });
-      fs.writeFileSync(templatePath, 'generated\n');
+      fs.writeFileSync(unknownKindPath, 'generated\n');
       fs.writeFileSync(missingPayloadJsonPath, '{"managed":true}\n');
       fs.writeFileSync(invalidJsonPath, '{not-json', 'utf8');
 
       writeCursorState(projectRoot, {
         operations: [
           managedOperation('remove', removedPath),
-          managedOperation('render-template', templatePath),
+          managedOperation('unknown-operation-kind', unknownKindPath),
           managedOperation('merge-json', missingPayloadJsonPath),
           managedOperation('merge-json', invalidJsonPath, {
             mergePayload: { managed: true },
@@ -901,65 +896,6 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('repair restores render-template outputs from recorded rendered content', () => {
-    const homeDir = createTempDir('install-lifecycle-home-');
-    const projectRoot = createTempDir('install-lifecycle-project-');
-
-    try {
-      const targetRoot = path.join(homeDir, '.gemini');
-      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
-      const destinationPath = path.join(targetRoot, 'plugin.json');
-      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-      fs.writeFileSync(destinationPath, '{"drifted":true}\n');
-
-      writeState(statePath, {
-        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
-        targetRoot,
-        installStatePath: statePath,
-        request: {
-          profile: null,
-          modules: [],
-          legacyLanguages: ['typescript'],
-          legacyMode: true,
-        },
-        resolution: {
-          selectedModules: ['legacy-egc-rules'],
-          skippedModules: [],
-        },
-        operations: [
-          {
-            kind: 'render-template',
-            moduleId: 'platform-configs',
-            sourceRelativePath: '.gemini-plugin/plugin.json.template',
-            destinationPath,
-            strategy: 'render-template',
-            ownership: 'managed',
-            scaffoldOnly: false,
-            renderedContent: '{"ok":true}\n',
-          },
-        ],
-        source: {
-          repoVersion: CURRENT_PACKAGE_VERSION,
-          repoCommit: 'abc123',
-          manifestVersion: CURRENT_MANIFEST_VERSION,
-        },
-      });
-
-      const result = repairInstalledStates({
-        repoRoot: REPO_ROOT,
-        homeDir,
-        projectRoot,
-        targets: ['egc'],
-      });
-
-      assert.strictEqual(result.results[0].status, 'repaired');
-      assert.strictEqual(fs.readFileSync(destinationPath, 'utf8'), '{"ok":true}\n');
-    } finally {
-      cleanup(homeDir);
-      cleanup(projectRoot);
-    }
-  })) passed++; else failed++;
-
   if (test('repair reapplies merge-json operations without clobbering unrelated keys', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
@@ -1159,66 +1095,6 @@ function runTests() {
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
-    }
-  })) passed++; else failed++;
-
-  if (test('uninstall restores rendered template files from recorded previous content', () => {
-    const tempDir = createTempDir('install-lifecycle-');
-
-    try {
-      const targetRoot = path.join(tempDir, '.gemini');
-      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
-      const destinationPath = path.join(targetRoot, 'plugin.json');
-      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-      fs.writeFileSync(destinationPath, '{"generated":true}\n');
-
-      writeInstallState(statePath, createInstallState({
-        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
-        targetRoot,
-        installStatePath: statePath,
-        request: {
-          profile: 'core',
-          modules: ['platform-configs'],
-          includeComponents: [],
-          excludeComponents: [],
-          legacyLanguages: [],
-          legacyMode: false,
-        },
-        resolution: {
-          selectedModules: ['platform-configs'],
-          skippedModules: [],
-        },
-        source: {
-          repoVersion: '1.8.0',
-          repoCommit: 'abc123',
-          manifestVersion: 1,
-        },
-        operations: [
-          {
-            kind: 'render-template',
-            moduleId: 'platform-configs',
-            sourceRelativePath: '.gemini/plugin.json.template',
-            destinationPath,
-            strategy: 'render-template',
-            ownership: 'managed',
-            scaffoldOnly: false,
-            renderedContent: '{"generated":true}\n',
-            previousContent: '{"existing":true}\n',
-          },
-        ],
-      }));
-
-      const result = uninstallInstalledStates({
-        homeDir: tempDir,
-        projectRoot: tempDir,
-        targets: ['egc'],
-      });
-
-      assert.strictEqual(result.summary.uninstalledCount, 1);
-      assert.strictEqual(fs.readFileSync(destinationPath, 'utf8'), '{"existing":true}\n');
-      assert.ok(!fs.existsSync(statePath));
-    } finally {
-      cleanup(tempDir);
     }
   })) passed++; else failed++;
 
@@ -1542,22 +1418,20 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('uninstall removes generated render-template files and no-backup remove operations are no-ops', () => {
+  if (test('uninstall removes generated copy-file outputs and no-backup remove operations are no-ops', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
     try {
       const targetRoot = path.join(projectRoot, '.cursor');
-      const templatePath = path.join(targetRoot, 'generated', 'plugin.json');
+      const generatedPath = path.join(targetRoot, 'generated', 'plugin.json');
       const removedPath = path.join(targetRoot, 'already-removed.txt');
-      fs.mkdirSync(path.dirname(templatePath), { recursive: true });
-      fs.writeFileSync(templatePath, '{"generated":true}\n');
+      fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
+      fs.writeFileSync(generatedPath, '{"generated":true}\n');
 
       writeCursorState(projectRoot, {
         operations: [
-          managedOperation('render-template', templatePath, {
-            renderedContent: '{"generated":true}\n',
-          }),
+          managedOperation('copy-file', generatedPath),
           managedOperation('remove', removedPath),
         ],
       });
@@ -1569,31 +1443,30 @@ function runTests() {
       });
 
       assert.strictEqual(result.results[0].status, 'uninstalled');
-      assert.ok(result.results[0].removedPaths.includes(templatePath));
-      assert.ok(!fs.existsSync(templatePath));
-      assert.ok(!fs.existsSync(path.dirname(templatePath)));
+      assert.ok(result.results[0].removedPaths.includes(generatedPath));
+      assert.ok(!fs.existsSync(generatedPath));
+      assert.ok(!fs.existsSync(path.dirname(generatedPath)));
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
   })) passed++; else failed++;
 
-  if (test('uninstall restores previous JSON snapshots for template and remove operations', () => {
+  if (test('uninstall restores previous JSON snapshots for merge-json and remove operations', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
     try {
       const targetRoot = path.join(projectRoot, '.cursor');
-      const templatePath = path.join(targetRoot, 'plugin.json');
+      const generatedPath = path.join(targetRoot, 'plugin.json');
       const removedPath = path.join(targetRoot, 'legacy.json');
       fs.mkdirSync(targetRoot, { recursive: true });
-      fs.writeFileSync(templatePath, '{"generated":true}\n');
+      fs.writeFileSync(generatedPath, '{"generated":true}\n');
 
       writeCursorState(projectRoot, {
         operations: [
-          managedOperation('render-template', templatePath, {
+          managedOperation('merge-json', generatedPath, {
             previousJson: { existing: true },
-            renderedContent: '{"generated":true}\n',
           }),
           managedOperation('remove', removedPath, {
             previousJson: { restored: true },
@@ -1608,7 +1481,7 @@ function runTests() {
       });
 
       assert.strictEqual(result.results[0].status, 'uninstalled');
-      assert.deepStrictEqual(JSON.parse(fs.readFileSync(templatePath, 'utf8')), {
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(generatedPath, 'utf8')), {
         existing: true,
       });
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(removedPath, 'utf8')), {

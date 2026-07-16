@@ -136,10 +136,8 @@ function runTests() {
       const normalizedTargetRoot = fs.realpathSync(targetRoot);
       const statePath = path.join(normalizedTargetRoot, 'egc-install-state.json');
       const jsonPath = path.join(normalizedTargetRoot, 'hooks.json');
-      const renderedPath = path.join(normalizedTargetRoot, 'generated.md');
       const removedPath = path.join(normalizedTargetRoot, 'legacy-note.txt');
       fs.writeFileSync(jsonPath, JSON.stringify({ existing: true, managed: false }, null, 2));
-      fs.writeFileSync(renderedPath, '# drifted\n');
       fs.writeFileSync(removedPath, 'stale\n');
 
       writeState(statePath, {
@@ -175,16 +173,6 @@ function runTests() {
             },
           },
           {
-            kind: 'render-template',
-            moduleId: 'platform-configs',
-            sourceRelativePath: '.cursor/generated.md.template',
-            destinationPath: renderedPath,
-            strategy: 'render-template',
-            ownership: 'managed',
-            scaffoldOnly: false,
-            renderedContent: '# generated\n',
-          },
-          {
             kind: 'remove',
             moduleId: 'platform-configs',
             sourceRelativePath: '.cursor/legacy-note.txt',
@@ -218,7 +206,6 @@ function runTests() {
       const parsed = JSON.parse(repairResult.stdout);
       assert.strictEqual(parsed.results[0].status, 'repaired');
       assert.ok(parsed.results[0].repairedPaths.includes(jsonPath));
-      assert.ok(parsed.results[0].repairedPaths.includes(renderedPath));
       assert.ok(parsed.results[0].repairedPaths.includes(removedPath));
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(jsonPath, 'utf8')), {
         existing: true,
@@ -227,7 +214,6 @@ function runTests() {
           enabled: true,
         },
       });
-      assert.strictEqual(fs.readFileSync(renderedPath, 'utf8'), '# generated\n');
       assert.ok(!fs.existsSync(removedPath));
 
       const repairedState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
@@ -255,8 +241,8 @@ function runTests() {
       fs.mkdirSync(targetRoot, { recursive: true });
       const normalizedTargetRoot = fs.realpathSync(targetRoot);
       const statePath = path.join(normalizedTargetRoot, 'egc-install-state.json');
-      const renderedPath = path.join(normalizedTargetRoot, 'generated.md');
-      fs.writeFileSync(renderedPath, '# drifted\n');
+      const jsonPath = path.join(normalizedTargetRoot, 'hooks.json');
+      fs.writeFileSync(jsonPath, JSON.stringify({ existing: true, managed: false }, null, 2));
 
       writeState(statePath, {
         adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
@@ -276,14 +262,19 @@ function runTests() {
         },
         operations: [
           {
-            kind: 'render-template',
+            kind: 'merge-json',
             moduleId: 'platform-configs',
-            sourceRelativePath: '.cursor/generated.md.template',
-            destinationPath: renderedPath,
-            strategy: 'render-template',
+            sourceRelativePath: '.cursor/hooks.json',
+            destinationPath: jsonPath,
+            strategy: 'merge-json',
             ownership: 'managed',
             scaffoldOnly: false,
-            renderedContent: '# generated\n',
+            mergePayload: {
+              managed: true,
+              nested: {
+                enabled: true,
+              },
+            },
           },
         ],
         source: {
@@ -300,8 +291,8 @@ function runTests() {
       assert.strictEqual(repairResult.code, 0, repairResult.stderr);
       const parsed = JSON.parse(repairResult.stdout);
       assert.strictEqual(parsed.dryRun, true);
-      assert.ok(parsed.results[0].plannedRepairs.includes(renderedPath));
-      assert.strictEqual(fs.readFileSync(renderedPath, 'utf8'), '# drifted\n');
+      assert.ok(parsed.results[0].plannedRepairs.includes(jsonPath));
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(jsonPath, 'utf8')), { existing: true, managed: false });
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
