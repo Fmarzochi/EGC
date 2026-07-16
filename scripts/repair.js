@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const os = require('os');
+const os = require('node:os');
 const { repairInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { reinstallAllPlugins, listInstalledPlugins } = require('./lib/plugin-registry');
@@ -76,7 +76,7 @@ function main() {
     }
 
     const result = repairInstalledStates({
-      repoRoot: require('path').join(__dirname, '..'),
+      repoRoot: require('node:path').join(__dirname, '..'),
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,

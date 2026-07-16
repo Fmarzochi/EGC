@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { createAdapterRegistry, inspectSessionTarget } = require('./lib/session-adapters/registry');
 const { readSkillObservations } = require('./lib/skill-improvement/observations');

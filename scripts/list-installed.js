@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const os = require('os');
+const os = require('node:os');
 const { discoverInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 

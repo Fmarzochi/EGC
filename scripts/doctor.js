@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const os = require('os');
-const path = require('path');
-const fs = require('fs');
+const os = require('node:os');
+const path = require('node:path');
+const fs = require('node:fs');
 const { buildDoctorReport } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir } = require('./lib/utils');

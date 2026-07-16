@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const _nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+const _nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10);
 if (_nodeMajor < 20) {
   process.stderr.write(
     '\n' +
@@ -17,8 +17,8 @@ if (_nodeMajor < 20) {
 
 if (process.platform === 'win32') process.exit(0);
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 if (process.env.npm_config_global !== 'true') process.exit(0);
 

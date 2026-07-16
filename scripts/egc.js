@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const _nodeMajor = parseInt(process.versions.node, 10);
+const _nodeMajor = Number.parseInt(process.versions.node, 10);
 if (_nodeMajor < 20) {
   process.stderr.write(
     `EGC requires Node.js 20 or later (found: ${process.version}).\n` +
@@ -9,8 +9,8 @@ if (_nodeMajor < 20) {
   process.exit(1);
 }
 
-const { spawnSync } = require('child_process');
-const path = require('path');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
 const { version: PACKAGE_VERSION } = require('../package.json');
 const { listAvailableLanguages } = require('./lib/install-executor');
 const { formatOSC8 } = require('./lib/utils');

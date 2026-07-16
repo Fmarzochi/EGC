@@ -1,7 +1,7 @@
-const { execFileSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 
 const TMP = path.join(os.tmpdir(), 'egc-e2e-team-' + Date.now());
 const REMOTE_REPO = path.join(TMP, 'remote-repo');

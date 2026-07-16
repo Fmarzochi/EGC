@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const path = require('path');
+const path = require('node:path');
 const {
   installPluginFromDir,
   installPluginFromNpm,
@@ -61,7 +61,7 @@ async function main() {
 
       if (sourceIdx !== -1 && args[sourceIdx + 1]) {
         const sourcePath = path.resolve(args[sourceIdx + 1]);
-        if (!require('fs').existsSync(sourcePath)) {
+        if (!require('node:fs').existsSync(sourcePath)) {
           console.error(`Error: Source path does not exist: ${sourcePath}`);
           process.exit(1);
         }

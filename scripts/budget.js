@@ -53,9 +53,9 @@ async function main() {
       const warnAtIdx = args.indexOf('--warn-at');
       const actionIdx = args.indexOf('--action');
 
-      const maxTokens = tokensIdx !== -1 ? parseInt(args[tokensIdx + 1], 10) : undefined;
-      const maxCost = costIdx !== -1 ? parseFloat(args[costIdx + 1]) : undefined;
-      const warnAtPercent = warnAtIdx !== -1 ? parseInt(args[warnAtIdx + 1], 10) : undefined;
+      const maxTokens = tokensIdx !== -1 ? Number.parseInt(args[tokensIdx + 1], 10) : undefined;
+      const maxCost = costIdx !== -1 ? Number.parseFloat(args[costIdx + 1]) : undefined;
+      const warnAtPercent = warnAtIdx !== -1 ? Number.parseInt(args[warnAtIdx + 1], 10) : undefined;
       const action = actionIdx !== -1 ? args[actionIdx + 1] : undefined;
 
       if (maxTokens !== undefined && (isNaN(maxTokens) || maxTokens <= 0)) {

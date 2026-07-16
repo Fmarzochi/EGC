@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 'use strict';
 
-const { spawnSync, spawn } = require('child_process');
-const path = require('path');
-const http = require('http');
-const fs = require('fs');
+const { spawnSync, spawn } = require('node:child_process');
+const path = require('node:path');
+const http = require('node:http');
+const fs = require('node:fs');
 
 const PORT = 7890;
 const DASHBOARD_DIR = path.join(__dirname, '..', 'dashboard');
 const SERVER_SCRIPT = path.join(DASHBOARD_DIR, 'server.js');
-const PID_FILE = path.join(require('os').homedir(), '.egc', 'dashboard.pid');
+const PID_FILE = path.join(require('node:os').homedir(), '.egc', 'dashboard.pid');
 
 const args = process.argv.slice(2);
 const flag = args[0];
@@ -42,7 +42,7 @@ function writePid(pid) {
 }
 
 function readPid() {
-  try { return parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10); } catch (_) { return null; }
+  try { return Number.parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10); } catch (_) { return null; }
 }
 
 async function start() {

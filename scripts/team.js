@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const { spawnSync, execFileSync } = require('child_process');
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const { spawnSync, execFileSync } = require('node:child_process');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');

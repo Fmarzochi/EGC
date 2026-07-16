@@ -22,11 +22,11 @@
  *   --help        Show usage
  */
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const { spawnSync, spawn } = require('child_process');
-const os = require('os');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
+const { spawnSync, spawn } = require('node:child_process');
+const os = require('node:os');
 
 const { version: PKG_VERSION } = require('../package.json');
 const { registerMcpServers: runMcpRegistration } = require('./lib/mcp-register');
@@ -86,7 +86,7 @@ function logDry(msg) { if (flags.dryRun) console.log(`  ${c.dim}[dry-run] ${msg}
 function logAction(msg) { console.log(`  ${c.dim}${flags.dryRun ? '[dry-run] ' : ''}${msg}${c.reset}`); }
 
 function checkNode() {
-  const major = parseInt(process.versions.node.split('.')[0], 10);
+  const major = Number.parseInt(process.versions.node.split('.')[0], 10);
   if (major < 20) {
     console.error(`Error: Node.js 20 or later is required (found: ${process.version}).`);
     if (major === 18) {
@@ -153,7 +153,7 @@ function runStateDbBootstrap() {
   if (flags.dryRun) return;
   const result = spawnSync(process.execPath, [bootstrapScript], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
   const output = (result.stderr || '').trim();
-  if (output) console.log('  ' + output.split('\n').join('\n  '));
+  if (output) console.log('  ' + output.replaceAll('\n', '\n  '));
 }
 
 /**
@@ -249,7 +249,7 @@ if (!flags.dryRun) {
       const url = 'http://localhost:7890';
       const cmd = process.platform === 'win32' ? 'start' :
                   process.platform === 'darwin' ? 'open' : 'xdg-open';
-      try { require('child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* best-effort */ }
+      try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* best-effort */ }
     };
     dashPing.then(already => {
       if (already) {

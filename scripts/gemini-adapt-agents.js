@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const TOOL_NAME_MAP = new Map([
   ['Read', 'read_file'],
@@ -83,7 +83,7 @@ function adaptToolName(toolName) {
   if (toolName.startsWith('mcp__')) {
     return toolName
       .replace(/^mcp__/, 'mcp_')
-      .replace(/__/g, '_')
+      .replaceAll('__', '_')
       .replace(/[^A-Za-z0-9_]/g, '_')
       .toLowerCase();
   }

@@ -8,9 +8,9 @@
 
 'use strict';
 
-const { spawnSync } = require('child_process');
-const path = require('path');
-const os = require('os');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const os = require('node:os');
 
 function main() {
   const pluginRoot = path.resolve(__dirname, '..');

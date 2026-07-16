@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-const http = require('http');
-const { execSync } = require('child_process');
+const http = require('node:http');
+const { execSync } = require('node:child_process');
 
 const DASHBOARD_URL = 'http://localhost:7890';
 

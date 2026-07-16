@@ -6,7 +6,7 @@
  * target-specific mutation logic into testable Node code.
  */
 
-const os = require('os');
+const os = require('node:os');
 
 
 const {
