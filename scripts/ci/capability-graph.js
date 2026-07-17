@@ -225,6 +225,17 @@ function buildHookEntry(event, matcher, blockId, h, i) {
   return { id, event, matcher, command, scriptPath };
 }
 
+function processHookBlock(event, block, results) {
+  if (!block || typeof block !== 'object') return;
+  const matcher = typeof block.matcher === 'string' ? block.matcher : null;
+  const blockId = typeof block.id === 'string' ? block.id : null;
+  const handlers = Array.isArray(block.hooks) ? block.hooks : [];
+  for (let i = 0; i < handlers.length; i++) {
+    const entry = buildHookEntry(event, matcher, blockId, handlers[i], i);
+    if (entry) results.push(entry);
+  }
+}
+
 function buildHooks() {
   const raw = readFileSafe(HOOKS_JSON);
   if (!raw) return [];
@@ -240,14 +251,7 @@ function buildHooks() {
     const arr = root[event];
     if (!Array.isArray(arr)) continue;
     for (const block of arr) {
-      if (!block || typeof block !== 'object') continue;
-      const matcher = typeof block.matcher === 'string' ? block.matcher : null;
-      const blockId = typeof block.id === 'string' ? block.id : null;
-      const handlers = Array.isArray(block.hooks) ? block.hooks : [];
-      for (let i = 0; i < handlers.length; i++) {
-        const entry = buildHookEntry(event, matcher, blockId, handlers[i], i);
-        if (entry) results.push(entry);
-      }
+      processHookBlock(event, block, results);
     }
   }
   return results;

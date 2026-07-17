@@ -168,6 +168,80 @@ function runExternalCommand(command, args, options = {}) {
   return result;
 }
 
+function performGitUpdate(repoRoot, env, execute) {
+  const isGitRepo = fs.existsSync(path.join(repoRoot, '.git'));
+  if (!isGitRepo) {
+    // npm-installed: git pull is not applicable. Reinstall from current package.
+    console.log(`EGC is installed via npm (v${PKG_VERSION}).`);
+    console.log('To upgrade to a newer version, run: npm install -g @egchq/egc@latest');
+    console.log('Reinstalling current version into managed targets...\n');
+  } else {
+    execute('git', ['fetch', '--all', '--prune'], { cwd: repoRoot, env });
+    try {
+      execute('git', ['pull', '--ff-only'], { cwd: repoRoot, env });
+    } catch (pullError) {
+      const msg = String(pullError.message || '');
+      if (msg.includes('no tracking information') || msg.includes('set-upstream')) {
+        throw new Error(
+          'git pull failed: no upstream tracking branch configured.\n' +
+          'To update: npm install -g @egchq/egc@latest\n' +
+          'Or set upstream: git branch --set-upstream-to=origin/<branch>',
+          { cause: pullError }
+        );
+      }
+      throw pullError;
+    }
+  }
+}
+
+function applyInstalls(validRecords, options, repoRoot, env, execute) {
+  const results = [];
+  for (const entry of validRecords) {
+    const installArgs = buildInstallApplyArgs(entry.record);
+    const args = [
+      path.join(repoRoot, 'scripts', 'install-apply.js'),
+      ...installArgs,
+      '--json',
+    ];
+
+    if (options.dryRun) {
+      args.push('--dry-run');
+    }
+
+    try {
+      const commandResult = execute(process.execPath, args, {
+        cwd: determineInstallCwd(entry.record, repoRoot),
+        env,
+      });
+
+      let payload = null;
+      if (commandResult.stdout?.trim()) {
+        payload = JSON.parse(commandResult.stdout);
+      }
+
+      results.push({
+        adapter: entry.record.adapter,
+        installStatePath: entry.record.installStatePath,
+        repoRoot,
+        cwd: determineInstallCwd(entry.record, repoRoot),
+        installArgs,
+        status: options.dryRun ? 'planned' : 'updated',
+        payload,
+      });
+    } catch (error) {
+      results.push({
+        adapter: entry.record.adapter,
+        installStatePath: entry.record.installStatePath,
+        repoRoot,
+        installArgs,
+        status: 'error',
+        error: error.message,
+      });
+    }
+  }
+  return results;
+}
+
 function runAutoUpdate(options = {}, dependencies = {}) {
   const discover = dependencies.discoverInstalledStates || discoverInstalledStates;
   const execute = dependencies.runExternalCommand || runExternalCommand;
@@ -243,74 +317,10 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   };
 
   if (!options.dryRun) {
-    const isGitRepo = fs.existsSync(path.join(repoRoot, '.git'));
-    if (!isGitRepo) {
-      // npm-installed: git pull is not applicable. Reinstall from current package.
-      console.log(`EGC is installed via npm (v${PKG_VERSION}).`);
-      console.log('To upgrade to a newer version, run: npm install -g @egchq/egc@latest');
-      console.log('Reinstalling current version into managed targets...\n');
-    } else {
-      execute('git', ['fetch', '--all', '--prune'], { cwd: repoRoot, env });
-      try {
-        execute('git', ['pull', '--ff-only'], { cwd: repoRoot, env });
-      } catch (pullError) {
-        const msg = String(pullError.message || '');
-        if (msg.includes('no tracking information') || msg.includes('set-upstream')) {
-          throw new Error(
-            'git pull failed: no upstream tracking branch configured.\n' +
-            'To update: npm install -g @egchq/egc@latest\n' +
-            'Or set upstream: git branch --set-upstream-to=origin/<branch>',
-            { cause: pullError }
-          );
-        }
-        throw pullError;
-      }
-    }
+    performGitUpdate(repoRoot, env, execute);
   }
 
-  for (const entry of validRecords) {
-    const installArgs = buildInstallApplyArgs(entry.record);
-    const args = [
-      path.join(repoRoot, 'scripts', 'install-apply.js'),
-      ...installArgs,
-      '--json',
-    ];
-
-    if (options.dryRun) {
-      args.push('--dry-run');
-    }
-
-    try {
-      const commandResult = execute(process.execPath, args, {
-        cwd: determineInstallCwd(entry.record, repoRoot),
-        env,
-      });
-
-      let payload = null;
-      if (commandResult.stdout?.trim()) {
-        payload = JSON.parse(commandResult.stdout);
-      }
-
-      results.push({
-        adapter: entry.record.adapter,
-        installStatePath: entry.record.installStatePath,
-        repoRoot,
-        cwd: determineInstallCwd(entry.record, repoRoot),
-        installArgs,
-        status: options.dryRun ? 'planned' : 'updated',
-        payload,
-      });
-    } catch (error) {
-      results.push({
-        adapter: entry.record.adapter,
-        installStatePath: entry.record.installStatePath,
-        repoRoot,
-        installArgs,
-        status: 'error',
-        error: error.message,
-      });
-    }
-  }
+  results.push(...applyInstalls(validRecords, options, repoRoot, env, execute));
 
   return {
     dryRun: Boolean(options.dryRun),

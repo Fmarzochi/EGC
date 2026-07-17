@@ -37,44 +37,7 @@ function sh(args, cwd) {
 let passed = 0, failed = 0;
 function ok(cond, msg) { if (cond) { console.log('  PASS: ' + msg); passed++; } else { console.log('  FAIL: ' + msg); failed++; } }
 
-(async () => { try {
-  console.log('=== E2E Direct Module Test ===\n');
-  console.log(`Sandbox home: ${SANDBOX_HOME}`);
-
-  // 1. Create remote bare repo via git
-  fs.mkdirSync(REMOTE, { recursive: true });
-  sh(['init', '--bare'], REMOTE);
-  console.log('1. Remote repo created at ' + REMOTE);
-  ok(fs.existsSync(path.join(REMOTE, 'HEAD')), 'remote git repo initialized');
-
-  // 2. Clean slate in sandbox
-  if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true });
-  if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON);
-  if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true });
-
-  // 3. Load and test the modules directly (after sandbox env is set)
-  const EGC_ROOT = path.resolve(__dirname, '..');
-  const { teamInit, teamSync, teamStatus, getTeamConfig, writeTeamConfig } = require(path.join(EGC_ROOT, 'mcp/servers/egc-memory/build/sync/TeamSync.js'));
-  const { SyncBackend } = require(path.join(EGC_ROOT, 'mcp/servers/egc-memory/build/sync/SyncBackend.js'));
-  const { GitBackend } = require(path.join(EGC_ROOT, 'mcp/servers/egc-memory/build/sync/GitBackend.js'));
-
-  ok(typeof teamInit === 'function', 'teamInit exports as function');
-  ok(typeof teamSync === 'function', 'teamSync exports as function');
-  ok(typeof teamStatus === 'function', 'teamStatus exports as function');
-  ok(typeof GitBackend === 'function', 'GitBackend class exports');
-
-  // 4. Test getTeamConfig returns null before init
-  ok(getTeamConfig() === null, 'getTeamConfig returns null before init');
-
-  // 5. Test writeTeamConfig / getTeamConfig round-trip
-  writeTeamConfig({ backend: 'git', remote: REMOTE, branch: 'main' });
-  const cfg = getTeamConfig();
-  ok(cfg !== null, 'getTeamConfig returns config after write');
-  ok(cfg.backend === 'git', 'config backend is git');
-  ok(cfg.remote === REMOTE, 'config remote matches');
-  ok(cfg.branch === 'main', 'config branch is main');
-
-  // 6. Test GitBackend directly
+async function runGitBackendTests(GitBackend, REMOTE, SYNCDIR) {
   console.log('\n2. Testing GitBackend directly...');
   const gitBackend = new GitBackend();
   ok(typeof gitBackend.init === 'function', 'GitBackend has init method');
@@ -90,7 +53,9 @@ function ok(cond, msg) { if (cond) { console.log('  PASS: ' + msg); passed++; } 
   const preStatus = await gitBackend.status();
   ok(preStatus.lastSyncTime === null, 'status reports no last sync before first push');
   ok(preStatus.remoteUrl === REMOTE, 'status reports correct remote URL');
+}
 
+async function runTeamSyncTests(teamInit, teamSync, teamStatus, REMOTE, STATEDIR, SYNCDIR, TEAMJSON) {
   // 7. Create state file
   fs.mkdirSync(STATEDIR, { recursive: true });
   const stateContent = [
@@ -143,7 +108,9 @@ function ok(cond, msg) { if (cond) { console.log('  PASS: ' + msg); passed++; } 
   ok(fs.existsSync(syncedStateDir), 'sync repo has state directory');
   const syncedFiles = fs.readdirSync(syncedStateDir);
   ok(syncedFiles.length > 0, 'state files synced to team-sync: ' + syncedFiles.join(', '));
+}
 
+function verifyBuildOutput(EGC_ROOT, SyncBackend) {
   // 13. Test SyncBackend abstract class
   console.log('\n7. Testing SyncBackend abstract class...');
   ok(typeof SyncBackend === 'function', 'SyncBackend class exports');
@@ -158,6 +125,48 @@ function ok(cond, msg) { if (cond) { console.log('  PASS: ' + msg); passed++; } 
   ok(buildIndex.includes('teamInit'), 'build/index.js references teamInit');
   ok(buildIndex.includes('teamSync'), 'build/index.js references teamSync');
   ok(buildIndex.includes('teamStatus'), 'build/index.js references teamStatus');
+}
+
+(async () => { try {
+  console.log('=== E2E Direct Module Test ===\n');
+  console.log(`Sandbox home: ${SANDBOX_HOME}`);
+
+  // 1. Create remote bare repo via git
+  fs.mkdirSync(REMOTE, { recursive: true });
+  sh(['init', '--bare'], REMOTE);
+  console.log('1. Remote repo created at ' + REMOTE);
+  ok(fs.existsSync(path.join(REMOTE, 'HEAD')), 'remote git repo initialized');
+
+  // 2. Clean slate in sandbox
+  if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true });
+  if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON);
+  if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true });
+
+  // 3. Load and test the modules directly (after sandbox env is set)
+  const EGC_ROOT = path.resolve(__dirname, '..');
+  const { teamInit, teamSync, teamStatus, getTeamConfig, writeTeamConfig } = require(path.join(EGC_ROOT, 'mcp/servers/egc-memory/build/sync/TeamSync.js'));
+  const { SyncBackend } = require(path.join(EGC_ROOT, 'mcp/servers/egc-memory/build/sync/SyncBackend.js'));
+  const { GitBackend } = require(path.join(EGC_ROOT, 'mcp/servers/egc-memory/build/sync/GitBackend.js'));
+
+  ok(typeof teamInit === 'function', 'teamInit exports as function');
+  ok(typeof teamSync === 'function', 'teamSync exports as function');
+  ok(typeof teamStatus === 'function', 'teamStatus exports as function');
+  ok(typeof GitBackend === 'function', 'GitBackend class exports');
+
+  // 4. Test getTeamConfig returns null before init
+  ok(getTeamConfig() === null, 'getTeamConfig returns null before init');
+
+  // 5. Test writeTeamConfig / getTeamConfig round-trip
+  writeTeamConfig({ backend: 'git', remote: REMOTE, branch: 'main' });
+  const cfg = getTeamConfig();
+  ok(cfg !== null, 'getTeamConfig returns config after write');
+  ok(cfg.backend === 'git', 'config backend is git');
+  ok(cfg.remote === REMOTE, 'config remote matches');
+  ok(cfg.branch === 'main', 'config branch is main');
+
+  await runGitBackendTests(GitBackend, REMOTE, SYNCDIR);
+  await runTeamSyncTests(teamInit, teamSync, teamStatus, REMOTE, STATEDIR, SYNCDIR, TEAMJSON);
+  verifyBuildOutput(EGC_ROOT, SyncBackend);
 
   // Cleanup
   console.log('\n--- Cleaning up ---');
