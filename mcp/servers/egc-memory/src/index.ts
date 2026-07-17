@@ -149,7 +149,7 @@ class SQLiteArbitrationQueue {
     });
   }
 
-  private async processNext() {
+  private async processNext() { // NOSONAR: queue processor keeps the single-threaded invariant and SQLITE_BUSY retry logic in one read
     // SINGLE-THREADED INVARIANT:
     // In Node.js, async functions run to the first await synchronously.
     // This synchronous execution until the first await guarantees that
@@ -206,27 +206,25 @@ const writeArbitrator = new SQLiteArbitrationQueue();
 // ============================================================================
 // Boot & Migrations
 // ============================================================================
-async function runMigrations(db: Database, dbDir: string) {
-  const lockFile = path.join(dbDir, 'migration.lock');
-
-  // Remove stale lock from a previous crashed process
-  if (fs.existsSync(lockFile)) {
-    try {
-      const storedPid = Number.parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
-      if (!isNaN(storedPid) && storedPid !== process.pid) {
-        // Check if the PID is still alive (POSIX: signal 0 = probe only)
-        let alive = false;
-        try { process.kill(storedPid, 0); alive = true; } catch (_) { // NOSONAR: probe failure means the PID is dead
-          // non-critical: if signal probe fails, treat PID as dead and clear lock
-        }
-        if (!alive) fs.unlinkSync(lockFile);
+function clearStaleMigrationLock(lockFile: string) {
+  if (!fs.existsSync(lockFile)) return;
+  try {
+    const storedPid = Number.parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
+    if (!isNaN(storedPid) && storedPid !== process.pid) {
+      // Check if the PID is still alive (POSIX: signal 0 = probe only)
+      let alive = false;
+      try { process.kill(storedPid, 0); alive = true; } catch (_) { // NOSONAR: probe failure means the PID is dead
+        // non-critical: if signal probe fails, treat PID as dead and clear lock
       }
-    } catch (e) {
-      // non-critical: if lock file is unreadable, proceed and attempt to acquire
-      console.error('[EGC memory] Could not read migration lock file:', String(e));
+      if (!alive) fs.unlinkSync(lockFile);
     }
+  } catch (e) {
+    // non-critical: if lock file is unreadable, proceed and attempt to acquire
+    console.error('[EGC memory] Could not read migration lock file:', String(e));
   }
+}
 
+async function acquireMigrationLock(lockFile: string): Promise<void> {
   let locked = false;
   let retries = 50;
   while (!locked && retries > 0) {
@@ -238,8 +236,14 @@ async function runMigrations(db: Database, dbDir: string) {
       await new Promise(r => setTimeout(r, 100));
     }
   }
-
   if (!locked) throw new Error('Timeout acquiring migration lock');
+}
+
+async function runMigrations(db: Database, dbDir: string) {
+  const lockFile = path.join(dbDir, 'migration.lock');
+
+  clearStaleMigrationLock(lockFile);
+  await acquireMigrationLock(lockFile);
 
   try {
     log('INFO', 'Running SQLite migrations');

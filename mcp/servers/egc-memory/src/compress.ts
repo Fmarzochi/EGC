@@ -258,7 +258,7 @@ function readObsFile(filePath: string, limit: number, since?: string): RawObserv
   return observations.slice(-limit);
 }
 
-export async function replaceObservation(projectPath: string, id: string, compressed: CompressedObservation): Promise<void> {
+export async function replaceObservation(projectPath: string, id: string, compressed: CompressedObservation): Promise<void> { // NOSONAR: dual-backend persistence path kept inline
   const { projectDir } = getProjectHash(projectPath);
   const dbPath = resolveStateStoreDbPath();
 
