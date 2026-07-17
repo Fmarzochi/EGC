@@ -69,7 +69,7 @@ function parseUpdatedMs(updated) {
 }
 
 function deriveWorkerHealth(rawWorker) {
-  const state = (rawWorker.status && rawWorker.status.state) || 'unknown';
+  const state = rawWorker.status?.state || 'unknown';
   const completedStates = ['completed', 'succeeded', 'success', 'done'];
   const failedStates = ['failed', 'error'];
 
@@ -78,9 +78,9 @@ function deriveWorkerHealth(rawWorker) {
 
   if (state === 'running' || state === 'active') {
     const pane = rawWorker.pane;
-    if (pane && pane.dead) return 'degraded';
+    if (pane?.dead) return 'degraded';
 
-    const updatedMs = parseUpdatedMs(rawWorker.status && rawWorker.status.updated);
+    const updatedMs = parseUpdatedMs(rawWorker.status?.updated);
     if (updatedMs === null) return 'stale';
     if (Date.now() - updatedMs > STALE_THRESHOLD_MS) return 'stale';
     return 'healthy';
@@ -115,7 +115,7 @@ function summarizeRawWorkerStates(snapshot) {
   }
 
   return (snapshot.workers || []).reduce((counts, worker) => {
-    const state = worker && worker.status && worker.status.state
+    const state = worker?.status?.state
       ? worker.status.state
       : 'unknown';
     counts[state] = (counts[state] || 0) + 1;
@@ -307,7 +307,7 @@ function writeFallbackSessionRecording(snapshot, options = {}) {
       : recordedAt,
     updatedAt: recordedAt,
     latest: snapshot,
-    history: Array.isArray(existing && existing.history)
+    history: Array.isArray(existing?.history)
       ? (snapshotChanged
           ? existing.history.concat([{ recordedAt, snapshot }])
           : existing.history)
@@ -334,8 +334,7 @@ function loadStateStore(options = {}) {
   try {
     return loadStateStoreImpl();
   } catch (error) {
-    const missingRequestedModule = error
-      && error.code === 'MODULE_NOT_FOUND'
+    const missingRequestedModule = error?.code === 'MODULE_NOT_FOUND'
       && typeof error.message === 'string'
       && error.message.includes('../state-store');
 
@@ -360,19 +359,19 @@ function resolveStateStoreWriter(stateStore) {
     { owner: stateStore, fn: stateStore.writeSessionSnapshot },
     {
       owner: stateStore.sessions,
-      fn: stateStore.sessions && stateStore.sessions.persistCanonicalSessionSnapshot
+      fn: stateStore.sessions?.persistCanonicalSessionSnapshot
     },
     {
       owner: stateStore.sessions,
-      fn: stateStore.sessions && stateStore.sessions.recordCanonicalSessionSnapshot
+      fn: stateStore.sessions?.recordCanonicalSessionSnapshot
     },
     {
       owner: stateStore.sessions,
-      fn: stateStore.sessions && stateStore.sessions.persistSessionSnapshot
+      fn: stateStore.sessions?.persistSessionSnapshot
     },
     {
       owner: stateStore.sessions,
-      fn: stateStore.sessions && stateStore.sessions.recordSessionSnapshot
+      fn: stateStore.sessions?.recordSessionSnapshot
     }
   ];
 

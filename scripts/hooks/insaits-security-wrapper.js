@@ -59,13 +59,13 @@ function spawnPythonMonitor(pyScript, input) {
     });
 
     // ENOENT means binary not found - try next candidate
-    if (result.error && result.error.code === 'ENOENT') {
+    if (result.error?.code === 'ENOENT') {
       continue;
     }
     break;
   }
 
-  if (!result || (result.error && result.error.code === 'ENOENT')) {
+  if (!result || result.error?.code === 'ENOENT') {
     return null;
   }
 

@@ -21,9 +21,7 @@ function buildDefaultAdapterOptions(options, adapterId) {
 
   return {
     ...sharedOptions,
-    ...(options.adapterOptions && options.adapterOptions[adapterId]
-      ? options.adapterOptions[adapterId]
-      : {})
+    ...(options.adapterOptions?.[adapterId] ?? {})
   };
 }
 

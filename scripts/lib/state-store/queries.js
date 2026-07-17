@@ -51,7 +51,7 @@ function mapSessionRow(row) {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     snapshot,
-    workerCount: Array.isArray(snapshot && snapshot.workers) ? snapshot.workers.length : 0,
+    workerCount: Array.isArray(snapshot?.workers) ? snapshot.workers.length : 0,
     inputTokens: row.input_tokens ?? null,
     outputTokens: row.output_tokens ?? null,
     totalTokens: row.total_tokens ?? null,
@@ -894,7 +894,7 @@ function createQueryApi(db) {
       return null;
     }
 
-    const workers = Array.isArray(session.snapshot && session.snapshot.workers)
+    const workers = Array.isArray(session.snapshot?.workers)
       ? session.snapshot.workers.map(worker => ({ ...worker }))
       : [];
 

@@ -51,7 +51,7 @@ function getEntityValidator(entityName) {
   const schema = readSchema();
   const definitionName = ENTITY_DEFINITIONS[entityName];
 
-  if (!definitionName || !schema.$defs || !schema.$defs[definitionName]) {
+  if (!definitionName || !schema.$defs?.[definitionName]) {
     throw new Error(`Unknown state-store schema entity: ${entityName}`);
   }
 

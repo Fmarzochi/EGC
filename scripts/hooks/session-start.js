@@ -242,7 +242,7 @@ function selectMatchingSession(sessions, cwd, currentProject) {
 }
 
 function flushInstinct(current, contentLines, instincts) {
-  if (current && current.id) {
+  if (current?.id) {
     current.content = contentLines.join('\n').trim();
     instincts.push(current);
   }
