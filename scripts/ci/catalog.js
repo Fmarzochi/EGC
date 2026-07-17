@@ -57,30 +57,39 @@ function listSkillsRecursive(skillsRoot) {
   const topLevel = fs.readdirSync(skillsRoot, { withFileTypes: true });
 
   for (const entry of topLevel) {
-    if (!entry.isDirectory()) continue;
-    const entryPath = path.join(skillsRoot, entry.name);
-
-    if (fs.existsSync(path.join(entryPath, 'SKILL.md'))) {
-      found.push(`${entry.name}/SKILL.md`);
-      continue;
-    }
-
-    let children;
-    try {
-      children = fs.readdirSync(entryPath, { withFileTypes: true });
-    } catch (_err) { // NOSONAR: unreadable entry dir is skipped
-      continue;
-    }
-    for (const child of children) {
-      if (!child.isDirectory()) continue;
-      const childPath = path.join(entryPath, child.name);
-      if (fs.existsSync(path.join(childPath, 'SKILL.md'))) {
-        found.push(`${entry.name}/${child.name}/SKILL.md`);
-      }
-    }
+    processTopLevelEntry(entry, skillsRoot, found);
   }
 
   return found.sort((a, b) => a.localeCompare(b));
+}
+
+function processTopLevelEntry(entry, skillsRoot, found) {
+  if (!entry.isDirectory()) {
+    return;
+  }
+  const entryPath = path.join(skillsRoot, entry.name);
+
+  if (fs.existsSync(path.join(entryPath, 'SKILL.md'))) {
+    found.push(`${entry.name}/SKILL.md`);
+    return;
+  }
+
+  const children = getChildrenDirs(entryPath);
+  for (const child of children) {
+    const childPath = path.join(entryPath, child.name);
+    if (fs.existsSync(path.join(childPath, 'SKILL.md'))) {
+      found.push(`${entry.name}/${child.name}/SKILL.md`);
+    }
+  }
+}
+
+function getChildrenDirs(entryPath) {
+  try {
+    return fs.readdirSync(entryPath, { withFileTypes: true })
+      .filter(child => child.isDirectory());
+  } catch (_err) { // NOSONAR: unreadable entry dir is skipped
+    return [];
+  }
 }
 
 function buildCatalog(root = ROOT) {

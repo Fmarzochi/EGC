@@ -68,32 +68,42 @@ function parseArgs(argv) {
   parsed.command = args[0];
 
   for (let index = 1; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--family') {
-      if (!args[index + 1]) {
-        throw new Error('Missing value for --family');
-      }
-      parsed.family = normalizeFamily(args[index + 1]);
-      index += 1;
-    } else if (arg === '--target') {
-      if (!args[index + 1]) {
-        throw new Error('Missing value for --target');
-      }
-      parsed.target = args[index + 1];
-      index += 1;
-    } else if (parsed.command === 'show' && !parsed.componentId) {
-      parsed.componentId = arg;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
+    index = processArg(args, index, parsed);
   }
 
   return parsed;
+}
+
+function processArg(args, index, parsed) {
+  const arg = args[index];
+
+  if (arg === '--help' || arg === '-h') {
+    parsed.help = true;
+    return index;
+  }
+  if (arg === '--json') {
+    parsed.json = true;
+    return index;
+  }
+  if (arg === '--family') {
+    if (!args[index + 1]) {
+      throw new Error('Missing value for --family');
+    }
+    parsed.family = normalizeFamily(args[index + 1]);
+    return index + 1;
+  }
+  if (arg === '--target') {
+    if (!args[index + 1]) {
+      throw new Error('Missing value for --target');
+    }
+    parsed.target = args[index + 1];
+    return index + 1;
+  }
+  if (parsed.command === 'show' && !parsed.componentId) {
+    parsed.componentId = arg;
+    return index;
+  }
+  throw new Error(`Unknown argument: ${arg}`);
 }
 
 function printProfiles(profiles) {
@@ -140,46 +150,62 @@ function main() {
       showHelp(0);
     }
 
-    if (options.command === 'profiles') {
-      const profiles = listInstallProfiles();
-      if (options.json) {
-        console.log(JSON.stringify({ profiles }, null, 2));
-      } else {
-        printProfiles(profiles);
-      }
-      return;
-    }
-
-    if (options.command === 'components') {
-      const components = listInstallComponents({
-        family: options.family,
-        target: options.target,
-      });
-      if (options.json) {
-        console.log(JSON.stringify({ components }, null, 2));
-      } else {
-        printComponents(components);
-      }
-      return;
-    }
-
-    if (options.command === 'show') {
-      if (!options.componentId) {
-        throw new Error('Catalog show requires an install component ID');
-      }
-      const component = getInstallComponent(options.componentId);
-      if (options.json) {
-        console.log(JSON.stringify(component, null, 2));
-      } else {
-        printComponent(component);
-      }
-      return;
-    }
-
-    throw new Error(`Unknown catalog command: ${options.command}`);
+    executeCommand(options);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
+  }
+}
+
+function executeCommand(options) {
+  if (options.command === 'profiles') {
+    handleProfiles(options);
+    return;
+  }
+
+  if (options.command === 'components') {
+    handleComponents(options);
+    return;
+  }
+
+  if (options.command === 'show') {
+    handleShow(options);
+    return;
+  }
+
+  throw new Error(`Unknown catalog command: ${options.command}`);
+}
+
+function handleProfiles(options) {
+  const profiles = listInstallProfiles();
+  if (options.json) {
+    console.log(JSON.stringify({ profiles }, null, 2));
+  } else {
+    printProfiles(profiles);
+  }
+}
+
+function handleComponents(options) {
+  const components = listInstallComponents({
+    family: options.family,
+    target: options.target,
+  });
+  if (options.json) {
+    console.log(JSON.stringify({ components }, null, 2));
+  } else {
+    printComponents(components);
+  }
+}
+
+function handleShow(options) {
+  if (!options.componentId) {
+    throw new Error('Catalog show requires an install component ID');
+  }
+  const component = getInstallComponent(options.componentId);
+  if (options.json) {
+    console.log(JSON.stringify(component, null, 2));
+  } else {
+    printComponent(component);
   }
 }
 
