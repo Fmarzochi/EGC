@@ -83,7 +83,7 @@ function validateEntity(entityName, payload) {
 function assertValidEntity(entityName, payload, label) {
   const result = validateEntity(entityName, payload);
   if (!result.valid) {
-    throw new Error(`Invalid ${entityName}${label ? ` (${label})` : ''}: ${formatValidationErrors(result.errors)}`);
+    throw new Error(`Invalid ${entityName}${label ? ' (' + label + ')' : ''}: ${formatValidationErrors(result.errors)}`);
   }
 }
 

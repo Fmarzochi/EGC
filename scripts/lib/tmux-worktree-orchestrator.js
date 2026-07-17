@@ -27,7 +27,7 @@ function renderTemplate(template, variables) {
 }
 
 function shellQuote(value) {
-  return `'${String(value).replaceAll("'", `'\\''`)}'`;
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
 }
 
 function formatCommand(program, args) {
@@ -47,7 +47,7 @@ function buildTemplateVariables(values) {
 }
 
 function buildSessionBannerCommand(sessionName, coordinationDir) {
-  return `printf '%s\\n' ${shellQuote(`Session: ${sessionName}`)} ${shellQuote(`Coordination: ${coordinationDir}`)}`;
+  return `printf '%s\\n' ${shellQuote('Session: ' + sessionName)} ${shellQuote('Coordination: ' + coordinationDir)}`;
 }
 
 function normalizeSeedPaths(seedPaths, repoRoot) {
@@ -333,7 +333,7 @@ function runCommand(program, args, options = {}) {
   }
   if (result.status !== 0) {
     const stderr = (result.stderr || '').trim();
-    throw new Error(`${program} ${args.join(' ')} failed${stderr ? `: ${stderr}` : ''}`);
+    throw new Error(`${program} ${args.join(' ')} failed${stderr ? ': ' + stderr : ''}`);
   }
   return result;
 }

@@ -138,7 +138,7 @@ ${chalk.bold('Files Tracked:')}    ${chalk.green(data.files)}
   instincts(instincts) {
     console.log('\n');
     console.log(box('Instincts Generated', instincts.map((inst, i) =>
-      `${chalk.yellow(`${i + 1}.`)} ${chalk.bold(inst.name)} ${chalk.gray(`(${Math.round(inst.confidence * 100)}%)`)}`
+      `${chalk.yellow((i + 1) + '.')} ${chalk.bold(inst.name)} ${chalk.gray('(' + Math.round(inst.confidence * 100) + '%)')}`
     ).join('\n')));
   }
 

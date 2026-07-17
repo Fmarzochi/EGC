@@ -109,7 +109,7 @@ function notifyMacOS(title, body) {
   const script = `display notification "${safeBody}" with title "${safeTitle}"`;
   const result = spawnSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 5000 });
   if (result.error || result.status !== 0) {
-    log(`[DesktopNotify] osascript failed: ${result.error ? result.error.message : `exit ${result.status}`}`);
+    log(`[DesktopNotify] osascript failed: ${result.error ? result.error.message : 'exit ' + result.status}`);
   }
 }
 

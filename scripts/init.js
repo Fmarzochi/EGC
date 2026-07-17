@@ -78,9 +78,9 @@ Examples:
 
 if (flags.help) showHelp();
 
-function ok(label, detail = '')  { console.log(`  ${c.green}${c.bold}✓${c.reset}  ${c.bold}${label}${c.reset}${detail ? `  ${c.dim}${detail}${c.reset}` : ''}`); }
-function skip(label, reason = '') { console.log(`  ${c.dim}-  ${label}${reason ? `  (${reason})` : ''}${c.reset}`); }
-function warn(label, reason = '') { console.log(`  ${c.yellow}!${c.reset}  ${label}${reason ? `  ${c.dim}${reason}${c.reset}` : ''}`); }
+function ok(label, detail = '')  { console.log(`  ${c.green}${c.bold}✓${c.reset}  ${c.bold}${label}${c.reset}${detail ? '  ' + c.dim + detail + c.reset : ''}`); }
+function skip(label, reason = '') { console.log(`  ${c.dim}-  ${label}${reason ? '  (' + reason + ')' : ''}${c.reset}`); }
+function warn(label, reason = '') { console.log(`  ${c.yellow}!${c.reset}  ${label}${reason ? '  ' + c.dim + reason + c.reset : ''}`); }
 function log(msg) { console.log(msg); }
 function logDry(msg) { if (flags.dryRun) console.log(`  ${c.dim}[dry-run] ${msg}${c.reset}`); }
 function logAction(msg) { console.log(`  ${c.dim}${flags.dryRun ? '[dry-run] ' : ''}${msg}${c.reset}`); }

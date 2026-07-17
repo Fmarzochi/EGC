@@ -453,7 +453,7 @@ function resolveModuleDependencyGraph({
       if (dependencyOf) {
         const owners = excludedModuleOwners.get(moduleId) || [];
         throw new Error(
-          `Module ${dependencyOf} depends on excluded module ${moduleId}${owners.length > 0 ? ` (excluded by ${owners.join(', ')})` : ''}`
+          `Module ${dependencyOf} depends on excluded module ${moduleId}${owners.length > 0 ? ' (excluded by ' + owners.join(', ') + ')' : ''}`
         );
       }
       return;

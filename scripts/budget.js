@@ -76,7 +76,7 @@ function handleSet(args) {
   writeBudgetConfig(config);
   console.log('Budget config saved:');
   console.log(`  Max tokens: ${config.max_tokens !== null ? config.max_tokens.toLocaleString() : 'not set'}`);
-  console.log(`  Max cost:   ${config.max_cost_usd !== null ? `$${config.max_cost_usd.toFixed(2)}` : 'not set'}`);
+  console.log(`  Max cost:   ${config.max_cost_usd !== null ? '$' + config.max_cost_usd.toFixed(2) : 'not set'}`);
   console.log(`  Warn at:    ${config.warn_at_percent}%`);
   console.log(`  Action:     ${config.action}`);
 }

@@ -126,7 +126,7 @@ async function status() {
   const running = await isRunning();
   const pid = readPid();
   if (running) {
-    console.log(`running  http://localhost:${PORT}${pid ? `  (pid ${pid})` : ''}`);
+    console.log(`running  http://localhost:${PORT}${pid ? '  (pid ' + pid + ')' : ''}`);
   } else {
     console.log('stopped');
   }

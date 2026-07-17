@@ -252,7 +252,7 @@ function validateInstallState(state) {
 function assertValidInstallState(state, label) {
   const result = validateInstallState(state);
   if (!result.valid) {
-    throw new Error(`Invalid install-state${label ? ` (${label})` : ''}: ${formatValidationErrors(result.errors)}`);
+    throw new Error(`Invalid install-state${label ? ' (' + label + ')' : ''}: ${formatValidationErrors(result.errors)}`);
   }
 }
 

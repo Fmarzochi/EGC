@@ -162,7 +162,7 @@ function runExternalCommand(command, args, options = {}) {
 
   if (typeof result.status === 'number' && result.status !== 0) {
     const errorOutput = (result.stderr || result.stdout || '').trim();
-    throw new Error(`${command} ${args.join(' ')} failed${errorOutput ? `: ${errorOutput}` : ''}`);
+    throw new Error(`${command} ${args.join(' ')} failed${errorOutput ? ': ' + errorOutput : ''}`);
   }
 
   return result;
