@@ -128,9 +128,9 @@ class SqlJsDatabase {
     try {
       this._flushPersist();
     } catch (_) {
-      // Ignore persist errors on close to prevent masking original errors
+      // ignore: persist errors on close are safely swallowed to prevent masking original errors
     } finally {
-      try { this._db.close(); } catch (_) { /* ignore close errors */ }
+      try { this._db.close(); } catch (_) { /* ignore: close errors are safely swallowed during shutdown */ }
       this._db = null;
     }
   }
@@ -154,9 +154,7 @@ class SqlJsDatabase {
       try {
         this._flushPersist();
       } catch (_) {
-        // _flushPersist already logs the failure. Swallowing it here keeps a
-        // failed debounced write from becoming an unhandled exception inside
-        // a bare setTimeout callback, which would crash the process.
+        // ignore: _flushPersist already logs the failure. Swallowing it here keeps a failed debounced write from crashing the process inside a setTimeout callback
       }
     }, 50);
   }

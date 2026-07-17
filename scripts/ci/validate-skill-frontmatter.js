@@ -24,7 +24,7 @@ function isCategoryRoot(dir) {
   try {
     const children = fs.readdirSync(dir, { withFileTypes: true });
     return children.some(c => c.isDirectory() && hasSkillMd(path.join(dir, c.name)));
-  } catch (_) { /* unreadable directory: not a category root */
+  } catch (_) { /* ignore: unreadable directory safely means it is not a category root */
     return false;
   }
 }

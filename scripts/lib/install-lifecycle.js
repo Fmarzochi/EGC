@@ -581,6 +581,7 @@ function inspectMergeJsonOperation(operation, destinationPath) {
       return inspectResult('drifted', operation, destinationPath);
     }
   } catch (_error) {
+    // ignore: parsing or merge failure means the content has drifted from expected schema
     return inspectResult('drifted', operation, destinationPath);
   }
   return inspectResult('ok', operation, destinationPath);

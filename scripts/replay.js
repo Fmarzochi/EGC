@@ -44,7 +44,7 @@ function fetchJSON(path) {
       res.on('data', d => data += d);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch (_e) { reject(new Error('Invalid JSON response')); }
+        catch (_e) { /* ignore: original parse error is replaced by a clearer Invalid JSON response error */ reject(new Error('Invalid JSON response')); }
       });
     }).on('error', () => {
       reject(new Error(
@@ -62,6 +62,7 @@ function openBrowser(url) {
     else if (platform === 'win32') execSync(`start "" "${url}"`);
     else execSync(`xdg-open "${url}"`);
   } catch (_) {
+    // ignore: fallback to manual URL output if OS-specific open command fails
     console.log('Open this URL in your browser: ' + url);
   }
 }

@@ -249,7 +249,7 @@ if (!flags.dryRun) {
       const url = 'http://localhost:7890';
       const cmd = process.platform === 'win32' ? 'start' :
                   process.platform === 'darwin' ? 'open' : 'xdg-open';
-      try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* best-effort */ }
+      try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ }
     };
     dashPing.then(already => {
       if (already) {

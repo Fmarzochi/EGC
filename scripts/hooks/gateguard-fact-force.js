@@ -160,7 +160,7 @@ function atomicRenameFile(tmpFile, stateFile) {
     fs.renameSync(tmpFile, stateFile);
   } catch (error) {
     if (error && (error.code === 'EEXIST' || error.code === 'EPERM')) {
-      try { fs.unlinkSync(stateFile); } catch (_) { /* ignore */ }
+      try { fs.unlinkSync(stateFile); } catch (_) { /* ignore: best-effort unlink before retry, subsequent renameSync will handle failures */ }
       fs.renameSync(tmpFile, stateFile);
     } else {
       throw error;
@@ -190,7 +190,7 @@ function saveState(state) {
     tmpFile = null;
     return true;
   } catch (_) {
-    if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_2) { /* ignore */ } }
+    if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_2) { /* ignore: best-effort cleanup of temporary state file during save failure */ } }
     return false;
   }
 }
