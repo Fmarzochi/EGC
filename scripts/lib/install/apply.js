@@ -141,6 +141,80 @@ function buildResolvedClaudeHooks(plan) {
   };
 }
 
+function applyHookOperation(operation) {
+  if (operation.hookEvent === STOP_EVENT) {
+    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
+    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
+    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
+  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
+    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else {
+    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+  }
+}
+
+function applyMergeJsonOperation(operation, disabledServers) {
+  const payload = cloneJsonValue(operation.mergePayload);
+  if (payload === undefined) {
+    throw new Error(`Missing merge payload for ${operation.destinationPath}`);
+  }
+
+  const filteredPayload = (
+    isMcpConfigPath(operation.destinationPath) && disabledServers.length > 0
+  )
+    ? filterMcpConfig(payload, disabledServers).config
+    : payload;
+
+  const currentValue = fs.existsSync(operation.destinationPath)
+    ? readJsonObject(operation.destinationPath, 'existing JSON config')
+    : {};
+  const mergedValue = deepMergeJson(currentValue, filteredPayload);
+  fs.writeFileSync(operation.destinationPath, formatJson(mergedValue), 'utf8');
+}
+
+function applyMergeYamlReadListOperation(operation) {
+  if (!operation.readEntry) {
+    throw new Error(`Missing readEntry for ${operation.destinationPath}`);
+  }
+
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  let nextContent;
+  try {
+    nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+  } catch (error) {
+    // js-yaml's raw SyntaxError gives no indication of which file or
+    // that it's a YAML problem at all — matches readJsonObject's
+    // actionable-error convention above instead of a bare crash.
+    throw new Error(
+      `Failed to parse Aider config at ${operation.destinationPath}: ${error.message}`,
+      { cause: error },
+    );
+  }
+  fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+}
+
+function applyMergeMarkdownIndexOperation(operation) {
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  const nextContent = mergeSkillIndexEntry(existingContent, {
+    name: operation.skillName,
+    description: operation.skillDescription,
+    relativePath: operation.relativePath,
+  });
+  fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+}
+
+function applyMcpCopyFileOperation(operation, disabledServers) {
+  const sourceConfig = readJsonObject(operation.sourcePath, 'MCP config');
+  const filteredConfig = filterMcpConfig(sourceConfig, disabledServers).config;
+  fs.writeFileSync(operation.destinationPath, formatJson(filteredConfig), 'utf8');
+}
+
 function applyInstallPlan(plan) {
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
@@ -149,85 +223,18 @@ function applyInstallPlan(plan) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
     if (operation.kind === HOOK_OPERATION_KIND) {
-      if (operation.hookEvent === STOP_EVENT) {
-        applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
-      } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-        applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
-      } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-        applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
-      } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-        applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-      } else {
-        applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
-      }
-      continue;
+      applyHookOperation(operation);
+    } else if (operation.kind === 'merge-json') {
+      applyMergeJsonOperation(operation, disabledServers);
+    } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
+      applyMergeYamlReadListOperation(operation);
+    } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+      applyMergeMarkdownIndexOperation(operation);
+    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath) && disabledServers.length > 0) {
+      applyMcpCopyFileOperation(operation, disabledServers);
+    } else {
+      fs.copyFileSync(operation.sourcePath, operation.destinationPath);
     }
-
-    if (operation.kind === 'merge-json') {
-      const payload = cloneJsonValue(operation.mergePayload);
-      if (payload === undefined) {
-        throw new Error(`Missing merge payload for ${operation.destinationPath}`);
-      }
-
-      const filteredPayload = (
-        isMcpConfigPath(operation.destinationPath) && disabledServers.length > 0
-      )
-        ? filterMcpConfig(payload, disabledServers).config
-        : payload;
-
-      const currentValue = fs.existsSync(operation.destinationPath)
-        ? readJsonObject(operation.destinationPath, 'existing JSON config')
-        : {};
-      const mergedValue = deepMergeJson(currentValue, filteredPayload);
-      fs.writeFileSync(operation.destinationPath, formatJson(mergedValue), 'utf8');
-      continue;
-    }
-
-    if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
-      if (!operation.readEntry) {
-        throw new Error(`Missing readEntry for ${operation.destinationPath}`);
-      }
-
-      const existingContent = fs.existsSync(operation.destinationPath)
-        ? fs.readFileSync(operation.destinationPath, 'utf8')
-        : null;
-      let nextContent;
-      try {
-        nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
-      } catch (error) {
-        // js-yaml's raw SyntaxError gives no indication of which file or
-        // that it's a YAML problem at all — matches readJsonObject's
-        // actionable-error convention above instead of a bare crash.
-        throw new Error(
-          `Failed to parse Aider config at ${operation.destinationPath}: ${error.message}`,
-          { cause: error },
-        );
-      }
-      fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
-      continue;
-    }
-
-    if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
-      const existingContent = fs.existsSync(operation.destinationPath)
-        ? fs.readFileSync(operation.destinationPath, 'utf8')
-        : null;
-      const nextContent = mergeSkillIndexEntry(existingContent, {
-        name: operation.skillName,
-        description: operation.skillDescription,
-        relativePath: operation.relativePath,
-      });
-      fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
-      continue;
-    }
-
-    if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath) && disabledServers.length > 0) {
-      const sourceConfig = readJsonObject(operation.sourcePath, 'MCP config');
-      const filteredConfig = filterMcpConfig(sourceConfig, disabledServers).config;
-      fs.writeFileSync(operation.destinationPath, formatJson(filteredConfig), 'utf8');
-      continue;
-    }
-
-    fs.copyFileSync(operation.sourcePath, operation.destinationPath);
   }
 
   if (resolvedClaudeHooksPlan) {
