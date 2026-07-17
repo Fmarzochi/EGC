@@ -54,7 +54,7 @@ def project_root() -> Path:
             text=True
         ).strip()
         return Path(root).resolve()
-    except (subprocess.CalledProcessError, OSError, FileNotFoundError):
+    except (subprocess.CalledProcessError, OSError):
         return Path.cwd().resolve()
 
 
@@ -75,7 +75,7 @@ def project_id() -> str:
             stderr=subprocess.DEVNULL,
             text=True
         ).strip()
-    except (subprocess.CalledProcessError, OSError, FileNotFoundError):
+    except (subprocess.CalledProcessError, OSError):
         pass
 
     hash_input = remote_url if remote_url else str(root)

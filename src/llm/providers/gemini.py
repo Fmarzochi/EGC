@@ -120,6 +120,25 @@ class GeminiProvider(LLMProvider):
         except Exception as _e:
             logger.warning("PostToolUse dispatch on tool results failed: %s", _e)
 
+    def _build_message_parts(self, msg) -> list:
+        parts = []
+        role = msg.role.value
+        if role == "tool" and msg.tool_call_id:
+            try:
+                resp_data = json.loads(msg.content) if msg.content else {}
+            except ValueError:
+                resp_data = {"result": msg.content or ""}
+            parts.append(types.Part.from_function_response(
+                name=msg.name or "unknown_tool",
+                response=resp_data
+            ))
+        elif msg.tool_calls:
+            for tc in msg.tool_calls:
+                parts.append(types.Part.from_function_call(name=tc.name, args=tc.arguments))
+        else:
+            parts.append(types.Part.from_text(text=msg.content or ""))
+        return parts
+
     def _build_contents(self, messages: list) -> tuple[str | None, list]:
         system_instruction = None
         contents = []
@@ -129,21 +148,7 @@ class GeminiProvider(LLMProvider):
                 system_instruction = msg.content
                 continue
             gemini_role = "model" if role == "assistant" else "user"
-            parts = []
-            if role == "tool" and msg.tool_call_id:
-                try:
-                    resp_data = json.loads(msg.content) if msg.content else {}
-                except ValueError:
-                    resp_data = {"result": msg.content or ""}
-                parts.append(types.Part.from_function_response(
-                    name=msg.name or "unknown_tool",
-                    response=resp_data
-                ))
-            elif msg.tool_calls:
-                for tc in msg.tool_calls:
-                    parts.append(types.Part.from_function_call(name=tc.name, args=tc.arguments))
-            else:
-                parts.append(types.Part.from_text(text=msg.content or ""))
+            parts = self._build_message_parts(msg)
             if parts:
                 contents.append(types.Content(role=gemini_role, parts=parts))
         return system_instruction, contents
@@ -157,6 +162,16 @@ class GeminiProvider(LLMProvider):
         if tools_mapped:
             config_args["tools"] = tools_mapped
         return config_args
+
+    def _is_fallback_error(self, e: Exception) -> bool:
+        msg = str(e).lower()
+        if isinstance(e, APIError):
+            status = getattr(e, "code", 500)
+            if status in (403, 404, 429):
+                return True
+        if "403" in msg or "404" in msg or "429" in msg or "quota" in msg or "exhausted" in msg or "not found" in msg or "access" in msg:
+            return True
+        return False
 
     def _call_api_with_fallback(self, model_name: str, contents: list, config_args: dict, system_instruction: str | None):
         if system_instruction:
@@ -178,16 +193,8 @@ class GeminiProvider(LLMProvider):
                 break
             except Exception as e:
                 last_exception = e
-                msg = str(e).lower()
-                is_fallback_error = False
-                if isinstance(e, APIError):
-                    status = getattr(e, "code", 500)
-                    if status in (403, 404, 429):
-                        is_fallback_error = True
-                if "403" in msg or "404" in msg or "429" in msg or "quota" in msg or "exhausted" in msg or "not found" in msg or "access" in msg:
-                    is_fallback_error = True
                 next_model = self._fallback_chain.get(current_model) or ModelResolver.get_model_info(current_model).get("fallback")
-                if is_fallback_error and next_model and next_model not in tried_models:
+                if self._is_fallback_error(e) and next_model and next_model not in tried_models:
                     logger.warning("Gemini model %s unavailable (%s); falling back to %s", current_model, type(e).__name__, next_model)
                     current_model = next_model
                     continue
@@ -228,16 +235,20 @@ class GeminiProvider(LLMProvider):
         return validated_calls
 
     @staticmethod
+    def _check_api_error(e: APIError, msg: str) -> None:
+        status = getattr(e, "code", 500)
+        if status == 401 or status == 403 or "api key" in msg:
+            raise AuthenticationError(str(e), provider=ProviderType.GEMINI) from e
+        if status == 429 or "quota" in msg or "exhausted" in msg:
+            raise RateLimitError(str(e), provider=ProviderType.GEMINI) from e
+        if status == 400 and "token" in msg:
+            raise ContextLengthError(str(e), provider=ProviderType.GEMINI) from e
+
+    @staticmethod
     def _map_api_error(e: Exception) -> None:
         msg = str(e).lower()
         if isinstance(e, APIError):
-            status = getattr(e, "code", 500)
-            if status == 401 or status == 403 or "api key" in msg:
-                raise AuthenticationError(str(e), provider=ProviderType.GEMINI) from e
-            if status == 429 or "quota" in msg or "exhausted" in msg:
-                raise RateLimitError(str(e), provider=ProviderType.GEMINI) from e
-            if status == 400 and "token" in msg:
-                raise ContextLengthError(str(e), provider=ProviderType.GEMINI) from e
+            GeminiProvider._check_api_error(e, msg)
         if "401" in msg or "403" in msg or "authentication" in msg:
             raise AuthenticationError(str(e), provider=ProviderType.GEMINI) from e
         if "429" in msg or "rate" in msg or "quota" in msg:

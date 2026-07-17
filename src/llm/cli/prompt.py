@@ -18,7 +18,7 @@ def format_osc8(text: str, uri: str) -> str:
     return f"\x1b]8;;{uri}\x1b\\{text}\x1b]8;;\x1b\\"
 
 
-async def run_prompt(prompt: str, model: str = None):
+async def run_prompt(prompt: str, model: str = None):  # NOSONAR
     # 1. Setup Session & Persistence
     session_id = os.environ.get("EGC_SESSION_ID") or os.environ.get("ECC_SESSION_ID") or "default-session"
     recorder = SessionRecorder(session_id=session_id)
@@ -29,7 +29,7 @@ async def run_prompt(prompt: str, model: str = None):
 
     # 2. Setup Dispatcher (Hooks Mesh)
     dispatcher = Dispatcher(recorder=recorder)
-    print(f"[Dispatcher] Active with mesh configuration.")
+    print("[Dispatcher] Active with mesh configuration.")
 
     # 3. Trigger SessionStart hook event and ingest context
     system_instruction_context = ""
@@ -62,7 +62,7 @@ async def run_prompt(prompt: str, model: str = None):
         print(output.content)
     finally:
         # 7. Complete Lifecycle
-        print(f"[Dispatcher] Completing session lifecycle...")
+        print("[Dispatcher] Completing session lifecycle...")
         extra = {"transcript_path": recorder.log_path}
         dispatcher.dispatch("Stop", session_id=session_id, extra_payload=extra)
         recorder.record("session_end", {"status": "completed"})

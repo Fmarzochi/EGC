@@ -53,7 +53,7 @@ class Dispatcher:
         try:
             with open(hooks_json_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load hooks.json")
             return {"hooks": {}}
 

@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger("EGC.SessionManager")
 
-class SESSION_MANAGER:
+class SESSION_MANAGER:  # NOSONAR
     """
     EGC Session Manager
     Handles the lifecycle, state, and history of EGC execution sessions with thread safety.

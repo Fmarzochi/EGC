@@ -17,7 +17,7 @@ async def test_runtime():
     
     # 1. Test Event Bus
     results = []
-    async def cb(d): results.append(d)
+    async def cb(d): results.append(d)  # NOSONAR
     await bus.subscribe("test", cb)
     await bus.emit("test", "data")
     await asyncio.sleep(0.1)

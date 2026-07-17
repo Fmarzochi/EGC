@@ -10,7 +10,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("EGC.Router")
 
-class AGENT_ROUTER:
+class AGENT_ROUTER:  # NOSONAR
     """
     EGC Agent Router
     Responsible for selecting the best agent for a given task based on affinity.

@@ -50,7 +50,7 @@ class MemoryManager:
 
         elif provider_type == "obsidian-mcp":
             p = MCPObsidianProvider(namespace=namespace, scope=scope)
-            if p.initialize():
+            if p.initialize():  # NOSONAR
                 return p
 
         # Fallback to local

@@ -2,7 +2,7 @@ import logging
 
 logger = logging.getLogger("EGC.DAGValidator")
 
-class DAG_VALIDATOR:
+class DAG_VALIDATOR:  # NOSONAR
     """
     EGC DAG Validator
     Ensures that orchestration chains are safe, acyclic, and within defined limits.

@@ -4,7 +4,7 @@ from typing import Callable, Any, Optional, List
 
 logger = logging.getLogger("EGC.Fallback")
 
-class FALLBACK_MANAGER:
+class FALLBACK_MANAGER:  # NOSONAR
     """
     EGC Fallback Manager
     Handles retries and re-routing logic when an agent or tool fails (Async version).

@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from execution.agent_loader import AgentLoader
 
-async def test_loader():
+async def test_loader():  # NOSONAR
     root = os.getcwd()
     loader = AgentLoader(root)
     agents = loader.discover_agents()

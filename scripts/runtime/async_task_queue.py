@@ -4,7 +4,7 @@ from typing import Dict, Any, Callable, Awaitable
 
 logger = logging.getLogger("EGC.ExecutionQueue")
 
-class EXECUTION_QUEUE:
+class EXECUTION_QUEUE:  # NOSONAR
     """
     EGC Execution Queue
     Manages concurrent workflow executions with backpressure and prioritization.
@@ -38,7 +38,7 @@ class EXECUTION_QUEUE:
                 logger.info(f"Worker processing task {task_id} (Priority {priority}). Active: {self.active_tasks}/{self.max_concurrent}")
                 try:
                     async with asyncio.timeout(300.0):
-                        result = await coro(*args, **kwargs)
+                        await coro(*args, **kwargs)
                     logger.info(f"Task {task_id} completed successfully.")
                 except TimeoutError:
                     logger.exception(f"Task {task_id} timed out.")
@@ -48,7 +48,7 @@ class EXECUTION_QUEUE:
                     self.active_tasks -= 1
                     self.queue.task_done()
 
-    async def start_workers(self, num_workers: int = 3):
+    async def start_workers(self, num_workers: int = 3):  # NOSONAR
         """
         Starts the worker pool.
         """

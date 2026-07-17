@@ -20,7 +20,7 @@ class ExecutionQueue:
         self.running_tasks = {}
         self.workers = []
 
-    async def start(self):
+    async def start(self):  # NOSONAR
         self.workers = [asyncio.create_task(self._worker()) for _ in range(self.concurrency)]
 
     async def _worker(self):

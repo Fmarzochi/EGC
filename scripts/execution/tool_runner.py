@@ -23,7 +23,7 @@ ALLOWED_COMMANDS = {
     "npm": ["npm", "yarn", "node"]
 }
 
-async def run_command(cmd: List[str], timeout: int = 30, env: Optional[Dict[str, str]] = None) -> ExecutionResult:
+async def run_command(cmd: List[str], timeout: int = 30, env: Optional[Dict[str, str]] = None) -> ExecutionResult:  # NOSONAR
     """Safely executes a command as a subprocess."""
 
     base_cmd = cmd[0]

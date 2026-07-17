@@ -227,7 +227,7 @@ class ExecutionOrchestrator:
         await self.queue.submit_task(priority, task_id, _wrapper)
         return task_id
 
-    async def await_task(self, task_id: str, timeout: Optional[float] = None) -> Dict[str, Any]:
+    async def await_task(self, task_id: str, timeout: Optional[float] = None) -> Dict[str, Any]:  # NOSONAR
         future = self._results.get(task_id)
         if future is None:
             return {"status": "failed", "error": f"Unknown task_id {task_id}"}

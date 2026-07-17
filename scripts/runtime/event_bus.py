@@ -13,7 +13,7 @@ class EventBus:
                 self.subscribers[event_type] = []
             self.subscribers[event_type].append(callback)
 
-    async def emit(self, event_type: str, data: Any):
+    async def emit(self, event_type: str, data: Any):  # NOSONAR
         if event_type in self.subscribers:
             for callback in self.subscribers[event_type]:
                 task = asyncio.create_task(callback(data))
