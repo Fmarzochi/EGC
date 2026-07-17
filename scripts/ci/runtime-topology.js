@@ -280,7 +280,7 @@ function readSource(relative) {
     const abs = path.join(ROOT, relative);
     try {
         return fs.readFileSync(abs, 'utf8');
-    } catch (_err) {
+    } catch (_err) { // NOSONAR: unreadable file is treated as empty content
         return '';
     }
 }

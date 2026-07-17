@@ -202,7 +202,7 @@ class StateWatcher {
 
   stop() {
     for (const watcher of this._watchers.values()) {
-      try { watcher.close(); } catch (_) { /* ignore */ }
+      try { watcher.close(); } catch (_) { /* ignore */ } // NOSONAR
     }
     this._watchers.clear();
     for (const timer of this._timers.values()) {
@@ -261,7 +261,7 @@ class StateWatcher {
     let content;
     try {
       content = fs.readFileSync(filePath, 'utf-8');
-    } catch (_) {
+    } catch (_) { // NOSONAR: unreadable state file is skipped by design
       return;
     }
 
@@ -289,7 +289,7 @@ class StateWatcher {
       try {
         stateUpdated = mergeBlockIntoStateFile(stateFilePath, block);
         if (stateUpdated) this._lastWriteMs.set(stateFilePath, Date.now());
-      } catch (_) { /* non-critical */ }
+      } catch (_) { /* non-critical */ } // NOSONAR
     }
 
     const syncedTools = Object.entries(written)

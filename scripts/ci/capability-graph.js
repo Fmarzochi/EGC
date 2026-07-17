@@ -31,7 +31,7 @@ const HOOK_EVENTS = [
 function readFileSafe(filePath) {
   try {
     return fs.readFileSync(filePath, 'utf8');
-  } catch (_err) {
+  } catch (_err) { // NOSONAR: unreadable file yields null in this safe-read helper
     return null;
   }
 }
@@ -44,7 +44,7 @@ function parseFrontmatter(content) {
     const data = yaml.load(match[1]) || {};
     const body = content.slice(match[0].length);
     return { data: typeof data === 'object' ? data : {}, body };
-  } catch (_err) {
+  } catch (_err) { // NOSONAR: invalid frontmatter falls back to raw body content
     return { data: {}, body: content };
   }
 }
@@ -90,7 +90,7 @@ function listSkillEntries() {
     let children;
     try {
       children = fs.readdirSync(nsPath, { withFileTypes: true });
-    } catch (_err) {
+    } catch (_err) { // NOSONAR: unreadable namespace dir is skipped
       continue;
     }
     for (const child of children) {
@@ -231,7 +231,7 @@ function buildHooks() {
   let parsed;
   try {
     parsed = JSON.parse(raw);
-  } catch (_err) {
+  } catch (_err) { // NOSONAR: invalid settings JSON yields no hook entries
     return [];
   }
   const root = parsed?.hooks ?? {};

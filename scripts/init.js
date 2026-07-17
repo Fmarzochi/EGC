@@ -255,7 +255,7 @@ if (!flags.dryRun) {
       } else {
         cmd = 'xdg-open';
       }
-      try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ }
+      try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ } // NOSONAR
     };
     dashPing.then(already => {
       if (already) {

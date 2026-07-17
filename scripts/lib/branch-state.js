@@ -66,7 +66,7 @@ function detectBranch(projectPath) {
     // Detached HEAD stores a bare commit hash; treat it as no branch
     if (!head.startsWith(refPrefix)) return null;
     return head.slice(refPrefix.length) || null;
-  } catch (_) {
+  } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }
 }

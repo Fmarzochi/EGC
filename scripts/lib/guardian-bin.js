@@ -65,7 +65,7 @@ function fromMcpConfigs() {
       const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');
       if (candidate !== home && !candidate.startsWith(home + path.sep)) continue;
       if (fs.existsSync(candidate)) return candidate;
-    } catch (_) { /* ignore: unreadable or malformed config, safely fallback to trying the next one */ }
+    } catch (_) { /* ignore: unreadable or malformed config, safely fallback to trying the next one */ } // NOSONAR
   }
 
   return null;

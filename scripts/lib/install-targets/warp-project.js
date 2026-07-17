@@ -36,7 +36,7 @@ function readSkillDescription(sourcePath) {
   let content;
   try {
     content = fs.readFileSync(sourcePath, 'utf8');
-  } catch (_error) {
+  } catch (_error) { // NOSONAR
     // ignore: missing or unreadable SKILL.md safely results in an empty description
     return '';
   }
@@ -49,7 +49,7 @@ function readSkillDescription(sourcePath) {
   let frontmatter;
   try {
     frontmatter = yaml.load(frontmatterMatch[1]);
-  } catch (_error) {
+  } catch (_error) { // NOSONAR
     // ignore: malformed YAML frontmatter safely results in an empty description
     return '';
   }

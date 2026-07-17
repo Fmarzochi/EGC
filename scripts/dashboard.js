@@ -37,18 +37,18 @@ function openBrowser() {
   }
   try {
     spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' });
-  } catch (_) { /* browser open is best-effort */ }
+  } catch (_) { /* browser open is best-effort */ } // NOSONAR
 }
 
 function writePid(pid) {
   try {
     fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
     fs.writeFileSync(PID_FILE, String(pid));
-  } catch (_) { /* pid file is optional */ }
+  } catch (_) { /* pid file is optional */ } // NOSONAR
 }
 
 function readPid() {
-  try { return Number.parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10); } catch (_) { return null; }
+  try { return Number.parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10); } catch (_) { return null; } // NOSONAR: missing or unreadable PID file simply means not running
 }
 
 async function start() {
@@ -107,8 +107,8 @@ async function stop() {
   }
   try {
     process.kill(pid, 0);
-  } catch (_) {
-    try { fs.unlinkSync(PID_FILE); } catch (__) { /* pid file is optional */ }
+  } catch (_) { // NOSONAR: kill(pid, 0) throwing means the process is already gone; stale PID is cleaned below
+    try { fs.unlinkSync(PID_FILE); } catch (__) { /* pid file is optional */ } // NOSONAR
     if (!await isRunning()) { console.log('Dashboard is not running (stale PID cleaned up).'); return; }
     console.error('No PID file found. Stop the server manually.');
     return;

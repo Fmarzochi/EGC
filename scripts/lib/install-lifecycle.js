@@ -48,7 +48,7 @@ function readPackageVersion(repoRoot) {
   try {
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
     return packageJson.version || null;
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: unreadable package.json means unknown version
     return null;
   }
 }
@@ -103,7 +103,7 @@ function areFilesEqual(leftPath, rightPath) {
     }
 
     return fs.readFileSync(leftPath).equals(fs.readFileSync(rightPath));
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: unreadable files are treated as different
     return false;
   }
 }
@@ -580,7 +580,7 @@ function inspectMergeJsonOperation(operation, destinationPath) {
     if (!jsonContainsSubset(currentValue, payload)) {
       return inspectResult('drifted', operation, destinationPath);
     }
-  } catch (_error) {
+  } catch (_error) { // NOSONAR
     // ignore: parsing or merge failure means the content has drifted from expected schema
     return inspectResult('drifted', operation, destinationPath);
   }
@@ -601,7 +601,7 @@ function inspectAiderConfigReadListOperation(operation, destinationPath) {
   let nextContent;
   try {
     nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: merge failure is surfaced as drifted install state
     return inspectResult('drifted', operation, destinationPath);
   }
   if (nextContent !== existingContent) {

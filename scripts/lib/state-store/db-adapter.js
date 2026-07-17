@@ -117,7 +117,7 @@ class SqlJsDatabase {
         this._persist();
         return result;
       } catch (err) {
-        try { this._db.run('ROLLBACK'); } catch (_) { /* rollback is best-effort */ }
+        try { this._db.run('ROLLBACK'); } catch (_) { /* rollback is best-effort */ } // NOSONAR
         this._inTransaction = false;
         throw err;
       }
@@ -132,10 +132,10 @@ class SqlJsDatabase {
     }
     try {
       this._flushPersist();
-    } catch (_) {
+    } catch (_) { // NOSONAR
       // ignore: persist errors on close are safely swallowed to prevent masking original errors
     } finally {
-      try { this._db.close(); } catch (_) { /* ignore: close errors are safely swallowed during shutdown */ }
+      try { this._db.close(); } catch (_) { /* ignore: close errors are safely swallowed during shutdown */ } // NOSONAR
       this._db = null;
     }
   }
@@ -158,7 +158,7 @@ class SqlJsDatabase {
       this._persistTimeout = null;
       try {
         this._flushPersist();
-      } catch (_) {
+      } catch (_) { // NOSONAR
         // ignore: _flushPersist already logs the failure. Swallowing it here keeps a failed debounced write from crashing the process inside a setTimeout callback
       }
     }, 50);

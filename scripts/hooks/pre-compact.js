@@ -28,7 +28,7 @@ function rotateCompactionMarkers(filePath) {
   let content;
   try {
     content = fs.readFileSync(filePath, 'utf8');
-  } catch (_err) {
+  } catch (_err) { // NOSONAR: unreadable session file is skipped
     return;
   }
 
@@ -49,7 +49,7 @@ function shouldSkipDuplicate(filePath, newMarkerLine) {
   let content;
   try {
     content = fs.readFileSync(filePath, 'utf8');
-  } catch (_err) {
+  } catch (_err) { // NOSONAR: unreadable file cannot already contain the marker
     return false;
   }
   return content.trimEnd().endsWith(newMarkerLine.trimEnd());
@@ -80,7 +80,7 @@ async function main() {
     let stats;
     try {
       stats = fs.statSync(activeSession);
-    } catch (_err) {
+    } catch (_err) { // NOSONAR: missing session file stats disable the size cap check
       stats = null;
     }
     if (stats && stats.size > SESSION_SIZE_CAP) {

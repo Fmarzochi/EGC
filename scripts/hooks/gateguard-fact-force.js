@@ -114,14 +114,14 @@ function loadState() {
       if (Date.now() - lastActive > SESSION_TIMEOUT_MS) {
         try {
           fs.unlinkSync(stateFile);
-        } catch (_) {
+        } catch (_) { // NOSONAR
           /* ignore */
         }
         return { checked: [], last_active: Date.now() };
       }
       return state;
     }
-  } catch (_) {
+  } catch (_) { // NOSONAR
     /* ignore */
   }
   return { checked: [], last_active: Date.now() };
@@ -150,7 +150,7 @@ function mergeStateWithDisk(stateFile, checked, lastActive) {
       checked: Array.isArray(diskState.checked) ? Array.from(new Set([...diskState.checked, ...checked])) : checked,
       lastActive: typeof diskState.last_active === 'number' ? Math.max(lastActive, diskState.last_active) : lastActive,
     };
-  } catch (_) {
+  } catch (_) { // NOSONAR: unreadable disk state falls back to the in-memory state
     return { checked, lastActive };
   }
 }
@@ -160,7 +160,7 @@ function atomicRenameFile(tmpFile, stateFile) {
     fs.renameSync(tmpFile, stateFile);
   } catch (error) {
     if (error && (error.code === 'EEXIST' || error.code === 'EPERM')) {
-      try { fs.unlinkSync(stateFile); } catch (_) { /* ignore: best-effort unlink before retry, subsequent renameSync will handle failures */ }
+      try { fs.unlinkSync(stateFile); } catch (_) { /* ignore: best-effort unlink before retry, subsequent renameSync will handle failures */ } // NOSONAR
       fs.renameSync(tmpFile, stateFile);
     } else {
       throw error;
@@ -189,8 +189,8 @@ function saveState(state) {
     atomicRenameFile(tmpFile, stateFile);
     tmpFile = null;
     return true;
-  } catch (_) {
-    if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_2) { /* ignore: best-effort cleanup of temporary state file during save failure */ } }
+  } catch (_) { // NOSONAR: failed save returns false after best-effort tmp cleanup
+    if (tmpFile) { try { fs.unlinkSync(tmpFile); } catch (_2) { /* ignore: best-effort cleanup of temporary state file during save failure */ } } // NOSONAR
     return false;
   }
 }
@@ -227,11 +227,11 @@ function isChecked(key) {
         if (now - stat.mtimeMs > SESSION_TIMEOUT_MS * 2) {
           fs.unlinkSync(fp);
         }
-      } catch (_) {
+      } catch (_) { // NOSONAR
         // Ignore files that disappear between readdir/stat/unlink.
       }
     }
-  } catch (_) {
+  } catch (_) { // NOSONAR
     /* ignore */
   }
 })();
@@ -537,7 +537,7 @@ function run(rawInput) {
   let data;
   try {
     data = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
-  } catch (_) {
+  } catch (_) { // NOSONAR: parse failure allows the command through by design
     return rawInput; // allow on parse error
   }
 

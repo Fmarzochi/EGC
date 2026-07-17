@@ -126,7 +126,7 @@ function resolveObservePath(pluginRoot) {
         exitCode: 0
       };
     }
-  } catch (_) {
+  } catch (_) { // NOSONAR: failure is converted into a structured hook error result
     return {
       stderr: `[Hook] path resolution failed: ${observePath}`,
       exitCode: 0
@@ -240,7 +240,7 @@ function teeEventToStateDb(raw) {
     });
     child.stdin.end(raw);
     child.unref();
-  } catch (_) {
+  } catch (_) { // NOSONAR
     // Intentional: state-db tee is best-effort; runtime must not block on writer failures.
   }
 }
@@ -249,7 +249,7 @@ if (require.main === module) {
   let raw;
   try {
     raw = fs.readFileSync(0, 'utf8');
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: missing stdin is treated as empty input
     raw = '';
   }
   const output = run(raw, { hookId: process.argv[2] || process.env.EGC_HOOK_ID || process.env.ECC_HOOK_ID });

@@ -102,7 +102,7 @@ try {
       let obj;
       try {
         obj = JSON.parse(rawContent);
-      } catch (_) {
+      } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
         console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping');
         return;
       }

@@ -33,7 +33,7 @@ function getPackageVersion(sourceRoot) {
       fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8')
     );
     return packageJson.version || null;
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: unreadable package.json means unknown version
     return null;
   }
 }
@@ -44,7 +44,7 @@ function getManifestVersion(sourceRoot) {
       fs.readFileSync(path.join(sourceRoot, 'manifests', 'install-modules.json'), 'utf8')
     );
     return modulesManifest.version || 1;
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: missing manifest defaults to version 1
     return 1;
   }
 }
@@ -57,7 +57,7 @@ function getRepoCommit(sourceRoot) {
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
     }).trim();
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: git being unavailable yields null commit info
     return null;
   }
 }

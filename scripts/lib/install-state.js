@@ -7,7 +7,7 @@ try {
   // The fallback validator below keeps source checkouts usable in bare environments.
   const ajvModule = require('ajv');
   Ajv = ajvModule.default || ajvModule;
-} catch (_error) {
+} catch (_error) { // NOSONAR: optional ajv dependency; fallback validator is used when absent
   Ajv = null;
 }
 

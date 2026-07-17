@@ -14,7 +14,7 @@ function isCategoryRoot(dir) {
   try {
     const children = fs.readdirSync(dir, { withFileTypes: true });
     return children.some(c => c.isDirectory() && hasSkillMd(path.join(dir, c.name)));
-  } catch (_err) {
+  } catch (_err) { // NOSONAR: unreadable dir cannot contain a skill
     return false;
   }
 }

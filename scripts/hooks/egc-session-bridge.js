@@ -14,14 +14,14 @@ function readStdin() {
   try {
     if (process.stdin.isTTY) return '';
     return fs.readFileSync(0, 'utf8');
-  } catch (_) {
+  } catch (_) { // NOSONAR: missing stdin means no payload to bridge
     return '';
   }
 }
 
 function parsePayload(raw) {
   if (!raw?.trim()) return {};
-  try { return JSON.parse(raw); } catch (_) { return {}; }
+  try { return JSON.parse(raw); } catch (_) { return {}; } // NOSONAR: malformed payload is treated as empty
 }
 
 function resolvePluginRoot() {

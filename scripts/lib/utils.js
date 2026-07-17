@@ -358,7 +358,7 @@ function findFiles(dir, pattern, options = {}) {
           searchDir(fullPath);
         }
       }
-    } catch (_err) {
+    } catch (_err) { // NOSONAR
       // Ignore permission errors
     }
   }

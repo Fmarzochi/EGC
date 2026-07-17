@@ -602,7 +602,7 @@ async function main() {
   try {
     const { bootstrap } = require('../bootstrap-state-db');
     await bootstrap();
-  } catch (_err) {
+  } catch (_err) { // NOSONAR
     // Intentional: state-db bootstrap is optional; session-start must not fail when DB is absent.
   }
 

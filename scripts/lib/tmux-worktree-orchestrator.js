@@ -352,12 +352,12 @@ function canonicalizePath(targetPath) {
 
   try {
     return fs.realpathSync.native(resolvedPath);
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: non-existent path falls back to parent resolution below
     const parentPath = path.dirname(resolvedPath);
 
     try {
       return path.join(fs.realpathSync.native(parentPath), path.basename(resolvedPath));
-    } catch (_parentError) {
+    } catch (_parentError) { // NOSONAR: unresolvable parent falls back to the raw resolved path
       return resolvedPath;
     }
   }

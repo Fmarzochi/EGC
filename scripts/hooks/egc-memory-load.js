@@ -7,7 +7,7 @@ function main() {
   let raw = '';
   try {
     raw = fs.readFileSync(0, 'utf8');
-  } catch (_) {
+  } catch (_) { // NOSONAR: missing stdin safely defaults to empty JSON state
     process.stdout.write('{}');
     process.exit(0);
   }
@@ -15,7 +15,7 @@ function main() {
   let input = {};
   try {
     input = JSON.parse(raw);
-  } catch (_) {
+  } catch (_) { // NOSONAR: malformed JSON passes through unchanged for the next hook
     process.stdout.write(raw);
     process.exit(0);
   }
@@ -37,7 +37,7 @@ function main() {
 
     const output = Object.assign({}, input, { promptForAssistant: prompt });
     process.stdout.write(JSON.stringify(output));
-  } catch (_) {
+  } catch (_) { // NOSONAR: enrichment failure falls back to the original input untouched
     process.stdout.write(JSON.stringify(input));
   }
 

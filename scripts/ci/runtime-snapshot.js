@@ -57,7 +57,7 @@ function readJsonlEvents(logPath) {
         if (!trimmed) continue;
         try {
             result.events.push(JSON.parse(trimmed));
-        } catch (_err) {
+        } catch (_err) { // NOSONAR: invalid JSONL line is skipped; snapshot stays best-effort
             continue;
         }
     }
@@ -115,7 +115,7 @@ function queryDatabaseTables(db) {
         try {
             const countRow = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get();
             rowCount = typeof countRow?.c === 'number' ? countRow.c : Number(countRow?.c ?? 0);
-        } catch (_err) {
+        } catch (_err) { // NOSONAR: unreadable table count is recorded as null in the snapshot
             rowCount = null;
         }
         tables.push({ name, rowCount });
@@ -144,7 +144,7 @@ async function buildStateStoreBlock(opts) {
         if (store) {
             try {
                 store.close();
-            } catch (_closeErr) {
+            } catch (_closeErr) { // NOSONAR
                 // ignore
             }
         }

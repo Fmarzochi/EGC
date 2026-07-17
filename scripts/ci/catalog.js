@@ -68,7 +68,7 @@ function listSkillsRecursive(skillsRoot) {
     let children;
     try {
       children = fs.readdirSync(entryPath, { withFileTypes: true });
-    } catch (_err) {
+    } catch (_err) { // NOSONAR: unreadable entry dir is skipped
       continue;
     }
     for (const child of children) {

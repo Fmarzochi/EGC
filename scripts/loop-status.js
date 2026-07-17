@@ -340,7 +340,7 @@ function readJsonlEntries(transcriptPath) {
 
     try {
       entries.push(JSON.parse(line));
-    } catch (_error) {
+    } catch (_error) { // NOSONAR: invalid line is counted in parseErrors, not silently dropped
       parseErrors += 1;
     }
   }

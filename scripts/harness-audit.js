@@ -123,7 +123,7 @@ function countFiles(rootDir, relativeDir, extension) {
 function safeRead(rootDir, relativePath) {
   try {
     return readText(rootDir, relativePath);
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: unreadable file is treated as empty in this safe-read helper
     return '';
   }
 }
@@ -135,7 +135,7 @@ function safeParseJson(text) {
 
   try {
     return JSON.parse(text);
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: invalid JSON yields null for the caller to handle
     return null;
   }
 }

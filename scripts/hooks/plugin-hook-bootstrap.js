@@ -10,7 +10,7 @@ const SAFE_SHELL_BASENAMES = new Set(['bash', 'bash.exe', 'sh', 'sh.exe']);
 function readStdinRaw() {
   try {
     return fs.readFileSync(0, 'utf8');
-  } catch (_error) {
+  } catch (_error) { // NOSONAR: missing stdin is treated as empty input
     return '';
   }
 }

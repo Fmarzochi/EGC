@@ -14,7 +14,7 @@ async function main() {
   let raw;
   try {
     raw = fs.readFileSync(0, 'utf8');
-  } catch (_) {
+  } catch (_) { // NOSONAR
     // Intentional: writer is best-effort; absent stdin (e.g., direct invocation) is a no-op.
     return;
   }
@@ -24,7 +24,7 @@ async function main() {
   let payload;
   try {
     payload = JSON.parse(raw);
-  } catch (_) {
+  } catch (_) { // NOSONAR: malformed payload is ignored; writer is fire-and-forget
     return;
   }
 

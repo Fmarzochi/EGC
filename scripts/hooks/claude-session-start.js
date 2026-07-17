@@ -36,7 +36,7 @@ function readStdinJson() {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed;
     }
-  } catch (_error) {
+  } catch (_error) { // NOSONAR
     // No stdin payload or invalid JSON: fall back to environment values.
   }
   return {};
@@ -61,7 +61,7 @@ function parseFrontmatterValue(val) {
   if (!val.startsWith('[')) return val;
   try {
     return JSON.parse(val);
-  } catch (_) {
+  } catch (_) { // NOSONAR: non-JSON env value is intentionally returned as plain string
     return val;
   }
 }
@@ -97,7 +97,7 @@ function agentMatchesStack(agentStack, languages, frameworks, knownFrameworkName
 function readAgentFiles(agentsDir) {
   try {
     return fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
-  } catch (_) {
+  } catch (_) { // NOSONAR: missing agents dir means nothing to list
     return null;
   }
 }
@@ -121,7 +121,7 @@ function loadRelevantAgents(languages, frameworks, knownFrameworkNames) {
       const match = agentMatchesStack(agentStack, languages, frameworks, knownFrameworkNames);
       if (match === 'generic') generic.push(fm.name);
       else if (match === 'specific') stackSpecific.push(fm.name);
-    } catch (_) {
+    } catch (_) { // NOSONAR
       // skip unreadable agent
     }
   }
@@ -222,7 +222,7 @@ function loadAndPrintState(projectPath) {
   if (propagateStateContent) {
     try {
       propagateStateContent(projectPath, content);
-    } catch (_) {
+    } catch (_) { // NOSONAR
       // Propagation is best-effort; never block session startup.
     }
   }
@@ -250,7 +250,7 @@ function main() {
     const projectPath = resolveProjectPath(input);
     loadAndPrintState(projectPath);
     emitStackBriefing(projectPath);
-  } catch (_error) {
+  } catch (_error) { // NOSONAR
     // Never break session startup because of memory loading.
   }
 
