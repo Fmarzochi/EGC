@@ -11,11 +11,13 @@ set -euo pipefail
 # - Merges EGC MCP servers into config.toml (add-only via Node TOML parser)
 
 MODE="apply"
+DRY_RUN_MODE="dry-run"
 UPDATE_MCP=""
 for arg in "$@"; do
   case "$arg" in
-    --dry-run)    MODE="dry-run" ;;
+    --dry-run)    MODE="$DRY_RUN_MODE" ;;
     --update-mcp) UPDATE_MCP="--update-mcp" ;;
+    *) ;;
   esac
 done
 
@@ -42,7 +44,7 @@ BACKUP_DIR="$CODEX_HOME/backups/egc-$STAMP"
 log() { printf '[egc-sync] %s\n' "$*"; }
 
 run_or_echo() {
-  if [[ "$MODE" == "dry-run" ]]; then
+  if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
     printf '[dry-run]'
     printf ' %q' "$@"
     printf '\n'
@@ -187,7 +189,7 @@ compose_egc_block() {
 }
 
 log "Merging EGC AGENTS into $AGENTS_FILE (preserving user content)"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   printf '[dry-run] merge EGC block into %s from %s + %s\n' "$AGENTS_FILE" "$AGENTS_ROOT_SRC" "$AGENTS_CODEX_SUPP_SRC"
 else
   replace_egc_section() {
@@ -252,7 +254,7 @@ else
 fi
 
 log "Merging EGC Codex baseline into $CONFIG_FILE (add-only, preserving user config)"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   node "$BASELINE_MERGE_SCRIPT" "$CONFIG_FILE" --dry-run
 else
   node "$BASELINE_MERGE_SCRIPT" "$CONFIG_FILE"
@@ -278,7 +280,7 @@ done
 log "Generating prompt files from EGC commands"
 run_or_echo mkdir -p "$PROMPTS_DEST"
 manifest="$PROMPTS_DEST/egc-prompts-manifest.txt"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   printf '[dry-run] > %s\n' "$manifest"
 else
   : > "$manifest"
@@ -288,7 +290,7 @@ prompt_count=0
 while IFS= read -r -d '' command_file; do
   name="$(basename "$command_file" .md)"
   out="$PROMPTS_DEST/egc-$name.md"
-  if [[ "$MODE" == "dry-run" ]]; then
+  if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
     printf '[dry-run] generate %s from %s\n' "$out" "$command_file"
   else
     generate_prompt_file "$command_file" "$out" "$name"
@@ -303,7 +305,7 @@ fi
 
 log "Generating Codex tool prompts + optional rule-pack prompts"
 extension_manifest="$PROMPTS_DEST/egc-extension-prompts-manifest.txt"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   printf '[dry-run] > %s\n' "$extension_manifest"
 else
   : > "$extension_manifest"
@@ -314,7 +316,7 @@ extension_count=0
 write_extension_prompt() {
   local name="$1"
   local file="$PROMPTS_DEST/$name"
-  if [[ "$MODE" == "dry-run" ]]; then
+  if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
     printf '[dry-run] generate %s\n' "$file"
   else
     cat > "$file"
@@ -492,14 +494,14 @@ if [[ "$MODE" == "apply" ]]; then
 fi
 
 log "Merging EGC MCP servers into $CONFIG_FILE (add-only, preserving user config)"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   node "$MCP_MERGE_SCRIPT" "$CONFIG_FILE" --dry-run $UPDATE_MCP
 else
   node "$MCP_MERGE_SCRIPT" "$CONFIG_FILE" $UPDATE_MCP
 fi
 
 log "Installing global git safety hooks"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   HOME="$HOME" \
   CODEX_HOME="$CODEX_HOME" \
   AGENTS_HOME="${AGENTS_HOME:-$HOME/.agents}" \
@@ -514,7 +516,7 @@ else
 fi
 
 log "Running global regression sanity check"
-if [[ "$MODE" == "dry-run" ]]; then
+if [[ "$MODE" == "$DRY_RUN_MODE" ]]; then
   printf '[dry-run] %s\n' "$SANITY_CHECKER"
 else
   HOME="$HOME" \

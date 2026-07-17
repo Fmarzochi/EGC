@@ -11,9 +11,17 @@ CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 # Use rg if available, otherwise fall back to grep -E.
 # All patterns in this script must be POSIX ERE compatible.
 if command -v rg >/dev/null 2>&1; then
-  search_file() { rg -n "$1" "$2" >/dev/null 2>&1; }
+  search_file() {
+    local pattern="$1"
+    local filepath="$2"
+    rg -n "$pattern" "$filepath" >/dev/null 2>&1
+  }
 else
-  search_file() { grep -En "$1" "$2" >/dev/null 2>&1; }
+  search_file() {
+    local pattern="$1"
+    local filepath="$2"
+    grep -En "$pattern" "$filepath" >/dev/null 2>&1
+  }
 fi
 
 CONFIG_FILE="$CODEX_HOME/config.toml"

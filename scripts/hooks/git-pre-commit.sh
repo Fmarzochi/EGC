@@ -13,13 +13,13 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null) || true
-[ -z "$STAGED" ] && exit 0
+[[ -z "$STAGED" ]] && exit 0
 
 EGC_START='<!-- egc:start -->'
 EGC_END='<!-- egc:end -->'
 
 while IFS= read -r FILE; do
-  [ -z "$FILE" ] && continue
+  [[ -z "$FILE" ]] && continue
   case "$FILE" in
     *.md|*.mdx|*.mdc) ;;
     *) continue ;;
