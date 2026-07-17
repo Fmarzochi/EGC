@@ -148,12 +148,7 @@ function main() {
     };
 
     if (!fs.existsSync(stateFile)) {
-      report.status = 'missing';
-      if (options.json) {
-        console.log(JSON.stringify(report, null, 2));
-      } else {
-        printHuman(report);
-      }
+      handleMissingState(report, options);
       return;
     }
 
@@ -165,31 +160,48 @@ function main() {
     report.stats = result.stats;
 
     if (!result.needed && !options.force) {
-      if (options.json) {
-        console.log(JSON.stringify(report, null, 2));
-      } else {
-        printHuman(report);
-      }
+      handleNotNeeded(report, options);
       return;
     }
 
-    report.status = options.dryRun ? 'dry-run' : 'consolidated';
-
-    if (options.dryRun) {
-      report.output = result.output;
-    } else {
-      report.backup = backupStateFile(homeDir, stateFile);
-      fs.writeFileSync(stateFile, result.output, 'utf8');
-    }
-
-    if (options.json) {
-      console.log(JSON.stringify(report, null, 2));
-    } else {
-      printHuman({ ...report, output: result.output });
-    }
+    performConsolidation(report, result, stateFile, homeDir, options);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
+  }
+}
+
+function handleMissingState(report, options) {
+  report.status = 'missing';
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printHuman(report);
+  }
+}
+
+function handleNotNeeded(report, options) {
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printHuman(report);
+  }
+}
+
+function performConsolidation(report, result, stateFile, homeDir, options) {
+  report.status = options.dryRun ? 'dry-run' : 'consolidated';
+
+  if (options.dryRun) {
+    report.output = result.output;
+  } else {
+    report.backup = backupStateFile(homeDir, stateFile);
+    fs.writeFileSync(stateFile, result.output, 'utf8');
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printHuman({ ...report, output: result.output });
   }
 }
 
