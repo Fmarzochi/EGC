@@ -247,7 +247,7 @@ function listAliases(options = {}) {
     const searchLower = search.toLowerCase();
     aliases = aliases.filter(a =>
       a.name.toLowerCase().includes(searchLower) ||
-      (a.title && a.title.toLowerCase().includes(searchLower))
+      (a.title?.toLowerCase() || '').includes(searchLower)
     );
   }
 

@@ -14,13 +14,13 @@ function rankCounts(values) {
 
 function summarizeVariantRuns(records) {
   return records.reduce((accumulator, record) => {
-    const key = record.run && record.run.variant ? record.run.variant : 'baseline';
+    const key = record.run?.variant ?? 'baseline';
     if (!accumulator[key]) {
       accumulator[key] = { runs: 0, successes: 0, failures: 0 };
     }
 
     accumulator[key].runs += 1;
-    if (record.outcome && record.outcome.success) {
+    if (record.outcome?.success) {
       accumulator[key].successes += 1;
     } else {
       accumulator[key].failures += 1;
@@ -46,11 +46,11 @@ function deriveSkillStatus(skillSummary, options = {}) {
 function buildSkillHealthReport(records, options = {}) {
   const filterSkillId = options.skillId || null;
   const filtered = filterSkillId
-    ? records.filter(record => record.skill && record.skill.id === filterSkillId)
+    ? records.filter(record => record.skill?.id === filterSkillId)
     : records.slice();
 
   const grouped = filtered.reduce((accumulator, record) => {
-    const skillId = record.skill.id;
+    const skillId = record.skill?.id;
     if (!accumulator.has(skillId)) {
       accumulator.set(skillId, []);
     }
@@ -60,7 +60,7 @@ function buildSkillHealthReport(records, options = {}) {
 
   const skills = Array.from(grouped.entries())
     .map(([skillId, skillRecords]) => {
-      const successes = skillRecords.filter(record => record.outcome && record.outcome.success).length;
+      const successes = skillRecords.filter(record => record.outcome?.success).length;
       const failures = skillRecords.length - successes;
       const recurringErrors = new Map();
       const recurringTasks = new Map();
@@ -85,7 +85,7 @@ function buildSkillHealthReport(records, options = {}) {
       const summary = {
         skill: {
           id: skillId,
-          path: skillRecords[0].skill.path || null
+          path: skillRecords[0]?.skill?.path ?? null
         },
         totalRuns: skillRecords.length,
         successes,

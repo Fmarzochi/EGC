@@ -95,8 +95,8 @@ function readOptionalStringOption(options, key) {
 }
 
 function readModuleTargetsOrThrow(module) {
-  const moduleId = module && module.id ? module.id : '<unknown>';
-  const targets = module && module.targets;
+  const moduleId = module?.id ? module.id : '<unknown>';
+  const targets = module?.targets;
 
   if (!Array.isArray(targets)) {
     throw new Error(`Install module ${moduleId} has invalid targets; expected an array of supported target ids`);

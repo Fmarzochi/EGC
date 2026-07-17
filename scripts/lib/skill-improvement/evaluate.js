@@ -8,7 +8,7 @@ function roundRate(value) {
 
 function summarize(records) {
   const runs = records.length;
-  const successes = records.filter(record => record.outcome && record.outcome.success).length;
+  const successes = records.filter(record => record.outcome?.success).length;
   const failures = runs - successes;
   return {
     runs,
@@ -21,10 +21,10 @@ function summarize(records) {
 function buildSkillEvaluationScaffold(skillId, records, options = {}) {
   const minimumRunsPerVariant = options.minimumRunsPerVariant || 2;
   const amendmentId = options.amendmentId || null;
-  const filtered = records.filter(record => record.skill && record.skill.id === skillId);
-  const baseline = filtered.filter(record => !record.run || record.run.variant !== 'amended');
-  const amended = filtered.filter(record => record.run && record.run.variant === 'amended')
-    .filter(record => !amendmentId || record.run.amendmentId === amendmentId);
+  const filtered = records.filter(record => record.skill?.id === skillId);
+  const baseline = filtered.filter(record => record.run?.variant !== 'amended');
+  const amended = filtered.filter(record => record.run?.variant === 'amended')
+    .filter(record => !amendmentId || record.run?.amendmentId === amendmentId);
 
   const baselineSummary = summarize(baseline);
   const amendedSummary = summarize(amended);

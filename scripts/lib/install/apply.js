@@ -115,7 +115,7 @@ function isMcpConfigPath(filePath) {
 }
 
 function buildResolvedClaudeHooks(plan) {
-  if (!plan.adapter || plan.adapter.target !== 'egc') {
+  if (plan.adapter?.target !== 'egc') {
     return null;
   }
 

@@ -14,7 +14,7 @@ function getPluginRoot(options = {}) {
     return String(options.pluginRoot).trim();
   }
   const root = process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT;
-  if (root && root.trim()) {
+  if (root?.trim()) {
     return root.trim();
   }
   return path.resolve(__dirname, '..', '..');
@@ -45,7 +45,7 @@ function toShellPath(filePath) {
 
 function findShellBinary() {
   const candidates = [];
-  if (process.env.BASH && process.env.BASH.trim()) {
+  if (process.env.BASH?.trim()) {
     const trimmed = process.env.BASH.trim();
     if (SAFE_SHELL_BASENAMES.has(path.basename(trimmed).toLowerCase())) {
       candidates.push(trimmed);
@@ -226,7 +226,7 @@ function emitHookResult(raw, output) {
 }
 
 function teeEventToStateDb(raw) {
-  if (!raw || !raw.trim()) return;
+  if (!raw?.trim()) return;
   const writerPath = path.join(__dirname, 'state-db-writer.js');
   if (!fs.existsSync(writerPath)) return;
   try {

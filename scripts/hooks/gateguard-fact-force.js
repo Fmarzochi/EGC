@@ -79,7 +79,7 @@ function hashSessionKey(prefix, value) {
 }
 
 function resolveSessionKey(data) {
-  const directCandidates = [data && data.session_id, data && data.sessionId, data && data.session && data.session.id, process.env.EGC_SESSION_ID, process.env.ECC_SESSION_ID];
+  const directCandidates = [data?.session_id, data?.sessionId, data?.session?.id, process.env.EGC_SESSION_ID, process.env.ECC_SESSION_ID];
 
   for (const candidate of directCandidates) {
     const sanitized = sanitizeSessionKey(candidate);
