@@ -18,7 +18,7 @@ const MAX_STDIN = 1024 * 1024;
 const GENERIC_SIGNALS = [
   { pattern: /\bget started\b/i, label: '"Get Started" CTA copy' },
   { pattern: /\blearn more\b/i, label: '"Learn more" CTA copy' },
-  { pattern: /\bgrid-cols-(3|4)\b/, label: 'uniform multi-card grid' },
+  { pattern: /\bgrid-cols-[34]\b/, label: 'uniform multi-card grid' },
   { pattern: /\bbg-gradient-to-[trbl]/, label: 'stock gradient utility usage' },
   { pattern: /\btext-center\b/, label: 'centered default layout cues' },
   { pattern: /\bfont-(sans|inter)\b/i, label: 'default font utility' },

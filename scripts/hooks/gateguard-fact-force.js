@@ -44,7 +44,24 @@ const EDIT_WRITE_HOOK_ID = 'pre:edit-write:gateguard-fact-force';
 const BASH_HOOK_ID = 'pre:bash:gateguard-fact-force';
 const EGC_DISABLE_VALUES = new Set(['0', 'false', 'off', 'disabled', 'disable']);
 
-const DESTRUCTIVE_BASH = /\b(rm\s+-rf|git\s+reset\s+--hard|git\s+checkout\s+--|git\s+clean\s+-f|drop\s+table|delete\s+from|truncate|git\s+push\s+--force(?!-with-lease)|git\s+commit\s+--amend|dd\s+if=)\b/i;
+// One pattern per destructive command; each keeps the same word boundaries
+// the former single alternation applied around the matched command.
+const DESTRUCTIVE_BASH_PATTERNS = [
+  /\brm\s+-rf\b/i,
+  /\bgit\s+reset\s+--hard\b/i,
+  /\bgit\s+checkout\s+--\b/i,
+  /\bgit\s+clean\s+-f\b/i,
+  /\bdrop\s+table\b/i,
+  /\bdelete\s+from\b/i,
+  /\btruncate\b/i,
+  /\bgit\s+push\s+--force(?!-with-lease)\b/i,
+  /\bgit\s+commit\s+--amend\b/i,
+  /\bdd\s+if=\b/i,
+];
+
+function isDestructiveBash(command) {
+  return DESTRUCTIVE_BASH_PATTERNS.some((pattern) => pattern.test(command));
+}
 
 // --- State management (per-session, atomic writes, bounded) ---
 
@@ -504,7 +521,7 @@ function handleBash(rawInput, toolName, toolInput) {
     return rawInput;
   }
 
-  if (DESTRUCTIVE_BASH.test(command)) {
+  if (isDestructiveBash(command)) {
     const key = '__destructive__' + crypto.createHash('sha256').update(command).digest('hex').slice(0, 16);
     if (!isChecked(key)) {
       if (!markChecked(key)) {

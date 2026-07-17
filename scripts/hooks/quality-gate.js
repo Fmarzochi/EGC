@@ -90,25 +90,29 @@ function runPrettier(filePath, projectRoot, fix, strict) {
 }
 
 /**
- * Run gofmt on a .go file.
+ * Format a .go file in place with gofmt.
  *
  * @param {string} filePath - Absolute path to the file
- * @param {boolean} fix - Whether to auto-fix
  * @param {boolean} strict - Whether to log failures
  */
-function runGoFmt(filePath, fix, strict) {
-  if (fix) {
-    const r = exec('gofmt', ['-w', filePath]);
-    if (r.status !== 0 && strict) {
-      log(`[QualityGate] gofmt failed for ${filePath}`);
-    }
-  } else if (strict) {
-    const r = exec('gofmt', ['-l', filePath]);
-    if (r.status !== 0) {
-      log(`[QualityGate] gofmt failed for ${filePath}`);
-    } else if (r.stdout?.trim()) {
-      log(`[QualityGate] gofmt check failed for ${filePath}`);
-    }
+function formatGoFile(filePath, strict) {
+  const r = exec('gofmt', ['-w', filePath]);
+  if (r.status !== 0 && strict) {
+    log(`[QualityGate] gofmt failed for ${filePath}`);
+  }
+}
+
+/**
+ * Check a .go file with gofmt without modifying it.
+ *
+ * @param {string} filePath - Absolute path to the file
+ */
+function checkGoFile(filePath) {
+  const r = exec('gofmt', ['-l', filePath]);
+  if (r.status !== 0) {
+    log(`[QualityGate] gofmt failed for ${filePath}`);
+  } else if (r.stdout?.trim()) {
+    log(`[QualityGate] gofmt check failed for ${filePath}`);
   }
 }
 
@@ -166,7 +170,11 @@ function maybeRunQualityGate(filePath) {
   }
 
   if (ext === '.go') {
-    runGoFmt(filePath, fix, strict);
+    if (fix) {
+      formatGoFile(filePath, strict);
+    } else if (strict) {
+      checkGoFile(filePath);
+    }
     return;
   }
 

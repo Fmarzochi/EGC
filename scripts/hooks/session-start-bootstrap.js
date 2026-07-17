@@ -69,19 +69,26 @@ function hasRunnerRoot(candidate) {
  *
  * @returns {string}
  */
+function findRunnerRootInCacheBase(cacheBase) {
+  for (const org of fs.readdirSync(cacheBase, { withFileTypes: true })) {
+    if (!org.isDirectory()) continue;
+    for (const version of fs.readdirSync(path.join(cacheBase, org.name), { withFileTypes: true })) {
+      if (!version.isDirectory()) continue;
+      const candidate = path.join(cacheBase, org.name, version.name);
+      if (hasRunnerRoot(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 function resolveFromCache(claudeDir) {
   try {
     for (const slug of CACHE_PLUGIN_SLUGS) {
-      const cacheBase = path.join(claudeDir, 'plugins', 'cache', slug);
-      for (const org of fs.readdirSync(cacheBase, { withFileTypes: true })) {
-        if (!org.isDirectory()) continue;
-        for (const version of fs.readdirSync(path.join(cacheBase, org.name), { withFileTypes: true })) {
-          if (!version.isDirectory()) continue;
-          const candidate = path.join(cacheBase, org.name, version.name);
-          if (hasRunnerRoot(candidate)) {
-            return candidate;
-          }
-        }
+      const found = findRunnerRootInCacheBase(path.join(claudeDir, 'plugins', 'cache', slug));
+      if (found) {
+        return found;
       }
     }
   } catch {

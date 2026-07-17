@@ -18,8 +18,7 @@ function log(message) {
   process.stderr.write(`[SessionEnd] ${message}\n`);
 }
 
-function run(rawInput) {
-  const output = rawInput || '';
+function run(output = '') {
   const sessionId = resolveSessionId();
 
   if (!sessionId) {

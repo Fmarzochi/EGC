@@ -1113,11 +1113,9 @@ src/main.ts
   if (test('handles old-format filename without session ID', () => {
     // The regex match[2] is undefined for old format → shortId defaults to 'no-id'
     const result = sessionManager.parseSessionFilename('2026-02-13-session.tmp');
-    if (result) {
-      assert.strictEqual(result.shortId, 'no-id', 'Should default to no-id');
-    }
     // Either null (regex doesn't match) or has no-id: both are acceptable
-    assert.ok(true, 'Old format handled without crash');
+    assert.ok(result === null || result.shortId === 'no-id',
+      'Old format yields null or a no-id shortId');
   })) passed++; else failed++;
 
   // ── Round 33: birthtime / createdTime fallback ──
@@ -2031,7 +2029,6 @@ file.ts
   if (test('appendSessionContent returns false when file is read-only (EACCES)', () => {
     if (process.platform === 'win32') {
       // chmod doesn't work reliably on Windows: skip
-      assert.ok(true, 'Skipped on Windows');
       return;
     }
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r112-readonly-'));
