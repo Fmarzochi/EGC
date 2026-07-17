@@ -364,8 +364,10 @@ function syncEnglishAgents(content, catalog) {
   nextContent = replaceOrThrow(
     nextContent,
     /(providing\s+)(\d+)(\s+specialized agents,\s+)(\d+)(\+?)(\s+skills,\s+)(\d+)(\s+commands)/i,
-    (_, prefix, __, agentsSuffix, ___, skillsPlus, skillsSuffix, ____, commandsSuffix) =>
-      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsPlus}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`,
+    (...args) => {
+      const [, prefix, , agentsSuffix, , skillsPlus, skillsSuffix, , commandsSuffix] = args;
+      return `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsPlus}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`;
+    },
     'AGENTS.md summary'
   );
   nextContent = replaceOrThrow(
@@ -394,8 +396,10 @@ function syncZhRootReadme(content, catalog) {
   return replaceOrThrow(
     content,
     /(你现在可以使用\s+)(\d+)(\s+个代理、\s*)(\d+)(\s*个技能和\s*)(\d+)(\s*个命令[。.!！]?)/i,
-    (_, prefix, __, agentsSuffix, ___, skillsSuffix, ____, commandsSuffix) =>
-      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`,
+    (...args) => {
+      const [, prefix, , agentsSuffix, , skillsSuffix, , commandsSuffix] = args;
+      return `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`;
+    },
     'README.zh-CN.md quick-start summary'
   );
 }
@@ -406,8 +410,10 @@ function syncZhDocsReadme(content, catalog) {
   nextContent = replaceOrThrow(
     nextContent,
     /(你现在可以使用\s+)(\d+)(\s+个智能体、\s*)(\d+)(\s*项技能和\s*)(\d+)(\s*个命令了[。.!！]?)/i,
-    (_, prefix, __, agentsSuffix, ___, skillsSuffix, ____, commandsSuffix) =>
-      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`,
+    (...args) => {
+      const [, prefix, , agentsSuffix, , skillsSuffix, , commandsSuffix] = args;
+      return `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`;
+    },
     'README.zh-CN.md quick-start summary'
   );
   nextContent = replaceOrThrow(
@@ -437,8 +443,10 @@ function syncZhAgents(content, catalog) {
   nextContent = replaceOrThrow(
     nextContent,
     /(提供\s+)(\d+)(\s+个专业代理、\s*)(\d+)(\+?)(\s*项技能、\s*)(\d+)(\s+条命令)/i,
-    (_, prefix, __, agentsSuffix, ___, skillsPlus, skillsSuffix, ____, commandsSuffix) =>
-      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsPlus}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`,
+    (...args) => {
+      const [, prefix, , agentsSuffix, , skillsPlus, skillsSuffix, , commandsSuffix] = args;
+      return `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsPlus}${skillsSuffix}${catalog.commands.count}${commandsSuffix}`;
+    },
     'docs/zh-CN/AGENTS.md summary'
   );
   nextContent = replaceOrThrow(

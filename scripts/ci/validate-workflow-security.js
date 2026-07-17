@@ -14,13 +14,18 @@ const RULES = [
     event: 'workflow_run',
     eventPattern: /\bworkflow_run\s*:/m,
     description: 'workflow_run must not checkout an untrusted workflow_run head ref/repository',
-    expressionPattern: /\$\{\{\s*github\.event\.workflow_run\.(?:head_branch|head_sha|head_repository(?:\.[A-Za-z0-9_.]+)?)\s*\}\}|\$\{\{\s*github\.event\.workflow_run\.pull_requests\[\d+\]\.head\.(?:ref|sha|repo\.full_name)\s*\}\}/g,
+    expressionPatterns: [
+      /\$\{\{\s*github\.event\.workflow_run\.(?:head_branch|head_sha|head_repository(?:\.[A-Za-z0-9_.]+)?)\s*\}\}/g,
+      /\$\{\{\s*github\.event\.workflow_run\.pull_requests\[\d+\]\.head\.(?:ref|sha|repo\.full_name)\s*\}\}/g,
+    ],
   },
   {
     event: 'pull_request_target',
     eventPattern: /\bpull_request_target\s*:/m,
     description: 'pull_request_target must not checkout an untrusted pull_request head ref/repository',
-    expressionPattern: /\$\{\{\s*github\.event\.pull_request\.head\.(?:ref|sha|repo\.full_name)\s*\}\}/g,
+    expressionPatterns: [
+      /\$\{\{\s*github\.event\.pull_request\.head\.(?:ref|sha|repo\.full_name)\s*\}\}/g,
+    ],
   },
 ];
 
@@ -88,7 +93,11 @@ function findViolations(filePath, source) {
     }
 
     for (const step of checkoutSteps) {
-      for (const match of step.text.matchAll(rule.expressionPattern)) {
+      // Scan each pattern, then sort by match position so the report keeps
+      // the same document order the former single alternation produced.
+      const matches = rule.expressionPatterns.flatMap(pattern => [...step.text.matchAll(pattern)]);
+      matches.sort((a, b) => a.index - b.index);
+      for (const match of matches) {
         violations.push({
           filePath,
           event: rule.event,
