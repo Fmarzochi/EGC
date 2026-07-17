@@ -610,22 +610,28 @@ function formatText(payload) {
         : `No Gemini transcript JSONL files found under ${payload.source.transcriptRoot}.`,
     ];
     if (skippedLines.length > 0) {
-      lines.push('Skipped transcript errors:');
-      lines.push(...skippedLines);
+      lines.push(
+        'Skipped transcript errors:',
+        ...skippedLines
+      );
     }
     return lines.join('\n');
   }
 
   const lines = [`EGC loop status (${payload.generatedAt})`];
   for (const session of payload.sessions) {
-    lines.push(`- ${session.sessionId} [${session.state}] ${session.transcriptPath}`);
-    lines.push(`  last event: ${session.lastEventAt || 'unknown'}; events: ${session.eventCount}`);
-    lines.push(`  signals: ${formatSignals(session.signals)}`);
-    lines.push(`  action: ${session.recommendedAction}`);
+    lines.push(
+      `- ${session.sessionId} [${session.state}] ${session.transcriptPath}`,
+      `  last event: ${session.lastEventAt || 'unknown'}; events: ${session.eventCount}`,
+      `  signals: ${formatSignals(session.signals)}`,
+      `  action: ${session.recommendedAction}`
+    );
   }
   if (skippedLines.length > 0) {
-    lines.push('Skipped transcript errors:');
-    lines.push(...skippedLines);
+    lines.push(
+      'Skipped transcript errors:',
+      ...skippedLines
+    );
   }
   return lines.join('\n');
 }

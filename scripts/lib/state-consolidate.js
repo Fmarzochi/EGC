@@ -251,9 +251,11 @@ function consolidateSection(section, now, stats) {
 function renderDocument(header, sectionOutputs) {
   const lines = [...header, ''];
   for (const section of sectionOutputs) {
-    lines.push(`## ${section.title}`);
-    lines.push(...section.lines);
-    lines.push('');
+    lines.push(
+      `## ${section.title}`,
+      ...section.lines,
+      ''
+    );
   }
   return lines.join('\n');
 }

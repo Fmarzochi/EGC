@@ -146,9 +146,11 @@ function buildBriefingLines(stack, stackSpecific, generic, missing) {
     }
   }
 
-  lines.push('Skill: coding-standards (cyclomatic complexity) - apply to all code written this session');
-  lines.push('===');
-  lines.push('');
+  lines.push(
+    'Skill: coding-standards (cyclomatic complexity) - apply to all code written this session',
+    '===',
+    ''
+  );
   return lines;
 }
 

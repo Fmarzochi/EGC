@@ -262,8 +262,10 @@ function renderAmendmentPanel(skillsById, options = {}) {
       const time = amendment.created_at ? amendment.created_at.slice(0, 19) : '-';
       lines.push(`${name} ${event} ${status} ${time}`);
     }
-    lines.push('');
-    lines.push(`${amendments.length} amendment${amendments.length === 1 ? '' : 's'} pending review`);
+    lines.push(
+      '',
+      `${amendments.length} amendment${amendments.length === 1 ? '' : 's'} pending review`
+    );
   }
 
   return {

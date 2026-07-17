@@ -186,16 +186,20 @@ function renderOverviewMarkdown(overview) {
   const readable = overview.entries.filter(entry => !entry.error);
   const failed = overview.entries.filter(entry => entry.error);
 
-  lines.push('# EGC State Overview');
-  lines.push('');
-  lines.push(`State root: ${overview.stateDir}`);
-  lines.push(`Projects: ${readable.length}`);
-  lines.push('');
+  lines.push(
+    '# EGC State Overview',
+    '',
+    `State root: ${overview.stateDir}`,
+    `Projects: ${readable.length}`,
+    ''
+  );
 
   for (const entry of readable) {
-    lines.push(`## ${entry.project}`);
-    lines.push(`- Branch: ${entry.branch || 'n/a'} (${entry.branchStateCount} state file${entry.branchStateCount === 1 ? '' : 's'}, ${entry.layout} layout)`);
-    lines.push(`- Updated: ${entry.updated}`);
+    lines.push(
+      `## ${entry.project}`,
+      `- Branch: ${entry.branch || 'n/a'} (${entry.branchStateCount} state file${entry.branchStateCount === 1 ? '' : 's'}, ${entry.layout} layout)`,
+      `- Updated: ${entry.updated}`
+    );
     if (entry.context) {
       lines.push(`- Context: ${entry.context}`);
     }

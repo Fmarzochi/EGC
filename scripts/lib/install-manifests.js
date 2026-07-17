@@ -382,8 +382,8 @@ function collectRequestedModuleIds(options, manifests, profileId) {
     requestedModuleIds.push(...profile.modules);
   }
 
-  requestedModuleIds.push(...dedupeStrings(options.moduleIds));
   requestedModuleIds.push(
+    ...dedupeStrings(options.moduleIds),
     ...expandComponentIdsToModuleIds(dedupeStrings(options.includeComponentIds), manifests)
   );
 

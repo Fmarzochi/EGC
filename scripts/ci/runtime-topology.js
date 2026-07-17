@@ -325,9 +325,11 @@ function buildGraph() {
 
 function toDot(graph) {
     const lines = [];
-    lines.push('digraph EGCRuntime {');
-    lines.push('  rankdir=LR;');
-    lines.push('  node [shape=box, fontname="Helvetica"];');
+    lines.push(
+      'digraph EGCRuntime {',
+      '  rankdir=LR;',
+      '  node [shape=box, fontname="Helvetica"];'
+    );
     for (const node of graph.nodes) {
         const label = `${node.id}\\n[${node.class}/${node.kind}]`;
         lines.push(`  "${node.id}" [label="${label}"];`);

@@ -179,8 +179,10 @@ function findSubSections(serverObj, prefix) {
     const val = serverObj[key];
     if (val && typeof val === 'object' && !Array.isArray(val)) {
       const subPath = `${prefix}.${key}`;
-      sections.push(subPath);
-      sections.push(...findSubSections(val, subPath));
+      sections.push(
+        subPath,
+        ...findSubSections(val, subPath)
+      );
     }
   }
   return sections;

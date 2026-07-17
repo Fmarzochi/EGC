@@ -383,30 +383,40 @@ function formatText(payload) {
   ];
 
   if (payload.matches.length === 0) {
-    lines.push('No strong component matches found.');
-    lines.push('Try: npx egc catalog components');
+    lines.push(
+      'No strong component matches found.',
+      'Try: npx egc catalog components'
+    );
   } else {
     lines.push('Recommended components:');
     payload.matches.forEach((match, index) => {
-      lines.push(`${index + 1}. ${match.componentId} [${match.family}]`);
-      lines.push(`   ${match.description}`);
-      lines.push(`   Install: ${match.installCommand}`);
-      lines.push(`   Preview: ${match.planCommand}`);
-      lines.push(`   Why: ${match.reasons.join('; ')}`);
+      lines.push(
+        `${index + 1}. ${match.componentId} [${match.family}]`,
+        `   ${match.description}`,
+        `   Install: ${match.installCommand}`,
+        `   Preview: ${match.planCommand}`,
+        `   Why: ${match.reasons.join('; ')}`
+      );
     });
   }
 
   if (payload.profiles.length > 0) {
-    lines.push('');
-    lines.push('Related profiles:');
+    lines.push(
+      '',
+      'Related profiles:'
+    );
     payload.profiles.forEach(profile => {
-      lines.push(`- ${profile.id}: ${profile.description}`);
-      lines.push(`  Install: ${profile.installCommand}`);
+      lines.push(
+        `- ${profile.id}: ${profile.description}`,
+        `  Install: ${profile.installCommand}`
+      );
     });
   }
 
-  lines.push('');
-  lines.push('Next steps:');
+  lines.push(
+    '',
+    'Next steps:'
+  );
   payload.nextSteps.forEach(step => lines.push(`- ${step}`));
 
   return `${lines.join('\n')}\n`;
