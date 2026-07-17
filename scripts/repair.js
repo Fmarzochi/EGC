@@ -68,6 +68,31 @@ function printHuman(result) {
   console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'repaired'}=${result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount}, errors=${result.summary.errorCount}`);
 }
 
+function executePluginRepairs(options) {
+  if (options.dryRun) return [];
+  const plugins = listInstalledPlugins();
+  if (plugins.length === 0) return [];
+  return reinstallAllPlugins();
+}
+
+function printOutput(result, pluginResults, options) {
+  if (options.json) {
+    if (pluginResults.length > 0) {
+      result.pluginRepairs = pluginResults;
+    }
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  printHuman(result);
+  if (pluginResults.length > 0) {
+    console.log('\nPlugin reinstall:\n');
+    for (const p of pluginResults) {
+      const icon = p.success ? '\u2713' : '\u2717';
+      console.log(`  ${icon} ${p.name}${p.success ? '' : ': ' + (p.errors || []).join(', ')}`);
+    }
+  }
+}
+
 function main() {
   try {
     const options = parseArgs(process.argv);
@@ -82,32 +107,11 @@ function main() {
       targets: options.targets,
       dryRun: options.dryRun,
     });
+    
+    const pluginResults = executePluginRepairs(options);
+    printOutput(result, pluginResults, options);
+
     const hasErrors = result.summary.errorCount > 0;
-    let pluginResults = [];
-
-    if (!options.dryRun) {
-      const plugins = listInstalledPlugins();
-      if (plugins.length > 0) {
-        pluginResults = reinstallAllPlugins();
-      }
-    }
-
-    if (options.json) {
-      if (pluginResults.length > 0) {
-        result.pluginRepairs = pluginResults;
-      }
-      console.log(JSON.stringify(result, null, 2));
-    } else {
-      printHuman(result);
-      if (pluginResults.length > 0) {
-        console.log('\nPlugin reinstall:\n');
-        for (const p of pluginResults) {
-          const icon = p.success ? '\u2713' : '\u2717';
-          console.log(`  ${icon} ${p.name}${p.success ? '' : ': ' + (p.errors || []).join(', ')}`);
-        }
-      }
-    }
-
     const pluginErrors = pluginResults.filter(p => !p.success).length;
     process.exitCode = (hasErrors || pluginErrors > 0) ? 1 : 0;
   } catch (error) {

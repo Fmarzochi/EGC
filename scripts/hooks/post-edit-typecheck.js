@@ -24,6 +24,57 @@ process.stdin.on("data", (chunk) => {
   }
 });
 
+function findTsConfig(startDir) {
+  let dir = startDir;
+  const root = path.parse(dir).root;
+  let depth = 0;
+
+  while (dir !== root && depth < 20) {
+    if (fs.existsSync(path.join(dir, "tsconfig.json"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+    depth++;
+  }
+  
+  if (fs.existsSync(path.join(dir, "tsconfig.json"))) {
+    return dir;
+  }
+  return null;
+}
+
+function runTypeCheck(dir, filePath, resolvedPath) {
+  try {
+    const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
+    execFileSync(npxBin, ["tsc", "--noEmit", "--pretty", "false"], {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 30000,
+    });
+  } catch (err) {
+    const output = (err.stdout || "") + (err.stderr || "");
+    const relPath = path.relative(dir, resolvedPath);
+    const candidates = new Set([filePath, resolvedPath, relPath]);
+    const relevantLines = output
+      .split("\n")
+      .filter((line) => {
+        for (const candidate of candidates) {
+          if (line.includes(candidate)) return true;
+        }
+        return false;
+      })
+      .slice(0, 10);
+
+    if (relevantLines.length > 0) {
+      console.error(
+        "[Hook] TypeScript errors in " + path.basename(filePath) + ":",
+      );
+      relevantLines.forEach((line) => console.error(line));
+    }
+  }
+}
+
 process.stdin.on("end", () => {
   try {
     const input = JSON.parse(data);
@@ -35,55 +86,10 @@ process.stdin.on("end", () => {
         process.stdout.write(data);
         process.exit(0);
       }
-      let dir = path.dirname(resolvedPath);
-      const root = path.parse(dir).root;
-      let depth = 0;
-
-      while (dir !== root && depth < 20) {
-        if (fs.existsSync(path.join(dir, "tsconfig.json"))) {
-          break;
-        }
-        dir = path.dirname(dir);
-        depth++;
-      }
-
-      if (fs.existsSync(path.join(dir, "tsconfig.json"))) {
-        try {
-          // Use npx.cmd on Windows to avoid shell: true which enables command injection
-          const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
-          execFileSync(npxBin, ["tsc", "--noEmit", "--pretty", "false"], {
-            cwd: dir,
-            encoding: "utf8",
-            stdio: ["pipe", "pipe", "pipe"],
-            timeout: 30000,
-          });
-        } catch (err) {
-          // tsc exits non-zero when there are errors: filter to edited file
-          const output = (err.stdout || "") + (err.stderr || "");
-          // Compute paths that uniquely identify the edited file.
-          // tsc output uses paths relative to its cwd (the tsconfig dir),
-          // so check for the relative path, absolute path, and original path.
-          // Avoid bare basename matching: it causes false positives when
-          // multiple files share the same name (e.g., src/utils.ts vs tests/utils.ts).
-          const relPath = path.relative(dir, resolvedPath);
-          const candidates = new Set([filePath, resolvedPath, relPath]);
-          const relevantLines = output
-            .split("\n")
-            .filter((line) => {
-              for (const candidate of candidates) {
-                if (line.includes(candidate)) return true;
-              }
-              return false;
-            })
-            .slice(0, 10);
-
-          if (relevantLines.length > 0) {
-            console.error(
-              "[Hook] TypeScript errors in " + path.basename(filePath) + ":",
-            );
-            relevantLines.forEach((line) => console.error(line));
-          }
-        }
+      
+      const tsConfigDir = findTsConfig(path.dirname(resolvedPath));
+      if (tsConfigDir) {
+        runTypeCheck(tsConfigDir, filePath, resolvedPath);
       }
     }
   } catch {

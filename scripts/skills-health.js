@@ -32,76 +32,72 @@ function requireValue(argv, index, argName) {
   return value;
 }
 
+function applyArg(argv, index, options) {
+  const arg = argv[index];
+
+  if (arg === '--json') {
+    options.json = true;
+    return 1;
+  }
+
+  if (arg === '--help' || arg === '-h') {
+    options.help = true;
+    return 1;
+  }
+
+  if (arg === '--skills-root') {
+    options.skillsRoot = requireValue(argv, index, '--skills-root');
+    return 2;
+  }
+
+  if (arg === '--learned-root') {
+    options.learnedRoot = requireValue(argv, index, '--learned-root');
+    return 2;
+  }
+
+  if (arg === '--imported-root') {
+    options.importedRoot = requireValue(argv, index, '--imported-root');
+    return 2;
+  }
+
+  if (arg === '--home') {
+    options.homeDir = requireValue(argv, index, '--home');
+    return 2;
+  }
+
+  if (arg === '--runs-file') {
+    options.runsFilePath = requireValue(argv, index, '--runs-file');
+    return 2;
+  }
+
+  if (arg === '--now') {
+    options.now = requireValue(argv, index, '--now');
+    return 2;
+  }
+
+  if (arg === '--warn-threshold') {
+    options.warnThreshold = Number(requireValue(argv, index, '--warn-threshold'));
+    return 2;
+  }
+
+  if (arg === '--dashboard') {
+    options.dashboard = true;
+    return 1;
+  }
+
+  if (arg === '--panel') {
+    options.panel = requireValue(argv, index, '--panel');
+    return 2;
+  }
+
+  throw new Error(`Unknown argument: ${arg}`);
+}
+
 function parseArgs(argv) {
   const options = {};
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-
-    if (arg === '--json') {
-      options.json = true;
-      continue;
-    }
-
-    if (arg === '--help' || arg === '-h') {
-      options.help = true;
-      continue;
-    }
-
-    if (arg === '--skills-root') {
-      options.skillsRoot = requireValue(argv, index, '--skills-root');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--learned-root') {
-      options.learnedRoot = requireValue(argv, index, '--learned-root');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--imported-root') {
-      options.importedRoot = requireValue(argv, index, '--imported-root');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--home') {
-      options.homeDir = requireValue(argv, index, '--home');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--runs-file') {
-      options.runsFilePath = requireValue(argv, index, '--runs-file');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--now') {
-      options.now = requireValue(argv, index, '--now');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--warn-threshold') {
-      options.warnThreshold = Number(requireValue(argv, index, '--warn-threshold'));
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--dashboard') {
-      options.dashboard = true;
-      continue;
-    }
-
-    if (arg === '--panel') {
-      options.panel = requireValue(argv, index, '--panel');
-      index += 1;
-      continue;
-    }
-
-    throw new Error(`Unknown argument: ${arg}`);
+  let index = 0;
+  while (index < argv.length) {
+    index += applyArg(argv, index, options);
   }
 
   return options;

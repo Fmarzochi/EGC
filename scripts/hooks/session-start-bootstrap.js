@@ -69,6 +69,27 @@ function hasRunnerRoot(candidate) {
  *
  * @returns {string}
  */
+function resolveFromCache(claudeDir) {
+  try {
+    for (const slug of CACHE_PLUGIN_SLUGS) {
+      const cacheBase = path.join(claudeDir, 'plugins', 'cache', slug);
+      for (const org of fs.readdirSync(cacheBase, { withFileTypes: true })) {
+        if (!org.isDirectory()) continue;
+        for (const version of fs.readdirSync(path.join(cacheBase, org.name), { withFileTypes: true })) {
+          if (!version.isDirectory()) continue;
+          const candidate = path.join(cacheBase, org.name, version.name);
+          if (hasRunnerRoot(candidate)) {
+            return candidate;
+          }
+        }
+      }
+    }
+  } catch {
+    // cache directory may not exist; that's fine
+  }
+  return null;
+}
+
 function resolvePluginRoot() {
   const envRoot = process.env.GEMINI_PLUGIN_ROOT || '';
   if (hasRunnerRoot(envRoot)) {
@@ -92,24 +113,8 @@ function resolvePluginRoot() {
     }
   }
 
-  // Walk versioned cache: ~/.gemini/plugins/cache/{egc,everything-gemini}/<org>/<version>/
-  try {
-    for (const slug of CACHE_PLUGIN_SLUGS) {
-      const cacheBase = path.join(claudeDir, 'plugins', 'cache', slug);
-      for (const org of fs.readdirSync(cacheBase, { withFileTypes: true })) {
-        if (!org.isDirectory()) continue;
-        for (const version of fs.readdirSync(path.join(cacheBase, org.name), { withFileTypes: true })) {
-          if (!version.isDirectory()) continue;
-          const candidate = path.join(cacheBase, org.name, version.name);
-          if (hasRunnerRoot(candidate)) {
-            return candidate;
-          }
-        }
-      }
-    }
-  } catch {
-    // cache directory may not exist; that's fine
-  }
+  const cachedRoot = resolveFromCache(claudeDir);
+  if (cachedRoot) return cachedRoot;
 
   return claudeDir;
 }

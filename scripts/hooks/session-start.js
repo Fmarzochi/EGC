@@ -186,55 +186,56 @@ function pruneExpiredSessions(searchDirs, retentionDays) {
  *   The best matching session with its cached content and match reason,
  *   or null if the sessions array is empty or all files are unreadable.
  */
+function updateMatchState(session, content, state, normalizedCwd, currentProject) {
+  if (!state.fallbackSession) {
+    state.fallbackSession = session;
+    state.fallbackContent = content;
+  }
+
+  const worktreeMatch = /\*\*Worktree:\*\*\s*(.+)$/m.exec(content); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+  const sessionWorktree = worktreeMatch ? worktreeMatch[1].trim() : '';
+
+  if (sessionWorktree && normalizePath(sessionWorktree) === normalizedCwd) {
+    return { session, content, matchReason: 'worktree' };
+  }
+
+  if (!state.projectMatch && currentProject) {
+    const projectFieldMatch = /\*\*Project:\*\*\s*(.+)$/m.exec(content); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+    const sessionProject = projectFieldMatch ? projectFieldMatch[1].trim() : '';
+    if (sessionProject && sessionProject === currentProject) {
+      state.projectMatch = session;
+      state.projectMatchContent = content;
+    }
+  }
+
+  return null;
+}
+
 function selectMatchingSession(sessions, cwd, currentProject) {
   if (sessions.length === 0) return null;
 
-  // Normalize cwd once outside the loop to avoid repeated syscalls
   const normalizedCwd = normalizePath(cwd);
-
-  let projectMatch = null;
-  let projectMatchContent = null;
-  let fallbackSession = null;
-  let fallbackContent = null;
+  const state = {
+    projectMatch: null,
+    projectMatchContent: null,
+    fallbackSession: null,
+    fallbackContent: null
+  };
 
   for (const session of sessions) {
     const content = readFile(session.path);
     if (!content) continue;
 
-    // Cache first readable session+content pair for fallback
-    if (!fallbackSession) {
-      fallbackSession = session;
-      fallbackContent = content;
-    }
-
-    // Extract **Worktree:** field
-    const worktreeMatch = /\*\*Worktree:\*\*\s*(.+)$/m.exec(content); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
-    const sessionWorktree = worktreeMatch ? worktreeMatch[1].trim() : '';
-
-    // Exact worktree match: best possible, return immediately
-    // Normalize both paths to handle symlinks and case-insensitive filesystems
-    if (sessionWorktree && normalizePath(sessionWorktree) === normalizedCwd) {
-      return { session, content, matchReason: 'worktree' };
-    }
-
-    // Project name match: keep searching for a worktree match
-    if (!projectMatch && currentProject) {
-      const projectFieldMatch = /\*\*Project:\*\*\s*(.+)$/m.exec(content); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
-      const sessionProject = projectFieldMatch ? projectFieldMatch[1].trim() : '';
-      if (sessionProject && sessionProject === currentProject) {
-        projectMatch = session;
-        projectMatchContent = content;
-      }
-    }
+    const exactMatch = updateMatchState(session, content, state, normalizedCwd, currentProject);
+    if (exactMatch) return exactMatch;
   }
 
-  if (projectMatch) {
-    return { session: projectMatch, content: projectMatchContent, matchReason: 'project' };
+  if (state.projectMatch) {
+    return { session: state.projectMatch, content: state.projectMatchContent, matchReason: 'project' };
   }
 
-  // Fallback: most recent readable session (original behavior)
-  if (fallbackSession) {
-    return { session: fallbackSession, content: fallbackContent, matchReason: 'recency-fallback' };
+  if (state.fallbackSession) {
+    return { session: state.fallbackSession, content: state.fallbackContent, matchReason: 'recency-fallback' };
   }
 
   log('[SessionStart] All session files were unreadable');
