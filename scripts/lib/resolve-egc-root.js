@@ -129,6 +129,6 @@ const INLINE_RESOLVE = '(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC
 
 module.exports = {
   resolveEGCRoot,
-  resolveEccRoot,
+  resolveEccRoot, // NOSONAR: deprecated ECC-era alias kept as a public export for backward compatibility
   INLINE_RESOLVE,
 };

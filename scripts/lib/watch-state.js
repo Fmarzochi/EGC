@@ -221,7 +221,7 @@ class StateWatcher {
   }
 
   _reattach(tool, filePath, oldWatcher) {
-    if (oldWatcher) { try { oldWatcher.close(); } catch (e) { void e; } }
+    if (oldWatcher) { try { oldWatcher.close(); } catch { /* watcher already closed */ } }
     this._watchers.delete(tool);
     this._watchFile(tool, filePath);
     this._schedule(tool, filePath);
@@ -240,8 +240,8 @@ class StateWatcher {
       // Windows emits 'error' (EPERM) instead of 'rename' on atomic file replacement
       watcher.on('error', () => setTimeout(() => this._reattach(tool, filePath, null), 150));
       this._watchers.set(tool, watcher);
-    } catch (e) {
-      void e; // File may have been deleted -- skip silently
+    } catch {
+      // File may have been deleted -- skip silently
     }
   }
 

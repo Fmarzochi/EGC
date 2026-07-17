@@ -326,7 +326,8 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
  * assigned directly (e.g. `planOperations: createFlatSkillPlanOperations`)
  * without a wrapper closure in each adapter file.
  */
-function createFlatSkillPlanOperations(input = {}, adapter) {
+function createFlatSkillPlanOperations(rawInput, adapter) {
+  const input = rawInput ?? {};
   let modules;
   if (Array.isArray(input.modules)) {
     modules = input.modules;

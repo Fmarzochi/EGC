@@ -89,7 +89,7 @@ function mergeSkillIndexEntry(existingContent, entry) {
 // be empty. See module comment above for why.
 function removeSkillIndexEntry(existingContent, name) {
   if (!existingContent) {
-    return existingContent || '';
+    return '';
   }
 
   const lines = existingContent.split('\n');
