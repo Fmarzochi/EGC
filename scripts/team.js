@@ -134,6 +134,99 @@ function callMcpTool(toolName, args) {
   throw new Error('No response from memory server');
 }
 
+function handleInit(args) {
+  const backendIdx = args.indexOf('--backend');
+  const remoteIdx = args.indexOf('--remote');
+  const branchIdx = args.indexOf('--branch');
+
+  const backend = backendIdx !== -1 ? args[backendIdx + 1] : 'git';
+  const remote = remoteIdx !== -1 ? args[remoteIdx + 1] : null;
+  const branch = branchIdx !== -1 ? args[branchIdx + 1] : 'main';
+
+  if (!remote) {
+    console.error('Error: --remote is required for team init');
+    process.exit(1);
+  }
+
+  const config = { backend, remote, branch };
+  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  console.log(`Team initialized:
+  Backend: ${backend}
+  Remote:  ${remote}
+  Branch:  ${branch}
+  Config:  ${TEAM_CONFIG_PATH}`);
+
+  // Now try to connect and set up via MCP tool.
+  try {
+    const result = callMcpTool('team_init', { backend, remote, branch });
+    if (result) {
+      console.log('Sync backend configured successfully.');
+    }
+  } catch (err) {
+    console.log(`Note: Memory server setup returned: ${err.message}`);
+    console.log('The config file is saved. Run "egc team sync" to start syncing.');
+  }
+}
+
+async function handleSync() {
+  const config = getTeamConfig();
+  if (!config) {
+    console.error('Error: Team not initialized. Run "egc team init" first.');
+    process.exit(1);
+  }
+
+  console.log('Syncing team memory...');
+  try {
+    const result = callMcpTool('team_sync', {});
+    console.log('Sync complete:');
+    if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
+    if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
+    if (result.conflictCount !== undefined && result.conflictCount > 0) {
+      console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
+    }
+    if (result.errors && result.errors.length > 0) {
+      console.log(`  Errors: ${result.errors.join(', ')}`);
+    }
+  } catch (err) {
+    // Fallback: use direct git operations.
+    console.log(`MCP tool failed: ${err.message}`);
+    console.log('Falling back to direct sync...');
+    await directSync(config);
+  }
+}
+
+function handleStatus() {
+  const config = getTeamConfig();
+  if (!config) {
+    console.error('Error: Team not initialized. Run "egc team init" first.');
+    process.exit(1);
+  }
+
+  try {
+    const result = callMcpTool('team_status', {});
+    if (result.lastSyncTime) console.log(`Last sync: ${result.lastSyncTime}`);
+    if (result.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${result.hasUncommittedChanges}`);
+    if (result.conflictCount !== undefined && result.conflictCount > 0) console.log(`Conflicts: ${result.conflictCount}`);
+    console.log(`Remote: ${result.remoteUrl || config.remote}`);
+  } catch {
+    // Fallback: read config.
+    console.log(`Backend: ${config.backend}`);
+    console.log(`Remote:  ${config.remote}`);
+    console.log(`Branch:  ${config.branch}`);
+    const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
+    const isRepo = fs.existsSync(path.join(syncDir, '.git'));
+    console.log(`Repo:    ${isRepo ? 'initialized' : 'not initialized'}`);
+    if (isRepo) {
+      try {
+        const log = safeGit(['log', '-1', '--format=%ai'], syncDir);
+        if (log) console.log(`Last commit: ${log}`);
+      } catch {
+        // no commits yet
+      }
+    }
+  }
+}
+
 async function main() {
   const args = process.argv.slice(3); // skip "node team.js" or "egc team"
   const firstArg = args[0];
@@ -144,101 +237,17 @@ async function main() {
   }
 
   switch (firstArg) {
-    case 'init': {
-      const backendIdx = args.indexOf('--backend');
-      const remoteIdx = args.indexOf('--remote');
-      const branchIdx = args.indexOf('--branch');
-
-      const backend = backendIdx !== -1 ? args[backendIdx + 1] : 'git';
-      const remote = remoteIdx !== -1 ? args[remoteIdx + 1] : null;
-      const branch = branchIdx !== -1 ? args[branchIdx + 1] : 'main';
-
-      if (!remote) {
-        console.error('Error: --remote is required for team init');
-        process.exit(1);
-      }
-
-      const config = { backend, remote, branch };
-      fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
-      console.log(`Team initialized:
-  Backend: ${backend}
-  Remote:  ${remote}
-  Branch:  ${branch}
-  Config:  ${TEAM_CONFIG_PATH}`);
-
-      // Now try to connect and set up via MCP tool.
-      try {
-        const result = callMcpTool('team_init', { backend, remote, branch });
-        if (result) {
-          console.log('Sync backend configured successfully.');
-        }
-      } catch (err) {
-        console.log(`Note: Memory server setup returned: ${err.message}`);
-        console.log('The config file is saved. Run "egc team sync" to start syncing.');
-      }
+    case 'init':
+      handleInit(args);
       break;
-    }
 
-    case 'sync': {
-      const config = getTeamConfig();
-      if (!config) {
-        console.error('Error: Team not initialized. Run "egc team init" first.');
-        process.exit(1);
-      }
-
-      console.log('Syncing team memory...');
-      try {
-        const result = callMcpTool('team_sync', {});
-        console.log('Sync complete:');
-        if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
-        if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
-        if (result.conflictCount !== undefined && result.conflictCount > 0) {
-          console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
-        }
-        if (result.errors && result.errors.length > 0) {
-          console.log(`  Errors: ${result.errors.join(', ')}`);
-        }
-      } catch (err) {
-        // Fallback: use direct git operations.
-        console.log(`MCP tool failed: ${err.message}`);
-        console.log('Falling back to direct sync...');
-        await directSync(config);
-      }
+    case 'sync':
+      await handleSync();
       break;
-    }
 
-    case 'status': {
-      const config = getTeamConfig();
-      if (!config) {
-        console.error('Error: Team not initialized. Run "egc team init" first.');
-        process.exit(1);
-      }
-
-      try {
-        const result = callMcpTool('team_status', {});
-        if (result.lastSyncTime) console.log(`Last sync: ${result.lastSyncTime}`);
-        if (result.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${result.hasUncommittedChanges}`);
-        if (result.conflictCount !== undefined && result.conflictCount > 0) console.log(`Conflicts: ${result.conflictCount}`);
-        console.log(`Remote: ${result.remoteUrl || config.remote}`);
-      } catch {
-        // Fallback: read config.
-        console.log(`Backend: ${config.backend}`);
-        console.log(`Remote:  ${config.remote}`);
-        console.log(`Branch:  ${config.branch}`);
-        const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
-        const isRepo = fs.existsSync(path.join(syncDir, '.git'));
-        console.log(`Repo:    ${isRepo ? 'initialized' : 'not initialized'}`);
-        if (isRepo) {
-          try {
-            const log = safeGit(['log', '-1', '--format=%ai'], syncDir);
-            if (log) console.log(`Last commit: ${log}`);
-          } catch {
-            // no commits yet
-          }
-        }
-      }
+    case 'status':
+      handleStatus();
       break;
-    }
 
     default:
       console.error(`Unknown team subcommand: ${firstArg}`);
