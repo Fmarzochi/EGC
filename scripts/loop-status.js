@@ -237,14 +237,14 @@ function getEntryTimestamp(entry) {
   return parseTimestamp(entry.timestamp)
     || parseTimestamp(entry.createdAt)
     || parseTimestamp(entry.created_at)
-    || parseTimestamp(entry.message && entry.message.timestamp);
+    || parseTimestamp(entry.message?.timestamp);
 }
 
 function getSessionId(entry, transcriptPath) {
   return entry.sessionId
     || entry.session_id
-    || (entry.session && entry.session.id)
-    || (entry.message && entry.message.sessionId)
+    || entry.session?.id
+    || entry.message?.sessionId
     || path.basename(transcriptPath, '.jsonl');
 }
 
@@ -263,7 +263,7 @@ function extractToolUses(entry) {
   const uses = [];
 
   for (const block of getContentBlocks(entry)) {
-    if (block && block.type === 'tool_use' && block.id) {
+    if (block?.type === 'tool_use' && block.id) {
       uses.push({
         id: block.id,
         input: block.input || {},
@@ -273,7 +273,7 @@ function extractToolUses(entry) {
   }
 
   const topLevelUse = entry.tool_use || entry.toolUse;
-  if (topLevelUse && topLevelUse.id) {
+  if (topLevelUse?.id) {
     uses.push({
       id: topLevelUse.id,
       input: topLevelUse.input || {},
@@ -296,7 +296,7 @@ function extractToolResultIds(entry) {
   const resultIds = [];
 
   for (const block of getContentBlocks(entry)) {
-    if (block && block.type === 'tool_result') {
+    if (block?.type === 'tool_result') {
       const toolUseId = block.tool_use_id || block.toolUseId || block.id;
       if (toolUseId) {
         resultIds.push(toolUseId);
@@ -324,7 +324,7 @@ function extractToolResultIds(entry) {
 
 function isAssistantProgressEntry(entry) {
   return entry.type === 'assistant'
-    || (entry.message && entry.message.role === 'assistant')
+    || entry.message?.role === 'assistant'
     || extractToolUses(entry).length > 0;
 }
 
@@ -464,7 +464,7 @@ function analyzeTranscript(transcriptPath, options = {}) {
     for (const toolUse of extractToolUses(entry)) {
       const startedAt = timestamp || lastEventAt;
       pendingTools.set(toolUse.id, {
-        command: toolUse.input && toolUse.input.command ? String(toolUse.input.command) : null,
+        command: toolUse.input?.command ? String(toolUse.input.command) : null,
         input: toolUse.input || {},
         name: toolUse.name,
         startedAt: toIso(startedAt),
@@ -478,7 +478,7 @@ function analyzeTranscript(transcriptPath, options = {}) {
           latestWake = {
             delaySeconds,
             dueAt: dueAt.toISOString(),
-            reason: toolUse.input && toolUse.input.reason ? String(toolUse.input.reason) : null,
+            reason: toolUse.input?.reason ? String(toolUse.input.reason) : null,
             scheduledAt: startedAt.toISOString(),
             toolUseId: toolUse.id,
           };

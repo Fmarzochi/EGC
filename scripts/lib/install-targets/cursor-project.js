@@ -114,7 +114,7 @@ module.exports = createInstallTargetAdapter({
 
     function takeUniqueOperations(operations) {
       return operations.filter(operation => {
-        if (!operation || !operation.destinationPath) {
+        if (!operation?.destinationPath) {
           return false;
         }
 

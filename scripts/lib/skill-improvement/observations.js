@@ -32,8 +32,8 @@ function createObservationId() {
 
 function createSkillObservation(input) {
   const task = ensureString(input.task, 'task');
-  const skillId = ensureString(input.skill && input.skill.id, 'skill.id');
-  const skillPath = typeof input.skill.path === 'string' && input.skill.path.trim().length > 0
+  const skillId = ensureString(input.skill?.id, 'skill.id');
+  const skillPath = typeof input.skill?.path === 'string' && input.skill.path.trim().length > 0
     ? input.skill.path.trim()
     : null;
   const success = Boolean(input.success);
@@ -94,7 +94,7 @@ function readSkillObservations(options = {}) {
         return null;
       }
     })
-    .filter(record => record && record.schemaVersion === OBSERVATION_SCHEMA_VERSION);
+    .filter(record => record?.schemaVersion === OBSERVATION_SCHEMA_VERSION);
 }
 
 module.exports = {

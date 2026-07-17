@@ -47,7 +47,7 @@ function resolveTarget(rootDir, relPath) {
 
 function findShellBinary() {
   const candidates = [];
-  if (process.env.BASH && process.env.BASH.trim()) {
+  if (process.env.BASH?.trim()) {
     const trimmed = process.env.BASH.trim();
     if (SAFE_SHELL_BASENAMES.has(path.basename(trimmed).toLowerCase())) {
       candidates.push(trimmed);

@@ -81,7 +81,7 @@ function compareStringArrays(left, right) {
 }
 
 function getManagedOperations(state) {
-  return Array.isArray(state && state.operations)
+  return Array.isArray(state?.operations)
     ? state.operations.filter(operation => operation.ownership === 'managed')
     : [];
 }
