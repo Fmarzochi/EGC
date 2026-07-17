@@ -208,7 +208,7 @@ function selectMatchingSession(sessions, cwd, currentProject) {
     }
 
     // Extract **Worktree:** field
-    const worktreeMatch = /\*\*Worktree:\*\*\s*(.+)$/m.exec(content);
+    const worktreeMatch = /\*\*Worktree:\*\*\s*(.+)$/m.exec(content); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     const sessionWorktree = worktreeMatch ? worktreeMatch[1].trim() : '';
 
     // Exact worktree match: best possible, return immediately
@@ -219,7 +219,7 @@ function selectMatchingSession(sessions, cwd, currentProject) {
 
     // Project name match: keep searching for a worktree match
     if (!projectMatch && currentProject) {
-      const projectFieldMatch = /\*\*Project:\*\*\s*(.+)$/m.exec(content);
+      const projectFieldMatch = /\*\*Project:\*\*\s*(.+)$/m.exec(content); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       const sessionProject = projectFieldMatch ? projectFieldMatch[1].trim() : '';
       if (sessionProject && sessionProject === currentProject) {
         projectMatch = session;
@@ -322,7 +322,7 @@ function readInstinctsFromDir(directory, scope) {
 }
 
 function extractInstinctAction(content) {
-  const actionMatch = /## Action\s*\n+([\s\S]+?)(?:\n## |\n---|$)/.exec(String(content || ''));
+  const actionMatch = /## Action\s*\n+([\s\S]+?)(?:\n## |\n---|$)/.exec(String(content || '')); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   const actionBlock = (actionMatch ? actionMatch[1] : String(content || '')).trim();
   const firstLine = actionBlock
     .split('\n')
@@ -390,7 +390,7 @@ function stripMarkdownInline(value) {
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     .trim();
 }
 
@@ -407,7 +407,7 @@ function truncateSummary(value, maxLength = MAX_LEARNED_SKILL_SUMMARY_CHARS) {
 }
 
 function extractMarkdownHeading(content) {
-  const match = /^#\s+(.+)$/m.exec(String(content || ''));
+  const match = /^#\s+(.+)$/m.exec(String(content || '')); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   return match ? stripMarkdownInline(match[1]) : '';
 }
 
@@ -418,7 +418,7 @@ function extractSection(content, headingPattern) {
 }
 
 function extractFirstParagraph(content) {
-  const withoutHeading = String(content || '').replace(/^#\s+.+$/m, '').trim();
+  const withoutHeading = String(content || '').replace(/^#\s+.+$/m, '').trim(); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   return withoutHeading
     .split(/\n\s*\n/)
     .map(paragraph => paragraph.trim())

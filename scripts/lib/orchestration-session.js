@@ -79,7 +79,7 @@ function parseWorkerStatus(content) {
   }
 
   for (const line of content.split('\n')) {
-    const match = /^- ([A-Za-z ]+):\s*(.+)$/.exec(line);
+    const match = /^- ([A-Za-z ]+):\s*(.+)$/.exec(line); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     if (!match) continue;
 
     const key = match[1].trim().toLowerCase().replace(/\s+/g, '');

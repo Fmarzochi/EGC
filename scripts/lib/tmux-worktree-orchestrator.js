@@ -9,7 +9,7 @@ function slugify(value, fallback = 'worker') {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   return normalized || fallback;
 }
 

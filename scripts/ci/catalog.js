@@ -209,19 +209,19 @@ function parseAgentsDocExpectations(agentsContent) {
     {
       category: 'agents',
       mode: 'exact',
-      regex: /^\s*agents\/\s*[,:–-]\s*(\d+)\s+specialized subagents\s*$/im,
+      regex: /^\s*agents\/\s*[,:–-]\s*(\d+)\s+specialized subagents\s*$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       source: 'AGENTS.md project structure'
     },
     {
       category: 'skills',
       mode: 'minimum',
-      regex: /^\s*skills\/\s*[,:–-]\s*(\d+)(\+)?\s+workflow skills and domain knowledge\s*$/im,
+      regex: /^\s*skills\/\s*[,:–-]\s*(\d+)(\+)?\s+workflow skills and domain knowledge\s*$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       source: 'AGENTS.md project structure'
     },
     {
       category: 'commands',
       mode: 'exact',
-      regex: /^\s*commands\/\s*[,:–-]\s*(\d+)\s+slash commands\s*$/im,
+      regex: /^\s*commands\/\s*[,:–-]\s*(\d+)\s+slash commands\s*$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       source: 'AGENTS.md project structure'
     }
   ];
@@ -264,19 +264,19 @@ function parseZhAgentsDocExpectations(agentsContent) {
     {
       category: 'agents',
       mode: 'exact',
-      regex: /^\s*agents\/\s*[,:–-]\s*(\d+)\s+个专业子代理\s*$/im,
+      regex: /^\s*agents\/\s*[,:–-]\s*(\d+)\s+个专业子代理\s*$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       source: 'docs/zh-CN/AGENTS.md project structure'
     },
     {
       category: 'skills',
       mode: 'minimum',
-      regex: /^\s*skills\/\s*[,:–-]\s*(\d+)(\+)?\s+个工作流技能和领域知识\s*$/im,
+      regex: /^\s*skills\/\s*[,:–-]\s*(\d+)(\+)?\s+个工作流技能和领域知识\s*$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       source: 'docs/zh-CN/AGENTS.md project structure'
     },
     {
       category: 'commands',
       mode: 'exact',
-      regex: /^\s*commands\/\s*[,:–-]\s*(\d+)\s+个斜杠命令\s*$/im,
+      regex: /^\s*commands\/\s*[,:–-]\s*(\d+)\s+个斜杠命令\s*$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       source: 'docs/zh-CN/AGENTS.md project structure'
     }
   ];
@@ -361,19 +361,19 @@ function syncEnglishAgents(content, catalog) {
   );
   nextContent = replaceOrThrow(
     nextContent,
-    /^(\s*agents\/\s*[,:–-]\s*)(\d+)(\s+specialized subagents\s*)$/im,
+    /^(\s*agents\/\s*[,:–-]\s*)(\d+)(\s+specialized subagents\s*)$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     (_, prefix, __, suffix) => `${prefix}${catalog.agents.count}${suffix}`,
     'AGENTS.md project structure (agents)'
   );
   nextContent = replaceOrThrow(
     nextContent,
-    /^(\s*skills\/\s*[,:–-]\s*)(\d+)(\+?)(\s+workflow skills and domain knowledge\s*)$/im,
+    /^(\s*skills\/\s*[,:–-]\s*)(\d+)(\+?)(\s+workflow skills and domain knowledge\s*)$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     (_, prefix, __, plus, suffix) => `${prefix}${catalog.skills.count}${plus}${suffix}`,
     'AGENTS.md project structure (skills)'
   );
   nextContent = replaceOrThrow(
     nextContent,
-    /^(\s*commands\/\s*[,:–-]\s*)(\d+)(\s+slash commands\s*)$/im,
+    /^(\s*commands\/\s*[,:–-]\s*)(\d+)(\s+slash commands\s*)$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     (_, prefix, __, suffix) => `${prefix}${catalog.commands.count}${suffix}`,
     'AGENTS.md project structure (commands)'
   );
@@ -434,19 +434,19 @@ function syncZhAgents(content, catalog) {
   );
   nextContent = replaceOrThrow(
     nextContent,
-    /^(\s*agents\/\s*[,:–-]\s*)(\d+)(\s+个专业子代理\s*)$/im,
+    /^(\s*agents\/\s*[,:–-]\s*)(\d+)(\s+个专业子代理\s*)$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     (_, prefix, __, suffix) => `${prefix}${catalog.agents.count}${suffix}`,
     'docs/zh-CN/AGENTS.md project structure (agents)'
   );
   nextContent = replaceOrThrow(
     nextContent,
-    /^(\s*skills\/\s*[,:–-]\s*)(\d+)(\+?)(\s+个工作流技能和领域知识\s*)$/im,
+    /^(\s*skills\/\s*[,:–-]\s*)(\d+)(\+?)(\s+个工作流技能和领域知识\s*)$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     (_, prefix, __, plus, suffix) => `${prefix}${catalog.skills.count}${plus}${suffix}`,
     'docs/zh-CN/AGENTS.md project structure (skills)'
   );
   nextContent = replaceOrThrow(
     nextContent,
-    /^(\s*commands\/\s*[,:–-]\s*)(\d+)(\s+个斜杠命令\s*)$/im,
+    /^(\s*commands\/\s*[,:–-]\s*)(\d+)(\s+个斜杠命令\s*)$/im, // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     (_, prefix, __, suffix) => `${prefix}${catalog.commands.count}${suffix}`,
     'docs/zh-CN/AGENTS.md project structure (commands)'
   );

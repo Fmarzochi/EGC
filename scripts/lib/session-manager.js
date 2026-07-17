@@ -243,13 +243,13 @@ function parseSessionMetadata(content) {
 
   if (!content) return metadata;
 
-  metadata.title = extractField(content, /^#\s+(.+)$/m);
+  metadata.title = extractField(content, /^#\s+(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   metadata.date = extractField(content, /\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})/);
   metadata.started = extractField(content, /\*\*Started:\*\*\s*([\d:]+)/);
   metadata.lastUpdated = extractField(content, /\*\*Last Updated:\*\*\s*([\d:]+)/);
-  metadata.project = extractField(content, /\*\*Project:\*\*\s*(.+)$/m);
-  metadata.branch = extractField(content, /\*\*Branch:\*\*\s*(.+)$/m);
-  metadata.worktree = extractField(content, /\*\*Worktree:\*\*\s*(.+)$/m);
+  metadata.project = extractField(content, /\*\*Project:\*\*\s*(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+  metadata.branch = extractField(content, /\*\*Branch:\*\*\s*(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+  metadata.worktree = extractField(content, /\*\*Worktree:\*\*\s*(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
 
   metadata.completed = extractListItems(
     content,

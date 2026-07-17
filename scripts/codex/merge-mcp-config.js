@@ -310,7 +310,7 @@ function applyChanges(configPath, raw, toAppend, toRemoveLog, dryRun, updateMcp)
 
   if (updateMcp || hasRemovals) {
     for (const label of toRemoveLog) log(`  [update] ${label}`);
-    const cleaned = raw.replace(/\n+$/, '\n');
+    const cleaned = raw.replace(/\n+$/, '\n'); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     fs.writeFileSync(configPath, cleaned + (toAppend.length > 0 ? appendText : ''), 'utf8');
   } else {
     fs.appendFileSync(configPath, appendText, 'utf8');

@@ -154,7 +154,7 @@ function extractHeaderField(header, label) {
 }
 
 function buildSessionHeader(today, currentTime, metadata, existingContent = '') {
-  const headingMatch = existingContent.match(/^#\s+.+$/m);
+  const headingMatch = existingContent.match(/^#\s+.+$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   const heading = headingMatch ? headingMatch[0] : `# Session: ${today}`;
   const date = extractHeaderField(existingContent, 'Date') || today;
   const started = extractHeaderField(existingContent, 'Started') || currentTime;

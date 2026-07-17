@@ -15,7 +15,7 @@ function run(rawInput) {
       if (match) {
         const prUrl = match[0];
         const repo = prUrl.replace(/https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/, '$1');
-        const prNum = prUrl.replace(/.+\/pull\/(\d+)/, '$1');
+        const prNum = prUrl.replace(/.+\/pull\/(\d+)/, '$1'); // NOSONAR: superlinear risk accepted: input is the local user's own command or CLI output
         return {
           stdout: typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput),
           stderr: [

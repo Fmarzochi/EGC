@@ -167,7 +167,7 @@ function sanitizeText(text, { preserveEmoji = false } = {}) {
   next = next.replace(/^>\s{2,}/gm, '> ');
   next = next.replace(/^-\s{2,}/gm, '- ');
   next = next.replace(/^(\d+\.)\s{2,}/gm, '$1 ');
-  next = next.replace(/[ \t]+$/gm, '');
+  next = next.replace(/[ \t]+$/gm, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
 
   return next;
 }

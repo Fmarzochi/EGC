@@ -5,8 +5,8 @@ const path = require('node:path');
 
 const { DEFAULT_BRANCH_FILE, getStateDir } = require('./branch-state');
 
-const HEADER_FIELD_REGEX = /^(project|branch|updated):\s*(.+)$/;
-const SECTION_HEADING_REGEX = /^##\s+(.+)$/;
+const HEADER_FIELD_REGEX = /^(project|branch|updated):\s*(.+)$/; // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+const SECTION_HEADING_REGEX = /^##\s+(.+)$/; // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
 
 /**
  * Parses one project-state Markdown file produced by the egc-memory

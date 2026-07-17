@@ -31,7 +31,7 @@ function validateFrontmatter(file, content) {
       continue;
     }
 
-    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     if (!match) {
       errors.push(`${file} - invalid frontmatter line: ${rawLine}`);
       continue;
@@ -119,7 +119,7 @@ function checkSkillDirXrefs(file, contentNoCodeBlocks, validSkills) {
 function checkWorkflowXrefs(file, contentNoCodeBlocks, validAgents) {
   const errors = [];
   for (const match of contentNoCodeBlocks.matchAll(/^([a-z][-a-z0-9]*(?:\s*->\s*[a-z][-a-z0-9]*)+)$/gm)) {
-    for (const agent of match[1].split(/\s*->\s*/)) {
+    for (const agent of match[1].split(/\s*->\s*/)) { // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
       if (!validAgents.has(agent)) {
         errors.push(`${file} - workflow references non-existent agent "${agent}"`);
       }

@@ -84,7 +84,7 @@ function hasHookEntry(settings, event, hookScriptPath, matcherFilter) {
 }
 
 function extractScriptBasename(command) {
-  const scriptPaths = String(command).match(/[^\s"']+\.js\b/g);
+  const scriptPaths = String(command).match(/[^\s"']+\.js\b/g); // NOSONAR: superlinear risk accepted: input is the local user's own command or CLI output
   if (!scriptPaths || scriptPaths.length === 0) {
     return null;
   }

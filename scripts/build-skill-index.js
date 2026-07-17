@@ -57,7 +57,7 @@ for (const f of walkMd(rulesRoot)) {
   try {
     if (path.basename(f) === 'README.md') continue;
     const content = fs.readFileSync(f, 'utf8');
-    const h1 = content.match(/^#\s+(.+)$/m);
+    const h1 = content.match(/^#\s+(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
     if (!h1) continue;
     const rel = path.relative(rulesRoot, f);
     const name = rel.replace(/[\\/]/g, '-').replace(/\.md$/, '').toLowerCase();

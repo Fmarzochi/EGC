@@ -95,7 +95,7 @@ function extractSummary(body, maxSentences = 1) {
   const firstParagraph = paragraphs.find(p => p.length > 0);
   if (!firstParagraph) return '';
 
-  const sentences = firstParagraph.match(/[^.!?]+[.!?]+/g) || [firstParagraph];
+  const sentences = firstParagraph.match(/[^.!?]+[.!?]+/g) || [firstParagraph]; // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   return sentences.slice(0, maxSentences).map(s => s.trim()).join(' ').trim();
 }
 

@@ -261,7 +261,7 @@ function sanitizeSessionId(raw) {
   const sanitized = normalized
     .replace(/[^a-zA-Z0-9_-]/g, '-')
     .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
 
   if (sanitized.length > 0) {
     const suffix = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 6);

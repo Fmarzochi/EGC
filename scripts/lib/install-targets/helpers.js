@@ -15,7 +15,7 @@ function normalizeRelativePath(relativePath) {
   return String(relativePath || '')
     .replaceAll('\\', '/')
     .replace(/^\.\/+/, '')
-    .replace(/\/+$/, '');
+    .replace(/\/+$/, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
 }
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {

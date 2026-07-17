@@ -78,7 +78,7 @@ function mergeSkillIndexEntry(existingContent, entry) {
     return nextLines.join('\n');
   }
 
-  const trimmedOriginal = original.replace(/\n+$/, '');
+  const trimmedOriginal = original.replace(/\n+$/, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   const prefix = trimmedOriginal.length > 0 ? `${trimmedOriginal}\n\n` : '';
   return `${prefix}${blockLines.join('\n')}\n`;
 }

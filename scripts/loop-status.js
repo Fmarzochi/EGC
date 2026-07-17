@@ -647,7 +647,7 @@ function isWindowsReservedBasename(value) {
 
 function sanitizeSnapshotName(value, fallback = 'session') {
   const raw = String(value || '').trim() || fallback;
-  const sanitized = raw.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+|_+$/g, '');
+  const sanitized = raw.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+|_+$/g, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   if (sanitized && sanitized.length <= 96 && !isWindowsReservedBasename(sanitized)) {
     return sanitized;
   }
@@ -660,7 +660,7 @@ function sanitizeSnapshotName(value, fallback = 'session') {
     return `${sanitized.slice(0, firstDotIndex)}-${hashSuffix}${sanitized.slice(firstDotIndex)}`;
   }
 
-  const prefix = sanitized ? sanitized.slice(0, 48).replace(/[._-]+$/g, '') : fallback;
+  const prefix = sanitized ? sanitized.slice(0, 48).replace(/[._-]+$/g, '') : fallback; // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   return `${prefix || fallback}-${hashString(raw).slice(0, 12)}`;
 }
 

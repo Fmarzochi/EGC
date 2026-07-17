@@ -38,7 +38,7 @@ const SECURITY_RELEVANT_TOOLS = new Set([
 
 // Commands that require governance approval
 const APPROVAL_COMMANDS = [
-  /git\s+push\s+.*--force/,
+  /git\s+push\s+.*--force/, // NOSONAR: superlinear risk accepted: input is the local user's own command or CLI output
   /git\s+reset\s+--hard/,
   /rm\s+-rf?\s/,
   /DROP\s+(?:TABLE|DATABASE)/i,
