@@ -19,6 +19,60 @@ function runIn(dir, file, args = []) {
   return run(file, args, { cwd: dir });
 }
 
+function verifyUser1PushToRemote(remoteRepo) {
+  console.log('\n[Verify] Checking remote has User1 data...');
+  const remoteLog = runIn(remoteRepo, 'git', ['log', '--oneline', '--all']);
+  console.log(`  Remote commits: ${remoteLog.trim() || 'none'}`);
+  if (remoteLog.trim()) {
+    console.log('  PASS: User1 pushed to remote');
+  } else {
+    console.log('  FAIL: No commits on remote');
+  }
+}
+
+function verifyUser2HasUser1State(stateDir) {
+  console.log('\n[Verify] User2 has User1 state...');
+  if (fs.existsSync(path.join(stateDir, 'test-project.md'))) {
+    const content = fs.readFileSync(path.join(stateDir, 'test-project.md'), 'utf-8');
+    console.log(`  PASS: State file synced to User2`);
+    if (content.includes('User1')) {
+      console.log(`  PASS: User1 attribution preserved`);
+    } else {
+      console.log(`  FAIL: Author attribution lost`);
+    }
+    if (content.includes('concurrent migrations')) {
+      console.log(`  PASS: Lesson content synced`);
+    } else {
+      console.log(`  FAIL: Lesson content lost`);
+    }
+  } else {
+    console.log(`  FAIL: No synced state found`);
+  }
+}
+
+function verifyTeamStatus(userDir, teamScript) {
+  console.log('\n[Verify] team status...');
+  try {
+    runIn(userDir, 'node', [teamScript, 'status']);
+    console.log(`  Status output includes last sync info`);
+    console.log(`  PASS: team status works`);
+  } catch (e) {
+    console.log(`  FAIL: team status error: ${e.message}`);
+  }
+}
+
+function verifyUser1PulledUser2Changes(stateDir) {
+  const finalContent = fs.readFileSync(path.join(stateDir, 'test-project.md'), 'utf-8');
+  console.log('[Verify] Latest state...');
+  console.log(`  Author: ${finalContent.split('\n').find(l => l.startsWith('author:'))}`);
+  console.log(`  Updated: ${finalContent.split('\n').find(l => l.startsWith('updated:'))}`);
+  if (finalContent.includes('User2') && finalContent.includes('PostgreSQL')) {
+    console.log('  PASS: User2 changes synced to User1');
+  } else {
+    console.log('  FAIL: Cross-sync failed');
+  }
+}
+
 async function main() {
   console.log('EGC Team Sync - E2E Integration Test\n');
   console.log(`Temp dir: ${TMP}`);
@@ -59,14 +113,7 @@ async function main() {
   runIn(USER1_DIR, 'node', [teamScript, 'sync']);
 
   // Verify User 1's push reached remote
-  console.log('\n[Verify] Checking remote has User1 data...');
-  const remoteLog = runIn(REMOTE_REPO, 'git', ['log', '--oneline', '--all']);
-  console.log(`  Remote commits: ${remoteLog.trim() || 'none'}`);
-  if (remoteLog.trim()) {
-    console.log('  PASS: User1 pushed to remote');
-  } else {
-    console.log('  FAIL: No commits on remote');
-  }
+  verifyUser1PushToRemote(REMOTE_REPO);
 
   // Simulate User 2: pull and merge
   console.log('\n[User 2] Initializing team sync...');
@@ -85,33 +132,10 @@ async function main() {
   runIn(USER2_DIR, 'node', [teamScript, 'sync']);
 
   // Check that User1's state file exists in User2's local state
-  console.log('\n[Verify] User2 has User1 state...');
-  if (fs.existsSync(path.join(stateDir, 'test-project.md'))) {
-    const content = fs.readFileSync(path.join(stateDir, 'test-project.md'), 'utf-8');
-    console.log(`  PASS: State file synced to User2`);
-    if (content.includes('User1')) {
-      console.log(`  PASS: User1 attribution preserved`);
-    } else {
-      console.log(`  FAIL: Author attribution lost`);
-    }
-    if (content.includes('concurrent migrations')) {
-      console.log(`  PASS: Lesson content synced`);
-    } else {
-      console.log(`  FAIL: Lesson content lost`);
-    }
-  } else {
-    console.log(`  FAIL: No synced state found`);
-  }
+  verifyUser2HasUser1State(stateDir);
 
   // User 1: Check team status
-  console.log('\n[Verify] team status...');
-  try {
-    runIn(USER1_DIR, 'node', [teamScript, 'status']);
-    console.log(`  Status output includes last sync info`);
-    console.log(`  PASS: team status works`);
-  } catch (e) {
-    console.log(`  FAIL: team status error: ${e.message}`);
-  }
+  verifyTeamStatus(USER1_DIR, teamScript);
 
   // User 2: Add their own lesson and sync back
   console.log('\n[User 2] Adding a lesson and syncing back...');
@@ -136,15 +160,7 @@ async function main() {
   process.env.USER = 'User1';
   runIn(USER1_DIR, 'node', [teamScript, 'sync']);
 
-  const finalContent = fs.readFileSync(path.join(stateDir, 'test-project.md'), 'utf-8');
-  console.log('[Verify] Latest state...');
-  console.log(`  Author: ${finalContent.split('\n').find(l => l.startsWith('author:'))}`);
-  console.log(`  Updated: ${finalContent.split('\n').find(l => l.startsWith('updated:'))}`);
-  if (finalContent.includes('User2') && finalContent.includes('PostgreSQL')) {
-    console.log('  PASS: User2 changes synced to User1');
-  } else {
-    console.log('  FAIL: Cross-sync failed');
-  }
+  verifyUser1PulledUser2Changes(stateDir);
 
   // Summary
   console.log(`\n${'='.repeat(50)}`);

@@ -22,6 +22,42 @@ function normalizeScope(scope) {
   return value;
 }
 
+function processSingleArg(arg, index, args, parsed) {
+  if (arg === '--help' || arg === '-h') {
+    parsed.help = true;
+    return index;
+  }
+  if (arg === '--format') {
+    parsed.format = (args[index + 1] || '').toLowerCase();
+    return index + 1;
+  }
+  if (arg === '--scope') {
+    parsed.scope = normalizeScope(args[index + 1]);
+    return index + 1;
+  }
+  if (arg === '--root') {
+    parsed.root = path.resolve(args[index + 1] || process.cwd());
+    return index + 1;
+  }
+  if (arg.startsWith('--format=')) {
+    parsed.format = arg.split('=')[1].toLowerCase();
+    return index;
+  }
+  if (arg.startsWith('--scope=')) {
+    parsed.scope = normalizeScope(arg.split('=')[1]);
+    return index;
+  }
+  if (arg.startsWith('--root=')) {
+    parsed.root = path.resolve(arg.slice('--root='.length));
+    return index;
+  }
+  if (arg.startsWith('-')) {
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+  parsed.scope = normalizeScope(arg);
+  return index;
+}
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   const parsed = {
@@ -32,51 +68,7 @@ function parseArgs(argv) {
   };
 
   for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-      continue;
-    }
-
-    if (arg === '--format') {
-      parsed.format = (args[index + 1] || '').toLowerCase();
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--scope') {
-      parsed.scope = normalizeScope(args[index + 1]);
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--root') {
-      parsed.root = path.resolve(args[index + 1] || process.cwd());
-      index += 1;
-      continue;
-    }
-
-    if (arg.startsWith('--format=')) {
-      parsed.format = arg.split('=')[1].toLowerCase();
-      continue;
-    }
-
-    if (arg.startsWith('--scope=')) {
-      parsed.scope = normalizeScope(arg.split('=')[1]);
-      continue;
-    }
-
-    if (arg.startsWith('--root=')) {
-      parsed.root = path.resolve(arg.slice('--root='.length));
-      continue;
-    }
-
-    if (arg.startsWith('-')) {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-
-    parsed.scope = normalizeScope(arg);
+    index = processSingleArg(args[index], index, args, parsed);
   }
 
   if (!['text', 'json'].includes(parsed.format)) {

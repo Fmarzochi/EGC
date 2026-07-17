@@ -76,6 +76,22 @@ function listCommandFiles() {
     .sort();
 }
 
+function processSkillChildren(ns, nsPath, entries) {
+  let children;
+  try {
+    children = fs.readdirSync(nsPath, { withFileTypes: true });
+  } catch (_err) { // NOSONAR: unreadable namespace dir is skipped
+    return;
+  }
+  for (const child of children) {
+    if (!child.isDirectory()) continue;
+    const childPath = path.join(nsPath, child.name);
+    if (fs.existsSync(path.join(childPath, 'SKILL.md'))) {
+      entries.push({ namespace: ns.name, id: child.name, dir: childPath });
+    }
+  }
+}
+
 function listSkillEntries() {
   if (!fs.existsSync(SKILLS_DIR)) return [];
   const entries = [];
@@ -87,19 +103,7 @@ function listSkillEntries() {
       entries.push({ namespace: null, id: ns.name, dir: nsPath });
       continue;
     }
-    let children;
-    try {
-      children = fs.readdirSync(nsPath, { withFileTypes: true });
-    } catch (_err) { // NOSONAR: unreadable namespace dir is skipped
-      continue;
-    }
-    for (const child of children) {
-      if (!child.isDirectory()) continue;
-      const childPath = path.join(nsPath, child.name);
-      if (fs.existsSync(path.join(childPath, 'SKILL.md'))) {
-        entries.push({ namespace: ns.name, id: child.name, dir: childPath });
-      }
-    }
+    processSkillChildren(ns, nsPath, entries);
   }
   entries.sort((a, b) => {
     const ka = `${a.namespace || ''}/${a.id}`;

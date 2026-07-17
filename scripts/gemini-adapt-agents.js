@@ -95,6 +95,20 @@ function formatToolLine(tools) {
   return `tools: [${tools.map(tool => JSON.stringify(tool)).join(', ')}]`;
 }
 
+function processToolsLine(line, tools) {
+  const adaptedTools = [];
+  const seen = new Set();
+  for (const tool of tools.map(adaptToolName)) {
+    if (seen.has(tool)) {
+      continue;
+    }
+    seen.add(tool);
+    adaptedTools.push(tool);
+  }
+  const updatedLine = formatToolLine(adaptedTools);
+  return { updatedLine, changed: updatedLine !== line };
+}
+
 function adaptFrontmatter(text) {
   const match = text.match(/^---\n([\s\S]*?)\n---(\n|$)/);
   if (!match) {
@@ -112,21 +126,8 @@ function adaptFrontmatter(text) {
 
     const tools = parseToolList(line);
     if (tools) {
-      const adaptedTools = [];
-      const seen = new Set();
-
-      for (const tool of tools.map(adaptToolName)) {
-        if (seen.has(tool)) {
-          continue;
-        }
-        seen.add(tool);
-        adaptedTools.push(tool);
-      }
-
-      const updatedLine = formatToolLine(adaptedTools);
-      if (updatedLine !== line) {
-        changed = true;
-      }
+      const { updatedLine, changed: lineChanged } = processToolsLine(line, tools);
+      if (lineChanged) changed = true;
       updatedLines.push(updatedLine);
       continue;
     }
