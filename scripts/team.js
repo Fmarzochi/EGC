@@ -70,39 +70,51 @@ function getTeamConfig() {
   }
 }
 
+function parseJsonOrRaw(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Parse one JSONL line of MCP output. Returns { value } when the line holds
+ * a text result, null when the line should be skipped (not JSON, or no text
+ * content), and throws when the line carries an MCP error payload.
+ */
+function extractMcpLineResult(line) {
+  let parsed;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (parsed.result?.content) {
+    for (const content of parsed.result.content) {
+      if (content.type === 'text') {
+        return { value: parseJsonOrRaw(content.text) };
+      }
+    }
+  }
+  if (parsed.error) {
+    throw new Error(parsed.error.message || 'MCP tool call failed');
+  }
+  return null;
+}
+
 function parseMcpResponse(stdout) {
   const lines = stdout.split('\n').filter(Boolean);
   for (const line of lines) {
-    try {
-      const parsed = JSON.parse(line);
-      if (parsed.result?.content) {
-        for (const content of parsed.result.content) {
-          if (content.type === 'text') {
-            try {
-              return JSON.parse(content.text);
-            } catch {
-              return content.text;
-            }
-          }
-        }
-      }
-      if (parsed.error) {
-        throw new Error(parsed.error.message || 'MCP tool call failed');
-      }
-    } catch (e) {
-      if (e.message && !e.message.includes('Unexpected token')) {
-        throw e;
-      }
+    const result = extractMcpLineResult(line);
+    if (result) {
+      return result.value;
     }
   }
 
   const stdoutTrimmed = stdout.trim();
   if (stdoutTrimmed) {
-    try {
-      return JSON.parse(stdoutTrimmed);
-    } catch {
-      return stdoutTrimmed;
-    }
+    return parseJsonOrRaw(stdoutTrimmed);
   }
 
   throw new Error('No response from memory server');

@@ -127,6 +127,25 @@ function verifyBuildOutput(EGC_ROOT, SyncBackend) {
   ok(buildIndex.includes('teamStatus'), 'build/index.js references teamStatus');
 }
 
+function cleanSandboxState() {
+  if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true });
+  if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON);
+  if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true });
+}
+
+function cleanSandboxAll() {
+  cleanSandboxState();
+  if (fs.existsSync(TMP)) fs.rmSync(TMP, { recursive: true, force: true });
+}
+
+// Each removal keeps its own try so one failure never blocks the next path.
+function cleanSandboxAllBestEffort() {
+  try { if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON); } catch { /* best-effort */ }
+  try { if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { if (fs.existsSync(TMP)) fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* best-effort */ }
+}
+
 (async () => { try {
   console.log('=== E2E Direct Module Test ===\n');
   console.log(`Sandbox home: ${SANDBOX_HOME}`);
@@ -138,9 +157,7 @@ function verifyBuildOutput(EGC_ROOT, SyncBackend) {
   ok(fs.existsSync(path.join(REMOTE, 'HEAD')), 'remote git repo initialized');
 
   // 2. Clean slate in sandbox
-  if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true });
-  if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON);
-  if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true });
+  cleanSandboxState();
 
   // 3. Load and test the modules directly (after sandbox env is set)
   const EGC_ROOT = path.resolve(__dirname, '..');
@@ -170,10 +187,7 @@ function verifyBuildOutput(EGC_ROOT, SyncBackend) {
 
   // Cleanup
   console.log('\n--- Cleaning up ---');
-  if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true });
-  if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON);
-  if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true });
-  if (fs.existsSync(TMP)) fs.rmSync(TMP, { recursive: true, force: true });
+  cleanSandboxAll();
 
   console.log('\n' + '='.repeat(50));
   console.log('E2E Results: ' + passed + ' passed, ' + failed + ' failed');
@@ -183,10 +197,6 @@ function verifyBuildOutput(EGC_ROOT, SyncBackend) {
 } catch (e) {
   console.error('\nFATAL: ' + e.message);
   console.error(e.stack);
-  // Cleanup
-  try { if (fs.existsSync(SYNCDIR)) fs.rmSync(SYNCDIR, { recursive: true, force: true }); } catch { /* best-effort */ }
-  try { if (fs.existsSync(TEAMJSON)) fs.unlinkSync(TEAMJSON); } catch { /* best-effort */ }
-  try { if (fs.existsSync(STATEDIR)) fs.rmSync(STATEDIR, { recursive: true, force: true }); } catch { /* best-effort */ }
-  try { if (fs.existsSync(TMP)) fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* best-effort */ }
+  cleanSandboxAllBestEffort();
   process.exit(1);
 }})();
