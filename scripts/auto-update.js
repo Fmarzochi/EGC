@@ -81,11 +81,10 @@ function deriveRepoRootFromState(state) {
     if (relativeParts.length === 0) {
       continue;
     }
-    let repoRoot = path.resolve(operation.sourcePath);
-    for (const _segment of relativeParts) {
-      repoRoot = path.dirname(repoRoot);
-    }
-    return repoRoot;
+    return relativeParts.reduce(
+      (dir) => path.dirname(dir),
+      path.resolve(operation.sourcePath)
+    );
   }
 
   throw new Error('Unable to infer EGC repo root from install-state operations');
