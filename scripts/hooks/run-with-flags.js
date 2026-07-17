@@ -120,7 +120,7 @@ function assertSafeScriptPath(hookId, scriptPath, resolvedRoot) {
  * exports run(); falls back to a legacy spawnSync child process otherwise.
  * Handles output emission and process.exit on all code paths.
  */
-async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
+async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) { // NOSONAR: central hook executor keeps every exit path visible inline for security review
   const resolvedRoot = path.resolve(pluginRoot);
   try {
     assertSafeScriptPath(hookId, scriptPath, resolvedRoot);

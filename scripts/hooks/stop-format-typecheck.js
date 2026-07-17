@@ -134,6 +134,33 @@ function typecheckBatch(tsConfigDir, editedFiles, timeoutMs) {
   }
 }
 
+function groupByProjectRoot(files) {
+  const byProjectRoot = new Map();
+  for (const filePath of files) {
+    if (!/\.(ts|tsx|js|jsx)$/.test(filePath)) continue;
+    const resolved = path.resolve(filePath);
+    if (!fs.existsSync(resolved)) continue;
+    const root = findProjectRoot(path.dirname(resolved));
+    if (!byProjectRoot.has(root)) byProjectRoot.set(root, []);
+    byProjectRoot.get(root).push(resolved);
+  }
+  return byProjectRoot;
+}
+
+function groupByTsConfigDir(files) {
+  const byTsConfigDir = new Map();
+  for (const filePath of files) {
+    if (!/\.(ts|tsx)$/.test(filePath)) continue;
+    const resolved = path.resolve(filePath);
+    if (!fs.existsSync(resolved)) continue;
+    const tsDir = findTsConfigDir(resolved);
+    if (!tsDir) continue;
+    if (!byTsConfigDir.has(tsDir)) byTsConfigDir.set(tsDir, []);
+    byTsConfigDir.get(tsDir).push(resolved);
+  }
+  return byTsConfigDir;
+}
+
 function main() {
   const accumFile = getAccumFile();
 
@@ -151,26 +178,8 @@ function main() {
   const files = parseAccumulator(raw);
   if (files.length === 0) return;
 
-  const byProjectRoot = new Map();
-  for (const filePath of files) {
-    if (!/\.(ts|tsx|js|jsx)$/.test(filePath)) continue;
-    const resolved = path.resolve(filePath);
-    if (!fs.existsSync(resolved)) continue;
-    const root = findProjectRoot(path.dirname(resolved));
-    if (!byProjectRoot.has(root)) byProjectRoot.set(root, []);
-    byProjectRoot.get(root).push(resolved);
-  }
-
-  const byTsConfigDir = new Map();
-  for (const filePath of files) {
-    if (!/\.(ts|tsx)$/.test(filePath)) continue;
-    const resolved = path.resolve(filePath);
-    if (!fs.existsSync(resolved)) continue;
-    const tsDir = findTsConfigDir(resolved);
-    if (!tsDir) continue;
-    if (!byTsConfigDir.has(tsDir)) byTsConfigDir.set(tsDir, []);
-    byTsConfigDir.get(tsDir).push(resolved);
-  }
+  const byProjectRoot = groupByProjectRoot(files);
+  const byTsConfigDir = groupByTsConfigDir(files);
 
   // Distribute the budget evenly across all batches so the cumulative total
   // stays within the Stop hook wall-clock limit even in large monorepos.

@@ -10,23 +10,57 @@ function resolveStateDbPath() {
   return path.join(getEGCDir(), 'egc', 'state.db');
 }
 
-async function main() {
+function readPayloadFromStdin() {
   let raw;
   try {
     raw = fs.readFileSync(0, 'utf8');
   } catch (_) { // NOSONAR
     // Intentional: writer is best-effort; absent stdin (e.g., direct invocation) is a no-op.
-    return;
+    return null;
   }
 
-  if (!raw.trim()) return;
+  if (!raw.trim()) return null;
 
-  let payload;
   try {
-    payload = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch (_) { // NOSONAR: malformed payload is ignored; writer is fire-and-forget
-    return;
+    return null;
   }
+}
+
+async function persistSessionEnd(store, payload) {
+  const sid = payload.session_id;
+  if (!sid) return;
+  const usage = payload.usage || {};
+  const inputTokens  = usage.input_tokens;
+  const outputTokens = usage.output_tokens;
+  const totalTokens  = (Number.isFinite(inputTokens) && Number.isFinite(outputTokens))
+    ? inputTokens + outputTokens
+    : null;
+
+  store.upsertSession({
+    id: sid,
+    adapterId: payload.ide || payload.adapter_id || 'unknown',
+    harness: payload.harness || 'unknown',
+    state: 'ended',
+    repoRoot: payload.repo_root || null,
+    startedAt: payload.started_at || null,
+    endedAt: new Date().toISOString(),
+    snapshot: {
+      ide: payload.ide,
+      model: payload.model || null,
+      workers: payload.workers || [],
+    },
+    inputTokens: Number.isFinite(inputTokens) ? inputTokens : null,
+    outputTokens: Number.isFinite(outputTokens) ? outputTokens : null,
+    totalTokens,
+    tokenCost: null,
+  });
+}
+
+async function main() {
+  const payload = readPayloadFromStdin();
+  if (!payload) return;
 
   const dbPath = resolveStateDbPath();
   if (!fs.existsSync(dbPath)) return;
@@ -60,34 +94,7 @@ async function main() {
 
     // On session_end events persist token data to the sessions table
     if (eventType === 'session_end' || (payload.event === 'session_end')) {
-      const sid = payload.session_id;
-      if (sid) {
-        const usage = payload.usage || {};
-        const inputTokens  = usage.input_tokens;
-        const outputTokens = usage.output_tokens;
-        const totalTokens  = (Number.isFinite(inputTokens) && Number.isFinite(outputTokens))
-          ? inputTokens + outputTokens
-          : null;
-
-        store.upsertSession({
-          id: sid,
-          adapterId: payload.ide || payload.adapter_id || 'unknown',
-          harness: payload.harness || 'unknown',
-          state: 'ended',
-          repoRoot: payload.repo_root || null,
-          startedAt: payload.started_at || null,
-          endedAt: new Date().toISOString(),
-          snapshot: {
-            ide: payload.ide,
-            model: payload.model || null,
-            workers: payload.workers || [],
-          },
-          inputTokens: Number.isFinite(inputTokens) ? inputTokens : null,
-          outputTokens: Number.isFinite(outputTokens) ? outputTokens : null,
-          totalTokens,
-          tokenCost: null,
-        });
-      }
+      await persistSessionEnd(store, payload);
     }
   } catch (e) {
     console.error(e);

@@ -136,7 +136,7 @@ function tokenizeShellWords(input, start = 0, end = input.length) {
   return tokens;
 }
 
-function findCommandSegmentEnd(input, start) {
+function findCommandSegmentEnd(input, start) { // NOSONAR: tokenizer state machine kept inline for auditability
   let quote = null;
   let escaped = false;
 
