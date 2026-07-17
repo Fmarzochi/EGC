@@ -288,6 +288,15 @@ function processServers(existing, disabledServers, updateMcp, rawInit) {
   return { raw, toAppend, toRemoveLog };
 }
 
+function previewChanges(toAppend, toRemoveLog, appendText) {
+  if (toRemoveLog.length > 0) {
+    log('Dry run - would remove and re-add:');
+    for (const label of toRemoveLog) log(`  [remove] ${label}`);
+  }
+  log('Dry run - would append:');
+  console.log(appendText);
+}
+
 function applyChanges(configPath, raw, toAppend, toRemoveLog, dryRun, updateMcp) {
   const hasRemovals = toRemoveLog.length > 0;
 
@@ -299,12 +308,7 @@ function applyChanges(configPath, raw, toAppend, toRemoveLog, dryRun, updateMcp)
   const appendText = '\n' + toAppend.join('\n\n') + '\n';
 
   if (dryRun) {
-    if (toRemoveLog.length > 0) {
-      log('Dry run - would remove and re-add:');
-      for (const label of toRemoveLog) log(`  [remove] ${label}`);
-    }
-    log('Dry run - would append:');
-    console.log(appendText);
+    previewChanges(toAppend, toRemoveLog, appendText);
     return;
   }
 

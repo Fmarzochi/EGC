@@ -39,16 +39,8 @@ Examples:
 `);
 }
 
-async function handleInstall(args) {
-  const pluginName = args[1];
-  if (!pluginName) {
-    console.error('Error: Usage: egc plugin install <name> [--source <path>]');
-    process.exit(1);
-  }
-
+function resolveInstallResult(pluginName, args) {
   const sourceIdx = args.indexOf('--source');
-  let result;
-
   if (sourceIdx !== -1 && args[sourceIdx + 1]) {
     const sourcePath = path.resolve(args[sourceIdx + 1]);
     if (!require('node:fs').existsSync(sourcePath)) {
@@ -56,11 +48,20 @@ async function handleInstall(args) {
       process.exit(1);
     }
     console.log(`Installing plugin "${pluginName}" from ${sourcePath}...`);
-    result = installPluginFromDir(sourcePath, pluginName);
-  } else {
-    console.log(`Installing plugin "${pluginName}" from npm...`);
-    result = installPluginFromNpm(pluginName, pluginName);
+    return installPluginFromDir(sourcePath, pluginName);
   }
+  console.log(`Installing plugin "${pluginName}" from npm...`);
+  return installPluginFromNpm(pluginName, pluginName);
+}
+
+async function handleInstall(args) {
+  const pluginName = args[1];
+  if (!pluginName) {
+    console.error('Error: Usage: egc plugin install <name> [--source <path>]');
+    process.exit(1);
+  }
+
+  const result = resolveInstallResult(pluginName, args);
 
   if (result.success) {
     console.log(`Plugin "${pluginName}" v${result.plugin.version} installed.`);

@@ -44,7 +44,7 @@ function handleSingleAmpersand(ch, next, prev, current, segments) {
  * while respecting quoting (single/double) and escaped characters.
  * Redirection operators (&>, >&, 2>&1) are NOT treated as separators.
  */
-function splitShellSegments(command) {
+function splitShellSegments(command) { // NOSONAR: shell segment parser state machine kept inline for auditability
   const segments = [];
   let current = '';
   let quote = null;

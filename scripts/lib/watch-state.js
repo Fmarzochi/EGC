@@ -89,7 +89,7 @@ function appendStateSection(lines, title, items, asText = false) {
   lines.push('');
 }
 
-function parseBlockToStateContent(block, updatedIso) {
+function parseBlockToStateContent(block, updatedIso) { // NOSONAR: line-oriented state parser kept inline; sections and invariants read top-to-bottom
   const header = ['# Project State'];
   if (updatedIso) header.push(`updated: ${updatedIso}`);
   header.push('');

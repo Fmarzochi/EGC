@@ -37,17 +37,7 @@ Examples:
 `);
 }
 
-function handleSet(args) {
-  const tokensIdx = args.indexOf('--tokens');
-  const costIdx = args.indexOf('--cost');
-  const warnAtIdx = args.indexOf('--warn-at');
-  const actionIdx = args.indexOf('--action');
-
-  const maxTokens = tokensIdx !== -1 ? Number.parseInt(args[tokensIdx + 1], 10) : undefined;
-  const maxCost = costIdx !== -1 ? Number.parseFloat(args[costIdx + 1]) : undefined;
-  const warnAtPercent = warnAtIdx !== -1 ? Number.parseInt(args[warnAtIdx + 1], 10) : undefined;
-  const action = actionIdx !== -1 ? args[actionIdx + 1] : undefined;
-
+function validateBudgetInput(maxTokens, maxCost, warnAtPercent, action) {
   if (maxTokens !== undefined && (isNaN(maxTokens) || maxTokens <= 0)) {
     console.error('Error: --tokens must be a positive integer');
     process.exit(1);
@@ -64,6 +54,20 @@ function handleSet(args) {
     console.error('Error: --action must be "warn" or "block"');
     process.exit(1);
   }
+}
+
+function handleSet(args) {
+  const tokensIdx = args.indexOf('--tokens');
+  const costIdx = args.indexOf('--cost');
+  const warnAtIdx = args.indexOf('--warn-at');
+  const actionIdx = args.indexOf('--action');
+
+  const maxTokens = tokensIdx !== -1 ? Number.parseInt(args[tokensIdx + 1], 10) : undefined;
+  const maxCost = costIdx !== -1 ? Number.parseFloat(args[costIdx + 1]) : undefined;
+  const warnAtPercent = warnAtIdx !== -1 ? Number.parseInt(args[warnAtIdx + 1], 10) : undefined;
+  const action = actionIdx !== -1 ? args[actionIdx + 1] : undefined;
+
+  validateBudgetInput(maxTokens, maxCost, warnAtPercent, action);
 
   const existing = readBudgetConfig() || getDefaultBudget();
   const config = {

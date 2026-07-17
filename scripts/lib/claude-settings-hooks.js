@@ -133,14 +133,8 @@ function buildNewGroup(hookScriptPath, matcher) {
   return group;
 }
 
-function addHookEntry(settings, event, hookScriptPath, options = {}) {
-  const base = isPlainObject(settings) ? settings : {};
-  const matcher = typeof options.matcher === 'string' && options.matcher ? options.matcher : undefined;
-  const existingGroups = isPlainObject(base.hooks) && Array.isArray(base.hooks[event])
-    ? base.hooks[event]
-    : [];
-
-  let present = hasHookEntry(base, event, hookScriptPath, matcher);
+function mergeMatcherGroups(existingGroups, matcher, hookScriptPath, initialPresent) {
+  let present = initialPresent;
   let changed = false;
   const groups = [];
 
@@ -161,6 +155,21 @@ function addHookEntry(settings, event, hookScriptPath, options = {}) {
       }
     }
   }
+
+  return { groups, present, changed };
+}
+
+function addHookEntry(settings, event, hookScriptPath, options = {}) {
+  const base = isPlainObject(settings) ? settings : {};
+  const matcher = typeof options.matcher === 'string' && options.matcher ? options.matcher : undefined;
+  const existingGroups = isPlainObject(base.hooks) && Array.isArray(base.hooks[event])
+    ? base.hooks[event]
+    : [];
+
+  const merged = mergeMatcherGroups(existingGroups, matcher, hookScriptPath, hasHookEntry(base, event, hookScriptPath, matcher));
+  const groups = merged.groups;
+  let present = merged.present;
+  let changed = merged.changed;
 
   if (!present) {
     groups.push(buildNewGroup(hookScriptPath, matcher));

@@ -244,7 +244,7 @@ function loadAndParseConfigs(configPath, referencePath) {
   }
 }
 
-function findMissingConfigs(referenceConfig, targetConfig) {
+function findMissingConfigs(referenceConfig, targetConfig) { // NOSONAR: TOML diff walker kept inline; nesting mirrors the config structure
   const missingRootKeys = {};
   for (const key of ROOT_KEYS) {
     if (referenceConfig[key] !== undefined && targetConfig[key] === undefined) {
