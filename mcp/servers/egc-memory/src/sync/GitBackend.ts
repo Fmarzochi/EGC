@@ -109,8 +109,8 @@ export class GitBackend extends SyncBackend {
       // Push failed, maybe no upstream. Try setting upstream.
       try {
         await this.git.push(['--set-upstream', 'origin', this.config.branch]);
-      } catch (err2) {
-        throw new Error(`Push failed after setting upstream: ${String(err2)}`);
+      } catch (error_) {
+        throw new Error(`Push failed after setting upstream: ${String(error_)}`);
       }
     }
     return true;

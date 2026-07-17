@@ -62,7 +62,7 @@ async function learn(payload: string): Promise<unknown> {
   }
 }
 
-const MODES: Record<string, (payload: string) => unknown | Promise<unknown>> = {
+const MODES: Record<string, (payload: string) => unknown> = {
   'command': payload => validateCommand(payload),
   'command-batch': commandBatch,
   'write': payload => validateWrite(payload),

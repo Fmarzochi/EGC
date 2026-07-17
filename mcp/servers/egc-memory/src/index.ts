@@ -23,7 +23,7 @@ import {
   listWorkingMemory,
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
-import { ruleBasedCompress, llmCompress, loadRawObservations, replaceObservation } from './compress.js';
+import { llmCompress, loadRawObservations, replaceObservation } from './compress.js';
 import { sanitize, sanitizeStrings } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 
@@ -72,7 +72,7 @@ function resolveStateStoreDbPath(): string {
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
   const egcRoot = path.join(os.homedir(), '.egc');
-  const attribPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'attrib.exe');
+  const attribPath = path.join(process.env.SystemRoot || String.raw`C:\Windows`, 'System32', 'attrib.exe');
   spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 
@@ -210,7 +210,7 @@ function clearStaleMigrationLock(lockFile: string) {
   if (!fs.existsSync(lockFile)) return;
   try {
     const storedPid = Number.parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
-    if (!isNaN(storedPid) && storedPid !== process.pid) {
+    if (!Number.isNaN(storedPid) && storedPid !== process.pid) {
       // Check if the PID is still alive (POSIX: signal 0 = probe only)
       let alive = false;
       try { process.kill(storedPid, 0); alive = true; } catch (_) { // NOSONAR: probe failure means the PID is dead
@@ -442,7 +442,7 @@ function resolveProjectPath(provided?: string): string {
   let cwd: string | undefined;
   try { cwd = process.cwd(); } catch { /* cwd unavailable, e.g. a deleted directory */ }
   const raw = provided || process.env.EGC_PROJECT || cwd || process.env.PWD || os.homedir();
-  if (provided && provided.split(/[/\\]/).some(s => s === '..')) {
+  if (provided?.split(/[/\\]/).includes('..')) {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
   let resolved = path.resolve(raw);
@@ -1240,7 +1240,7 @@ async function handleCompressObservations(db: Database, toolArgs: unknown) {
   const compressed: import('./compress.js').CompressedObservation[] = [];
   for (const raw of rawObservations) {
     // llmCompress falls back to ruleBasedCompress automatically when no LLM client is wired
-    // TODO: pass a real llmCall once EGC dispatcher is wired into this server
+    // No dispatcher is wired here yet, so this rejects and llmCompress uses its rule-based fallback.
     try {
       const result = await llmCompress(raw, () => Promise.reject(new Error('LLM not configured')));
       compressed.push(result);
