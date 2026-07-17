@@ -209,7 +209,14 @@ function resolveServerEntry(name, existing) {
   const aliases = LEGACY_ALIASES[name] || [];
   const legacyName = aliases.find(a => existing[a] && typeof existing[a].command === 'string');
   const hasCanonical = entry && typeof entry.command === 'string';
-  const resolvedEntry = hasCanonical ? entry : legacyName ? existing[legacyName] : null;
+  let resolvedEntry;
+  if (hasCanonical) {
+    resolvedEntry = entry;
+  } else if (legacyName) {
+    resolvedEntry = existing[legacyName];
+  } else {
+    resolvedEntry = null;
+  }
   const urlEntry = !resolvedEntry && entry && typeof entry.url === 'string' ? entry : null;
   return {
     finalEntry: resolvedEntry || urlEntry,

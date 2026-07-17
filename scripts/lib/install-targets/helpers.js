@@ -327,9 +327,14 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
  * without a wrapper closure in each adapter file.
  */
 function createFlatSkillPlanOperations(input = {}, adapter) {
-  const modules = Array.isArray(input.modules)
-    ? input.modules
-    : (input.module ? [input.module] : []);
+  let modules;
+  if (Array.isArray(input.modules)) {
+    modules = input.modules;
+  } else if (input.module) {
+    modules = [input.module];
+  } else {
+    modules = [];
+  }
   const planningInput = {
     repoRoot: input.repoRoot,
     projectRoot: input.projectRoot,

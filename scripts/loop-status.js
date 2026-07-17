@@ -682,7 +682,13 @@ function getSnapshotPath(outputDir, session, usedNames) {
   let attempt = 0;
 
   while (attempt < 1000) {
-    const suffix = attempt === 0 ? '' : `-${hashSuffix}${attempt === 1 ? '' : `-${attempt}`}`;
+    let suffix;
+    if (attempt === 0) {
+      suffix = '';
+    } else {
+      const innerSuffix = attempt === 1 ? '' : `-${attempt}`;
+      suffix = `-${hashSuffix}${innerSuffix}`;
+    }
     const fileName = `${baseName}${suffix}.json`;
     if (!usedNames.has(fileName)) {
       usedNames.add(fileName);

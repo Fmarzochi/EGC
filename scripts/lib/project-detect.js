@@ -426,7 +426,14 @@ function hasDepMatch(rule, depMap) {
 }
 
 function determinePrimary(frameworks, languages) {
-  let primary = frameworks.length > 0 ? frameworks[0] : (languages.length > 0 ? languages[0] : 'unknown');
+  let primary;
+  if (frameworks.length > 0) {
+    primary = frameworks[0];
+  } else if (languages.length > 0) {
+    primary = languages[0];
+  } else {
+    primary = 'unknown';
+  }
   if (frameworks.some(f => FRONTEND_SIGNALS.includes(f)) && frameworks.some(f => BACKEND_SIGNALS.includes(f))) {
     primary = 'fullstack';
   }

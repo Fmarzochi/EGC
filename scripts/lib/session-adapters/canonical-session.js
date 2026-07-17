@@ -298,6 +298,17 @@ function writeFallbackSessionRecording(snapshot, options = {}) {
   const snapshotChanged = !existing
     || JSON.stringify(existing.latest) !== JSON.stringify(snapshot);
 
+  let resolvedHistory;
+  if (Array.isArray(existing?.history)) {
+    if (snapshotChanged) {
+      resolvedHistory = existing.history.concat([{ recordedAt, snapshot }]);
+    } else {
+      resolvedHistory = existing.history;
+    }
+  } else {
+    resolvedHistory = [{ recordedAt, snapshot }];
+  }
+
   const payload = {
     schemaVersion: SESSION_RECORDING_SCHEMA_VERSION,
     adapterId: snapshot.adapterId,
@@ -307,11 +318,7 @@ function writeFallbackSessionRecording(snapshot, options = {}) {
       : recordedAt,
     updatedAt: recordedAt,
     latest: snapshot,
-    history: Array.isArray(existing?.history)
-      ? (snapshotChanged
-          ? existing.history.concat([{ recordedAt, snapshot }])
-          : existing.history)
-      : [{ recordedAt, snapshot }]
+    history: resolvedHistory
   };
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });

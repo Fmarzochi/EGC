@@ -124,9 +124,14 @@ function main() {
     const defaultConfigPath = options.configPath || options.languages.length > 0
       ? null
       : findDefaultInstallConfigPath({ cwd: process.cwd() });
-    const config = options.configPath
-      ? loadInstallConfig(options.configPath, { cwd: process.cwd() })
-      : (defaultConfigPath ? loadInstallConfig(defaultConfigPath, { cwd: process.cwd() }) : null);
+    let config;
+    if (options.configPath) {
+      config = loadInstallConfig(options.configPath, { cwd: process.cwd() });
+    } else if (defaultConfigPath) {
+      config = loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
+    } else {
+      config = null;
+    }
     const request = normalizeInstallRequest({
       ...options,
       config,

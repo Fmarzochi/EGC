@@ -47,9 +47,15 @@ function isSuspiciousDocPath(filePath) {
 function run(inputOrRaw, _options = {}) {
   let input;
   try {
-    input = typeof inputOrRaw === 'string'
-      ? (inputOrRaw.trim() ? JSON.parse(inputOrRaw) : {})
-      : (inputOrRaw || {});
+    if (typeof inputOrRaw === 'string') {
+      if (inputOrRaw.trim()) {
+        input = JSON.parse(inputOrRaw);
+      } else {
+        input = {};
+      }
+    } else {
+      input = inputOrRaw || {};
+    }
   } catch {
     return { exitCode: 0 };
   }

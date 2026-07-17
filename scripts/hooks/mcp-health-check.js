@@ -552,7 +552,11 @@ async function handlePreToolUse(rawInput, input, target, statePathValue, now) {
   markUnhealthy(state, target.server, now, probe.failureCode, probe.reason);
   saveState(statePathValue, state);
 
-  const reconnectSuffix = reconnect.attempted ? ` Reconnect attempt: ${reconnect.success ? 'ok' : reconnect.reason}.` : '';
+  let reconnectSuffix = '';
+  if (reconnect.attempted) {
+    const statusText = reconnect.success ? 'ok' : reconnect.reason;
+    reconnectSuffix = ` Reconnect attempt: ${statusText}.`;
+  }
   logs.push(`[MCPHealthCheck] ${target.server} is unavailable (${probe.reason}). Blocking ${target.tool || 'tool'} so Gemini can fall back to non-MCP tools.${reconnectSuffix}`);
   return { rawInput, exitCode: shouldFailOpen() ? 0 : 2, logs };
 }

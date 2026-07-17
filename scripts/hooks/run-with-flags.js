@@ -189,11 +189,14 @@ async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) {
   if (result.stderr) process.stderr.write(result.stderr);
 
   if (result.error || result.signal || result.status === null) {
-    const failureDetail = result.error
-      ? result.error.message
-      : result.signal
-        ? `terminated by signal ${result.signal}`
-        : 'missing exit status';
+    let failureDetail;
+    if (result.error) {
+      failureDetail = result.error.message;
+    } else if (result.signal) {
+      failureDetail = `terminated by signal ${result.signal}`;
+    } else {
+      failureDetail = 'missing exit status';
+    }
     writeStderr(`[Hook] legacy hook execution failed for ${hookId}: ${failureDetail}`);
     process.exit(1);
   }

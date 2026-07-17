@@ -32,9 +32,14 @@ class Statement {
   }
 
   all(...args) {
-    const params = args.length === 0 ? undefined
-      : args.length === 1 ? normalizeParams(args[0])
-      : args;
+    let params;
+    if (args.length === 0) {
+      params = undefined;
+    } else if (args.length === 1) {
+      params = normalizeParams(args[0]);
+    } else {
+      params = args;
+    }
     const stmt = this._adapter._db.prepare(this._sql);
     const rows = [];
     try {

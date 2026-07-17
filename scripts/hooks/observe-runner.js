@@ -84,9 +84,10 @@ function getTimeoutMs() {
 }
 
 function combineStderr(stderr, message) {
-  const prefix = typeof stderr === 'string' && stderr.length > 0
-    ? stderr.endsWith('\n') ? stderr : `${stderr}\n`
-    : '';
+  let prefix = '';
+  if (typeof stderr === 'string' && stderr.length > 0) {
+    prefix = stderr.endsWith('\n') ? stderr : `${stderr}\n`;
+  }
   return `${prefix}${message}\n`;
 }
 
@@ -154,11 +155,14 @@ function buildSpawnResult(result) {
   }
 
   if (result.error || result.signal || result.status === null) {
-    const reason = result.error
-      ? result.error.message
-      : result.signal
-        ? `terminated by signal ${result.signal}`
-        : 'missing exit status';
+    let reason;
+    if (result.error) {
+      reason = result.error.message;
+    } else if (result.signal) {
+      reason = `terminated by signal ${result.signal}`;
+    } else {
+      reason = 'missing exit status';
+    }
     output.stderr = combineStderr(output.stderr, `[Hook] observe runner failed: ${reason}`);
     output.exitCode = 0;
   }

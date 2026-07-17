@@ -142,11 +142,14 @@ if (fs.existsSync(script)) {
   }
 
   if (result.error || result.status === null || result.signal) {
-    const reason = result.error
-      ? result.error.message
-      : result.signal
-        ? 'signal ' + result.signal
-        : 'missing exit status';
+    let reason;
+    if (result.error) {
+      reason = result.error.message;
+    } else if (result.signal) {
+      reason = 'signal ' + result.signal;
+    } else {
+      reason = 'missing exit status';
+    }
     process.stderr.write('[SessionStart] ERROR: session-start hook failed: ' + reason + '\n');
     process.exit(1);
   }

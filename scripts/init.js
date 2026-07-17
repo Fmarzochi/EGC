@@ -247,8 +247,14 @@ if (!flags.dryRun) {
     });
     const openBrowser = () => {
       const url = 'http://localhost:7890';
-      const cmd = process.platform === 'win32' ? 'start' :
-                  process.platform === 'darwin' ? 'open' : 'xdg-open';
+      let cmd;
+      if (process.platform === 'win32') {
+        cmd = 'start';
+      } else if (process.platform === 'darwin') {
+        cmd = 'open';
+      } else {
+        cmd = 'xdg-open';
+      }
       try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ }
     };
     dashPing.then(already => {

@@ -245,7 +245,14 @@ function reportLintResults(filesToCheck) {
     if (fileIssues.length > 0) {
       console.error(`\n[FILE] ${file}`);
       for (const issue of fileIssues) {
-        const label = issue.severity === 'error' ? 'ERROR' : issue.severity === 'warning' ? 'WARNING' : 'INFO';
+        let label;
+        if (issue.severity === 'error') {
+          label = 'ERROR';
+        } else if (issue.severity === 'warning') {
+          label = 'WARNING';
+        } else {
+          label = 'INFO';
+        }
         console.error(`  ${label} Line ${issue.line}: ${issue.message}`);
         totalIssues++;
         if (issue.severity === 'error') errorCount++;

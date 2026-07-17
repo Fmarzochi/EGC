@@ -35,11 +35,14 @@ function extractUserMessage(entry) {
     return '';
   }
   const rawContent = entry.message?.content ?? entry.content;
-  const text = typeof rawContent === 'string'
-    ? rawContent
-    : Array.isArray(rawContent)
-      ? rawContent.map(c => c?.text ?? '').join(' ')
-      : '';
+  let text;
+  if (typeof rawContent === 'string') {
+    text = rawContent;
+  } else if (Array.isArray(rawContent)) {
+    text = rawContent.map(c => c?.text ?? '').join(' ');
+  } else {
+    text = '';
+  }
   return stripAnsi(text).trim();
 }
 

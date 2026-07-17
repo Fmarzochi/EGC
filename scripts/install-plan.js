@@ -230,9 +230,14 @@ function main() {
     const defaultConfigPath = options.configPath
       ? null
       : findDefaultInstallConfigPath({ cwd: process.cwd() });
-    const config = options.configPath
-      ? loadInstallConfig(options.configPath, { cwd: process.cwd() })
-      : (defaultConfigPath ? loadInstallConfig(defaultConfigPath, { cwd: process.cwd() }) : null);
+    let config;
+    if (options.configPath) {
+      config = loadInstallConfig(options.configPath, { cwd: process.cwd() });
+    } else if (defaultConfigPath) {
+      config = loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
+    } else {
+      config = null;
+    }
 
     if (process.argv.length <= 2 && !config) {
       showHelp();

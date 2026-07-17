@@ -153,11 +153,14 @@ function main() {
   writeStderr(result.stderr);
 
   if (result.error || result.signal || result.status === null) {
-    const reason = result.error
-      ? result.error.message
-      : result.signal
-        ? `terminated by signal ${result.signal}`
-        : 'missing exit status';
+    let reason;
+    if (result.error) {
+      reason = result.error.message;
+    } else if (result.signal) {
+      reason = `terminated by signal ${result.signal}`;
+    } else {
+      reason = 'missing exit status';
+    }
     writeStderr(`[Hook] bootstrap execution failed: ${reason}\n`);
     process.exit(0);
   }

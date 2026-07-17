@@ -661,15 +661,30 @@ function createManifestInstallPlan(options = {}) {
   const requestProfileId = Object.hasOwn(options, 'requestProfileId')
     ? options.requestProfileId
     : (options.profileId || null);
-  const requestModuleIds = Object.hasOwn(options, 'requestModuleIds')
-    ? [...options.requestModuleIds]
-    : (Array.isArray(options.moduleIds) ? [...options.moduleIds] : []);
-  const requestIncludeComponentIds = Object.hasOwn(options, 'requestIncludeComponentIds')
-    ? [...options.requestIncludeComponentIds]
-    : (Array.isArray(options.includeComponentIds) ? [...options.includeComponentIds] : []);
-  const requestExcludeComponentIds = Object.hasOwn(options, 'requestExcludeComponentIds')
-    ? [...options.requestExcludeComponentIds]
-    : (Array.isArray(options.excludeComponentIds) ? [...options.excludeComponentIds] : []);
+  let requestModuleIds;
+  if (Object.hasOwn(options, 'requestModuleIds')) {
+    requestModuleIds = [...options.requestModuleIds];
+  } else if (Array.isArray(options.moduleIds)) {
+    requestModuleIds = [...options.moduleIds];
+  } else {
+    requestModuleIds = [];
+  }
+  let requestIncludeComponentIds;
+  if (Object.hasOwn(options, 'requestIncludeComponentIds')) {
+    requestIncludeComponentIds = [...options.requestIncludeComponentIds];
+  } else if (Array.isArray(options.includeComponentIds)) {
+    requestIncludeComponentIds = [...options.includeComponentIds];
+  } else {
+    requestIncludeComponentIds = [];
+  }
+  let requestExcludeComponentIds;
+  if (Object.hasOwn(options, 'requestExcludeComponentIds')) {
+    requestExcludeComponentIds = [...options.requestExcludeComponentIds];
+  } else if (Array.isArray(options.excludeComponentIds)) {
+    requestExcludeComponentIds = [...options.excludeComponentIds];
+  } else {
+    requestExcludeComponentIds = [];
+  }
   const plan = resolveInstallPlan({
     repoRoot: sourceRoot,
     projectRoot,

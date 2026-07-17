@@ -112,11 +112,14 @@ function normalizeHookResult(previousRaw, output) {
   }
 
   if (output && typeof output === 'object') {
-    const nextRaw = Object.hasOwn(output, 'stdout')
-      ? String(output.stdout ?? '')
-      : !Number.isInteger(output.exitCode) || output.exitCode === 0
-        ? previousRaw
-        : '';
+    let nextRaw;
+    if (Object.hasOwn(output, 'stdout')) {
+      nextRaw = String(output.stdout ?? '');
+    } else if (!Number.isInteger(output.exitCode) || output.exitCode === 0) {
+      nextRaw = previousRaw;
+    } else {
+      nextRaw = '';
+    }
 
     return {
       raw: nextRaw,

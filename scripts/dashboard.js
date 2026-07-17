@@ -27,8 +27,14 @@ function isRunning() {
 
 function openBrowser() {
   const url = `http://localhost:${PORT}`;
-  const cmd = process.platform === 'win32' ? 'start' :
-               process.platform === 'darwin' ? 'open' : 'xdg-open';
+  let cmd;
+  if (process.platform === 'win32') {
+    cmd = 'start';
+  } else if (process.platform === 'darwin') {
+    cmd = 'open';
+  } else {
+    cmd = 'xdg-open';
+  }
   try {
     spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' });
   } catch (_) { /* browser open is best-effort */ }

@@ -23,11 +23,14 @@ const DOCS_ZH_CN_README_PATH = path.join(ROOT, 'docs', 'zh-CN', 'README.md');
 const DOCS_ZH_CN_AGENTS_PATH = path.join(ROOT, 'docs', 'zh-CN', 'AGENTS.md');
 const WRITE_MODE = process.argv.includes('--write');
 
-const OUTPUT_MODE = process.argv.includes('--md')
-  ? 'md'
-  : process.argv.includes('--text')
-    ? 'text'
-    : 'json';
+let OUTPUT_MODE;
+if (process.argv.includes('--md')) {
+  OUTPUT_MODE = 'md';
+} else if (process.argv.includes('--text')) {
+  OUTPUT_MODE = 'text';
+} else {
+  OUTPUT_MODE = 'json';
+}
 
 function normalizePathSegments(relativePath) {
   return relativePath.split(path.sep).join('/');
