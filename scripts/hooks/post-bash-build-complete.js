@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { writeHookResult } = require('./hook-output');
 'use strict';
 
 const MAX_STDIN = 1024 * 1024;
@@ -42,7 +43,7 @@ if (require.main === module) {
       return;
     }
 
-    process.stdout.write(typeof result === 'string' ? result : JSON.stringify(result));
+    writeHookResult(result);
   });
 }
 

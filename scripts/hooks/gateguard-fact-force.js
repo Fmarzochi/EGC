@@ -44,8 +44,7 @@ const EDIT_WRITE_HOOK_ID = 'pre:edit-write:gateguard-fact-force';
 const BASH_HOOK_ID = 'pre:bash:gateguard-fact-force';
 const EGC_DISABLE_VALUES = new Set(['0', 'false', 'off', 'disabled', 'disable']);
 
-const DESTRUCTIVE_BASH = // NOSONAR: security pattern is intentionally explicit for auditability
-  /\b(rm\s+-rf|git\s+reset\s+--hard|git\s+checkout\s+--|git\s+clean\s+-f|drop\s+table|delete\s+from|truncate|git\s+push\s+--force(?!-with-lease)|git\s+commit\s+--amend|dd\s+if=)\b/i;
+const DESTRUCTIVE_BASH = /\b(rm\s+-rf|git\s+reset\s+--hard|git\s+checkout\s+--|git\s+clean\s+-f|drop\s+table|delete\s+from|truncate|git\s+push\s+--force(?!-with-lease)|git\s+commit\s+--amend|dd\s+if=)\b/i; // NOSONAR: security pattern is intentionally explicit for auditability
 
 // --- State management (per-session, atomic writes, bounded) ---
 

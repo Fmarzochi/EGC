@@ -82,9 +82,7 @@ function deriveRepoRootFromState(state) {
       continue;
     }
     let repoRoot = path.resolve(operation.sourcePath);
-    for (const _part of relativeParts) {
-      repoRoot = path.dirname(repoRoot);
-    }
+    repoRoot = relativeParts.reduce((dir) => path.dirname(dir), repoRoot);
     return repoRoot;
   }
 
