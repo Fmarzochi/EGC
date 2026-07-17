@@ -28,7 +28,7 @@ function toNullableNumber(value, fieldName) {
 
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) {
-    throw new Error(`${fieldName} must be a number`);
+    throw new TypeError(`${fieldName} must be a number`);
   }
 
   return numericValue;
@@ -67,7 +67,7 @@ function normalizeExecutionRecord(input, options = {}) {
   }
 
   if (Number.isNaN(Date.parse(recordedAt))) {
-    throw new Error('recorded_at must be an ISO timestamp');
+    throw new TypeError('recorded_at must be an ISO timestamp');
   }
 
   return {

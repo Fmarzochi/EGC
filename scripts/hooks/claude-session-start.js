@@ -7,10 +7,10 @@
 // Read-only by design: it never executes project code and never fails the
 // session. Missing or unreadable state exits silently with code 0.
 
-const fs = require('fs');
-const http = require('http');
-const os = require('os');
-const path = require('path');
+const fs = require('node:fs');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 // Optional libs: minimal installations may lack them, so a failed require
 // resolves to null and the dependent feature is skipped instead of failing
 // session startup. Run `egc repair` to restore missing libs.

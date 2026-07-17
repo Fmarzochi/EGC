@@ -332,7 +332,7 @@ function renderDashboard(options = {}) {
   const now = options.now || new Date().toISOString();
   const nowMs = Date.parse(now);
   if (Number.isNaN(nowMs)) {
-    throw new Error(`Invalid now timestamp: ${now}`);
+    throw new TypeError(`Invalid now timestamp: ${now}`);
   }
 
   const dashboardOptions = { ...options, now };

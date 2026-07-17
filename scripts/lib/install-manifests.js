@@ -1,6 +1,6 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { getInstallTargetAdapter, planInstallTargetScaffold } = require('./install-targets/registry');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
@@ -99,7 +99,7 @@ function readModuleTargetsOrThrow(module) {
   const targets = module?.targets;
 
   if (!Array.isArray(targets)) {
-    throw new Error(`Install module ${moduleId} has invalid targets; expected an array of supported target ids`);
+    throw new TypeError(`Install module ${moduleId} has invalid targets; expected an array of supported target ids`);
   }
 
   const normalizedTargets = targets.map(target => (

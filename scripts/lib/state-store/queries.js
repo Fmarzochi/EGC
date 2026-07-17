@@ -368,7 +368,7 @@ function normalizeInstinctInput(instinct) {
   let confidence = 0.5;
   if (typeof instinct.confidence === 'number') {
     if (!Number.isFinite(instinct.confidence)) {
-      throw new Error(`Invalid instinct.confidence: must be a finite number (got ${instinct.confidence})`);
+      throw new TypeError(`Invalid instinct.confidence: must be a finite number (got ${instinct.confidence})`);
     }
     confidence = Math.min(1, Math.max(0, instinct.confidence));
   }

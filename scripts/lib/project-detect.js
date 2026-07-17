@@ -402,8 +402,8 @@ function getElixirDeps(projectDir) {
   }
 }
 
-const FRONTEND_SIGNALS = ['react', 'vue', 'angular', 'svelte', 'nextjs', 'nuxt', 'astro', 'remix'];
-const BACKEND_SIGNALS = ['django', 'fastapi', 'flask', 'express', 'nestjs', 'rails', 'spring', 'laravel', 'phoenix', 'gin', 'echo', 'actix', 'axum'];
+const FRONTEND_SIGNALS = new Set(['react', 'vue', 'angular', 'svelte', 'nextjs', 'nuxt', 'astro', 'remix']);
+const BACKEND_SIGNALS = new Set(['django', 'fastapi', 'flask', 'express', 'nestjs', 'rails', 'spring', 'laravel', 'phoenix', 'gin', 'echo', 'actix', 'axum']);
 
 function buildDepMap(projectDir) {
   return {
@@ -434,7 +434,7 @@ function determinePrimary(frameworks, languages) {
   } else {
     primary = 'unknown';
   }
-  if (frameworks.some(f => FRONTEND_SIGNALS.includes(f)) && frameworks.some(f => BACKEND_SIGNALS.includes(f))) {
+  if (frameworks.some(f => FRONTEND_SIGNALS.has(f)) && frameworks.some(f => BACKEND_SIGNALS.has(f))) {
     primary = 'fullstack';
   }
   return primary;

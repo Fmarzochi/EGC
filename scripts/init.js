@@ -46,12 +46,12 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const GUARDIAN_BIN = path.join(ROOT_DIR, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js');
 const MEMORY_BIN = path.join(ROOT_DIR, 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 
-const args = process.argv.slice(2);
+const args = new Set(process.argv.slice(2));
 const flags = {
-  dryRun: args.includes('--dry-run'),
-  mcpOnly: args.includes('--mcp-only'),
-  yes: args.includes('--yes') || args.includes('-y'),
-  help: args.includes('--help') || args.includes('-h'),
+  dryRun: args.has('--dry-run'),
+  mcpOnly: args.has('--mcp-only'),
+  yes: args.has('--yes') || args.has('-y'),
+  help: args.has('--help') || args.has('-h'),
 };
 
 function showHelp() {

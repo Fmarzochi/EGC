@@ -44,7 +44,7 @@ function ensureOptionalString(value, fieldPath) {
 
 function ensureBoolean(value, fieldPath) {
   if (typeof value !== 'boolean') {
-    throw new Error(`Canonical session snapshot requires ${fieldPath} to be a boolean`);
+    throw new TypeError(`Canonical session snapshot requires ${fieldPath} to be a boolean`);
   }
 }
 
@@ -182,7 +182,7 @@ function validateCanonicalSnapshot(snapshot) {
   ensureString(snapshot.session.sourceTarget.value, 'session.sourceTarget.value');
 
   if (!Array.isArray(snapshot.workers)) {
-    throw new Error('Canonical session snapshot requires workers to be an array');
+    throw new TypeError('Canonical session snapshot requires workers to be an array');
   }
 
   snapshot.workers.forEach((worker, index) => {

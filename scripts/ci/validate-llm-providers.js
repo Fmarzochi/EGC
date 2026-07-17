@@ -10,8 +10,8 @@
  * new native providers landed within days of each other) — had none.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const README_PATH = path.join(REPO_ROOT, 'README.md');

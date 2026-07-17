@@ -10,7 +10,7 @@ const Ajv = require('ajv');
 
 const HOOKS_FILE = path.join(__dirname, '../../hooks/hooks.json');
 const HOOKS_SCHEMA_PATH = path.join(__dirname, '../../schemas/hooks.schema.json');
-const VALID_EVENTS = [
+const VALID_EVENTS = new Set([
   'SessionStart',
   'UserPromptSubmit',
   'PreToolUse',
@@ -29,8 +29,8 @@ const VALID_EVENTS = [
   'WorktreeCreate',
   'WorktreeRemove',
   'SessionEnd',
-];
-const VALID_HOOK_TYPES = ['command', 'http', 'prompt', 'agent'];
+]);
+const VALID_HOOK_TYPES = new Set(['command', 'http', 'prompt', 'agent']);
 const EVENTS_WITHOUT_MATCHER = new Set(['UserPromptSubmit', 'Notification', 'Stop', 'SubagentStop']);
 
 function isNonEmptyString(value) {
@@ -139,7 +139,7 @@ function validateHookEntry(hook, label) {
   if (!hook.type || typeof hook.type !== 'string') {
     console.error(`ERROR: ${label} missing or invalid 'type' field`);
     hasErrors = true;
-  } else if (!VALID_HOOK_TYPES.includes(hook.type)) {
+  } else if (!VALID_HOOK_TYPES.has(hook.type)) {
     console.error(`ERROR: ${label} has unsupported hook type '${hook.type}'`);
     hasErrors = true;
   }
@@ -195,7 +195,7 @@ function validateObjectFormat(hooks) {
   let totalMatchers = 0;
 
   for (const [eventType, matchers] of Object.entries(hooks)) {
-    if (!VALID_EVENTS.includes(eventType)) {
+    if (!VALID_EVENTS.has(eventType)) {
       console.error(`ERROR: Invalid event type: ${eventType}`);
       hasErrors = true;
       continue;
