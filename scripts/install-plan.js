@@ -44,6 +44,38 @@ Options:
 `);
 }
 
+const BOOLEAN_FLAGS = new Map([
+  ['--help', 'help'],
+  ['-h', 'help'],
+  ['--json', 'json'],
+  ['--list-profiles', 'listProfiles'],
+  ['--list-modules', 'listModules'],
+  ['--list-components', 'listComponents'],
+]);
+
+const VALUE_FLAGS = new Map([
+  ['--family', 'family'],
+  ['--profile', 'profileId'],
+  ['--config', 'configPath'],
+  ['--target', 'target'],
+]);
+
+const LIST_FLAGS = new Set(['--modules', '--with', '--without']);
+
+function applyListFlag(parsed, arg, rawValue) {
+  if (arg === '--modules') {
+    parsed.moduleIds = rawValue.split(',').map(value => value.trim()).filter(Boolean);
+    return;
+  }
+  const componentId = rawValue.trim();
+  if (!componentId) return;
+  if (arg === '--with') {
+    parsed.includeComponentIds.push(componentId);
+  } else {
+    parsed.excludeComponentIds.push(componentId);
+  }
+}
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   const parsed = {
@@ -63,47 +95,21 @@ function parseArgs(argv) {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--list-profiles') {
-      parsed.listProfiles = true;
-    } else if (arg === '--list-modules') {
-      parsed.listModules = true;
-    } else if (arg === '--list-components') {
-      parsed.listComponents = true;
-    } else if (arg === '--family') {
-      parsed.family = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--profile') {
-      parsed.profileId = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--modules') {
-      const raw = args[index + 1] || '';
-      parsed.moduleIds = raw.split(',').map(value => value.trim()).filter(Boolean);
-      index += 1;
-    } else if (arg === '--with') {
-      const componentId = args[index + 1] || '';
-      if (componentId.trim()) {
-        parsed.includeComponentIds.push(componentId.trim());
-      }
-      index += 1;
-    } else if (arg === '--without') {
-      const componentId = args[index + 1] || '';
-      if (componentId.trim()) {
-        parsed.excludeComponentIds.push(componentId.trim());
-      }
-      index += 1;
-    } else if (arg === '--config') {
-      parsed.configPath = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--target') {
-      parsed.target = args[index + 1] || null;
-      index += 1;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
+    if (BOOLEAN_FLAGS.has(arg)) {
+      parsed[BOOLEAN_FLAGS.get(arg)] = true;
+      continue;
     }
+    if (VALUE_FLAGS.has(arg)) {
+      parsed[VALUE_FLAGS.get(arg)] = args[index + 1] || null;
+      index += 1;
+      continue;
+    }
+    if (LIST_FLAGS.has(arg)) {
+      applyListFlag(parsed, arg, args[index + 1] || '');
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown argument: ${arg}`);
   }
 
   return parsed;
@@ -185,6 +191,45 @@ function printPlan(plan) {
   }
 }
 
+function outputListing(useJson, payloadKey, items, printer) {
+  if (useJson) {
+    console.log(JSON.stringify({ [payloadKey]: items }, null, 2));
+  } else {
+    printer(items);
+  }
+}
+
+function maybeHandleListing(options) {
+  if (options.listProfiles) {
+    outputListing(options.json, 'profiles', listInstallProfiles(), printProfiles);
+    return true;
+  }
+  if (options.listModules) {
+    outputListing(options.json, 'modules', listInstallModules(), printModules);
+    return true;
+  }
+  if (options.listComponents) {
+    const components = listInstallComponents({
+      family: options.family,
+      target: options.target,
+    });
+    outputListing(options.json, 'components', components, printComponents);
+    return true;
+  }
+  return false;
+}
+
+function resolveInstallConfig(options) {
+  if (options.configPath) {
+    return loadInstallConfig(options.configPath, { cwd: process.cwd() });
+  }
+  const defaultConfigPath = findDefaultInstallConfigPath({ cwd: process.cwd() });
+  if (defaultConfigPath) {
+    return loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
+  }
+  return null;
+}
+
 function main() {
   try {
     const options = parseArgs(process.argv);
@@ -194,50 +239,11 @@ function main() {
       process.exit(0);
     }
 
-    if (options.listProfiles) {
-      const profiles = listInstallProfiles();
-      if (options.json) {
-        console.log(JSON.stringify({ profiles }, null, 2));
-      } else {
-        printProfiles(profiles);
-      }
+    if (maybeHandleListing(options)) {
       return;
     }
 
-    if (options.listModules) {
-      const modules = listInstallModules();
-      if (options.json) {
-        console.log(JSON.stringify({ modules }, null, 2));
-      } else {
-        printModules(modules);
-      }
-      return;
-    }
-
-    if (options.listComponents) {
-      const components = listInstallComponents({
-        family: options.family,
-        target: options.target,
-      });
-      if (options.json) {
-        console.log(JSON.stringify({ components }, null, 2));
-      } else {
-        printComponents(components);
-      }
-      return;
-    }
-
-    const defaultConfigPath = options.configPath
-      ? null
-      : findDefaultInstallConfigPath({ cwd: process.cwd() });
-    let config;
-    if (options.configPath) {
-      config = loadInstallConfig(options.configPath, { cwd: process.cwd() });
-    } else if (defaultConfigPath) {
-      config = loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
-    } else {
-      config = null;
-    }
+    const config = resolveInstallConfig(options);
 
     if (process.argv.length <= 2 && !config) {
       showHelp();

@@ -443,7 +443,7 @@ function resolveModuleDependencyGraph({
   const visitingIds = new Set();
   const resolvedIds = new Set();
 
-  function resolveModule(moduleId, dependencyOf, rootRequesterId) {
+  function resolveModule(moduleId, dependencyOf, rootRequesterId) { // NOSONAR: recursive dependency resolver kept inline; cycle and exclusion invariants read together
     const module = manifests.modulesById.get(moduleId);
     if (!module) {
       throw new Error(`Unknown install module: ${moduleId}`);

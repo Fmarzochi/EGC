@@ -57,6 +57,23 @@ function showHelp(exitCode = 0) {
   process.exit(exitCode);
 }
 
+function printModulePlanDetails(plan) {
+  if (plan.mode === 'legacy-compat') {
+    console.log(`Legacy languages: ${plan.legacyLanguages.join(', ')}`);
+  }
+  console.log(`Profile: ${plan.profileId || '(custom modules)'}`); // NOSONAR jssecurity:S8689
+  console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
+  console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
+  console.log(`Requested modules: ${plan.requestedModuleIds.join(', ') || '(none)'}`);
+  console.log(`Selected modules: ${plan.selectedModuleIds.join(', ') || '(none)'}`);
+  if (plan.skippedModuleIds.length > 0) {
+    console.log(`Skipped modules: ${plan.skippedModuleIds.join(', ')}`);
+  }
+  if (plan.excludedModuleIds.length > 0) {
+    console.log(`Excluded modules: ${plan.excludedModuleIds.join(', ')}`);
+  }
+}
+
 function printHumanPlan(plan, dryRun) {
   console.log(`${dryRun ? 'Dry-run install plan' : 'Applying install plan'}:\n`);
   console.log(`Mode: ${plan.mode}`);
@@ -67,20 +84,7 @@ function printHumanPlan(plan, dryRun) {
   if (plan.mode === 'legacy') {
     console.log(`Languages: ${plan.languages.join(', ')}`);
   } else {
-    if (plan.mode === 'legacy-compat') {
-      console.log(`Legacy languages: ${plan.legacyLanguages.join(', ')}`);
-    }
-    console.log(`Profile: ${plan.profileId || '(custom modules)'}`); // NOSONAR jssecurity:S8689
-    console.log(`Included components: ${plan.includedComponentIds.join(', ') || '(none)'}`);
-    console.log(`Excluded components: ${plan.excludedComponentIds.join(', ') || '(none)'}`);
-    console.log(`Requested modules: ${plan.requestedModuleIds.join(', ') || '(none)'}`);
-    console.log(`Selected modules: ${plan.selectedModuleIds.join(', ') || '(none)'}`);
-    if (plan.skippedModuleIds.length > 0) {
-      console.log(`Skipped modules: ${plan.skippedModuleIds.join(', ')}`);
-    }
-    if (plan.excludedModuleIds.length > 0) {
-      console.log(`Excluded modules: ${plan.excludedModuleIds.join(', ')}`);
-    }
+    printModulePlanDetails(plan);
     if (plan.selectedModuleIds.length === 0 && plan.skippedModuleIds.length > 0) {
       process.stderr.write(
         `Warning: all requested modules were skipped for target '${plan.target}'. ` +

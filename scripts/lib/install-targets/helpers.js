@@ -224,7 +224,7 @@ function createNamespacedFlatRuleOperations(adapter, moduleId, sourceRelativePat
   return operations;
 }
 
-function createFlatFileOperations({
+function createFlatFileOperations({ // NOSONAR: directory walk building install operations kept inline; branches mirror the layout rules
   moduleId,
   repoRoot,
   sourceRelativePath,
