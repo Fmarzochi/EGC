@@ -98,7 +98,7 @@ function walkDir(dir: string, results: string[] = []): string[] {
 
 /** Return path relative to ROOT, always using forward slashes. */
 function rel(p: string): string {
-  return path.relative(ROOT, p).replace(/\\/g, '/');
+  return path.relative(ROOT, p).replaceAll('\\', '/');
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +252,10 @@ ${fileSection}${moreFiles}
 function generateIndex(areas: Record<string, AreaInfo>, allFiles: string[]): string {
   const totalFiles = allFiles.length;
   const areaRows = Object.entries(areas)
-    .map(([key, area]) => `| [${area.name}](./${key}.md) | ${area.files.length} files | ${area.directories.slice(0, 3).map((d) => `\`${d}\``).join(', ') || ','} |`)
+    .map(([key, area]) => {
+      const dirList = area.directories.slice(0, 3).map((d) => '`' + d + '`').join(', ') || ',';
+      return `| [${area.name}](./${key}.md) | ${area.files.length} files | ${dirList} |`;
+    })
     .join('\n');
 
   const topLevelTree = buildTree(SRC_DIR);

@@ -7,7 +7,7 @@ import { SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
 const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
 
 export class GitBackend extends SyncBackend {
-  private git: SimpleGit;
+  private readonly git: SimpleGit;
   private config: SyncConfig | null = null;
   private readonly repoDir: string;
 

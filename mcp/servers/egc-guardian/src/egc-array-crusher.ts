@@ -12,7 +12,7 @@ const VARIANCE_THRESHOLD = 0.15;
 function toKey(v: unknown): string {
   if (v === null || v === undefined) return '__null__';
   if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
+  return String(v); // NOSONAR: object values are stringified as JSON on the previous line
 }
 
 function columnCardinality(rows: Record<string, unknown>[], key: string): number {
