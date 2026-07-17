@@ -241,7 +241,7 @@ function processDisabledServer(name, resolved, raw, existing, toRemoveLog) {
   return updatedRaw;
 }
 
-function processExistingServer(name, spec, resolved, updateMcp, raw, existing, toRemoveLog, toAppend) {
+function processExistingServer({ name, spec, resolved, updateMcp, raw, existing, toRemoveLog, toAppend }) {
   let updatedRaw = raw;
   if (updateMcp) {
     toRemoveLog.push(`mcp_servers.${resolved.resolvedLabel}`);
@@ -278,7 +278,7 @@ function processServers(existing, disabledServers, updateMcp, rawInit) {
     }
 
     if (resolved.finalEntry) {
-      raw = processExistingServer(name, spec, resolved, updateMcp, raw, existing, toRemoveLog, toAppend);
+      raw = processExistingServer({ name, spec, resolved, updateMcp, raw, existing, toRemoveLog, toAppend });
     } else {
       log(`  [add] mcp_servers.${name}`);
       toAppend.push(spec.toml);
