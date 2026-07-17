@@ -27,7 +27,8 @@ function renderTemplate(template, variables) {
 }
 
 function shellQuote(value) {
-  return `'${String(value).replaceAll("'", String.raw`'\''`)}'`;
+  const escaped = String(value).replaceAll("'", String.raw`'\''`);
+  return `'${escaped}'`;
 }
 
 function formatCommand(program, args) {

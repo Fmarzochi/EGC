@@ -153,7 +153,7 @@ function getNow(options = {}) {
   return now;
 }
 
-function walkJsonlFiles(dir, result = { errors: [], files: [] }) {
+function walkJsonlFiles(dir, result = { errors: [], files: [] }) { // NOSONAR: JS evaluates the default per call; recursion passes the accumulator explicitly
   if (!fs.existsSync(dir)) {
     return result;
   }
@@ -214,7 +214,7 @@ function findTranscriptPaths(options = {}) {
 
   return {
     errors,
-    transcriptPaths: transcriptEntries
+    transcriptPaths: [...transcriptEntries]
     .sort((left, right) => right.mtimeMs - left.mtimeMs)
     .slice(0, normalizedOptions.limit)
     .map(entry => entry.transcriptPath),

@@ -22,7 +22,7 @@ function getRunsFilePath(options = {}) {
 }
 
 function toNullableNumber(value, fieldName) {
-  if (value === null || typeof value === 'undefined') {
+  if (value === null || value === undefined) {
     return null;
   }
 

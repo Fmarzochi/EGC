@@ -767,7 +767,7 @@ module.exports = {
   // Directories
   getHomeDir,
   getEGCDir,
-  getClaudeDir,
+  getClaudeDir, // NOSONAR: deprecated alias kept for backward compatibility
   getSessionsDir,
   getLegacySessionsDir,
   getSessionSearchDirs,

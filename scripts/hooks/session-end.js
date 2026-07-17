@@ -227,7 +227,7 @@ function injectSummaryIntoContent(updatedContent, summary) {
   }
   // Migration path for files created before summary markers existed.
   return updatedContent.replace(
-    /## (?:Session Summary|Current State)[\s\S]*?$/,
+    /## (?:Session Summary|Current State)[\s\S]*$/,
     `${summaryBlock}\n\n### Notes for Next Session\n-\n\n### Context to Load\n\`\`\`\n[relevant files]\n\`\`\`\n`
   );
 }

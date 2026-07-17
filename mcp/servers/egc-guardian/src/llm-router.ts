@@ -56,7 +56,7 @@ function buildUserMessage(prompt: string, catalogBlock: string): string {
 
 function extractJsonBlock(raw: string): unknown {
   try {
-    const match = /\{[\s\S]*\}/.exec(raw);
+    const match = /\{[\s\S]*\}/.exec(raw); // NOSONAR: input is the local LLM response, not network-controlled
     if (!match) return null;
     return JSON.parse(match[0]);
   } catch {

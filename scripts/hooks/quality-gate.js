@@ -96,7 +96,7 @@ function runPrettier(filePath, projectRoot, fix, strict) {
  * @param {boolean} fix - Whether to auto-fix
  * @param {boolean} strict - Whether to log failures
  */
-function runGoFmt(filePath, fix, strict) {
+function runGoFmt(filePath, fix, strict) { // NOSONAR: internal helper mirrors gofmt -w flag semantics
   if (fix) {
     const r = exec('gofmt', ['-w', filePath]);
     if (r.status !== 0 && strict) {

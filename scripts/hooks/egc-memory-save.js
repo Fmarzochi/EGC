@@ -21,7 +21,7 @@ function main() {
     + 'preferences, and next steps from this session. '
     + 'project_path is optional: omit it and it uses PWD automatically.';
 
-  process.stdout.write(JSON.stringify(Object.assign({}, input, { promptForAssistant: prompt })));
+  process.stdout.write(JSON.stringify({ ...input, promptForAssistant: prompt }));
   process.exit(0);
 }
 

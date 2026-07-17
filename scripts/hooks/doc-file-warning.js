@@ -3,7 +3,7 @@
  * Doc file warning hook (PreToolUse - Write)
  *
  * Uses a denylist approach: only warn on known ad-hoc documentation
- * filenames (NOTES, TODO, SCRATCH, etc.) outside structured directories.
+ * filenames (NOTES, SCRATCH, and similar ad-hoc names) outside structured directories.
  * This avoids false positives for legitimate markdown-heavy workflows
  * (specs, ADRs, command definitions, skill files, etc.).
  *

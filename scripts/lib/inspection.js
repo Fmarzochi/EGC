@@ -82,7 +82,7 @@ function detectPatterns(skillRuns, options = {}) {
       (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')
     );
 
-    const firstSeen = sortedRuns[sortedRuns.length - 1].createdAt || null;
+    const firstSeen = sortedRuns.at(-1).createdAt || null;
     const lastSeen = sortedRuns[0].createdAt || null;
     const sessionIds = [...new Set(sortedRuns.map(r => r.sessionId).filter(Boolean))];
     const versions = [...new Set(sortedRuns.map(r => r.skillVersion).filter(Boolean))];

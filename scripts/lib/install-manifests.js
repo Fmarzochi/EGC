@@ -80,7 +80,7 @@ function dedupeStrings(values) {
 
 function readOptionalStringOption(options, key) {
   if (
-    !Object.prototype.hasOwnProperty.call(options, key)
+    !Object.hasOwn(options, key)
     || options[key] === null
     || options[key] === undefined
   ) {

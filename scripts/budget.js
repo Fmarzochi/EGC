@@ -48,15 +48,15 @@ function handleSet(args) {
   const warnAtPercent = warnAtIdx !== -1 ? Number.parseInt(args[warnAtIdx + 1], 10) : undefined;
   const action = actionIdx !== -1 ? args[actionIdx + 1] : undefined;
 
-  if (maxTokens !== undefined && (isNaN(maxTokens) || maxTokens <= 0)) {
+  if (maxTokens !== undefined && (Number.isNaN(maxTokens) || maxTokens <= 0)) {
     console.error('Error: --tokens must be a positive integer');
     process.exit(1);
   }
-  if (maxCost !== undefined && (isNaN(maxCost) || maxCost <= 0)) {
+  if (maxCost !== undefined && (Number.isNaN(maxCost) || maxCost <= 0)) {
     console.error('Error: --cost must be a positive number');
     process.exit(1);
   }
-  if (warnAtPercent !== undefined && (isNaN(warnAtPercent) || warnAtPercent < 1 || warnAtPercent > 100)) {
+  if (warnAtPercent !== undefined && (Number.isNaN(warnAtPercent) || warnAtPercent < 1 || warnAtPercent > 100)) {
     console.error('Error: --warn-at must be between 1 and 100');
     process.exit(1);
   }

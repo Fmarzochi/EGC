@@ -20,7 +20,7 @@ const TEAMJSON = path.join(EGCDIR, 'team.json');
 function resolveGitBin() {
   const lookupCmd = process.platform === 'win32' ? 'where' : 'which';
   const output = execFileSync(lookupCmd, ['git'], { encoding: 'utf-8', stdio: 'pipe' });
-  const gitPath = output.split('\n').map(s => s.trim()).filter(Boolean)[0];
+  const gitPath = output.split('\n').map(s => s.trim()).find(Boolean);
   if (!gitPath || !path.isAbsolute(gitPath)) {
     throw new Error(`git executable not found at an absolute path (got: ${gitPath || 'none'})`);
   }
