@@ -70,7 +70,7 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.agents'],
   installStatePathSegments: ['egc-install-state.json'],
   supportsModule(module) {
-    const paths = Array.isArray(module && module.paths) ? module.paths : [];
+    const paths = Array.isArray(module?.paths) ? module.paths : [];
     return paths.length > 0;
   },
   planOperations(input, adapter) {

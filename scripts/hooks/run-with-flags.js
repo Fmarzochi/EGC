@@ -80,7 +80,7 @@ function writeLegacySpawnOutput(raw, result) {
 
 function getPluginRoot() {
   const root = process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT;
-  if (root && root.trim()) {
+  if (root?.trim()) {
     return root.trim();
   }
   return path.resolve(__dirname, '..', '..');

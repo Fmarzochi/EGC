@@ -212,7 +212,7 @@ function getPackageManager(options = {}) {
 
   // 5. Check global user preference
   const globalConfig = loadConfig();
-  if (globalConfig && globalConfig.packageManager && PACKAGE_MANAGERS[globalConfig.packageManager]) {
+  if (globalConfig?.packageManager && PACKAGE_MANAGERS[globalConfig.packageManager]) {
     return {
       name: globalConfig.packageManager,
       config: PACKAGE_MANAGERS[globalConfig.packageManager],
