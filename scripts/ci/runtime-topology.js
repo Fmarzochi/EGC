@@ -331,7 +331,7 @@ function toDot(graph) {
       '  node [shape=box, fontname="Helvetica"];'
     );
     for (const node of graph.nodes) {
-        const label = `${node.id}\\n[${node.class}/${node.kind}]`;
+        const label = String.raw`${node.id}\n[${node.class}/${node.kind}]`;
         lines.push(`  "${node.id}" [label="${label}"];`);
     }
     for (const edge of graph.edges) {

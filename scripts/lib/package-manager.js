@@ -359,7 +359,7 @@ function getSelectionPrompt() {
 
 // Escape regex metacharacters in a string before interpolating into a pattern
 function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return str.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**

@@ -77,8 +77,8 @@ const allowedSymbolCodePoints = new Set([
 ]);
 
 const targetedReplacements = [
-  [new RegExp(`${String.fromCodePoint(0x26A0)}(?:\\uFE0F)?`, 'gu'), 'WARNING:'],
-  [new RegExp(`${String.fromCodePoint(0x23ED)}(?:\\uFE0F)?`, 'gu'), 'SKIPPED:'],
+  [new RegExp(String.raw`${String.fromCodePoint(0x26A0)}(?:\uFE0F)?`, 'gu'), 'WARNING:'],
+  [new RegExp(String.raw`${String.fromCodePoint(0x23ED)}(?:\uFE0F)?`, 'gu'), 'SKIPPED:'],
   [new RegExp(String.fromCodePoint(0x2705), 'gu'), 'PASS:'],
   [new RegExp(String.fromCodePoint(0x274C), 'gu'), 'FAIL:'],
   [new RegExp(String.fromCodePoint(0x2728), 'gu'), ''],

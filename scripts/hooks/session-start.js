@@ -413,7 +413,7 @@ function extractMarkdownHeading(content) {
 
 function extractSection(content, headingPattern) {
   const source = String(content || '');
-  const match = source.match(new RegExp(`^##\\s+${headingPattern}\\s*\\n+([\\s\\S]+?)(?:\\n##\\s+|$)`, 'im'));
+  const match = source.match(new RegExp(String.raw`^##\s+${headingPattern}\s*\n+([\s\S]+?)(?:\n##\s+|$)`, 'im'));
   return match ? match[1].trim() : '';
 }
 

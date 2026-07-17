@@ -62,7 +62,7 @@ function run(rawInput) {
         const tmuxCheck = spawnSync('which', ['tmux'], { encoding: 'utf8' });
         if (tmuxCheck.status === 0) {
           // Escape single quotes for shell safety: 'text' -> 'text'\''text'
-          const escapedCmd = cmd.replaceAll("'", "'\\''");
+          const escapedCmd = cmd.replaceAll("'", String.raw`'\''`);
 
           // 1. Kill existing session (silent if doesn't exist)
           // 2. Create new detached session with the dev command
