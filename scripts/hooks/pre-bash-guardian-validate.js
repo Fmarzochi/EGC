@@ -49,7 +49,7 @@ function extractSegments(command) {
   const segments = [];
   for (const rawSegment of command.split(SEGMENT_SEPARATORS)) {
     let tokens = rawSegment.trim().split(/\s+/).filter(Boolean);
-    while (tokens.length > 0 && (LEADING_WRAPPERS.has(tokens[0]) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0]))) {
+    while (tokens.length > 0 && (LEADING_WRAPPERS.has(tokens[0]) || /^[A-Za-z_]\w*=/.test(tokens[0]))) {
       tokens = tokens.slice(1);
     }
     if (tokens.length > 0) segments.push(tokens.join(' '));

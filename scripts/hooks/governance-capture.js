@@ -28,7 +28,7 @@ const SECRET_PATTERNS = [
   { name: 'generic_secret', pattern: /(?:secret|password|token|api[_-]?key)\s*[:=]\s*["'][^"']{8,}/i },
   { name: 'private_key', pattern: /-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----/ },
   { name: 'jwt', pattern: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/ },
-  { name: 'github_token', pattern: /gh[pousr]_[A-Za-z0-9_]{36,}/ },
+  { name: 'github_token', pattern: /gh[pousr]_\w{36,}/ },
 ];
 
 // Tool names that represent security-relevant operations

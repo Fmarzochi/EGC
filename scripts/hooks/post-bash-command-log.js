@@ -27,10 +27,10 @@ function sanitizeCommand(command) {
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED>')
     .replace(/\bASIA[A-Z0-9]{16}\b/g, '<REDACTED>')
     .replace(/password[= ][^ ]*/gi, 'password=<REDACTED>')
-    .replace(/\bghp_[A-Za-z0-9_]+\b/g, '<REDACTED>')
-    .replace(/\bgho_[A-Za-z0-9_]+\b/g, '<REDACTED>')
-    .replace(/\bghs_[A-Za-z0-9_]+\b/g, '<REDACTED>')
-    .replace(/\bgithub_pat_[A-Za-z0-9_]+\b/g, '<REDACTED>');
+    .replace(/\bghp_\w+\b/g, '<REDACTED>')
+    .replace(/\bgho_\w+\b/g, '<REDACTED>')
+    .replace(/\bghs_\w+\b/g, '<REDACTED>')
+    .replace(/\bgithub_pat_\w+\b/g, '<REDACTED>');
 }
 
 function appendLine(filePath, line) {

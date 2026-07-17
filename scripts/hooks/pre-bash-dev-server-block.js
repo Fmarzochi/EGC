@@ -123,7 +123,7 @@ function getLeadingCommandWord(segment) {
       continue;
     }
 
-    if (/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(token)) continue;
+    if (/^[A-Za-z_]\w*=.*/.test(token)) continue;
 
     const normalizedToken = normalizeCommandWord(token);
 

@@ -84,7 +84,7 @@ function adaptToolName(toolName) {
     return toolName
       .replace(/^mcp__/, 'mcp_')
       .replaceAll('__', '_')
-      .replace(/[^A-Za-z0-9_]/g, '_')
+      .replace(/\W/g, '_')
       .toLowerCase();
   }
 

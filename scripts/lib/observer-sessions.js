@@ -144,7 +144,7 @@ function stopObserverForContext(context) {
   if (!fs.existsSync(pidFile)) return false;
 
   const pid = (fs.readFileSync(pidFile, 'utf8') || '').trim();
-  if (!/^[0-9]+$/.test(pid) || pid === '0' || pid === '1') {
+  if (!/^\d+$/.test(pid) || pid === '0' || pid === '1') {
     fs.rmSync(pidFile, { force: true });
     return false;
   }
