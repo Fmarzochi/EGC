@@ -149,7 +149,7 @@ function getSessionMetadata() {
 }
 
 function extractHeaderField(header, label) {
-  const match = new RegExp(`\\*\\*${escapeRegExp(label)}:\\*\\*\\s*(.+)$`, 'm').exec(header);
+  const match = new RegExp(String.raw`\*\*${escapeRegExp(label)}:\*\*\s*(.+)$`, 'm').exec(header);
   return match ? match[1].trim() : null;
 }
 
@@ -221,7 +221,7 @@ function injectSummaryIntoContent(updatedContent, summary) {
   const summaryBlock = buildSummaryBlock(summary);
   if (updatedContent.includes(SUMMARY_START_MARKER) && updatedContent.includes(SUMMARY_END_MARKER)) {
     return updatedContent.replace(
-      new RegExp(`${escapeRegExp(SUMMARY_START_MARKER)}[\\s\\S]*?${escapeRegExp(SUMMARY_END_MARKER)}`),
+      new RegExp(String.raw`${escapeRegExp(SUMMARY_START_MARKER)}[\s\S]*?${escapeRegExp(SUMMARY_END_MARKER)}`),
       summaryBlock
     );
   }
@@ -327,5 +327,5 @@ function buildSummaryBlock(summary) {
 }
 
 function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

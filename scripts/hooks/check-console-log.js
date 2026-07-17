@@ -44,7 +44,7 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
-    const files = getGitModifiedFiles(['\\.tsx?$', '\\.jsx?$'])
+    const files = getGitModifiedFiles([String.raw`\.tsx?$`, String.raw`\.jsx?$`])
       .filter(f => fs.existsSync(f))
       .filter(f => !EXCLUDED_PATTERNS.some(pattern => pattern.test(f)));
 
