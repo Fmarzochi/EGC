@@ -149,7 +149,7 @@ function getSessionMetadata() {
 }
 
 function extractHeaderField(header, label) {
-  const match = new RegExp(`\\*\\*${escapeRegExp(label)}\\*\\*\\s*(.+)$`, 'm').exec(header);
+  const match = new RegExp(`\\*\\*${escapeRegExp(label)}:\\*\\*\\s*(.+)$`, 'm').exec(header);
   return match ? match[1].trim() : null;
 }
 
