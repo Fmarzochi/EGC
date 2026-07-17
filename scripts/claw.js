@@ -160,7 +160,7 @@ function searchSessions(query, dir) {
     if (idx >= 0) {
       const start = Math.max(0, idx - 40);
       const end = Math.min(content.length, idx + q.length + 40);
-      const snippet = content.slice(start, end).replace(/\n/g, ' ');
+      const snippet = content.slice(start, end).replaceAll('\n', ' ');
       results.push({ session: name, snippet });
     }
   }

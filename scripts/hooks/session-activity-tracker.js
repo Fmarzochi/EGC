@@ -30,7 +30,7 @@ const FILE_PATH_KEYS = new Set([
 
 function redactSecrets(value) {
   return String(value || '')
-    .replace(/\n/g, ' ')
+    .replaceAll('\n', ' ')
     .replace(/--token[= ][^ ]*/g, '--token=<REDACTED>')
     .replace(/Authorization:[: ]*[^ ]*[: ]*[^ ]*/gi, 'Authorization:<REDACTED>')
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED>')

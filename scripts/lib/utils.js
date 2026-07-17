@@ -326,8 +326,8 @@ function findFiles(dir, pattern, options = {}) {
   // Order matters: escape specials first, then convert * and ? to regex equivalents.
   const regexPattern = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
+    .replaceAll('*', '.*')
+    .replaceAll('?', '.');
   const regex = new RegExp(`^${regexPattern}$`);
 
   function collectIfInAge(fullPath, stats) {

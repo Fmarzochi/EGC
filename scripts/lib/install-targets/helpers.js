@@ -13,7 +13,7 @@ const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
 
 function normalizeRelativePath(relativePath) {
   return String(relativePath || '')
-    .replace(/\\/g, '/')
+    .replaceAll('\\', '/')
     .replace(/^\.\/+/, '')
     .replace(/\/+$/, '');
 }
@@ -202,7 +202,7 @@ function createNamespacedFlatRuleOperations(adapter, moduleId, sourceRelativePat
     if (entry.isDirectory()) {
       const relativeFiles = listRelativeFiles(entryPath);
       for (const relativeFile of relativeFiles) {
-        const flattenedFileName = `${namespace}-${normalizeRelativePath(relativeFile).replace(/\//g, '-')}`;
+        const flattenedFileName = `${namespace}-${normalizeRelativePath(relativeFile).replaceAll('/', '-')}`;
         const sourceRelativeFile = path.join(normalizedSourcePath, namespace, relativeFile);
         operations.push(createManagedOperation({
           moduleId,
@@ -250,7 +250,7 @@ function createFlatFileOperations({
     if (entry.isDirectory()) {
       const relativeFiles = listRelativeFiles(entryPath);
       for (const relativeFile of relativeFiles) {
-        const defaultFileName = `${namespace}-${normalizeRelativePath(relativeFile).replace(/\//g, '-')}`;
+        const defaultFileName = `${namespace}-${normalizeRelativePath(relativeFile).replaceAll('/', '-')}`;
         const sourceRelativeFile = path.join(normalizedSourcePath, namespace, relativeFile);
         const flattenedFileName = typeof destinationNameTransform === 'function'
           ? destinationNameTransform(defaultFileName, sourceRelativeFile)

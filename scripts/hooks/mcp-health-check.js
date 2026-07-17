@@ -435,7 +435,7 @@ function reconnectCommand(serverName) {
     return null;
   }
 
-  return command.replace(/\{server\}/g, serverName);
+  return command.replaceAll('{server}', serverName);
 }
 
 function attemptReconnect(serverName) {

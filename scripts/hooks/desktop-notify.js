@@ -104,8 +104,8 @@ function extractSummary(message) {
  * double quotes with curly quotes and strip backslashes before embedding.
  */
 function notifyMacOS(title, body) {
-  const safeBody = body.replace(/\\/g, '').replaceAll('"', '\u201C');
-  const safeTitle = title.replace(/\\/g, '').replaceAll('"', '\u201C');
+  const safeBody = body.replaceAll('\\', '').replaceAll('"', '\u201C');
+  const safeTitle = title.replaceAll('\\', '').replaceAll('"', '\u201C');
   const script = `display notification "${safeBody}" with title "${safeTitle}"`;
   const result = spawnSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 5000 });
   if (result.error || result.status !== 0) {

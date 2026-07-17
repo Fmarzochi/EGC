@@ -25,7 +25,7 @@ const ADHOC_FILENAMES = /^(NOTES|TODO|SCRATCH|TEMP|DRAFT|BRAINSTORM|SPIKE|DEBUG|
 const STRUCTURED_DIRS = /(^|\/)(docs|\.gemini|\.github|commands|skills|benchmarks|templates|\.history|memory)\//;
 
 function isSuspiciousDocPath(filePath) {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = filePath.replaceAll('\\', '/');
   const basename = path.basename(normalized);
 
   // Only inspect .md and .txt files (case-sensitive, consistent with ADHOC_FILENAMES)

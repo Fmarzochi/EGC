@@ -252,7 +252,7 @@ function sanitizePath(filePath) {
 
 function normalizeForMatch(value) {
   return String(value || '')
-    .replace(/\\/g, '/')
+    .replaceAll('\\', '/')
     .toLowerCase();
 }
 

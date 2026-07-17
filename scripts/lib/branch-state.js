@@ -11,12 +11,12 @@ function getStateDir(homeDir) {
 }
 
 function projectSlug(projectPath) {
-  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = projectPath.replaceAll('\\', '/').split('/').filter(Boolean);
   return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
 function sanitizeBranchName(branch) {
-  return branch.replace(/\//g, '-').replace(/[^a-zA-Z0-9-_]/g, '_');
+  return branch.replaceAll('/', '-').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
 // Validates a resolved absolute path is within a trusted directory root

@@ -59,7 +59,7 @@ function fromMcpConfigs() {
       // this whole fallback on Windows. Normalizing the candidate's own
       // separators before comparing means either style in the config matches.
       const indexJs = [server?.command, ...args].find(
-        a => typeof a === 'string' && a.replace(/\\/g, '/').endsWith('egc-guardian/build/index.js'),
+        a => typeof a === 'string' && a.replaceAll('\\', '/').endsWith('egc-guardian/build/index.js'),
       );
       if (!indexJs) continue;
       const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');

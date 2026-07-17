@@ -17,7 +17,7 @@ const ISO_DATE_RE = /\b(\d{4})-(\d{2})-(\d{2})\b/;
 const BR_DATE_RE = /\b(\d{2})\/(\d{2})\/(\d{4})\b/;
 
 function projectSlug(projectPath) {
-  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = projectPath.replaceAll('\\', '/').split('/').filter(Boolean);
   return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
