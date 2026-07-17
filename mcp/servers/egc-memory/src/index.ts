@@ -84,8 +84,8 @@ function ensurePrivateDir(dirPath: string): void {
 }
 
 class PersistentLogger {
-  private logPath: string;
-  private maxSizeBytes = 5 * 1024 * 1024; // 5MB
+  private readonly logPath: string;
+  private readonly maxSizeBytes = 5 * 1024 * 1024; // 5MB
 
   constructor(serviceName: string) {
     const logDir = path.join(os.homedir(), '.egc', 'logs');
@@ -136,7 +136,7 @@ interface QueueTask<T> {
 }
 
 class SQLiteArbitrationQueue {
-  private queue: QueueTask<unknown>[] = [];
+  private readonly queue: QueueTask<unknown>[] = [];
   private isProcessing = false;
   private readonly MAX_RETRIES = 5;
   private readonly BASE_BACKOFF_MS = 50;
@@ -168,7 +168,7 @@ class SQLiteArbitrationQueue {
       const result = await task.operation();
       task.resolve(result);
     } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
+      const error = err instanceof Error ? err : new Error(JSON.stringify(err));
       if (error.message && (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked'))) {
         if (task.retries < this.MAX_RETRIES) {
           task.retries++;
@@ -216,7 +216,7 @@ async function runMigrations(db: Database, dbDir: string) {
       if (!isNaN(storedPid) && storedPid !== process.pid) {
         // Check if the PID is still alive (POSIX: signal 0 = probe only)
         let alive = false;
-        try { process.kill(storedPid, 0); alive = true; } catch (_) {
+        try { process.kill(storedPid, 0); alive = true; } catch (_) { // NOSONAR: probe failure means the PID is dead
           // non-critical: if signal probe fails, treat PID as dead and clear lock
         }
         if (!alive) fs.unlinkSync(lockFile);
@@ -233,7 +233,7 @@ async function runMigrations(db: Database, dbDir: string) {
     try {
       fs.writeFileSync(lockFile, process.pid.toString(), { flag: 'wx' });
       locked = true;
-    } catch (e) {
+    } catch (e) { // NOSONAR: lock contention is handled by the retry loop below
       retries--;
       await new Promise(r => setTimeout(r, 100));
     }
@@ -1050,7 +1050,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             );
             await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['current_session_id', sessionId]);
           });
-        } catch (_) { /* non-fatal */ }
+        } catch (_) { /* non-fatal */ } // NOSONAR: session id persistence is best-effort
 
         if (resolved.source === 'none') {
           const branchLine = branch ? `Branch: ${branch}\n` : '';
@@ -1095,7 +1095,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               await db.run('DELETE FROM operational_state WHERE id = ?', ['current_session_id']);
             });
           }
-        } catch (_) { /* non-fatal */ }
+        } catch (_) { /* non-fatal */ } // NOSONAR: legacy flat-state merge is best-effort
         // Merge from the same file get_state would read, so the first
         // branch-scoped write inherits the pre-existing flat state
         const resolved = resolveStateRead(getStateDir(), projPath, branch);

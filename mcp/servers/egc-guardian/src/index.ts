@@ -11,7 +11,7 @@ import { llmRoute, keywordRoute } from './llm-router.js';
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
   const egcRoot = path.join(os.homedir(), '.egc');
-  const attribPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'attrib.exe');
+  const attribPath = path.join(process.env.SystemRoot || String.raw`C:\Windows`, 'System32', 'attrib.exe');
   spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 import { z } from 'zod';
@@ -80,8 +80,8 @@ async function routeTask(prompt: string): Promise<{
 }
 
 class PersistentLogger {
-  private logPath: string;
-  private maxSizeBytes = 5 * 1024 * 1024; // 5MB
+  private readonly logPath: string;
+  private readonly maxSizeBytes = 5 * 1024 * 1024; // 5MB
 
   constructor(serviceName: string) {
     const logDir = path.join(os.homedir(), '.egc', 'logs');
@@ -99,7 +99,7 @@ class PersistentLogger {
         if (stats.size > this.maxSizeBytes) {
            await fs.promises.rename(this.logPath, `${this.logPath}.${Date.now()}.bak`);
         }
-      } catch (_e) {
+      } catch (_e) { // NOSONAR: rotating a missing log file is a no-op
         // file might not exist
       }
       await fs.promises.appendFile(this.logPath, payload + '\n', 'utf-8');
@@ -114,7 +114,10 @@ const sysLogger = new PersistentLogger('egc-guardian-router');
 // Security audit log writes are handled by audit-log.ts (writeAuditEntry).
 
 function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: Record<string, unknown> = {}) {
-  const level = (status === 'FATAL' || status === 'DENIED') ? 'ERROR' : (status === 'ONLINE' || status === 'SHUTDOWN' ? 'INFO' : 'AUDIT');
+  let level: 'ERROR' | 'INFO' | 'AUDIT';
+  if (status === 'FATAL' || status === 'DENIED') level = 'ERROR';
+  else if (status === 'ONLINE' || status === 'SHUTDOWN') level = 'INFO';
+  else level = 'AUDIT';
   sysLogger.log(level, action, status, details);
   if (status === 'DENIED') writeAuditEntry(action, status, details);
 }
@@ -294,7 +297,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                await fileHandle.close();
              }
            } catch(e: unknown) {
-             const reason = e instanceof Error ? e.message : String(e);
+             const reason = e instanceof Error ? e.message : JSON.stringify(e);
              auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
            }
         }
@@ -418,9 +421,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
 
         const extraFiles = result.propagated_to?.length ?? 0;
+        const extraSuffix = extraFiles > 0 ? ` and ${extraFiles} other AI tool config file(s)` : '';
         const summary = result.skipped
           ? `[auto_learn] skipped: ${result.reason}`
-          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file}${extraFiles > 0 ? ` and ${extraFiles} other AI tool config file(s)` : ''} (${result.patterns_found} failure patterns found)`;
+          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file}${extraSuffix} (${result.patterns_found} failure patterns found)`;
 
         return { content: [{ type: 'text', text: summary }] };
       }

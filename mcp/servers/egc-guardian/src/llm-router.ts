@@ -56,7 +56,7 @@ function buildUserMessage(prompt: string, catalogBlock: string): string {
 
 function extractJsonBlock(raw: string): unknown {
   try {
-    const match = raw.match(/\{[\s\S]*\}/);
+    const match = /\{[\s\S]*\}/.exec(raw);
     if (!match) return null;
     return JSON.parse(match[0]);
   } catch {

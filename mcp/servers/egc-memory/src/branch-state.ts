@@ -12,12 +12,12 @@ export interface ResolvedState {
 }
 
 export function projectSlug(projectPath: string): string {
-  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = projectPath.replaceAll('\\', '/').split('/').filter(Boolean);
   return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 
 export function sanitizeBranchName(branch: string): string {
-  return branch.replace(/\//g, '-').replace(/[^a-zA-Z0-9-_]/g, '_');
+  return branch.replaceAll('/', '-').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
 
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
@@ -48,7 +48,7 @@ export function detectBranch(projectPath: string): string | null {
     // Detached HEAD stores a bare commit hash; treat it as no branch
     if (!head.startsWith(refPrefix)) return null;
     return head.slice(refPrefix.length) || null;
-  } catch (_) {
+  } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info
     return null;
   }
 }

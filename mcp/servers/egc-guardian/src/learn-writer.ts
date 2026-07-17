@@ -63,8 +63,9 @@ async function loadRecentFailures(projectRoot: string, limit: number): Promise<F
       let payload: Record<string, unknown>;
       try { payload = JSON.parse(row.payload); } catch { continue; }
 
-      const out = String(payload.output ?? payload.result ?? '');
-      const tool = String(payload.tool ?? 'unknown');
+      const asText = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v ?? ''));
+      const out = asText(payload.output ?? payload.result ?? '');
+      const tool = asText(payload.tool ?? 'unknown');
 
       if (/error|failed|exception|cannot|unexpected/i.test(out)) {
         const existing = tally.get(tool);

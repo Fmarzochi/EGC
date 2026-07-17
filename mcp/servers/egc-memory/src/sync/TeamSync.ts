@@ -196,7 +196,7 @@ function mergeStateDocs(localContent: string, remoteContent: string): string {
 }
 
 function extractTimestamp(content: string): number {
-  const match = content.match(/^updated:\s*(.+)/m);
+  const match = /^updated:\s*(.+)/m.exec(content);
   if (match) {
     return new Date(match[1].trim()).getTime();
   }

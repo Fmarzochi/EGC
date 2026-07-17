@@ -80,7 +80,7 @@ function extractErrorKey(event: RuntimeEvent): string | null {
 
   const message = p['error'] ?? p['message'] ?? p['errorMessage'];
   if (typeof message === 'string' && message) {
-    const tsMatch = message.match(/TS\d+/);
+    const tsMatch = /TS\d+/.exec(message);
     if (tsMatch) return tsMatch[0];
 
     const words = message.trim().split(/\s+/).slice(0, 6).join(' ');
