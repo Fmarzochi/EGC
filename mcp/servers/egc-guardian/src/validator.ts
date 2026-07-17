@@ -184,174 +184,178 @@ export interface ValidationResult {
  * Validate arguments for a specific allowed command.
  * Returns { allowed: false, reason } if the args are unsafe.
  */
+function validateGitArgs(args: string[]): ValidationResult {
+  // Block force pushes, including --force-with-lease/--force-if-includes
+  // (startsWith, not includes, so these are caught even though their
+  // second character is '-' and they carry a value after '=').
+  const hasForceFlag = args.some(
+a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
+  );
+  if (hasForceFlag) {
+return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
+  }
+  // Additional check for combined short flags like -fu used destructively
+  if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
+return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
+  }
+  return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
+  const home = os.homedir();
+
+  // Detect if any recursive flag is present
+  const isRecursive = args.some(
+a => a === '-r' || a === '-R' || a === '--recursive' ||
+     // combined short flags: -rn, -Rn, -rl, etc.
+     /^-[a-zA-Z]*[rR]/.test(a),
+  );
+
+  // Non-flag, non-empty args are candidates for pattern or path.
+  // In grep: grep [options] PATTERN [FILE…]
+  // The first non-flag arg is the pattern; the rest are paths.
+  const positionalArgs = args.filter(a => a.length > 0 && !a.startsWith('-'));
+
+  // Paths are all positional args after the first one (the pattern).
+  const pathArgs = positionalArgs.slice(1);
+
+  if (isRecursive) {
+for (const p of pathArgs) {
+  if (p === '/' || p === home || isProtectedPath(p, cwd)) {
+    return {
+      allowed: false,
+      reason: `grep recursive over protected path '${p}' is forbidden`,
+      trust_level: 'SAFE_READONLY',
+    };
+  }
+}
+// If no explicit path args, grep defaults to '.', which is fine.
+// But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
+if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
+  return {
+    allowed: false,
+    reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
+    trust_level: 'SAFE_READONLY',
+  };
+}
+  }
+
+  // Even without -r, block explicit protected paths
+  for (const p of pathArgs) {
+if (isProtectedPath(p, cwd)) {
+  return {
+    allowed: false,
+    reason: `grep over protected path '${p}' is forbidden`,
+    trust_level: 'SAFE_READONLY',
+  };
+}
+  }
+
+  return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+function validateCatArgs(args: string[], cwd?: string): ValidationResult {
+  for (const arg of args) {
+if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
+  return {
+    allowed: false,
+    reason: `cat of protected path '${arg}' is forbidden`,
+    trust_level: 'SAFE_READONLY',
+  };
+}
+  }
+  return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+function validateFindArgs(args: string[], cwd?: string): ValidationResult {
+  // -delete/-exec/etc. make find perform an action instead of just
+  // filtering, which reproduces 'rm -rf' through a base command that
+  // isn't in the DANGEROUS list. Deny regardless of path.
+  const actionFlag = args.find(a => FIND_ACTION_FLAGS.includes(a));
+  if (actionFlag) {
+return {
+  allowed: false,
+  reason: `find with action flag '${actionFlag}' is forbidden (use a read-only find, then a separate reviewed command)`,
+  trust_level: 'DANGEROUS',
+};
+  }
+
+  // First non-flag arg is typically the search root
+  const pathArgs = args.filter(a => !a.startsWith('-'));
+  for (const p of pathArgs) {
+if (isProtectedPath(p, cwd)) {
+  return {
+    allowed: false,
+    reason: `find over protected path '${p}' is forbidden`,
+    trust_level: 'SAFE_READONLY',
+  };
+}
+  }
+  return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: string): ValidationResult {
+  // These are read-only but we still block protected paths
+  for (const arg of args) {
+if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
+  return {
+    allowed: false,
+    reason: `${baseCommand} on protected path '${arg}' is forbidden`,
+    trust_level: 'SAFE_READONLY',
+  };
+}
+  }
+  return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+function validateDevToolArgs(baseCommand: string, args: string[], cwd?: string): ValidationResult {
+  // node -e/-p can read, write, or exfiltrate anything the process can
+  // touch, including files DENIED_PATHS protects (e.g. the state
+  // encryption key) — inline eval is caught by the interpreter check in
+  // validateCommand, but a defense-in-depth check here means this branch
+  // is still safe even if it's ever reached directly.
+  const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
+  if (evalFlags && args.some(a => evalFlags.includes(a))) {
+return {
+  allowed: false,
+  reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
+  trust_level: 'DANGEROUS',
+};
+  }
+
+  // Any argument that resolves to a protected path (a script path, a
+  // require target, etc.) is denied the same way 'cat'/'find' deny it —
+  // being in SAFE_DEV means "safe to run", not "exempt from path checks".
+  for (const arg of args) {
+if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
+  return {
+    allowed: false,
+    reason: `${baseCommand} on protected path '${arg}' is forbidden`,
+    trust_level: 'SAFE_DEV',
+  };
+}
+  }
+
+  return { allowed: true, trust_level: 'SAFE_DEV' };
+}
+
 export function validateCommandArgs(
   baseCommand: string,
   args: string[],
   cwd?: string,
 ): ValidationResult {
-  const allArgs = args.join(' ');
-
   switch (baseCommand) {
-    case 'git': {
-      // Block force pushes, including --force-with-lease/--force-if-includes
-      // (startsWith, not includes, so these are caught even though their
-      // second character is '-' and they carry a value after '=').
-      const hasForceFlag = args.some(
-        a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
-      );
-      if (hasForceFlag) {
-        return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
-      }
-      // Additional check for combined short flags like -fu used destructively
-      if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
-        return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'grep': {
-      const home = os.homedir();
-
-      // Detect if any recursive flag is present
-      const isRecursive = args.some(
-        a => a === '-r' || a === '-R' || a === '--recursive' ||
-             // combined short flags: -rn, -Rn, -rl, etc.
-             /^-[a-zA-Z]*[rR]/.test(a),
-      );
-
-      // Non-flag, non-empty args are candidates for pattern or path.
-      // In grep: grep [options] PATTERN [FILE…]
-      // The first non-flag arg is the pattern; the rest are paths.
-      const positionalArgs = args.filter(a => a.length > 0 && !a.startsWith('-'));
-
-      // Paths are all positional args after the first one (the pattern).
-      const pathArgs = positionalArgs.slice(1);
-
-      if (isRecursive) {
-        for (const p of pathArgs) {
-          if (p === '/' || p === home || isProtectedPath(p, cwd)) {
-            return {
-              allowed: false,
-              reason: `grep recursive over protected path '${p}' is forbidden`,
-              trust_level: 'SAFE_READONLY',
-            };
-          }
-        }
-        // If no explicit path args, grep defaults to '.', which is fine.
-        // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-        if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
-          return {
-            allowed: false,
-            reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-
-      // Even without -r, block explicit protected paths
-      for (const p of pathArgs) {
-        if (isProtectedPath(p, cwd)) {
-          return {
-            allowed: false,
-            reason: `grep over protected path '${p}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'cat': {
-      for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
-          return {
-            allowed: false,
-            reason: `cat of protected path '${arg}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'find': {
-      // -delete/-exec/etc. make find perform an action instead of just
-      // filtering, which reproduces 'rm -rf' through a base command that
-      // isn't in the DANGEROUS list. Deny regardless of path.
-      const actionFlag = args.find(a => FIND_ACTION_FLAGS.includes(a));
-      if (actionFlag) {
-        return {
-          allowed: false,
-          reason: `find with action flag '${actionFlag}' is forbidden (use a read-only find, then a separate reviewed command)`,
-          trust_level: 'DANGEROUS',
-        };
-      }
-
-      // First non-flag arg is typically the search root
-      const pathArgs = args.filter(a => !a.startsWith('-'));
-      for (const p of pathArgs) {
-        if (isProtectedPath(p, cwd)) {
-          return {
-            allowed: false,
-            reason: `find over protected path '${p}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
+    case 'git': return validateGitArgs(args);
+    case 'grep': return validateGrepArgs(args, cwd);
+    case 'cat': return validateCatArgs(args, cwd);
+    case 'find': return validateFindArgs(args, cwd);
     case 'head':
     case 'stat':
-    case 'ls': {
-      // These are read-only but we still block protected paths
-      for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
-          return {
-            allowed: false,
-            reason: `${baseCommand} on protected path '${arg}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
+    case 'ls': return validateReadOnlyPathArgs(baseCommand, args, cwd);
     case 'npm':
     case 'npx':
     case 'node':
-    case 'tsc': {
-      // node -e/-p can read, write, or exfiltrate anything the process can
-      // touch, including files DENIED_PATHS protects (e.g. the state
-      // encryption key) — inline eval is caught by the interpreter check in
-      // validateCommand, but a defense-in-depth check here means this branch
-      // is still safe even if it's ever reached directly.
-      const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
-      if (evalFlags && args.some(a => evalFlags.includes(a))) {
-        return {
-          allowed: false,
-          reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
-          trust_level: 'DANGEROUS',
-        };
-      }
-
-      // Any argument that resolves to a protected path (a script path, a
-      // require target, etc.) is denied the same way 'cat'/'find' deny it —
-      // being in SAFE_DEV means "safe to run", not "exempt from path checks".
-      for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
-          return {
-            allowed: false,
-            reason: `${baseCommand} on protected path '${arg}' is forbidden`,
-            trust_level: 'SAFE_DEV',
-          };
-        }
-      }
-
-      return { allowed: true, trust_level: 'SAFE_DEV' };
-    }
-
+    case 'tsc': return validateDevToolArgs(baseCommand, args, cwd);
     default:
       return { allowed: true, trust_level: 'SAFE_READONLY' };
   }
