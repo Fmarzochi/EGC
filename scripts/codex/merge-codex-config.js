@@ -72,8 +72,8 @@ function findFirstTableIndex(raw) {
 }
 
 function findTableRange(raw, tablePath) {
-  const escaped = tablePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const headerPattern = new RegExp(`^[ \\t]*\\[${escaped}\\][ \\t]*(?:#.*)?$`, 'm');
+  const escaped = tablePath.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const headerPattern = new RegExp(String.raw`^[ \t]*\[${escaped}\][ \t]*(?:#.*)?$`, 'm');
   const match = headerPattern.exec(raw);
   if (!match) {
     return null;
@@ -126,11 +126,11 @@ function updateInlineTableKeys(raw, tablePath, missingKeys) {
   }
 
   const tableKey = pathParts[pathParts.length - 1];
-  const escapedKey = tableKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedKey = tableKey.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   const body = raw.slice(parentRange.bodyStart, parentRange.bodyEnd);
   const lines = body.split('\n');
   for (let index = 0; index < lines.length; index += 1) {
-    const inlinePattern = new RegExp(`^(\\s*${escapedKey}\\s*=\\s*\\{)(.*?)(\\}\\s*(?:#.*)?)$`);
+    const inlinePattern = new RegExp(String.raw`^(\s*${escapedKey}\s*=\s*\{)(.*?)(\}\s*(?:#.*)?)$`);
     const match = inlinePattern.exec(lines[index]);
     if (!match) {
       continue;

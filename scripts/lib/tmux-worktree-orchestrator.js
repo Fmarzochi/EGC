@@ -27,7 +27,7 @@ function renderTemplate(template, variables) {
 }
 
 function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
+  return `'${String(value).replaceAll("'", String.raw`'\''`)}'`;
 }
 
 function formatCommand(program, args) {
@@ -47,7 +47,7 @@ function buildTemplateVariables(values) {
 }
 
 function buildSessionBannerCommand(sessionName, coordinationDir) {
-  return `printf '%s\\n' ${shellQuote('Session: ' + sessionName)} ${shellQuote('Coordination: ' + coordinationDir)}`;
+  return String.raw`printf '%s\n' ${shellQuote('Session: ' + sessionName)} ${shellQuote('Coordination: ' + coordinationDir)}`;
 }
 
 function normalizeSeedPaths(seedPaths, repoRoot) {

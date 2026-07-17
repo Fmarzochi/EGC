@@ -64,11 +64,11 @@ function writeSnapshotToDisk(projectPath = process.env.PWD || process.cwd()) {
 }
 
 function escapeRegExp(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function extractSection(content, heading) {
-  const re = new RegExp(`^${escapeRegExp(heading)}\\n([\\s\\S]*?)(?=^## |\\Z)`, 'm');
+  const re = new RegExp(String.raw`^${escapeRegExp(heading)}\n([\s\S]*?)(?=^## |\Z)`, 'm');
   const match = content.match(re);
   return match ? match[1].trim() : '';
 }
@@ -82,7 +82,7 @@ function appendToSection(content, heading, lines) {
   const escaped = escapeRegExp(heading);
   if (new RegExp(`^${escaped}$`, 'm').test(content)) {
     const updated = content.replace(
-      new RegExp(`^(${escaped}\\n)`, 'm'),
+      new RegExp(String.raw`^(${escaped}\n)`, 'm'),
       `$1${block}`,
     );
     return { content: updated, added: fresh.length };

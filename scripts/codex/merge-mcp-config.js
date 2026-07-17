@@ -145,8 +145,8 @@ function configDiffers(existing, recommended) {
  * Returns the text with the section removed.
  */
 function removeSectionFromText(text, sectionHeader) {
-  const escaped = sectionHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const headerPattern = new RegExp(`^${escaped}(\\s*(#.*)?)?$`);
+  const escaped = sectionHeader.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const headerPattern = new RegExp(String.raw`^${escaped}(\s*(#.*)?)?$`);
   const lines = text.split('\n');
   const result = [];
   let skipping = false;
