@@ -88,7 +88,7 @@ function extractScriptBasename(command) {
   if (!scriptPaths || scriptPaths.length === 0) {
     return null;
   }
-  return path.basename(scriptPaths[scriptPaths.length - 1]);
+  return path.basename(scriptPaths.at(-1));
 }
 
 function isStaleEgcHookEntry(entry, hookScriptPath) {

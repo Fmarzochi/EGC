@@ -154,7 +154,7 @@ function parseStateDocument(content) {
     current.lines.push(line);
   }
 
-  while (header.length > 0 && header[header.length - 1].trim() === '') {
+  while (header.length > 0 && header.at(-1).trim() === '') {
     header.pop();
   }
 

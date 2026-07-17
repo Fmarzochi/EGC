@@ -156,7 +156,7 @@ function removeSectionFromText(text, sectionHeader) {
       skipping = true;
       continue;
     }
-    if (skipping && /^\[/.test(trimmed)) {
+    if (skipping && trimmed.startsWith('[')) {
       skipping = false;
     }
     if (!skipping) {

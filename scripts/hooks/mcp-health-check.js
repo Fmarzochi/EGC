@@ -346,7 +346,7 @@ function scheduleGraceTimer(timeoutMs, child, serverName, ps) {
 
 function probeCommandServer(serverName, config) {
   return new Promise(resolve => {
-    const args = Array.isArray(config.args) ? config.args.map(arg => String(arg)) : [];
+    const args = Array.isArray(config.args) ? config.args.map(String) : [];
     const timeoutMs = envNumber('EGC_MCP_HEALTH_TIMEOUT_MS', DEFAULT_TIMEOUT_MS);
     const mergedEnv = { ...process.env, ...(isValidEnvObject(config.env) ? config.env : {}) };
     const ps = createProbeState(resolve);

@@ -189,8 +189,6 @@ export function validateCommandArgs(
   args: string[],
   cwd?: string,
 ): ValidationResult {
-  const allArgs = args.join(' ');
-
   switch (baseCommand) {
     case 'git': {
       // Block force pushes, including --force-with-lease/--force-if-includes

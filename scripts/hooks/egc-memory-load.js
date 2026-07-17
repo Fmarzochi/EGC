@@ -35,7 +35,7 @@ function main() {
       'You have persistent memory for this project. Resume exactly where you left off: no need to re-explain anything already decided.\n\n' +
       content;
 
-    const output = Object.assign({}, input, { promptForAssistant: prompt });
+    const output = { ...input, promptForAssistant: prompt };
     process.stdout.write(JSON.stringify(output));
   } catch (_) { // NOSONAR: enrichment failure falls back to the original input untouched
     process.stdout.write(JSON.stringify(input));

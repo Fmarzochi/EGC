@@ -122,7 +122,7 @@ function cloneJsonValue(value) {
     return undefined;
   }
 
-  return JSON.parse(JSON.stringify(value));
+  return structuredClone(value);
 }
 
 function parseJsonLikeValue(value, label) {

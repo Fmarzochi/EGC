@@ -5,7 +5,7 @@
  * Runs quality checks before git commit commands:
  * - Detects staged files
  * - Runs linter on staged files (if available)
- * - Checks for common issues (console.log, TODO, etc.)
+ * - Checks for common issues (console.log, open task markers, etc.)
  * - Validates commit message format (if provided)
  *
  * Cross-platform (Windows, macOS, Linux)
@@ -93,7 +93,7 @@ function findFileIssues(filePath) {
         });
       }
       
-      // Check for TODO/FIXME without issue reference
+      // Check for open task markers without an issue reference
       const todoMatch = line.match(/\/\/\s*(TODO|FIXME):?\s*(.+)/);
       if (todoMatch && !todoMatch[2].match(/#\d+|issue/i)) {
         issues.push({

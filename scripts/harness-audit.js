@@ -629,7 +629,7 @@ function buildReport(scope, options = {}) {
     .reduce((sum, check) => sum + check.points, 0);
 
   const failedChecks = checks.filter(check => !check.pass);
-  const topActions = failedChecks
+  const topActions = [...failedChecks]
     .sort((left, right) => right.points - left.points)
     .slice(0, 3)
     .map(check => ({

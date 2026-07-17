@@ -52,7 +52,7 @@ function cloneJsonValue(value) {
     return undefined;
   }
 
-  return JSON.parse(JSON.stringify(value));
+  return structuredClone(value);
 }
 
 function isPlainObject(value) {

@@ -459,7 +459,7 @@ async function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-run().catch((err) => {
+run().catch((err) => { // NOSONAR: CommonJS-compatible entrypoint keeps the promise chain
   auditLog('CRASH', 'FATAL', { error: String(err) });
   process.exit(1);
 });

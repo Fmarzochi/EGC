@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict';
+const { writeHookResult } = require('./hook-output');
 
 const MAX_STDIN = 1024 * 1024;
 let raw = '';
 
-function run(rawInput) {
+function run(rawInput) { // NOSONAR: hook contract returns pass-through string or structured decision object
   try {
     const input = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
     const cmd = String(input.tool_input?.command || '');
@@ -50,7 +51,7 @@ if (require.main === module) {
       return;
     }
 
-    process.stdout.write(String(result));
+    writeHookResult(result);
   });
 }
 

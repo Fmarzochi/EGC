@@ -1117,7 +1117,7 @@ src/main.ts
       assert.strictEqual(result.shortId, 'no-id', 'Should default to no-id');
     }
     // Either null (regex doesn't match) or has no-id: both are acceptable
-    assert.ok(true, 'Old format handled without crash');
+    assert.ok(true, 'Old format handled without crash'); // NOSONAR: explicit no-op assertion documents the tolerated path
   })) passed++; else failed++;
 
   // ── Round 33: birthtime / createdTime fallback ──
@@ -2031,7 +2031,7 @@ file.ts
   if (test('appendSessionContent returns false when file is read-only (EACCES)', () => {
     if (process.platform === 'win32') {
       // chmod doesn't work reliably on Windows: skip
-      assert.ok(true, 'Skipped on Windows');
+      assert.ok(true, 'Skipped on Windows'); // NOSONAR: explicit no-op assertion documents the platform skip
       return;
     }
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r112-readonly-'));

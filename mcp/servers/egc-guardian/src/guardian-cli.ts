@@ -62,7 +62,7 @@ async function learn(payload: string): Promise<unknown> {
   }
 }
 
-const MODES: Record<string, (payload: string) => unknown | Promise<unknown>> = {
+const MODES: Record<string, (payload: string) => unknown> = {
   'command': payload => validateCommand(payload),
   'command-batch': commandBatch,
   'write': payload => validateWrite(payload),
@@ -92,6 +92,6 @@ async function main() {
   process.stdout.write(JSON.stringify(result));
 }
 
-main().catch(err => {
+main().catch(err => { // NOSONAR: CommonJS-compatible entrypoint keeps the promise chain
   process.stdout.write(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
 });

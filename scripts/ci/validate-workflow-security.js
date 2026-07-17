@@ -14,7 +14,7 @@ const RULES = [
     event: 'workflow_run',
     eventPattern: /\bworkflow_run\s*:/m,
     description: 'workflow_run must not checkout an untrusted workflow_run head ref/repository',
-    expressionPattern: /\$\{\{\s*github\.event\.workflow_run\.(?:head_branch|head_sha|head_repository(?:\.[A-Za-z0-9_.]+)?)\s*\}\}|\$\{\{\s*github\.event\.workflow_run\.pull_requests\[\d+\]\.head\.(?:ref|sha|repo\.full_name)\s*\}\}/g,
+    expressionPattern: /\$\{\{\s*github\.event\.workflow_run\.(?:head_branch|head_sha|head_repository(?:\.[A-Za-z0-9_.]+)?)\s*\}\}|\$\{\{\s*github\.event\.workflow_run\.pull_requests\[\d+\]\.head\.(?:ref|sha|repo\.full_name)\s*\}\}/g, // NOSONAR: security pattern is intentionally explicit for auditability
   },
   {
     event: 'pull_request_target',
