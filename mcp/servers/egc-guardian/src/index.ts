@@ -232,62 +232,70 @@ function handleValidateWrite(toolArgs: unknown) {
   return { content: [{ type: "text", text: "[ALLOWED]" }] };
 }
 
+async function loadContextFileChunks(filepath: string, totalBytesLoaded: number): Promise<{ chunks: string[]; bytes: number } | null> {
+  try {
+    const resolved = path.resolve(filepath);
+    let realResolved: string;
+    try {
+      realResolved = fs.realpathSync(resolved);
+    } catch {
+      auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'path resolution failed' });
+      return null;
+    }
+    if (isProtectedPath(realResolved)) {
+      auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
+      return null;
+    }
+
+    // SEC-05/SEC-06: enforce byte-load limits against the same file handle
+    // used to read (stat-then-read on a path is a TOCTOU race if the file
+    // is swapped between the two calls).
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+
+    const fileHandle = await fs.promises.open(realResolved, 'r');
+    try {
+      const stats = await fileHandle.stat();
+      if (!stats.isFile()) {
+        auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
+        return null;
+      }
+      if (stats.size > MAX_FILE_SIZE) {
+        auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
+        return null;
+      }
+      if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
+        auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
+        return null;
+      }
+
+      const content = await fileHandle.readFile('utf-8');
+      // Split context into chunks/paragraphs to allow granular pruning
+      const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
+      return { chunks, bytes: Buffer.byteLength(content, 'utf8') };
+    } finally {
+      await fileHandle.close();
+    }
+  } catch (e: unknown) {
+    const reason = e instanceof Error ? e.message : JSON.stringify(e);
+    auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
+    return null;
+  }
+}
+
 async function handleReduceContext(toolArgs: unknown) {
   const { filepaths, mode } = ReduceContextSchema.parse(toolArgs);
   const rawPayloads: string[] = [];
-  
+
   let totalBytesLoaded = 0;
   for (const filepath of filepaths) {
-     try {
-       const resolved = path.resolve(filepath);
-       let realResolved: string;
-       try {
-         realResolved = fs.realpathSync(resolved);
-       } catch {
-         auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'path resolution failed' });
-         continue;
-       }
-       if (isProtectedPath(realResolved)) {
-         auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
-         continue;
-       }
-       
-       // SEC-05/SEC-06: enforce byte-load limits against the same file handle
-       // used to read (stat-then-read on a path is a TOCTOU race if the file
-       // is swapped between the two calls).
-       const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-       const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
-
-       const fileHandle = await fs.promises.open(realResolved, 'r');
-       try {
-         const stats = await fileHandle.stat();
-         if (!stats.isFile()) {
-     auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
-     continue;
-         }
-         if (stats.size > MAX_FILE_SIZE) {
-     auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
-     continue;
-         }
-         if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
-     auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
-     continue;
-         }
-
-         const content = await fileHandle.readFile('utf-8');
-         // Split context into chunks/paragraphs to allow granular pruning
-         const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
-         rawPayloads.push(...chunks);
-         totalBytesLoaded += Buffer.byteLength(content, 'utf8');
-       } finally {
-         await fileHandle.close();
-       }
-     } catch(e: unknown) {
-       const reason = e instanceof Error ? e.message : JSON.stringify(e);
-       auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
-     }
+    const loaded = await loadContextFileChunks(filepath, totalBytesLoaded);
+    if (!loaded) continue;
+    rawPayloads.push(...loaded.chunks);
+    totalBytesLoaded += loaded.bytes;
   }
-  
+
+
   const pipeline = runCompressionPipeline(rawPayloads);
 
   // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
@@ -465,7 +473,9 @@ async function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-run().catch((err) => {
+try {
+  await run();
+} catch (err) {
   auditLog('CRASH', 'FATAL', { error: String(err) });
   process.exit(1);
-});
+}

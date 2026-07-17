@@ -99,8 +99,7 @@ function buildRecommendations(patterns: FailurePattern[]): string {
     lines.push(`- **${p.tool}** failed ${p.count} time(s). Last error: \`${p.sample_error.slice(0, 100)}\``);
   }
 
-  lines.push('');
-  lines.push(`_Updated: ${new Date().toISOString()}_`);
+  lines.push('', `_Updated: ${new Date().toISOString()}_`);
 
   return lines.join('\n');
 }
