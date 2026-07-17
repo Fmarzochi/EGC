@@ -68,7 +68,7 @@ function run() {
   if (!fs.existsSync(bridgePy)) return 0;
 
   const python = resolvePythonBin(pluginRoot);
-  const env = Object.assign({}, process.env);
+  const env = { ...process.env };
   env.EGC_SESSION_ID = sessionId;
   env.ECC_SESSION_ID = sessionId;
   env.EGC_PLUGIN_ROOT = pluginRoot;
