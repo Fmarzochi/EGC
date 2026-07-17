@@ -248,41 +248,47 @@ function jsonContainsSubset(actualValue, expectedValue) {
 
 const JSON_REMOVE_SENTINEL = Symbol('json-remove');
 
+function handleNestedPlainObjectRemove(nextValue, key, value) {
+  const nestedValue = deepRemoveJsonSubset(nextValue[key], value);
+  if (nestedValue === JSON_REMOVE_SENTINEL) {
+    delete nextValue[key];
+  } else {
+    nextValue[key] = nestedValue;
+  }
+}
+
+function handleNestedArrayRemove(nextValue, key, value) {
+  if (Array.isArray(nextValue[key]) && jsonContainsSubset(nextValue[key], value)) {
+    delete nextValue[key];
+  }
+}
+
+function removePlainObjectSubset(currentValue, managedValue) {
+  if (!isPlainObject(currentValue)) {
+    return currentValue;
+  }
+
+  const nextValue = { ...currentValue };
+  for (const [key, value] of Object.entries(managedValue)) {
+    if (!Object.hasOwn(nextValue, key)) {
+      continue;
+    }
+
+    if (isPlainObject(value)) {
+      handleNestedPlainObjectRemove(nextValue, key, value);
+    } else if (Array.isArray(value)) {
+      handleNestedArrayRemove(nextValue, key, value);
+    } else if (nextValue[key] === value) {
+      delete nextValue[key];
+    }
+  }
+
+  return Object.keys(nextValue).length === 0 ? JSON_REMOVE_SENTINEL : nextValue;
+}
+
 function deepRemoveJsonSubset(currentValue, managedValue) {
   if (isPlainObject(managedValue)) {
-    if (!isPlainObject(currentValue)) {
-      return currentValue;
-    }
-
-    const nextValue = { ...currentValue };
-    for (const [key, value] of Object.entries(managedValue)) {
-      if (!Object.hasOwn(nextValue, key)) {
-        continue;
-      }
-
-      if (isPlainObject(value)) {
-        const nestedValue = deepRemoveJsonSubset(nextValue[key], value);
-        if (nestedValue === JSON_REMOVE_SENTINEL) {
-          delete nextValue[key];
-        } else {
-          nextValue[key] = nestedValue;
-        }
-        continue;
-      }
-
-      if (Array.isArray(value)) {
-        if (Array.isArray(nextValue[key]) && jsonContainsSubset(nextValue[key], value)) {
-          delete nextValue[key];
-        }
-        continue;
-      }
-
-      if (nextValue[key] === value) {
-        delete nextValue[key];
-      }
-    }
-
-    return Object.keys(nextValue).length === 0 ? JSON_REMOVE_SENTINEL : nextValue;
+    return removePlainObjectSubset(currentValue, managedValue);
   }
 
   if (Array.isArray(managedValue)) {
@@ -334,84 +340,88 @@ function repairClaudeSettingsHook(operation) {
   }
 }
 
+function repairCopyFile(repoRoot, operation) {
+  const sourcePath = resolveOperationSourcePath(repoRoot, operation);
+  if (!sourcePath || !fs.existsSync(sourcePath)) {
+    throw new Error(`Missing source file for repair: ${sourcePath || operation.sourceRelativePath}`);
+  }
+
+  ensureParentDir(operation.destinationPath);
+  fs.copyFileSync(sourcePath, operation.destinationPath);
+}
+
+function repairMergeJson(operation) {
+  const payload = getOperationJsonPayload(operation);
+  if (payload === undefined) {
+    throw new Error(`Missing merge payload for repair: ${operation.destinationPath}`);
+  }
+
+  const currentValue = fs.existsSync(operation.destinationPath)
+    ? readJsonFile(operation.destinationPath)
+    : {};
+  const mergedValue = deepMergeJson(currentValue, payload);
+
+  ensureParentDir(operation.destinationPath);
+  fs.writeFileSync(operation.destinationPath, formatJson(mergedValue));
+}
+
+function repairRemove(operation) {
+  if (!fs.existsSync(operation.destinationPath)) {
+    return;
+  }
+
+  fs.rmSync(operation.destinationPath, { recursive: true, force: true });
+}
+
+function repairMergeYamlReadList(operation) {
+  if (!operation.readEntry) {
+    throw new Error(`Missing readEntry for repair: ${operation.destinationPath}`);
+  }
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  let nextContent;
+  try {
+    nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
+  } catch (error) {
+    throw new Error(
+      `Failed to parse Aider config at ${operation.destinationPath}: ${error.message}`,
+      { cause: error },
+    );
+  }
+  ensureParentDir(operation.destinationPath);
+  fs.writeFileSync(operation.destinationPath, nextContent);
+}
+
+function repairMergeMarkdownIndex(operation) {
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  const nextContent = mergeSkillIndexEntry(existingContent, {
+    name: operation.skillName,
+    description: operation.skillDescription,
+    relativePath: operation.relativePath,
+  });
+  ensureParentDir(operation.destinationPath);
+  fs.writeFileSync(operation.destinationPath, nextContent);
+}
+
 function executeRepairOperation(repoRoot, operation) {
   if (operation.kind === 'copy-file') {
-    const sourcePath = resolveOperationSourcePath(repoRoot, operation);
-    if (!sourcePath || !fs.existsSync(sourcePath)) {
-      throw new Error(`Missing source file for repair: ${sourcePath || operation.sourceRelativePath}`);
-    }
-
-    ensureParentDir(operation.destinationPath);
-    fs.copyFileSync(sourcePath, operation.destinationPath);
-    return;
-  }
-
-  if (operation.kind === 'merge-json') {
-    const payload = getOperationJsonPayload(operation);
-    if (payload === undefined) {
-      throw new Error(`Missing merge payload for repair: ${operation.destinationPath}`);
-    }
-
-    const currentValue = fs.existsSync(operation.destinationPath)
-      ? readJsonFile(operation.destinationPath)
-      : {};
-    const mergedValue = deepMergeJson(currentValue, payload);
-
-    ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, formatJson(mergedValue));
-    return;
-  }
-
-  if (operation.kind === 'remove') {
-    if (!fs.existsSync(operation.destinationPath)) {
-      return;
-    }
-
-    fs.rmSync(operation.destinationPath, { recursive: true, force: true });
-    return;
-  }
-
-  if (operation.kind === HOOK_OPERATION_KIND) {
+    repairCopyFile(repoRoot, operation);
+  } else if (operation.kind === 'merge-json') {
+    repairMergeJson(operation);
+  } else if (operation.kind === 'remove') {
+    repairRemove(operation);
+  } else if (operation.kind === HOOK_OPERATION_KIND) {
     repairClaudeSettingsHook(operation);
-    return;
+  } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
+    repairMergeYamlReadList(operation);
+  } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+    repairMergeMarkdownIndex(operation);
+  } else {
+    throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
   }
-
-  if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
-    if (!operation.readEntry) {
-      throw new Error(`Missing readEntry for repair: ${operation.destinationPath}`);
-    }
-    const existingContent = fs.existsSync(operation.destinationPath)
-      ? fs.readFileSync(operation.destinationPath, 'utf8')
-      : null;
-    let nextContent;
-    try {
-      nextContent = mergeAiderConfigReadList(existingContent, operation.readEntry);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse Aider config at ${operation.destinationPath}: ${error.message}`,
-        { cause: error },
-      );
-    }
-    ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, nextContent);
-    return;
-  }
-
-  if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
-    const existingContent = fs.existsSync(operation.destinationPath)
-      ? fs.readFileSync(operation.destinationPath, 'utf8')
-      : null;
-    const nextContent = mergeSkillIndexEntry(existingContent, {
-      name: operation.skillName,
-      description: operation.skillDescription,
-      relativePath: operation.relativePath,
-    });
-    ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, nextContent);
-    return;
-  }
-
-  throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
 }
 
 function restorePreviousContent(operation) {
