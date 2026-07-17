@@ -103,7 +103,7 @@ function upsertEgcSection(existing, block) {
 const STATE_UPDATED_RE = /<!-- egc:state-updated:(\S+) -->/;
 
 function extractStateUpdated(content) {
-  const match = typeof content === 'string' ? content.match(STATE_UPDATED_RE) : null;
+  const match = typeof content === 'string' ? STATE_UPDATED_RE.exec(content) : null;
   return match ? match[1] : '';
 }
 

@@ -19,7 +19,7 @@ function parseStateFile(content) {
   let currentSection = null;
 
   for (const line of lines) {
-    const headingMatch = line.match(SECTION_HEADING_REGEX);
+    const headingMatch = SECTION_HEADING_REGEX.exec(line);
     if (headingMatch) {
       currentSection = headingMatch[1].trim();
       sections[currentSection] = [];
@@ -27,7 +27,7 @@ function parseStateFile(content) {
     }
 
     if (!currentSection) {
-      const fieldMatch = line.match(HEADER_FIELD_REGEX);
+      const fieldMatch = HEADER_FIELD_REGEX.exec(line);
       if (fieldMatch) {
         header[fieldMatch[1]] = fieldMatch[2].trim();
       }

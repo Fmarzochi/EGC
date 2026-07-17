@@ -136,7 +136,7 @@ function findFileIssues(filePath) {
  */
 function validateCommitMessage(command) {
   // Extract commit message from command
-  const messageMatch = command.match(/(?:-m|--message)[=\s]+["']?([^"']+)["']?/);
+  const messageMatch = /(?:-m|--message)[=\s]+["']?([^"']+)["']?/.exec(command);
   if (!messageMatch) return null;
   
   const message = messageMatch[1];

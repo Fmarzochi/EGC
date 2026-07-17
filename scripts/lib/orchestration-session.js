@@ -79,7 +79,7 @@ function parseWorkerStatus(content) {
   }
 
   for (const line of content.split('\n')) {
-    const match = line.match(/^- ([A-Za-z ]+):\s*(.+)$/);
+    const match = /^- ([A-Za-z ]+):\s*(.+)$/.exec(line);
     if (!match) continue;
 
     const key = match[1].trim().toLowerCase().replace(/\s+/g, '');

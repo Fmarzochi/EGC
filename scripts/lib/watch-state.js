@@ -151,8 +151,8 @@ function mergeBlockIntoStateFile(stateFilePath, block) {
   const existing = rawState.toString('utf-8');
 
   // Only update Context and Next Session sections if they differ
-  const contextMatch = parsed.match(/## Context\n([^\n]+)/);
-  const nextMatch = parsed.match(/## Next Session\n([\s\S]*?)(?=\n##|$)/);
+  const contextMatch = /## Context\n([^\n]+)/.exec(parsed);
+  const nextMatch = /## Next Session\n([\s\S]*?)(?=\n##|$)/.exec(parsed);
 
   if (!contextMatch && !nextMatch) return false;
 

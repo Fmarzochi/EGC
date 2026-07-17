@@ -11,7 +11,7 @@ function run(rawInput) {
 
     if (/\bgh\s+pr\s+create\b/.test(cmd)) {
       const out = String(input.tool_output?.output || '');
-      const match = out.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/);
+      const match = /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.exec(out);
       if (match) {
         const prUrl = match[0];
         const repo = prUrl.replace(/https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/, '$1');

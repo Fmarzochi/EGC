@@ -208,7 +208,7 @@ function selectMatchingSession(sessions, cwd, currentProject) {
     }
 
     // Extract **Worktree:** field
-    const worktreeMatch = content.match(/\*\*Worktree:\*\*\s*(.+)$/m);
+    const worktreeMatch = /\*\*Worktree:\*\*\s*(.+)$/m.exec(content);
     const sessionWorktree = worktreeMatch ? worktreeMatch[1].trim() : '';
 
     // Exact worktree match: best possible, return immediately
@@ -219,7 +219,7 @@ function selectMatchingSession(sessions, cwd, currentProject) {
 
     // Project name match: keep searching for a worktree match
     if (!projectMatch && currentProject) {
-      const projectFieldMatch = content.match(/\*\*Project:\*\*\s*(.+)$/m);
+      const projectFieldMatch = /\*\*Project:\*\*\s*(.+)$/m.exec(content);
       const sessionProject = projectFieldMatch ? projectFieldMatch[1].trim() : '';
       if (sessionProject && sessionProject === currentProject) {
         projectMatch = session;
@@ -322,7 +322,7 @@ function readInstinctsFromDir(directory, scope) {
 }
 
 function extractInstinctAction(content) {
-  const actionMatch = String(content || '').match(/## Action\s*\n+([\s\S]+?)(?:\n## |\n---|$)/);
+  const actionMatch = /## Action\s*\n+([\s\S]+?)(?:\n## |\n---|$)/.exec(String(content || ''));
   const actionBlock = (actionMatch ? actionMatch[1] : String(content || '')).trim();
   const firstLine = actionBlock
     .split('\n')
@@ -407,13 +407,13 @@ function truncateSummary(value, maxLength = MAX_LEARNED_SKILL_SUMMARY_CHARS) {
 }
 
 function extractMarkdownHeading(content) {
-  const match = String(content || '').match(/^#\s+(.+)$/m);
+  const match = /^#\s+(.+)$/m.exec(String(content || ''));
   return match ? stripMarkdownInline(match[1]) : '';
 }
 
 function extractSection(content, headingPattern) {
   const source = String(content || '');
-  const match = source.match(new RegExp(`^##\\s+${headingPattern}\\s*\\n+([\\s\\S]+?)(?:\\n##\\s+|$)`, 'im'));
+  const match = new RegExp(`^##\\s+${headingPattern}\\s*\\n+([\\s\\S]+?)(?:\\n##\\s+|$)`, 'im').exec(source);
   return match ? match[1].trim() : '';
 }
 

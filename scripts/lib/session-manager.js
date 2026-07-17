@@ -33,7 +33,7 @@ const SESSION_FILENAME_REGEX = /^(\d{4}-\d{2}-\d{2})(?:-([a-zA-Z0-9_][a-zA-Z0-9_
  */
 function parseSessionFilename(filename) {
   if (!filename || typeof filename !== 'string') return null;
-  const match = filename.match(SESSION_FILENAME_REGEX);
+  const match = SESSION_FILENAME_REGEX.exec(filename);
   if (!match) return null;
 
   const dateStr = match[1];
@@ -215,7 +215,7 @@ function getSessionContent(sessionPath) {
  * @returns {object} Parsed metadata
  */
 function extractField(content, regex, group = 1) {
-  const m = content.match(regex);
+  const m = regex.exec(content);
   return m ? m[group].trim() : null;
 }
 
