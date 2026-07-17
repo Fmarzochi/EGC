@@ -205,7 +205,7 @@ function readPlaintextState(stateFile) {
 
   if (autoConsolidate) {
     const result = consolidateBestEffort(stateFile);
-    if (result && result.consolidated) raw = fs.readFileSync(stateFile);
+    if (result?.consolidated) raw = fs.readFileSync(stateFile);
   }
   return raw.toString('utf8');
 }

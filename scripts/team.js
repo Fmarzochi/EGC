@@ -100,7 +100,7 @@ function callMcpTool(toolName, args) {
   for (const line of lines) {
     try {
       const parsed = JSON.parse(line);
-      if (parsed.result && parsed.result.content) {
+      if (parsed.result?.content) {
         for (const content of parsed.result.content) {
           if (content.type === 'text') {
             try {

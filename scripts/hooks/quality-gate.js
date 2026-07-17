@@ -106,7 +106,7 @@ function runGoFmt(filePath, fix, strict) {
     const r = exec('gofmt', ['-l', filePath]);
     if (r.status !== 0) {
       log(`[QualityGate] gofmt failed for ${filePath}`);
-    } else if (r.stdout && r.stdout.trim()) {
+    } else if (r.stdout?.trim()) {
       log(`[QualityGate] gofmt check failed for ${filePath}`);
     }
   }

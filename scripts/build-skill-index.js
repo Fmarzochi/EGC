@@ -37,7 +37,7 @@ const entries = [];
 for (const f of walkMd(path.join(root, 'skills'))) {
   try {
     const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
-    if (fm && fm.name && fm.description) {
+    if (fm?.name && fm?.description) {
       entries.push({ kind: 'skill', name: fm.name, description: fm.description });
     }
   } catch (_) { /* skip unreadable file */ }
@@ -46,7 +46,7 @@ for (const f of walkMd(path.join(root, 'skills'))) {
 for (const f of walkMd(path.join(root, 'agents'))) {
   try {
     const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
-    if (fm && fm.name && fm.description) {
+    if (fm?.name && fm?.description) {
       entries.push({ kind: 'agent', name: fm.name, description: fm.description });
     }
   } catch (_) { /* skip unreadable file */ }

@@ -187,7 +187,7 @@ function commitOptionConsumesNextValue(value) {
   }
 
   const shortValueOption = getCommitShortValueOption(value);
-  return Boolean(shortValueOption && shortValueOption.consumesNextValue);
+  return Boolean(shortValueOption?.consumesNextValue);
 }
 
 function commitOptionContainsInlineValue(value) {
@@ -200,7 +200,7 @@ function commitOptionContainsInlineValue(value) {
   }
 
   const shortValueOption = getCommitShortValueOption(value);
-  return Boolean(shortValueOption && shortValueOption.containsInlineValue);
+  return Boolean(shortValueOption?.containsInlineValue);
 }
 
 function getCommitShortValueOption(value) {
@@ -411,7 +411,7 @@ function hasHooksPathOverride(input, detected) {
     const value = tokens[i].value;
 
     if (value === '-c') {
-      const next = tokens[i + 1] && tokens[i + 1].value;
+      const next = tokens[i + 1]?.value;
       if (typeof next === 'string' && next.startsWith(GIT_CONFIG_KEY_PREFIX)) {
         return true;
       }

@@ -20,7 +20,7 @@ function readStdin() {
 }
 
 function parsePayload(raw) {
-  if (!raw || !raw.trim()) return {};
+  if (!raw?.trim()) return {};
   try { return JSON.parse(raw); } catch (_) { return {}; }
 }
 
@@ -32,7 +32,7 @@ function resolvePluginRoot() {
 
 function resolvePythonBin(pluginRoot) {
   const fromEnv = process.env.EGC_PYTHON_BIN;
-  if (fromEnv && fromEnv.trim() && SAFE_PYTHON_BASENAMES.has(path.basename(fromEnv.trim()).toLowerCase()) && fs.existsSync(fromEnv.trim())) return fromEnv.trim();
+  if (fromEnv?.trim() && SAFE_PYTHON_BASENAMES.has(path.basename(fromEnv.trim()).toLowerCase()) && fs.existsSync(fromEnv.trim())) return fromEnv.trim();
   const venvBin = os.platform() === 'win32'
     ? path.join(pluginRoot, '.venv', 'Scripts', 'python.exe')
     : path.join(pluginRoot, '.venv', 'bin', 'python3');

@@ -39,7 +39,7 @@ function getEnvRoot(options) {
   const envRoot = options.envRoot !== undefined
     ? options.envRoot
     : (process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT || '');
-  return envRoot && envRoot.trim() ? envRoot.trim() : null;
+  return envRoot?.trim() || null;
 }
 
 function findInOrgDir(orgPath, probe) {

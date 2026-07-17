@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 
 function fromEnv() {
   const explicit = process.env.EGC_GUARDIAN_CLI;
-  if (explicit && explicit.trim() && fs.existsSync(explicit.trim())) return explicit.trim();
+  if (explicit?.trim() && fs.existsSync(explicit.trim())) return explicit.trim();
   return null;
 }
 

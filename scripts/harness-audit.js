@@ -129,7 +129,7 @@ function safeRead(rootDir, relativePath) {
 }
 
 function safeParseJson(text) {
-  if (!text || !text.trim()) {
+  if (!text?.trim()) {
     return null;
   }
 

@@ -110,7 +110,7 @@ function assertSafeScriptPath(hookId, scriptPath, resolvedRoot) {
       throw new Error(`[Hook] Symlink traversal rejected for ${hookId}: ${scriptPath}`);
     }
   } catch (err) {
-    if (err.message && err.message.startsWith('[Hook]')) throw err;
+    if (err.message?.startsWith('[Hook]')) throw err;
     throw new Error(`[Hook] Path resolution failed for ${hookId}: ${scriptPath}`, { cause: err });
   }
 }

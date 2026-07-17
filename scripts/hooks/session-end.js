@@ -38,7 +38,7 @@ function extractUserMessage(entry) {
   const text = typeof rawContent === 'string'
     ? rawContent
     : Array.isArray(rawContent)
-      ? rawContent.map(c => (c && c.text) || '').join(' ')
+      ? rawContent.map(c => c?.text ?? '').join(' ')
       : '';
   return stripAnsi(text).trim();
 }

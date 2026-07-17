@@ -106,7 +106,7 @@ async function ensureConsent() {
  */
 function ping(pagePath, title) {
   const consent = readConsent();
-  if (!consent || !consent.enabled) return;
+  if (!consent?.enabled) return;
 
   const { version } = require('../../package.json');
   const userAgent = `EGC-CLI/${version} (${process.platform}; Node/${process.versions.node})`;

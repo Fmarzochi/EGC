@@ -67,7 +67,7 @@ function readJsonlEvents(logPath) {
 function buildEventTypeCounts(events) {
     const counts = {};
     for (const ev of events) {
-        const t = ev && ev.type ? String(ev.type) : 'unknown';
+        const t = ev?.type ? String(ev.type) : 'unknown';
         counts[t] = (counts[t] || 0) + 1;
     }
     return counts;
@@ -76,7 +76,7 @@ function buildEventTypeCounts(events) {
 function buildSessionCounts(events) {
     const counts = {};
     for (const ev of events) {
-        const id = ev && ev.execution_id ? String(ev.execution_id) : 'unknown';
+        const id = ev?.execution_id ? String(ev.execution_id) : 'unknown';
         counts[id] = (counts[id] || 0) + 1;
     }
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -109,12 +109,12 @@ function queryDatabaseTables(db) {
         .all();
     const tables = [];
     for (const row of tableRows) {
-        const name = row && row.name ? String(row.name) : null;
+        const name = row?.name ? String(row.name) : null;
         if (!name) continue;
         let rowCount;
         try {
             const countRow = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get();
-            rowCount = countRow && typeof countRow.c === 'number' ? countRow.c : Number(countRow ? countRow.c : 0);
+            rowCount = typeof countRow?.c === 'number' ? countRow.c : Number(countRow?.c ?? 0);
         } catch (_err) {
             rowCount = null;
         }
@@ -139,7 +139,7 @@ async function buildStateStoreBlock(opts) {
         store = await createStateStore({ dbPath });
         block.tables = queryDatabaseTables(store._database);
     } catch (err) {
-        block.error = err && err.message ? String(err.message) : String(err);
+        block.error = err?.message ? String(err.message) : String(err);
     } finally {
         if (store) {
             try {
@@ -174,6 +174,6 @@ async function main() {
 }
 
 main().catch((err) => {
-    process.stderr.write(`[runtime-snapshot] FAILED: ${err && err.message ? err.message : err}\n`);
+    process.stderr.write(`[runtime-snapshot] FAILED: ${err?.message ?? err}\n`);
     process.exit(1);
 });

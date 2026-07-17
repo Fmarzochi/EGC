@@ -53,7 +53,7 @@ function parseArgs(argv) {
 }
 
 function deriveRepoRootFromState(state) {
-  const operations = Array.isArray(state && state.operations) ? state.operations : [];
+  const operations = Array.isArray(state?.operations) ? state.operations : [];
 
   // Prefer deriving root from the currently running package (__dirname = <pkg>/scripts)
   // This works correctly regardless of which Node version is active.
@@ -287,7 +287,7 @@ function runAutoUpdate(options = {}, dependencies = {}) {
       });
 
       let payload = null;
-      if (commandResult.stdout && commandResult.stdout.trim()) {
+      if (commandResult.stdout?.trim()) {
         payload = JSON.parse(commandResult.stdout);
       }
 

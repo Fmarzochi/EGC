@@ -52,7 +52,7 @@ process.stdin.on('end', () => {
 
     for (const file of files) {
       const content = readFile(file);
-      if (content && content.includes('console.log')) {
+      if (content?.includes('console.log')) {
         log(`[Hook] WARNING: console.log found in ${file}`);
         hasConsole = true;
       }

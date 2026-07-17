@@ -234,7 +234,7 @@ function buildHooks() {
   } catch (_err) {
     return [];
   }
-  const root = parsed && parsed.hooks ? parsed.hooks : {};
+  const root = parsed?.hooks ?? {};
   const results = [];
   for (const event of HOOK_EVENTS) {
     const arr = root[event];
