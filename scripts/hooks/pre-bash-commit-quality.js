@@ -234,35 +234,40 @@ function commandOutput(result) {
  * @param {string[]} filesToCheck
  * @returns {{ totalIssues: number, errorCount: number, warningCount: number, infoCount: number }}
  */
+function updateIssueCounts(issue, counts) {
+  counts.totalIssues++;
+  if (issue.severity === 'error') counts.errorCount++;
+  if (issue.severity === 'warning') counts.warningCount++;
+  if (issue.severity === 'info') counts.infoCount++;
+}
+
+function printIssue(issue) {
+  let label;
+  if (issue.severity === 'error') {
+    label = 'ERROR';
+  } else if (issue.severity === 'warning') {
+    label = 'WARNING';
+  } else {
+    label = 'INFO';
+  }
+  console.error(`  ${label} Line ${issue.line}: ${issue.message}`);
+}
+
 function reportLintResults(filesToCheck) {
-  let totalIssues = 0;
-  let errorCount = 0;
-  let warningCount = 0;
-  let infoCount = 0;
+  const counts = { totalIssues: 0, errorCount: 0, warningCount: 0, infoCount: 0 };
 
   for (const file of filesToCheck) {
     const fileIssues = findFileIssues(file);
     if (fileIssues.length > 0) {
       console.error(`\n[FILE] ${file}`);
       for (const issue of fileIssues) {
-        let label;
-        if (issue.severity === 'error') {
-          label = 'ERROR';
-        } else if (issue.severity === 'warning') {
-          label = 'WARNING';
-        } else {
-          label = 'INFO';
-        }
-        console.error(`  ${label} Line ${issue.line}: ${issue.message}`);
-        totalIssues++;
-        if (issue.severity === 'error') errorCount++;
-        if (issue.severity === 'warning') warningCount++;
-        if (issue.severity === 'info') infoCount++;
+        printIssue(issue);
+        updateIssueCounts(issue, counts);
       }
     }
   }
 
-  return { totalIssues, errorCount, warningCount, infoCount };
+  return counts;
 }
 
 /**

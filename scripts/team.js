@@ -70,6 +70,44 @@ function getTeamConfig() {
   }
 }
 
+function parseMcpResponse(stdout) {
+  const lines = stdout.split('\n').filter(Boolean);
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.result?.content) {
+        for (const content of parsed.result.content) {
+          if (content.type === 'text') {
+            try {
+              return JSON.parse(content.text);
+            } catch {
+              return content.text;
+            }
+          }
+        }
+      }
+      if (parsed.error) {
+        throw new Error(parsed.error.message || 'MCP tool call failed');
+      }
+    } catch (e) {
+      if (e.message && !e.message.includes('Unexpected token')) {
+        throw e;
+      }
+    }
+  }
+
+  const stdoutTrimmed = stdout.trim();
+  if (stdoutTrimmed) {
+    try {
+      return JSON.parse(stdoutTrimmed);
+    } catch {
+      return stdoutTrimmed;
+    }
+  }
+
+  throw new Error('No response from memory server');
+}
+
 function callMcpTool(toolName, args) {
   if (!fs.existsSync(MEMORY_SERVER_SCRIPT)) {
     console.error(`Memory server not built. Run "npm run build" in mcp/servers/egc-memory/`);
@@ -95,43 +133,7 @@ function callMcpTool(toolName, args) {
 
   if (result.error) throw result.error;
 
-  // Parse JSON-RPC response from stdout.
-  const lines = result.stdout.split('\n').filter(Boolean);
-  for (const line of lines) {
-    try {
-      const parsed = JSON.parse(line);
-      if (parsed.result?.content) {
-        for (const content of parsed.result.content) {
-          if (content.type === 'text') {
-            try {
-              return JSON.parse(content.text);
-            } catch {
-              return content.text;
-            }
-          }
-        }
-      }
-      if (parsed.error) {
-        throw new Error(parsed.error.message || 'MCP tool call failed');
-      }
-    } catch (e) {
-      if (e.message && !e.message.includes('Unexpected token')) {
-        throw e;
-      }
-    }
-  }
-
-  // If no JSON-RPC response, try direct output.
-  const stdout = result.stdout.trim();
-  if (stdout) {
-    try {
-      return JSON.parse(stdout);
-    } catch {
-      return stdout;
-    }
-  }
-
-  throw new Error('No response from memory server');
+  return parseMcpResponse(result.stdout);
 }
 
 function handleInit(args) {
@@ -195,6 +197,23 @@ async function handleSync() {
   }
 }
 
+function printFallbackStatus(config) {
+  console.log(`Backend: ${config.backend}`);
+  console.log(`Remote:  ${config.remote}`);
+  console.log(`Branch:  ${config.branch}`);
+  const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
+  const isRepo = fs.existsSync(path.join(syncDir, '.git'));
+  console.log(`Repo:    ${isRepo ? 'initialized' : 'not initialized'}`);
+  if (isRepo) {
+    try {
+      const log = safeGit(['log', '-1', '--format=%ai'], syncDir);
+      if (log) console.log(`Last commit: ${log}`);
+    } catch {
+      // no commits yet
+    }
+  }
+}
+
 function handleStatus() {
   const config = getTeamConfig();
   if (!config) {
@@ -209,21 +228,7 @@ function handleStatus() {
     if (result.conflictCount !== undefined && result.conflictCount > 0) console.log(`Conflicts: ${result.conflictCount}`);
     console.log(`Remote: ${result.remoteUrl || config.remote}`);
   } catch {
-    // Fallback: read config.
-    console.log(`Backend: ${config.backend}`);
-    console.log(`Remote:  ${config.remote}`);
-    console.log(`Branch:  ${config.branch}`);
-    const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
-    const isRepo = fs.existsSync(path.join(syncDir, '.git'));
-    console.log(`Repo:    ${isRepo ? 'initialized' : 'not initialized'}`);
-    if (isRepo) {
-      try {
-        const log = safeGit(['log', '-1', '--format=%ai'], syncDir);
-        if (log) console.log(`Last commit: ${log}`);
-      } catch {
-        // no commits yet
-      }
-    }
+    printFallbackStatus(config);
   }
 }
 
@@ -275,15 +280,7 @@ function mirrorCopy(src, dest) {
   fs.cpSync(src, dest, { recursive: true });
 }
 
-async function directSync(config) {
-  const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
-  const stateDir = path.join(os.homedir(), '.egc', 'state');
-
-  if (!fs.existsSync(syncDir)) {
-    fs.mkdirSync(syncDir, { recursive: true });
-  }
-
-  // Initialize git repo if needed.
+function initializeSyncRepo(syncDir, config) {
   const isRepo = fs.existsSync(path.join(syncDir, '.git'));
   if (!isRepo) {
     safeGit(['init'], syncDir);
@@ -291,14 +288,9 @@ async function directSync(config) {
   } else {
     ensureRemote(syncDir, config.remote);
   }
+}
 
-  // Discard uncommitted sync-repo changes before pull.
-  try {
-    safeGit(['reset', '--hard'], syncDir);
-  } catch {
-    // empty repo on first sync
-  }
-
+function pullRemoteChanges(syncDir, config) {
   try {
     safeGit(['pull', 'origin', config.branch, '--allow-unrelated-histories', '--no-rebase'], syncDir);
     console.log('  Pulled remote changes.');
@@ -306,14 +298,9 @@ async function directSync(config) {
     const msg = err.stderr ? err.stderr.toString().trim() : err.message;
     console.log(`  Pull: ${msg.includes('no upstream') ? 'first sync, no upstream yet' : msg}`);
   }
+}
 
-  // Copy state files into sync repo (mirror to avoid resurrecting deleted files).
-  const syncStateDir = path.join(syncDir, 'state');
-  if (fs.existsSync(stateDir)) {
-    mirrorCopy(stateDir, syncStateDir);
-  }
-
-  // Commit and push.
+function commitAndPushChanges(syncDir, config) {
   safeGit(['add', '-A'], syncDir);
   try {
     safeGit(['config', 'user.email', `${process.env.USER || process.env.USERNAME || 'egc'}@egc.local`], syncDir);
@@ -325,13 +312,13 @@ async function directSync(config) {
     const staged = safeGit(['diff', '--cached', '--name-only'], syncDir);
     if (!staged.trim()) {
       console.log('  Nothing new to push.');
-      console.log('Sync complete.');
-      return;
+      return false;
     }
     const author = process.env.USER || process.env.USERNAME || 'unknown';
     safeGit(['commit', '-m', `sync: team memory update from ${author}`], syncDir);
     safeGit(['push', 'origin', config.branch], syncDir);
     console.log('  Pushed local changes.');
+    return true;
   } catch (err) {
     const msg = err.stderr ? err.stderr.toString() : err.message;
     if (msg.includes('nothing to commit')) {
@@ -339,7 +326,36 @@ async function directSync(config) {
     } else {
       console.log(`  Push: ${msg.trim().split('\n').pop() || 'unknown error'}`);
     }
+    return false;
   }
+}
+
+async function directSync(config) {
+  const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
+  const stateDir = path.join(os.homedir(), '.egc', 'state');
+
+  if (!fs.existsSync(syncDir)) {
+    fs.mkdirSync(syncDir, { recursive: true });
+  }
+
+  initializeSyncRepo(syncDir, config);
+
+  // Discard uncommitted sync-repo changes before pull.
+  try {
+    safeGit(['reset', '--hard'], syncDir);
+  } catch {
+    // empty repo on first sync
+  }
+
+  pullRemoteChanges(syncDir, config);
+
+  // Copy state files into sync repo (mirror to avoid resurrecting deleted files).
+  const syncStateDir = path.join(syncDir, 'state');
+  if (fs.existsSync(stateDir)) {
+    mirrorCopy(stateDir, syncStateDir);
+  }
+
+  commitAndPushChanges(syncDir, config);
 
   console.log('Sync complete.');
 }
