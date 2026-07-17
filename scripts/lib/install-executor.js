@@ -121,7 +121,7 @@ function listFilesRecursive(dirPath) {
 }
 
 function isGeneratedRuntimeSourcePath(sourceRelativePath) {
-  const normalizedPath = String(sourceRelativePath || '').replace(/\\/g, '/');
+  const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
   return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
 }
 

@@ -296,7 +296,7 @@ function buildSummarySection(summary) {
   // Tasks (from user messages: collapse newlines and escape backticks to prevent markdown breaks)
   section += '### Tasks\n';
   for (const msg of summary.userMessages) {
-    section += `- ${msg.replace(/\\/g, '\\\\').replace(/\n/g, ' ').replaceAll('`', '\\`')}\n`;
+    section += `- ${msg.replaceAll('\\', '\\\\').replaceAll('\n', ' ').replaceAll('`', '\\`')}\n`;
   }
   section += '\n';
 
@@ -304,14 +304,14 @@ function buildSummarySection(summary) {
   if (summary.filesModified.length > 0) {
     section += '### Files Modified\n';
     for (const f of summary.filesModified) {
-      section += `- ${f.replace(/\\/g, '\\\\').replaceAll('`', '\\`')}\n`;
+      section += `- ${f.replaceAll('\\', '\\\\').replaceAll('`', '\\`')}\n`;
     }
     section += '\n';
   }
 
   // Tools used
   if (summary.toolsUsed.length > 0) {
-    section += `### Tools Used\n${summary.toolsUsed.map(t => t.replace(/\\/g, '\\\\').replaceAll('`', '\\`')).join(', ')}\n\n`;
+    section += `### Tools Used\n${summary.toolsUsed.map(t => t.replaceAll('\\', '\\\\').replaceAll('`', '\\`')).join(', ')}\n\n`;
   }
 
   section += `### Stats\n- Total user messages: ${summary.totalMessages}\n`;

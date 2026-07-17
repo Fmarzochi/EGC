@@ -32,7 +32,7 @@ function readJson(filePath, label) {
 }
 
 function normalizeRelativePath(relativePath) {
-  return String(relativePath).replace(/\\/g, '/').replace(/\/+$/, '');
+  return String(relativePath).replaceAll('\\', '/').replace(/\/+$/, '');
 }
 
 function validateSchema(ajv, schemaPath, data, label) {

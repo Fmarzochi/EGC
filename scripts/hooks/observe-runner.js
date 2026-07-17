@@ -40,7 +40,7 @@ function toShellPath(filePath) {
 
   return normalized
     .replace(/^([A-Za-z]):[\\/]/, (_, driveLetter) => `/${driveLetter.toLowerCase()}/`)
-    .replace(/\\/g, '/');
+    .replaceAll('\\', '/');
 }
 
 function findShellBinary() {

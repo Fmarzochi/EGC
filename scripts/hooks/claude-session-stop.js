@@ -24,7 +24,7 @@ function saveIntervalMs() {
 }
 
 function projectSlug(projectPath) {
-  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = projectPath.replaceAll('\\', '/').split('/').filter(Boolean);
   return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 

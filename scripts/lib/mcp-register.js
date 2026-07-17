@@ -189,7 +189,7 @@ function registerJson(targetPath, bins) {
  * hex-ish character.
  */
 function tomlEscape(p) {
-  return p.replace(/\\/g, '\\\\');
+  return p.replaceAll('\\', '\\\\');
 }
 
 /**

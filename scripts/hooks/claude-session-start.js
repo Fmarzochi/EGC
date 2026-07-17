@@ -53,7 +53,7 @@ function resolveProjectPath(input) {
 // double-hyphen join as branch-state.projectSlug; the previous single-hyphen
 // form never matched the files the memory server actually writes.
 function projectSlug(projectPath) {
-  const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const parts = projectPath.replaceAll('\\', '/').split('/').filter(Boolean);
   return parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
 }
 

@@ -127,7 +127,7 @@ function ok(cond, msg) { if (cond) { console.log('  PASS: ' + msg); passed++; } 
   try {
     const log = sh(['log', '--oneline', '--all'], REMOTE);
     ok(log.length > 0, 'remote has commits: ' + log);
-    console.log('   Remote log: ' + log.replace(/\n/g, ' | '));
+    console.log('   Remote log: ' + log.replaceAll('\n', ' | '));
   } catch (e) {
     ok(false, 'git log on remote: ' + e.message);
   }

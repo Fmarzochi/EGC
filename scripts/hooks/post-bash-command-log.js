@@ -21,7 +21,7 @@ const MODE_CONFIG = {
 
 function sanitizeCommand(command) {
   return String(command || '')
-    .replace(/\n/g, ' ')
+    .replaceAll('\n', ' ')
     .replace(/--token[= ][^ ]*/g, '--token=<REDACTED>')
     .replace(/Authorization:[: ]*[^ ]*[: ]*[^ ]*/gi, 'Authorization:<REDACTED>')
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED>')
