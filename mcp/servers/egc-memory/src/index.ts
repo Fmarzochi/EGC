@@ -975,6 +975,306 @@ async function handleLessonReinforce(db: Database, args: unknown) {
   return { content: [{ type: "text", text: JSON.stringify(updated ? mapLessonRow(updated) : { id, confidence: newConfidence }, null, 2) }] };
 }
 
+async function handleGetState(db: Database, toolArgs: unknown) {
+  const { project_path } = GetStateSchema.parse(toolArgs || {});
+  const projPath = resolveProjectPath(project_path);
+  const branch = detectBranch(projPath);
+  const resolved = resolveStateRead(getStateDir(), projPath, branch);
+
+  // Sweep expired working memory entries throttled to once per hour.
+  try {
+    const lastWmSweep = await getMaintenanceState(db, 'last_working_memory_sweep');
+    const wmSweepDue = !lastWmSweep || Date.now() - new Date(lastWmSweep).getTime() > 60 * 60 * 1000;
+    if (wmSweepDue) {
+      const swept = await sweepExpired(db);
+      await setMaintenanceState(db, 'last_working_memory_sweep', new Date().toISOString());
+      if (swept > 0) log('INFO', 'Swept expired working memory entries', { count: swept });
+    }
+  } catch (e) {
+    log('WARN', 'Working memory sweep failed, continuing', { error: String(e) });
+  }
+
+  // Run confidence decay sweep throttled to once per day.
+  try {
+    const lastDecay = await getMaintenanceState(db, 'last_decay_sweep');
+    const decayDue = !lastDecay || Date.now() - new Date(lastDecay).getTime() > 24 * 60 * 60 * 1000;
+    if (decayDue) {
+      const affected = await runLessonDecaySweep(db);
+      await setMaintenanceState(db, 'last_decay_sweep', new Date().toISOString());
+      if (affected > 0) log('INFO', 'Lesson decay sweep ran', { affected });
+    }
+  } catch (e) {
+    log('WARN', 'Lesson decay sweep failed, continuing', { error: String(e) });
+  }
+
+  // Open a session record for time-aware session tracking.
+  try {
+    const sessionId = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    await writeArbitrator.enqueue(async () => {
+      await db.run(
+        'INSERT INTO sessions (id, project_path, tool, started_at) VALUES (?, ?, ?, ?)',
+        [sessionId, projPath, 'get_state', new Date().toISOString()]
+      );
+      await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['current_session_id', sessionId]);
+    });
+  } catch (_) { /* non-fatal */ } // NOSONAR: session id persistence is best-effort
+
+  if (resolved.source === 'none') {
+    const branchLine = branch ? `Branch: ${branch}\n` : '';
+    return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
+  }
+
+  let content: string;
+  try {
+    content = readStateFile(resolved.filePath, _encKey);
+  } catch (err) {
+    log('ERROR', '[EGC encryption] Failed to decrypt state file', { file: resolved.filePath, error: String(err) });
+    return { content: [{ type: "text", text: `State file exists but could not be decrypted. The encryption key may have changed.\nPath: ${resolved.filePath}` }] };
+  }
+  const verify = verifyHmac(resolved.filePath, content, _integrityKey);
+  if (!verify.ok) {
+    log('WARN', '[EGC integrity] State file integrity check failed', { file: resolved.filePath, reason: (verify as { ok: false; reason: string }).reason });
+    log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: (verify as { ok: false; reason: string }).reason });
+  } else {
+    log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: 'ok' });
+  }
+  return { content: [{ type: "text", text: content }] };
+}
+
+async function handleUpdateState(db: Database, toolArgs: unknown) {
+  const args = UpdateStateSchema.parse(toolArgs || {});
+  if (args.context) {
+    const check = sanitize(args.context);
+    if (check.flagged) {
+      log('WARN', 'update_state: suspicious content in context', { reason: check.reason });
+      return { content: [{ type: "text", text: `Blocked: ${check.reason}` }] };
+    }
+  }
+  const projPath = resolveProjectPath(args.project_path);
+  const branch = detectBranch(projPath);
+
+  // Close the open session if one exists.
+  try {
+    const sessionId = await getMaintenanceState(db, 'current_session_id');
+    if (sessionId) {
+      await writeArbitrator.enqueue(async () => {
+        await db.run('UPDATE sessions SET ended_at = ? WHERE id = ?', [new Date().toISOString(), sessionId]);
+        await db.run('DELETE FROM operational_state WHERE id = ?', ['current_session_id']);
+      });
+    }
+  } catch (_) { /* non-fatal */ } // NOSONAR: legacy flat-state merge is best-effort
+  // Merge from the same file get_state would read, so the first
+  // branch-scoped write inherits the pre-existing flat state
+  const resolved = resolveStateRead(getStateDir(), projPath, branch);
+  let existing: Record<string, string[]|string>;
+  try {
+    existing = readStateDoc(resolved.filePath);
+  } catch (err) {
+    if (args.force && fs.existsSync(resolved.filePath)) {
+      const backupPath = quarantineUndecryptableStateFile(resolved.filePath);
+      log('WARN', 'update_state: force=true, undecryptable state file backed up and replaced', { file: resolved.filePath, backup: backupPath, error: String(err) });
+      existing = {};
+    } else {
+      log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
+      throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}. Retry with force: true to back up the unreadable file and start fresh — only do this after confirming the failure is persistent, not a transient lock from another process.`);
+    }
+  }
+  const filePath = resolveStateWrite(getStateDir(), projPath, branch);
+
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  writeStateDoc(filePath, projPath, args, existing, branch);
+  const writtenContent = readStateFile(filePath, _encKey);
+  writeHmac(filePath, writtenContent, _integrityKey);
+  const propagated = propagateStateToTools({
+    projectPath: projPath,
+    context: args.context,
+    decisions: args.decisions,
+    next: args.next,
+  });
+  const propagatedTools = Object.entries(propagated)
+    .filter(([, p]) => p !== null)
+    .map(([tool]) => tool);
+
+  log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0, propagated: propagatedTools });
+  const branchLine = branch ? `Branch: ${branch}\n` : '';
+  const toolsLine = propagatedTools.length > 0 ? `Tools updated: ${propagatedTools.join(', ')}\n` : '';
+  return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}${toolsLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
+}
+
+async function handleDetectPatterns(db: Database, toolArgs: unknown) {
+  const { window_days, min_occurrences } = DetectPatternsSchema.parse(toolArgs || {});
+  const cutoff = new Date(Date.now() - window_days * 24 * 60 * 60 * 1000).toISOString();
+
+  // Read events and persist patterns in the state-store DB where hooks write events.
+  // Uses the server's own sqlite3/sqlite driver so the build carries no extra dependency.
+  const stateDbPath = resolveStateStoreDbPath();
+
+  let events: Array<{
+    id: string;
+    sessionId: string | null;
+    eventType: string;
+    payload: Record<string, unknown> | null;
+    timestamp: string;
+  }> = [];
+
+  const patterns = await writeArbitrator.enqueue(async () => {
+    if (!fs.existsSync(stateDbPath)) {
+      log('INFO', 'State-store DB not found; no events to analyze', { path: stateDbPath });
+      return [];
+    }
+
+    const ssDb = await open({ filename: stateDbPath, driver: sqlite3.Database });
+    try {
+      await ssDb.exec('PRAGMA journal_mode = WAL;');
+      await ssDb.exec('PRAGMA busy_timeout = 5000;');
+      await ssDb.exec(`
+        CREATE TABLE IF NOT EXISTS patterns (
+    id TEXT PRIMARY KEY,
+    pattern_type TEXT NOT NULL,
+    key TEXT NOT NULL,
+    description TEXT NOT NULL,
+    occurrences INTEGER NOT NULL DEFAULT 1,
+    frequency REAL NOT NULL DEFAULT 0,
+    last_seen TEXT NOT NULL,
+    suggested_automation TEXT,
+    first_seen TEXT NOT NULL,
+    window_days INTEGER NOT NULL DEFAULT 7
+        );
+      `);
+
+      const rawEvents = await ssDb.all<Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>>(
+        'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC',
+        [cutoff]
+      );
+
+      events = rawEvents.map(row => ({
+        id: row.id,
+        sessionId: row.session_id ?? null,
+        eventType: row.event_type,
+        payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
+        timestamp: row.timestamp,
+      }));
+
+      const detected = detectPatternsFromEvents(events, window_days, min_occurrences);
+
+      const upsertSql = `
+        INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+    pattern_type = excluded.pattern_type,
+    key = excluded.key,
+    description = excluded.description,
+    occurrences = excluded.occurrences,
+    frequency = excluded.frequency,
+    last_seen = excluded.last_seen,
+    suggested_automation = excluded.suggested_automation,
+    first_seen = MIN(patterns.first_seen, excluded.first_seen),
+    window_days = excluded.window_days
+      `;
+
+      await ssDb.exec('BEGIN');
+      try {
+        for (const p of detected) {
+    const entry = patternToStoreEntry(p, window_days);
+    await ssDb.run(upsertSql, [
+      entry.id,
+      entry.patternType,
+      entry.key,
+      entry.description,
+      entry.occurrences,
+      entry.frequency,
+      entry.lastSeen,
+      entry.suggestedAutomation,
+      entry.firstSeen,
+      entry.windowDays,
+    ]);
+        }
+        await ssDb.exec('COMMIT');
+      } catch (txError) {
+        await ssDb.exec('ROLLBACK');
+        throw txError;
+      }
+
+      return detected;
+    } finally {
+      await ssDb.close();
+    }
+  });
+
+  const output = patterns.map(p => ({
+    type: p.type,
+    description: p.description,
+    occurrences: p.occurrences,
+    suggestion: p.suggestion,
+  }));
+
+  log('INFO', 'Pattern detection complete', {
+    window_days,
+    min_occurrences,
+    events_analyzed: events.length,
+    patterns_found: patterns.length,
+  });
+
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({ success: true, data: { patterns: output }, meta: { window_days, min_occurrences, events_analyzed: events.length } }, null, 2)
+    }]
+  };
+}
+
+async function handleCompressObservations(db: Database, toolArgs: unknown) {
+  const args = CompressObservationsSchema.parse(toolArgs || {});
+  const projPath = resolveProjectPath(args.project_path);
+
+  const rawObservations = await loadRawObservations(projPath, args.limit, args.since);
+
+  if (rawObservations.length === 0) {
+    return {
+      content: [{ type: "text", text: "No raw observations found to compress." }],
+    };
+  }
+
+  // Use llmCompress (with ruleBasedCompress as its internal fallback) as the primary path
+  // Sequential loop avoids race condition: replaceObservation rewrites the entire JSONL file each call
+  const compressed: import('./compress.js').CompressedObservation[] = [];
+  for (const raw of rawObservations) {
+    // llmCompress falls back to ruleBasedCompress automatically when no LLM client is wired
+    // TODO: pass a real llmCall once EGC dispatcher is wired into this server
+    try {
+      const result = await llmCompress(raw, () => Promise.reject(new Error('LLM not configured')));
+      compressed.push(result);
+    } catch (e) {
+      log('ERROR', 'LLM compression failed, skipping', { error: String(e) });
+    }
+  }
+
+  // Write replacements sequentially to prevent JSONL file corruption from concurrent writes
+  for (let i = 0; i < compressed.length; i++) {
+    const id = rawObservations[i].id;
+    if (id !== undefined) await replaceObservation(projPath, id, compressed[i]);
+  }
+
+  const summary = compressed.map((c) => ({
+    title:      c.title,
+    type:       c.type,
+    importance: c.importance,
+  }));
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+    { compressed_count: compressed.length, summary },
+    null,
+    2
+        ),
+      },
+    ],
+  };
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const db = await getDb();
   try {
@@ -1012,131 +1312,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_project_state": {
         return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: "sqlite-wal", arbitration: "MessageQueue" }) }] };
       }
-      case "get_state": {
-        const { project_path } = GetStateSchema.parse(request.params.arguments || {});
-        const projPath = resolveProjectPath(project_path);
-        const branch = detectBranch(projPath);
-        const resolved = resolveStateRead(getStateDir(), projPath, branch);
+      case "get_state": return await handleGetState(db, request.params.arguments);
 
-        // Sweep expired working memory entries throttled to once per hour.
-        try {
-          const lastWmSweep = await getMaintenanceState(db, 'last_working_memory_sweep');
-          const wmSweepDue = !lastWmSweep || Date.now() - new Date(lastWmSweep).getTime() > 60 * 60 * 1000;
-          if (wmSweepDue) {
-            const swept = await sweepExpired(db);
-            await setMaintenanceState(db, 'last_working_memory_sweep', new Date().toISOString());
-            if (swept > 0) log('INFO', 'Swept expired working memory entries', { count: swept });
-          }
-        } catch (e) {
-          log('WARN', 'Working memory sweep failed, continuing', { error: String(e) });
-        }
-
-        // Run confidence decay sweep throttled to once per day.
-        try {
-          const lastDecay = await getMaintenanceState(db, 'last_decay_sweep');
-          const decayDue = !lastDecay || Date.now() - new Date(lastDecay).getTime() > 24 * 60 * 60 * 1000;
-          if (decayDue) {
-            const affected = await runLessonDecaySweep(db);
-            await setMaintenanceState(db, 'last_decay_sweep', new Date().toISOString());
-            if (affected > 0) log('INFO', 'Lesson decay sweep ran', { affected });
-          }
-        } catch (e) {
-          log('WARN', 'Lesson decay sweep failed, continuing', { error: String(e) });
-        }
-
-        // Open a session record for time-aware session tracking.
-        try {
-          const sessionId = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
-          await writeArbitrator.enqueue(async () => {
-            await db.run(
-              'INSERT INTO sessions (id, project_path, tool, started_at) VALUES (?, ?, ?, ?)',
-              [sessionId, projPath, 'get_state', new Date().toISOString()]
-            );
-            await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['current_session_id', sessionId]);
-          });
-        } catch (_) { /* non-fatal */ } // NOSONAR: session id persistence is best-effort
-
-        if (resolved.source === 'none') {
-          const branchLine = branch ? `Branch: ${branch}\n` : '';
-          return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
-        }
-
-        let content: string;
-        try {
-          content = readStateFile(resolved.filePath, _encKey);
-        } catch (err) {
-          log('ERROR', '[EGC encryption] Failed to decrypt state file', { file: resolved.filePath, error: String(err) });
-          return { content: [{ type: "text", text: `State file exists but could not be decrypted. The encryption key may have changed.\nPath: ${resolved.filePath}` }] };
-        }
-        const verify = verifyHmac(resolved.filePath, content, _integrityKey);
-        if (!verify.ok) {
-          log('WARN', '[EGC integrity] State file integrity check failed', { file: resolved.filePath, reason: (verify as { ok: false; reason: string }).reason });
-          log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: (verify as { ok: false; reason: string }).reason });
-        } else {
-          log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: 'ok' });
-        }
-        return { content: [{ type: "text", text: content }] };
-      }
-
-      case "update_state": {
-        const args = UpdateStateSchema.parse(request.params.arguments || {});
-        if (args.context) {
-          const check = sanitize(args.context);
-          if (check.flagged) {
-            log('WARN', 'update_state: suspicious content in context', { reason: check.reason });
-            return { content: [{ type: "text", text: `Blocked: ${check.reason}` }] };
-          }
-        }
-        const projPath = resolveProjectPath(args.project_path);
-        const branch = detectBranch(projPath);
-
-        // Close the open session if one exists.
-        try {
-          const sessionId = await getMaintenanceState(db, 'current_session_id');
-          if (sessionId) {
-            await writeArbitrator.enqueue(async () => {
-              await db.run('UPDATE sessions SET ended_at = ? WHERE id = ?', [new Date().toISOString(), sessionId]);
-              await db.run('DELETE FROM operational_state WHERE id = ?', ['current_session_id']);
-            });
-          }
-        } catch (_) { /* non-fatal */ } // NOSONAR: legacy flat-state merge is best-effort
-        // Merge from the same file get_state would read, so the first
-        // branch-scoped write inherits the pre-existing flat state
-        const resolved = resolveStateRead(getStateDir(), projPath, branch);
-        let existing: Record<string, string[]|string>;
-        try {
-          existing = readStateDoc(resolved.filePath);
-        } catch (err) {
-          if (args.force && fs.existsSync(resolved.filePath)) {
-            const backupPath = quarantineUndecryptableStateFile(resolved.filePath);
-            log('WARN', 'update_state: force=true, undecryptable state file backed up and replaced', { file: resolved.filePath, backup: backupPath, error: String(err) });
-            existing = {};
-          } else {
-            log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
-            throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}. Retry with force: true to back up the unreadable file and start fresh — only do this after confirming the failure is persistent, not a transient lock from another process.`);
-          }
-        }
-        const filePath = resolveStateWrite(getStateDir(), projPath, branch);
-
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-        writeStateDoc(filePath, projPath, args, existing, branch);
-        const writtenContent = readStateFile(filePath, _encKey);
-        writeHmac(filePath, writtenContent, _integrityKey);
-        const propagated = propagateStateToTools({
-          projectPath: projPath,
-          context: args.context,
-          decisions: args.decisions,
-          next: args.next,
-        });
-        const propagatedTools = Object.entries(propagated)
-          .filter(([, p]) => p !== null)
-          .map(([tool]) => tool);
-
-        log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0, propagated: propagatedTools });
-        const branchLine = branch ? `Branch: ${branch}\n` : '';
-        const toolsLine = propagatedTools.length > 0 ? `Tools updated: ${propagatedTools.join(', ')}\n` : '';
-        return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}${toolsLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
-      }
+      case "update_state": return await handleUpdateState(db, request.params.arguments);
 
       case "working_memory_set": {
         const args = WorkingMemorySetSchema.parse(request.params.arguments || {});
@@ -1180,179 +1358,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "lesson_reinforce":
         return await handleLessonReinforce(db, request.params.arguments);
 
-      case "detect_patterns": {
-        const { window_days, min_occurrences } = DetectPatternsSchema.parse(request.params.arguments || {});
-        const cutoff = new Date(Date.now() - window_days * 24 * 60 * 60 * 1000).toISOString();
+      case "detect_patterns": return await handleDetectPatterns(db, request.params.arguments);
 
-        // Read events and persist patterns in the state-store DB where hooks write events.
-        // Uses the server's own sqlite3/sqlite driver so the build carries no extra dependency.
-        const stateDbPath = resolveStateStoreDbPath();
-
-        let events: Array<{
-          id: string;
-          sessionId: string | null;
-          eventType: string;
-          payload: Record<string, unknown> | null;
-          timestamp: string;
-        }> = [];
-
-        const patterns = await writeArbitrator.enqueue(async () => {
-          if (!fs.existsSync(stateDbPath)) {
-            log('INFO', 'State-store DB not found; no events to analyze', { path: stateDbPath });
-            return [];
-          }
-
-          const ssDb = await open({ filename: stateDbPath, driver: sqlite3.Database });
-          try {
-            await ssDb.exec('PRAGMA journal_mode = WAL;');
-            await ssDb.exec('PRAGMA busy_timeout = 5000;');
-            await ssDb.exec(`
-              CREATE TABLE IF NOT EXISTS patterns (
-                id TEXT PRIMARY KEY,
-                pattern_type TEXT NOT NULL,
-                key TEXT NOT NULL,
-                description TEXT NOT NULL,
-                occurrences INTEGER NOT NULL DEFAULT 1,
-                frequency REAL NOT NULL DEFAULT 0,
-                last_seen TEXT NOT NULL,
-                suggested_automation TEXT,
-                first_seen TEXT NOT NULL,
-                window_days INTEGER NOT NULL DEFAULT 7
-              );
-            `);
-
-            const rawEvents = await ssDb.all<Array<{ id: string; session_id: string | null; event_type: string; payload: string; timestamp: string }>>(
-              'SELECT id, session_id, event_type, payload, timestamp FROM events WHERE timestamp >= ? ORDER BY timestamp ASC',
-              [cutoff]
-            );
-
-            events = rawEvents.map(row => ({
-              id: row.id,
-              sessionId: row.session_id ?? null,
-              eventType: row.event_type,
-              payload: (() => { try { return JSON.parse(row.payload); } catch { return null; } })(),
-              timestamp: row.timestamp,
-            }));
-
-            const detected = detectPatternsFromEvents(events, window_days, min_occurrences);
-
-            const upsertSql = `
-              INSERT INTO patterns (id, pattern_type, key, description, occurrences, frequency, last_seen, suggested_automation, first_seen, window_days)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET
-                pattern_type = excluded.pattern_type,
-                key = excluded.key,
-                description = excluded.description,
-                occurrences = excluded.occurrences,
-                frequency = excluded.frequency,
-                last_seen = excluded.last_seen,
-                suggested_automation = excluded.suggested_automation,
-                first_seen = MIN(patterns.first_seen, excluded.first_seen),
-                window_days = excluded.window_days
-            `;
-
-            await ssDb.exec('BEGIN');
-            try {
-              for (const p of detected) {
-                const entry = patternToStoreEntry(p, window_days);
-                await ssDb.run(upsertSql, [
-                  entry.id,
-                  entry.patternType,
-                  entry.key,
-                  entry.description,
-                  entry.occurrences,
-                  entry.frequency,
-                  entry.lastSeen,
-                  entry.suggestedAutomation,
-                  entry.firstSeen,
-                  entry.windowDays,
-                ]);
-              }
-              await ssDb.exec('COMMIT');
-            } catch (txError) {
-              await ssDb.exec('ROLLBACK');
-              throw txError;
-            }
-
-            return detected;
-          } finally {
-            await ssDb.close();
-          }
-        });
-
-        const output = patterns.map(p => ({
-          type: p.type,
-          description: p.description,
-          occurrences: p.occurrences,
-          suggestion: p.suggestion,
-        }));
-
-        log('INFO', 'Pattern detection complete', {
-          window_days,
-          min_occurrences,
-          events_analyzed: events.length,
-          patterns_found: patterns.length,
-        });
-
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({ success: true, data: { patterns: output }, meta: { window_days, min_occurrences, events_analyzed: events.length } }, null, 2)
-          }]
-        };
-      }
-
-      case "compress_observations": {
-        const args = CompressObservationsSchema.parse(request.params.arguments || {});
-        const projPath = resolveProjectPath(args.project_path);
-
-        const rawObservations = await loadRawObservations(projPath, args.limit, args.since);
-
-        if (rawObservations.length === 0) {
-          return {
-            content: [{ type: "text", text: "No raw observations found to compress." }],
-          };
-        }
-
-        // Use llmCompress (with ruleBasedCompress as its internal fallback) as the primary path
-        // Sequential loop avoids race condition: replaceObservation rewrites the entire JSONL file each call
-        const compressed: import('./compress.js').CompressedObservation[] = [];
-        for (const raw of rawObservations) {
-          // llmCompress falls back to ruleBasedCompress automatically when no LLM client is wired
-          // TODO: pass a real llmCall once EGC dispatcher is wired into this server
-          try {
-            const result = await llmCompress(raw, () => Promise.reject(new Error('LLM not configured')));
-            compressed.push(result);
-          } catch (e) {
-            log('ERROR', 'LLM compression failed, skipping', { error: String(e) });
-          }
-        }
-
-        // Write replacements sequentially to prevent JSONL file corruption from concurrent writes
-        for (let i = 0; i < compressed.length; i++) {
-          const id = rawObservations[i].id;
-          if (id !== undefined) await replaceObservation(projPath, id, compressed[i]);
-        }
-
-        const summary = compressed.map((c) => ({
-          title:      c.title,
-          type:       c.type,
-          importance: c.importance,
-        }));
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { compressed_count: compressed.length, summary },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
+      case "compress_observations": return await handleCompressObservations(db, request.params.arguments);
 
       case "team_init": {
         const { backend, remote, branch } = TeamInitSchema.parse(request.params.arguments || {});
