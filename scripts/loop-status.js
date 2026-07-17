@@ -153,7 +153,11 @@ function getNow(options = {}) {
   return now;
 }
 
-function walkJsonlFiles(dir, result = { errors: [], files: [] }) {
+function createWalkResult() {
+  return { errors: [], files: [] };
+}
+
+function walkJsonlFiles(dir, result = createWalkResult()) {
   if (!fs.existsSync(dir)) {
     return result;
   }
@@ -215,7 +219,7 @@ function findTranscriptPaths(options = {}) {
   return {
     errors,
     transcriptPaths: transcriptEntries
-    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .toSorted((left, right) => right.mtimeMs - left.mtimeMs)
     .slice(0, normalizedOptions.limit)
     .map(entry => entry.transcriptPath),
   };

@@ -67,8 +67,9 @@ function parseArgs(argv) {
     root: path.resolve(process.env.AUDIT_ROOT || process.cwd()),
   };
 
-  for (let index = 0; index < args.length; index += 1) {
-    index = processSingleArg(args[index], index, args, parsed);
+  let index = 0;
+  while (index < args.length) {
+    index = processSingleArg(args[index], index, args, parsed) + 1;
   }
 
   if (!['text', 'json'].includes(parsed.format)) {
@@ -630,7 +631,7 @@ function buildReport(scope, options = {}) {
 
   const failedChecks = checks.filter(check => !check.pass);
   const topActions = failedChecks
-    .sort((left, right) => right.points - left.points)
+    .toSorted((left, right) => right.points - left.points)
     .slice(0, 3)
     .map(check => ({
       action: check.fix,

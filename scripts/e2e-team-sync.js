@@ -12,7 +12,7 @@ const PROC_OPTS = { stdio: 'pipe', encoding: 'utf-8' };
 
 function run(file, args = [], opts = {}) {
   console.log(`  $ ${file} ${args.join(' ')}`);
-  return execFileSync(file, args, Object.assign({}, PROC_OPTS, opts));
+  return execFileSync(file, args, { ...PROC_OPTS, ...opts });
 }
 
 function runIn(dir, file, args = []) {

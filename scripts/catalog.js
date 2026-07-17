@@ -67,8 +67,9 @@ function parseArgs(argv) {
 
   parsed.command = args[0];
 
-  for (let index = 1; index < args.length; index += 1) {
-    index = processArg(args, index, parsed);
+  let index = 1;
+  while (index < args.length) {
+    index = processArg(args, index, parsed) + 1;
   }
 
   return parsed;

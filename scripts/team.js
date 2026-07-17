@@ -17,7 +17,7 @@ function resolveGitBin() {
   } catch (err) {
     throw new Error(`git executable not found. Install git and ensure it is on PATH. ${err.message}`, { cause: err });
   }
-  const gitPath = output.split('\n').map(s => s.trim()).filter(Boolean)[0];
+  const gitPath = output.split('\n').map(s => s.trim()).find(Boolean);
   if (!gitPath || !path.isAbsolute(gitPath)) {
     throw new Error(`git executable not found at an absolute path (got: ${gitPath || 'none'})`);
   }
