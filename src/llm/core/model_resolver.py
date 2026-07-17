@@ -49,28 +49,43 @@ def _first_env(*names: str) -> Optional[str]:
     return None
 
 
+# Module-level model ID constants to avoid string duplication (SonarCloud S1192)
+GEMINI_25_PRO = "gemini-2.5-pro"
+GEMINI_25_FLASH = "gemini-2.5-flash"
+GEMINI_25_FLASH_LITE = "gemini-2.5-flash-lite"
+GEMINI_20_FLASH_LITE = "gemini-2.0-flash-lite"
+GEMINI_15_FLASH = "gemini-1.5-flash"
+GEMINI_15_FLASH_8B = "gemini-1.5-flash-8b"
+OPENAI_GPT_4O_MINI = "openai/gpt-4o-mini"
+OPENROUTER_AUTO = "openrouter/auto"
+OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b"
+LLAMA32 = "llama3.2"
+GOOGLE_GEMINI_25_FLASH = "google/gemini-2.5-flash"
+OPENAI_GPT_4O = "openai/gpt-4o"
+
+
 class ModelResolver:
     """Centralized model resolution / routing layer for EGC."""
 
     # Model IDs reused across the registry, fallback chains and menu_choices()
     # -- centralized here as the single source of truth to avoid typo-prone
     # string duplication (SonarCloud S1192).
-    _GEMINI_25_PRO = "gemini-2.5-pro"
-    _GEMINI_25_FLASH = "gemini-2.5-flash"
-    _GEMINI_25_FLASH_LITE = "gemini-2.5-flash-lite"
-    _GEMINI_20_FLASH_LITE = "gemini-2.0-flash-lite"
-    _GEMINI_15_FLASH = "gemini-1.5-flash"
-    _GEMINI_15_FLASH_8B = "gemini-1.5-flash-8b"
-    _OPENAI_GPT_4O_MINI = "openai/gpt-4o-mini"
+    _GEMINI_25_PRO = GEMINI_25_PRO
+    _GEMINI_25_FLASH = GEMINI_25_FLASH
+    _GEMINI_25_FLASH_LITE = GEMINI_25_FLASH_LITE
+    _GEMINI_20_FLASH_LITE = GEMINI_20_FLASH_LITE
+    _GEMINI_15_FLASH = GEMINI_15_FLASH
+    _GEMINI_15_FLASH_8B = GEMINI_15_FLASH_8B
+    _OPENAI_GPT_4O_MINI = OPENAI_GPT_4O_MINI
     _GPT_4O = "gpt-4o"
     _CLAUDE_SONNET = "claude-sonnet-4-7"
-    _OPENROUTER_AUTO = "openrouter/auto"
-    _OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b"
-    _LLAMA32 = "llama3.2"
-    _GOOGLE_GEMINI_25_FLASH = "google/gemini-2.5-flash"
+    _OPENROUTER_AUTO = OPENROUTER_AUTO
+    _OPENAI_GPT_OSS_120B = OPENAI_GPT_OSS_120B
+    _LLAMA32 = LLAMA32
+    _GOOGLE_GEMINI_25_FLASH = GOOGLE_GEMINI_25_FLASH
     _CLAUDE_HAIKU = "claude-haiku-4-7"
     _GPT_4O_MINI = "gpt-4o-mini"
-    _OPENAI_GPT_4O_OR = "openai/gpt-4o"
+    _OPENAI_GPT_4O_OR = OPENAI_GPT_4O
     _DEEPSEEK_CHAT_V3 = "deepseek/deepseek-chat-v3-0324"
     _QWEN3_32B = "qwen/qwen3-32b"
     _LLAMA4_SCOUT = "meta-llama/llama-4-scout"
@@ -82,7 +97,7 @@ class ModelResolver:
     # ------------------------------------------------------------------ #
     _REGISTRY: Dict[str, Dict[str, Any]] = {
         # --- Gemini 2.5 generation (State of the Art) ---
-        "gemini-2.5-pro": {
+        GEMINI_25_PRO: {
             "provider": "gemini",
             "capabilities": [
                 ModelCapability.REASONING,
@@ -97,7 +112,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "gemini-2.5-flash": {
+        GEMINI_25_FLASH: {
             "provider": "gemini",
             "capabilities": [
                 ModelCapability.SPEED,
@@ -113,7 +128,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "gemini-2.5-flash-lite": {
+        GEMINI_25_FLASH_LITE: {
             "provider": "gemini",
             "capabilities": [
                 ModelCapability.SPEED,
@@ -144,7 +159,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "gemini-2.0-flash-lite": {
+        GEMINI_20_FLASH_LITE: {
             "provider": "gemini",
             "capabilities": [
                 ModelCapability.SPEED,
@@ -173,7 +188,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "gemini-1.5-flash": {
+        GEMINI_15_FLASH: {
             "provider": "gemini",
             "capabilities": [
                 ModelCapability.SPEED,
@@ -188,7 +203,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "gemini-1.5-flash-8b": {
+        GEMINI_15_FLASH_8B: {
             "provider": "gemini",
             "capabilities": [
                 ModelCapability.SPEED,
@@ -263,7 +278,7 @@ class ModelResolver:
             "supports_tools": True,
         },
         # --- Groq ---
-        "openai/gpt-oss-120b": {
+        OPENAI_GPT_OSS_120B: {
             "provider": "groq",
             "capabilities": [
                 ModelCapability.REASONING,
@@ -417,7 +432,7 @@ class ModelResolver:
             "supports_vision": False,
             "supports_tools": True,
         },
-        "llama3.2": {
+        LLAMA32: {
             "provider": "ollama",
             "capabilities": [ModelCapability.SPEED, ModelCapability.COST_EFFICIENT],
             "fallback": None,
@@ -427,7 +442,7 @@ class ModelResolver:
             "supports_tools": False,
         },
         # --- OpenRouter (broker; any vendor/model ID is also accepted directly) ---
-        "openrouter/auto": {
+        OPENROUTER_AUTO: {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING],
             "fallback": _GOOGLE_GEMINI_25_FLASH,
@@ -445,7 +460,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "google/gemini-2.5-flash": {
+        GOOGLE_GEMINI_25_FLASH: {
             "provider": "openrouter",
             "capabilities": [ModelCapability.SPEED, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING, ModelCapability.LOW_LATENCY, ModelCapability.COST_EFFICIENT],
             "fallback": _OPENAI_GPT_4O_MINI,
@@ -463,7 +478,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "openai/gpt-4o": {
+        OPENAI_GPT_4O: {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING],
             "fallback": _OPENAI_GPT_4O_MINI,
@@ -472,7 +487,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "openai/gpt-4o-mini": {
+        OPENAI_GPT_4O_MINI: {
             "provider": "openrouter",
             "capabilities": [ModelCapability.SPEED, ModelCapability.LOW_LATENCY, ModelCapability.COST_EFFICIENT, ModelCapability.TOOL_CALLING],
             "fallback": None,
@@ -787,29 +802,29 @@ class ModelResolver:
     def menu_choices(cls, provider: str) -> List[tuple]:
         """``(model_id, human_label)`` pairs for interactive selectors."""
         labels = {
-            "gemini-2.5-pro": "Gemini 2.5 Pro - deepest reasoning, multimodal",
-            "gemini-2.5-flash": "Gemini 2.5 Flash - balanced, fast, multimodal",
-            "gemini-2.5-flash-lite": "Gemini 2.5 Flash-Lite - lowest latency / cost",
+            GEMINI_25_PRO: "Gemini 2.5 Pro - deepest reasoning, multimodal",
+            GEMINI_25_FLASH: "Gemini 2.5 Flash - balanced, fast, multimodal",
+            GEMINI_25_FLASH_LITE: "Gemini 2.5 Flash-Lite - lowest latency / cost",
             "gemini-2.0-flash": "Gemini 2.0 Flash - fast, multimodal",
-            "gemini-2.0-flash-lite": "Gemini 2.0 Flash-Lite - low cost",
+            GEMINI_20_FLASH_LITE: "Gemini 2.0 Flash-Lite - low cost",
             "gemini-1.5-pro": "Gemini 1.5 Pro - 2M context (legacy capable)",
-            "gemini-1.5-flash": "Gemini 1.5 Flash - free-tier friendly",
-            "gemini-1.5-flash-8b": "Gemini 1.5 Flash-8B - cheapest legacy",
+            GEMINI_15_FLASH: "Gemini 1.5 Flash - free-tier friendly",
+            GEMINI_15_FLASH_8B: "Gemini 1.5 Flash-8B - cheapest legacy",
             "claude-opus-4-5": "Claude Opus 4.5 - most capable",
             "claude-sonnet-4-7": "Claude Sonnet 4.7 - balanced",
             "claude-haiku-4-7": "Claude Haiku 4.7 - fast",
             "gpt-4o": "GPT-4o - most capable",
             "gpt-4o-mini": "GPT-4o-mini - fast & affordable",
             "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
-            "openai/gpt-oss-120b": "GPT-OSS 120B via Groq - fast inference, tool calling",
+            OPENAI_GPT_OSS_120B: "GPT-OSS 120B via Groq - fast inference, tool calling",
             "command-a-plus-05-2026": "Command A+ (Cohere) - agentic tool use, vision, multilingual",
-            "llama3.2": "Llama 3.2 - local general purpose",
-            "openrouter/auto": "OpenRouter Auto - broker picks the best model",
+            LLAMA32: "Llama 3.2 - local general purpose",
+            OPENROUTER_AUTO: "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
-            "google/gemini-2.5-flash": "Gemini 2.5 Flash via OpenRouter",
+            GOOGLE_GEMINI_25_FLASH: "Gemini 2.5 Flash via OpenRouter",
             "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5 via OpenRouter",
-            "openai/gpt-4o": "GPT-4o via OpenRouter",
-            "openai/gpt-4o-mini": "GPT-4o-mini via OpenRouter",
+            OPENAI_GPT_4O: "GPT-4o via OpenRouter",
+            OPENAI_GPT_4O_MINI: "GPT-4o-mini via OpenRouter",
             "deepseek/deepseek-r1": "DeepSeek R1 via OpenRouter - strong reasoning",
             cls._DEEPSEEK_CHAT_V3: "DeepSeek Chat V3 via OpenRouter - cost-efficient",
             "qwen/qwen3-235b-a22b": "Qwen3 235B via OpenRouter - large reasoning model",
