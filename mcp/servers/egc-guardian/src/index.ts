@@ -210,6 +210,211 @@ function checkRateLimit(tool: string, projectPath?: string | null): boolean {
   return timestamps.length <= RATE_MAX_CALLS;
 }
 
+function handleValidateCommand(toolArgs: unknown) {
+  const { command } = ValidateCommandSchema.parse(toolArgs);
+  const result = validateCommand(command);
+  if (!result.allowed) {
+    auditLog('COMMAND_EXECUTION', 'DENIED', { command, reason: result.reason, trust_level: result.trust_level });
+    return { content: [{ type: "text", text: `[DENIED] ${result.reason}` }] };
+  }
+  auditLog('COMMAND_EXECUTION', 'ALLOWED', { command, trust_level: result.trust_level });
+  return { content: [{ type: "text", text: "[ALLOWED]" }] };
+}
+
+function handleValidateWrite(toolArgs: unknown) {
+  const { filepath } = ValidateWriteSchema.parse(toolArgs);
+  const result = validateWrite(filepath);
+  if (!result.allowed) {
+    auditLog('FILE_WRITE', 'DENIED', { filepath, reason: result.reason });
+    return { content: [{ type: "text", text: `[DENIED] ${result.reason}` }] };
+  }
+  auditLog('FILE_WRITE', 'ALLOWED', { filepath: path.resolve(filepath) });
+  return { content: [{ type: "text", text: "[ALLOWED]" }] };
+}
+
+async function handleReduceContext(toolArgs: unknown) {
+  const { filepaths, mode } = ReduceContextSchema.parse(toolArgs);
+  const rawPayloads: string[] = [];
+  
+  let totalBytesLoaded = 0;
+  for (const filepath of filepaths) {
+     try {
+       const resolved = path.resolve(filepath);
+       let realResolved: string;
+       try {
+         realResolved = fs.realpathSync(resolved);
+       } catch {
+         auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'path resolution failed' });
+         continue;
+       }
+       if (isProtectedPath(realResolved)) {
+         auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
+         continue;
+       }
+       
+       // SEC-05/SEC-06: enforce byte-load limits against the same file handle
+       // used to read (stat-then-read on a path is a TOCTOU race if the file
+       // is swapped between the two calls).
+       const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+       const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+
+       const fileHandle = await fs.promises.open(realResolved, 'r');
+       try {
+         const stats = await fileHandle.stat();
+         if (!stats.isFile()) {
+     auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
+     continue;
+         }
+         if (stats.size > MAX_FILE_SIZE) {
+     auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
+     continue;
+         }
+         if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
+     auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
+     continue;
+         }
+
+         const content = await fileHandle.readFile('utf-8');
+         // Split context into chunks/paragraphs to allow granular pruning
+         const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
+         rawPayloads.push(...chunks);
+         totalBytesLoaded += Buffer.byteLength(content, 'utf8');
+       } finally {
+         await fileHandle.close();
+       }
+     } catch(e: unknown) {
+       const reason = e instanceof Error ? e.message : JSON.stringify(e);
+       auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
+     }
+  }
+  
+  const pipeline = runCompressionPipeline(rawPayloads);
+
+  // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
+  let finalContent = pipeline.chunks.join('\n\n');
+  let headroomSavingsPct = 0;
+  let headroomTransforms: string[] = [];
+  if (pipeline.chunks.length > 0) {
+    const hr = await compressViaHeadroom(pipeline.chunks);
+    if (hr !== null) {
+      finalContent = hr.text;
+      headroomSavingsPct = Math.round((1 - hr.bytes_after / hr.bytes_before) * 100);
+      headroomTransforms = hr.transforms_applied;
+    }
+  }
+
+  const finalBytes = Buffer.byteLength(finalContent, 'utf8');
+  const totalSavingsPct = pipeline.bytes_before === 0
+    ? 0
+    : Math.round((1 - finalBytes / pipeline.bytes_before) * 100);
+
+  auditLog('PAYLOAD_MUTATION', 'MUTATED', {
+    mode,
+    files_requested: filepaths.length,
+    raw_chunks: rawPayloads.length,
+    reduced_chunks: pipeline.chunks.length,
+    bytes_before: pipeline.bytes_before,
+    bytes_after: finalBytes,
+    savings_pct: totalSavingsPct,
+    volatile_findings: pipeline.volatile_findings,
+    chunks_crushed: pipeline.chunks_crushed,
+    headroom_savings_pct: headroomSavingsPct,
+    headroom_transforms: headroomTransforms.length,
+  });
+
+  const headerParts = [
+    `[reduce_context] ${totalSavingsPct}% saved`,
+    `(${pipeline.bytes_before} -> ${finalBytes} bytes,`,
+    `${pipeline.chunks_crushed} JSON chunks crushed,`,
+    `${pipeline.volatile_findings} volatile tokens detected`,
+  ];
+  if (headroomSavingsPct > 0) {
+    headerParts.push(`, headroom: ${headroomSavingsPct}% extra via ${headroomTransforms.length} transforms`);
+  }
+  const header = headerParts.join(' ') + ')';
+
+  return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
+}
+
+async function handleOrchestrateTask(toolArgs: unknown) {
+  const parsed = OrchestrateTaskSchema.parse(toolArgs);
+  const prompt = parsed.prompt;
+  const files: string[] = parsed.filepaths ?? [];
+
+  // Read any provided file payloads
+  const rawPayloads: string[] = [];
+  for (const filePath of files) {
+    try {
+      const abs = path.resolve(filePath);
+      const realAbs = fs.realpathSync(abs);
+      if (!isProtectedPath(realAbs)) rawPayloads.push(fs.readFileSync(realAbs, 'utf8'));
+    } catch (err) {
+      console.error(`[EGC guardian] Failed to read file ${filePath}:`, err);
+    }
+  }
+
+  const pipeline = runCompressionPipeline(rawPayloads);
+  const routing = await routeTask(prompt);
+
+  const hint = routing.provider === 'keyword'
+    ? 'Semantic routing unavailable: set ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY to enable LLM-based routing.'
+    : undefined;
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        prompt,
+        routing,
+        ...(hint ? { routing_hint: hint } : {}),
+        context_reduction: {
+    bytes_before: pipeline.bytes_before,
+    bytes_after: pipeline.bytes_after,
+    savings_pct: pipeline.savings_pct,
+        },
+        files_loaded: rawPayloads.length,
+      }, null, 2),
+    }],
+  };
+}
+
+async function handleAutoLearn(toolArgs: Record<string, unknown> | undefined) {
+  const projectPath = toolArgs?.project_path as string;
+  const targetFile  = toolArgs?.target_file as string | undefined;
+  const limit       = toolArgs?.limit as number | undefined;
+
+  if (!projectPath) {
+    throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
+  }
+
+  let realProjectPath: string;
+  try {
+    realProjectPath = fs.realpathSync(path.resolve(projectPath));
+  } catch {
+    throw new McpError(ErrorCode.InvalidParams, 'project_path resolution failed');
+  }
+  if (isProtectedPath(realProjectPath)) {
+    throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
+  }
+
+  const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
+
+  auditLog('AUTO_LEARN', 'MUTATED', {
+    project_path: projectPath,
+    patterns_found: result.patterns_found,
+    recommendations_written: result.recommendations_written,
+    skipped: result.skipped,
+  });
+
+  const extraFiles = result.propagated_to?.length ?? 0;
+  const extraSuffix = extraFiles > 0 ? ` and ${extraFiles} other AI tool config file(s)` : '';
+  const summary = result.skipped
+    ? `[auto_learn] skipped: ${result.reason}`
+    : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file}${extraSuffix} (${result.patterns_found} failure patterns found)`;
+
+  return { content: [{ type: 'text', text: summary }] };
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const tool = request.params.name;
@@ -224,210 +429,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     
     switch (request.params.name) {
-      case "validate_command": {
-        const { command } = ValidateCommandSchema.parse(request.params.arguments);
-        const result = validateCommand(command);
-        if (!result.allowed) {
-          auditLog('COMMAND_EXECUTION', 'DENIED', { command, reason: result.reason, trust_level: result.trust_level });
-          return { content: [{ type: "text", text: `[DENIED] ${result.reason}` }] };
-        }
-        auditLog('COMMAND_EXECUTION', 'ALLOWED', { command, trust_level: result.trust_level });
-        return { content: [{ type: "text", text: "[ALLOWED]" }] };
-      }
-      
-      case "validate_write": {
-        const { filepath } = ValidateWriteSchema.parse(request.params.arguments);
-        const result = validateWrite(filepath);
-        if (!result.allowed) {
-          auditLog('FILE_WRITE', 'DENIED', { filepath, reason: result.reason });
-          return { content: [{ type: "text", text: `[DENIED] ${result.reason}` }] };
-        }
-        auditLog('FILE_WRITE', 'ALLOWED', { filepath: path.resolve(filepath) });
-        return { content: [{ type: "text", text: "[ALLOWED]" }] };
-      }
-
-      case "reduce_context": {
-        const { filepaths, mode } = ReduceContextSchema.parse(request.params.arguments);
-        const rawPayloads: string[] = [];
-        
-        let totalBytesLoaded = 0;
-        for (const filepath of filepaths) {
-           try {
-             const resolved = path.resolve(filepath);
-             let realResolved: string;
-             try {
-               realResolved = fs.realpathSync(resolved);
-             } catch {
-               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'path resolution failed' });
-               continue;
-             }
-             if (isProtectedPath(realResolved)) {
-               auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
-               continue;
-             }
-             
-             // SEC-05/SEC-06: enforce byte-load limits against the same file handle
-             // used to read (stat-then-read on a path is a TOCTOU race if the file
-             // is swapped between the two calls).
-             const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-             const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
-
-             const fileHandle = await fs.promises.open(realResolved, 'r');
-             try {
-               const stats = await fileHandle.stat();
-               if (!stats.isFile()) {
-                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
-                 continue;
-               }
-               if (stats.size > MAX_FILE_SIZE) {
-                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${stats.size} bytes)` });
-                 continue;
-               }
-               if (totalBytesLoaded + stats.size > MAX_TOTAL_SIZE) {
-                 auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
-                 continue;
-               }
-
-               const content = await fileHandle.readFile('utf-8');
-               // Split context into chunks/paragraphs to allow granular pruning
-               const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
-               rawPayloads.push(...chunks);
-               totalBytesLoaded += Buffer.byteLength(content, 'utf8');
-             } finally {
-               await fileHandle.close();
-             }
-           } catch(e: unknown) {
-             const reason = e instanceof Error ? e.message : JSON.stringify(e);
-             auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason });
-           }
-        }
-        
-        const pipeline = runCompressionPipeline(rawPayloads);
-
-        // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
-        let finalContent = pipeline.chunks.join('\n\n');
-        let headroomSavingsPct = 0;
-        let headroomTransforms: string[] = [];
-        if (pipeline.chunks.length > 0) {
-          const hr = await compressViaHeadroom(pipeline.chunks);
-          if (hr !== null) {
-            finalContent = hr.text;
-            headroomSavingsPct = Math.round((1 - hr.bytes_after / hr.bytes_before) * 100);
-            headroomTransforms = hr.transforms_applied;
-          }
-        }
-
-        const finalBytes = Buffer.byteLength(finalContent, 'utf8');
-        const totalSavingsPct = pipeline.bytes_before === 0
-          ? 0
-          : Math.round((1 - finalBytes / pipeline.bytes_before) * 100);
-
-        auditLog('PAYLOAD_MUTATION', 'MUTATED', {
-          mode,
-          files_requested: filepaths.length,
-          raw_chunks: rawPayloads.length,
-          reduced_chunks: pipeline.chunks.length,
-          bytes_before: pipeline.bytes_before,
-          bytes_after: finalBytes,
-          savings_pct: totalSavingsPct,
-          volatile_findings: pipeline.volatile_findings,
-          chunks_crushed: pipeline.chunks_crushed,
-          headroom_savings_pct: headroomSavingsPct,
-          headroom_transforms: headroomTransforms.length,
-        });
-
-        const headerParts = [
-          `[reduce_context] ${totalSavingsPct}% saved`,
-          `(${pipeline.bytes_before} -> ${finalBytes} bytes,`,
-          `${pipeline.chunks_crushed} JSON chunks crushed,`,
-          `${pipeline.volatile_findings} volatile tokens detected`,
-        ];
-        if (headroomSavingsPct > 0) {
-          headerParts.push(`, headroom: ${headroomSavingsPct}% extra via ${headroomTransforms.length} transforms`);
-        }
-        const header = headerParts.join(' ') + ')';
-
-        return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
-      }
-
-      case "orchestrate_task": {
-        const parsed = OrchestrateTaskSchema.parse(request.params.arguments);
-        const prompt = parsed.prompt;
-        const files: string[] = parsed.filepaths ?? [];
-
-        // Read any provided file payloads
-        const rawPayloads: string[] = [];
-        for (const filePath of files) {
-          try {
-            const abs = path.resolve(filePath);
-            const realAbs = fs.realpathSync(abs);
-            if (!isProtectedPath(realAbs)) rawPayloads.push(fs.readFileSync(realAbs, 'utf8'));
-          } catch (err) {
-            console.error(`[EGC guardian] Failed to read file ${filePath}:`, err);
-          }
-        }
-
-        const pipeline = runCompressionPipeline(rawPayloads);
-        const routing = await routeTask(prompt);
-
-        const hint = routing.provider === 'keyword'
-          ? 'Semantic routing unavailable: set ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY to enable LLM-based routing.'
-          : undefined;
-
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              prompt,
-              routing,
-              ...(hint ? { routing_hint: hint } : {}),
-              context_reduction: {
-                bytes_before: pipeline.bytes_before,
-                bytes_after: pipeline.bytes_after,
-                savings_pct: pipeline.savings_pct,
-              },
-              files_loaded: rawPayloads.length,
-            }, null, 2),
-          }],
-        };
-      }
-
-      case "auto_learn": {
-        const projectPath = request.params.arguments?.project_path as string;
-        const targetFile  = request.params.arguments?.target_file as string | undefined;
-        const limit       = request.params.arguments?.limit as number | undefined;
-
-        if (!projectPath) {
-          throw new McpError(ErrorCode.InvalidParams, 'project_path is required');
-        }
-
-        let realProjectPath: string;
-        try {
-          realProjectPath = fs.realpathSync(path.resolve(projectPath));
-        } catch {
-          throw new McpError(ErrorCode.InvalidParams, 'project_path resolution failed');
-        }
-        if (isProtectedPath(realProjectPath)) {
-          throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
-        }
-
-        const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
-
-        auditLog('AUTO_LEARN', 'MUTATED', {
-          project_path: projectPath,
-          patterns_found: result.patterns_found,
-          recommendations_written: result.recommendations_written,
-          skipped: result.skipped,
-        });
-
-        const extraFiles = result.propagated_to?.length ?? 0;
-        const extraSuffix = extraFiles > 0 ? ` and ${extraFiles} other AI tool config file(s)` : '';
-        const summary = result.skipped
-          ? `[auto_learn] skipped: ${result.reason}`
-          : `[auto_learn] wrote ${result.recommendations_written} recommendations to ${result.target_file}${extraSuffix} (${result.patterns_found} failure patterns found)`;
-
-        return { content: [{ type: 'text', text: summary }] };
-      }
+      case "validate_command": return handleValidateCommand(request.params.arguments);
+      case "validate_write": return handleValidateWrite(request.params.arguments);
+      case "reduce_context": return await handleReduceContext(request.params.arguments);
+      case "orchestrate_task": return await handleOrchestrateTask(request.params.arguments);
+      case "auto_learn": return await handleAutoLearn(request.params.arguments);
 
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${request.params.name}`);
