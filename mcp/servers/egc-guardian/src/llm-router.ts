@@ -56,9 +56,12 @@ function buildUserMessage(prompt: string, catalogBlock: string): string {
 
 function extractJsonBlock(raw: string): unknown {
   try {
-    const match = /\{[\s\S]*\}/.exec(raw);
-    if (!match) return null;
-    return JSON.parse(match[0]);
+    // Same span the previous greedy regex captured (first "{" through last
+    // "}"), without the super-linear backtracking on adversarial input.
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end < start) return null;
+    return JSON.parse(raw.slice(start, end + 1));
   } catch {
     return null;
   }

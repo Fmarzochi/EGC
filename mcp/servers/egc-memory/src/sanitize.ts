@@ -10,7 +10,7 @@ export interface SanitizeResult {
 // Patterns that indicate prompt injection attempts
 const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /ignore\s+(previous|all|prior)\s+instructions/i,       reason: 'prompt override attempt' },
-  { pattern: /SYSTEM\s*[:]\s*(OVERRIDE|INSTRUCTION|PROMPT)/i,       reason: 'system prompt injection' },
+  { pattern: /SYSTEM\s*:\s*(OVERRIDE|INSTRUCTION|PROMPT)/i,         reason: 'system prompt injection' },
   { pattern: /\[SYSTEM\]/i,                                          reason: 'system tag injection' },
   { pattern: /you\s+are\s+now\s+(a\s+)?(different|new|another)/i,   reason: 'persona override attempt' },
   { pattern: /new\s+instructions?\s*:/i,                             reason: 'instruction injection' },
