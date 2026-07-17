@@ -435,61 +435,91 @@ function buildRecommendation(signals) {
   return 'No stale ScheduleWakeup or Bash waits detected.';
 }
 
+function updateTimestamps(entry, state) {
+  const timestamp = getEntryTimestamp(entry);
+  if (!timestamp) return null;
+
+  if (!state.lastEventAt || timestamp.getTime() > state.lastEventAt.getTime()) {
+    state.lastEventAt = timestamp;
+  }
+  if (
+    isAssistantProgressEntry(entry)
+    && (!state.latestAssistantProgressAt || timestamp.getTime() > state.latestAssistantProgressAt.getTime())
+  ) {
+    state.latestAssistantProgressAt = timestamp;
+  }
+  return timestamp;
+}
+
+function processToolUses(entry, timestamp, lastEventAt, pendingTools, state) {
+  for (const toolUse of extractToolUses(entry)) {
+    const startedAt = timestamp || lastEventAt;
+    pendingTools.set(toolUse.id, {
+      command: toolUse.input && toolUse.input.command ? String(toolUse.input.command) : null,
+      input: toolUse.input || {},
+      name: toolUse.name,
+      startedAt: toIso(startedAt),
+      toolUseId: toolUse.id,
+    });
+
+    if (toolUse.name === 'ScheduleWakeup') {
+      const delaySeconds = readDelaySeconds(toolUse.input);
+      if (delaySeconds && startedAt) {
+        const dueAt = new Date(startedAt.getTime() + delaySeconds * 1000);
+        state.latestWake = {
+          delaySeconds,
+          dueAt: dueAt.toISOString(),
+          reason: toolUse.input && toolUse.input.reason ? String(toolUse.input.reason) : null,
+          scheduledAt: startedAt.toISOString(),
+          toolUseId: toolUse.id,
+        };
+      }
+    }
+  }
+}
+
+function processTranscriptEntries(entries, absoluteTranscriptPath) {
+  const pendingTools = new Map();
+  const state = {
+    lastEventAt: null,
+    latestAssistantProgressAt: null,
+    latestWake: null,
+    sessionId: path.basename(absoluteTranscriptPath, '.jsonl')
+  };
+
+  for (const entry of entries) {
+    state.sessionId = getSessionId(entry, absoluteTranscriptPath) || state.sessionId;
+    const timestamp = updateTimestamps(entry, state);
+    processToolUses(entry, timestamp, state.lastEventAt, pendingTools, state);
+
+    for (const toolUseId of extractToolResultIds(entry)) {
+      pendingTools.delete(toolUseId);
+    }
+  }
+
+  return {
+    sessionId: state.sessionId,
+    lastEventAt: state.lastEventAt,
+    latestAssistantProgressAt: state.latestAssistantProgressAt,
+    pendingTools,
+    latestWake: state.latestWake
+  };
+}
+
 function analyzeTranscript(transcriptPath, options = {}) {
   const normalizedOptions = normalizeOptions(options);
   const absoluteTranscriptPath = path.resolve(transcriptPath);
   const now = normalizedOptions.nowDate || getNow(normalizedOptions);
   const nowMs = now.getTime();
   const { entries, parseErrors } = readJsonlEntries(absoluteTranscriptPath);
-  const pendingTools = new Map();
-  let latestAssistantProgressAt = null;
-  let lastEventAt = null;
-  let latestWake = null;
-  let sessionId = path.basename(absoluteTranscriptPath, '.jsonl');
 
-  for (const entry of entries) {
-    sessionId = getSessionId(entry, absoluteTranscriptPath) || sessionId;
-    const timestamp = getEntryTimestamp(entry);
-    if (timestamp && (!lastEventAt || timestamp.getTime() > lastEventAt.getTime())) {
-      lastEventAt = timestamp;
-    }
-    if (
-      timestamp
-      && isAssistantProgressEntry(entry)
-      && (!latestAssistantProgressAt || timestamp.getTime() > latestAssistantProgressAt.getTime())
-    ) {
-      latestAssistantProgressAt = timestamp;
-    }
-
-    for (const toolUse of extractToolUses(entry)) {
-      const startedAt = timestamp || lastEventAt;
-      pendingTools.set(toolUse.id, {
-        command: toolUse.input && toolUse.input.command ? String(toolUse.input.command) : null,
-        input: toolUse.input || {},
-        name: toolUse.name,
-        startedAt: toIso(startedAt),
-        toolUseId: toolUse.id,
-      });
-
-      if (toolUse.name === 'ScheduleWakeup') {
-        const delaySeconds = readDelaySeconds(toolUse.input);
-        if (delaySeconds && startedAt) {
-          const dueAt = new Date(startedAt.getTime() + delaySeconds * 1000);
-          latestWake = {
-            delaySeconds,
-            dueAt: dueAt.toISOString(),
-            reason: toolUse.input && toolUse.input.reason ? String(toolUse.input.reason) : null,
-            scheduledAt: startedAt.toISOString(),
-            toolUseId: toolUse.id,
-          };
-        }
-      }
-    }
-
-    for (const toolUseId of extractToolResultIds(entry)) {
-      pendingTools.delete(toolUseId);
-    }
-  }
+  const {
+    sessionId,
+    lastEventAt,
+    latestAssistantProgressAt,
+    pendingTools,
+    latestWake
+  } = processTranscriptEntries(entries, absoluteTranscriptPath);
 
   const pendingToolList = Array.from(pendingTools.values()).map(tool => {
     const startedAt = parseTimestamp(tool.startedAt);

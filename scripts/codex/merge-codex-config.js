@@ -209,8 +209,7 @@ function stringifyTableKeys(tableValue) {
   return lines.join('\n');
 }
 
-function main() {
-  const args = process.argv.slice(2);
+function parseCommandLineArgs(args) {
   const configPath = args.find(arg => !arg.startsWith('-'));
   const dryRun = args.includes('--dry-run');
 
@@ -218,8 +217,10 @@ function main() {
     console.error('Usage: merge-codex-config.js <config.toml> [--dry-run]');
     process.exit(1);
   }
+  return { configPath, dryRun };
+}
 
-  const referencePath = path.join(__dirname, '..', '..', '.codex', 'config.toml');
+function loadAndParseConfigs(configPath, referencePath) {
   if (!fs.existsSync(referencePath)) {
     console.error(`[egc-codex] Reference config not found: ${referencePath}`);
     process.exit(1);
@@ -233,16 +234,17 @@ function main() {
   const raw = fs.readFileSync(configPath, 'utf8');
   const referenceRaw = fs.readFileSync(referencePath, 'utf8');
 
-  let targetConfig;
-  let referenceConfig;
   try {
-    targetConfig = TOML.parse(raw);
-    referenceConfig = TOML.parse(referenceRaw);
+    const targetConfig = TOML.parse(raw);
+    const referenceConfig = TOML.parse(referenceRaw);
+    return { targetConfig, referenceConfig, raw };
   } catch (error) {
     console.error(`[egc-codex] Failed to parse TOML: ${error.message}`);
     process.exit(1);
   }
+}
 
+function findMissingConfigs(referenceConfig, targetConfig) {
   const missingRootKeys = {};
   for (const key of ROOT_KEYS) {
     if (referenceConfig[key] !== undefined && targetConfig[key] === undefined) {
@@ -280,15 +282,11 @@ function main() {
     }
   }
 
-  if (
-    Object.keys(missingRootKeys).length === 0 &&
-    missingTables.length === 0 &&
-    missingTableKeys.length === 0
-  ) {
-    log('All baseline Codex settings already present. Nothing to do.');
-    return;
-  }
+  return { missingRootKeys, missingTables, missingTableKeys };
+}
 
+function mergeBaselineSettings(raw, missingConfigs, referenceConfig) {
+  const { missingRootKeys, missingTables, missingTableKeys } = missingConfigs;
   let nextRaw = raw;
   if (Object.keys(missingRootKeys).length > 0) {
     log(`  [add-root] ${Object.keys(missingRootKeys).join(', ')}`);
@@ -304,6 +302,28 @@ function main() {
     log(`  [add-table] [${tablePath}]`);
     nextRaw = appendBlock(nextRaw, stringifyTable(tablePath, getNested(referenceConfig, tablePath.split('.'))));
   }
+  return nextRaw;
+}
+
+function main() {
+  const { configPath, dryRun } = parseCommandLineArgs(process.argv.slice(2));
+  const referencePath = path.join(__dirname, '..', '..', '.codex', 'config.toml');
+
+  const { targetConfig, referenceConfig, raw } = loadAndParseConfigs(configPath, referencePath);
+
+  const missingConfigs = findMissingConfigs(referenceConfig, targetConfig);
+  const { missingRootKeys, missingTables, missingTableKeys } = missingConfigs;
+
+  if (
+    Object.keys(missingRootKeys).length === 0 &&
+    missingTables.length === 0 &&
+    missingTableKeys.length === 0
+  ) {
+    log('All baseline Codex settings already present. Nothing to do.');
+    return;
+  }
+
+  const nextRaw = mergeBaselineSettings(raw, missingConfigs, referenceConfig);
 
   if (dryRun) {
     log('Dry run: would write the merged Codex baseline.');

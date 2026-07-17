@@ -279,6 +279,139 @@ function handleHelp() {
   console.log('  exit                           Quit the REPL');
 }
 
+function handleModelCommand(line, state) {
+  const model = line.replace('/model', '').trim();
+  if (!model) {
+    console.log(`Current model: ${state.model}`);
+  } else {
+    state.model = model;
+    console.log(`Model set to: ${state.model}`);
+  }
+}
+
+function handleLoadCommand(line, state) {
+  const skill = line.replace('/load', '').trim();
+  if (!skill) {
+    console.log('Usage: /load <skill-name>');
+    return;
+  }
+  if (!skillExists(skill)) {
+    console.log(`Skill not found: ${skill}`);
+    return;
+  }
+
+  if (!state.skills.includes(skill)) {
+    state.skills.push(skill);
+  }
+  state.egcContext = loadEGCContext(state.skills);
+  console.log(`Loaded skill: ${skill}`);
+}
+
+function handleBranchCommand(line, state) {
+  const target = line.replace('/branch', '').trim();
+  const result = branchSession(state.sessionPath, target);
+  if (!result.ok) {
+    console.log(result.message);
+    return;
+  }
+
+  state.sessionName = result.session;
+  state.sessionPath = result.path;
+  console.log(`Branched to session: ${state.sessionName}`);
+}
+
+function handleSearchCommand(line) {
+  const query = line.replace('/search', '').trim();
+  const matches = searchSessions(query);
+  if (matches.length === 0) {
+    console.log('(no matches)');
+    return;
+  }
+  console.log(`Found ${matches.length} match(es):`);
+  for (const match of matches) {
+    console.log(`- ${match.session}: ${match.snippet}`);
+  }
+}
+
+function handleExportCommand(line, state) {
+  const parts = line.split(/\s+/).filter(Boolean);
+  const format = parts[1];
+  const outputPath = parts[2];
+  if (!format) {
+    console.log('Usage: /export <md|json|txt> [path]');
+    return;
+  }
+  const result = exportSession(state.sessionPath, format, outputPath);
+  if (!result.ok) {
+    console.log(result.message);
+  } else {
+    console.log(`Exported: ${result.path}`);
+  }
+}
+
+function handleMetricsCommand(state) {
+  const m = getSessionMetrics(state.sessionPath);
+  console.log(`Session: ${state.sessionName}`);
+  console.log(`Model: ${state.model}`);
+  console.log(`Turns: ${m.turns} (user ${m.userTurns}, assistant ${m.assistantTurns})`);
+  console.log(`Chars: ${m.charCount}`);
+  console.log(`Estimated tokens: ${m.tokenEstimate}`);
+}
+
+function handleReplCommand(line, state, rl) {
+  if (line === 'exit') {
+    console.log('Goodbye.');
+    rl.close();
+    return 'exit';
+  }
+  if (line === '/help') {
+    handleHelp();
+    return 'prompt';
+  }
+  if (line === '/clear') {
+    handleClear(state.sessionPath);
+    return 'prompt';
+  }
+  if (line === '/history') {
+    handleHistory(state.sessionPath);
+    return 'prompt';
+  }
+  if (line === '/sessions') {
+    handleSessions();
+    return 'prompt';
+  }
+  if (line.startsWith('/model')) {
+    handleModelCommand(line, state);
+    return 'prompt';
+  }
+  if (line.startsWith('/load ')) {
+    handleLoadCommand(line, state);
+    return 'prompt';
+  }
+  if (line.startsWith('/branch ')) {
+    handleBranchCommand(line, state);
+    return 'prompt';
+  }
+  if (line.startsWith('/search ')) {
+    handleSearchCommand(line);
+    return 'prompt';
+  }
+  if (line === '/compact') {
+    const changed = compactSession(state.sessionPath);
+    console.log(changed ? 'Session compacted.' : 'No compaction needed.');
+    return 'prompt';
+  }
+  if (line.startsWith('/export ')) {
+    handleExportCommand(line, state);
+    return 'prompt';
+  }
+  if (line === '/metrics') {
+    handleMetricsCommand(state);
+    return 'prompt';
+  }
+  return 'send';
+}
+
 function main() {
   const initialSessionName = process.env.CLAW_SESSION || 'default';
   if (!isValidSessionName(initialSessionName)) {
@@ -293,9 +426,8 @@ function main() {
     sessionPath: getSessionPath(initialSessionName),
     model: DEFAULT_MODEL,
     skills: normalizeSkillList(process.env.CLAW_SKILLS || ''),
+    egcContext: loadEGCContext(normalizeSkillList(process.env.CLAW_SKILLS || '')),
   };
-
-  let egcContext = loadEGCContext(state.skills);
 
   const loadedCount = state.skills.filter(skillExists).length;
 
@@ -313,127 +445,13 @@ function main() {
       const line = input.trim();
       if (!line) return prompt();
 
-      if (line === 'exit') {
-        console.log('Goodbye.');
-        rl.close();
-        return;
-      }
+      const action = handleReplCommand(line, state, rl);
+      if (action === 'exit') return;
+      if (action === 'prompt') return prompt();
 
-      if (line === '/help') {
-        handleHelp();
-        return prompt();
-      }
-
-      if (line === '/clear') {
-        handleClear(state.sessionPath);
-        return prompt();
-      }
-
-      if (line === '/history') {
-        handleHistory(state.sessionPath);
-        return prompt();
-      }
-
-      if (line === '/sessions') {
-        handleSessions();
-        return prompt();
-      }
-
-      if (line.startsWith('/model')) {
-        const model = line.replace('/model', '').trim();
-        if (!model) {
-          console.log(`Current model: ${state.model}`);
-        } else {
-          state.model = model;
-          console.log(`Model set to: ${state.model}`);
-        }
-        return prompt();
-      }
-
-      if (line.startsWith('/load ')) {
-        const skill = line.replace('/load', '').trim();
-        if (!skill) {
-          console.log('Usage: /load <skill-name>');
-          return prompt();
-        }
-        if (!skillExists(skill)) {
-          console.log(`Skill not found: ${skill}`);
-          return prompt();
-        }
-
-        if (!state.skills.includes(skill)) {
-          state.skills.push(skill);
-        }
-        egcContext = loadEGCContext(state.skills);
-        console.log(`Loaded skill: ${skill}`);
-        return prompt();
-      }
-
-      if (line.startsWith('/branch ')) {
-        const target = line.replace('/branch', '').trim();
-        const result = branchSession(state.sessionPath, target);
-        if (!result.ok) {
-          console.log(result.message);
-          return prompt();
-        }
-
-        state.sessionName = result.session;
-        state.sessionPath = result.path;
-        console.log(`Branched to session: ${state.sessionName}`);
-        return prompt();
-      }
-
-      if (line.startsWith('/search ')) {
-        const query = line.replace('/search', '').trim();
-        const matches = searchSessions(query);
-        if (matches.length === 0) {
-          console.log('(no matches)');
-          return prompt();
-        }
-        console.log(`Found ${matches.length} match(es):`);
-        for (const match of matches) {
-          console.log(`- ${match.session}: ${match.snippet}`);
-        }
-        return prompt();
-      }
-
-      if (line === '/compact') {
-        const changed = compactSession(state.sessionPath);
-        console.log(changed ? 'Session compacted.' : 'No compaction needed.');
-        return prompt();
-      }
-
-      if (line.startsWith('/export ')) {
-        const parts = line.split(/\s+/).filter(Boolean);
-        const format = parts[1];
-        const outputPath = parts[2];
-        if (!format) {
-          console.log('Usage: /export <md|json|txt> [path]');
-          return prompt();
-        }
-        const result = exportSession(state.sessionPath, format, outputPath);
-        if (!result.ok) {
-          console.log(result.message);
-        } else {
-          console.log(`Exported: ${result.path}`);
-        }
-        return prompt();
-      }
-
-      if (line === '/metrics') {
-        const m = getSessionMetrics(state.sessionPath);
-        console.log(`Session: ${state.sessionName}`);
-        console.log(`Model: ${state.model}`);
-        console.log(`Turns: ${m.turns} (user ${m.userTurns}, assistant ${m.assistantTurns})`);
-        console.log(`Chars: ${m.charCount}`);
-        console.log(`Estimated tokens: ${m.tokenEstimate}`);
-        return prompt();
-      }
-
-      // Regular message
       const history = loadHistory(state.sessionPath);
       appendTurn(state.sessionPath, 'User', line);
-      const response = askGemini(egcContext, history, line, state.model);
+      const response = askGemini(state.egcContext, history, line, state.model);
       console.log(`\n${response}\n`);
       appendTurn(state.sessionPath, 'Assistant', response);
       prompt();
