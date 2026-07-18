@@ -12,6 +12,7 @@ const { run: runGitPushReminder } = require('./pre-bash-git-push-reminder');
 const { run: runCommitQuality } = require('./pre-bash-commit-quality');
 const { run: runVerificationGate } = require('./pre-bash-verification-gate');
 const { run: runGateGuard } = require('./gateguard-fact-force');
+const { run: runCrusherRewrite } = require('./pre-bash-crusher-rewrite');
 const { run: runBudgetCheck } = require('./pre-budget-check');
 const { run: runCommandLog } = require('./post-bash-command-log');
 const { run: runPrCreated } = require('./post-bash-pr-created');
@@ -58,6 +59,11 @@ const PRE_BASH_HOOKS = [
     id: 'pre:bash:gateguard-fact-force',
     profiles: 'standard,strict',
     run: rawInput => runGateGuard(rawInput),
+  },
+  {
+    id: 'pre:bash:crusher-rewrite',
+    profiles: 'standard,strict',
+    run: rawInput => runCrusherRewrite(rawInput),
   },
   {
     id: 'pre:bash:budget-check',
