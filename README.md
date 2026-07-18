@@ -20,7 +20,7 @@
 
 ---
 
-EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own, no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Warp, VS Code with GitHub Copilot, and more (19 tools total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
+EGC is a local runtime that gives every AI coding tool you use a persistent memory. At the end of each session, your AI saves what it learned: decisions made, what failed, your preferences, what to pick up next. At the start of the next session, it loads that state back on its own, no prompting required. Say "let's continue" or "where did we stop?" in any language and your AI already knows what to do. One install covers Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Warp, JetBrains Junie, VS Code with GitHub Copilot, and more (20 tools total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
 ---
 
