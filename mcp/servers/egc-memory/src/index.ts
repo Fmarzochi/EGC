@@ -254,6 +254,21 @@ async function acquireMigrationLock(lockFile: string): Promise<void> {
   if (!locked) throw new Error('Timeout acquiring migration lock');
 }
 
+// Cross-process mutex for state-file merges: update_state does a
+// read-merge-write on the encrypted file, so two server processes writing
+// concurrently would silently drop the loser's merge without this.
+async function withStateMergeLock<T>(stateFile: string, fn: () => Promise<T>): Promise<T> {
+  const lockFile = `${stateFile}.merge.lock`;
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  clearStaleMigrationLock(lockFile);
+  await acquireMigrationLock(lockFile);
+  try {
+    return await fn();
+  } finally {
+    try { fs.unlinkSync(lockFile); } catch (_) { /* NOSONAR: already cleared by a stale sweep */ }
+  }
+}
+
 async function runMigrations(db: Database, dbDir: string) {
   const lockFile = path.join(dbDir, 'migration.lock');
 
@@ -1178,47 +1193,54 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
 
   if (args.scope === 'global') {
     const globalFile = getGlobalStateFile();
-    let existingGlobal: Record<string, string[]|string> = {};
-    try {
-      existingGlobal = readStateDoc(globalFile);
-    } catch (err) {
-      if (args.force && fs.existsSync(globalFile)) {
-        const backupPath = quarantineUndecryptableStateFile(globalFile);
-        log('WARN', 'update_state: force=true, undecryptable global state backed up and replaced', { file: globalFile, backup: backupPath, error: String(err) });
-      } else {
-        log('ERROR', '[EGC encryption] Cannot read existing global state, aborting update to prevent data loss', { file: globalFile, error: String(err) });
-        throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing global state file. The encryption key may have changed. Path: ${globalFile}. Retry with force: true to back up the unreadable file and start fresh.`);
+    return withStateMergeLock(globalFile, async () => {
+      let existingGlobal: Record<string, string[]|string> = {};
+      try {
+        existingGlobal = readStateDoc(globalFile);
+      } catch (err) {
+        if (args.force && fs.existsSync(globalFile)) {
+          const backupPath = quarantineUndecryptableStateFile(globalFile);
+          log('WARN', 'update_state: force=true, undecryptable global state backed up and replaced', { file: globalFile, backup: backupPath, error: String(err) });
+        } else {
+          log('ERROR', '[EGC encryption] Cannot read existing global state, aborting update to prevent data loss', { file: globalFile, error: String(err) });
+          throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing global state file. The encryption key may have changed. Path: ${globalFile}. Retry with force: true to back up the unreadable file and start fresh.`);
+        }
       }
-    }
-    writeStateDoc(globalFile, 'global', args, existingGlobal, null);
-    const writtenGlobal = readStateFile(globalFile, _encKey);
-    writeHmac(globalFile, writtenGlobal, _integrityKey);
-    log('INFO', 'Global state updated', { decisions: args.decisions?.length || 0 });
-    return { content: [{ type: "text", text: `Global memory updated (shared across all projects).\nFile: ${globalFile}\nDecisions saved: ${args.decisions?.length || 0}` }] };
+      writeStateDoc(globalFile, 'global', args, existingGlobal, null);
+      const writtenGlobal = readStateFile(globalFile, _encKey);
+      writeHmac(globalFile, writtenGlobal, _integrityKey);
+      log('INFO', 'Global state updated', { decisions: args.decisions?.length || 0 });
+      return { content: [{ type: "text", text: `Global memory updated (shared across all projects).\nFile: ${globalFile}\nDecisions saved: ${args.decisions?.length || 0}` }] };
+    });
   }
 
-  // Merge from the same file get_state would read, so the first
-  // branch-scoped write inherits the pre-existing flat state
-  const resolved = resolveStateRead(getStateDir(), projPath, branch);
-  let existing: Record<string, string[]|string>;
-  try {
-    existing = readStateDoc(resolved.filePath);
-  } catch (err) {
-    if (args.force && fs.existsSync(resolved.filePath)) {
-      const backupPath = quarantineUndecryptableStateFile(resolved.filePath);
-      log('WARN', 'update_state: force=true, undecryptable state file backed up and replaced', { file: resolved.filePath, backup: backupPath, error: String(err) });
-      existing = {};
-    } else {
-      log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
-      throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}. Retry with force: true to back up the unreadable file and start fresh — only do this after confirming the failure is persistent, not a transient lock from another process.`);
-    }
-  }
   const filePath = resolveStateWrite(getStateDir(), projPath, branch);
 
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  writeStateDoc(filePath, projPath, args, existing, branch);
-  const writtenContent = readStateFile(filePath, _encKey);
-  writeHmac(filePath, writtenContent, _integrityKey);
+  // Merge from the same file get_state would read, so the first
+  // branch-scoped write inherits the pre-existing flat state. The read
+  // happens inside the merge lock: reading before acquiring it would
+  // reintroduce the lost-update race between concurrent sessions.
+  await withStateMergeLock(filePath, async () => {
+    const resolved = resolveStateRead(getStateDir(), projPath, branch);
+    let existing: Record<string, string[]|string>;
+    try {
+      existing = readStateDoc(resolved.filePath);
+    } catch (err) {
+      if (args.force && fs.existsSync(resolved.filePath)) {
+        const backupPath = quarantineUndecryptableStateFile(resolved.filePath);
+        log('WARN', 'update_state: force=true, undecryptable state file backed up and replaced', { file: resolved.filePath, backup: backupPath, error: String(err) });
+        existing = {};
+      } else {
+        log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
+        throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}. Retry with force: true to back up the unreadable file and start fresh — only do this after confirming the failure is persistent, not a transient lock from another process.`);
+      }
+    }
+
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    writeStateDoc(filePath, projPath, args, existing, branch);
+    const writtenContent = readStateFile(filePath, _encKey);
+    writeHmac(filePath, writtenContent, _integrityKey);
+  });
   const propagated = propagateStateToTools({
     projectPath: projPath,
     context: args.context,
@@ -1235,16 +1257,17 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}${toolsLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
 }
 
-async function resolveBusSessionId(db: Database, provided?: string): Promise<string> {
-  if (provided) return provided;
-  const current = await getMaintenanceState(db, 'current_session_id');
-  return current || `bus-${process.pid}`;
+// Stable per process. Reading the shared current_session_id here would let
+// another session's id leak in between claim and release (breaking the
+// claim/release symmetry) or make parallel sessions collide on one identity.
+function resolveBusSessionId(provided?: string): string {
+  return provided || `bus-${process.pid}`;
 }
 
 async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
   const args = SessionAnnounceSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(args.project_path);
-  const sessionId = await resolveBusSessionId(db, args.session_id);
+  const sessionId = resolveBusSessionId(args.session_id);
   await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
     await busAnnounce(db, { sessionId, projectPath: projPath, territory: args.territory });
@@ -1259,7 +1282,7 @@ async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
 
 async function handleClaimPath(db: Database, toolArgs: unknown) {
   const args = ClaimPathSchema.parse(toolArgs || {});
-  const sessionId = await resolveBusSessionId(db, args.session_id);
+  const sessionId = resolveBusSessionId(args.session_id);
   const result = await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
     return busClaimPath(db, { sessionId, path: args.path, ttlSeconds: args.ttl_seconds });
@@ -1272,7 +1295,7 @@ async function handleClaimPath(db: Database, toolArgs: unknown) {
 
 async function handleReleasePath(db: Database, toolArgs: unknown) {
   const args = ReleasePathSchema.parse(toolArgs || {});
-  const sessionId = await resolveBusSessionId(db, args.session_id);
+  const sessionId = resolveBusSessionId(args.session_id);
   const released = await writeArbitrator.enqueue(async () => busReleasePath(db, { sessionId, path: args.path }));
   return { content: [{ type: "text", text: released ? `Lock released: ${args.path}` : `No lock held by ${sessionId} on ${args.path}; nothing released.` }] };
 }

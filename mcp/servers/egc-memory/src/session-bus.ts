@@ -73,30 +73,52 @@ export interface ClaimResult {
 }
 
 // Fail-fast claim: a conflicting live lock is reported, never queued.
+// Every acquisition path is a conditional write (INSERT OR IGNORE or a
+// session-guarded UPDATE/DELETE), so two concurrent claimers can never both
+// win: whoever lands the row first owns it and the loser sees changes === 0.
 export async function claimPath(
   db: BusDb,
   input: { sessionId: string; path: string; ttlSeconds?: number },
   nowMs: number = Date.now()
 ): Promise<ClaimResult> {
   const ttl = Math.min(Math.max(input.ttlSeconds || DEFAULT_LOCK_TTL_SECONDS, 1), MAX_LOCK_TTL_SECONDS);
-  const existing = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', input.path);
-  if (existing && existing.session_id !== input.sessionId) {
-    const holder = await db.get('SELECT id, territory FROM bus_sessions WHERE id = ?', existing.session_id);
-    if (holder) {
-      return { ok: false, holder: String(holder.id), holderTerritory: holder.territory ? String(holder.territory) : undefined };
-    }
-    await db.run('DELETE FROM bus_locks WHERE path = ?', input.path);
-  }
-  await db.run(
-    `INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(path) DO UPDATE SET
-       session_id = excluded.session_id,
-       acquired_at = excluded.acquired_at,
-       ttl_seconds = excluded.ttl_seconds`,
-    input.path, input.sessionId, new Date(nowMs).toISOString(), ttl
+  const now = new Date(nowMs).toISOString();
+
+  const changed = (result: unknown): boolean =>
+    typeof (result as { changes?: number })?.changes === 'number'
+    && (result as { changes: number }).changes > 0;
+
+  const refresh = await db.run(
+    'UPDATE bus_locks SET acquired_at = ?, ttl_seconds = ? WHERE path = ? AND session_id = ?',
+    now, ttl, input.path, input.sessionId
   );
-  return { ok: true };
+  if (changed(refresh)) return { ok: true };
+
+  const tryInsert = () => db.run(
+    'INSERT OR IGNORE INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, ?)',
+    input.path, input.sessionId, now, ttl
+  );
+  if (changed(await tryInsert())) return { ok: true };
+
+  const existing = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', input.path);
+  if (!existing) {
+    return changed(await tryInsert())
+      ? { ok: true }
+      : { ok: false };
+  }
+
+  const holder = await db.get('SELECT id, territory FROM bus_sessions WHERE id = ?', existing.session_id);
+  if (!holder) {
+    await db.run(
+      'DELETE FROM bus_locks WHERE path = ? AND session_id = ?',
+      input.path, existing.session_id
+    );
+    if (changed(await tryInsert())) return { ok: true };
+    const winner = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', input.path);
+    return { ok: false, holder: winner ? String(winner.session_id) : undefined };
+  }
+
+  return { ok: false, holder: String(holder.id), holderTerritory: holder.territory ? String(holder.territory) : undefined };
 }
 
 export async function releasePath(db: BusDb, input: { sessionId: string; path: string }): Promise<boolean> {
