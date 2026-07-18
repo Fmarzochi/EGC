@@ -13,6 +13,15 @@ import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
 import { buildGlobalAppendix, globalStateFilePath } from './global-state';
+import {
+  announce as busAnnounce,
+  claimPath as busClaimPath,
+  createSessionBusTables,
+  listLocks as busListLocks,
+  listPeers as busListPeers,
+  releasePath as busReleasePath,
+  sweepDead as busSweepDead,
+} from './session-bus';
 import { loadOrCreateKey, writeHmac, verifyHmac } from './integrity';
 import { loadOrCreateEncKey, readStateFile, writeStateFile, quarantineUndecryptableStateFile } from './encryption';
 import { propagateStateToTools } from './propagate';
@@ -361,6 +370,13 @@ async function runMigrations(db: Database, dbDir: string) {
       await db.run('INSERT INTO schema_migrations (version) VALUES (9)');
     }
 
+    // Migration 10: session bus tables for presence and cooperative path locks.
+    const hasV10 = await db.get('SELECT version FROM schema_migrations WHERE version = 10');
+    if (!hasV10) {
+      await createSessionBusTables(db);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (10)');
+    }
+
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
     const bootCount = bootRow ? Number.parseInt(bootRow.value, 10) + 1 : 1;
     await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['server_boot_count', String(bootCount)]);
@@ -684,6 +700,27 @@ const UpdateStateSchema = z.object({
   scope: z.enum(['project', 'global']).optional().default('project')
 });
 
+const SessionAnnounceSchema = z.object({
+  session_id: z.string().min(1).max(200).optional(),
+  project_path: z.string().optional(),
+  territory: z.string().max(500).optional()
+});
+
+const ClaimPathSchema = z.object({
+  session_id: z.string().min(1).max(200).optional(),
+  path: z.string().min(1).max(1000),
+  ttl_seconds: z.number().int().min(1).max(3600).optional()
+});
+
+const ReleasePathSchema = z.object({
+  session_id: z.string().min(1).max(200).optional(),
+  path: z.string().min(1).max(1000)
+});
+
+const SessionPeersSchema = z.object({
+  project_path: z.string().optional()
+});
+
 const WorkingMemorySetSchema = z.object({
   project_path: z.string().optional(),
   key: z.string().min(1).max(200),
@@ -752,6 +789,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             next: { type: "array", items: { type: "string" }, description: "What to pick up in the next session." },
             force: { type: "boolean", description: "Recover from a state file that cannot be decrypted (corrupted or encrypted with an orphaned key). When true and the existing file fails to decrypt, the corrupted file is renamed to a '.corrupted-backup-<timestamp>' sibling instead of being read, and this call's data becomes the fresh state — nothing is merged in from the unreadable file, and nothing is deleted. Only set this after confirming the failure is persistent, not a transient lock from another process writing at the same moment." },
             scope: { type: "string", enum: ["project", "global"], description: "Where to write. 'project' (default) scopes to the current project/branch. 'global' writes to the user-wide memory shared across all projects (~/.egc/global/state.md); use it only for transversal preferences and lessons the user wants everywhere, never for project-specific state." }
+          }
+        }
+      },
+      {
+        name: "session_announce",
+        description: "Announce this session on the session bus: registers presence with an optional territory (folder or theme this session will work on) and doubles as heartbeat. Call at session start and periodically during long work. Sessions without a heartbeat for 10 minutes are swept and their locks released. Returns the list of live peer sessions for the project so parallel sessions can split territory instead of colliding.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_id: { type: "string", description: "Stable identifier for this session. Defaults to the id opened by get_state, falling back to a process-scoped id." },
+            project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." },
+            territory: { type: "string", description: "Folder or theme this session is claiming informally, e.g. 'scripts/lib' or 'docs sweep'." }
+          }
+        }
+      },
+      {
+        name: "claim_path",
+        description: "Cooperatively lock a path on the session bus before editing it. Fail-fast: if another live session holds the lock the claim is refused and the holder is returned; coordinate or pick another territory instead of retrying in a loop. Locks expire after ttl_seconds (default 900, max 3600) and die with their session.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_id: { type: "string", description: "Session id acquiring the lock. Defaults to the current session." },
+            path: { type: "string", description: "Repo-relative or absolute path (file or folder) to lock." },
+            ttl_seconds: { type: "number", description: "Lock lifetime in seconds (1-3600, default 900)." }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "release_path",
+        description: "Release a path lock held by this session on the session bus. Only the holder can release; returns whether a lock was actually removed.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_id: { type: "string", description: "Session id releasing the lock. Defaults to the current session." },
+            path: { type: "string", description: "The locked path to release." }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "session_peers",
+        description: "List live sessions and active path locks on the session bus. Use before starting parallel work to see who is active and which territories are taken.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            project_path: { type: "string", description: "Filter sessions to one project. Omit for all projects." }
           }
         }
       },
@@ -1151,6 +1235,59 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   return { content: [{ type: "text", text: `Project memory updated.\n${branchLine}${toolsLine}File: ${filePath}\nDecisions saved: ${args.decisions?.length || 0}\nNext session items: ${args.next?.length || 0}` }] };
 }
 
+async function resolveBusSessionId(db: Database, provided?: string): Promise<string> {
+  if (provided) return provided;
+  const current = await getMaintenanceState(db, 'current_session_id');
+  return current || `bus-${process.pid}`;
+}
+
+async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
+  const args = SessionAnnounceSchema.parse(toolArgs || {});
+  const projPath = resolveProjectPath(args.project_path);
+  const sessionId = await resolveBusSessionId(db, args.session_id);
+  await writeArbitrator.enqueue(async () => {
+    await busSweepDead(db);
+    await busAnnounce(db, { sessionId, projectPath: projPath, territory: args.territory });
+  });
+  const peers = await busListPeers(db, projPath);
+  const peerLines = peers
+    .filter(p => p.id !== sessionId)
+    .map(p => `- ${p.id}${p.territory ? ` (territory: ${p.territory})` : ''}`);
+  log('INFO', 'Session announced on bus', { session: sessionId, project: projPath, peers: peerLines.length });
+  return { content: [{ type: "text", text: `Session ${sessionId} announced.\nLive peers in this project: ${peerLines.length === 0 ? 'none' : '\n' + peerLines.join('\n')}` }] };
+}
+
+async function handleClaimPath(db: Database, toolArgs: unknown) {
+  const args = ClaimPathSchema.parse(toolArgs || {});
+  const sessionId = await resolveBusSessionId(db, args.session_id);
+  const result = await writeArbitrator.enqueue(async () => {
+    await busSweepDead(db);
+    return busClaimPath(db, { sessionId, path: args.path, ttlSeconds: args.ttl_seconds });
+  });
+  if (!result.ok) {
+    return { content: [{ type: "text", text: `Claim REFUSED: ${args.path} is locked by live session ${result.holder}${result.holderTerritory ? ` (territory: ${result.holderTerritory})` : ''}.\nCoordinate with that session or work elsewhere; do not retry in a loop.` }] };
+  }
+  return { content: [{ type: "text", text: `Path claimed by ${sessionId}: ${args.path}` }] };
+}
+
+async function handleReleasePath(db: Database, toolArgs: unknown) {
+  const args = ReleasePathSchema.parse(toolArgs || {});
+  const sessionId = await resolveBusSessionId(db, args.session_id);
+  const released = await writeArbitrator.enqueue(async () => busReleasePath(db, { sessionId, path: args.path }));
+  return { content: [{ type: "text", text: released ? `Lock released: ${args.path}` : `No lock held by ${sessionId} on ${args.path}; nothing released.` }] };
+}
+
+async function handleSessionPeers(db: Database, toolArgs: unknown) {
+  const args = SessionPeersSchema.parse(toolArgs || {});
+  await writeArbitrator.enqueue(async () => busSweepDead(db));
+  const projPath = args.project_path ? resolveProjectPath(args.project_path) : undefined;
+  const peers = await busListPeers(db, projPath);
+  const locks = await busListLocks(db);
+  const peerLines = peers.map(p => `- ${p.id}${p.project_path ? ` [${p.project_path}]` : ''}${p.territory ? ` (territory: ${p.territory})` : ''} since ${p.started_at}`);
+  const lockLines = locks.map(l => `- ${l.path} held by ${l.session_id} (ttl ${l.ttl_seconds}s)`);
+  return { content: [{ type: "text", text: `Live sessions: ${peers.length}\n${peerLines.join('\n') || '(none)'}\n\nActive locks: ${locks.length}\n${lockLines.join('\n') || '(none)'}` }] };
+}
+
 async function handleDetectPatterns(db: Database, toolArgs: unknown) {
   const { window_days, min_occurrences } = DetectPatternsSchema.parse(toolArgs || {});
   const cutoff = new Date(Date.now() - window_days * 24 * 60 * 60 * 1000).toISOString();
@@ -1365,6 +1502,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_state": return await handleGetState(db, request.params.arguments);
 
       case "update_state": return await handleUpdateState(db, request.params.arguments);
+      case "session_announce": return await handleSessionAnnounce(db, request.params.arguments);
+      case "claim_path": return await handleClaimPath(db, request.params.arguments);
+      case "release_path": return await handleReleasePath(db, request.params.arguments);
+      case "session_peers": return await handleSessionPeers(db, request.params.arguments);
 
       case "working_memory_set": {
         const args = WorkingMemorySetSchema.parse(request.params.arguments || {});
