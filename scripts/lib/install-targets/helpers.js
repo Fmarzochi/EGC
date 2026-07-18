@@ -111,6 +111,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   codebuddy:    { name: 'CodeBuddy',          url: 'https://copilot.tencent.com' },
   kiro:         { name: 'Kiro',               url: 'https://kiro.dev' },
   trae:         { name: 'Trae',               url: 'https://www.trae.ai' },
+ junie:         { name: 'Junie', url: 'https://www.jetbrains.com/junie/' },
   goose:        { name: 'Goose',              url: 'https://block.github.io/goose/' },
   amazonq:      { name: 'Amazon Q Developer CLI', url: 'https://aws.amazon.com/q/developer/' },
   openhands:    { name: 'OpenHands',          url: 'https://docs.openhands.dev' },
