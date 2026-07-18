@@ -186,6 +186,30 @@ With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`
 
 ---
 
+## Global memory and parallel sessions
+
+Since v1.1.12 memory has two scopes. Project scope works exactly as before (one state per project branch). The new user-wide global scope is shared across every project: save transversal preferences and lessons once with `update_state` and `scope: "global"`, and every `get_state` in every project appends a deduplicated `Global Memory` section after the project state. Project and branch entries always take precedence, and global memory is only ever written by an explicit global call, never derived from project data.
+
+Parallel sessions coordinate through the session bus. A session announces itself with `session_announce` (presence plus an optional territory, doubling as heartbeat), inspects who else is active with `session_peers`, and takes cooperative locks with `claim_path` before editing shared files. Claims are fail-fast: a conflicting live lock is refused with the holder's identity instead of queued. Sessions silent for 10 minutes are swept and their locks released, so a crashed session never blocks the others.
+
+Populated memory never reaches a commit. The propagation files (AGENTS.md, GEMINI.md, editor rules) ship as empty structure; local sessions repopulate them, a pre-commit hook blocks accidental staging, and a CI guard catches anything that slips past local hooks.
+
+---
+
+## Token Crusher
+
+The Token Crusher compresses noisy shell output before it reaches the model: long `git log` and `git diff` output, test-runner noise, package-manager installs, and large `gh --json` payloads shrink by up to 90%, while errors, warnings and failures always survive. It ships with the package, announces itself once at the end of `egc init`, and stays silent afterwards.
+
+```bash
+egc run git log        # any command, crushed output
+egc run --raw git log  # escape hatch: full output
+egc saved              # accumulated savings report, computed locally at zero token cost
+```
+
+On hook-capable harnesses the bash dispatcher routes eligible simple commands through `egc run` automatically. The rewrite is strictly fail-open: pipelines, chaining, redirection, already-wrapped commands, or a missing `egc` CLI all pass through untouched. Opt out anytime with `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`.
+
+---
+
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues including permission errors, Node.js version mismatches, and manual MCP registration steps.

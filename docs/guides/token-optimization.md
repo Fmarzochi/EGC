@@ -61,6 +61,18 @@ Switch models mid-session:
 
 ---
 
+## Token Crusher (built into EGC)
+
+Since v1.1.12 the biggest lever ships with the package: the Token Crusher compresses noisy shell output before it reaches the model. Long `git log`/`git diff`, test-runner noise, package-manager installs and large `gh --json` payloads shrink by up to 90%, with errors, warnings and failures always preserved.
+
+| Command | What it does |
+|---------|--------------|
+| `egc run <cmd>` | Runs the command and crushes the output before the model reads it |
+| `egc run --raw <cmd>` | Escape hatch: full output when you need every line |
+| `egc saved` | Accumulated savings report, computed locally at zero token cost |
+
+On hook-capable harnesses eligible simple commands are routed through `egc run` automatically by the bash dispatcher; opt out with `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`.
+
 ## Context Management
 
 ### Commands

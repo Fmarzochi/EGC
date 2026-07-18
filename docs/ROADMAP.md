@@ -50,6 +50,18 @@ What shipped in the 1.1.x patch series:
 - Community translations: Arabic, Hindi, Korean, Russian, Japanese, Spanish, Portuguese -- 8 languages total
 - 14 supported AI coding tools
 
+## v1.1.12: Omnipresent Context (Released 2026-07-18)
+
+Memory everywhere, tokens crushed, sessions coordinated:
+
+- User-wide global memory: `update_state` with `scope: "global"` shares preferences and lessons across every project; `get_state` and the session-start hooks append a deduplicated Global Memory section with strict project-over-global precedence (#855)
+- Session Bus MVP: `session_announce`, `session_peers`, `claim_path`, `release_path` -- parallel sessions split territory with fail-fast cooperative locks, dead sessions swept after 10 minutes (#858)
+- Commit privacy enforced in three layers: `check-state-leak.js`, tracked pre-commit hook, and a CI tree guard; the public baseline of the propagation files now ships zeroed (#856)
+- Token Crusher: native shell-output compression engine with `egc run` and the zero-cost `egc saved` report (#857), silent tier A rewrite in the bash dispatcher (#860), status line at `egc init` (#859)
+- Multi-session SQLite write arbitration hardened with equal jitter and deeper retries (#853)
+- Zero-friction DCO finally works: the prepare-commit-msg hook shipped without its executable bit since #719 (#854)
+- 20 supported AI coding tools
+
 ## v1.2.0: Teams
 
 Multi-developer workflows and shared context:

@@ -49,6 +49,12 @@ update_state({
 
 `update_state` merges with existing state: it does not erase previous memory. Only include fields that changed this session. Leave out fields with nothing new.
 
+Pass `scope: "global"` to write to the user-wide memory shared across all projects; use it only for transversal preferences and lessons, never for project-specific state. `get_state` appends that global memory automatically, with project and branch entries taking precedence.
+
+## Parallel sessions
+
+When more than one session works on this project at the same time, coordinate through the session bus: call `session_announce` at start (registers presence and territory, doubles as heartbeat), check `session_peers` before picking work, and `claim_path` before editing shared files. A refused claim means another live session holds that path: coordinate or work elsewhere, never retry in a loop.
+
 ## Where state is stored
 
 `~/.egc/state/<project-slug>/<branch>.md`: one file per project branch (flat `<project-slug>.md` files from older versions are still read). Files are encrypted at rest with AES-256-GCM (key at `~/.egc/encryption.key`); the memory server and session hooks decrypt them transparently.
@@ -58,7 +64,7 @@ update_state({
 Both servers must be registered in your MCP config (`.mcp.json`):
 
 - `egc-guardian`: `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task`
-- `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`
+- `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`, `session_announce`, `session_peers`, `claim_path`, `release_path`
 
 Run `sh install.sh` to build the servers. Run `egc doctor` to verify they are registered and running.
 
