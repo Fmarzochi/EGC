@@ -1,7 +1,7 @@
 {
   "$schema": "https://glama.ai/mcp/servers/schema.json",
   "name": "EGC",
-  "description": "Local MCP runtime that gives persistent cross-session memory to 13 AI coding tools (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, Kiro, VS Code Copilot, and more). SQLite-backed state survives context resets. Bidirectional sync keeps all tool config files in sync. Install: npm install -g @egchq/egc",
+  "description": "Local MCP runtime that gives persistent cross-session memory to 20 AI coding tools (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, Kiro, VS Code Copilot, JetBrains Junie, and more). SQLite-backed state survives context resets, a user-wide global scope shares context across every project, and a session bus lets parallel sessions split territory with cooperative path locks. Bidirectional sync keeps all tool config files in sync. Install: npm install -g @egchq/egc",
   "license": "MIT",
   "homepage": "https://github.com/Fmarzochi/EGC",
   "repository": "https://github.com/Fmarzochi/EGC",
@@ -11,11 +11,27 @@
   "tools": [
     {
       "name": "get_state",
-      "description": "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch. Call this at the START of every session to restore context."
+      "description": "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch, with a deduplicated user-wide Global Memory section appended when it exists. Call this at the START of every session to restore context."
     },
     {
       "name": "update_state",
-      "description": "Updates the project memory with decisions made this session. Writes to the state file of the current git branch. Call this at the END of every session. Merges with existing state: does not erase previous memory."
+      "description": "Updates the project memory with decisions made this session. Writes to the state file of the current git branch, or to the user-wide global memory with scope 'global'. Call this at the END of every session. Merges with existing state: does not erase previous memory."
+    },
+    {
+      "name": "session_announce",
+      "description": "Announce this session on the session bus: registers presence with an optional territory and doubles as heartbeat. Returns live peer sessions so parallel sessions split territory instead of colliding."
+    },
+    {
+      "name": "claim_path",
+      "description": "Cooperatively lock a path before editing it. Fail-fast: a conflicting live lock is refused with holder info instead of queued. Locks are TTL-bounded and die with their session."
+    },
+    {
+      "name": "release_path",
+      "description": "Release a path lock held by this session. Only the holder can release."
+    },
+    {
+      "name": "session_peers",
+      "description": "List live sessions and active path locks on the session bus. Use before starting parallel work."
     },
     {
       "name": "get_project_state",
@@ -81,7 +97,10 @@
     "cross-session",
     "bidirectional-sync",
     "sqlite",
-    "session-memory"
+    "session-memory",
+    "global-memory",
+    "session-bus",
+    "multi-session"
   ],
   "authors": [
     {
