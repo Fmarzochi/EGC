@@ -114,6 +114,15 @@ function main() {
     return;
   }
 
+  // Git clean-filter mode: stdin in, zeroed content out. Wired by
+  // memory-filters.js as filter.egc-memory.clean so populated memory is
+  // stripped from the staged blob even when local hooks are bypassed.
+  if (mode === '--filter-clean') {
+    const stdin = fs.readFileSync(0, 'utf8');
+    process.stdout.write(cleanContent(stdin));
+    return;
+  }
+
   const leaks = mode === '--staged' ? checkStaged() : checkTree();
   if (leaks.length === 0) {
     console.log('state-leak check: clean');

@@ -146,6 +146,29 @@ function registerMcpServers() {
   );
 }
 
+function configureCommitPrivacyFilter() {
+  let configureMemoryFilters;
+  try {
+    ({ configureMemoryFilters } = require('./lib/memory-filters'));
+  } catch {
+    skip('commit-privacy filter', 'memory-filters lib not available');
+    return;
+  }
+
+  const scriptPath = path.join(ROOT_DIR, 'scripts', 'check-state-leak.js');
+  logAction('configuring commit-privacy filter (planned changes below)...');
+  const plan = configureMemoryFilters({ projectDir: process.cwd(), scriptPath, dryRun: true });
+  if (!plan.configured) {
+    skip('commit-privacy filter', plan.reason);
+    return;
+  }
+  for (const action of plan.actions) logAction(action);
+  if (flags.dryRun) return;
+
+  const result = configureMemoryFilters({ projectDir: process.cwd(), scriptPath, dryRun: false });
+  ok('commit-privacy filter', `populated memory is stripped from staged blobs (${result.actions.length} change(s), local repo only)`);
+}
+
 function runStateDbBootstrap() {
   const bootstrapScript = path.join(ROOT_DIR, 'scripts', 'bootstrap-state-db.js');
   if (!fs.existsSync(bootstrapScript)) return;
@@ -231,6 +254,7 @@ checkMcpBuilds();
 runBootstrap();
 registerMcpServers();
 runStateDbBootstrap();
+configureCommitPrivacyFilter();
 runDoctor();
 
 console.log('');
