@@ -121,6 +121,14 @@ const COMMANDS = {
     script: 'plugin.js',
     description: 'Plugin registry: install, list, remove, update EGC plugins from npm or local path.',
   },
+  run: {
+    script: 'crush-run.js',
+    description: 'Run a command through the Token Crusher (compresses noisy output; --raw skips it)',
+  },
+  saved: {
+    script: 'saved.js',
+    description: 'Show accumulated Token Crusher savings (local ledger, zero token cost)',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -148,6 +156,8 @@ const PRIMARY_COMMANDS = [
   'team',
   'budget',
   'plugin',
+  'run',
+  'saved',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);
@@ -201,6 +211,9 @@ Examples:
   egc watch --project /path/to/project --quiet
   egc telemetry status
   egc telemetry off
+  egc run git diff
+  egc run --raw git diff
+  egc saved
 `);
 
   process.exit(exitCode);
