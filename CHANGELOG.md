@@ -2,6 +2,39 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.13] - 2026-07-18
+
+### New Features
+
+- **Commit privacy completed with a git clean filter**: `egc init` now configures `filter.egc-memory.clean` in the local repo config and binds the four memory propagation files (AGENTS.md, GEMINI.md, `.cursor/rules/egc-context.mdc`, `.trae/rules/egc-context.md`) in `.git/info/attributes`. `git add` stages a zeroed blob even when local hooks are bypassed with `--no-verify`, while the working tree keeps the populated memory. Everything stays local to `.git`, nothing tracked is modified, the installer prints the action plan before applying it, and `--dry-run` is honored. Outside a git repository the step is skipped with a reason. (#863)
+
+## [1.1.12] - 2026-07-18
+
+### New Features
+
+- **User-wide global memory**: `update_state` accepts `scope: "global"` to share transversal preferences and lessons across every project; `get_state` and the session-start hooks append a deduplicated `Global Memory` section with strict project-over-global precedence. (#855)
+- **Token Crusher**: native shell-output compression built into the package. `egc run <cmd>` crushes long `git log`/`git diff` output, test-runner noise, package-manager installs and large `gh --json` payloads by up to 90% while always preserving errors and warnings; `egc saved` reports accumulated savings locally at zero token cost; on hook-capable harnesses the bash dispatcher silently routes eligible simple commands through `egc run`, strictly fail-open, opt-out via `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`. Announced once at the end of `egc init`. (#857, #859, #860)
+- **Session Bus MVP**: `session_announce`, `session_peers`, `claim_path` and `release_path` let parallel sessions register presence, split territory and take fail-fast cooperative path locks; sessions silent for 10 minutes are swept and their locks released. (#858)
+
+### Security
+
+- **Commit privacy enforced in layers**: `check-state-leak.js` blocks populated memory in staged blobs (pre-commit hook) and in the tracked tree (CI guard); the public baseline of the propagation files now ships zeroed. (#856)
+
+### Bug Fixes
+
+- **Multi-session SQLite write arbitration hardened**: equal jitter (via `crypto.randomInt`) and deeper retries eliminate lock-step collisions between concurrent sessions. (#853)
+- **Zero-friction DCO finally works**: the `prepare-commit-msg` hook had shipped without its executable bit since #719; restored with mode 100755. (#854)
+
+## [1.1.11] - 2026-07-16
+
+### Bug Fixes
+
+- **Dashboard telemetry and cost showing zero in nearly every session**: traced to four root causes: missing PreToolUse/PostToolUse hook wiring for `claude.running`, the Stop hook not forwarding the model field, Claude Code omitting token usage from the Stop payload (now read from the session transcript instead), and the `/stats` regexes never matching the real state-file format (now queried directly from SQLite).
+
+### Maintenance
+
+- **Cyclomatic complexity reduced** in `resolveInstallPlan` and `analyzeRecord`, the two largest functions flagged by the EGC-128 security audit, each split into focused single-purpose helpers with the full test suite kept green.
+
 ## [1.1.9] - 2026-07-11
 
 ### Security

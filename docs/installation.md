@@ -192,7 +192,7 @@ Since v1.1.12 memory has two scopes. Project scope works exactly as before (one 
 
 Parallel sessions coordinate through the session bus. A session announces itself with `session_announce` (presence plus an optional territory, doubling as heartbeat), inspects who else is active with `session_peers`, and takes cooperative locks with `claim_path` before editing shared files. Claims are fail-fast: a conflicting live lock is refused with the holder's identity instead of queued. Sessions silent for 10 minutes are swept and their locks released, so a crashed session never blocks the others.
 
-Populated memory never reaches a commit. The propagation files (AGENTS.md, GEMINI.md, editor rules) ship as empty structure; local sessions repopulate them, a pre-commit hook blocks accidental staging, and a CI guard catches anything that slips past local hooks.
+Populated memory never reaches a commit. The propagation files (AGENTS.md, GEMINI.md, editor rules) ship as empty structure; local sessions repopulate them, a pre-commit hook blocks accidental staging, and a CI guard catches anything that slips past local hooks. Since v1.1.13 `egc init` adds a third local layer: a git clean filter (`filter.egc-memory.clean`) bound to the propagation files in `.git/info/attributes`, so `git add` stages a zeroed blob even when hooks are bypassed with `--no-verify`. The filter configuration stays entirely inside `.git` (nothing tracked is modified), the working tree keeps the populated memory, and the installer prints the exact actions before applying them, honoring `--dry-run`.
 
 ---
 
