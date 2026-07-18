@@ -1,0 +1,5 @@
+#!/bin/sh
+# Blocks commits that would leak populated EGC memory from propagation files.
+if command -v node >/dev/null 2>&1; then
+  node "$(git rev-parse --show-toplevel)/scripts/check-state-leak.js" --staged || exit 1
+fi
