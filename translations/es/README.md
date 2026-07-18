@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-🌐 [English](../../README.md) · [العربية](../ar/README.md) · **Español** · [हिन्दी](../hi/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md)
+🌐 [English](../../README.md) · [العربية](../ar/README.md) · **Español** · [हिन्दी](../hi/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [简体中文](../zh-CN/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -92,7 +92,7 @@ egc dashboard
 
 ---
 
-🌐 [English](../../README.md) · [العربية](../ar/README.md) · **Español** · [हिन्दी](../hi/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md)
+🌐 [English](../../README.md) · [العربية](../ar/README.md) · **Español** · [हिन्दी](../hi/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [简体中文](../zh-CN/README.md)
 
 ---
 

@@ -16,7 +16,7 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '../..');
 const README_PATH = path.join(ROOT, 'README.md');
 const TRANSLATIONS_DIR = path.join(ROOT, 'translations');
-const LANGUAGES = ['ar', 'es', 'hi', 'ja', 'ko', 'pt', 'ru'];
+const LANGUAGES = ['ar', 'es', 'hi', 'ja', 'ko', 'pt', 'ru', 'zh-CN'];
 
 // Only ## and ### are part of the README's structural outline; deeper
 // headings are free-form prose inside a section, not the skeleton being

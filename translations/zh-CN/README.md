@@ -6,158 +6,89 @@
 <img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
+[![npm downloads](https://img.shields.io/npm/dm/@egchq/egc?label=downloads&color=22c55e)](https://www.npmjs.com/package/@egchq/egc) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
 
 <div align="center">
-# EGC - Extended Global Context
 
-**让你的 AI 智能体告别从零开始。**
+# EGC - 给每个 AI 智能体同一个大脑
 
-*零配置。零命令。你只管工作，记录由EGC来办。*
+**每个 AI 智能体、IDE、终端和会话自动共享的持久化记忆。无需记忆提示词,无需重建上下文,开口即可。**
 
 </div>
 
 ---
 
-EGC是一款为所有 AI 编程工具适配的本地运行环境，能为你的项目开发提供持久化记忆。会话结束时，AI 会自动沉淀会话中的项目细节，包括决策过程、报错记录、个人偏好以及后续计划。再次开启会话时，无需任何提示即可自行加载上下文状态。无论你说“继续执行”或“上次进度到哪了？”，AI 都能心领神会。只需一次安装，即可适配 Claude Code、Cursor、Gemini CLI、Windsurf、Zed、Warp、JetBrains Junie、VS Code（搭载 GitHub Copilot）等 20 多款工具。它不仅原生支持 Claude、GPT-4o、Gemini、DeepSeek 与 Mistral 等 AI 模型，Groq、Cohere 与 Vertex AI 等 AI 平台，还能通过 OpenRouter 接入 Qwen3、Llama 4 等更多模型。
+EGC 不是又一个记忆工具。它是一个智能层,让任何 AI 都像从第一天起就参与你的项目一样工作,无论是在 Cursor、Copilot、Claude Code、Codex、Aider 还是任何终端智能体中(共支持 20 个 AI 编程工具)。原生支持 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere 和 Vertex AI,并通过 OpenRouter 支持 Qwen3、Llama 4 等更多模型。
 
----
-
-## 你的 AI 对此早已了然于胸
-
-打开一个在 Claude Code 里搁置两周的项目，无需进行任何输入，你就能看到如下内容：
-
-```
-State loaded from egc-memory via ~/.egc/state/MyApp/main.md
-
-Context and preferences acknowledged.
-
-Ready to pick up:
-• Fix the rate limiter edge case on concurrent requests
-• Add integration tests for the new auth module
-• Review open PR from @contributor before merging
-
-=== EGC Stack Briefing ===
-Stack: typescript, node
-Skills: tdd-workflow, coding-standards
-Agents: code-reviewer
-Guardian: active, every command checked before it runs
-===
-```
-
-这超越了简单的对话缓存逻辑。EGC 谨记着你的开发决策、规避方案以及个人偏好，并作为全程的安全守卫，在危险命令执行前予以拦截，防止代码库损坏。无需任何额外配置，你可以专注开发。
-
-<div align="center">
-  <img src="../../assets/egc-terminal.gif" alt="EGC demo" width="700" />
-</div>
+每一次对话都在积累项目的集体智慧。每个智能体都能继承,每个会话都更聪明。
 
 ---
 
 ## 安装
 
-Windows、macOS 和 Linux 下的安装命令完全一致：
-
 ```bash
 npm install -g @egchq/egc && egc install
 ```
 
-Windows 有一些特殊限制（例如 PowerShell 版本、Antigravity CLI、已失效的 Gemini CLI 免费版）：如果遇到问题，请参阅 [Windows 说明](../../docs/installation.md#windows-notes)。
+- **将上下文浪费减少高达 90%,降低 token 成本,让所有 AI 在会话之间保持完美对齐。**
+- **Guardian:在执行前校验每条命令,拦截危险写入,检测提示词注入。每个共享大脑都自带内置安全层。**
+- **一条命令,零配置:记忆保存在你的本地机器上并加密,永远不会提交到 git。**
 
-或者直接运行，无需全局安装：
-
-```bash
-npx @egchq/egc install
-```
-
-**一个核心，多端联动。** 只需安装 GitHub Copilot Chat 扩展，Copilot 便能自动识别相关技能；同时，你在 Claude Code 或 Cursor 中积累的上下文记忆也将实时同步：
-
-```bash
-npm install -g @egchq/egc
-egc install --target copilot
-```
+<div align="center">
+  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+</div>
 
 [完整安装指南](../../docs/installation.md)
 
 ---
 
-## EGC 能为你的 AI 助手提供什么
+## 大脑内部:EGC 如何工作
 
-每次运行 EGC 时，它都在后台同步执行两项任务：记忆持久化，用于保留所有关键语境；安全风控，在危险操作执行前自动拦截。一切开箱即用，无需繁琐配置。
+EGC 不是工具清单,而是一个具备多种能力的大脑。它会记忆、理解、守护、过滤和协调,覆盖你机器上的每个 AI 智能体。
 
-### 记忆：AI 自主沉淀的项目经验
+<div align="center">
+  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+</div>
 
-告别繁琐的记忆指令。无论是“对齐昨日进度”、“记录当前决策”还是“回顾上次失败原因”，你的 AI 都能心领神会。你只管工作，记忆交给 EGC 来办。
+### 无需记忆命令,自然对话即可
 
-**`egc-memory`**
+用任何语言与大脑对话:「保存这个会话」「关于鉴权我们决定了什么?」「记住这个决定」。EGC 理解意图,存储上下文,并在你机器上的任何其他标签页、终端或工具中即时调出。一个大脑,所有智能体,零命令记忆负担。
 
-| 工具 | 功能 |
-|---|---|
-| `get_state` | 开启会话时，即刻同步 AI 已掌握的项目背景及用户的全局长期记忆 |
-| `update_state` | 记录今日决策，确保明日工作无缝衔接；`scope: "global"` 可跨项目共享这些上下文 |
-| `session_announce` / `session_peers` | 各并行会话彼此可见，自动划分工作区，避免运行冲突 |
-| `claim_path` / `release_path` | 引入协作锁机制，确保多个会话不会因同时操作相同文件而产生冲突 |
-| `store_decision` | 永久记录一项重要决策 |
-| `query_history` | 按时间顺序回顾历史决策记录 |
-| `search_history` | 就算不记得日期，它也能找回曾经做过的每一项决策 |
-| `working_memory_set` / `_get` / `_list` | 随用随记、到期后自动失效的临时笔记 |
-| `lesson_save` | 记录学习到的知识，若未经再次确认，这些记忆将随时间流逝而淡化 |
-| `lesson_recall` | 提取仍具有实践价值的经验教训 |
-| `lesson_reinforce` | 当经验再次得到确证时，予以强化 |
-| `detect_patterns` | 对持续重复出现的错误或指令，会自动识别并提醒 |
-| `compress_observations` | 自动归纳历史会话记录，避免产生不必要的 Token 开销 |
-| `get_project_state` | 验证上下文记忆功能是否正常运行 |
+### 持久化项目记忆
 
-项目的每个分支均拥有独立记忆，并在本地进行加密存储：无论是云端还是其他任何人都无法访问。原生隐私设计，无需额外配置。
+EGC 为每个 AI 智能体提供一个持久化的共享大脑。它捕捉决策、会话上下文、工作记忆和习得模式,并让它们在你打开的任何其他终端、IDE 或智能体中即时可用。会话状态、项目历史和积累的经验在标签页、工具和队友之间无缝流动:无需手动同步,上下文零丢失。所有记忆都保存在你机器的 `~/.egc` 中,使用 AES-256-GCM 加密,按项目分支独立存储,永远不会提交到你的仓库。
 
-### 上下文与安全：为项目开发提供实时保障
+### Guardian:内置安全护栏
 
-**`egc-guardian`**
+大脑的另一半在后台运行安全护栏。它在命令执行前进行校验,拦截高风险写入,在上下文溢出前进行压缩,在智能体之间编排多步任务,并从每次纠正中学习,而你无需调用任何工具。这是一张隐形的安全网,让上下文保持精简、操作保持安全、工作流保持自主。
 
-这些工具在后台独立运行。在执行前，每一个 Shell 命令和文件写入操作都经严格安全审计。无需你手动调用。
+### Token Crusher:大脑在记忆之前先过滤噪音
 
-| 工具 | 功能 |
-|---|---|
-| `validate_command` | 在执行前自动审核所有命令，拦截并阻止潜在的风险操作 |
-| `validate_write` | 防止 AI 因误操作向敏感文件写入内容 |
-| `reduce_context` | 压缩大文件，避免无谓消耗 Token 预算 |
-| `orchestrate_task` | 自动为每个请求匹配最合适的工具，无需手动记忆或挑选可用工具 |
-| `auto_learn` | 记录并吸取会话中的失败教训，防止类似错误再次发生 |
-
-### Token 优化器：告别终端无用输出带来的 Token 浪费
-
-面对 200 条 `git log`提交记录、400 行 `npm install`安装日志或是包含 300 个测试通过的报告，你的模型会照单全收，而你则需要为这笔庞大的 Token 支出买单。Token 优化器在这些输出**到达模型之前**就将其压缩：体积最多缩减 90%，并确保错误、警告及失败条目被完整保留。
-
-```
-egc run git log        # same command, crushed output
-egc run --raw git log  # escape hatch: full output
-egc saved              # accumulated savings, computed locally at zero token cost
-```
-
-设计上保持稳健：较短输出原样保留，故障记录持久化存储，这一精简压缩策略绝不占用您的上下文窗口。
-
-### 代码硬性约束，而非指令引导
-
-安全保障不再依赖于 AI 的“状态”：所有命令在执行前必经 EGC 审核。[点击了解有关 harness 应用、意图识别及记忆提取机制的详细方案 →](../../docs/installation.md#enforcement)
-
-### 统一的持久化记忆，告别跨工具碎片化
-
-只需运行一次 **`egc watch`**，即可静默生效。无论是在 Cursor 中切换上下文，还是使用 Gemini CLI、Copilot、Windsurf 或 Zed，它都会通过自动同步贯穿你的所有开发工具。无需手动操作，确保各处版本始终实时更新。
-
-```
-egc watch              # watch current project
-egc watch /path/proj   # watch a specific project
-egc watch --quiet      # suppress output
-```
-
-### 控制面板：实时掌握智能体工作状态
-
-直接在浏览器中实时监控 AI 代理生成的每个命令、消耗的 Token 及对应成本。执行 `egc init` 后即可自动开启。[查看完整指南](../../docs/installation.md#dashboard)
+大脑不只是记忆,它还会过滤。在任何 shell 输出到达模型之前,EGC 的 Token Crusher 会将 git 日志、测试噪音、安装刷屏和巨型 JSON 压缩高达 90%,并始终保留每一条错误和警告。运行 `egc saved` 即可查看在本地零成本计算的累计 token 节省:更便宜的会话,更持久的上下文。
 
 ---
 
 ## 提示词库
 
-除此之外，EGC 还附带了 63 个智能体、230 项技能、77 条内部命令和 111 条预设规则。这些资源包含能够自动审阅代码的专家工具、针对各种语言和场景的最佳实践指南、可一键执行复杂任务序列的快捷指令，以及保持代码规范的一系列风格准则。所有功能均基于真实工程案例提炼，而非纸上谈兵。当然，这些都是可选的，即使不使用他们，EGC 的核心功能持久化记忆依然可以独立运作。
+作为附赠,EGC 为你提供 63 个智能体、230 个技能和 77 个命令,外加 111 条规则:能独立审查代码的专家、覆盖每种语言和场景的最佳实践指南、一键执行整套任务的快捷指令,以及保持代码风格一致的规则。全部来自真实工程会话的沉淀,而非纸上谈兵。不想用这些?没关系:EGC 的持久化记忆照常工作。
+
+---
+
+## 快速开始
+
+运行一次 `egc watch`,然后忘掉它的存在:
+
+```bash
+egc watch
+```
+
+在 Cursor 中变更上下文,它会自动出现在 Gemini CLI、Copilot、Windsurf、Zed 或任何终端智能体中。无需手动操作,状态永不过期。
+
+要在浏览器中实时查看智能体的工具调用、token 和成本:
+
+```bash
+egc dashboard
+```
 
 ---
 
