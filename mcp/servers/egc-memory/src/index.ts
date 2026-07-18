@@ -12,6 +12,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import { buildGlobalAppendix, globalStateFilePath } from './global-state';
 import { loadOrCreateKey, writeHmac, verifyHmac } from './integrity';
 import { loadOrCreateEncKey, readStateFile, writeStateFile, quarantineUndecryptableStateFile } from './encryption';
 import { propagateStateToTools } from './propagate';
@@ -418,6 +419,12 @@ function getStateDir(): string {
   return dir;
 }
 
+function getGlobalStateFile(): string {
+  const file = globalStateFilePath();
+  ensurePrivateDir(path.dirname(file));
+  return file;
+}
+
 function isProtectedPath(p: string): boolean {
   const home = os.homedir();
   const denied = [
@@ -673,7 +680,8 @@ const UpdateStateSchema = z.object({
   })).max(20).optional(),
   preferences: z.array(z.string().max(300)).max(20).optional(),
   next: z.array(z.string().max(500)).max(10).optional(),
-  force: z.boolean().optional()
+  force: z.boolean().optional(),
+  scope: z.enum(['project', 'global']).optional().default('project')
 });
 
 const WorkingMemorySetSchema = z.object({
@@ -722,7 +730,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       { name: "search_history", description: "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Each result includes the decision content, context label, timestamp, and a score normalized to [0, 1] where 1 is the best match in the result set. Use this to find past decisions by topic instead of paging through query_history.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Keywords to search for, e.g. 'authentication jwt'." }, limit: { type: "number", description: "Maximum number of results to return. Defaults to 10." }, min_score: { type: "number", description: "Minimum normalized relevance score between 0 and 1. Defaults to 0." } }, required: ["query"] } },
       {
         name: "get_state",
-        description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch when the project is a git repository, falling back to the default branch state and then to the legacy flat state file. Call this at the START of every session to restore context.",
+        description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch when the project is a git repository, falling back to the default branch state and then to the legacy flat state file. When user-wide global memory exists (written via update_state with scope 'global'), a deduplicated 'Global Memory' section is appended after the project state; project and branch entries always take precedence. Call this at the START of every session to restore context.",
         inputSchema: {
           type: "object",
           properties: {
@@ -742,7 +750,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             avoid: { type: "array", items: { type: "object", properties: { what: { type: "string" }, why: { type: "string" } }, required: ["what"] }, description: "What failed and should not be repeated." },
             preferences: { type: "array", items: { type: "string" }, description: "Coding style, workflow, or communication preferences discovered." },
             next: { type: "array", items: { type: "string" }, description: "What to pick up in the next session." },
-            force: { type: "boolean", description: "Recover from a state file that cannot be decrypted (corrupted or encrypted with an orphaned key). When true and the existing file fails to decrypt, the corrupted file is renamed to a '.corrupted-backup-<timestamp>' sibling instead of being read, and this call's data becomes the fresh state — nothing is merged in from the unreadable file, and nothing is deleted. Only set this after confirming the failure is persistent, not a transient lock from another process writing at the same moment." }
+            force: { type: "boolean", description: "Recover from a state file that cannot be decrypted (corrupted or encrypted with an orphaned key). When true and the existing file fails to decrypt, the corrupted file is renamed to a '.corrupted-backup-<timestamp>' sibling instead of being read, and this call's data becomes the fresh state — nothing is merged in from the unreadable file, and nothing is deleted. Only set this after confirming the failure is persistent, not a transient lock from another process writing at the same moment." },
+            scope: { type: "string", enum: ["project", "global"], description: "Where to write. 'project' (default) scopes to the current project/branch. 'global' writes to the user-wide memory shared across all projects (~/.egc/global/state.md); use it only for transversal preferences and lessons the user wants everywhere, never for project-specific state." }
           }
         }
       },
@@ -1026,7 +1035,9 @@ async function handleGetState(db: Database, toolArgs: unknown) {
 
   if (resolved.source === 'none') {
     const branchLine = branch ? `Branch: ${branch}\n` : '';
-    return { content: [{ type: "text", text: `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.` }] };
+    const emptyStateText = `No state found for this project yet.\n${branchLine}Path: ${resolved.filePath}\n\nCall update_state at the end of this session to start building project memory.`;
+    const appendix = readGlobalAppendix('');
+    return { content: [{ type: "text", text: appendix ? `${emptyStateText}\n${appendix}` : emptyStateText }] };
   }
 
   let content: string;
@@ -1043,7 +1054,19 @@ async function handleGetState(db: Database, toolArgs: unknown) {
   } else {
     log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: 'ok' });
   }
-  return { content: [{ type: "text", text: content }] };
+  const appendix = readGlobalAppendix(content);
+  return { content: [{ type: "text", text: appendix ? `${content}\n${appendix}` : content }] };
+}
+
+function readGlobalAppendix(projectContent: string): string | null {
+  try {
+    const globalFile = getGlobalStateFile();
+    if (!fs.existsSync(globalFile)) return null;
+    return buildGlobalAppendix(readStateDoc(globalFile), projectContent);
+  } catch (err) {
+    log('WARN', 'Failed to read global state, returning project state only', { error: String(err) });
+    return null;
+  }
 }
 
 async function handleUpdateState(db: Database, toolArgs: unknown) {
@@ -1068,6 +1091,28 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
       });
     }
   } catch (_) { /* non-fatal */ } // NOSONAR: legacy flat-state merge is best-effort
+
+  if (args.scope === 'global') {
+    const globalFile = getGlobalStateFile();
+    let existingGlobal: Record<string, string[]|string> = {};
+    try {
+      existingGlobal = readStateDoc(globalFile);
+    } catch (err) {
+      if (args.force && fs.existsSync(globalFile)) {
+        const backupPath = quarantineUndecryptableStateFile(globalFile);
+        log('WARN', 'update_state: force=true, undecryptable global state backed up and replaced', { file: globalFile, backup: backupPath, error: String(err) });
+      } else {
+        log('ERROR', '[EGC encryption] Cannot read existing global state, aborting update to prevent data loss', { file: globalFile, error: String(err) });
+        throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing global state file. The encryption key may have changed. Path: ${globalFile}. Retry with force: true to back up the unreadable file and start fresh.`);
+      }
+    }
+    writeStateDoc(globalFile, 'global', args, existingGlobal, null);
+    const writtenGlobal = readStateFile(globalFile, _encKey);
+    writeHmac(globalFile, writtenGlobal, _integrityKey);
+    log('INFO', 'Global state updated', { decisions: args.decisions?.length || 0 });
+    return { content: [{ type: "text", text: `Global memory updated (shared across all projects).\nFile: ${globalFile}\nDecisions saved: ${args.decisions?.length || 0}` }] };
+  }
+
   // Merge from the same file get_state would read, so the first
   // branch-scoped write inherits the pre-existing flat state
   const resolved = resolveStateRead(getStateDir(), projPath, branch);
