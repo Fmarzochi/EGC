@@ -138,7 +138,7 @@ interface QueueTask<T> {
 class SQLiteArbitrationQueue {
   private readonly queue: QueueTask<unknown>[] = [];
   private isProcessing = false;
-  private readonly MAX_RETRIES = 5;
+  private readonly MAX_RETRIES = 12;
   private readonly BASE_BACKOFF_MS = 50;
   private readonly MAX_BACKOFF_MS = 5000;
 
@@ -174,6 +174,10 @@ class SQLiteArbitrationQueue {
           task.retries++;
           let backoff = Math.pow(2, task.retries) * this.BASE_BACKOFF_MS;
           if (backoff > this.MAX_BACKOFF_MS) backoff = this.MAX_BACKOFF_MS;
+          // Equal jitter: with N MCP server processes (one per IDE/CLI session)
+          // colliding on the same ~/.egc database, deterministic backoff wakes
+          // them all on the same tick and the collision repeats (thundering herd).
+          backoff = backoff / 2 + Math.random() * (backoff / 2);
           log('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, {
             queue_depth: this.queue.length,
             retry_count: task.retries,
