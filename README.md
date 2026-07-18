@@ -18,7 +18,7 @@
 
 ---
 
-EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one - across Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (20 AI coding tools in total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
+EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one, in Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (20 AI coding tools in total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
 Every conversation builds your project's collective intelligence. Every agent inherits it. Every session gets smarter.
 
@@ -31,7 +31,7 @@ npm install -g @egchq/egc && egc install
 ```
 
 - **Reduce context waste by up to 90%, cut token costs, and keep every AI perfectly aligned across sessions.**
-- **Guardian: validate every command before execution, block dangerous writes, and detect prompt injection - so every shared brain comes with a built-in safety layer.**
+- **Guardian: validate every command before execution, block dangerous writes, and detect prompt injection. Every shared brain comes with a built-in safety layer.**
 - **One command, zero config: memory stays local and encrypted on your machine, and never gets committed to git.**
 
 <div align="center">
@@ -44,27 +44,27 @@ npm install -g @egchq/egc && egc install
 
 ## Inside the Brain: How EGC Works
 
-EGC is not a list of tools; it is one brain with several faculties. It remembers, understands, protects, filters, and coordinates - across every AI agent on your machine.
+EGC is not a list of tools; it is one brain with several faculties. It remembers, understands, protects, filters, and coordinates, across every AI agent on your machine.
 
 <div align="center">
   <img src="assets/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
-### You Don't Memorize Commands - You Speak Naturally
+### You Don't Memorize Commands, You Speak Naturally
 
 Talk to the brain in any language: "save this session", "what did we decide about auth?", "remember this decision". EGC understands the intent, stores the context, and recalls it instantly in any other tab, terminal, or tool on your machine. One brain. Every agent. Zero commands to remember.
 
 ### Persistent Project Memory
 
-EGC gives every AI agent a persistent, shared brain. It captures decisions, session context, working memory, and learned patterns - then makes them instantly available in any other terminal, IDE, or agent you open. Session state, project history, and accumulated lessons flow seamlessly between tabs, tools, and teammates - no manual sync, no context loss. All memory lives in `~/.egc` on your machine, encrypted with AES-256-GCM, kept per project branch, and never committed to your repository.
+EGC gives every AI agent a persistent, shared brain. It captures decisions, session context, working memory, and learned patterns, then makes them instantly available in any other terminal, IDE, or agent you open. Session state, project history, and accumulated lessons flow seamlessly between tabs, tools, and teammates: no manual sync, no context loss. All memory lives in `~/.egc` on your machine, encrypted with AES-256-GCM, kept per project branch, and never committed to your repository.
 
 ### Guardian: Built-In Safety Guardrails
 
-A second half of the brain runs guardrails in the background. It validates commands before they execute, gates risky writes, compresses context before it overflows, orchestrates multi-step tasks across agents, and learns from every correction - all without you invoking a single tool. An invisible safety net that keeps context lean, actions safe, and workflows autonomous.
+A second half of the brain runs guardrails in the background. It validates commands before they execute, gates risky writes, compresses context before it overflows, orchestrates multi-step tasks across agents, and learns from every correction, all without you invoking a single tool. An invisible safety net that keeps context lean, actions safe, and workflows autonomous.
 
 ### Token Crusher: The Brain Filters Noise Before It Remembers
 
-The brain doesn't just remember - it filters. Before any shell output reaches the model, EGC's Token Crusher compresses git logs, test spam, install noise, and giant JSONs by up to 90%, preserving every error and warning. Run `egc saved` to see your accumulated token savings, computed locally at zero cost - cheaper sessions, context that lasts.
+The brain doesn't just remember: it filters. Before any shell output reaches the model, EGC's Token Crusher compresses git logs, test spam, install noise, and giant JSONs by up to 90%, preserving every error and warning. Run `egc saved` to see your accumulated token savings, computed locally at zero cost: cheaper sessions, context that lasts.
 
 ---
 

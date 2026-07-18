@@ -18,7 +18,7 @@
 
 ---
 
-EGC no es otra herramienta de memoria. Es la capa de inteligencia que hace que cualquier IA trabaje como si hubiera estado en tu proyecto desde el primer día - en Cursor, Copilot, Claude Code, Codex, Aider y cualquier agente de terminal (20 herramientas de programación con IA en total). Funciona de forma nativa con Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere y Vertex AI, más OpenRouter para Qwen3, Llama 4 y más.
+EGC no es otra herramienta de memoria. Es la capa de inteligencia que hace que cualquier IA trabaje como si hubiera estado en tu proyecto desde el primer día, en Cursor, Copilot, Claude Code, Codex, Aider y cualquier agente de terminal (20 herramientas de programación con IA en total). Funciona de forma nativa con Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere y Vertex AI, más OpenRouter para Qwen3, Llama 4 y más.
 
 Cada conversación aumenta la inteligencia colectiva de tu proyecto. Cada agente la hereda. Cada sesión se vuelve más inteligente.
 
@@ -31,7 +31,7 @@ npm install -g @egchq/egc && egc install
 ```
 
 - **Reduce hasta un 90% el desperdicio de contexto, recorta costos de tokens y mantén todas las IA perfectamente alineadas entre sesiones.**
-- **Guardian: valida cada comando antes de ejecutarse, bloquea escrituras peligrosas y detecta prompt injection - todo cerebro compartido viene con una capa de seguridad integrada.**
+- **Guardian: valida cada comando antes de ejecutarse, bloquea escrituras peligrosas y detecta prompt injection. Todo cerebro compartido viene con una capa de seguridad integrada.**
 - **Un comando, cero configuración: la memoria queda local y cifrada en tu máquina, y nunca se commitea en git.**
 
 <div align="center">
@@ -44,27 +44,27 @@ npm install -g @egchq/egc && egc install
 
 ## Dentro del Cerebro: Cómo Funciona EGC
 
-EGC no es una lista de herramientas; es un cerebro con varias facultades. Recuerda, entiende, protege, filtra y coordina - en todos los agentes de IA de tu máquina.
+EGC no es una lista de herramientas; es un cerebro con varias facultades. Recuerda, entiende, protege, filtra y coordina, en todos los agentes de IA de tu máquina.
 
 <div align="center">
   <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
 </div>
 
-### No Memorizas Comandos - Hablas con Naturalidad
+### No Memorizas Comandos, Hablas con Naturalidad
 
 Háblale al cerebro en cualquier idioma: "guarda esta sesión", "¿qué decidimos sobre la autenticación?", "recuerda esta decisión". EGC entiende la intención, guarda el contexto y lo recupera al instante en cualquier otra pestaña, terminal o herramienta de tu máquina. Un cerebro. Todos los agentes. Cero comandos que memorizar.
 
 ### Memoria Persistente de Proyecto
 
-EGC le da a cada agente de IA un cerebro persistente y compartido. Captura decisiones, contexto de sesión, memoria de trabajo y patrones aprendidos - y los pone al instante a disposición de cualquier otro terminal, IDE o agente que abras. El estado de sesión, el historial del proyecto y las lecciones acumuladas fluyen entre pestañas, herramientas y compañeros - sin sincronización manual, sin pérdida de contexto. Toda la memoria vive en `~/.egc` en tu máquina, cifrada con AES-256-GCM, separada por rama de proyecto, y nunca se commitea en tu repositorio.
+EGC le da a cada agente de IA un cerebro persistente y compartido. Captura decisiones, contexto de sesión, memoria de trabajo y patrones aprendidos, y los pone al instante a disposición de cualquier otro terminal, IDE o agente que abras. El estado de sesión, el historial del proyecto y las lecciones acumuladas fluyen entre pestañas, herramientas y compañeros: sin sincronización manual, sin pérdida de contexto. Toda la memoria vive en `~/.egc` en tu máquina, cifrada con AES-256-GCM, separada por rama de proyecto, y nunca se commitea en tu repositorio.
 
 ### Guardian: Barreras de Seguridad Integradas
 
-La segunda mitad del cerebro ejecuta barreras de seguridad en segundo plano. Valida comandos antes de que se ejecuten, frena escrituras riesgosas, comprime el contexto antes de que desborde, orquesta tareas de múltiples pasos entre agentes y aprende de cada corrección - todo sin que invoques una sola herramienta. Una red de seguridad invisible que mantiene el contexto ligero, las acciones seguras y los flujos autónomos.
+La segunda mitad del cerebro ejecuta barreras de seguridad en segundo plano. Valida comandos antes de que se ejecuten, frena escrituras riesgosas, comprime el contexto antes de que desborde, orquesta tareas de múltiples pasos entre agentes y aprende de cada corrección, todo sin que invoques una sola herramienta. Una red de seguridad invisible que mantiene el contexto ligero, las acciones seguras y los flujos autónomos.
 
 ### Token Crusher: El Cerebro Filtra el Ruido Antes de Recordar
 
-El cerebro no solo recuerda - filtra. Antes de que cualquier salida de shell llegue al modelo, el Token Crusher de EGC comprime git logs, ruido de tests, spam de install y JSONs gigantes hasta un 90%, preservando cada error y advertencia. Ejecuta `egc saved` para ver el ahorro de tokens acumulado, calculado localmente a costo cero - sesiones más baratas, contexto que dura.
+El cerebro no solo recuerda: filtra. Antes de que cualquier salida de shell llegue al modelo, el Token Crusher de EGC comprime git logs, ruido de tests, spam de install y JSONs gigantes hasta un 90%, preservando cada error y advertencia. Ejecuta `egc saved` para ver el ahorro de tokens acumulado, calculado localmente a costo cero: sesiones más baratas, contexto que dura.
 
 ---
 
