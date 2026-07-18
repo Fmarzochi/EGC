@@ -18,7 +18,7 @@
 
 ---
 
-EGCは単なるメモリツールではありません。あらゆるAIが初日からプロジェクトにいたかのように働ける知能レイヤーです - Cursor、Copilot、Claude Code、Codex、Aider、そしてあらゆるターミナルエージェントで(合計20のAIコーディングツールに対応)。
+EGCは単なるメモリツールではありません。あらゆるAIが初日からプロジェクトにいたかのように働ける知能レイヤーです - Cursor、Copilot、Claude Code、Codex、Aider、そしてあらゆるターミナルエージェントで(合計20のAIコーディングツールに対応)。 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere、Vertex AIにネイティブ対応し、OpenRouter経由でQwen3やLlama 4などにも対応します。
 
 会話のたびにプロジェクトの集合知が育ちます。すべてのエージェントがそれを受け継ぎ、セッションごとに賢くなります。
 

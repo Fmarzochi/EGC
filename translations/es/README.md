@@ -18,7 +18,7 @@
 
 ---
 
-EGC no es otra herramienta de memoria. Es la capa de inteligencia que hace que cualquier IA trabaje como si hubiera estado en tu proyecto desde el primer día - en Cursor, Copilot, Claude Code, Codex, Aider y cualquier agente de terminal (20 herramientas de programación con IA en total).
+EGC no es otra herramienta de memoria. Es la capa de inteligencia que hace que cualquier IA trabaje como si hubiera estado en tu proyecto desde el primer día - en Cursor, Copilot, Claude Code, Codex, Aider y cualquier agente de terminal (20 herramientas de programación con IA en total). Funciona de forma nativa con Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere y Vertex AI, más OpenRouter para Qwen3, Llama 4 y más.
 
 Cada conversación aumenta la inteligencia colectiva de tu proyecto. Cada agente la hereda. Cada sesión se vuelve más inteligente.
 

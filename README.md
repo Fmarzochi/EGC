@@ -18,7 +18,7 @@
 
 ---
 
-EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one - across Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (20 AI coding tools in total).
+EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one - across Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (20 AI coding tools in total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
 Every conversation builds your project's collective intelligence. Every agent inherits it. Every session gets smarter.
 

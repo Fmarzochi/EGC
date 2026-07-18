@@ -18,7 +18,7 @@
 
 ---
 
-EGC는 또 하나의 메모리 도구가 아닙니다. 어떤 AI든 첫날부터 프로젝트에 있었던 것처럼 일하게 만드는 인텔리전스 레이어입니다 - Cursor, Copilot, Claude Code, Codex, Aider 그리고 모든 터미널 에이전트에서(총 20개의 AI 코딩 도구 지원).
+EGC는 또 하나의 메모리 도구가 아닙니다. 어떤 AI든 첫날부터 프로젝트에 있었던 것처럼 일하게 만드는 인텔리전스 레이어입니다 - Cursor, Copilot, Claude Code, Codex, Aider 그리고 모든 터미널 에이전트에서(총 20개의 AI 코딩 도구 지원). Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, Vertex AI를 기본 지원하며, OpenRouter를 통해 Qwen3, Llama 4 등도 지원합니다.
 
 대화할 때마다 프로젝트의 집단 지성이 자랍니다. 모든 에이전트가 이를 물려받고, 세션마다 더 똑똑해집니다.
 
