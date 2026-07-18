@@ -93,8 +93,10 @@ You'll never memorize a single command. Say it in any language: "continue from y
 
 | Tool | What it does |
 |---|---|
-| `get_state` | Loads everything your AI already knew about the project the moment the session opens |
-| `update_state` | Saves what got decided today so nobody loses the thread tomorrow |
+| `get_state` | Loads everything your AI already knew about the project the moment the session opens, plus your user-wide global memory |
+| `update_state` | Saves what got decided today so nobody loses the thread tomorrow; `scope: "global"` shares it across every project |
+| `session_announce` / `session_peers` | Parallel sessions see each other and split territory instead of colliding |
+| `claim_path` / `release_path` | Cooperative locks so two sessions never fight over the same files |
 | `store_decision` | Writes down one important decision, for good |
 | `query_history` | Shows past decisions in the order they happened |
 | `search_history` | Finds anything that was ever decided, even if you don't remember the date |
@@ -121,6 +123,18 @@ These tools run automatically in the background. Every shell command and every f
 | `reduce_context` | Shrinks large files so you don't burn your token budget for nothing |
 | `orchestrate_task` | Picks the right tools for each request, without you needing to know which ones exist |
 | `auto_learn` | Learns from the session's mistakes and writes it down so it doesn't repeat |
+
+### Token Crusher: stop burning tokens on shell noise
+
+A 200-commit `git log`, a 400-line `npm install`, a test run with 300 passing cases: your model reads all of it, and you pay for all of it. The Token Crusher compresses that output **before it reaches the model**: up to 90% smaller, with errors, warnings and failures always preserved.
+
+```
+egc run git log        # same command, crushed output
+egc run --raw git log  # escape hatch: full output
+egc saved              # accumulated savings, computed locally at zero token cost
+```
+
+Conservative by design: small outputs pass through untouched, failures always survive, and the savings ledger never touches your context window.
 
 ### Enforced, not requested
 

@@ -235,7 +235,8 @@ runDoctor();
 
 console.log('');
 console.log(`  ${c.green}${c.bold}Installation complete.${c.reset}`);
-console.log(`  ${c.dim}Run \`egc doctor\` anytime to verify.${c.reset}`);
+console.log(`  ${c.green}Memory loaded (project + global)${c.reset} ${c.dim}|${c.reset} ${c.bold}Token Crusher engaged:${c.reset} shell output compressed up to 90%`);
+console.log(`  ${c.dim}Route heavy commands through \`egc run <cmd>\`; see savings anytime with \`egc saved\`. Run \`egc doctor\` to verify.${c.reset}`);
 
 if (!flags.dryRun) {
   const dashboardScript = path.join(ROOT_DIR, 'scripts', 'dashboard.js');
