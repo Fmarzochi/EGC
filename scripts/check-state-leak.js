@@ -22,8 +22,16 @@ const POPULATED_SIGNATURES = [
   /^\*\*Next session:\*\*/m,
 ];
 
+// S4036: prefer fixed git locations over a PATH lookup; the bare name is the
+// last resort for layouts like nix or Windows portable installs.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  'C:\\Program Files\\Git\\cmd\\git.exe',
+].find(p => fs.existsSync(p)) || 'git';
+
 function git(args, options) {
-  return execFileSync('git', args, { encoding: 'utf8', ...options });
+  return execFileSync(GIT_BIN, args, { encoding: 'utf8', ...options });
 }
 
 function isMarkdownPath(p) {
@@ -63,7 +71,7 @@ function checkStaged() {
     .split('\n').filter(Boolean).filter(isMarkdownPath);
   const leaks = [];
   for (const file of staged) {
-    let content = '';
+    let content;
     try {
       content = git(['show', `:0:${file}`]);
     } catch {
@@ -78,7 +86,7 @@ function checkTree() {
   const tracked = git(['ls-files']).split('\n').filter(Boolean).filter(isMarkdownPath);
   const leaks = [];
   for (const file of tracked) {
-    let content = '';
+    let content;
     try {
       content = fs.readFileSync(file, 'utf8');
     } catch {
