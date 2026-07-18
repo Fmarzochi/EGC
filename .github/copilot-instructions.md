@@ -7,17 +7,14 @@ Crusher). It installs into 20 AI coding tools from one npm package
 (@egchq/egc). Memory lives encrypted in ~/.egc on the user's machine and must
 never reach the repository.
 
-## Writing style (enforced project-wide)
+## Repository conventions
 
-- Never use em dashes and never use a spaced hyphen (" - ") as a sentence
-  separator in prose. Rewrite with a comma, a colon, or two sentences.
-  Brand headings like "EGC - Give Every AI Agent the Same Brain" are the only
-  exception.
 - All repository content is written in English, except the files under
   translations/.
 - Flag any populated memory content in AGENTS.md, GEMINI.md,
   .cursor/rules/egc-context.mdc or .trae/rules/egc-context.md: those
-  propagation files must ship with an empty structure only.
+  propagation files must ship with an empty structure only, and CI enforces
+  it.
 
 ## README and translations
 
