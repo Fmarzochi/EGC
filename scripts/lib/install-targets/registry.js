@@ -21,6 +21,7 @@ const zedHome = require('./zed-home');
 const continueHome = require('./continue-home');
 const continueProject = require('./continue-project');
 const traeProject = require('./trae-project');
+const junieProject = require('./junie-project');
 const warpProject = require('./warp-project');
 
 const ADAPTERS = Object.freeze([
@@ -47,6 +48,7 @@ const ADAPTERS = Object.freeze([
   continueHome,
   continueProject,
   traeProject,
+  junieProject,
   warpProject,
 ]);
 

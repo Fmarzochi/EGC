@@ -1687,6 +1687,29 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.trae', 'egc-install-state.json'));
   })) passed++; else failed++;
 
+    if (test('resolves junie adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('junie');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'junie-project');
+    assert.strictEqual(adapter.target, 'junie');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.junie'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.junie', 'egc-install-state.json'));
+  })) passed++; else failed++;
+ 
+    if (test('junie adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('junie');
+    const byId = getInstallTargetAdapter('junie-project');
+
+    assert.strictEqual(byTarget.id, 'junie-project');
+    assert.strictEqual(byId.id, 'junie-project');
+    assert.ok(byTarget.supports('junie'));
+    assert.ok(byTarget.supports('junie-project'));
+  })) passed++; else failed++;
+  
   if (test('trae adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('trae');
     const byId = getInstallTargetAdapter('trae-project');
