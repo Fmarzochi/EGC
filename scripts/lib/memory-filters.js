@@ -11,6 +11,14 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
+// S4036: prefer fixed git locations over a PATH lookup; the bare name is the
+// last resort for layouts like nix or Windows portable installs.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  'C:\\Program Files\\Git\\cmd\\git.exe',
+].find(p => fs.existsSync(p)) || 'git';
+
 const FILTER_NAME = 'egc-memory';
 const PROPAGATION_FILES = [
   'AGENTS.md',
@@ -21,7 +29,7 @@ const PROPAGATION_FILES = [
 
 function gitDir(projectDir) {
   try {
-    return execFileSync('git', ['rev-parse', '--git-dir'], {
+    return execFileSync(GIT_BIN, ['rev-parse', '--git-dir'], {
       cwd: projectDir,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -61,7 +69,7 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   }
 
   if (!dryRun) {
-    execFileSync('git', ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
+    execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
       cwd: projectDir,
       encoding: 'utf8',
     });
