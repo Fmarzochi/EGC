@@ -1,7 +1,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
 export const DEFAULT_BRANCH_FILE = 'main.md';
+const BRANCH_FILE_PREFIX_LENGTH = 120;
 
 export type StateSource = 'branch' | 'default-branch' | 'flat' | 'none';
 
@@ -18,6 +20,15 @@ export function projectSlug(projectPath: string): string {
 
 export function sanitizeBranchName(branch: string): string {
   return branch.replaceAll('/', '-').replace(/[^a-zA-Z0-9-_]/g, '_');
+}
+
+// Sanitization alone is not injective: feature/auth and feature-auth both
+// become feature-auth. Keep a readable prefix, then bind it to the exact ref.
+export function branchStateKey(branch: string): string {
+  const branchName = String(branch || '');
+  const readablePrefix = sanitizeBranchName(branchName).slice(0, BRANCH_FILE_PREFIX_LENGTH) || 'branch';
+  const digest = createHash('sha256').update(branchName, 'utf8').digest('hex');
+  return `${readablePrefix}--${digest}`;
 }
 
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
@@ -58,6 +69,10 @@ export function flatStateFile(stateDir: string, projectPath: string): string {
 }
 
 export function branchStateFile(stateDir: string, projectPath: string, branch: string): string {
+  return path.join(stateDir, projectSlug(projectPath), `${branchStateKey(branch)}.md`);
+}
+
+export function legacyBranchStateFile(stateDir: string, projectPath: string, branch: string): string {
   return path.join(stateDir, projectSlug(projectPath), `${sanitizeBranchName(branch)}.md`);
 }
 
@@ -66,6 +81,10 @@ export function resolveStateRead(stateDir: string, projectPath: string, branch: 
     const branchFile = branchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(branchFile)) {
       return { filePath: branchFile, source: 'branch', branch };
+    }
+    const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
+    if (fs.existsSync(legacyBranchFile)) {
+      return { filePath: legacyBranchFile, source: 'branch', branch };
     }
     const defaultFile = path.join(stateDir, projectSlug(projectPath), DEFAULT_BRANCH_FILE);
     if (fs.existsSync(defaultFile)) {

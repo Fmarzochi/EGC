@@ -236,28 +236,56 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('resolveStateFilePath prefers hashed branch state and falls back to legacy', () => {
+    const projectDir = mktemp();
+    const homeDir = mktemp();
+    const originalHomedir = os.homedir;
+    const {
+      branchStateFile,
+      legacyBranchStateFile,
+    } = require('../../scripts/lib/branch-state');
+
+    try {
+      os.homedir = () => homeDir;
+      const gitDir = path.join(projectDir, '.git');
+      fs.mkdirSync(gitDir);
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature/auth\n');
+
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      const legacyFile = legacyBranchStateFile(stateDir, projectDir, 'feature/auth');
+      const currentFile = branchStateFile(stateDir, projectDir, 'feature/auth');
+      fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
+      fs.writeFileSync(legacyFile, '# Legacy state\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), legacyFile);
+
+      fs.writeFileSync(currentFile, '# Current state\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), currentFile);
+    } finally {
+      os.homedir = originalHomedir;
+      cleanup(projectDir);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (await test('resolveStateFilePath without branch finds main.md', () => {
     const projectDir = mktemp();
-    const stateDir = path.join(os.homedir(), '.egc', 'state');
+    const homeDir = mktemp();
+    const originalHomedir = os.homedir;
+    const stateDir = path.join(homeDir, '.egc', 'state');
     const slug = require('../../scripts/lib/branch-state').projectSlug(projectDir);
     const slugDir = path.join(stateDir, slug);
-    let createdSlugDir = false;
     const mainMd = path.join(slugDir, 'main.md');
 
     try {
-      if (!fs.existsSync(slugDir)) {
-        fs.mkdirSync(slugDir, { recursive: true });
-        createdSlugDir = true;
-      }
+      os.homedir = () => homeDir;
+      fs.mkdirSync(slugDir, { recursive: true });
       fs.writeFileSync(mainMd, '# State\n');
       const result = resolveStateFilePath(projectDir);
       assert.strictEqual(result, mainMd, 'should resolve to main.md when no branch (detached HEAD or non-git dir)');
     } finally {
-      try { fs.unlinkSync(mainMd); } catch (_) { /* may not exist if test failed early */ }
-      if (createdSlugDir) {
-        try { fs.rmdirSync(slugDir); } catch (_) { /* may fail if dir still has files */ }
-      }
+      os.homedir = originalHomedir;
       cleanup(projectDir);
+      cleanup(homeDir);
     }
   })) passed++; else failed++;
 

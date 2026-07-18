@@ -10,9 +10,11 @@ const {
   getStateDir,
   projectSlug,
   sanitizeBranchName,
+  branchStateKey,
   detectBranch,
   flatStateFile,
   branchStateFile,
+  legacyBranchStateFile,
   resolveStateRead,
   resolveStateWrite,
 } = require('../../scripts/lib/branch-state');
@@ -86,6 +88,12 @@ function runTests() {
     assert.strictEqual(sanitizeBranchName('fix/issue#137'), 'fix-issue_137');
   })) passed++; else failed++;
 
+  if (test('branchStateKey prevents collisions after filename sanitization', () => {
+    assert.match(branchStateKey('feature/auth'), /^feature-auth--[0-9a-f]{64}$/);
+    assert.notStrictEqual(branchStateKey('feature/auth'), branchStateKey('feature-auth'));
+    assert.notStrictEqual(branchStateKey('release/1.0'), branchStateKey('release-1_0'));
+  })) passed++; else failed++;
+
   if (test('getStateDir resolves under the provided home directory', () => {
     assert.strictEqual(getStateDir('/tmp/fake-home'), path.join('/tmp/fake-home', '.egc', 'state'));
   })) passed++; else failed++;
@@ -115,8 +123,21 @@ function runTests() {
     );
     assert.strictEqual(
       branchStateFile(stateDir, project, 'feature/auth'),
-      path.join(stateDir, 'Projects--my-app', 'feature-auth.md')
+      path.join(stateDir, 'Projects--my-app', `${branchStateKey('feature/auth')}.md`)
     );
+  })) passed++; else failed++;
+
+  if (test('colliding legacy branch names write to independent state files', () => {
+    const stateDir = makeTmpDir('egc-branch-state-collision-');
+    const project = '/home/user/Projects/my-app';
+    const slashBranchFile = branchStateFile(stateDir, project, 'feature/auth');
+    const dashBranchFile = branchStateFile(stateDir, project, 'feature-auth');
+
+    assert.notStrictEqual(slashBranchFile, dashBranchFile);
+    writeState(slashBranchFile, 'slash branch');
+    writeState(dashBranchFile, 'dash branch');
+    assert.match(fs.readFileSync(slashBranchFile, 'utf8'), /slash branch/);
+    assert.match(fs.readFileSync(dashBranchFile, 'utf8'), /dash branch/);
   })) passed++; else failed++;
 
   if (test('resolveStateRead prefers the current branch file', () => {
@@ -139,6 +160,22 @@ function runTests() {
     const resolved = resolveStateRead(stateDir, project, 'feature/auth');
     assert.strictEqual(resolved.source, 'default-branch');
     assert.strictEqual(resolved.filePath, path.join(stateDir, 'Projects--my-app', 'main.md'));
+  })) passed++; else failed++;
+
+  if (test('resolveStateRead migrates safely from legacy branch filenames', () => {
+    const stateDir = makeTmpDir('egc-branch-state-legacy-');
+    const project = '/home/user/Projects/my-app';
+    const legacyFile = legacyBranchStateFile(stateDir, project, 'feature/auth');
+    const currentFile = branchStateFile(stateDir, project, 'feature/auth');
+    writeState(legacyFile, 'legacy branch state');
+
+    const fromLegacy = resolveStateRead(stateDir, project, 'feature/auth');
+    assert.strictEqual(fromLegacy.source, 'branch');
+    assert.strictEqual(fromLegacy.filePath, legacyFile);
+
+    writeState(currentFile, 'current branch state');
+    const fromCurrent = resolveStateRead(stateDir, project, 'feature/auth');
+    assert.strictEqual(fromCurrent.filePath, currentFile);
   })) passed++; else failed++;
 
   if (test('resolveStateRead falls back to the legacy flat file', () => {

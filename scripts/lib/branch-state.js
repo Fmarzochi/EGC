@@ -3,8 +3,10 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 
 const DEFAULT_BRANCH_FILE = 'main.md';
+const BRANCH_FILE_PREFIX_LENGTH = 120;
 
 function getStateDir(homeDir) {
   return path.join(homeDir || os.homedir(), '.egc', 'state');
@@ -17,6 +19,15 @@ function projectSlug(projectPath) {
 
 function sanitizeBranchName(branch) {
   return branch.replaceAll('/', '-').replace(/[^a-zA-Z0-9-_]/g, '_');
+}
+
+// Sanitization alone is not injective: feature/auth and feature-auth both
+// become feature-auth. Keep a readable prefix, then bind it to the exact ref.
+function branchStateKey(branch) {
+  const branchName = String(branch || '');
+  const readablePrefix = sanitizeBranchName(branchName).slice(0, BRANCH_FILE_PREFIX_LENGTH) || 'branch';
+  const digest = createHash('sha256').update(branchName, 'utf8').digest('hex');
+  return `${readablePrefix}--${digest}`;
 }
 
 // Validates a resolved absolute path is within a trusted directory root
@@ -76,6 +87,10 @@ function flatStateFile(stateDir, projectPath) {
 }
 
 function branchStateFile(stateDir, projectPath, branch) {
+  return path.join(stateDir, projectSlug(projectPath), `${branchStateKey(branch)}.md`);
+}
+
+function legacyBranchStateFile(stateDir, projectPath, branch) {
   return path.join(stateDir, projectSlug(projectPath), `${sanitizeBranchName(branch)}.md`);
 }
 
@@ -84,6 +99,10 @@ function resolveStateRead(stateDir, projectPath, branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(branchFile)) {
       return { filePath: branchFile, source: 'branch', branch };
+    }
+    const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
+    if (fs.existsSync(legacyBranchFile)) {
+      return { filePath: legacyBranchFile, source: 'branch', branch };
     }
     const defaultFile = path.join(stateDir, projectSlug(projectPath), DEFAULT_BRANCH_FILE);
     if (fs.existsSync(defaultFile)) {
@@ -113,9 +132,11 @@ module.exports = {
   getStateDir,
   projectSlug,
   sanitizeBranchName,
+  branchStateKey,
   detectBranch,
   flatStateFile,
   branchStateFile,
+  legacyBranchStateFile,
   resolveStateRead,
   resolveStateWrite,
 };

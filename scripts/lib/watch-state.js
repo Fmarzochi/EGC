@@ -5,7 +5,12 @@ const path = require('node:path');
 const os = require('node:os');
 
 const { propagateStateContent } = require('./propagate-state');
-const { projectSlug, sanitizeBranchName, detectBranch } = require('./branch-state');
+const {
+  projectSlug,
+  detectBranch,
+  branchStateFile,
+  legacyBranchStateFile,
+} = require('./branch-state');
 const { isEncryptedBuffer } = require('./state-crypto');
 
 const EGC_START = '<!-- egc:start -->';
@@ -127,8 +132,11 @@ function resolveStateFilePath(projectPath) {
   const branch = detectBranch(projectPath);
 
   if (branch) {
-    const branchFile = path.join(stateDir, slug, `${sanitizeBranchName(branch)}.md`);
+    const branchFile = branchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(branchFile)) return branchFile;
+
+    const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
+    if (fs.existsSync(legacyBranchFile)) return legacyBranchFile;
   }
 
   const defaultFile = path.join(stateDir, slug, 'main.md');

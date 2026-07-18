@@ -68,9 +68,11 @@ async function runTests() {
   const {
     projectSlug,
     sanitizeBranchName,
+    branchStateKey,
     detectBranch,
     flatStateFile,
     branchStateFile,
+    legacyBranchStateFile,
     resolveStateRead,
     resolveStateWrite,
   } = api;
@@ -88,6 +90,11 @@ async function runTests() {
   if (test('sanitizeBranchName produces safe filenames', () => {
     assert.strictEqual(sanitizeBranchName('feature/auth'), 'feature-auth');
     assert.strictEqual(sanitizeBranchName('release/1.0.8'), 'release-1_0_8');
+  })) passed++; else failed++;
+
+  if (test('branchStateKey distinguishes names with the same legacy filename', () => {
+    assert.notStrictEqual(branchStateKey('feature/auth'), branchStateKey('feature-auth'));
+    assert.notStrictEqual(branchStateKey('release/1.0'), branchStateKey('release-1_0'));
   })) passed++; else failed++;
 
   if (test('detectBranch returns the current branch and null outside repos', () => {
@@ -121,6 +128,17 @@ async function runTests() {
     const fromFlat = resolveStateRead(stateDir, project, 'feature/auth');
     assert.strictEqual(fromFlat.source, 'flat');
     assert.strictEqual(fromFlat.filePath, flatStateFile(stateDir, project));
+  })) passed++; else failed++;
+
+  if (test('resolveStateRead supports legacy sanitized branch filenames', () => {
+    const stateDir = makeTmpDir('egc-memory-legacy-');
+    const project = '/home/user/Projects/my-app';
+    const legacyFile = legacyBranchStateFile(stateDir, project, 'feature/auth');
+    writeState(legacyFile, 'legacy branch');
+
+    const resolved = resolveStateRead(stateDir, project, 'feature/auth');
+    assert.strictEqual(resolved.source, 'branch');
+    assert.strictEqual(resolved.filePath, legacyFile);
   })) passed++; else failed++;
 
   if (test('resolveStateRead reports none when no state exists', () => {
