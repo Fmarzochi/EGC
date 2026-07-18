@@ -96,5 +96,19 @@ run('globalStateFilePath points inside ~/.egc/global', () => {
   assert.ok(p.endsWith(path.join('.egc', 'global', 'state.md')));
 });
 
+run('JS hook mirror and TS build produce identical output', () => {
+  const jsLib = require(path.join(__dirname, '..', 'scripts', 'lib', 'global-state.js'));
+  const fixtures = [
+    [{}, ''],
+    [{ Preferences: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'], 'Active Decisions': ['d1'], 'Do Not Repeat': ['a1'], Context: 'scalar' }, '## Preferences\n- p2\n'],
+    [{ Preferences: ['only'] }, '## Preferences\n- only\n'],
+    [{ Unknown: ['x'] }, ''],
+  ];
+  for (const [doc, project] of fixtures) {
+    assert.deepStrictEqual(jsLib.buildGlobalAppendix(doc, project), buildGlobalAppendix(doc, project));
+  }
+  assert.strictEqual(jsLib.globalStateFilePath(), globalStateFilePath());
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
