@@ -70,7 +70,7 @@ function crushTestRunner(output) {
   const lines = output.split('\n');
   const kept = lines.filter(l =>
     KEEP_LINE_RE.test(l)
-    || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|✕|✗|✖|FAIL|PASS:?\s*$)/i.test(l.trim())
+    || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i.test(l.trim())
     || /^\s*\d+ (passed|failed|skipped|pending)/i.test(l)
   );
   const summaryTail = lines.slice(-5).filter(l => l.trim());
