@@ -3,10 +3,8 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
-
-[![npm downloads](https://img.shields.io/npm/dm/@egchq/egc?label=downloads&color=22c55e)](https://www.npmjs.com/package/@egchq/egc) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
 
 <div align="center">
 
