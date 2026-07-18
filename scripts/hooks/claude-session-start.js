@@ -28,6 +28,7 @@ const projectDetect = tryRequire('../lib/project-detect');
 const branchState = tryRequire('../lib/branch-state');
 const autoConsolidate = tryRequire('../lib/auto-consolidate');
 const stateCrypto = tryRequire('../lib/state-crypto');
+const globalState = tryRequire('../lib/global-state');
 
 function readStdinJson() {
   try {
@@ -214,12 +215,13 @@ function readPlaintextState(stateFile) {
 
 function loadAndPrintState(projectPath) {
   const stateFile = resolveStateFile(projectPath);
-  if (!stateFile) return;
+  let content = null;
+  if (stateFile) {
+    content = readPlaintextState(stateFile);
+    if (content !== null && !content.trim()) content = null;
+  }
 
-  const content = readPlaintextState(stateFile);
-  if (content === null || !content.trim()) return;
-
-  if (propagateStateContent) {
+  if (content && propagateStateContent) {
     try {
       propagateStateContent(projectPath, content);
     } catch (_) { // NOSONAR
@@ -227,7 +229,11 @@ function loadAndPrintState(projectPath) {
     }
   }
 
-  process.stdout.write('EGC persistent memory for this project (restored automatically):\n\n' + content);
+  const appendix = globalState ? globalState.readGlobalAppendix(content || '', stateCrypto) : null;
+  if (!content && !appendix) return;
+
+  const header = 'EGC persistent memory for this project (restored automatically):\n\n';
+  process.stdout.write(header + (content || '') + (appendix ? `\n${appendix}\n` : ''));
 }
 
 function postSessionStart(sessionId) {

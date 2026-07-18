@@ -38,6 +38,7 @@ const {
 
 const HOOK_LIB_SOURCES = [
   'scripts/lib/branch-state.js',
+  'scripts/lib/global-state.js',
   'scripts/lib/project-detect.js',
   'scripts/lib/propagate-state.js',
   'scripts/lib/state-crypto.js',
