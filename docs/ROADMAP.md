@@ -62,6 +62,13 @@ Memory everywhere, tokens crushed, sessions coordinated:
 - Zero-friction DCO finally works: the prepare-commit-msg hook shipped without its executable bit since #719 (#854)
 - 20 supported AI coding tools
 
+## v1.1.13: Commit Privacy Completed (Released 2026-07-18)
+
+Closes the commit-privacy scope started in v1.1.12:
+
+- Git clean filter as the third privacy layer: `egc init` configures `filter.egc-memory.clean` locally and binds the four propagation files in `.git/info/attributes`, so `git add` stages a zeroed blob even when local hooks are bypassed; the working tree keeps the populated memory (#863)
+- The installer prints the filter action plan before applying it and honors `--dry-run`; outside a git repository the step is skipped with a reason (#863)
+
 ## v1.2.0: Teams
 
 Multi-developer workflows and shared context:
