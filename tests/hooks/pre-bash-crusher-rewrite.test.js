@@ -54,7 +54,9 @@ runCase('pipelines and chaining pass through', () => {
 
 runCase('already wrapped commands pass through', () => {
   assert.strictEqual(invoke('egc run git log'), 'egc run git log');
-  assert.strictEqual(invoke('rtk git log'), 'rtk git log');
+  process.env.EGC_CRUSHER_SKIP_PREFIXES = 'someproxy';
+  assert.strictEqual(invoke('someproxy git log'), 'someproxy git log');
+  delete process.env.EGC_CRUSHER_SKIP_PREFIXES;
   assert.strictEqual(invoke('git log --raw'), 'git log --raw');
 });
 

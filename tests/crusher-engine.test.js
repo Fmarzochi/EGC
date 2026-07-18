@@ -44,7 +44,9 @@ run('classifies commands into kinds', () => {
   assert.strictEqual(commandKind('yarn install'), 'pm-install');
   assert.strictEqual(commandKind('gh pr list --json number'), 'gh-json');
   assert.strictEqual(commandKind('ls -la'), 'generic');
-  assert.strictEqual(commandKind('rtk git log'), 'git-log');
+  process.env.EGC_CRUSHER_SKIP_PREFIXES = 'someproxy';
+  assert.strictEqual(commandKind('someproxy git log'), 'git-log');
+  delete process.env.EGC_CRUSHER_SKIP_PREFIXES;
 });
 
 run('small outputs pass through untouched', () => {

@@ -29,8 +29,22 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 
 const KEEP_LINE_RE = /\b(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception)\b/i;
 
+// EGC_CRUSHER_SKIP_PREFIXES names other local CLI proxies; their prefix is
+// stripped so the underlying command is still classified correctly.
+function stripProxyPrefix(command) {
+  const trimmed = command.trim();
+  const prefixes = (process.env.EGC_CRUSHER_SKIP_PREFIXES || '')
+    .split(',')
+    .map(p => p.trim())
+    .filter(p => /^[\w.-]+$/.test(p));
+  for (const prefix of prefixes) {
+    if (trimmed.startsWith(`${prefix} `)) return trimmed.slice(prefix.length + 1);
+  }
+  return trimmed;
+}
+
 function commandKind(command) {
-  const normalized = command.trim().replace(/^rtk\s+/, '');
+  const normalized = stripProxyPrefix(command);
   if (/^git\s+log\b/.test(normalized)) return 'git-log';
   if (/^git\s+diff\b/.test(normalized)) return 'git-diff';
   if (/\b(jest|vitest|pytest|mocha)\b/.test(normalized) || /npm\s+(run\s+)?test\b/.test(normalized) || /node\s+\S*tests?\//.test(normalized)) return 'test-runner';

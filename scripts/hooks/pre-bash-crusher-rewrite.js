@@ -19,7 +19,16 @@ function tryRequire(modulePath) {
 // Repo layout first, flattened install layout second.
 const engine = tryRequire('../lib/crusher/engine') || tryRequire('../lib/crusher-engine');
 
-const WRAPPED_RE = /(?:^\s*(?:egc|rtk)\s)|(?:--raw\b)/;
+// EGC_CRUSHER_SKIP_PREFIXES lists extra command prefixes (comma-separated)
+// that mean the command is already handled by another local CLI proxy.
+function wrappedRe() {
+  const extra = (process.env.EGC_CRUSHER_SKIP_PREFIXES || '')
+    .split(',')
+    .map(p => p.trim())
+    .filter(p => /^[\w.-]+$/.test(p));
+  const prefixes = ['egc', ...extra].join('|');
+  return new RegExp(`(?:^\\s*(?:${prefixes})\\s)|(?:--raw\\b)`);
+}
 // Wrapping changes semantics for pipelines, chaining, redirection, substitution
 // and multi-line commands, so those never get rewritten.
 const COMPLEX_SHELL_RE = /[|&;<>$`()\n]/;
@@ -43,7 +52,7 @@ function run(rawInput) {
     if (
       !engine
       || !cmd
-      || WRAPPED_RE.test(cmd)
+      || wrappedRe().test(cmd)
       || COMPLEX_SHELL_RE.test(cmd)
       || engine.commandKind(cmd) === 'generic'
       || !hasEgcCli()
