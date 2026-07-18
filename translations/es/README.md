@@ -3,7 +3,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
