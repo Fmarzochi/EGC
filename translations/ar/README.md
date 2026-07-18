@@ -3,159 +3,92 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
+[![npm downloads](https://img.shields.io/npm/dm/@egchq/egc?label=downloads&color=22c55e)](https://www.npmjs.com/package/@egchq/egc) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
 
 <div align="center">
 
-# EGC - السياق العالمي الممتد (Extended Global Context)
+# EGC - امنح كل وكيل ذكاء اصطناعي الدماغ نفسه
 
-**وكلاؤك الآليون لن يبدأوا من الصفر مرة أخرى أبدًا.**
-
-*بلا إعداد. بلا أوامر. أنت تعمل، وEGC يتذكر.*
+**ذاكرة دائمة يتشاركها تلقائيًا كل وكيل ذكاء اصطناعي وكل IDE وكل طرفية وكل جلسة. لا أوامر تحفظها. لا سياق تعيد بناءه. تحدّث فحسب.**
 
 </div>
 
 ---
 
-EGC هو وقت تشغيل محلي يمنح كل أداة برمجة تعتمد على الذكاء الاصطناعي تستخدمها ذاكرة مستمرة. في نهاية كل جلسة، يحفظ الذكاء الاصطناعي ما تعلمه عن مشروعك: القرارات التي اتخذتها، وما فشل، وتفضيلاتك، وما سيأتي بعد ذلك. في بداية الجلسة التالية، يقوم بتحميل تلك الحالة تلقائيًا دون أن تطلب ذلك. قل "لنكمل" أو "أين توقفنا؟" بأي لغة، وسيعرف الذكاء الاصطناعي بالفعل ما عليه فعله. تثبيت واحد يغطي Claude Code و Cursor و Gemini CLI و Windsurf و Zed و Warp و VS Code مع GitHub Copilot والمزيد (19 أداة إجمالاً). يعمل بشكل أصلي مع Claude وGPT-4o وGemini وDeepSeek وMistral وGroq وCohere وVertex AI، بالإضافة إلى OpenRouter لـ Qwen3 وLlama 4 والمزيد.
+EGC ليس أداة ذاكرة أخرى. إنه طبقة الذكاء التي تجعل أي ذكاء اصطناعي يعمل كأنه في مشروعك منذ اليوم الأول - في Cursor وCopilot وClaude Code وCodex وAider وأي وكيل طرفية (20 أداة برمجة بالذكاء الاصطناعي إجمالًا).
 
----
-
-## ذكاؤك الاصطناعي يعرف بالفعل
-
-تفتح Claude Code في مشروع لم تلمسه منذ أسبوعين. دون كتابة أي شيء:
-
-```
-State loaded from egc-memory via ~/.egc/state/MyApp/main.md
-
-Context and preferences acknowledged.
-
-Ready to pick up:
-• Fix the rate limiter edge case on concurrent requests
-• Add integration tests for the new auth module
-• Review open PR from @contributor before merging
-
-=== EGC Stack Briefing ===
-Stack: typescript, node
-Skills: tdd-workflow, coding-standards
-Agents: code-reviewer
-Guardian: active, every command checked before it runs
-===
-```
-
-هذه ليست ذاكرة تخزين مؤقت لآخر محادثة. يتذكر EGC القرارات، والمحاولات الفاشلة، وتفضيلاتك، ويظل يقظًا طوال الجلسة، فيمنع الأوامر التي قد تدمر مشروعك قبل أن تُنفَّذ. لم تطلب أي شيء من هذا. لقد بدأت العمل فحسب.
-
-<div align="center">
-  <img src="../../assets/egc-terminal.gif" alt="EGC demo" width="700" />
-</div>
+كل محادثة تبني الذكاء الجماعي لمشروعك. كل وكيل يرثه. وكل جلسة تصبح أذكى.
 
 ---
 
 ## التثبيت
 
-نفس أمر التثبيت على Windows وmacOS وLinux:
-
 ```bash
 npm install -g @egchq/egc && egc install
 ```
 
-لدى Windows بعض الملاحظات الخاصة به (إصدار PowerShell، Antigravity CLI، توقف الخطة المجانية لـ Gemini CLI): راجع [ملاحظات Windows](../../docs/installation.md#windows-notes) إن واجهت أي شيء غير متوقع.
+- **قلّل هدر السياق حتى 90%، واخفض تكاليف التوكنز، وأبقِ كل الذكاءات الاصطناعية متناسقة تمامًا عبر الجلسات.**
+- **Guardian: يتحقق من كل أمر قبل تنفيذه، ويحجب الكتابات الخطرة، ويكشف حقن الأوامر - كل دماغ مشترك يأتي بطبقة أمان مدمجة.**
+- **أمر واحد، بلا إعدادات: تبقى الذاكرة محلية ومشفّرة على جهازك، ولا تُرفع أبدًا إلى git.**
 
-أو التشغيل بدون تثبيت عالمي:
-
-```bash
-npx @egchq/egc install
-```
-
-**عقل واحد، أدوات متعددة.** بعد تثبيت امتداد GitHub Copilot Chat، يجد Copilot الـ skills بنفسه، وتظهر نفس الذاكرة الموجودة في Claude Code أو Cursor هناك أيضًا:
-
-```bash
-npm install -g @egchq/egc
-egc install --target copilot
-```
+<div align="center">
+  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+</div>
 
 [دليل التثبيت الكامل](../../docs/installation.md)
 
 ---
 
-## ما يقدمه EGC لذكائك الاصطناعي
+## داخل الدماغ: كيف يعمل EGC
 
-يشغّل EGC دائمًا شيئين معًا في كل جلسة: ذاكرة تحفظ ما يهم، وطبقة أمان تمنع الأوامر الخطرة قبل تنفيذها. كل ذلك جاهز دون أي إعداد.
+EGC ليس قائمة أدوات؛ إنه دماغ واحد بعدة ملكات. يتذكر ويفهم ويحمي ويصفّي وينسّق - عبر كل وكلاء الذكاء الاصطناعي على جهازك.
 
-### الذاكرة: ما يتذكره ذكاؤك الاصطناعي بنفسه
+<div align="center">
+  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+</div>
 
-لن تحفظ أي أمر عن ظهر قلب أبدًا. قلها بأي لغة: "أكمل من الأمس"، "تذكر هذا القرار"، "ما الذي تعطّل آخر مرة؟"، وسيعرف ذكاؤك الاصطناعي بالضبط ما عليه فعله. العمل لك، والتذكر لـ EGC.
+### لا تحفظ الأوامر - تحدّث بشكل طبيعي
 
-**`egc-memory`**
+خاطب الدماغ بأي لغة: «احفظ هذه الجلسة»، «ماذا قررنا بشأن المصادقة؟»، «تذكّر هذا القرار». يفهم EGC القصد، ويخزّن السياق، ويستدعيه فورًا في أي تبويب أو طرفية أو أداة أخرى على جهازك. دماغ واحد. كل الوكلاء. صفر أوامر للحفظ.
 
-| الأداة | ماذا تفعل |
-|---|---|
-| `get_state` | يحمّل كل ما كان يعرفه ذكاؤك الاصطناعي عن المشروع لحظة فتح الجلسة |
-| `update_state` | يحفظ ما تقرر اليوم حتى لا يفقد أحد الخيط غدًا |
-| `store_decision` | يسجّل قرارًا مهمًا واحدًا، بشكل دائم |
-| `query_history` | يعرض القرارات السابقة بترتيب حدوثها |
-| `search_history` | يجد أي شيء تقرر يومًا ما، حتى لو لم تتذكر التاريخ |
-| `working_memory_set` / `_get` / `_list` | ملاحظات سريعة تنتهي صلاحيتها تلقائيًا عندما لا تعود مفيدة |
-| `lesson_save` | يسجل درسًا مستفادًا، تضعف قوته مع الوقت إن لم يتأكد منه أحد مجددًا |
-| `lesson_recall` | يستعيد الدروس التي لا تزال تستحق العمل بها |
-| `lesson_reinforce` | يعزز درسًا عند تأكيده مرة أخرى |
-| `detect_patterns` | يلاحظ عندما يتكرر نفس الخطأ أو الأمر كثيرًا |
-| `compress_observations` | يلخّص السجل الخام حتى لا تهدر الرموز (tokens) عبثًا |
-| `get_project_state` | يتأكد أن الذاكرة تعمل كما ينبغي |
+### ذاكرة مشروع دائمة
 
-كل فرع (branch) في مشروعك يحتفظ بذاكرته الخاصة، مشفّرة على جهازك: لا يستطيع أحد آخر الوصول إليها، ولا حتى السحابة. خصوصية افتراضية، دون إعداد أي شيء.
+يمنح EGC كل وكيل ذكاء اصطناعي دماغًا دائمًا مشتركًا. يلتقط القرارات وسياق الجلسة والذاكرة العاملة والأنماط المتعلّمة - ثم يجعلها متاحة فورًا في أي طرفية أو IDE أو وكيل آخر تفتحه. حالة الجلسة وتاريخ المشروع والدروس المتراكمة تتدفق بسلاسة بين التبويبات والأدوات والزملاء - بلا مزامنة يدوية وبلا فقدان سياق. كل الذاكرة تعيش في `~/.egc` على جهازك، مشفّرة بـ AES-256-GCM، منفصلة لكل فرع، ولا تُرفع أبدًا إلى مستودعك.
 
-### السياق والأمان: ما يحرس عملك
+### Guardian: حواجز أمان مدمجة
 
-**`egc-guardian`**
+النصف الثاني من الدماغ يدير حواجز الأمان في الخلفية. يتحقق من الأوامر قبل تنفيذها، ويوقف الكتابات الخطرة، ويضغط السياق قبل أن يفيض، وينسّق المهام متعددة الخطوات بين الوكلاء، ويتعلم من كل تصحيح - كل ذلك دون أن تستدعي أداة واحدة. شبكة أمان خفية تُبقي السياق خفيفًا والأفعال آمنة والعمل مستقلًا.
 
-هذه الأدوات تعمل تلقائياً في الخلفية. كل أمر shell وكل كتابة ملف يتم فحصهما قبل التنفيذ. لا تحتاج إلى استدعائها مباشرة.
+### Token Crusher: الدماغ يصفّي الضجيج قبل أن يتذكر
 
-| الأداة | ماذا تفعل |
-|---|---|
-| `validate_command` | يفحص كل أمر قبل تنفيذه: يمنع ما قد يسبب ضررًا |
-| `validate_write` | يمنع ذكاءك الاصطناعي من الكتابة في ملفات حساسة عن طريق الخطأ |
-| `reduce_context` | يضغط الملفات الكبيرة حتى لا تهدر ميزانية الرموز عبثًا |
-| `orchestrate_task` | يختار الأدوات الصحيحة لكل طلب، دون أن تحتاج لمعرفة أيها موجود |
-| `auto_learn` | يتعلم من أخطاء الجلسة ويسجلها حتى لا تتكرر |
-
-### Token Crusher: توقف عن حرق التوكنز على ضجيج الطرفية
-
-سجل `git log` من 200 إيداع، و`npm install` من 400 سطر، ومجموعة اختبارات فيها 300 اختبار ناجح: نموذجك يقرأ كل ذلك، وأنت تدفع ثمن كل ذلك. يضغط Token Crusher هذه المخرجات **قبل أن تصل إلى النموذج**: أصغر بنسبة تصل إلى 90%، مع الحفاظ دائمًا على الأخطاء والتحذيرات والإخفاقات.
-
-```
-egc run git log        # الأمر نفسه، مخرجات مضغوطة
-egc run --raw git log  # مخرج الطوارئ: المخرجات الكاملة
-egc saved              # التوفير المتراكم، محسوب محليًا بتكلفة صفر من التوكنز
-```
-
-محافظ حسب التصميم: المخرجات الصغيرة تمر كما هي، والإخفاقات تنجو دائمًا، وتقرير التوفير لا يلمس نافذة السياق أبدًا.
-### مُطبَّق بالكود، لا بالطلب
-
-أمان لا يعتمد على مزاج الذكاء الاصطناعي: كل أمر يمر عبر EGC قبل تنفيذه، دائمًا. [تفاصيل كاملة عن تطبيق الـ harness، وكشف نية الجلسة، ومنقّب الذاكرة →](../../docs/installation.md#enforcement)
-
-### ذاكرة واحدة. لكل أدواتك.
-
-شغّل **`egc watch`** مرة واحدة وانسَه. غيّر السياق في Cursor، ويظهر تلقائيًا في Gemini CLI و Copilot و Windsurf و Zed: في كل ما تستخدمه. بلا خطوات يدوية، وبلا حالة قديمة في أي مكان.
-
-```
-egc watch              # مراقبة المشروع الحالي
-egc watch /path/proj   # مراقبة مشروع محدد
-egc watch --quiet      # كتم المخرجات
-```
-
-### لوحة التحكم: شاهد وكلاءك وهم يعملون
-
-شاهد كل استدعاء أداة وكل رمز وتكلفة يولّدها وكلاؤك، مباشرةً في المتصفح. تبدأ تلقائياً بعد `egc init`. [الدليل الكامل](../../docs/installation.md#dashboard)
+الدماغ لا يتذكر فحسب - بل يصفّي. قبل أن يصل خرج الطرفية إلى النموذج، يضغط Token Crusher سجلات git وضجيج الاختبارات وبريد التثبيت وملفات JSON الضخمة حتى 90%، مع الحفاظ على كل خطأ وتحذير. شغّل `egc saved` لترى وفورات التوكنز المتراكمة، محسوبة محليًا وبلا تكلفة - جلسات أرخص وسياق يدوم.
 
 ---
 
-## مكتبة الأوامر
+## مكتبة الموجهات
 
-كمكافأة، يمنحك EGC أيضًا وصولًا إلى 63 agent و230 skill و77 command، بالإضافة إلى 111 rule: خبراء يراجعون كودك بأنفسهم، وأدلة أفضل الممارسات لكل لغة وموقف، واختصارات تنفذ سلسلة كاملة من المهام نيابة عنك، وقواعد أسلوب تحافظ على اتساق الكود. كلها مكتوبة من جلسات هندسة حقيقية، لا نظريات. لا تريد استخدام أي منها؟ لا بأس: تعمل ذاكرة EGC المستمرة بنفس الطريقة تمامًا.
+كمكافأة، يمنحك EGC الوصول إلى 63 وكيلًا و230 مهارة و77 أمرًا، إضافة إلى 111 قاعدة: مختصون يراجعون كودك بأنفسهم، وأدلة أفضل الممارسات لكل لغة وموقف، واختصارات تنفذ سلاسل مهام كاملة، وقواعد أسلوب تحافظ على اتساق الكود. كلها مكتوبة من جلسات هندسية حقيقية لا من النظريات. لا تريد استخدام أي منها؟ لا بأس: الذاكرة الدائمة في EGC تعمل تمامًا كما هي.
+
+---
+
+## بداية سريعة
+
+شغّل `egc watch` مرة واحدة وانسَ وجوده:
+
+```bash
+egc watch
+```
+
+غيّر السياق في Cursor فيظهر وحده في Gemini CLI وCopilot وWindsurf وZed أو أي وكيل طرفية. لا خطوات يدوية ولا حالة قديمة.
+
+لمشاهدة نداءات الأدوات والتوكنز والتكاليف من وكلائك مباشرة في المتصفح:
+
+```bash
+egc dashboard
+```
 
 ---
 
