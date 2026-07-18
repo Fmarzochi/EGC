@@ -122,6 +122,17 @@ Estas herramientas se ejecutan solas, en segundo plano. Cada comando de shell y 
 | `orchestrate_task` | Elige las herramientas correctas para cada solicitud, sin que tengas que saber cuáles existen |
 | `auto_learn` | Aprende de los errores de la sesión y lo deja anotado para que no se repita |
 
+### Token Crusher: deja de quemar tokens con ruido de shell
+
+Un `git log` de 200 commits, un `npm install` de 400 líneas, una suite con 300 tests en verde: tu modelo lee todo eso, y tú pagas por todo eso. El Token Crusher comprime esa salida **antes de que llegue al modelo**: hasta un 90% más pequeña, preservando siempre errores, avisos y fallos.
+
+```
+egc run git log        # mismo comando, salida comprimida
+egc run --raw git log  # vía de escape: salida completa
+egc saved              # ahorro acumulado, calculado localmente con coste cero de tokens
+```
+
+Conservador por diseño: las salidas pequeñas pasan intactas, los fallos siempre sobreviven y el informe de ahorro nunca toca tu ventana de contexto.
 ### Aplicado por código, no por petición
 
 Seguridad que no depende de que la IA esté de buen humor: todo comando pasa por EGC antes de ejecutarse, siempre. [Detalles completos sobre la aplicación del harness, la detección de intención de sesión y el minero de memoria →](../../docs/installation.md#enforcement)
