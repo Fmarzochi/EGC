@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
@@ -177,7 +177,8 @@ class SQLiteArbitrationQueue {
           // Equal jitter: with N MCP server processes (one per IDE/CLI session)
           // colliding on the same ~/.egc database, deterministic backoff wakes
           // them all on the same tick and the collision repeats (thundering herd).
-          backoff = backoff / 2 + Math.random() * (backoff / 2);
+          const half = Math.floor(backoff / 2);
+          backoff = half + randomInt(0, half + 1);
           log('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, {
             queue_depth: this.queue.length,
             retry_count: task.retries,
