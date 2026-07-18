@@ -3,159 +3,92 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
+[![npm downloads](https://img.shields.io/npm/dm/@egchq/egc?label=downloads&color=22c55e)](https://www.npmjs.com/package/@egchq/egc) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
 
 <div align="center">
 
-# EGC - Extended Global Context
+# EGC - すべてのAIエージェントに同じ脳を
 
-**あなたのAIエージェントは、もうゼロから始める必要がありません。**
-
-*設定不要。コマンド不要。あなたは作業するだけ、EGCが覚えています。*
+**すべてのAIエージェント、IDE、ターミナル、セッションが自動的に共有する永続メモリ。覚えるプロンプトなし。文脈の再構築なし。話すだけ。**
 
 </div>
 
 ---
 
-EGCは、あなたが使うすべてのAIコーディングツールに永続メモリを提供するローカルランタイムです。各セッションの終わりに、AIは学んだことを保存します。下した決定、失敗したこと、あなたの好み、次に取りかかるべきことです。次のセッションの開始時には、その状態を自動で読み込みます。プロンプトは不要です。どの言語でも「続きをやろう」や「どこで止まった？」と言えば、AIはすでに何をすべきか分かっています。1回のインストールでClaude Code、Cursor、Gemini CLI、Windsurf、Zed、Warp、VS Code（GitHub Copilot付き）など（合計19ツール）をカバーします。Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere、Vertex AIにネイティブ対応し、さらにQwen3やLlama 4などにはOpenRouter経由で対応します。
+EGCは単なるメモリツールではありません。あらゆるAIが初日からプロジェクトにいたかのように働ける知能レイヤーです。Cursor、Copilot、Claude Code、Codex、Aider、そしてあらゆるターミナルエージェントで(合計20のAIコーディングツールに対応)。 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere、Vertex AIにネイティブ対応し、OpenRouter経由でQwen3やLlama 4などにも対応します。
 
----
-
-## あなたのAIはもう知っている
-
-2週間触っていなかったプロジェクトをClaude Codeで開きます。何も入力しなくても、次のようになります。
-
-```
-State loaded from egc-memory via ~/.egc/state/MyApp/main.md
-
-Context and preferences acknowledged.
-
-Ready to pick up:
-• Fix the rate limiter edge case on concurrent requests
-• Add integration tests for the new auth module
-• Review open PR from @contributor before merging
-
-=== EGC Stack Briefing ===
-Stack: typescript, node
-Skills: tdd-workflow, coding-standards
-Agents: code-reviewer
-Guardian: active, every command checked before it runs
-===
-```
-
-これは前回の会話のキャッシュではありません。EGCは決定、行き詰まった経緯、あなたの好みを覚えているだけでなく、セッションの間ずっと見張り続け、コードベースを壊しかねないコマンドを実行前にブロックします。あなたは何も頼んでいません。ただ作業を始めただけです。
-
-<div align="center">
-  <img src="../../assets/egc-terminal.gif" alt="EGC demo" width="700" />
-</div>
+会話のたびにプロジェクトの集合知が育ちます。すべてのエージェントがそれを受け継ぎ、セッションごとに賢くなります。
 
 ---
 
 ## インストール
 
-Windows、macOS、Linuxでインストールコマンドは同じです。
-
 ```bash
 npm install -g @egchq/egc && egc install
 ```
 
-Windows特有の注意点もあります（PowerShellのバージョン、Antigravity CLI、Gemini CLIの無料枠終了など）。何か想定外のことが起きたら[Windows notes](../../docs/installation.md#windows-notes)を確認してください。
+- **コンテキストの無駄を最大90%削減し、トークンコストを抑え、すべてのAIをセッション間で完全に同期させます。**
+- **Guardian: 実行前にすべてのコマンドを検証し、危険な書き込みをブロックし、プロンプトインジェクションを検出。共有される脳には安全レイヤーが標準搭載。**
+- **ワンコマンド、設定ゼロ: メモリはローカルに暗号化して保存され、gitにコミットされることはありません。**
 
-グローバルにインストールせずに実行することもできます。
-
-```bash
-npx @egchq/egc install
-```
-
-**1つの頭脳、複数のツール。** GitHub Copilot Chat拡張機能をインストールしていれば、Copilotが自動でスキルを見つけ、Claude CodeやCursorですでに使っているメモリがそこにも反映されます。
-
-```bash
-npm install -g @egchq/egc
-egc install --target copilot
-```
+<div align="center">
+  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+</div>
 
 [インストールガイド全文](../../docs/installation.md)
 
 ---
 
-## EGCがAIに提供するもの
+## 脳の中身: EGCの仕組み
 
-EGCは毎回のセッションで、常に2つのことを一緒に行います。大切なことを覚えておく記憶と、危険なコマンドを実行前に止める安全装置です。どちらも設定不要、最初から使えます。
+EGCはツールの一覧ではなく、複数の能力を持つひとつの脳です。覚え、理解し、守り、濾過し、調整します。あなたのマシン上のすべてのAIエージェントで。
 
-### メモリ：あなたのAIが自分で覚えていること
+<div align="center">
+  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+</div>
 
-覚えるべきコマンドは1つもありません。どの言語でも「昨日の続きから」「この決定を覚えて」「前回は何が壊れた？」と言えば、AIが正確に何をすべきか分かります。作業はあなたのもの、記憶はEGCのものです。
+### コマンドを覚えない、自然に話すだけ
 
-**`egc-memory`**
+どの言語でも脳に話しかけてください。「このセッションを保存して」「認証について何を決めた?」「この決定を覚えて」。EGCは意図を理解し、文脈を保存し、マシン上の他のタブ・ターミナル・ツールで即座に呼び出します。ひとつの脳。すべてのエージェント。覚えるコマンドはゼロ。
 
-| Tool | What it does |
-|---|---|
-| `get_state` | セッションを開いた瞬間に、AIが知っていたプロジェクトの情報をすべて読み込みます |
-| `update_state` | 今日決めたことを保存し、明日誰も話の続きを見失わないようにします |
-| `store_decision` | 重要な決定を1つ、永久に記録します |
-| `query_history` | 過去の決定を起きた順に表示します |
-| `search_history` | いつ決まったか覚えていなくても、決定事項を見つけます |
-| `working_memory_set` / `_get` / `_list` | 不要になったら自動で消える一時メモです |
-| `lesson_save` | 学んだことを記録し、確認されないと時間とともに弱まります |
-| `lesson_recall` | まだ役立つ教訓を呼び戻します |
-| `lesson_reinforce` | 教訓が再び確認されたとき、その信頼度を高めます |
-| `detect_patterns` | 同じエラーやコマンドが繰り返されていることに気づきます |
-| `compress_observations` | 生の履歴を要約し、無駄にトークンを使わないようにします |
-| `get_project_state` | メモリが正しく動作しているか確認します |
+### 永続するプロジェクトメモリ
 
-プロジェクトの各ブランチは、あなたのコンピュータ上で暗号化された、それぞれ専用のメモリを持ちます。クラウドを含め、他の誰もアクセスできません。設定不要で、最初からプライバシーが守られています。
+EGCはすべてのAIエージェントに永続的な共有脳を与えます。決定、セッションの文脈、ワーキングメモリ、学習したパターンを捉え、開いたどのターミナル・IDE・エージェントでも即座に利用可能にします。セッション状態、プロジェクト履歴、蓄積された教訓がタブ・ツール・チームメイトの間をシームレスに流れます。手動同期なし、文脈の喪失なし。メモリはすべてマシンの `~/.egc` にAES-256-GCMで暗号化され、ブランチごとに保存され、リポジトリにコミットされることはありません。
 
-### コンテキストと安全：作業中に見張っているもの
+### Guardian: 組み込みの安全ガードレール
 
-**`egc-guardian`**
+脳のもう半分はバックグラウンドでガードレールを走らせます。コマンドを実行前に検証し、危険な書き込みを止め、溢れる前にコンテキストを圧縮し、エージェント間のマルチステップタスクを編成し、すべての修正から学びます。ツールをひとつも呼び出すことなく。コンテキストを軽く、行動を安全に、ワークフローを自律的に保つ見えないセーフティネットです。
 
-これらのツールはバックグラウンドで自動的に実行されます。すべてのシェルコマンドとすべてのファイル書き込みは、実行前にチェックされます。あなたが直接呼び出す必要はありません。
+### Token Crusher: 脳は覚える前にノイズを濾過する
 
-| Tool | What it does |
-|---|---|
-| `validate_command` | すべてのコマンドを実行前にチェックし、問題を起こしかねないものをブロックします |
-| `validate_write` | AIが誤って機密ファイルに書き込むのを防ぎます |
-| `reduce_context` | 大きなファイルを圧縮し、トークン予算を無駄にしません |
-| `orchestrate_task` | どのツールが存在するか知らなくても、リクエストごとに適切なツールを選びます |
-| `auto_learn` | セッション中の失敗から学び、繰り返さないよう記録します |
-
-### Token Crusher: シェルのノイズでトークンを浪費しない
-
-200コミットの `git log`、400行の `npm install`、300件パスするテストスイート: モデルはそのすべてを読み、あなたはそのすべてに支払っています。Token Crusher はその出力を**モデルに届く前に**圧縮します: 最大90%小さく、エラー・警告・失敗は常に保持されます。
-
-```
-egc run git log        # 同じコマンド、圧縮された出力
-egc run --raw git log  # 緊急脱出口: 完全な出力
-egc saved              # 累積の節約額、トークンコストゼロでローカル計算
-```
-
-設計から保守的: 小さな出力はそのまま通過し、失敗は必ず生き残り、節約レポートがコンテキストウィンドウに触れることはありません。
-### 要求ではなく強制
-
-AIの機嫌に頼らない安全機能です。すべてのコマンドは実行前に必ずEGCを通過します。[ハーネスの仕組み、セッション意図の検出、メモリマイナーの詳細 →](../../docs/installation.md#enforcement)
-
-### 1つのメモリ。すべてのツールで。
-
-**`egc watch`** を一度実行すれば、あとは忘れてしまって構いません。Cursorでコンテキストを変更すると、Gemini CLI、Copilot、Windsurf、Zedなど、使っているすべてのツールに自動で反映されます。手動作業も、古い状態が残ることもありません。
-
-```
-egc watch              # watch current project
-egc watch /path/proj   # watch a specific project
-egc watch --quiet      # suppress output
-```
-
-### Dashboard：エージェントの動きをその場で見る
-
-エージェントが生成するすべてのツール呼び出し、トークン、コストをブラウザでライブ表示できます。`egc init` の後に自動で起動します。[ガイド全文](../../docs/installation.md#dashboard)
+脳は覚えるだけでなく、濾過します。シェル出力がモデルに届く前に、EGCのToken Crusherがgitログ、テストのノイズ、インストールのスパム、巨大なJSONを最大90%圧縮し、エラーと警告は必ず残します。`egc saved` を実行すれば、ローカルでコストゼロで計算された累積トークン節約が見られます。セッションは安く、コンテキストは長持ち。
 
 ---
 
-## Prompt library
+## プロンプトライブラリ
 
-ボーナスとして、EGCは63個のagent、230個のskill、77個のcommand、さらに111個のruleへのアクセスも提供します。自分のコードを自動でレビューする専門家、あらゆる言語・状況向けのベストプラクティスガイド、一連のタスクをまとめて実行するショートカット、コードの一貫性を保つスタイルルールです。すべて理論ではなく、実際のエンジニアリングセッションから書かれています。使わなくても大丈夫です。EGCの永続メモリはそのまま同じように機能します。
+ボーナスとして、EGCは63のエージェント、230のスキル、77のコマンド、さらに111のルールへのアクセスを提供します。自らコードをレビューする専門家、あらゆる言語と状況のベストプラクティスガイド、一連のタスクをまとめて実行するショートカット、コードの一貫性を保つスタイルルール。すべて理論ではなく実際のエンジニアリングセッションから書かれています。使いたくない?問題ありません。EGCの永続メモリはまったく同じように機能します。
+
+---
+
+## クイックスタート
+
+`egc watch` を一度実行したら、存在を忘れてください:
+
+```bash
+egc watch
+```
+
+Cursorでコンテキストを変えれば、Gemini CLI、Copilot、Windsurf、Zed、あらゆるターミナルエージェントに自動で現れます。手動の手順なし、古い状態なし。
+
+エージェントのツール呼び出し、トークン、コストをブラウザでライブで見るには:
+
+```bash
+egc dashboard
+```
 
 ---
 

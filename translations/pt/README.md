@@ -3,159 +3,92 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
-[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=alert_status)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=security_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Fmarzochi_EGC&metric=reliability_rating)](https://sonarcloud.io/project/overview?id=Fmarzochi_EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc) [![EGC MCP server](https://glama.ai/mcp/servers/Fmarzochi/EGC/badges/score.svg)](https://glama.ai/mcp/servers/Fmarzochi/EGC)
+[![npm downloads](https://img.shields.io/npm/dm/@egchq/egc?label=downloads&color=22c55e)](https://www.npmjs.com/package/@egchq/egc) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Fmarzochi/EGC?label=openssf+scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/Fmarzochi/EGC) [![Socket](https://socket.dev/api/badge/npm/package/@egchq/egc)](https://socket.dev/npm/package/@egchq/egc)
 
 <div align="center">
 
-# EGC - Extended Global Context
+# EGC - Dê o Mesmo Cérebro a Todos os Seus Agentes de IA
 
-**Seus agentes de IA nunca mais começarão do zero.**
-
-*Configuração zero. Comandos zero. Você trabalha, o EGC lembra.*
+**Memória persistente que todo agente de IA, IDE, terminal e sessão compartilham automaticamente. Sem prompts para decorar. Sem contexto para reconstruir. Basta conversar.**
 
 </div>
 
 ---
 
-EGC é um runtime local que oferece memória persistente para cada ferramenta de IA que você usa. Ao final de cada sessão, a IA salva o que aprendeu sobre o seu projeto: as decisões tomadas, o que falhou, suas preferências e os próximos passos. No início da próxima sessão, ela carrega esse estado de volta sozinha, sem você pedir nada. Diga "vamos continuar" ou "onde paramos?" em qualquer idioma e sua IA já sabe o que fazer. Uma única instalação cobre Claude Code, Cursor, Gemini CLI, Windsurf, Zed, Warp, JetBrains Junie, VS Code com GitHub Copilot e muito mais (20 ferramentas no total). Compatível nativamente com Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere e Vertex AI, além do OpenRouter para Qwen3, Llama 4 e outros.
+O EGC não é mais uma ferramenta de memória. É a camada de inteligência que faz qualquer IA trabalhar como se estivesse no seu projeto desde o primeiro dia, no Cursor, Copilot, Claude Code, Codex, Aider e em qualquer agente de terminal (20 ferramentas de programação com IA no total). Funciona nativamente com Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere e Vertex AI, além do OpenRouter para Qwen3, Llama 4 e mais.
 
----
-
-## Sua IA já sabe
-
-Você abre o Claude Code em um projeto que não toca há duas semanas. Sem digitar nada:
-
-```
-State loaded from egc-memory via ~/.egc/state/MyApp/main.md
-
-Context and preferences acknowledged.
-
-Ready to pick up:
-• Fix the rate limiter edge case on concurrent requests
-• Add integration tests for the new auth module
-• Review open PR from @contributor before merging
-
-=== EGC Stack Briefing ===
-Stack: typescript, node
-Skills: tdd-workflow, coding-standards
-Agents: code-reviewer
-Guardian: active, every command checked before it runs
-===
-```
-
-Isso não é um cache da sua última conversa. O EGC lembra das decisões, dos becos sem saída e das suas preferências, e fica de guarda a sessão inteira, bloqueando os comandos que incendiariam seu código antes deles rodarem. Você não pediu nada disso. Só começou a trabalhar.
-
-<div align="center">
-  <img src="../../assets/egc-terminal.gif" alt="EGC demo" width="700" />
-</div>
+Cada conversa aumenta a inteligência coletiva do seu projeto. Cada agente a herda. Cada sessão fica mais inteligente.
 
 ---
 
 ## Instalação
 
-Mesmo comando de instalação no Windows, macOS e Linux:
-
 ```bash
 npm install -g @egchq/egc && egc install
 ```
 
-O Windows tem algumas ressalvas próprias (versão do PowerShell, Antigravity CLI, fim do free tier do Gemini CLI): veja as [notas do Windows](../../docs/installation.md#windows-notes) se algo inesperado acontecer.
+- **Reduza em até 90% o desperdício de contexto, corte custos de token e mantenha todas as IAs perfeitamente alinhadas entre sessões.**
+- **Guardian: valida cada comando antes da execução, bloqueia escritas perigosas e detecta prompt injection. Todo cérebro compartilhado vem com uma camada de segurança embutida.**
+- **Um comando, zero configuração: a memória fica local e criptografada na sua máquina, e nunca é commitada no git.**
 
-Ou execute sem instalar globalmente:
+<div align="center">
+  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+</div>
 
-```bash
-npx @egchq/egc install
-```
-
-**Um cérebro, várias ferramentas.** Com a extensão do GitHub Copilot Chat instalada, o Copilot encontra as skills sozinho, e a mesma memória que você já tem no Claude Code ou no Cursor aparece lá também:
-
-```bash
-npm install -g @egchq/egc
-egc install --target copilot
-```
-
-[Guia de instalação completo](../../docs/installation.md)
+[Guia completo de instalação](../../docs/installation.md)
 
 ---
 
-## O que o EGC oferece à sua IA
+## Dentro do Cérebro: Como o EGC Funciona
 
-O EGC sempre roda duas coisas juntas, em toda sessão: uma memória que guarda o que importa, e uma camada de segurança que barra comando perigoso antes dele rodar. Vem tudo pronto, sem configurar nada.
+O EGC não é uma lista de ferramentas; é um cérebro com várias faculdades. Ele lembra, entende, protege, filtra e coordena, em todos os agentes de IA da sua máquina.
 
-### Memória: o que sua IA lembra sozinha
+<div align="center">
+  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+</div>
 
-Você nunca vai memorizar comando nenhum. Fala em qualquer língua: "continua de ontem", "lembra dessa decisão", "o que quebrou da última vez", e sua IA sabe exatamente o que fazer. O trabalho é seu, a lembrança é do EGC.
+### Você Não Decora Comandos, Você Fala Naturalmente
 
-**`egc-memory`**
+Fale com o cérebro em qualquer idioma: "salva essa sessão", "o que decidimos sobre a autenticação?", "lembra dessa decisão". O EGC entende a intenção, guarda o contexto e o resgata na hora em qualquer outra aba, terminal ou ferramenta da sua máquina. Um cérebro. Todos os agentes. Zero comandos para decorar.
 
-| Ferramenta | O que faz |
-|---|---|
-| `get_state` | Carrega tudo que sua IA já sabia sobre o projeto assim que a sessão abre |
-| `update_state` | Guarda o que foi decidido hoje pra amanhã ninguém perder o fio |
-| `store_decision` | Anota uma decisão importante pra sempre |
-| `query_history` | Mostra decisões antigas, em ordem de quando aconteceram |
-| `search_history` | Busca qualquer coisa que já foi decidida, mesmo sem lembrar a data |
-| `working_memory_set` / `_get` / `_list` | Anotações rápidas que expiram sozinhas quando não servem mais |
-| `lesson_save` | Grava um aprendizado, que perde força com o tempo se ninguém confirmar de novo |
-| `lesson_recall` | Traz de volta os aprendizados que ainda valem a pena |
-| `lesson_reinforce` | Reforça um aprendizado quando ele se confirma de novo |
-| `detect_patterns` | Percebe quando o mesmo erro ou comando se repete demais |
-| `compress_observations` | Resume o histórico bruto pra não gastar tokens à toa |
-| `get_project_state` | Confere se a memória está funcionando direito |
+### Memória Persistente de Projeto
 
-Cada branch do seu projeto guarda sua própria memória, criptografada no seu computador: ninguém mais tem acesso, nem a nuvem. Privacidade de fábrica, sem configurar nada.
+O EGC dá a cada agente de IA um cérebro persistente e compartilhado. Ele captura decisões, contexto de sessão, memória de trabalho e padrões aprendidos, e os disponibiliza na hora em qualquer outro terminal, IDE ou agente que você abrir. Estado de sessão, histórico do projeto e lições acumuladas fluem entre abas, ferramentas e colegas: sem sincronização manual, sem perda de contexto. Toda a memória vive em `~/.egc` na sua máquina, criptografada com AES-256-GCM, separada por branch de projeto, e nunca é commitada no seu repositório.
 
-### Contexto e segurança: o que fica de guarda enquanto você trabalha
+### Guardian: Proteção de Segurança Embutida
 
-**`egc-guardian`**
+A segunda metade do cérebro roda guarda-corpos em segundo plano. Valida comandos antes de executarem, barra escritas arriscadas, comprime o contexto antes de estourar, orquestra tarefas de múltiplos passos entre agentes e aprende com cada correção, tudo sem você invocar uma única ferramenta. Uma rede de segurança invisível que mantém o contexto enxuto, as ações seguras e os fluxos autônomos.
 
-Essas ferramentas rodam sozinhas, em segundo plano. Todo comando de shell e toda escrita de arquivo é conferida antes de executar. Você nunca as chama diretamente.
+### Token Crusher: O Cérebro Filtra o Ruído Antes de Lembrar
 
-| Ferramenta | O que faz |
-|---|---|
-| `validate_command` | Confere todo comando antes de rodar: bloqueia o que pode dar problema |
-| `validate_write` | Impede que a IA escreva em arquivos sensíveis por engano |
-| `reduce_context` | Enxuga arquivos grandes pra não gastar seu orçamento de tokens à toa |
-| `orchestrate_task` | Escolhe as ferramentas certas pra cada pedido, sem você precisar saber quais existem |
-| `auto_learn` | Aprende com os erros da sessão e já deixa anotado pra não repetir |
-
-### Token Crusher: pare de queimar tokens com ruído de shell
-
-Um `git log` de 200 commits, um `npm install` de 400 linhas, uma suíte com 300 testes passando: seu modelo lê tudo isso, e você paga por tudo isso. O Token Crusher comprime essa saída **antes de chegar ao modelo**: até 90% menor, preservando sempre erros, avisos e falhas.
-
-```
-egc run git log        # mesmo comando, saída esmagada
-egc run --raw git log  # válvula de escape: saída completa
-egc saved              # economia acumulada, calculada localmente a custo zero de tokens
-```
-
-Conservador por design: saídas pequenas passam intactas, falhas sempre sobrevivem, e o extrato de economia nunca toca sua janela de contexto.
-### Imposto por código, não por pedido
-
-Segurança que não depende da IA estar de bom humor: todo comando passa pelo EGC antes de rodar, sempre. [Detalhes completos sobre a aplicação via harness, detecção de intenção e o minerador de memória →](../../docs/installation.md#enforcement)
-
-### Uma memória. Todas as suas ferramentas.
-
-Roda **`egc watch`** uma vez, esquece que existe. Muda contexto no Cursor, aparece sozinho no Gemini CLI, Copilot, Windsurf, Zed: em tudo que você usa. Sem passo manual, sem versão desatualizada em lugar nenhum.
-
-```
-egc watch              # monitorar projeto atual
-egc watch /caminho     # monitorar projeto específico
-egc watch --quiet      # suprimir saída
-```
-
-### Dashboard: veja seus agentes trabalhando
-
-Veja cada comando, token e custo gerado pelos seus agentes, direto no navegador. Inicia automaticamente após `egc init`. [Guia completo](../../docs/installation.md#dashboard)
+O cérebro não só lembra: ele filtra. Antes de qualquer saída de shell chegar ao modelo, o Token Crusher do EGC comprime git logs, ruído de testes, spam de install e JSONs gigantes em até 90%, preservando todo erro e aviso. Rode `egc saved` para ver a economia de tokens acumulada, calculada localmente a custo zero: sessões mais baratas, contexto que dura.
 
 ---
 
-## Biblioteca de prompts
+## Biblioteca de Prompts
 
-De bônus, o EGC também dá acesso a 63 agents, 230 skills e 77 commands, mais 111 rules: especialistas que revisam seu código sozinhos, guias de boas práticas pra cada linguagem e situação, atalhos que executam uma sequência inteira de tarefas, e regras de estilo que mantêm o código consistente. Tudo escrito a partir de sessões reais de engenharia, não teoria. Não quer usar nada disso? Tudo bem: a memória persistente do EGC funciona do mesmo jeito.
+Como bônus, o EGC dá acesso a 63 agentes, 230 skills e 77 comandos, além de 111 regras: especialistas que revisam seu código sozinhos, guias de boas práticas para cada linguagem e situação, atalhos que executam sequências inteiras de tarefas e regras de estilo que mantêm seu código consistente. Tudo escrito a partir de sessões reais de engenharia, não de teoria. Não quer usar nada disso? Sem problema: a memória persistente do EGC funciona exatamente igual.
+
+---
+
+## Começo Rápido
+
+Rode `egc watch` uma vez e esqueça que ele existe:
+
+```bash
+egc watch
+```
+
+Mude o contexto no Cursor e ele aparece sozinho no Gemini CLI, Copilot, Windsurf, Zed ou qualquer agente de terminal. Sem passos manuais, sem estado defasado.
+
+Para ver ao vivo no navegador as chamadas de ferramentas, tokens e custos dos seus agentes:
+
+```bash
+egc dashboard
+```
 
 ---
 
