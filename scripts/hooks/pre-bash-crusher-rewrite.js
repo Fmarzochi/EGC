@@ -19,7 +19,7 @@ function tryRequire(modulePath) {
 // Repo layout first, flattened install layout second.
 const engine = tryRequire('../lib/crusher/engine') || tryRequire('../lib/crusher-engine');
 
-const WRAPPED_RE = /^\s*(egc|rtk)\s|--raw\b/;
+const WRAPPED_RE = /(?:^\s*(?:egc|rtk)\s)|(?:--raw\b)/;
 // Wrapping changes semantics for pipelines, chaining, redirection, substitution
 // and multi-line commands, so those never get rewritten.
 const COMPLEX_SHELL_RE = /[|&;<>$`()\n]/;
