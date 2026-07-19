@@ -12,10 +12,24 @@ function post(ev) {
     { hostname:'127.0.0.1', port:7890, path:'/event', method:'POST',
       headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)},
       timeout:300 },
-    ()=>{}
+    (res) => {
+      res.resume();
+      
+      res.on('end', () => {
+        process.exit(0);
+      });
+    }
   );
-  req.on('error', ()=>{});
-  req.on('timeout', ()=>req.destroy());
+  
+  req.on('error', () => {
+    process.exit(0);
+  });
+  
+  req.on('timeout', () => {
+    req.destroy();
+    process.exit(0);
+  });
+  
   req.end(body);
 }
 
