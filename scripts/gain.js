@@ -26,10 +26,40 @@ function bar(fraction, width = BAR_WIDTH) {
   return '█'.repeat(filled) + '░'.repeat(width - filled);
 }
 
+function printHistory(entries) {
+  if (entries.length === 0) {
+    console.log('EGC Token Gain: no crushed runs recorded yet.');
+    console.log('Route commands through "egc run <cmd>" to start saving.');
+    return;
+  }
+  console.log('EGC Token Gain: run history (most recent last)');
+  console.log('═'.repeat(52));
+  const recent = entries.slice(-30);
+  if (entries.length > recent.length) {
+    console.log(`  ... ${entries.length - recent.length} earlier run(s) omitted`);
+  }
+  for (const e of recent) {
+    const when = (e.ts || '').replace('T', ' ').slice(0, 16);
+    console.log(
+      `  ${when}  ${String(e.kind || '?').padEnd(12)} ` +
+      `~${formatTokens(e.tokensSaved || 0).padStart(7)} saved  ${e.cmd || ''}`
+    );
+  }
+}
+
 function main() {
   const json = process.argv.includes('--json');
   const entries = readAll();
   const totals = aggregate(entries);
+
+  if (process.argv.includes('--history')) {
+    if (json) {
+      console.log(JSON.stringify(entries, null, 2));
+      return;
+    }
+    printHistory(entries);
+    return;
+  }
 
   if (json) {
     console.log(JSON.stringify({ ...totals, entries: entries.length }, null, 2));

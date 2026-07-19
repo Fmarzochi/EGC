@@ -62,7 +62,7 @@ La segunda mitad del cerebro ejecuta barreras de seguridad en segundo plano. Val
 
 ### Token Crusher: El Cerebro Filtra el Ruido Antes de Recordar
 
-El cerebro no solo recuerda: filtra. Antes de que cualquier salida de shell llegue al modelo, el Token Crusher de EGC comprime git logs, ruido de tests, spam de install y JSONs gigantes hasta un 90%, preservando cada error y advertencia. Ejecuta `egc saved` para ver el ahorro de tokens acumulado, calculado localmente a costo cero: sesiones más baratas, contexto que dura.
+El cerebro no solo recuerda: filtra. Antes de que cualquier salida de shell llegue al modelo, el Token Crusher de EGC comprime git logs, ruido de tests, spam de install y JSONs gigantes hasta un 90%, preservando cada error y advertencia. Solo pregunta "¿cuánto ahorré?" en cualquier idioma, y la respuesta llega desde tu registro local a costo cero: sesiones más baratas, contexto que dura.
 
 ---
 
@@ -74,19 +74,9 @@ Como bono, EGC te da acceso a 63 agentes, 230 skills y 77 comandos, más 111 reg
 
 ## Inicio Rápido
 
-Ejecuta `egc watch` una vez y olvida que existe:
+No hay paso dos. Abre cualquiera de tus herramientas de IA y simplemente habla: "hola", "sigamos", "recuerda esta decisión", en cualquier idioma. La sesión se registra sola, la memoria se carga sola, y cada pestaña abierta ya sabe qué están haciendo las demás: dos pestañas de Cursor, una terminal de Claude Code y una sesión de Antigravity comparten un único contexto vivo, al mismo tiempo.
 
-```bash
-egc watch
-```
-
-Cambia el contexto en Cursor y aparece solo en Gemini CLI, Copilot, Windsurf, Zed o cualquier agente de terminal. Sin pasos manuales, sin estado obsoleto.
-
-Para ver en vivo en el navegador las llamadas a herramientas, tokens y costos de tus agentes:
-
-```bash
-egc dashboard
-```
+Un panel en vivo con la actividad, los tokens y los costos de tus agentes arranca solo justo después de instalar. ¿Prefieres control manual? Todos los comandos están documentados en la [guía de instalación](../../docs/installation.md): probablemente nunca necesites escribir uno.
 
 ---
 

@@ -205,9 +205,49 @@ egc run git log        # any command, crushed output
 egc run --raw git log  # escape hatch: full output
 egc saved              # accumulated savings report, computed locally at zero token cost
 egc gain               # full savings panel: totals, efficiency meter, breakdown by command kind
+egc gain --history     # the run-by-run savings log
+egc discover           # scan recent session transcripts for crushable output that skipped the crusher
 ```
 
 On hook-capable harnesses the bash dispatcher routes eligible simple commands through `egc run` automatically. The rewrite is strictly fail-open: pipelines, chaining, redirection, already-wrapped commands, or a missing `egc` CLI all pass through untouched. Opt out anytime with `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`.
+
+---
+
+## Command reference
+
+You never need to type any of these. Talk to your AI naturally, in any language, and the auto-intuition protocol maps your intent to the right action: saying "how much did I save?" runs the savings report, saying "we are done for today" saves the session. The commands below exist for people who prefer explicit control, and every one of them is valid on its own:
+
+| Command | What it does |
+|---------|--------------|
+| `egc init` | First-run bootstrap (cognitive protocol + MCP registration + doctor) |
+| `egc install` | Install EGC content into a supported target |
+| `egc plan` | Inspect selective-install manifests and resolved plans |
+| `egc catalog` | Discover install profiles and component IDs |
+| `egc consult` | Recommend EGC components and profiles from a natural language query |
+| `egc consolidate` | Compact oversized project state files into layered summaries |
+| `egc list-installed` | Inspect install-state files for the current context |
+| `egc doctor` | Diagnose missing or drifted EGC-managed files |
+| `egc repair` | Restore drifted or missing EGC-managed files |
+| `egc auto-update` | Pull latest EGC changes and reinstall the current managed targets |
+| `egc status` | Query the EGC SQLite state store status summary |
+| `egc overview` | Aggregated read-only view of every per-project memory state |
+| `egc verify` | Run the project verification command and record a receipt for the commit gate |
+| `egc sessions` | List or inspect EGC sessions from the SQLite state store |
+| `egc replay` | List or replay recorded sessions with timeline scrubbing |
+| `egc prompt` | Execute an LLM prompt via the Gemini backend (EGC Bridge) |
+| `egc session-inspect` | Emit canonical EGC session snapshots from dmux or Gemini history targets |
+| `egc loop-status` | Inspect transcripts for stale loop wakeups and pending tool results |
+| `egc uninstall` | Remove EGC-managed files recorded in install-state |
+| `egc watch` | Watch tool config files and sync state changes bidirectionally |
+| `egc telemetry` | Manage anonymous usage telemetry (status, on, off) |
+| `egc dashboard` | Start the EGC Dashboard (stop and status as sub-args) |
+| `egc team` | Team memory sync: init, sync, or status |
+| `egc budget` | Budget guardian: set, status, reset token and cost limits per session |
+| `egc plugin` | Plugin registry: install, list, remove, update EGC plugins |
+| `egc run` | Run a command through the Token Crusher (--raw skips compression) |
+| `egc saved` | Accumulated Token Crusher savings, short summary |
+| `egc gain` | Full savings panel (--history for the run-by-run log) |
+| `egc discover` | Scan recent session transcripts for crushable output that skipped the crusher |
 
 ---
 

@@ -62,7 +62,7 @@ A segunda metade do cérebro roda guarda-corpos em segundo plano. Valida comando
 
 ### Token Crusher: O Cérebro Filtra o Ruído Antes de Lembrar
 
-O cérebro não só lembra: ele filtra. Antes de qualquer saída de shell chegar ao modelo, o Token Crusher do EGC comprime git logs, ruído de testes, spam de install e JSONs gigantes em até 90%, preservando todo erro e aviso. Rode `egc saved` para ver a economia de tokens acumulada, calculada localmente a custo zero: sessões mais baratas, contexto que dura.
+O cérebro não só lembra: ele filtra. Antes de qualquer saída de shell chegar ao modelo, o Token Crusher do EGC comprime git logs, ruído de testes, spam de install e JSONs gigantes em até 90%, preservando todo erro e aviso. Basta perguntar "quanto eu economizei?" em qualquer idioma, e a resposta vem direto do seu registro local a custo zero: sessões mais baratas, contexto que dura.
 
 ---
 
@@ -74,19 +74,9 @@ Como bônus, o EGC dá acesso a 63 agentes, 230 skills e 77 comandos, além de 1
 
 ## Começo Rápido
 
-Rode `egc watch` uma vez e esqueça que ele existe:
+Não existe passo dois. Abra qualquer uma das suas ferramentas de IA e simplesmente fale: "oi", "vamos continuar", "lembra dessa decisão", em qualquer idioma. A sessão se conecta sozinha, a memória carrega instantaneamente e cada aba aberta já sabe o que as outras estão fazendo: duas abas do Cursor, um terminal do Claude Code e uma sessão do Antigravity compartilham o mesmo contexto vivo, ao mesmo tempo.
 
-```bash
-egc watch
-```
-
-Mude o contexto no Cursor e ele aparece sozinho no Gemini CLI, Copilot, Windsurf, Zed ou qualquer agente de terminal. Sem passos manuais, sem estado defasado.
-
-Para ver ao vivo no navegador as chamadas de ferramentas, tokens e custos dos seus agentes:
-
-```bash
-egc dashboard
-```
+Um painel ao vivo com a atividade, os tokens e os custos dos seus agentes inicia automaticamente após a instalação. Prefere controle manual? Todos os comandos estão documentados no [guia de instalação](../../docs/installation.md): mas você provavelmente nunca precisará digitar um.
 
 ---
 

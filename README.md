@@ -62,7 +62,7 @@ A second half of the brain runs guardrails in the background. It validates comma
 
 ### Token Crusher: The Brain Filters Noise Before It Remembers
 
-The brain doesn't just remember: it filters. Before any shell output reaches the model, EGC's Token Crusher compresses git logs, test spam, install noise, and giant JSONs by up to 90%, preserving every error and warning. Run `egc saved` to see your accumulated token savings, computed locally at zero cost: cheaper sessions, context that lasts.
+The brain doesn't just remember: it filters. Before any shell output reaches the model, EGC's Token Crusher compresses git logs, test spam, install noise, and giant JSONs by up to 90%, preserving every error and warning. Just ask "how much did I save?" in any language, and the answer comes straight from your local ledger at zero cost: cheaper sessions, context that lasts.
 
 ---
 
@@ -74,19 +74,9 @@ As a bonus, EGC gives you access to 63 agents, 230 skills, and 77 commands, plus
 
 ## Quick Start
 
-Run `egc watch` once and forget it exists:
+There is no step two. Open any of your AI tools and just talk: "hi", "let's continue", "remember this decision", in any language. Sessions connect instantly, memory loads automatically, and every open tab already knows what the others are doing: two Cursor tabs, a Claude Code terminal, and an Antigravity session all share the same living context, simultaneously.
 
-```bash
-egc watch
-```
-
-Change context in Cursor and it shows up on its own in Gemini CLI, Copilot, Windsurf, Zed, or any terminal agent. No manual steps, no stale state.
-
-To watch live tool calls, tokens, and costs from your agents in the browser:
-
-```bash
-egc dashboard
-```
+A live dashboard displaying agent activity, tokens, and costs spins up automatically right after installation. Prefer manual control? Every command is documented in the [installation guide](docs/installation.md): you will probably never need to type one.
 
 ---
 🌐 **English** · [العربية](translations/ar/README.md) · [Español](translations/es/README.md) · [हिन्दी](translations/hi/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md)
