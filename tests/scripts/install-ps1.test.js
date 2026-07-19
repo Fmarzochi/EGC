@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
-const SCRIPT = path.join(__dirname, '..', '..', 'install.ps1');
+const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.ps1');
 const PACKAGE_JSON = path.join(__dirname, '..', '..', 'package.json');
 
 function createTempDir(prefix) {

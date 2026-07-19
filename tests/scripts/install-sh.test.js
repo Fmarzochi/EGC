@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const SCRIPT = path.join(__dirname, '..', '..', 'install.sh');
+const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
