@@ -657,6 +657,7 @@ const S={
   latencyMs:0,hooksOk:false,
   telemetryFailStreak:0,
   pingFailStreak:0,
+  wsFailStreak:0,
   isOffline:false,
   telemetryReqId:0,
   pingReqId:0,
@@ -1098,20 +1099,19 @@ function setOffline(offline){
     }
   });
 }
+function updateOfflineState(){
+  const offline = S.telemetryFailStreak>=3 || S.pingFailStreak>=3 || S.wsFailStreak>=3;
+  setOffline(offline);
+}
 function reportPollResult(type, ok){
   if(ok){
     if(type==='telemetry') S.telemetryFailStreak=0;
     if(type==='ping') S.pingFailStreak=0;
-    if(S.telemetryFailStreak===0 && S.pingFailStreak===0){
-      setOffline(false);
-    }
   }else{
     if(type==='telemetry') S.telemetryFailStreak++;
     if(type==='ping') S.pingFailStreak++;
-    if(S.telemetryFailStreak>=3 || S.pingFailStreak>=3){
-      setOffline(true);
-    }
   }
+  updateOfflineState();
 }
 
 function pollTelemetry(){
@@ -1147,8 +1147,8 @@ pollTelemetry();
 function connect(){
   try{
     S.ws=new WebSocket('ws://localhost:7890');
-    S.ws.onopen=()=>{setWs(true);S.rc=1000;pingLatency();};
-    S.ws.onclose=()=>{setWs(false);setTimeout(connect,S.rc);S.rc=Math.min(S.rc*2,10000);};
+    S.ws.onopen=()=>{setWs(true);S.rc=1000;S.wsFailStreak=0;updateOfflineState();pingLatency();};
+    S.ws.onclose=()=>{setWs(false);S.wsFailStreak++;updateOfflineState();setTimeout(connect,S.rc);S.rc=Math.min(S.rc*2,10000);};
     S.ws.onmessage=m=>{
       try{
         const t0=performance.now();
@@ -1164,12 +1164,6 @@ function setWs(on){
   document.getElementById('wsDot').className='ws-dot'+(on?' on':'');
   document.getElementById('wsLbl').textContent=on?'live':'offline';
   document.getElementById('activeBadge').style.display=on?'':'none';
-  if(!on){
-    S.pingFailStreak=0;
-    if(S.telemetryFailStreak===0){
-      setOffline(false);
-    }
-  }
 }
 function pingLatency(){
   if(!S.ws||S.ws.readyState!==1)return;
