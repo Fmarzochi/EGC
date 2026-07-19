@@ -88,7 +88,7 @@ Un panel en vivo con la actividad, los tokens y los costos de tus agentes arranc
 
 EGC es desarrollado por una sola persona, mantenido de forma abierta y gratuito.
 
-- **[Únete al Discord](https://discord.gg/AtazrtxJ)**: haz preguntas y comparte comentarios
+- **[Únete al Discord](https://discord.gg/TxppsGb52)**: haz preguntas y comparte comentarios
 - **[Patrocina en GitHub](https://github.com/sponsors/Fmarzochi)**: cualquier cantidad ayuda
 - **[Dona mediante PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: no necesitas una cuenta de GitHub
 - **Dale una estrella al repositorio**: ayuda a que otros desarrolladores lo descubran

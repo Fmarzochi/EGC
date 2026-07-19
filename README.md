@@ -88,7 +88,7 @@ A live dashboard displaying agent activity, tokens, and costs spins up automatic
 EGC is built by one developer, maintained in the open, and free.
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: full docs, feature overview, and live demo
-- **[Join the Discord](https://discord.gg/AtazrtxJ)**: ask questions, share feedback
+- **[Join the Discord](https://discord.gg/TxppsGb52)**: ask questions, share feedback
 - **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)**: any amount
 - **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: no GitHub account needed
 - **Star the repository**: helps other developers find it

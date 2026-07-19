@@ -99,7 +99,7 @@ egc dashboard
 EGC 是一个由社区成员独立开发，公开维护的开源免费项目。
 
 - **[官网](https://fmarzochi.github.io/EGCSite)**：包含完整文档、功能概览与在线演示
-- **[加入 Discord](https://discord.gg/AtazrtxJ)**：在这里提问并分享您的反馈意见
+- **[加入 Discord](https://discord.gg/TxppsGb52)**：在这里提问并分享您的反馈意见
 - **[在 GitHub 上赞助](https://github.com/sponsors/Fmarzochi)**：金额不限，每一份支持都很重要
 - **[通过 PayPal 捐赠](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**：无需 GitHub 账号
 - **点个 Star 关注**：让更多开发者发现此项目

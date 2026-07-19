@@ -88,7 +88,7 @@ Um painel ao vivo com a atividade, os tokens e os custos dos seus agentes inicia
 
 O EGC é desenvolvido por um único desenvolvedor, mantido de forma aberta e gratuito.
 
-- **[Entre no Discord](https://discord.gg/AtazrtxJ)**: faça perguntas, compartilhe feedback
+- **[Entre no Discord](https://discord.gg/TxppsGb52)**: faça perguntas, compartilhe feedback
 - **[Patrocine no GitHub](https://github.com/sponsors/Fmarzochi)**: qualquer valor ajuda
 - **[Doe pelo PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: sem necessidade de conta no GitHub
 - **Marque o repositório com estrela**: ajuda outros desenvolvedores a encontrá-lo

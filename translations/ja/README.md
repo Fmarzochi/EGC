@@ -89,7 +89,7 @@ EGCはすべてのAIエージェントに永続的な共有脳を与えます。
 EGCは1人の開発者によって作られ、オープンにメンテナンスされている無料のプロジェクトです。
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: 完全なドキュメント、機能概要、ライブデモ
-- **[Join the Discord](https://discord.gg/AtazrtxJ)**: 質問やフィードバックの共有
+- **[Join the Discord](https://discord.gg/TxppsGb52)**: 質問やフィードバックの共有
 - **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)**: 金額はいくらでも
 - **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHubアカウントなしでも可能
 - **Star the repository**: 他の開発者が見つけやすくなります

@@ -88,7 +88,7 @@ EGC ليس قائمة أدوات؛ إنه دماغ واحد بعدة ملكات.
 
 تم بناء EGC بواسطة مطور واحد، ويتم صيانته بشكل علني ومجاني.
 
-- **[انضم إلى Discord](https://discord.gg/AtazrtxJ)**: اطرح الأسئلة وشارك التعليقات
+- **[انضم إلى Discord](https://discord.gg/TxppsGb52)**: اطرح الأسئلة وشارك التعليقات
 - **[رعاية المشروع على GitHub](https://github.com/sponsors/Fmarzochi)**: أي مبلغ يساعد
 - **[تبرع عبر PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: لا يلزم وجود حساب GitHub
 - **ضع نجمة على المستودع**: يساعد المطورين الآخرين في العثور عليه
