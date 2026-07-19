@@ -98,3 +98,34 @@ def test_missing_usage_degrades_to_zeros_instead_of_crashing(provider: OpenAIPro
 
     assert result.content == "hi"
     assert result.usage == {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+
+@pytest.mark.unit
+def test_stream_flag_raises_not_implemented(provider: OpenAIProvider) -> None:
+    """Regression test for issue #903: LLMInput.stream=True was silently
+    dropped when building the request params, downgrading callers to a
+    blocking call. Streaming must either be implemented or fail loudly."""
+    stream_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model="gpt-4o-mini",
+        stream=True,
+    )
+
+    with pytest.raises(NotImplementedError, match="streaming not supported"):
+        provider.generate(stream_input)
+
+    provider.client.chat.completions.create.assert_not_called()
+
+
+@pytest.mark.unit
+def test_non_streaming_call_unchanged(provider: OpenAIProvider) -> None:
+    """Regression test for issue #903: the non-streaming path (stream=False,
+    the default) must continue to work exactly as before."""
+    usage = MagicMock(prompt_tokens=1, completion_tokens=2, total_tokens=3)
+    provider.client.chat.completions.create.return_value = _make_response(_text_choice("hi"), usage)
+
+    result = provider.generate(_simple_input())
+
+    assert result.content == "hi"
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert "stream" not in kwargs
