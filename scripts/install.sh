@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Forward --help directly to the Node installer
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then

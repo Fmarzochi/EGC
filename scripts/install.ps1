@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$RootDir       = $PSScriptRoot
+$RootDir       = Split-Path -Parent $PSScriptRoot
 $BootstrapDb   = Join-Path (Join-Path $RootDir "scripts") "bootstrap-state-db.js"
 $EgcInstall    = Join-Path (Join-Path $RootDir "scripts") "install-apply.js"
 $GuardianBin   = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-guardian") "build") "index.js"

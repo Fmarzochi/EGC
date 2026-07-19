@@ -63,7 +63,7 @@ Not sure if you have Node.js 20? Run `node --version`. If it shows 20 or higher,
 ```bash
 git clone https://github.com/Fmarzochi/EGC.git
 cd EGC
-sh install.sh
+sh scripts/install.sh
 ```
 
 ### What the installer does
@@ -105,7 +105,7 @@ Run 'egc doctor' to verify.
 ```powershell
 git clone https://github.com/Fmarzochi/EGC.git
 cd EGC
-.\install.ps1
+.\scripts\install.ps1
 ```
 
 ### Windows notes

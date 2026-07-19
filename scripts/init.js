@@ -109,7 +109,7 @@ function checkMcpBuilds() {
     }
     console.error(`Error: MCP server build missing: ${missing.join(', ')}`);
     console.error('If you installed via npm, this is a package bug: please report.');
-    console.error('If you installed via git clone, run: sh install.sh');
+    console.error('If you installed via git clone, run: sh scripts/install.sh');
     process.exit(1);
   }
   ok('MCP servers', 'built');
