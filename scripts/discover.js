@@ -1,21 +1,19 @@
 #!/usr/bin/env node
 'use strict';
 
-// egc discover: scans recent AI-session transcripts for shell commands whose
+// egc discover: scans recent session transcripts for shell commands whose
 // noisy output never went through the Token Crusher and estimates what those
 // runs could have saved. Read-only, local files only, zero token cost.
 //
-// Sources scanned (newest first, last 7 days, capped for speed):
-//   ~/.claude/projects/**/*.jsonl  (session transcripts with tool calls)
-// The path names a supported harness's data directory, the same way the
-// installer targets each harness's own config paths; more harness transcript
-// formats can be added to scanRoots as they expose comparable logs.
-// EGC_DISCOVER_DIR overrides the scan root (used by tests).
+// The directories scanned come from the transcript-roots data module, which
+// lists where each supported harness keeps its session logs (newest first,
+// last 7 days, capped for speed). EGC_DISCOVER_DIR overrides the scan root
+// (used by tests).
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { commandKind, estimateTokens, MIN_BYTES_TO_CRUSH } = require('./lib/crusher/engine');
+const { transcriptRoots } = require('./lib/crusher/transcript-roots');
 
 const MAX_FILES = 40;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -29,10 +27,7 @@ const CRUSH_RATIO = {
   'gh-json': 0.7,
 };
 
-function scanRoots() {
-  if (process.env.EGC_DISCOVER_DIR) return [process.env.EGC_DISCOVER_DIR];
-  return [path.join(os.homedir(), '.claude', 'projects')];
-}
+const scanRoots = transcriptRoots;
 
 function listTranscripts(root) {
   const out = [];
