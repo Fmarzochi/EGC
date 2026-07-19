@@ -165,6 +165,47 @@ async function main() {
   const reclaim = await sessions[2].tool('claim_path', { project_path: PROJECT, path: 'src/shared.js' });
   check('apos release, outra sessao consegue o lock', !/refused|held|denied|conflict/i.test(reclaim), `release: ${released.slice(0, 80)} | reclaim: ${reclaim.slice(0, 80)}`);
 
+  // 7. Event queue: direct send, broadcast, exactly-once consumption, peek.
+  // Direct targeting needs the receiver's real bus id: grab it from peers.
+  const peersForIds = await sessions[0].tool('session_peers', { project_path: PROJECT });
+  const ids = [...peersForIds.matchAll(/- (bus-\d+)/g)].map(m => m[1]);
+  check('ids de sessao visiveis para enderecamento', ids.length >= N - 1, `${ids.length} ids`);
+
+  const directTarget = ids[0];
+  const direct = await sessions[0].tool('session_send', {
+    project_path: PROJECT, to_session: directTarget, kind: 'handoff', payload: 'auth notes in state',
+  });
+  check('send direto aceito', /Event #\d+ sent/.test(direct), direct.slice(0, 80));
+
+  const broadcast = await sessions[0].tool('session_send', {
+    project_path: PROJECT, kind: 'heads-up', payload: 'refactor em curso',
+  });
+  check('broadcast aceito', /broadcast/.test(broadcast), broadcast.slice(0, 80));
+
+  const senderRead = await sessions[0].tool('session_events', { project_path: PROJECT });
+  check('remetente nao recebe o proprio broadcast', /No new events/.test(senderRead), senderRead.slice(0, 60));
+
+  const lastReader = sessions[sessions.length - 1];
+  const firstRead = await lastReader.tool('session_events', { project_path: PROJECT });
+  check('receptor ve o broadcast', /heads-up/.test(firstRead), firstRead.slice(0, 100));
+  const secondRead = await lastReader.tool('session_events', { project_path: PROJECT });
+  check('consumo exactly-once: segunda leitura vazia', /No new events/.test(secondRead));
+
+  const peekTarget = sessions[sessions.length - 2];
+  const peeked = await peekTarget.tool('session_events', { project_path: PROJECT, peek: true });
+  const afterPeek = await peekTarget.tool('session_events', { project_path: PROJECT });
+  check('peek nao consome', /heads-up/.test(peeked) && /heads-up/.test(afterPeek));
+
+  // 8. Implicit presence: a brand-new session that only calls get_state
+  // becomes visible on the bus without any session_announce.
+  const ghost = new Session('ghost');
+  await ghost.init();
+  await ghost.tool('get_state', { project_path: PROJECT });
+  const peersAfterGhost = await sessions[0].tool('session_peers', { project_path: PROJECT });
+  const ghostVisible = new RegExp(`Live sessions: ${N + 1}`).test(peersAfterGhost);
+  check('presenca implicita: get_state registra a sessao no bus', ghostVisible, peersAfterGhost.split('\n')[0]);
+  ghost.kill();
+
   sessions.forEach(s => s.kill());
   const failed = results.filter(r => !r.ok).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);

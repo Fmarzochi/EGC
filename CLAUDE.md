@@ -103,5 +103,7 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - What savings am I missing? What is wasting my tokens? → run `egc discover`
 - Show me the history of what was saved → run `egc gain --history`
 - I need the full/raw output of that command → rerun it through `egc run --raw`
+- Did another session/tab leave me anything? What are the others doing? → call `session_events` (and `session_peers`)
+- Tell the other session/tab something, hand work off → call `session_send`
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
