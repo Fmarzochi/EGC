@@ -123,6 +123,7 @@ EGC 是一个由社区成员独立开发，公开维护的开源免费项目。
 #### 支持者
 
 <a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+<a href="https://github.com/jackmcwin"><img src="https://avatars.githubusercontent.com/u/135963880?v=4" width="52" height="52" alt="@jackmcwin" title="@jackmcwin, Chinese Simplified translation" /></a>
 
 #### 月度赞助者 · _虚位以待_
 
