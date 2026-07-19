@@ -18,6 +18,8 @@ const LANGUAGE_NAMES = {
   ar: "العربية",
   hi: "हिन्दी",
   zh: "中文",
+  "zh-CN": "简体中文",
+  "zh-TW": "繁體中文",
   ja: "日本語",
   ko: "한국어",
   vi: "Tiếng Việt",
