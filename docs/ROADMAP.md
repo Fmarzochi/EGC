@@ -69,6 +69,26 @@ Closes the commit-privacy scope started in v1.1.12:
 - Git clean filter as the third privacy layer: `egc init` configures `filter.egc-memory.clean` locally and binds the four propagation files in `.git/info/attributes`, so `git add` stages a zeroed blob even when local hooks are bypassed; the working tree keeps the populated memory (#863)
 - The installer prints the filter action plan before applying it and honors `--dry-run`; outside a git repository the step is skipped with a reason (#863)
 
+## v1.1.14: Community Wave (Released 2026-07-18)
+
+- README repositioned around the shared brain across all 8 languages (#869), with Chinese Simplified landing as the 9th community translation (#870, @jackmcwin)
+- `egc gain`: the full token savings panel, with `egc saved` as the short report (#874)
+- Session bus v2: event queue and implicit presence for parallel sessions (#875); three cross-process races closed (#867)
+- Secrets redacted in mapped SDK errors, Google API keys covered (#883)
+- Guardian command validator: argument-parsing bypasses closed (#882)
+- Commit privacy guard extended to all 11 memory propagation targets (#881)
+- `claw` and `harness-audit` registered as first-class `egc` commands (#889)
+- Team sync degrades to offline errors instead of crashing (#890)
+- Lean repository root: tool configuration files moved to their conventional homes (#891)
+- `egc install` launches the dashboard right after installing (#893)
+
+## Unreleased (on main)
+
+- Relicensed from MIT to Apache License 2.0 (#906)
+- Dashboard session shim no longer leaves a zombie process after every event (#907, @developmentwithparth1311)
+- Lean repository root phase 2: examples, lint, and test configs relocated, redundant files dropped (#908)
+- Dashboard offline badge after consecutive poll failures, with per-endpoint failure streaks (#911, @harshjainnn)
+
 ## v1.2.0: Teams
 
 Multi-developer workflows and shared context:
@@ -81,7 +101,7 @@ Multi-developer workflows and shared context:
 
 ## v1.3.0: Growth
 
-- Community translations: German, French, Chinese Simplified, Italian, Turkish, Ukrainian, Malay
+- Community translations: German, French, Italian, Turkish, Ukrainian, Malay
 - Per-project skill profiles and overrides
 - OSS-Fuzz integration for continuous fuzz testing
 
