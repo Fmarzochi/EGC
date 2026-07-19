@@ -2,6 +2,32 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.14] - 2026-07-19
+
+### New Features
+
+- **First Chinese Simplified README**: full zh-CN translation contributed by first-time contributor jackmcwin, rewritten from scratch against the repositioned README and wired into every language selector and the translation-structure CI gate. 简体中文 is the 8th language of EGC. (#870, #878, #879)
+- **Dashboard launches right after `egc install`**: the launcher is now a shared module used by both `install` and `init`; on an interactive terminal the dashboard is pinged, started detached when absent, and the browser opened, never failing the install. (#893)
+- **`egc claw` and `egc harness-audit` promoted to first-class commands**: the NanoClaw REPL and the harness scoring audit are registered in the CLI router and documented in the command reference. (#889)
+
+### Security
+
+- **Guardian validator arg-parsing bypasses closed**: eval flags glued to their value (`--eval=`, `-c` glued, `:` forms) now match in both checkpoints; `grep -f` pattern files are checked against protected paths; `--flag=/path` forms no longer slip past the path checks in cat/find/dev-tool validators. (#882)
+- **Provider errors never leak API keys**: claude, cohere, gemini and ollama now redact SDK exception text before raising, and the redaction net gained Google-style `AIza` keys and `key=` query parameters. (#883)
+- **Memory commit-privacy guards extended from 4 to all 11 propagation targets**, including non-markdown files like `.cursorrules` and `llms.txt`, across the pre-commit hook, the CI tree check and the git clean filter. (#881)
+
+### Bug Fixes
+
+- **Token Crusher keeps ANSI-colored error lines**: terminal color codes broke the keep-line word boundary and colored errors were silently dropped from compressed output. (#887)
+- **Team sync degrades to offline instead of crashing**: a missing or unreachable remote now reports an error in the sync result rather than throwing out of the MCP server. (#890)
+- **Hardened scripts**: `harness-audit` no longer crashes on a corrupt `package.json`, `consolidate` handles a state file deleted mid-run, and `init` cannot die on an unhandled dashboard-launch rejection. (#884)
+- **OpenCode plugin version drift fixed permanently**: the plugin reported 1.0.0/1.1.6; both constants are realigned and the release script now bumps them in lockstep. (#885)
+- **Expired Discord invite replaced** across the README in all 8 languages, contributing docs and the issue templates. (#886)
+
+### Maintenance
+
+- **Leaner repository root**: CODE_OF_CONDUCT and codecov config moved to `.github/`, Dockerfile to `docker/`, installers to `scripts/` (re-anchored), and the stale duplicate Sonar properties file consolidated. (#891)
+
 ## [1.1.13] - 2026-07-18
 
 ### New Features
