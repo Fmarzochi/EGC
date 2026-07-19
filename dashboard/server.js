@@ -182,13 +182,20 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       if (exceeded) return;
 
+      let ev;
       try {
-        const ev = JSON.parse(body);
-        if (accumulateEvent(ev)) {
-          const msg = JSON.stringify(ev);
-          for (const ws of clients) { if (ws.readyState === 1) ws.send(msg); }
-        }
-      } catch (_) {}
+        ev = JSON.parse(body);
+      } catch (_) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        return;
+      }
+
+      if (accumulateEvent(ev)) {
+        const msg = JSON.stringify(ev);
+        for (const ws of clients) { if (ws.readyState === 1) ws.send(msg); }
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end('{"ok":true}');
     });
