@@ -4,6 +4,14 @@
   "description": "EGC is a local-first MCP runtime that gives every AI agent the same brain: persistent shared memory, security guardrails, and up to 90% token savings across 20 AI coding tools.",
   "author": "Felipe Marzochi <fmarzochi@gmail.com> (https://github.com/Fmarzochi)",
   "license": "Apache-2.0",
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "none",
+    "semi": true,
+    "tabWidth": 2,
+    "printWidth": 200,
+    "arrowParens": "avoid"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Fmarzochi/EGC.git"

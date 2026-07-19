@@ -40,7 +40,7 @@ test_full_output.log
 # =========================================================
 .env
 .env.*
-!.env.example
+!examples/.env.example
 *.pem
 *.key
 *.p12

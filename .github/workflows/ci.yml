@@ -245,14 +245,14 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install --require-hashes -r requirements.txt
+        run: pip install --require-hashes -r tests/requirements.txt
 
       - name: Run pytest
-        run: python -m pytest
+        run: python -m pytest tests/
 
       - name: Audit Python dependencies
         run: |
-          pip-audit -r requirements.txt
+          pip-audit -r tests/requirements.txt
 
   lint:
     name: Lint
@@ -276,7 +276,7 @@ jobs:
         run: npx eslint "scripts/**/*.js" "tests/**/*.js"
 
       - name: Run markdownlint
-        run: npx markdownlint "agents/**/*.md" "skills/**/*.md" "commands/**/*.md" "rules/**/*.md"
+        run: npx markdownlint --config .github/.markdownlint.json "agents/**/*.md" "skills/**/*.md" "commands/**/*.md" "rules/**/*.md"
 
       - name: Verify npm pack surface
         run: |
