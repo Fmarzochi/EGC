@@ -137,6 +137,14 @@ const COMMANDS = {
     script: 'discover.js',
     description: 'Scan recent session transcripts for crushable output that skipped the Token Crusher',
   },
+  claw: {
+    script: 'claw.js',
+    description: 'NanoClaw REPL: persistent session-aware agent loop with Markdown history',
+  },
+  'harness-audit': {
+    script: 'harness-audit.js',
+    description: 'Score the harness setup across tool coverage, quality gates, memory, and security',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -168,6 +176,8 @@ const PRIMARY_COMMANDS = [
   'saved',
   'gain',
   'discover',
+  'claw',
+  'harness-audit',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);

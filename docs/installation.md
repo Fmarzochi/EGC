@@ -250,6 +250,8 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 | `egc saved` | Accumulated Token Crusher savings, short summary |
 | `egc gain` | Full savings panel (--history for the run-by-run log) |
 | `egc discover` | Scan recent session transcripts for crushable output that skipped the crusher |
+| `egc claw` | NanoClaw REPL: persistent session-aware agent loop with Markdown history |
+| `egc harness-audit` | Score the harness setup across tool coverage, quality gates, memory, and security |
 
 ---
 
