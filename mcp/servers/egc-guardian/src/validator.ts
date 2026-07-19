@@ -25,6 +25,28 @@ export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir
 // independent of the guardian's allowlist for base commands). Denied
 // regardless of whether the interpreter itself is otherwise allowlisted,
 // because 'allowed to run node' must not imply 'allowed to eval anything'.
+// Matches an eval flag given exactly, glued to its value (-e'code', -ccode),
+// or joined with = or : (--eval=code, -Command:code). Exact membership alone
+// misses every glued form, which the underlying interpreters all accept.
+function matchesEvalFlag(arg: string, flags: string[]): boolean {
+  for (const flag of flags) {
+    if (arg === flag) return true;
+    if (arg.startsWith(flag + '=') || arg.startsWith(flag + ':')) return true;
+    if (!flag.startsWith('--') && flag.length === 2 && arg.startsWith(flag) && arg.length > 2) return true;
+  }
+  return false;
+}
+
+// A flag like --file=/path carries a real filesystem target even though the
+// argument starts with '-'; loops that skip dashed args entirely would let
+// protected paths through inside the value.
+function embeddedPathCandidate(arg: string): string | null {
+  if (!arg.startsWith('-')) return null;
+  const eq = arg.indexOf('=');
+  if (eq > 0 && eq < arg.length - 1) return arg.slice(eq + 1);
+  return null;
+}
+
 const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
   node: ['-e', '--eval', '-p', '--print'],
   nodejs: ['-e', '--eval', '-p', '--print'],
@@ -211,13 +233,46 @@ a => a === '-r' || a === '-R' || a === '--recursive' ||
      /^-[a-zA-Z]*[rR]/.test(a),
   );
 
+  // -f/--file makes grep read its patterns from a FILE, so that value is a
+  // real filesystem read target and must pass the protected-path check even
+  // though it is not positional. It also means the pattern did not consume
+  // the first positional slot.
+  const fileFlagValues: string[] = [];
+  let patternViaFlag = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-f' || a === '--file') {
+      if (i + 1 < args.length) fileFlagValues.push(args[i + 1]);
+      patternViaFlag = true;
+    } else if (a.startsWith('--file=')) {
+      fileFlagValues.push(a.slice('--file='.length));
+      patternViaFlag = true;
+    } else if (a.startsWith('-f') && a.length > 2) {
+      fileFlagValues.push(a.slice(2));
+      patternViaFlag = true;
+    } else if (a === '-e' || a === '--regexp' || a.startsWith('--regexp=') || (a.startsWith('-e') && a.length > 2)) {
+      patternViaFlag = true;
+    }
+  }
+  for (const p of fileFlagValues) {
+    if (isProtectedPath(p, cwd)) {
+      return {
+        allowed: false,
+        reason: `grep pattern file '${p}' is a protected path`,
+        trust_level: 'SAFE_READONLY',
+      };
+    }
+  }
+
   // Non-flag, non-empty args are candidates for pattern or path.
   // In grep: grep [options] PATTERN [FILE…]
-  // The first non-flag arg is the pattern; the rest are paths.
-  const positionalArgs = args.filter(a => a.length > 0 && !a.startsWith('-'));
+  // The first non-flag arg is the pattern; the rest are paths. When the
+  // pattern was supplied via -e/-f, every positional is a path.
+  const flagValueSet = new Set(fileFlagValues);
+  const positionalArgs = args.filter(a => a.length > 0 && !a.startsWith('-') && !flagValueSet.has(a));
 
   // Paths are all positional args after the first one (the pattern).
-  const pathArgs = positionalArgs.slice(1);
+  const pathArgs = patternViaFlag ? positionalArgs : positionalArgs.slice(1);
 
   if (isRecursive) {
 for (const p of pathArgs) {
@@ -256,7 +311,8 @@ if (isProtectedPath(p, cwd)) {
 
 function validateCatArgs(args: string[], cwd?: string): ValidationResult {
   for (const arg of args) {
-if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
+const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
+if (candidate !== null && isProtectedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `cat of protected path '${arg}' is forbidden`,
@@ -280,8 +336,11 @@ return {
 };
   }
 
-  // First non-flag arg is typically the search root
-  const pathArgs = args.filter(a => !a.startsWith('-'));
+  // First non-flag arg is typically the search root; also surface paths
+  // handed over inside --flag=value forms.
+  const pathArgs = args
+    .map(a => (a.startsWith('-') ? embeddedPathCandidate(a) : a))
+    .filter((a): a is string => a !== null);
   for (const p of pathArgs) {
 if (isProtectedPath(p, cwd)) {
   return {
@@ -297,7 +356,8 @@ if (isProtectedPath(p, cwd)) {
 function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: string): ValidationResult {
   // These are read-only but we still block protected paths
   for (const arg of args) {
-if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
+const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
+if (candidate !== null && isProtectedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -315,7 +375,7 @@ function validateDevToolArgs(baseCommand: string, args: string[], cwd?: string):
   // validateCommand, but a defense-in-depth check here means this branch
   // is still safe even if it's ever reached directly.
   const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
-  if (evalFlags && args.some(a => evalFlags.includes(a))) {
+  if (evalFlags && args.some(a => matchesEvalFlag(a, evalFlags))) {
 return {
   allowed: false,
   reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
@@ -327,7 +387,8 @@ return {
   // require target, etc.) is denied the same way 'cat'/'find' deny it —
   // being in SAFE_DEV means "safe to run", not "exempt from path checks".
   for (const arg of args) {
-if (!arg.startsWith('-') && isProtectedPath(arg, cwd)) {
+const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
+if (candidate !== null && isProtectedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -395,7 +456,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   // regardless of allowlist status. Using DANGEROUS here (not BLOCKED) keeps
   // the reason string out of the hook's advisory-reason list.
   const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand];
-  if (evalFlagsForBase && args.some(a => evalFlagsForBase.includes(a))) {
+  if (evalFlagsForBase && args.some(a => matchesEvalFlag(a, evalFlagsForBase))) {
     return {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
