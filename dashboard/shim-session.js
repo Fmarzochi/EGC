@@ -18,6 +18,10 @@ function post(ev) {
       res.on('end', () => {
         process.exit(0);
       });
+
+      res.on('error', () => {
+        process.exit(0);
+      });
     }
   );
   
