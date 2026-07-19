@@ -297,6 +297,8 @@ if (!flags.dryRun) {
       console.log(`\n  ${c.cyan}EGC Dashboard starting at http://localhost:7890${c.reset}`);
       console.log(`  ${c.dim}Minimize it to keep working. Run \`egc dashboard stop\` to close.${c.reset}`);
       setTimeout(openBrowser, 1500);
+    }).catch(err => {
+      console.error(`  ${c.dim}Dashboard startup skipped: ${err.message}${c.reset}`);
     });
   }
 }

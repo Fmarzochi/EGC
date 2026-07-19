@@ -147,12 +147,16 @@ function main() {
       backup: null,
     };
 
-    if (!fs.existsSync(stateFile)) {
-      handleMissingState(report, options);
-      return;
+    let content;
+    try {
+      content = fs.readFileSync(stateFile, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        handleMissingState(report, options);
+        return;
+      }
+      throw err;
     }
-
-    const content = fs.readFileSync(stateFile, 'utf8');
     const result = consolidateState(content, { threshold });
 
     report.linesBefore = result.linesBefore;
