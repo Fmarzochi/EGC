@@ -67,6 +67,9 @@ body{
 .hd-val{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;}
 .status-badge{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:9999px;border:1px solid rgba(0,217,146,.3);background:rgba(0,217,146,.06);font-size:10px;font-weight:600;letter-spacing:1.5px;color:var(--primary);}
 .status-dot{width:6px;height:6px;border-radius:50%;background:var(--primary);animation:pip 1.4s ease-in-out infinite;}
+.status-badge.offline{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:var(--red);}
+.status-badge.offline .status-dot{background:var(--red);animation:none;}
+.stale{opacity:.45;filter:grayscale(.4);pointer-events:none;transition:opacity .3s ease,filter .3s ease;}
 .session-time{font-family:SFMono-Regular,Menlo,monospace;font-size:20px;font-weight:500;color:var(--ink-strong);letter-spacing:2px;}
 .hd-right{display:flex;align-items:center;gap:8px;}
 .sys-health{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--canvas-soft);border:1px solid var(--hairline);border-radius:8px;}
@@ -406,6 +409,7 @@ body.minimized footer{display:none!important;}
     </div>
     <div class="vd hd-hide"></div>
     <div class="status-badge" id="activeBadge" style="display:none"><div class="status-dot"></div>ACTIVE</div>
+    <div class="status-badge offline" id="offlineBadge" style="display:none"><div class="status-dot"></div>OFFLINE</div>
     <div class="vd"></div>
     <div class="hd-block">
       <span class="hd-eye">Session</span>
@@ -651,6 +655,8 @@ const S={
   eco:{tok:0,hitCt:0,lifetok:1482221},
   mission:{task:'Waiting...',file:'--',pct:0},
   latencyMs:0,hooksOk:false,
+  pollFailStreak:0,
+  isOffline:false,
 };
 
 /* ── GREETING ───────────────────────────────────────────── */
@@ -1072,6 +1078,35 @@ ${value.toLocaleString()} tokens`;
     });
 }
 
+function setOffline(offline){
+  if(S.isOffline===offline)return;
+  S.isOffline=offline;
+  const badge=document.getElementById('offlineBadge');
+  if(badge)badge.style.display=offline?'':'none';
+  const els=[
+    document.querySelector('.panel-brain'),
+    document.getElementById('panelCenter'),
+    document.getElementById('panelRight')
+  ];
+  els.forEach(el=>{
+    if(el){
+      if(offline)el.classList.add('stale');
+      else el.classList.remove('stale');
+    }
+  });
+}
+function reportPollResult(ok){
+  if(ok){
+    S.pollFailStreak=0;
+    setOffline(false);
+  }else{
+    S.pollFailStreak++;
+    if(S.pollFailStreak>=3){
+      setOffline(true);
+    }
+  }
+}
+
 function pollTelemetry(){
   fetch('/telemetry').then(r=>r.json()).then(t=>{
     renderEconomy(t);
@@ -1082,7 +1117,10 @@ function pollTelemetry(){
       if(p.running)el.classList.add('alive');
       else el.classList.remove('alive');
     });
-  }).catch(()=>{});
+    reportPollResult(true);
+  }).catch(()=>{
+    reportPollResult(false);
+  });
 }
 setInterval(pollTelemetry,8000);
 pollTelemetry();
@@ -1114,7 +1152,10 @@ function pingLatency(){
   fetch('/ping').then(r=>r.json()).then(d=>{
     const lat=Date.now()-d.ts;
     document.getElementById('shLat').textContent=lat+'ms';
-  }).catch(()=>{});
+    reportPollResult(true);
+  }).catch(()=>{
+    reportPollResult(false);
+  });
   setTimeout(pingLatency,5000);
 }
 
