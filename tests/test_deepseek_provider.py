@@ -285,6 +285,32 @@ def test_resolve_deepseek_reasoner_is_not_replaced_by_default() -> None:
 
 
 @pytest.mark.unit
+def test_non_streaming_call_unchanged(provider: DeepSeekProvider) -> None:
+    """Regression test for issue #903: the non-streaming path (stream=False,
+    the default) must continue to work exactly as before and must not forward
+    a `stream` kwarg to the SDK."""
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = "hi"
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.model = "deepseek-chat"
+    usage = MagicMock()
+    usage.prompt_tokens = 1
+    usage.completion_tokens = 2
+    usage.total_tokens = 3
+    response.usage = usage
+    provider.client.chat.completions.create.return_value = response
+
+    result = provider.generate(_simple_input())
+
+    assert result.content == "hi"
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert "stream" not in kwargs
+
+
+@pytest.mark.unit
 def test_stream_flag_raises_not_implemented(provider: DeepSeekProvider) -> None:
     """Regression test for issue #903: DeepSeekProvider forwards the stream
     flag through the OpenAI-compatible flow. Because streaming is not

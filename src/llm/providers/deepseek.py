@@ -91,7 +91,7 @@ class DeepSeekProvider(OpenAIProvider):
             raise
         except NotImplementedError:
             # Contract-level errors (e.g. streaming not supported) are not
-            # provider-attributable wire failures — let them surface as-is.
+            # provider-attributable wire failures - let them surface as-is.
             raise
         except Exception as exc:
             # fix #2: native OpenAI SDK exceptions (RateLimitError,

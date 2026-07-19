@@ -132,6 +132,23 @@ def test_unauthorized_exception_raises_authentication_error(provider):
     assert exc.value.provider == ProviderType.MISTRAL
 
 
+def test_stream_flag_raises_not_implemented(provider):
+    """Regression test for issue #903: MistralProvider inherits the OpenAI-compatible
+    flow, so LLMInput.stream=True must fail loudly instead of being swallowed
+    by the provider-retagging wrapper and re-raised as a generic LLMError."""
+    from llm.core.types import LLMInput, Message, Role
+    stream_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model="mistral-large-latest",
+        stream=True,
+    )
+
+    with pytest.raises(NotImplementedError, match="streaming not supported"):
+        provider.generate(stream_input)
+
+    provider.mock_create.assert_not_called()
+
+
 # --- Configuration Tests ---
 
 def test_validate_config_true(provider):

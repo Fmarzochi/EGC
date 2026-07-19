@@ -58,6 +58,10 @@ class MistralProvider(OpenAIProvider):
             # plain LLMError here would discard that subclass information.
             exc.provider = ProviderType.MISTRAL
             raise
+        except NotImplementedError:
+            # Contract-level errors (e.g. streaming not supported) are not
+            # provider-attributable wire failures - let them surface as-is.
+            raise
         except Exception as exc:
             # Native OpenAI SDK exceptions (RateLimitError, APIConnectionError,
             # AuthenticationError, etc.) propagate here unwrapped when

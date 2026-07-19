@@ -169,6 +169,23 @@ def test_retagging_preserves_exception_subclass(provider: GroqProvider) -> None:
 
 
 @pytest.mark.unit
+def test_stream_flag_raises_not_implemented(provider: GroqProvider) -> None:
+    """Regression test for issue #903: GroqProvider inherits the OpenAI-compatible
+    flow, so LLMInput.stream=True must fail loudly instead of being swallowed
+    by the provider-retagging wrapper and re-raised as a generic LLMError."""
+    stream_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model="openai/gpt-oss-120b",
+        stream=True,
+    )
+
+    with pytest.raises(NotImplementedError, match="streaming not supported"):
+        provider.generate(stream_input)
+
+    provider.client.chat.completions.create.assert_not_called()
+
+
+@pytest.mark.unit
 def test_provider_for_groq_model_name() -> None:
     from llm.core.model_resolver import ModelResolver
     assert ModelResolver._provider_for("openai/gpt-oss-120b") == "groq"
