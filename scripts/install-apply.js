@@ -150,7 +150,9 @@ function main() {
     );
     if (!hasSelection) {
       options.profileId = DEFAULT_INSTALL_PROFILE;
-      console.log(`No profile or modules specified; installing the default profile "${DEFAULT_INSTALL_PROFILE}". Run egc install --help to see every profile and option.`);
+      if (!options.json) {
+        console.log(`No profile or modules specified; installing the default profile "${DEFAULT_INSTALL_PROFILE}". Run egc install --help to see every profile and option.`);
+      }
     }
     const request = normalizeInstallRequest({
       ...options,

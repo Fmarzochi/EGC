@@ -100,6 +100,22 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('bare install with --json keeps the output machine-readable', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--dry-run', '--json'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.strictEqual(payload.dryRun, true);
+      assert.strictEqual(payload.plan.profileId, 'developer');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs Gemini rules and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
