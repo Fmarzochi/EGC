@@ -7,6 +7,7 @@ const fs      = require('fs');
 const os      = require('os');
 const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
+const { createBodyCollector } = require('./event-body');
 
 const PORT   = 7890;
 const PUBLIC = path.join(__dirname, 'public');
@@ -158,16 +159,14 @@ const server = http.createServer((req, res) => {
 
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
-    let body = '';
-    let currentSize = 0;
+    const collector = createBodyCollector();
     const MAX_SIZE = 256 * 1024; // 256 KB cap
     let exceeded = false;
 
     req.on('data', d => {
       if (exceeded) return;
-      
-      currentSize += d.length;
-      if (currentSize > MAX_SIZE) {
+
+      if (collector.push(d) > MAX_SIZE) {
         exceeded = true;
         res.writeHead(413, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Payload too large' }), () => {
@@ -175,8 +174,6 @@ const server = http.createServer((req, res) => {
         });
         return;
       }
-      
-      body += d;
     });
 
     req.on('end', () => {
@@ -184,7 +181,7 @@ const server = http.createServer((req, res) => {
 
       let ev;
       try {
-        ev = JSON.parse(body);
+        ev = JSON.parse(collector.toString());
       } catch (_) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
