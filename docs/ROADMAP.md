@@ -88,6 +88,10 @@ Closes the commit-privacy scope started in v1.1.12:
 - Dashboard session shim no longer leaves a zombie process after every event (#907, @developmentwithparth1311)
 - Lean repository root phase 2: examples, lint, and test configs relocated, redundant files dropped (#908)
 - Dashboard offline badge after consecutive poll failures, with per-endpoint failure streaks (#911, @harshjainnn)
+- `LLMInput.stream=True` now raises `NotImplementedError` across the OpenAI-compatible providers instead of silently downgrading to a blocking call (#912, @Sufiyan-MSA)
+- Dashboard POST /event rejects malformed JSON with a 400 instead of a silent 200 (#917, @harshjainnn)
+- Dashboard offline badge reacts to a dead WebSocket, not only to poll failures (#919, @harshjainnn)
+- zh-CN README rendering fixed after the closing div (#922, @Aki-new)
 
 ## v1.2.0: Teams
 
