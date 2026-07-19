@@ -94,7 +94,7 @@ test('invalid event returns false (broadcast guard)', () => {
 // HTTP Server Payload Cap Regression Test Case (Live POST verification)
 // ---------------------------------------------------------------------------
 
-test('POST /event rejects payloads larger than 256 KB with 413 status code', (t, done) => {
+function runWithDashboardServer(testFn, done) {
   const originalCreateServer = http.createServer;
   const originalSetInterval = global.setInterval;
   const originalWatchFile = fs.watchFile;
@@ -123,10 +123,14 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
     }
   };
 
-  // Safely evaluate the target module and guarantee cleanup via try/finally
   try {
     delete require.cache[require.resolve('../dashboard/server.js')];
     require('../dashboard/server.js');
+  } catch (err) {
+    http.createServer = originalCreateServer;
+    global.setInterval = originalSetInterval;
+    fs.watchFile = originalWatchFile;
+    return done(err);
   } finally {
     http.createServer = originalCreateServer;
     global.setInterval = originalSetInterval;
@@ -144,17 +148,33 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
   }
 
   const testServer = http.createServer(serverHandler);
-  let responseValidated = false;
+  let finished = false;
+
+  const cleanup = (err) => {
+    if (finished) return;
+    finished = true;
+    testServer.close(() => {
+      cleanupHandles();
+      done(err);
+    });
+  };
 
   testServer.on('error', (err) => {
-    cleanupHandles();
-    done(err);
+    cleanup(err);
   });
 
-  // Dynamic port assignment (Port 0) avoids cross-process network binding collisions
   testServer.listen(0, '127.0.0.1', () => {
     const DYNAMIC_PORT = testServer.address().port;
+    try {
+      testFn(DYNAMIC_PORT, cleanup);
+    } catch (err) {
+      cleanup(err);
+    }
+  });
+}
 
+test('POST /event rejects payloads larger than 256 KB with 413 status code', (t, done) => {
+  runWithDashboardServer((port, cleanup) => {
     const payloadSize = 300 * 1024;
     const largePayload = JSON.stringify({
       ide: 'claude',
@@ -164,7 +184,7 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
 
     const options = {
       hostname: '127.0.0.1',
-      port: DYNAMIC_PORT,
+      port: port,
       path: '/event',
       method: 'POST',
       headers: {
@@ -178,103 +198,37 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
       res.setEncoding('utf8');
       res.on('data', chunk => { responseData += chunk; });
       res.on('end', () => {
-        testServer.close(() => {
-          cleanupHandles();
-          try {
-            assert.equal(res.statusCode, 413, 'Server must reject large inputs with 413 Status');
-            const body = JSON.parse(responseData);
-            assert.equal(body.error, 'Payload too large', 'Error response should explicitly match design expectations');
-            responseValidated = true;
-            done();
-          } catch (err) {
-            done(err);
-          }
-        });
-      });
-    });
-
-    req.on('error', (err) => {
-      if (responseValidated) return; // Prevent double-callback invocations if already verified cleanly
-      
-      testServer.close(() => {
-        cleanupHandles();
-        if (err.code === 'ECONNRESET') {
-          done(new Error('Connection reset before 413 response was fully processed – server may not be sending the expected rejection'));
-        } else {
-          done(err);
+        try {
+          assert.equal(res.statusCode, 413, 'Server must reject large inputs with 413 Status');
+          const body = JSON.parse(responseData);
+          assert.equal(body.error, 'Payload too large', 'Error response should explicitly match design expectations');
+          cleanup();
+        } catch (err) {
+          cleanup(err);
         }
       });
     });
 
+    req.on('error', (err) => {
+      if (err.code === 'ECONNRESET') {
+        cleanup(new Error('Connection reset before 413 response was fully processed - server may not be sending the expected rejection'));
+      } else {
+        cleanup(err);
+      }
+    });
+
     req.write(largePayload);
     req.end();
-  });
+  }, done);
 });
 
 test('POST /event rejects malformed JSON with 400 status code', (t, done) => {
-  const originalCreateServer = http.createServer;
-  const originalSetInterval = global.setInterval;
-  const originalWatchFile = fs.watchFile;
-  
-  let serverHandler = null;
-  const activeIntervals = [];
-  const watchedFiles = [];
-
-  http.createServer = (handler) => {
-    serverHandler = handler;
-    return { listen: () => {}, on: () => {} };
-  };
-
-  global.setInterval = (cb, ms) => {
-    const timerId = originalSetInterval(cb, ms);
-    activeIntervals.push(timerId);
-    return timerId;
-  };
-
-  fs.watchFile = (filename, options, listener) => {
-    watchedFiles.push(filename);
-    if (typeof options === 'function') {
-      originalWatchFile(filename, {}, options);
-    } else {
-      originalWatchFile(filename, options, listener);
-    }
-  };
-
-  try {
-    delete require.cache[require.resolve('../dashboard/server.js')];
-    require('../dashboard/server.js');
-  } finally {
-    http.createServer = originalCreateServer;
-    global.setInterval = originalSetInterval;
-    fs.watchFile = originalWatchFile;
-  }
-
-  const cleanupHandles = () => {
-    activeIntervals.forEach(id => clearInterval(id));
-    watchedFiles.forEach(file => fs.unwatchFile(file));
-  };
-
-  if (typeof serverHandler !== 'function') {
-    cleanupHandles();
-    return done(new Error('Failed to intercept dashboard server route handler logic'));
-  }
-
-  const testServer = http.createServer(serverHandler);
-  let responseValidated = false;
-
-  testServer.on('error', (err) => {
-    cleanupHandles();
-    done(err);
-  });
-
-  testServer.listen(0, '127.0.0.1', () => {
-    const DYNAMIC_PORT = testServer.address().port;
-
+  runWithDashboardServer((port, cleanup) => {
     const malformedPayload = '{"ide":"claude","event":';
 
     const options = {
       hostname: '127.0.0.1',
-      port: DYNAMIC_PORT,
+      port: port,
       path: '/event',
       method: 'POST',
       headers: {
@@ -288,99 +242,34 @@ test('POST /event rejects malformed JSON with 400 status code', (t, done) => {
       res.setEncoding('utf8');
       res.on('data', chunk => { responseData += chunk; });
       res.on('end', () => {
-        testServer.close(() => {
-          cleanupHandles();
-          try {
-            assert.equal(res.statusCode, 400, 'Server must reject malformed JSON with 400 Status');
-            const body = JSON.parse(responseData);
-            assert.equal(typeof body.error, 'string', 'Error message must be a string');
-            assert.ok(body.error.length > 0, 'Error message must not be empty');
-            responseValidated = true;
-            done();
-          } catch (err) {
-            done(err);
-          }
-        });
+        try {
+          assert.equal(res.statusCode, 400, 'Server must reject malformed JSON with 400 Status');
+          const body = JSON.parse(responseData);
+          assert.equal(typeof body.error, 'string', 'Error message must be a string');
+          assert.ok(body.error.length > 0, 'Error message must not be empty');
+          cleanup();
+        } catch (err) {
+          cleanup(err);
+        }
       });
     });
 
     req.on('error', (err) => {
-      if (responseValidated) return;
-      testServer.close(() => {
-        cleanupHandles();
-        done(err);
-      });
+      cleanup(err);
     });
 
     req.write(malformedPayload);
     req.end();
-  });
+  }, done);
 });
 
 test('POST /event still accepts valid JSON with 200 status code', (t, done) => {
-  const originalCreateServer = http.createServer;
-  const originalSetInterval = global.setInterval;
-  const originalWatchFile = fs.watchFile;
-  
-  let serverHandler = null;
-  const activeIntervals = [];
-  const watchedFiles = [];
-
-  http.createServer = (handler) => {
-    serverHandler = handler;
-    return { listen: () => {}, on: () => {} };
-  };
-
-  global.setInterval = (cb, ms) => {
-    const timerId = originalSetInterval(cb, ms);
-    activeIntervals.push(timerId);
-    return timerId;
-  };
-
-  fs.watchFile = (filename, options, listener) => {
-    watchedFiles.push(filename);
-    if (typeof options === 'function') {
-      originalWatchFile(filename, {}, options);
-    } else {
-      originalWatchFile(filename, options, listener);
-    }
-  };
-
-  try {
-    delete require.cache[require.resolve('../dashboard/server.js')];
-    require('../dashboard/server.js');
-  } finally {
-    http.createServer = originalCreateServer;
-    global.setInterval = originalSetInterval;
-    fs.watchFile = originalWatchFile;
-  }
-
-  const cleanupHandles = () => {
-    activeIntervals.forEach(id => clearInterval(id));
-    watchedFiles.forEach(file => fs.unwatchFile(file));
-  };
-
-  if (typeof serverHandler !== 'function') {
-    cleanupHandles();
-    return done(new Error('Failed to intercept dashboard server route handler logic'));
-  }
-
-  const testServer = http.createServer(serverHandler);
-  let responseValidated = false;
-
-  testServer.on('error', (err) => {
-    cleanupHandles();
-    done(err);
-  });
-
-  testServer.listen(0, '127.0.0.1', () => {
-    const DYNAMIC_PORT = testServer.address().port;
-
+  runWithDashboardServer((port, cleanup) => {
     const validPayload = JSON.stringify({ ide: 'claude', event: 'pre_tool' });
 
     const options = {
       hostname: '127.0.0.1',
-      port: DYNAMIC_PORT,
+      port: port,
       path: '/event',
       method: 'POST',
       headers: {
@@ -394,30 +283,22 @@ test('POST /event still accepts valid JSON with 200 status code', (t, done) => {
       res.setEncoding('utf8');
       res.on('data', chunk => { responseData += chunk; });
       res.on('end', () => {
-        testServer.close(() => {
-          cleanupHandles();
-          try {
-            assert.equal(res.statusCode, 200, 'Server must accept valid JSON with 200 Status');
-            const body = JSON.parse(responseData);
-            assert.equal(body.ok, true, 'Response body must contain ok: true');
-            responseValidated = true;
-            done();
-          } catch (err) {
-            done(err);
-          }
-        });
+        try {
+          assert.equal(res.statusCode, 200, 'Server must accept valid JSON with 200 Status');
+          const body = JSON.parse(responseData);
+          assert.equal(body.ok, true, 'Response body must contain ok: true');
+          cleanup();
+        } catch (err) {
+          cleanup(err);
+        }
       });
     });
 
     req.on('error', (err) => {
-      if (responseValidated) return;
-      testServer.close(() => {
-        cleanupHandles();
-        done(err);
-      });
+      cleanup(err);
     });
 
     req.write(validPayload);
     req.end();
-  });
+  }, done);
 });
