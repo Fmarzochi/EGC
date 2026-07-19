@@ -136,6 +136,32 @@ function main() {
     } else {
       config = null;
     }
+    const hasSelection = Boolean(
+      config ||
+      options.profileId ||
+      options.moduleIds.length > 0 ||
+      options.includeComponentIds.length > 0 ||
+      options.excludeComponentIds.length > 0 ||
+      options.languages.length > 0
+    );
+    if (!hasSelection && !options.dryRun && !options.json && !process.env.EGC_INSTALL_DELEGATED) {
+      // A bare "egc install" is the README Quick Start path. The no-argument
+      // flow is already defined by the shipped onboarding installers, so run
+      // them instead of failing; the env guard stops the wrappers from
+      // recursing back into this script.
+      const path = require('node:path');
+      const { spawnSync } = require('node:child_process');
+      const rootDir = path.join(__dirname, '..');
+      const wrapper = process.platform === 'win32'
+        ? { cmd: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'scripts', 'install.ps1')] }
+        : { cmd: 'bash', args: [path.join(rootDir, 'scripts', 'install.sh')] };
+      const spawned = spawnSync(wrapper.cmd, wrapper.args, {
+        cwd: rootDir,
+        stdio: 'inherit',
+        env: { ...process.env, EGC_INSTALL_DELEGATED: '1' },
+      });
+      process.exit(spawned.status === null ? 1 : spawned.status);
+    }
     const request = normalizeInstallRequest({
       ...options,
       config,

@@ -85,6 +85,51 @@ function runTests() {
     assert.ok(result.stderr.includes('cannot be combined'));
   })) passed++; else failed++;
 
+  if (process.platform !== 'win32') {
+    if (test('bare install delegates to the shipped install.sh wrapper', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      const binDir = createTempDir('install-apply-bin-');
+
+      try {
+        const fakeBash = path.join(binDir, 'bash');
+        fs.writeFileSync(fakeBash, '#!/bin/sh\necho "WRAPPER CALLED: $1"\nexit 0\n');
+        fs.chmodSync(fakeBash, 0o755);
+
+        const result = run([], {
+          cwd: projectDir,
+          homeDir,
+          env: { PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
+        });
+        assert.strictEqual(result.code, 0, result.stderr);
+        assert.ok(result.stdout.includes('WRAPPER CALLED'));
+        assert.ok(result.stdout.includes(path.join('scripts', 'install.sh')));
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+        cleanup(binDir);
+      }
+    })) passed++; else failed++;
+  }
+
+  if (test('delegated bare install keeps the explicit selection contract', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run([], {
+        cwd: projectDir,
+        homeDir,
+        env: { EGC_INSTALL_DELEGATED: '1' },
+      });
+      assert.strictEqual(result.code, 1);
+      assert.ok(result.stderr.includes('No install profile'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs Gemini rules and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
