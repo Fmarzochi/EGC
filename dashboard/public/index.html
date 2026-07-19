@@ -1164,6 +1164,12 @@ function setWs(on){
   document.getElementById('wsDot').className='ws-dot'+(on?' on':'');
   document.getElementById('wsLbl').textContent=on?'live':'offline';
   document.getElementById('activeBadge').style.display=on?'':'none';
+  if(!on){
+    S.pingFailStreak=0;
+    if(S.telemetryFailStreak===0){
+      setOffline(false);
+    }
+  }
 }
 function pingLatency(){
   if(!S.ws||S.ws.readyState!==1)return;
