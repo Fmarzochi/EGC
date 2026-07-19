@@ -24,8 +24,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const http = require('node:http');
-const { spawnSync, spawn } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const os = require('node:os');
 
 const { version: PKG_VERSION } = require('../package.json');
@@ -263,40 +262,6 @@ console.log(`  ${c.green}Memory loaded (project + global)${c.reset} ${c.dim}|${c
 console.log(`  ${c.dim}Route heavy commands through \`egc run <cmd>\`; see savings anytime with \`egc saved\`. Run \`egc doctor\` to verify.${c.reset}`);
 
 if (!flags.dryRun) {
-  const dashboardScript = path.join(ROOT_DIR, 'scripts', 'dashboard.js');
-  if (fs.existsSync(dashboardScript)) {
-    const dashPing = new Promise(resolve => {
-      const req = http.get('http://localhost:7890/ping', res => { res.resume(); resolve(res.statusCode === 200); });
-      req.on('error', () => resolve(false));
-      req.setTimeout(500, () => { req.destroy(); resolve(false); });
-    });
-    const openBrowser = () => {
-      const url = 'http://localhost:7890';
-      let cmd;
-      if (process.platform === 'win32') {
-        cmd = 'start';
-      } else if (process.platform === 'darwin') {
-        cmd = 'open';
-      } else {
-        cmd = 'xdg-open';
-      }
-      try { require('node:child_process').spawnSync(cmd, [url], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ } // NOSONAR
-    };
-    dashPing.then(already => {
-      if (already) {
-        console.log(`\n  ${c.cyan}Dashboard already running at http://localhost:7890${c.reset}`);
-        openBrowser();
-        return;
-      }
-      const child = spawn(process.execPath, [dashboardScript], {
-        detached: true,
-        stdio: 'ignore',
-        ...(process.platform === 'win32' && { shell: true }),
-      });
-      child.unref();
-      console.log(`\n  ${c.cyan}EGC Dashboard starting at http://localhost:7890${c.reset}`);
-      console.log(`  ${c.dim}Minimize it to keep working. Run \`egc dashboard stop\` to close.${c.reset}`);
-      setTimeout(openBrowser, 1500);
-    });
-  }
+  const { launchDashboard } = require('./lib/dashboard-launch');
+  launchDashboard({ rootDir: ROOT_DIR, log: msg => console.log(`\n  ${c.cyan}${msg}${c.reset}`) });
 }
