@@ -34,8 +34,21 @@ function git(args, options) {
   return execFileSync(GIT_BIN, args, { encoding: 'utf8', ...options });
 }
 
-function isMarkdownPath(p) {
-  return p.endsWith('.md') || p.endsWith('.mdc') || p.endsWith('.markdown');
+// Every propagation target of egc-memory (propagate.ts) is scanned, not just
+// markdown: several targets (.rules, .clinerules, .cursorrules, llms.txt)
+// have no .md extension and would otherwise slip past the guard.
+const NON_MARKDOWN_TARGETS = [
+  '.rules',
+  '.clinerules',
+  '.cursorrules',
+  'CONVENTIONS.md',
+  'llms.txt',
+];
+
+function isGuardedPath(p) {
+  if (p.endsWith('.md') || p.endsWith('.mdc') || p.endsWith('.markdown')) return true;
+  const base = p.split('/').pop();
+  return NON_MARKDOWN_TARGETS.includes(base);
 }
 
 function findLeak(content) {
@@ -68,7 +81,7 @@ function cleanContent(content) {
 
 function checkStaged() {
   const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACM'])
-    .split('\n').filter(Boolean).filter(isMarkdownPath);
+    .split('\n').filter(Boolean).filter(isGuardedPath);
   const leaks = [];
   for (const file of staged) {
     let content;
@@ -83,7 +96,7 @@ function checkStaged() {
 }
 
 function checkTree() {
-  const tracked = git(['ls-files']).split('\n').filter(Boolean).filter(isMarkdownPath);
+  const tracked = git(['ls-files']).split('\n').filter(Boolean).filter(isGuardedPath);
   const leaks = [];
   for (const file of tracked) {
     let content;

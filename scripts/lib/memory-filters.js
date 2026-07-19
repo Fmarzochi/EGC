@@ -25,6 +25,13 @@ const PROPAGATION_FILES = [
   'GEMINI.md',
   '.cursor/rules/egc-context.mdc',
   '.trae/rules/egc-context.md',
+  '.github/copilot-instructions.md',
+  '.windsurf/rules/egc-context.md',
+  '.rules',
+  '.clinerules',
+  '.cursorrules',
+  'CONVENTIONS.md',
+  'llms.txt',
 ];
 
 function gitDir(projectDir) {
