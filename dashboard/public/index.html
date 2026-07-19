@@ -657,6 +657,8 @@ const S={
   latencyMs:0,hooksOk:false,
   pollFailStreak:0,
   isOffline:false,
+  telemetryReqId:0,
+  pingReqId:0,
 };
 
 /* ── GREETING ───────────────────────────────────────────── */
@@ -1108,7 +1110,12 @@ function reportPollResult(ok){
 }
 
 function pollTelemetry(){
-  fetch('/telemetry').then(r=>r.json()).then(t=>{
+  S.telemetryReqId++;
+  const reqId = S.telemetryReqId;
+  fetch('/telemetry').then(r=>{
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }).then(t=>{
     renderEconomy(t);
     // Update pill alive state from server truth
     Object.entries(t).forEach(([ide,p])=>{
@@ -1117,9 +1124,13 @@ function pollTelemetry(){
       if(p.running)el.classList.add('alive');
       else el.classList.remove('alive');
     });
-    reportPollResult(true);
+    if(reqId===S.telemetryReqId){
+      reportPollResult(true);
+    }
   }).catch(()=>{
-    reportPollResult(false);
+    if(reqId===S.telemetryReqId){
+      reportPollResult(false);
+    }
   });
 }
 setInterval(pollTelemetry,8000);
@@ -1149,12 +1160,21 @@ function setWs(on){
 }
 function pingLatency(){
   if(!S.ws||S.ws.readyState!==1)return;
-  fetch('/ping').then(r=>r.json()).then(d=>{
+  S.pingReqId++;
+  const reqId = S.pingReqId;
+  fetch('/ping').then(r=>{
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }).then(d=>{
     const lat=Date.now()-d.ts;
     document.getElementById('shLat').textContent=lat+'ms';
-    reportPollResult(true);
+    if(reqId===S.pingReqId){
+      reportPollResult(true);
+    }
   }).catch(()=>{
-    reportPollResult(false);
+    if(reqId===S.pingReqId){
+      reportPollResult(false);
+    }
   });
   setTimeout(pingLatency,5000);
 }
