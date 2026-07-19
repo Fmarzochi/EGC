@@ -86,7 +86,22 @@ function buildStaticManifest(dir) {
   scan(dir, '');
   return manifest;
 }
-const STATIC_FILES = buildStaticManifest(PUBLIC);
+let STATIC_FILES = buildStaticManifest(PUBLIC);
+
+// Late-added static files (e.g. dropped in after an in-place package upgrade
+// while the daemon stays up) must be served without a restart. The manifest
+// also doubles as the path-traversal guard, so we NEVER resolve raw request
+// paths against the filesystem — on a miss we rebuild the manifest from a
+// directory scan, debounced so a burst of misses refreshes at most once per
+// few seconds. See EGC#918.
+let staticRefreshAt = 0;
+const STATIC_REFRESH_INTERVAL_MS = 3000;
+function refreshStaticManifestIfStale() {
+  const now = Date.now();
+  if (now - staticRefreshAt < STATIC_REFRESH_INTERVAL_MS) return;
+  staticRefreshAt = now;
+  STATIC_FILES = buildStaticManifest(PUBLIC);
+}
 
 function detectModel() {
   const candidates = [
@@ -420,8 +435,13 @@ const grandTotal = Object.values(byIde).reduce(
 
   // ── Static files ─────────────────────────────────────────
   const segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
-  const filePath = STATIC_FILES.get(segment);
-  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+  let filePath = STATIC_FILES.get(segment);
+  if (!filePath) {
+    // File may have been added after startup; rebuild the manifest (guarded by
+    // a debounce so a burst of misses refreshes at most once per interval).
+    refreshStaticManifestIfStale();
+    filePath = STATIC_FILES.get(segment);
+  }  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
     if (segment === '/index.html') {

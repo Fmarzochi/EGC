@@ -10,6 +10,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
 const fs = require('fs');
+const path = require('path');
 const { createAccumulator } = require('../dashboard/accumulator');
 
 // ---------------------------------------------------------------------------
@@ -367,5 +368,48 @@ test('POST /event handles multi-byte UTF-8 character split across TCP chunks', (
     req.write(chunk1);
     req.write(chunk2);
     req.end();
+  }, done);
+});
+test('static file added after startup is served, traversal still 404 (EGC#918)', (t, done) => {
+  runWithDashboardServer((port, cleanup) => {
+    const PUBLIC = path.join(__dirname, '..', 'dashboard', 'public');
+    const fileName = `late-added-${Date.now()}-${process.pid}.txt`;
+    const filePath = path.join(PUBLIC, fileName);
+    const relPath = '/' + fileName;
+    fs.writeFileSync(filePath, 'hello-after-startup', 'utf8');
+
+    const get = (p) => new Promise((resolve, reject) => {
+      const req = http.request({ hostname: '127.0.0.1', port, path: p, method: 'GET' }, (res) => {
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => resolve({ status: res.statusCode, data }));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    const finish = (err) => {
+      try { fs.unlinkSync(filePath); } catch (_) {}
+      cleanup(err);
+    };
+
+    (async () => {
+      try {
+        const late = await get(relPath);
+        assert.equal(late.status, 200, 'Late-added static file must be served without restart');
+        assert.equal(late.data, 'hello-after-startup', 'Served file content must match');
+
+        const traversal = await get('/../server.js');
+        assert.equal(traversal.status, 404, 'Traversal path must still 404');
+
+        const encoded = await get('/%2e%2e/server.js');
+        assert.equal(encoded.status, 404, 'Encoded traversal must still 404');
+
+        finish();
+      } catch (err) {
+        finish(err);
+      }
+    })();
   }, done);
 });
