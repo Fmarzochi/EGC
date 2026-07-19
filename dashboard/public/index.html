@@ -655,7 +655,8 @@ const S={
   eco:{tok:0,hitCt:0,lifetok:1482221},
   mission:{task:'Waiting...',file:'--',pct:0},
   latencyMs:0,hooksOk:false,
-  pollFailStreak:0,
+  telemetryFailStreak:0,
+  pingFailStreak:0,
   isOffline:false,
   telemetryReqId:0,
   pingReqId:0,
@@ -1097,13 +1098,17 @@ function setOffline(offline){
     }
   });
 }
-function reportPollResult(ok){
+function reportPollResult(type, ok){
   if(ok){
-    S.pollFailStreak=0;
-    setOffline(false);
+    if(type==='telemetry') S.telemetryFailStreak=0;
+    if(type==='ping') S.pingFailStreak=0;
+    if(S.telemetryFailStreak===0 && S.pingFailStreak===0){
+      setOffline(false);
+    }
   }else{
-    S.pollFailStreak++;
-    if(S.pollFailStreak>=3){
+    if(type==='telemetry') S.telemetryFailStreak++;
+    if(type==='ping') S.pingFailStreak++;
+    if(S.telemetryFailStreak>=3 || S.pingFailStreak>=3){
       setOffline(true);
     }
   }
@@ -1116,20 +1121,22 @@ function pollTelemetry(){
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   }).then(t=>{
-    renderEconomy(t);
-    // Update pill alive state from server truth
-    Object.entries(t).forEach(([ide,p])=>{
-      const el=document.getElementById(`pill-${ide}`);
-      if(!el)return;
-      if(p.running)el.classList.add('alive');
-      else el.classList.remove('alive');
-    });
     if(reqId===S.telemetryReqId){
-      reportPollResult(true);
+      reportPollResult('telemetry', true);
     }
+    try{
+      renderEconomy(t);
+      // Update pill alive state from server truth
+      Object.entries(t).forEach(([ide,p])=>{
+        const el=document.getElementById(`pill-${ide}`);
+        if(!el)return;
+        if(p.running)el.classList.add('alive');
+        else el.classList.remove('alive');
+      });
+    }catch(e){}
   }).catch(()=>{
     if(reqId===S.telemetryReqId){
-      reportPollResult(false);
+      reportPollResult('telemetry', false);
     }
   });
 }
@@ -1166,14 +1173,16 @@ function pingLatency(){
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   }).then(d=>{
-    const lat=Date.now()-d.ts;
-    document.getElementById('shLat').textContent=lat+'ms';
     if(reqId===S.pingReqId){
-      reportPollResult(true);
+      reportPollResult('ping', true);
     }
+    try{
+      const lat=Date.now()-d.ts;
+      document.getElementById('shLat').textContent=lat+'ms';
+    }catch(e){}
   }).catch(()=>{
     if(reqId===S.pingReqId){
-      reportPollResult(false);
+      reportPollResult('ping', false);
     }
   });
   setTimeout(pingLatency,5000);
