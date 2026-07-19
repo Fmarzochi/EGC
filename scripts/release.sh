@@ -61,6 +61,7 @@ update_version ".agents/plugins/marketplace.json"
 sed -i "s/${CURRENT}/${VERSION}/g" VERSION agent.yaml
 sed -i "s/EGC_VERSION: \"${CURRENT}\"/EGC_VERSION: \"${VERSION}\"/g" .opencode/plugins/egc-hooks.ts
 sed -i "s/Extended Global Context v${CURRENT}/Extended Global Context v${VERSION}/g" .opencode/plugins/egc-hooks.ts
+sed -i "s/export const VERSION = \"${CURRENT}\"/export const VERSION = \"${VERSION}\"/" .opencode/index.ts
 
 update_latest_release_heading "$ROOT_ZH_CN_README_FILE"
 
