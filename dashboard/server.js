@@ -7,6 +7,7 @@ const fs      = require('fs');
 const os      = require('os');
 const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
+const { decodeRequestBody } = require('./body-decode');
 
 const PORT   = 7890;
 const PUBLIC = path.join(__dirname, 'public');
@@ -158,14 +159,14 @@ const server = http.createServer((req, res) => {
 
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
-    let body = '';
+    const chunks = [];
     let currentSize = 0;
     const MAX_SIZE = 256 * 1024; // 256 KB cap
     let exceeded = false;
 
     req.on('data', d => {
       if (exceeded) return;
-      
+
       currentSize += d.length;
       if (currentSize > MAX_SIZE) {
         exceeded = true;
@@ -175,12 +176,14 @@ const server = http.createServer((req, res) => {
         });
         return;
       }
-      
-      body += d;
+
+      chunks.push(d);
     });
 
     req.on('end', () => {
       if (exceeded) return;
+
+      const body = decodeRequestBody(chunks);
 
       let ev;
       try {

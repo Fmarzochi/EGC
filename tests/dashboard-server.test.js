@@ -302,3 +302,78 @@ test('POST /event still accepts valid JSON with 200 status code', (t, done) => {
     req.end();
   }, done);
 });
+
+test('POST /event body decode preserves multi-byte UTF-8 split across chunk boundaries (EGC#916)', (t, done) => {
+  delete require.cache[require.resolve('../dashboard/body-decode.js')];
+  const { decodeRequestBody } = require('../dashboard/body-decode');
+
+  // A 4-byte emoji inside a commit message. Split the raw Buffer so the emoji's
+  // bytes straddle two chunks — the exact condition that corrupts when each
+  // chunk is decoded to a string in isolation.
+  const full = JSON.stringify({
+    ide: 'claude',
+    event: 'post_tool',
+    message: 'shipped 🚀 to production'
+  });
+  const buf = Buffer.from(full, 'utf8');
+  const emojiIdx = buf.indexOf(0xf0); // lead byte of a 4-byte UTF-8 sequence
+  assert.ok(emojiIdx > 0 && emojiIdx < buf.length - 4, 'fixture must contain a splittable multi-byte char');
+  const first = buf.subarray(0, emojiIdx + 2);  // cut a 4-byte char in half
+  const second = buf.subarray(emojiIdx + 2);
+
+  const decoded = decodeRequestBody([first, second]);
+  assert.equal(decoded, full, 'Split multi-byte body must decode to the exact original string');
+  // The emoji must survive, not collapse to a replacement character.
+  assert.ok(decoded.includes('🚀'), 'The multi-byte character must survive intact');
+
+  // Regression guard: the naive per-chunk decode corrupts the split char.
+  const naive = [first, second].map(c => c.toString('utf8')).join('');
+  assert.notEqual(naive, full, 'Naive per-chunk decode must differ (proves the bug existed)');
+  assert.ok(!naive.includes('🚀'), 'Naive decode must drop the split multi-byte character');
+
+  done();
+});
+
+test('POST /event accepts a split multi-byte body end to end (EGC#916)', (t, done) => {
+  runWithDashboardServer((port, cleanup) => {
+    const full = JSON.stringify({
+      ide: 'claude',
+      event: 'post_tool',
+      message: 'shipped 🚀 to production'
+    });
+    const buf = Buffer.from(full, 'utf8');
+    const emojiIdx = buf.indexOf(0xf0);
+    const first = buf.subarray(0, emojiIdx + 2);
+    const second = buf.subarray(emojiIdx + 2);
+
+    const options = {
+      hostname: '127.0.0.1',
+      port: port,
+      path: '/event',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': buf.length }
+    };
+
+    const req = http.request(options, (res) => {
+      let responseData = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { responseData += chunk; });
+      res.on('end', () => {
+        try {
+          assert.equal(res.statusCode, 200, 'Split multi-byte payload must parse (no 400 corruption)');
+          const body = JSON.parse(responseData);
+          assert.equal(body.ok, true, 'Response body must contain ok: true');
+          cleanup();
+        } catch (err) {
+          cleanup(err);
+        }
+      });
+    });
+
+    req.on('error', (err) => { cleanup(err); });
+
+    req.write(Buffer.from(first));
+    req.write(Buffer.from(second));
+    req.end();
+  }, done);
+});
