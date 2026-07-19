@@ -160,6 +160,9 @@ function main() {
         stdio: 'inherit',
         env: { ...process.env, EGC_INSTALL_DELEGATED: '1' },
       });
+      if (spawned.error) {
+        process.stderr.write(`Error: failed to launch ${wrapper.cmd}: ${spawned.error.message}\n`);
+      }
       process.exit(spawned.status === null ? 1 : spawned.status);
     }
     const request = normalizeInstallRequest({

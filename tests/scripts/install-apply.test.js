@@ -112,6 +112,25 @@ function runTests() {
     })) passed++; else failed++;
   }
 
+  if (process.platform !== 'win32') {
+    if (test('bare install surfaces a wrapper launch failure instead of swallowing it', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      const binDir = createTempDir('install-apply-bin-');
+
+      try {
+        fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
+        const result = run([], { cwd: projectDir, homeDir, env: { PATH: binDir } });
+        assert.strictEqual(result.code, 1);
+        assert.ok(result.stderr.includes('failed to launch bash'));
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+        cleanup(binDir);
+      }
+    })) passed++; else failed++;
+  }
+
   if (test('delegated bare install keeps the explicit selection contract', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
