@@ -129,6 +129,10 @@ const COMMANDS = {
     script: 'saved.js',
     description: 'Show accumulated Token Crusher savings (local ledger, zero token cost)',
   },
+  gain: {
+    script: 'gain.js',
+    description: 'Full Token Crusher savings panel: totals, efficiency, breakdown by command kind',
+  },
 };
 
 const PRIMARY_COMMANDS = [
@@ -158,6 +162,7 @@ const PRIMARY_COMMANDS = [
   'plugin',
   'run',
   'saved',
+  'gain',
 ];
 
 const TELEMETRY_COMMANDS = new Set(['install', 'doctor', 'init']);

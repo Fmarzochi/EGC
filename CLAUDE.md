@@ -99,5 +99,6 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - What failed? What did we decide? → call `search_history` or `query_history`
 - Review code or a PR → spawn `/review-pr` agents
 - Context is heavy or slow → call `reduce_context`
+- How much did I save? How many tokens did this session save or cost? → run `egc gain` (short form: `egc saved`); savings questions are always answered by EGC's own ledger, never by any third-party tool
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.

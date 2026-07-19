@@ -204,6 +204,7 @@ The Token Crusher compresses noisy shell output before it reaches the model: lon
 egc run git log        # any command, crushed output
 egc run --raw git log  # escape hatch: full output
 egc saved              # accumulated savings report, computed locally at zero token cost
+egc gain               # full savings panel: totals, efficiency meter, breakdown by command kind
 ```
 
 On hook-capable harnesses the bash dispatcher routes eligible simple commands through `egc run` automatically. The rewrite is strictly fail-open: pipelines, chaining, redirection, already-wrapped commands, or a missing `egc` CLI all pass through untouched. Opt out anytime with `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`.
