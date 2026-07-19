@@ -50,7 +50,7 @@ function printHuman(result) {
 
   console.log('Uninstall summary:\n');
   for (const entry of result.results) {
-    console.log(`- ${entry.adapter.id}`);
+    console.log(`- ${(entry.adapter && entry.adapter.id) || 'unknown adapter'}`);
     console.log(`  Status: ${entry.status.toUpperCase()}`);
     console.log(`  Install-state: ${entry.installStatePath}`);
 
