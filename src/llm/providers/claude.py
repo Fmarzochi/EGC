@@ -7,6 +7,7 @@ from typing import Any
 
 try:
     from anthropic import Anthropic
+
     _ANTHROPIC_AVAILABLE = True
 except ImportError:
     _ANTHROPIC_AVAILABLE = False
@@ -17,7 +18,14 @@ from llm.core.interface import (
     LLMProvider,
     RateLimitError,
 )
-from llm.core.types import LLMInput, LLMOutput, Message, ModelInfo, ProviderType, ToolCall
+from llm.core.types import (
+    LLMInput,
+    LLMOutput,
+    Message,
+    ModelInfo,
+    ProviderType,
+    ToolCall,
+)
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
 
@@ -32,7 +40,10 @@ class ClaudeProvider(LLMProvider):
                 "Install with: pip install everything-gemini[claude]"
             )
         from anthropic import Anthropic
-        self.client = Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"), base_url=base_url)
+
+        self.client = Anthropic(
+            api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"), base_url=base_url
+        )
         self._models = [
             ModelInfo(
                 name="claude-opus-4-5",
@@ -67,11 +78,13 @@ class ClaudeProvider(LLMProvider):
             if getattr(block, "type", None) != "tool_use":
                 continue
             tool_input = getattr(block, "input", {})
-            calls.append(ToolCall(
-                id=getattr(block, "id", ""),
-                name=getattr(block, "name", ""),
-                arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
-            ))
+            calls.append(
+                ToolCall(
+                    id=getattr(block, "id", ""),
+                    name=getattr(block, "name", ""),
+                    arguments=dict(tool_input) if isinstance(tool_input, dict) else {},
+                )
+            )
         return calls or None
 
     @staticmethod
@@ -86,6 +99,11 @@ class ClaudeProvider(LLMProvider):
         raise e
 
     def generate(self, input: LLMInput) -> LLMOutput:
+        if input.stream:
+            # Streaming is not implemented in this adapter. Fail loudly instead
+            # of silently downgrading to a blocking call, which would mislead
+            # callers into thinking they are consuming a stream.
+            raise NotImplementedError("streaming not supported")
         try:
             params: dict[str, Any] = {
                 "model": input.model or self.get_default_model(),
@@ -95,12 +113,20 @@ class ClaudeProvider(LLMProvider):
             }
             if input.tools:
                 params["tools"] = [
-                    {"name": t.name, "description": t.description, "input_schema": t.parameters}
+                    {
+                        "name": t.name,
+                        "description": t.description,
+                        "input_schema": t.parameters,
+                    }
                     for t in input.tools
                 ]
             response = self.client.messages.create(**params)
             content = next(
-                (block.text or "" for block in response.content if block.type == "text"),
+                (
+                    block.text or ""
+                    for block in response.content
+                    if block.type == "text"
+                ),
                 "",
             )
             return LLMOutput(
