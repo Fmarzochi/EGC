@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - SDK optional
 
 from llm.core.interface import AuthenticationError, LLMError, LLMProvider
 from llm.core.model_resolver import ModelResolver
+from llm.core.redact import redact_secrets
 from llm.core.types import (
     LLMInput,
     LLMOutput,
@@ -150,9 +151,10 @@ class CohereProvider(LLMProvider):
             raise
         except Exception as exc:
             msg = str(exc).lower()
+            safe = redact_secrets(str(exc))
             if "unauthorized" in msg or "api key" in msg or "401" in msg:
-                raise AuthenticationError(str(exc), provider=ProviderType.COHERE) from exc
-            raise LLMError(str(exc), provider=ProviderType.COHERE) from exc
+                raise AuthenticationError(safe, provider=ProviderType.COHERE) from exc
+            raise LLMError(safe, provider=ProviderType.COHERE) from exc
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()

@@ -19,6 +19,7 @@ from llm.core.interface import (
 )
 from llm.core.types import LLMInput, LLMOutput, Message, ModelInfo, ProviderType, ToolCall
 from llm.core.model_resolver import ModelResolver
+from llm.core.redact import redact_secrets
 
 
 class ClaudeProvider(LLMProvider):
@@ -75,7 +76,7 @@ class ClaudeProvider(LLMProvider):
 
     @staticmethod
     def _map_error(e: Exception) -> None:
-        msg = str(e)
+        msg = redact_secrets(str(e))
         if "401" in msg or "authentication" in msg.lower():
             raise AuthenticationError(msg, provider=ProviderType.CLAUDE) from e
         if "429" in msg or "rate_limit" in msg.lower():

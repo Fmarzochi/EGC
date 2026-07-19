@@ -1,5 +1,4 @@
 """Ollama provider adapter for local models."""
-
 from __future__ import annotations
 
 import os
@@ -102,7 +101,7 @@ class OllamaProvider(LLMProvider):
                 },
             )
         except Exception as e:
-            msg = str(e)
+            msg = redact_secrets(str(e))
             if "401" in msg or "connection" in msg.lower():
                 raise AuthenticationError(f"Ollama connection failed: {msg}", provider=ProviderType.OLLAMA) from e
             if "429" in msg or "rate_limit" in msg.lower():

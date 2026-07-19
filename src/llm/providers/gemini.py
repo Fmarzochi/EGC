@@ -28,6 +28,7 @@ from llm.core.interface import (
 )
 from llm.core.types import LLMInput, LLMOutput, Message, ModelInfo, ProviderType, ToolCall, ToolDefinition
 from llm.core.model_resolver import ModelResolver
+from llm.core.redact import redact_secrets
 
 
 class GeminiProvider(LLMProvider):
@@ -238,11 +239,11 @@ class GeminiProvider(LLMProvider):
     def _check_api_error(e: APIError, msg: str) -> None:
         status = getattr(e, "code", 500)
         if status == 401 or status == 403 or "api key" in msg:
-            raise AuthenticationError(str(e), provider=ProviderType.GEMINI) from e
+            raise AuthenticationError(redact_secrets(str(e)), provider=ProviderType.GEMINI) from e
         if status == 429 or "quota" in msg or "exhausted" in msg:
-            raise RateLimitError(str(e), provider=ProviderType.GEMINI) from e
+            raise RateLimitError(redact_secrets(str(e)), provider=ProviderType.GEMINI) from e
         if status == 400 and "token" in msg:
-            raise ContextLengthError(str(e), provider=ProviderType.GEMINI) from e
+            raise ContextLengthError(redact_secrets(str(e)), provider=ProviderType.GEMINI) from e
 
     @staticmethod
     def _map_api_error(e: Exception) -> None:
@@ -250,11 +251,11 @@ class GeminiProvider(LLMProvider):
         if isinstance(e, APIError):
             GeminiProvider._check_api_error(e, msg)
         if "401" in msg or "403" in msg or "authentication" in msg:
-            raise AuthenticationError(str(e), provider=ProviderType.GEMINI) from e
+            raise AuthenticationError(redact_secrets(str(e)), provider=ProviderType.GEMINI) from e
         if "429" in msg or "rate" in msg or "quota" in msg:
-            raise RateLimitError(str(e), provider=ProviderType.GEMINI) from e
+            raise RateLimitError(redact_secrets(str(e)), provider=ProviderType.GEMINI) from e
         if "context" in msg and "length" in msg:
-            raise ContextLengthError(str(e), provider=ProviderType.GEMINI) from e
+            raise ContextLengthError(redact_secrets(str(e)), provider=ProviderType.GEMINI) from e
         if "timeout" in msg:
             raise LLMError(f"Request timeout: {e}", provider=ProviderType.GEMINI, code="timeout") from e
         raise LLMError(f"Unexpected provider error: {e}", provider=ProviderType.GEMINI) from e
