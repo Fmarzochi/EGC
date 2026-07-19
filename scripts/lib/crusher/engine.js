@@ -29,6 +29,13 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 
 const KEEP_LINE_RE = /\b(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception)\b/i;
 
+// Terminal color codes glue onto words (\x1b[31merror) and break the \b
+// word boundary, silently dropping colored error lines from the kept set.
+const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+function stripAnsi(line) {
+  return line.replace(ANSI_RE, '');
+}
+
 // EGC_CRUSHER_SKIP_PREFIXES names other local CLI proxies; their prefix is
 // stripped so the underlying command is still classified correctly.
 function stripProxyPrefix(command) {
@@ -82,11 +89,12 @@ function crushGitDiff(output) {
 
 function crushTestRunner(output) {
   const lines = output.split('\n');
-  const kept = lines.filter(l =>
-    KEEP_LINE_RE.test(l)
-    || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i.test(l.trim())
-    || /^\s*\d+ (passed|failed|skipped|pending)/i.test(l)
-  );
+  const kept = lines.filter(raw => {
+    const l = stripAnsi(raw);
+    return KEEP_LINE_RE.test(l)
+      || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i.test(l.trim())
+      || /^\s*\d+ (passed|failed|skipped|pending)/i.test(l);
+  });
   const summaryTail = lines.slice(-5).filter(l => l.trim());
   const merged = [...new Set([...kept, ...summaryTail])];
   if (merged.length >= lines.length) return null;
@@ -95,7 +103,7 @@ function crushTestRunner(output) {
 
 function crushPmInstall(output) {
   const lines = output.split('\n');
-  const kept = lines.filter(l => KEEP_LINE_RE.test(l));
+  const kept = lines.filter(l => KEEP_LINE_RE.test(stripAnsi(l)));
   const tail = lines.slice(-6).filter(l => l.trim());
   const merged = [...new Set([...kept, ...tail])];
   if (merged.length >= lines.length) return null;
