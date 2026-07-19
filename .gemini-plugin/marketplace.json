@@ -19,7 +19,7 @@
       },
       "homepage": "https://github.com/Fmarzochi/EGC",
       "repository": "https://github.com/Fmarzochi/EGC",
-      "license": "MIT",
+      "license": "Apache-2.0",
       "keywords": [
         "agents",
         "skills",

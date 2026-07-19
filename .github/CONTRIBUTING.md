@@ -85,7 +85,7 @@ git add . && git commit -m "feat: add my-feature" && git push -u origin feat/my-
 
 ## Developer Certificate of Origin (DCO)
 
-Every commit in your pull request must include a `Signed-off-by` line. This certifies that you wrote the code and have the right to contribute it under the project's MIT license.
+Every commit in your pull request must include a `Signed-off-by` line. This certifies that you wrote the code and have the right to contribute it under the project's Apache License 2.0.
 
 **Zero-friction setup — run once per clone, never again:**
 
