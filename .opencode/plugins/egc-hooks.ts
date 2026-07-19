@@ -513,7 +513,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
      */
     "shell.env": async () => {
       const env: Record<string, string> = {
-        EGC_VERSION: "1.1.6",
+        EGC_VERSION: "1.1.13",
         EGC_PLUGIN: "true",
         EGC_HOOK_PROFILE: currentProfile,
         EGC_DISABLED_HOOKS: process.env.EGC_DISABLED_HOOKS || "",
