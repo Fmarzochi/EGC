@@ -19,6 +19,10 @@ const {
   parseInstallArgs,
 } = require('./lib/install/request');
 
+// Bare "egc install" is the documented Quick Start path and must work in a
+// clean environment, so it falls back to the default engineering profile.
+const DEFAULT_INSTALL_PROFILE = 'developer';
+
 function getHelpText() {
   const languages = listLegacyCompatibilityLanguages();
 
@@ -135,6 +139,18 @@ function main() {
       config = loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
     } else {
       config = null;
+    }
+    const hasSelection = Boolean(
+      config ||
+      options.profileId ||
+      options.moduleIds.length > 0 ||
+      options.includeComponentIds.length > 0 ||
+      options.excludeComponentIds.length > 0 ||
+      options.languages.length > 0
+    );
+    if (!hasSelection) {
+      options.profileId = DEFAULT_INSTALL_PROFILE;
+      console.log(`No profile or modules specified; installing the default profile "${DEFAULT_INSTALL_PROFILE}". Run egc install --help to see every profile and option.`);
     }
     const request = normalizeInstallRequest({
       ...options,
