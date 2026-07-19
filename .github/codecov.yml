@@ -1,0 +1,53 @@
+codecov:
+  # Do not block merges if Codecov is unavailable
+  require_ci_to_pass: false
+  # Wait for all CI jobs to finish before processing coverage
+  notify:
+    wait_for_ci: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        # Auto-target: use the previous commit's coverage as the baseline
+        target: auto
+        # Allow up to 1% drop before failing the status check
+        threshold: 1%
+        if_no_uploads: success
+        if_not_found: success
+    patch:
+      default:
+        # New/changed lines should be at least 80% covered
+        target: 80%
+        # Allow up to 5% miss on patch before failing
+        threshold: 5%
+        # Informational only: shows coverage diff without blocking merges
+        informational: true
+        if_no_uploads: success
+        if_not_found: success
+
+comment:
+  # Update the existing comment instead of creating a new one on each push
+  behavior: default
+  # Show: coverage reach, diff summary, per-file breakdown
+  layout: "reach,diff,files"
+  # Only post if coverage actually changed in this PR
+  require_changes: true
+  # Only post if base branch coverage is available (avoids noise on first PRs)
+  require_base: true
+
+# Files that should not count toward coverage metrics
+ignore:
+  - "tests/**"
+  - "fuzz/**"
+  - "scripts/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+  - "**/*.config.js"
+  - ".github/**"
+  - ".clusterfuzzlite/**"
+  - "mcp/servers/*/build/**"
