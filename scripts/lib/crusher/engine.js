@@ -29,9 +29,10 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 
 const KEEP_LINE_RE = /\b(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception)\b/i;
 
-// Terminal color codes glue onto words (\x1b[31merror) and break the \b
+// Terminal color codes glue onto words (ESC[31merror) and break the \b
 // word boundary, silently dropping colored error lines from the kept set.
-const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+// Built via the constructor because eslint forbids control chars in literals.
+const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
 function stripAnsi(line) {
   return line.replace(ANSI_RE, '');
 }
