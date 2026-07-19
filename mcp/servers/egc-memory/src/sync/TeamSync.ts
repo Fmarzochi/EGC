@@ -66,7 +66,14 @@ export async function teamSync(): Promise<SyncResult> {
 
   const instance = new BackendClass();
   try {
-    await instance.init(config);
+    // A missing or unreachable remote must degrade to an offline no-op with
+    // a reported error, never an exception that takes the MCP server down.
+    try {
+      await instance.init(config);
+    } catch (err) {
+      result.errors.push(`Sync backend init failed (offline?): ${String(err)}`);
+      return result;
+    }
 
     // Step 1: Pull remote changes.
     try {
