@@ -36,6 +36,7 @@
     "test:state-store": "node tests/lib/state-store.test.js",
     "test:hooks": "node tests/hooks/hooks.test.js",
     "lint": "eslint .",
+    "lint:md": "markdownlint --config .github/.markdownlint.json \"agents/**/*.md\" \"skills/**/*.md\" \"commands/**/*.md\" \"rules/**/*.md\"",
     "build": "npm run build:opencode && npm run build:mcp",
     "doctor": "node scripts/doctor.js",
     "bootstrap": "node scripts/bootstrap-state-db.js",

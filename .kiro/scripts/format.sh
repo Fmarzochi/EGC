@@ -26,6 +26,8 @@ detect_formatter() {
     echo "biome"
   elif [ -f ".prettierrc" ] || [ -f ".prettierrc.js" ] || [ -f ".prettierrc.json" ] || [ -f ".prettierrc.yml" ] || [ -f "prettier.config.js" ] || [ -f "prettier.config.mjs" ]; then
     echo "prettier"
+  elif [ -f "package.json" ] && grep -q '"prettier"[[:space:]]*:' package.json; then
+    echo "prettier"
   elif command -v biome &>/dev/null; then
     echo "biome"
   elif command -v prettier &>/dev/null; then
