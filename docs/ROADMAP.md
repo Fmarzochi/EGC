@@ -96,6 +96,9 @@ Closes the commit-privacy scope started in v1.1.12:
 - CLA workflow runs are named after the PR they check instead of the base branch (#930)
 - Italian README translation, the 10th language, wired into all language selectors (#933, @LuckysHorizon)
 - Bare `egc install` runs the shipped onboarding installers instead of erroring in a clean environment (#937, @Aki-new via #935)
+- `egc catalog search <terms>`: ranked keyword search across skills, agents, rules, components and profiles (#939)
+- Lean root phase 3: the VERSION file dropped, package.json is the single version source (#940)
+- Official Hugging Face Space launched: https://huggingface.co/spaces/fmarzochi/EGC
 
 ## v1.2.0: Teams
 
