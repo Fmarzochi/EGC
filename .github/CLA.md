@@ -11,3 +11,5 @@ By contributing to EGC (Extended Global Context), you agree to the following ter
 4. **Patent Grant** - You grant a license under any patents you hold that are necessarily infringed by your contribution.
 
 This agreement covers all past and future contributions to the Fmarzochi/EGC repository.
+
+I have read the CLA Document and I hereby sign the CLA.
