@@ -661,6 +661,7 @@ const S={
   isOffline:false,
   telemetryReqId:0,
   pingReqId:0,
+  pingTimerId:null,
 };
 
 /* ── GREETING ───────────────────────────────────────────── */
@@ -1147,7 +1148,7 @@ pollTelemetry();
 function connect(){
   try{
     S.ws=new WebSocket('ws://localhost:7890');
-    S.ws.onopen=()=>{setWs(true);S.rc=1000;S.wsFailStreak=0;updateOfflineState();pingLatency();};
+    S.ws.onopen=()=>{setWs(true);S.rc=1000;S.wsFailStreak=0;updateOfflineState();};
     S.ws.onclose=()=>{setWs(false);S.wsFailStreak++;updateOfflineState();setTimeout(connect,S.rc);S.rc=Math.min(S.rc*2,10000);};
     S.ws.onmessage=m=>{
       try{
@@ -1166,7 +1167,8 @@ function setWs(on){
   document.getElementById('activeBadge').style.display=on?'':'none';
 }
 function pingLatency(){
-  if(!S.ws||S.ws.readyState!==1)return;
+  clearTimeout(S.pingTimerId);
+  S.pingTimerId=setTimeout(pingLatency,5000);
   S.pingReqId++;
   const reqId = S.pingReqId;
   fetch('/ping').then(r=>{
@@ -1185,7 +1187,7 @@ function pingLatency(){
       reportPollResult('ping', false);
     }
   });
-  setTimeout(pingLatency,5000);
+
 }
 
 /* ── EVENT HANDLER ──────────────────────────────────────── */
@@ -1441,6 +1443,7 @@ setInterval(loadCostSummary, 10000);
 
 
 connect();
+pingLatency();
 
 loadSessionHistory();
 
