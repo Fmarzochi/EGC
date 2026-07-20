@@ -92,6 +92,10 @@ Closes the commit-privacy scope started in v1.1.12:
 - Dashboard POST /event rejects malformed JSON with a 400 instead of a silent 200 (#917, @harshjainnn)
 - Dashboard offline badge reacts to a dead WebSocket, not only to poll failures (#919, @harshjainnn)
 - zh-CN README rendering fixed after the closing div (#922, @Aki-new)
+- Last em dash removed from the docs per repo writing convention (#929, @aryamirani)
+- CLA workflow runs are named after the PR they check instead of the base branch (#930)
+- Italian README translation, the 10th language, wired into all language selectors (#933, @LuckysHorizon)
+- Bare `egc install` runs the shipped onboarding installers instead of erroring in a clean environment (#937, reported by @Aki-new in #935)
 
 ## v1.2.0: Teams
 
