@@ -68,7 +68,6 @@ function buildExpectedPublishPaths(repoRoot) {
     "install.ps1",
     "schemas",
     "agent.yaml",
-    "VERSION",
   ]
 
   const combined = new Set(

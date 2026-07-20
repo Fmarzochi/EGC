@@ -58,7 +58,7 @@ update_version ".gemini-plugin/marketplace.json"
 update_version ".codex-plugin/plugin.json"
 update_version ".agents/plugins/marketplace.json"
 
-sed -i "s/${CURRENT}/${VERSION}/g" VERSION agent.yaml
+sed -i "s/${CURRENT}/${VERSION}/g" agent.yaml
 sed -i "s/EGC_VERSION: \"${CURRENT}\"/EGC_VERSION: \"${VERSION}\"/g" .opencode/plugins/egc-hooks.ts
 sed -i "s/Extended Global Context v${CURRENT}/Extended Global Context v${VERSION}/g" .opencode/plugins/egc-hooks.ts
 sed -i "s/export const VERSION = \"${CURRENT}\"/export const VERSION = \"${VERSION}\"/" .opencode/index.ts
@@ -84,7 +84,7 @@ echo "Running version sync tests..."
 node tests/plugin-manifest.test.js
 
 git add \
-  "$ROOT_PACKAGE_JSON" package-lock.json VERSION agent.yaml \
+  "$ROOT_PACKAGE_JSON" package-lock.json agent.yaml \
   .gemini-plugin/plugin.json .gemini-plugin/marketplace.json \
   .codex-plugin/plugin.json \
   .agents/plugins/marketplace.json \

@@ -30,7 +30,6 @@ const ptBrReadmePath = path.join(repoRoot, 'docs', 'pt-BR', 'README.md');
 const trReadmePath = path.join(repoRoot, 'docs', 'tr', 'README.md');
 const rootZhCnReadmePath = path.join(repoRoot, 'README.zh-CN.md');
 const agentYamlPath = path.join(repoRoot, 'agent.yaml');
-const versionFilePath = path.join(repoRoot, 'VERSION');
 const zhCnReadmePath = path.join(repoRoot, 'docs', 'zh-CN', 'README.md');
 const selectiveInstallArchitecturePath = path.join(repoRoot, 'docs', 'SELECTIVE-INSTALL-ARCHITECTURE.md');
 const opencodePackageJsonPath = path.join(repoRoot, '.opencode', 'package.json');
@@ -135,12 +134,6 @@ test('agent.yaml version matches package.json', () => {
   const match = agentYamlSource.match(new RegExp(`^version:\\s*(${semverPattern})$`, 'm'));
   assert.ok(match, 'Expected agent.yaml to declare a top-level version field');
   assert.strictEqual(match[1], expectedVersion);
-});
-
-test('VERSION file matches package.json', () => {
-  const versionFile = fs.readFileSync(versionFilePath, 'utf8').trim();
-  assert.ok(versionFile, 'Expected VERSION file to be non-empty');
-  assert.strictEqual(versionFile, expectedVersion);
 });
 
 test('docs/SELECTIVE-INSTALL-ARCHITECTURE.md repoVersion example matches package.json', () => {

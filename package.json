@@ -71,7 +71,6 @@
     "mcp/servers/egc-memory/package.json",
     ".mcp.json",
     "agent.yaml",
-    "VERSION",
     "README.md",
     "LICENSE",
     "NOTICE",
