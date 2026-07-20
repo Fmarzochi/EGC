@@ -95,7 +95,7 @@ Closes the commit-privacy scope started in v1.1.12:
 - Last em dash removed from the docs per repo writing convention (#929, @aryamirani)
 - CLA workflow runs are named after the PR they check instead of the base branch (#930)
 - Italian README translation, the 10th language, wired into all language selectors (#933, @LuckysHorizon)
-- Bare `egc install` runs the shipped onboarding installers instead of erroring in a clean environment (#937, reported by @Aki-new in #935)
+- Bare `egc install` runs the shipped onboarding installers instead of erroring in a clean environment (#937, @Aki-new via #935)
 
 ## v1.2.0: Teams
 
