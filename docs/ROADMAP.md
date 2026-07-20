@@ -99,6 +99,8 @@ Closes the commit-privacy scope started in v1.1.12:
 - `egc catalog search <terms>`: ranked keyword search across skills, agents, rules, components and profiles (#939)
 - Lean root phase 3: the VERSION file dropped, package.json is the single version source (#940)
 - Official Hugging Face Space launched: https://huggingface.co/spaces/fmarzochi/EGC
+- Dashboard /ping polling survives WebSocket outages on a single self-healing timer chain (#943, @Tyr1onX)
+- The generate() error wrapper deduplicated into one shared hook across the OpenAI-compatible providers (#944, @harshjainnn)
 
 ## v1.2.0: Teams
 
