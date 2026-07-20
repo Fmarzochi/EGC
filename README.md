@@ -3,7 +3,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="assets/images/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **One command, zero config: memory stays local and encrypted on your machine, and never gets committed to git.**
 
 <div align="center">
-  <img src="assets/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
+  <img src="assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
 [Full installation guide](docs/installation.md)
@@ -45,7 +45,7 @@ npm install -g @egchq/egc && egc install
 EGC is not a list of tools; it is one brain with several faculties. It remembers, understands, protects, filters, and coordinates, across every AI agent on your machine.
 
 <div align="center">
-  <img src="assets/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
+  <img src="assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
 ### You Don't Memorize Commands, You Speak Naturally

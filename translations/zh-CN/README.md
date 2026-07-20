@@ -5,7 +5,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/images/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
@@ -35,7 +35,7 @@ npm install -g @egchq/egc && egc install
 - **一键启动，无需配置：记忆仅在本地加密存储，绝不误入 Git 仓库。**
 
 <div align="center">
-  <img src="../../assets/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 [完整安装指南](../../docs/installation.md)
 
@@ -46,7 +46,7 @@ npm install -g @egchq/egc && egc install
 EGC 并非工具的简单组合。它统合多种官能：记忆、理解、守护、过滤、协调，是统筹多 Agent 工作流的共享智脑。
 
 <div align="center">
-  <img src="../../assets/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
+  <img src="../../assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
 ### 无需死记硬背 prompt ，像日常对话一样自然交流

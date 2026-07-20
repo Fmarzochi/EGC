@@ -3,7 +3,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/images/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **أمر واحد، بلا إعدادات: تبقى الذاكرة محلية ومشفّرة على جهازك، ولا تُرفع أبدًا إلى git.**
 
 <div align="center">
-  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="EGC install" width="800" />
 </div>
 
 [دليل التثبيت الكامل](../../docs/installation.md)
@@ -45,7 +45,7 @@ npm install -g @egchq/egc && egc install
 EGC ليس قائمة أدوات؛ إنه دماغ واحد بعدة ملكات. يتذكر ويفهم ويحمي ويصفّي وينسّق، عبر كل وكلاء الذكاء الاصطناعي على جهازك.
 
 <div align="center">
-  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+  <img src="../../assets/gifs/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
 </div>
 
 ### لا تحفظ الأوامر، تحدّث بشكل طبيعي

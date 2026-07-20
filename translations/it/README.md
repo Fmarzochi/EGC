@@ -3,7 +3,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/images/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **Un comando, zero configurazione: la memoria resta locale e cifrata sulla tua macchina, e non viene mai committata su git.**
 
 <div align="center">
-  <img src="../../assets/install.gif" alt="Un solo comando installa EGC su 20 strumenti di coding AI" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="Un solo comando installa EGC su 20 strumenti di coding AI" width="800" />
 </div>
 
 [Guida completa all'installazione](../../docs/installation.md)
@@ -45,7 +45,7 @@ npm install -g @egchq/egc && egc install
 EGC non è una lista di strumenti, è un cervello con più facoltà. Ricorda, comprende, protegge, filtra e coordina, su ogni agente AI della tua macchina.
 
 <div align="center">
-  <img src="../../assets/sharedbrain.gif" alt="Una decisione presa in Cursor è già nota in Claude Code" width="900" />
+  <img src="../../assets/gifs/sharedbrain.gif" alt="Una decisione presa in Cursor è già nota in Claude Code" width="900" />
 </div>
 
 ### Non memorizzi comandi, parli in modo naturale
