@@ -94,6 +94,31 @@ class OpenAIProvider(LLMProvider):
             raise ContextLengthError(safe_msg, provider=self.provider_type) from e
         raise e
 
+    def _wrap_generate_errors(self, fn):
+        """Shared error-mapping wrapper for ``generate()``.
+
+        Every OpenAI-compatible subclass (Groq, Mistral, DeepSeek, ...) needs
+        the exact same try/except around its call into the OpenAI transport:
+        re-raise ``LLMError`` with the provider re-tagged, let contract-level
+        ``NotImplementedError`` (e.g. unsupported streaming) pass through
+        untouched, and wrap any other raw SDK exception in a redacted
+        ``LLMError`` attributed to the subclass's provider. Centralizing it
+        here means that logic exists in exactly one place instead of being
+        copied into every subclass's ``generate()`` override.
+        """
+        try:
+            return fn()
+        except LLMError as exc:
+            exc.provider = self.provider_type
+            raise
+        except NotImplementedError:
+            raise
+        except Exception as exc:
+            raise LLMError(
+                redact_secrets(str(exc)),
+                provider=self.provider_type,
+            ) from exc
+
     def generate(self, input: LLMInput) -> LLMOutput:
         if input.stream:
             # Streaming is not implemented in this adapter. Fail loudly instead

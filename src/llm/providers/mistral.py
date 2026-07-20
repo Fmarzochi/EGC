@@ -10,9 +10,8 @@ try:
 except ImportError: 
     OpenAI = None 
 
-from llm.core.interface import AuthenticationError, LLMError
+from llm.core.interface import AuthenticationError
 from llm.core.model_resolver import ModelResolver
-from llm.core.redact import redact_secrets
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
@@ -49,29 +48,11 @@ class MistralProvider(OpenAIProvider):
         ]
 
     def generate(self, llm_input: "LLMInput") -> "LLMOutput":  # type: ignore[override]
-        try:
-            return super().generate(llm_input)
-        except LLMError as exc:
-            # Re-tag in place so telemetry attributes to MISTRAL, while
-            # preserving the original exception subclass (AuthenticationError,
-            # RateLimitError, ContextLengthError, ...) — constructing a new
-            # plain LLMError here would discard that subclass information.
-            exc.provider = ProviderType.MISTRAL
-            raise
-        except NotImplementedError:
-            # Contract-level errors (e.g. streaming not supported) are not
-            # provider-attributable wire failures - let them surface as-is.
-            raise
-        except Exception as exc:
-            # Native OpenAI SDK exceptions (RateLimitError, APIConnectionError,
-            # AuthenticationError, etc.) propagate here unwrapped when
-            # OpenAIProvider.generate() hits the bare `raise`. Wrap them so
-            # telemetry always attributes to MISTRAL, never OPENAI. Redacted:
-            # a raw SDK exception message can embed the HTTP response body.
-            raise LLMError(
-                redact_secrets(str(exc)),
-                provider=ProviderType.MISTRAL,
-            ) from exc
+        # The try/except that maps LLMError/NotImplementedError/raw SDK
+        # exceptions to this provider lives once, on OpenAIProvider - see
+        # OpenAIProvider._wrap_generate_errors for the shared behavior.
+        base_generate = super().generate
+        return self._wrap_generate_errors(lambda: base_generate(llm_input))
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()
