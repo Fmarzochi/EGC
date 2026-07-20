@@ -3,7 +3,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/images/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **एक कमांड, शून्य कॉन्फ़िग: मेमोरी आपकी मशीन पर लोकल और एन्क्रिप्टेड रहती है, और कभी git में कमिट नहीं होती।**
 
 <div align="center">
-  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="EGC install" width="800" />
 </div>
 
 [पूरा इंस्टॉलेशन गाइड](../../docs/installation.md)
@@ -45,7 +45,7 @@ npm install -g @egchq/egc && egc install
 EGC टूलों की सूची नहीं है; यह कई क्षमताओं वाला एक दिमाग़ है। यह याद रखता है, समझता है, रक्षा करता है, छानता है और तालमेल बिठाता है, आपकी मशीन के हर AI एजेंट में।
 
 <div align="center">
-  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+  <img src="../../assets/gifs/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
 </div>
 
 ### कमांड याद नहीं रखने, स्वाभाविक रूप से बोलिए

@@ -3,7 +3,7 @@
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
-<img src="../../assets/hero.png" alt="EGC - Extended Global Context" width="100%" />
+<img src="../../assets/images/hero.png" alt="EGC - Extended Global Context" width="100%" />
 </div>
 
 <div align="center">
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **명령 하나, 설정 제로: 메모리는 내 컴퓨터에 로컬로 암호화되어 저장되며, git에 커밋되지 않습니다.**
 
 <div align="center">
-  <img src="../../assets/install.gif" alt="EGC install" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="EGC install" width="800" />
 </div>
 
 [전체 설치 가이드](../../docs/installation.md)
@@ -45,7 +45,7 @@ npm install -g @egchq/egc && egc install
 EGC는 도구 목록이 아니라 여러 능력을 가진 하나의 뇌입니다. 기억하고, 이해하고, 보호하고, 거르고, 조율합니다. 내 컴퓨터의 모든 AI 에이전트에서.
 
 <div align="center">
-  <img src="../../assets/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+  <img src="../../assets/gifs/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
 </div>
 
 ### 명령을 외우지 않습니다, 자연스럽게 말하세요
