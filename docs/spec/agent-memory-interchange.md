@@ -55,7 +55,7 @@ author: dev
 updated: 2026-01-15T12:00:00.000Z
 ```
 
-- `project` (REQUIRED): absolute project path as seen by the producer.
+- `project` (REQUIRED for project-scoped and branch-scoped documents, omitted for global-scope documents): absolute project path as seen by the producer.
 - `branch` (OPTIONAL): branch name; omitted for project-scoped and global documents.
 - `author` (REQUIRED): the OS user or agent identity that produced the update.
 - `updated` (REQUIRED): ISO 8601 timestamp of the last write.
