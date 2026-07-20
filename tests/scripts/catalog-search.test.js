@@ -70,6 +70,35 @@ function runTests() {
     assert.deepStrictEqual(searchEntries(FIXTURE, null), []);
   })) passed++; else failed++;
 
+  if (test('single-character terms are ignored as noise', () => {
+    assert.deepStrictEqual(searchEntries(FIXTURE, ['e']), []);
+    const results = searchEntries(FIXTURE, ['e', 'memory']);
+    assert.ok(results.length > 0, 'longer term should still match after noise is dropped');
+  })) passed++; else failed++;
+
+  if (test('matching is case-insensitive', () => {
+    const results = searchEntries(FIXTURE, ['MeMoRy']);
+    assert.strictEqual(results.length, 2);
+    assert.strictEqual(results[0].name, 'memory');
+  })) passed++; else failed++;
+
+  if (test('description-only matches score and rank below name matches', () => {
+    const results = searchEntries(FIXTURE, ['metrics']);
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].name, 'dashboards');
+    assert.strictEqual(results[0].score, 1);
+  })) passed++; else failed++;
+
+  if (test('equal scores tie-break alphabetically', () => {
+    const tied = [
+      { kind: 'skill', name: 'zeta-tool', description: 'shared keyword here' },
+      { kind: 'skill', name: 'alpha-tool', description: 'shared keyword here' },
+    ];
+    const results = searchEntries(tied, ['keyword']);
+    assert.strictEqual(results[0].name, 'alpha-tool');
+    assert.strictEqual(results[1].name, 'zeta-tool');
+  })) passed++; else failed++;
+
   if (test('limit caps the result list', () => {
     const many = Array.from({ length: 30 }, (_, i) => ({
       kind: 'skill',

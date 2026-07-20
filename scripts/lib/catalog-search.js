@@ -42,7 +42,7 @@ function scoreEntry(entry, terms) {
 function searchEntries(entries, rawTerms, limit = 20) {
   const terms = (Array.isArray(rawTerms) ? rawTerms : [])
     .map(term => String(term).trim().toLowerCase())
-    .filter(Boolean);
+    .filter(term => term.length >= 2);
 
   if (terms.length === 0) {
     return [];
