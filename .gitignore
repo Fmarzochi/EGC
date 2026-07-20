@@ -190,7 +190,6 @@ memory/**
 !.prettierrc
 !eslint.config.js
 !agent.yaml
-!VERSION
 
 # =========================================================
 # RE-BLOCK ARTIFACTS INSIDE WHITELISTED PATHS

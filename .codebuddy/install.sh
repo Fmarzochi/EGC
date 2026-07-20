@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 find_repo_root() {
     local dir="$(dirname "$SCRIPT_DIR")"
     # First try the parent of SCRIPT_DIR (original layout: .codebuddy/ lives in repo root)
-    if [ -f "$dir/VERSION" ] && [ -d "$dir/commands" ] && [ -d "$dir/agents" ]; then
+    if [ -f "$dir/agent.yaml" ] && [ -d "$dir/commands" ] && [ -d "$dir/agents" ]; then
         echo "$dir"
         return 0
     fi
