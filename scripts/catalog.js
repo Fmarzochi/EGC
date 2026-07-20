@@ -30,11 +30,13 @@ Usage:
   egc catalog profiles [--json]
   egc catalog components [--family <family>] [--target <target>] [--json]
   egc catalog show <component-id> [--json]
+  egc catalog search <term> [<term> ...] [--json]
 
 Examples:
   egc catalog profiles
   egc catalog components --family language
   egc catalog show framework:nextjs
+  egc catalog search memory session
 `);
 
   process.exit(exitCode);
@@ -56,6 +58,7 @@ function parseArgs(argv) {
     componentId: null,
     family: null,
     target: null,
+    terms: [],
     json: false,
     help: false,
   };
@@ -102,6 +105,10 @@ function processArg(args, index, parsed) {
   }
   if (parsed.command === 'show' && !parsed.componentId) {
     parsed.componentId = arg;
+    return index;
+  }
+  if (parsed.command === 'search' && !arg.startsWith('--')) {
+    parsed.terms.push(arg);
     return index;
   }
   throw new Error(`Unknown argument: ${arg}`);
@@ -174,6 +181,11 @@ function executeCommand(options) {
     return;
   }
 
+  if (options.command === 'search') {
+    handleSearch(options);
+    return;
+  }
+
   throw new Error(`Unknown catalog command: ${options.command}`);
 }
 
@@ -195,6 +207,46 @@ function handleComponents(options) {
     console.log(JSON.stringify({ components }, null, 2));
   } else {
     printComponents(components);
+  }
+}
+
+function handleSearch(options) {
+  if (options.terms.length === 0) {
+    throw new Error('Catalog search requires at least one term');
+  }
+
+  const { loadIndexEntries, searchEntries } = require('./lib/catalog-search');
+
+  const componentEntries = listInstallComponents({}).map(component => ({
+    kind: 'component',
+    name: component.id,
+    description: component.description,
+  }));
+  const profileEntries = listInstallProfiles().map(profile => ({
+    kind: 'profile',
+    name: profile.id,
+    description: profile.description,
+  }));
+
+  const results = searchEntries(
+    [...loadIndexEntries(), ...componentEntries, ...profileEntries],
+    options.terms
+  );
+
+  if (options.json) {
+    console.log(JSON.stringify({ results }, null, 2));
+    return;
+  }
+
+  if (results.length === 0) {
+    console.log(`No catalog entries match: ${options.terms.join(' ')}`);
+    return;
+  }
+
+  console.log(`Catalog matches for "${options.terms.join(' ')}":\n`);
+  for (const result of results) {
+    console.log(`- ${result.name} [${result.kind}]`);
+    console.log(`  ${result.description}`);
   }
 }
 
