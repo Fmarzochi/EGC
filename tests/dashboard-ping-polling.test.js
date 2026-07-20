@@ -136,3 +136,19 @@ test('ping polling continues with one timer while WebSocket is down', async () =
   assert.ok(activeTimers.has(101));
   assert.equal(S.pingTimerId, 101);
 });
+
+test('ping polling starts independently during dashboard initialization', () => {
+  const connectBody = extractFunctionBody(dashboardSource, 'connect');
+
+  assert.doesNotMatch(
+    connectBody,
+    /\bpingLatency\(\)/,
+    'WebSocket onopen should not be responsible for starting ping polling'
+  );
+
+  assert.match(
+    dashboardSource,
+    /\nconnect\(\);\s*\npingLatency\(\);/,
+    'dashboard initialization should start ping polling independently'
+  );
+});

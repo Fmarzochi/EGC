@@ -1148,7 +1148,7 @@ pollTelemetry();
 function connect(){
   try{
     S.ws=new WebSocket('ws://localhost:7890');
-    S.ws.onopen=()=>{setWs(true);S.rc=1000;S.wsFailStreak=0;updateOfflineState();pingLatency();};
+    S.ws.onopen=()=>{setWs(true);S.rc=1000;S.wsFailStreak=0;updateOfflineState();};
     S.ws.onclose=()=>{setWs(false);S.wsFailStreak++;updateOfflineState();setTimeout(connect,S.rc);S.rc=Math.min(S.rc*2,10000);};
     S.ws.onmessage=m=>{
       try{
@@ -1443,6 +1443,7 @@ setInterval(loadCostSummary, 10000);
 
 
 connect();
+pingLatency();
 
 loadSessionHistory();
 
