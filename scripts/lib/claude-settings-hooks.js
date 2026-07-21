@@ -700,6 +700,24 @@ function createGateGuardHookMergeOperationForDestination(destinationPath, hookSc
   };
 }
 
+// Crusher variant of the destination-driven merge op, for hosts whose
+// hooks.json path is not derivable from targetRoot (Copilot ~/.copilot/hooks,
+// Antigravity's project/global split). Same Claude hooks.json schema.
+function createCrusherHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: CRUSHER_HOOK_MODULE_ID,
+    sourceRelativePath: CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+  };
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -746,6 +764,7 @@ module.exports = {
   createPreToolUseGateGuardHookMergeOperation,
   createCrusherScriptCopyOperations,
   createPreToolUseCrusherHookMergeOperation,
+  createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,

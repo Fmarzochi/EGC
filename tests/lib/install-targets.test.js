@@ -1521,6 +1521,47 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('crusher hook is registered on Bash and scaffolded for Copilot, Antigravity and Continue', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+      { target: 'continue', input: { homeDir }, hooksFilePath: path.join(homeDir, '.continue', 'settings.json'), root: path.join(homeDir, '.continue') },
+    ];
+
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const crusherScriptPath = path.join(root, 'scripts', 'hooks', 'crusher-hook.js');
+
+      const crusherOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'PreToolUse'
+        && operation.destinationPath === hooksFilePath
+        && operation.hookScriptPath === crusherScriptPath
+      ));
+      assert.strictEqual(crusherOps.length, 1, `${target}: crusher registered once`);
+      assert.strictEqual(crusherOps[0].hookMatcher, 'Bash', `${target}: crusher on Bash`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/crusher-hook.js'
+          && operation.destinationPath === crusherScriptPath
+        )),
+        `${target}: crusher hook script scaffolded`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/crusher/engine.js'
+          && operation.destinationPath === path.join(root, 'scripts', 'lib', 'crusher', 'engine.js')
+        )),
+        `${target}: crusher engine dependency scaffolded`
+      );
+    }
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
