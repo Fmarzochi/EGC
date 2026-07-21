@@ -8,6 +8,9 @@ from typing import Any
 from llm.core.types import LLMInput, LLMOutput, ModelInfo, ProviderType
 
 
+CLIENT_TIMEOUT = 60.0
+
+
 class LLMProvider(ABC):
     provider_type: ProviderType
 
@@ -27,7 +30,9 @@ class LLMProvider(ABC):
         return False
 
     def get_default_model(self) -> str:
-        raise NotImplementedError(f"{self.__class__.__name__} must implement get_default_model")
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement get_default_model"
+        )
 
 
 class LLMError(Exception):

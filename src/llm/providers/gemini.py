@@ -19,6 +19,7 @@ except ImportError:
     APIError = Exception
 
 from llm.core.interface import (
+    CLIENT_TIMEOUT,
     AuthenticationError,
     ContextLengthError,
     LLMProvider,
@@ -52,7 +53,9 @@ class GeminiProvider(LLMProvider):
                 "No Gemini API key provided", provider=ProviderType.GEMINI
             )
 
-        self.client = genai.Client(api_key=key)
+        self.client = genai.Client(
+            api_key=key, http_options={"timeout": int(CLIENT_TIMEOUT * 1000)}
+        )
 
         # Model routing is fully dynamic: defaults, fallbacks and the model
         # catalogue all come from the centralized ModelResolver. No model ID

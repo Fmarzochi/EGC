@@ -21,7 +21,7 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     genai = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import LLMInput, LLMOutput, ProviderType
 from llm.providers.gemini import GeminiProvider
@@ -51,7 +51,10 @@ class VertexAIProvider(GeminiProvider):
             )
 
         self.client = genai.Client(
-            vertexai=True, project=self._project, location=self._location
+            vertexai=True,
+            project=self._project,
+            location=self._location,
+            http_options={"timeout": int(CLIENT_TIMEOUT * 1000)},
         )
 
         # Vertex AI serves the same Gemini model family/catalog: reuse it

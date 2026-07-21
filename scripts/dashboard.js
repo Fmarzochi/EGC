@@ -6,17 +6,24 @@ const path = require('node:path');
 const http = require('node:http');
 const fs = require('node:fs');
 
-const PORT = 7890;
 const DASHBOARD_DIR = path.join(__dirname, '..', 'dashboard');
 const SERVER_SCRIPT = path.join(DASHBOARD_DIR, 'server.js');
+const PORT_HELPER   = path.join(DASHBOARD_DIR, 'port');
 const PID_FILE = path.join(require('node:os').homedir(), '.egc', 'dashboard.pid');
 
 const args = process.argv.slice(2);
 const flag = args[0];
 
+// Resolve port lazily so a missing dashboard directory produces the friendly
+// "EGC Dashboard not found" error instead of a MODULE_NOT_FOUND crash.
+function getPort() {
+  return require(PORT_HELPER).PORT;
+}
+
 function isRunning() {
+  const port = getPort();
   return new Promise(resolve => {
-    const req = http.get(`http://localhost:${PORT}/ping`, res => {
+    const req = http.get(`http://localhost:${port}/ping`, res => {
       res.resume();
       resolve(res.statusCode === 200);
     });
@@ -26,7 +33,7 @@ function isRunning() {
 }
 
 function openBrowser() {
-  const url = `http://localhost:${PORT}`;
+  const url = `http://localhost:${getPort()}`;
   let cmd;
   if (process.platform === 'win32') {
     cmd = 'start';
@@ -57,6 +64,8 @@ async function start() {
     process.exit(1);
   }
 
+  const PORT = getPort();
+
   const nmDir = path.join(DASHBOARD_DIR, 'node_modules');
   if (!fs.existsSync(nmDir)) {
     console.log('Installing dashboard dependencies...');
@@ -77,6 +86,7 @@ async function start() {
     cwd: DASHBOARD_DIR,
     detached: true,
     stdio: 'ignore',
+    env: { ...process.env, EGC_PORT: String(PORT) },
   });
   child.unref();
   writePid(child.pid);
@@ -125,6 +135,7 @@ async function stop() {
 async function status() {
   const running = await isRunning();
   const pid = readPid();
+  const PORT = getPort();
   if (running) {
     console.log(`running  http://localhost:${PORT}${pid ? '  (pid ' + pid + ')' : ''}`);
   } else {

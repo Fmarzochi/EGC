@@ -6,8 +6,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { readFileDelta } = require('./read-file-delta');
-
-const PORT = 7890;
+const { PORT } = require('./port');
 
 const LOG_PATHS = [
   path.join(os.homedir(), '.vscode', 'logs'),

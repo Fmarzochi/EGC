@@ -320,3 +320,52 @@ test('POST /event still accepts valid JSON with 200 status code', (t, done) => {
     req.end();
   }, done);
 });
+
+test('POST /event handles multi-byte UTF-8 character split across TCP chunks', (t, done) => {
+  runWithDashboardServer((port, cleanup) => {
+    const payload = JSON.stringify({ ide: 'claude', event: 'pre_tool', text: '\u00E9' });
+    const buf = Buffer.from(payload, 'utf8');
+
+    const charIndex = payload.indexOf('\u00E9');
+    const byteBeforeChar = Buffer.byteLength(payload.slice(0, charIndex), 'utf8');
+    const splitPoint = byteBeforeChar + 1;
+
+    const chunk1 = buf.subarray(0, splitPoint);
+    const chunk2 = buf.subarray(splitPoint);
+
+    const options = {
+      hostname: '127.0.0.1',
+      port: port,
+      path: '/event',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': buf.length
+      }
+    };
+
+    const req = http.request(options, (res) => {
+      let responseData = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { responseData += chunk; });
+      res.on('end', () => {
+        try {
+          assert.equal(res.statusCode, 200, 'Split multi-byte payload must be accepted');
+          const body = JSON.parse(responseData);
+          assert.equal(body.ok, true);
+          cleanup();
+        } catch (err) {
+          cleanup(err);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      cleanup(err);
+    });
+
+    req.write(chunk1);
+    req.write(chunk2);
+    req.end();
+  }, done);
+});

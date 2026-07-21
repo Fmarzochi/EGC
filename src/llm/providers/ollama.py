@@ -11,6 +11,7 @@ from llm.core.interface import (
     LLMProvider,
     RateLimitError,
 )
+from llm.core.interface import CLIENT_TIMEOUT
 from llm.core.types import (
     LLMInput,
     LLMOutput,
@@ -86,7 +87,7 @@ class OllamaProvider(LLMProvider):
                 url, data=data, headers={"Content-Type": "application/json"}
             )
 
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
                 result = json.loads(response.read().decode("utf-8"))
 
             message = result.get("message") or {}

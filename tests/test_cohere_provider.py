@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm.core.interface import AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
 from llm.core.types import LLMInput, Message, ProviderType, Role, ToolDefinition
 from llm.providers.cohere import COHERE_DEFAULT_MODEL, CohereProvider
 
@@ -70,7 +70,9 @@ def test_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     with patch("llm.providers.cohere.cohere") as mock_cohere:
         mock_cohere.ClientV2.return_value = MagicMock()
         provider = CohereProvider()
-    mock_cohere.ClientV2.assert_called_once_with(api_key="co-test-key")
+    mock_cohere.ClientV2.assert_called_once_with(
+        api_key="co-test-key", timeout=CLIENT_TIMEOUT
+    )
     assert provider._api_key == "co-test-key"
 
 

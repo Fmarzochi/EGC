@@ -502,6 +502,87 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.gemini', 'egc-install-state.json'));
   })) passed++; else failed++;
 
+  if (test('resolves cline adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('cline');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'cline-project');
+    assert.strictEqual(adapter.target, 'cline');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.clinerules'));
+    assert.strictEqual(
+      statePath,
+      path.join(projectRoot, '.clinerules', 'egc-install-state.json')
+    );
+  })) passed++; else failed++;
+
+  if (test('cline adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('cline');
+    const byId = getInstallTargetAdapter('cline-project');
+
+    assert.strictEqual(byTarget.id, 'cline-project');
+    assert.strictEqual(byId.id, 'cline-project');
+    assert.ok(byTarget.supports('cline'));
+    assert.ok(byTarget.supports('cline-project'));
+  })) passed++; else failed++;
+
+  if (test('plans cline rules as flat namespaced files under .clinerules', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cline',
+      repoRoot,
+      projectRoot,
+      modules: [
+        {
+          id: 'rules-core',
+          paths: ['rules'],
+        },
+      ],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'cline-project');
+    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.clinerules'));
+    assert.strictEqual(
+      plan.installStatePath,
+      path.join(projectRoot, '.clinerules', 'egc-install-state.json')
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'rules/common/coding-style.md'
+        && operation.destinationPath === path.join(
+          projectRoot,
+          '.clinerules',
+          'common-coding-style.md'
+        )
+      )),
+      'Should flatten common rules into namespaced files for Cline'
+    );
+
+    assert.ok(
+      !plan.operations.some(operation => (
+        operation.destinationPath === path.join(
+          projectRoot,
+          '.clinerules',
+          'common',
+          'coding-style.md'
+        )
+      )),
+      'Should not preserve nested rule directories for Cline installs'
+    );
+  })) passed++; else failed++;
+
+  if (test('cline adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(adapter => adapter.target);
+
+    assert.ok(targets.includes('cline'), 'Should include cline target');
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('codebuddy');
     const byId = getInstallTargetAdapter('codebuddy-project');
@@ -1521,6 +1602,47 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('crusher hook is registered on Bash and scaffolded for Copilot, Antigravity and Continue', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+      { target: 'continue', input: { homeDir }, hooksFilePath: path.join(homeDir, '.continue', 'settings.json'), root: path.join(homeDir, '.continue') },
+    ];
+
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const crusherScriptPath = path.join(root, 'scripts', 'hooks', 'crusher-hook.js');
+
+      const crusherOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'PreToolUse'
+        && operation.destinationPath === hooksFilePath
+        && operation.hookScriptPath === crusherScriptPath
+      ));
+      assert.strictEqual(crusherOps.length, 1, `${target}: crusher registered once`);
+      assert.strictEqual(crusherOps[0].hookMatcher, 'Bash', `${target}: crusher on Bash`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/crusher-hook.js'
+          && operation.destinationPath === crusherScriptPath
+        )),
+        `${target}: crusher hook script scaffolded`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/crusher/engine.js'
+          && operation.destinationPath === path.join(root, 'scripts', 'lib', 'crusher', 'engine.js')
+        )),
+        `${target}: crusher engine dependency scaffolded`
+      );
+    }
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
@@ -1938,6 +2060,63 @@ function runTests() {
     assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
   })) passed++; else failed++;
 
+  if (test('resolves roocode adapter root to .roo/rules and install-state path', () => {
+    const adapter = getInstallTargetAdapter('roocode');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'roocode-project');
+    assert.strictEqual(adapter.target, 'roocode');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.roo', 'rules'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.roo', 'rules', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('roocode adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('roocode');
+    const byId = getInstallTargetAdapter('roocode-project');
+
+    assert.strictEqual(byTarget.id, 'roocode-project');
+    assert.strictEqual(byId.id, 'roocode-project');
+    assert.ok(byTarget.supports('roocode'));
+    assert.ok(byTarget.supports('roocode-project'));
+  })) passed++; else failed++;
+
+  if (test('roocode adapter preserves category structure under .roo/rules/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'roocode',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'roocode-project');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(
+          projectRoot,
+          '.roo',
+          'rules',
+          'skills',
+          'workflow',
+          'tdd-workflow'
+        )
+      )),
+      'Should preserve skills/<category>/<name> structure under .roo/rules/'
+    );
+  })) passed++; else failed++;
+
+  if (test('roocode adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('roocode'), 'Should include roocode target');
+  })) passed++; else failed++;
+
   if (test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('openhands');
     const homeDir = '/Users/example';
@@ -2060,6 +2239,77 @@ function runTests() {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('aider'), 'Should include aider target');
+  })) passed++; else failed++;
+
+  if (test('resolves qwen adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('qwen');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'qwen-project');
+    assert.strictEqual(adapter.target, 'qwen');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.qwen'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.qwen', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('qwen adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('qwen');
+    const byId = getInstallTargetAdapter('qwen-project');
+
+    assert.strictEqual(byTarget.id, 'qwen-project');
+    assert.strictEqual(byId.id, 'qwen-project');
+    assert.ok(byTarget.supports('qwen'));
+    assert.ok(byTarget.supports('qwen-project'));
+  })) passed++; else failed++;
+
+  if (test('qwen adapter installs skills into the native .qwen/skills directory', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'qwen',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'testing', paths: ['skills/testing/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'qwen-project');
+    assert.strictEqual(plan.operations.length, 1);
+
+    const operation = plan.operations[0];
+    assert.strictEqual(operation.kind, 'copy-path');
+    assert.strictEqual(
+      normalizedRelativePath(operation.sourceRelativePath),
+      'skills/testing/tdd-workflow'
+    );
+    assert.strictEqual(
+      operation.destinationPath,
+      path.join(projectRoot, '.qwen', 'skills', 'tdd-workflow')
+    );
+  })) passed++; else failed++;
+
+  if (test('qwen adapter passes non-skill paths through and appears in the adapter list', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'qwen',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    assert.strictEqual(plan.operations.length, 1);
+    assert.strictEqual(
+      plan.operations[0].destinationPath,
+      path.join(projectRoot, '.qwen', 'rules')
+    );
+    assert.ok(
+      listInstallTargetAdapters().some(adapter => adapter.target === 'qwen'),
+      'Should include qwen target'
+    );
   })) passed++; else failed++;
 
   if (test('resolves warp adapter root and install-state path from project root', () => {

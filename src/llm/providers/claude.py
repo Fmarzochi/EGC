@@ -13,6 +13,7 @@ except ImportError:
     _ANTHROPIC_AVAILABLE = False
 
 from llm.core.interface import (
+    CLIENT_TIMEOUT,
     AuthenticationError,
     ContextLengthError,
     LLMProvider,
@@ -42,7 +43,9 @@ class ClaudeProvider(LLMProvider):
         from anthropic import Anthropic
 
         self.client = Anthropic(
-            api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"), base_url=base_url
+            api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"),
+            base_url=base_url,
+            timeout=CLIENT_TIMEOUT,
         )
         self._models = [
             ModelInfo(

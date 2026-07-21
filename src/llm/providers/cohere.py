@@ -20,7 +20,12 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     cohere = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMError, LLMProvider
+from llm.core.interface import (
+    CLIENT_TIMEOUT,
+    AuthenticationError,
+    LLMError,
+    LLMProvider,
+)
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
 from llm.core.types import (
@@ -61,7 +66,7 @@ class CohereProvider(LLMProvider):
                 "No Cohere API key provided", provider=ProviderType.COHERE
             )
         self._api_key = key
-        self.client = cohere.ClientV2(api_key=key)
+        self.client = cohere.ClientV2(api_key=key, timeout=CLIENT_TIMEOUT)
         self._models = ModelResolver.model_infos("cohere") or [
             ModelInfo(
                 name=COHERE_DEFAULT_MODEL,

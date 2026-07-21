@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm.core.interface import AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
 from llm.core.types import LLMInput, Message, ProviderType, Role
 from llm.providers import gemini as gemini_module
 from llm.providers.vertex_ai import VertexAIProvider
@@ -76,7 +76,10 @@ def test_project_and_location_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
         mock_genai.Client.return_value = MagicMock()
         provider = VertexAIProvider()
     mock_genai.Client.assert_called_once_with(
-        vertexai=True, project="my-gcp-project", location="europe-west4"
+        vertexai=True,
+        project="my-gcp-project",
+        location="europe-west4",
+        http_options={"timeout": int(CLIENT_TIMEOUT * 1000)},
     )
     assert provider._project == "my-gcp-project"
     assert provider._location == "europe-west4"
