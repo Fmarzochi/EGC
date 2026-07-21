@@ -10,43 +10,64 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createBodyCollector } = require('../dashboard/event-body');
 
-// Returns a byte index that lands inside a multi-byte UTF-8 character
-// (i.e. on a continuation byte, 10xxxxxx), so splitting the buffer there
-// simulates a chunk boundary landing mid-character.
-function findMidCharacterSplit(buf) {
-  for (let i = 1; i < buf.length; i++) {
-    if ((buf[i] & 0xc0) === 0x80) return i;
-  }
-  throw new Error('payload has no multi-byte character to split');
+// U+1F389 PARTY POPPER, as raw UTF-8 bytes rather than a literal emoji
+// character. This file must stay free of Extended_Pictographic code points
+// (see scripts/ci/check-unicode-safety.js) — writing the emoji as a string
+// literal would trip that gate.
+const PARTY_POPPER_BYTES = Buffer.from([0xF0, 0x9F, 0x8E, 0x89]);
+const EMOJI_PLACEHOLDER = '@EMOJI@';
+
+// Serializes `obj` to JSON, then splices PARTY_POPPER_BYTES in at the byte
+// offset where EMOJI_PLACEHOLDER appears in the resulting text. This gives
+// an exact, known byte offset for the emoji's 4-byte UTF-8 sequence, so
+// tests can split precisely inside it instead of scanning for "some"
+// multi-byte character boundary.
+function payloadBufferWithEmoji(obj) {
+  const json = JSON.stringify(obj);
+  const markerIndex = json.indexOf(EMOJI_PLACEHOLDER);
+  if (markerIndex === -1) throw new Error('EMOJI_PLACEHOLDER not found in payload');
+
+  const before = Buffer.from(json.slice(0, markerIndex), 'utf8');
+  const after = Buffer.from(json.slice(markerIndex + EMOJI_PLACEHOLDER.length), 'utf8');
+
+  return {
+    buf: Buffer.concat([before, PARTY_POPPER_BYTES, after]),
+    emojiStart: before.length,
+  };
 }
 
 test('multi-byte UTF-8 character split across chunks decodes correctly', () => {
-  const payload = JSON.stringify({
+  const { buf: payloadBuf, emojiStart } = payloadBufferWithEmoji({
     ide: 'claude',
     event: 'pre_tool',
-    note: '日本語 パス名 🎉 done',
+    note: `日本語 パス名 ${EMOJI_PLACEHOLDER} done`,
   });
-  const buf = Buffer.from(payload, 'utf8');
-  const splitIndex = findMidCharacterSplit(buf);
+  const payload = payloadBuf.toString('utf8');
+
+  // Split 2 bytes into the emoji's 4-byte UTF-8 sequence.
+  const splitIndex = emojiStart + 2;
 
   const collector = createBodyCollector();
-  collector.push(buf.subarray(0, splitIndex));
-  collector.push(buf.subarray(splitIndex));
+  collector.push(payloadBuf.subarray(0, splitIndex));
+  collector.push(payloadBuf.subarray(splitIndex));
 
   assert.equal(collector.toString(), payload);
   assert.deepEqual(JSON.parse(collector.toString()), JSON.parse(payload));
 });
 
 test('character split across three chunks still decodes correctly', () => {
-  const payload = JSON.stringify({ ide: 'claude', note: '🎉' });
-  const buf = Buffer.from(payload, 'utf8');
-  const splitIndex = findMidCharacterSplit(buf);
+  const { buf: payloadBuf, emojiStart } = payloadBufferWithEmoji({
+    ide: 'claude',
+    note: EMOJI_PLACEHOLDER,
+  });
+  const payload = payloadBuf.toString('utf8');
 
   const collector = createBodyCollector();
-  // Split the multi-byte character's bytes into two separate pushes too.
-  collector.push(buf.subarray(0, splitIndex));
-  collector.push(buf.subarray(splitIndex, splitIndex + 1));
-  collector.push(buf.subarray(splitIndex + 1));
+  // Split the emoji's 4 raw bytes into three separate pushes: byte 0, byte 1,
+  // then bytes 2-3.
+  collector.push(payloadBuf.subarray(0, emojiStart + 1));
+  collector.push(payloadBuf.subarray(emojiStart + 1, emojiStart + 2));
+  collector.push(payloadBuf.subarray(emojiStart + 2));
 
   assert.equal(collector.toString(), payload);
 });
