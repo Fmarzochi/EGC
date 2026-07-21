@@ -502,6 +502,87 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.gemini', 'egc-install-state.json'));
   })) passed++; else failed++;
 
+  if (test('resolves cline adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('cline');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'cline-project');
+    assert.strictEqual(adapter.target, 'cline');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.clinerules'));
+    assert.strictEqual(
+      statePath,
+      path.join(projectRoot, '.clinerules', 'egc-install-state.json')
+    );
+  })) passed++; else failed++;
+
+  if (test('cline adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('cline');
+    const byId = getInstallTargetAdapter('cline-project');
+
+    assert.strictEqual(byTarget.id, 'cline-project');
+    assert.strictEqual(byId.id, 'cline-project');
+    assert.ok(byTarget.supports('cline'));
+    assert.ok(byTarget.supports('cline-project'));
+  })) passed++; else failed++;
+
+  if (test('plans cline rules as flat namespaced files under .clinerules', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cline',
+      repoRoot,
+      projectRoot,
+      modules: [
+        {
+          id: 'rules-core',
+          paths: ['rules'],
+        },
+      ],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'cline-project');
+    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.clinerules'));
+    assert.strictEqual(
+      plan.installStatePath,
+      path.join(projectRoot, '.clinerules', 'egc-install-state.json')
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'rules/common/coding-style.md'
+        && operation.destinationPath === path.join(
+          projectRoot,
+          '.clinerules',
+          'common-coding-style.md'
+        )
+      )),
+      'Should flatten common rules into namespaced files for Cline'
+    );
+
+    assert.ok(
+      !plan.operations.some(operation => (
+        operation.destinationPath === path.join(
+          projectRoot,
+          '.clinerules',
+          'common',
+          'coding-style.md'
+        )
+      )),
+      'Should not preserve nested rule directories for Cline installs'
+    );
+  })) passed++; else failed++;
+
+  if (test('cline adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(adapter => adapter.target);
+
+    assert.ok(targets.includes('cline'), 'Should include cline target');
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('codebuddy');
     const byId = getInstallTargetAdapter('codebuddy-project');
