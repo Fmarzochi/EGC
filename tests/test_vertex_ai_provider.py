@@ -195,3 +195,16 @@ def test_get_default_model_reuses_gemini_catalog(provider: VertexAIProvider) -> 
     assert provider.get_default_model() == ModelResolver.resolve(
         None, provider="gemini"
     )
+
+
+@pytest.mark.unit
+def test_stream_flag_raises_not_implemented(provider: VertexAIProvider) -> None:
+    with patch.object(gemini_module, "types", _TypesStub):
+        stream_input = LLMInput(
+            messages=[Message(role=Role.USER, content="hi")],
+            model="gemini-2.5-pro",
+            stream=True,
+        )
+        with pytest.raises(NotImplementedError, match="streaming not supported"):
+            provider.generate(stream_input)
+        provider.client.models.generate_content.assert_not_called()

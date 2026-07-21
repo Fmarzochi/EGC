@@ -62,6 +62,11 @@ class OllamaProvider(LLMProvider):
         ]
 
     def generate(self, input: LLMInput) -> LLMOutput:
+        if input.stream:
+            # Streaming is not implemented in this adapter. Fail loudly instead
+            # of silently downgrading to a blocking call, which would mislead
+            # callers into thinking they are consuming a stream.
+            raise NotImplementedError("streaming not supported")
         import urllib.request
         import json
 

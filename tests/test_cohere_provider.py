@@ -211,3 +211,15 @@ def test_model_resolver_default_for_cohere_provider() -> None:
 
     resolved = ModelResolver.resolve(None, provider="cohere")
     assert ModelResolver._provider_for(resolved) == "cohere"
+
+
+@pytest.mark.unit
+def test_stream_flag_raises_not_implemented(provider: CohereProvider) -> None:
+    stream_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model=COHERE_DEFAULT_MODEL,
+        stream=True,
+    )
+    with pytest.raises(NotImplementedError, match="streaming not supported"):
+        provider.generate(stream_input)
+    provider.client.chat.assert_not_called()
