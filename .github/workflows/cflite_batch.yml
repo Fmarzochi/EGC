@@ -2,8 +2,12 @@ name: ClusterFuzzLite batch fuzzing
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 6 * * 0'
+  # schedule disabled (EGC#910): ClusterFuzzLite is dead-locked upstream for
+  # JavaScript (config_utils.py rejects `none` while compile requires it), so the
+  # weekly batch never goes green and only masks real failures. Manual runs via
+  # workflow_dispatch remain; re-enable once the upstream contradiction is fixed.
+  # schedule:
+  #   - cron: '0 6 * * 0'
 
 permissions: {}
 
