@@ -14,6 +14,7 @@ def _make_anthropic_stub():
 
 def _simple_input():
     from llm.core.types import LLMInput, Message, Role
+
     return LLMInput(
         messages=[Message(role=Role.USER, content="hi")],
         model="claude-sonnet-4-7",
@@ -25,6 +26,7 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         self._patch = patch.dict(sys.modules, {"anthropic": _make_anthropic_stub()})
         self._patch.start()
         from llm.providers.claude import ClaudeProvider
+
         self.provider = ClaudeProvider.__new__(ClaudeProvider)
         self.provider.client = MagicMock()
         self.provider._models = []
@@ -103,6 +105,22 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         self.provider.client.messages.create.return_value = self._make_response([])
         result = self.provider.generate(_simple_input())
         self.assertEqual(result.content, "")
+
+    def test_stream_flag_raises_not_implemented(self):
+        """Regression test for issue #923: LLMInput.stream=True was silently
+        ignored, downgrading callers to a blocking call. Streaming must fail
+        loudly instead of pretending to stream."""
+        from llm.core.types import LLMInput, Message, Role
+
+        stream_input = LLMInput(
+            messages=[Message(role=Role.USER, content="hi")],
+            model="claude-sonnet-4-7",
+            stream=True,
+        )
+        with self.assertRaises(NotImplementedError) as ctx:
+            self.provider.generate(stream_input)
+        self.assertIn("streaming not supported", str(ctx.exception))
+        self.provider.client.messages.create.assert_not_called()
 
 
 if __name__ == "__main__":
