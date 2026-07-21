@@ -78,13 +78,20 @@ function buildStaticManifest(dir) {
       const abs = path.join(current, name);
       const rel  = base + '/' + name;
       try {
-        if (fs.statSync(abs).isDirectory()) scan(abs, rel);
+        const st = fs.lstatSync(abs);
+        if (st.isSymbolicLink()) continue;
+        if (st.isDirectory()) scan(abs, rel);
         else manifest.set(rel, abs);
       } catch (_) {}
     }
   }
   scan(dir, '');
   return manifest;
+}
+
+let lastManifestMtime = 0;
+function manifestMtime(dir) {
+  try { return fs.statSync(dir).mtimeMs; } catch (_) { return 0; }
 }
 let STATIC_FILES = buildStaticManifest(PUBLIC);
 
@@ -100,6 +107,9 @@ function refreshStaticManifestIfStale() {
   const now = Date.now();
   if (now - staticRefreshAt < STATIC_REFRESH_INTERVAL_MS) return;
   staticRefreshAt = now;
+  const mt = manifestMtime(PUBLIC);
+  if (mt === lastManifestMtime) return;
+  lastManifestMtime = mt;
   STATIC_FILES = buildStaticManifest(PUBLIC);
 }
 
@@ -434,14 +444,16 @@ const grandTotal = Object.values(byIde).reduce(
   }
 
   // ── Static files ─────────────────────────────────────────
-  const segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
+  let segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
+  try { segment = decodeURIComponent(segment); } catch (_) {}
   let filePath = STATIC_FILES.get(segment);
   if (!filePath) {
     // File may have been added after startup; rebuild the manifest (guarded by
     // a debounce so a burst of misses refreshes at most once per interval).
     refreshStaticManifestIfStale();
     filePath = STATIC_FILES.get(segment);
-  }  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+  }
+  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
     if (segment === '/index.html') {
