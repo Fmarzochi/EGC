@@ -115,7 +115,7 @@ function createAccumulator(externalPrices) {
         t:     Date.now(),
         event: ev.event || 'unknown',
         tool:  ev.tool_name || ev.tool || null,
-        file:  ev.file_path || ev.file || null,
+        file:  ev.file_path || ev.file || ev.detail || null,
         cmd:   ev.command   || null,
         mem:   ev.memory_key || null,
         model: ev.model || null,

@@ -90,6 +90,24 @@ test('invalid event returns false (broadcast guard)', () => {
   assert.equal(accumulateEvent({ ide: 42 }), false);
 });
 
+
+test('replay stores file path from detail-shaped file-edit event', () => {
+  const { accumulateEvent, getReplayEvents } = createAccumulator();
+
+  accumulateEvent({
+    ide: 'claude',
+    event: 'pre_tool',
+    tool: 'Edit',
+    detail: '/workspace/src/app.js',
+    session_id: 'detail-file-path-test',
+  });
+
+  const replay = getReplayEvents('detail-file-path-test');
+
+  assert.equal(replay.events.length, 1);
+  assert.equal(replay.events[0].file, '/workspace/src/app.js');
+});
+
 // ---------------------------------------------------------------------------
 // HTTP Server Payload Cap Regression Test Case (Live POST verification)
 // ---------------------------------------------------------------------------
