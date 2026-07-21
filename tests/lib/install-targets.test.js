@@ -720,6 +720,44 @@ function runTests() {
     assert.ok(libCopyOperation, 'Should copy gateguard-fact-force.js\'s only dependency alongside it');
   })) passed++; else failed++;
 
+  if (test('codex adapter also wires the Token Crusher into ~/.codex/hooks.json on the Bash matcher', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const codexHome = path.join(homeDir, '.codex');
+    const crusherScriptPath = path.join(codexHome, 'scripts', 'hooks', 'crusher-hook.js');
+
+    const crusherHookOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === crusherScriptPath
+    ));
+    assert.strictEqual(crusherHookOps.length, 1, 'Crusher is registered once, on Bash only (apply_patch has nothing to crush)');
+    assert.strictEqual(crusherHookOps[0].hookMatcher, 'Bash');
+    assert.strictEqual(crusherHookOps[0].destinationPath, path.join(codexHome, 'hooks.json'));
+
+    // The whole crusher dependency tree must be scaffolded so the requires resolve.
+    for (const src of [
+      'scripts/hooks/crusher-hook.js',
+      'scripts/hooks/pre-bash-crusher-rewrite.js',
+      'scripts/hooks/pretooluse-output.js',
+      'scripts/lib/crusher/engine.js',
+    ]) {
+      const op = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === src
+        && operation.destinationPath === path.join(codexHome, ...src.split('/'))
+      ));
+      assert.ok(op, `Should scaffold ${src} into ~/.codex`);
+    }
+  })) passed++; else failed++;
+
   for (const [target, expectedRootSegments] of [['continue', ['.continue']], ['continue-project', ['.continue']]]) {
     if (test(`${target} adapter wires GateGuard PreToolUse for Edit/Write/MultiEdit/Bash into settings.json`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
@@ -1510,6 +1548,42 @@ function runTests() {
       ['Bash', 'Edit', 'MultiEdit', 'Write'],
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for CodeBuddy'
     );
+  })) passed++; else failed++;
+
+  if (test('codebuddy adapter also registers the Token Crusher on Bash at .codebuddy/settings.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const settingsPath = path.join(projectRoot, '.codebuddy', 'settings.json');
+    const crusherScriptPath = path.join(projectRoot, '.codebuddy', 'scripts', 'hooks', 'crusher-hook.js');
+
+    const crusherOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === settingsPath
+      && operation.hookScriptPath === crusherScriptPath
+    ));
+    assert.strictEqual(crusherOps.length, 1, 'Crusher registered once, on Bash');
+    assert.strictEqual(crusherOps[0].hookMatcher, 'Bash');
+
+    for (const src of [
+      'scripts/hooks/crusher-hook.js',
+      'scripts/hooks/pre-bash-crusher-rewrite.js',
+      'scripts/hooks/pretooluse-output.js',
+      'scripts/lib/crusher/engine.js',
+    ]) {
+      const op = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === src
+        && operation.destinationPath === path.join(projectRoot, '.codebuddy', ...src.split('/'))
+      ));
+      assert.ok(op, `Should scaffold ${src} into .codebuddy`);
+    }
   })) passed++; else failed++;
 
   if (test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
