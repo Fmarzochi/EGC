@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { runPreBash } = require('./bash-hook-dispatcher');
+const { runPreBash, toPreToolUseOutput } = require('./bash-hook-dispatcher');
 
 let raw = '';
 const MAX_STDIN = 1024 * 1024;
@@ -19,6 +19,6 @@ process.stdin.on('end', () => {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }
-  process.stdout.write(result.output);
+  process.stdout.write(toPreToolUseOutput(raw, result.output));
   process.exitCode = result.exitCode;
 });
