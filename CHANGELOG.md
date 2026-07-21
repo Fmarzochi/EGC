@@ -2,6 +2,37 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.15] - 2026-07-21
+
+### New Features
+
+- **Token Crusher on every hook-capable host**: the compression hook now reaches all six harnesses. Codex and CodeBuddy (#959), Copilot, Antigravity and Continue (#964), plus pipelines and compound commands crushed through `egc run --shell` (#956). The core bug that silently dropped every rewrite is fixed: the dispatcher now emits `hookSpecificOutput.updatedInput`, so the host actually applies the compressed command (#958).
+- **Three new install targets**: Roo Code (#957), Qwen Code (#962) and Cline (#965), bringing EGC to 23 supported AI coding harnesses.
+- **Ranked keyword search for the catalog**: `egc` scores skills and components by relevance instead of listing them flat (#939).
+- **Two new README translations**: Italian (#933) and French (#948), wired into every language selector, bring EGC to 11 languages.
+- **Agent Memory Interchange draft specification**: a first draft of the cross-tool memory interchange format (#947).
+- **Configurable dashboard port**: the dashboard honors `EGC_PORT` instead of hardcoding 7890 (#963).
+- **Explicit HTTP timeouts on every provider**: all native LLM provider clients set a connect/read timeout (#961), and the remaining native providers gained a `stream=True` guard that raises `NotImplementedError` instead of silently returning a blocking response (#912, #924).
+
+### Security
+
+- **Two high-severity advisories patched**: `fast-uri` (GHSA-4c8g-83qw-93j6, host confusion via failed IDN canonicalization) and `linkify-it` (GHSA-v245-v573-v5vm, quadratic DoS in the `mailto:` validator) bumped across the root and both mcp-server lockfiles (#967).
+- **`@hono/node-server` serve-static advisory cleared** (GHSA-frvp-7c67-39w9): a transitive pin under `@modelcontextprotocol/sdk` with no patched 1.x release is forced to 2.x via an npm override, clearing the Dependabot alerts and the Scorecard finding. Both mcp servers use stdio transport, so the HTTP adapter never loads.
+- **Earlier advisory rounds**: `tar`, `js-yaml` and `brace-expansion` (#952), the mcp and fuzz lockfiles (#955), and `body-parser` (#954).
+
+### Bug Fixes
+
+- **Dashboard serves late-added static files without a restart**: files dropped into `public/` after an in-place upgrade are served immediately, with a symlink guard and a debounced manifest rebuild that keeps the path-traversal protection intact (#928).
+- **Multi-byte UTF-8 preserved across TCP chunks** on `POST /event` (#960); malformed JSON now returns 400 instead of crashing the handler (#917).
+- **Dashboard resilience**: ping polling survives a dead WebSocket (#943), the offline badge reacts to a dead socket and to consecutive poll failures (#911, #919), reconnect attempts are capped (#951), replay file paths are preserved (#950), a watcher stat-open race is closed (#953), and zombie shim processes can no longer linger (#907).
+- **Providers share a single `generate()` error wrapper** across the OpenAI-compatible subclasses, removing duplicated redaction paths (#944).
+
+### Maintenance
+
+- **License migrated from MIT to Apache License 2.0** (#906).
+- **Leaner repository root**: configs relocated and the redundant `VERSION` file dropped in favor of `package.json` as the single version source (#908, #940, #946).
+- **Bare `egc install` runs the shipped onboarding installers** (#937).
+
 ## [1.1.14] - 2026-07-19
 
 ### New Features
