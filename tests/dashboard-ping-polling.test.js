@@ -152,3 +152,60 @@ test('ping polling starts independently during dashboard initialization', () => 
     'dashboard initialization should start ping polling independently'
   );
 });
+
+test('WebSocket reconnect stops at the cap and shows disconnected state', () => {
+  const functionBody = extractFunctionBody(dashboardSource, 'connect');
+
+  const S = {
+    ws: null,
+    rc: 1000,
+    wsFailStreak: 0,
+    wsReconnectAttempts: 19,
+    wsReconnectMax: 20
+  };
+
+  const scheduledDelays = [];
+  const wsStates = [];
+
+  class WebSocketStub {
+    constructor(url) {
+      this.url = url;
+    }
+  }
+
+  function setTimeoutStub(_callback, delay) {
+    scheduledDelays.push(delay);
+  }
+
+  function setWsStub(on, label) {
+    wsStates.push([on, label]);
+  }
+
+  function updateOfflineStateStub() {}
+
+  const createConnect = new Function(
+    'S',
+    'WebSocket',
+    'setTimeout',
+    'setWs',
+    'updateOfflineState',
+    `return function connect() {
+      ${functionBody}
+    };`
+  );
+
+  const connect = createConnect(
+    S,
+    WebSocketStub,
+    setTimeoutStub,
+    setWsStub,
+    updateOfflineStateStub
+  );
+
+  connect();
+  S.ws.onclose();
+
+  assert.equal(S.wsReconnectAttempts, 20);
+  assert.deepEqual(scheduledDelays, []);
+  assert.deepEqual(wsStates, [[false, 'disconnected']]);
+});

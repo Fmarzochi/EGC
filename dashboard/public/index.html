@@ -658,6 +658,8 @@ const S={
   telemetryFailStreak:0,
   pingFailStreak:0,
   wsFailStreak:0,
+  wsReconnectAttempts:0,
+  wsReconnectMax:20,
   isOffline:false,
   telemetryReqId:0,
   pingReqId:0,
@@ -1148,8 +1150,30 @@ pollTelemetry();
 function connect(){
   try{
     S.ws=new WebSocket('ws://localhost:7890');
-    S.ws.onopen=()=>{setWs(true);S.rc=1000;S.wsFailStreak=0;updateOfflineState();};
-    S.ws.onclose=()=>{setWs(false);S.wsFailStreak++;updateOfflineState();setTimeout(connect,S.rc);S.rc=Math.min(S.rc*2,10000);};
+
+    S.ws.onopen=()=>{
+      setWs(true);
+      S.rc=1000;
+      S.wsFailStreak=0;
+      S.wsReconnectAttempts=0;
+      updateOfflineState();
+    };
+
+    S.ws.onclose=()=>{
+      S.wsFailStreak++;
+      S.wsReconnectAttempts++;
+      updateOfflineState();
+
+      if(S.wsReconnectAttempts>=S.wsReconnectMax){
+        setWs(false,'disconnected');
+        return;
+      }
+
+      setWs(false);
+      setTimeout(connect,S.rc);
+      S.rc=Math.min(S.rc*2,10000);
+    };
+
     S.ws.onmessage=m=>{
       try{
         const t0=performance.now();
@@ -1161,9 +1185,10 @@ function connect(){
     };
   }catch(e){}
 }
-function setWs(on){
+
+function setWs(on,label){
   document.getElementById('wsDot').className='ws-dot'+(on?' on':'');
-  document.getElementById('wsLbl').textContent=on?'live':'offline';
+  document.getElementById('wsLbl').textContent=on?'live':(label||'offline');
   document.getElementById('activeBadge').style.display=on?'':'none';
 }
 function pingLatency(){
