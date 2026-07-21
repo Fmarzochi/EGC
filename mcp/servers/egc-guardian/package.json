@@ -19,6 +19,7 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "undici": "^6.27.0"
+    "undici": "^6.27.0",
+    "@hono/node-server": "^2.0.5"
   }
 }

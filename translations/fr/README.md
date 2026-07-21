@@ -113,6 +113,7 @@ Outils de codage IA qui s'intègrent nativement avec EGC. Les partenaires béné
 #### Contributeurs
 
 <a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
+<a href="https://github.com/ankit24417-sys"><img src="https://avatars.githubusercontent.com/u/259909839?v=4" width="52" height="52" alt="@ankit24417-sys" title="@ankit24417-sys" /></a>
 
 #### Sponsors mensuels · _soyez le premier_
 
