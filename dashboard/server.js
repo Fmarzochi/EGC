@@ -158,7 +158,7 @@ const server = http.createServer((req, res) => {
 
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
-    let body = '';
+    const chunks = [];
     let currentSize = 0;
     const MAX_SIZE = 256 * 1024; // 256 KB cap
     let exceeded = false;
@@ -176,12 +176,13 @@ const server = http.createServer((req, res) => {
         return;
       }
       
-      body += d;
+      chunks.push(d);
     });
 
     req.on('end', () => {
       if (exceeded) return;
 
+      const body = Buffer.concat(chunks).toString('utf8');
       let ev;
       try {
         ev = JSON.parse(body);
