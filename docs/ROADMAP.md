@@ -82,7 +82,7 @@ Closes the commit-privacy scope started in v1.1.12:
 - Lean repository root: tool configuration files moved to their conventional homes (#891)
 - `egc install` launches the dashboard right after installing (#893)
 
-## Unreleased (on main)
+## v1.1.15: Universal Crusher and Clean Security (Released 2026-07-21)
 
 - Relicensed from MIT to Apache License 2.0 (#906)
 - Dashboard session shim no longer leaves a zombie process after every event (#907, @developmentwithparth1311)
@@ -113,6 +113,15 @@ Closes the commit-privacy scope started in v1.1.12:
 - Native Roo Code install target (#957, @Tyr1onX)
 - Native Qwen Code install target (#962, @Tyr1onX)
 - Native Cline install target, bringing EGC to 23 supported AI coding tools (#965, @Tyr1onX)
+- `stream=True` now raises `NotImplementedError` across the five remaining native providers (Claude, Cohere, Gemini, Ollama, Vertex AI), completing stream-guard coverage (#924, @hanu-14)
+- Dashboard serves static files added after startup without a restart, with a symlink guard and a debounced manifest rebuild that preserves the traversal protection (#928, @hanu-14)
+- French README translation, the 11th language, wired into every language selector (#948, @ankit24417-sys)
+- High-severity advisories cleared: fast-uri and linkify-it across the root and mcp-server lockfiles (#967), and `@hono/node-server` forced to 2.x via npm override to close the last Dependabot and Scorecard findings (#968)
+- ClusterFuzzLite weekly schedule disabled while upstream is dead-locked for JavaScript, keeping manual `workflow_dispatch` (EGC#910)
+
+## Unreleased (on main)
+
+_Nothing yet since v1.1.15._
 
 ## v1.2.0: Teams
 
