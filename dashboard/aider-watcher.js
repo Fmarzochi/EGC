@@ -5,6 +5,7 @@ const fs   = require('fs');
 const path = require('path');
 const http = require('http');
 const os   = require('os');
+const { readFileDelta } = require('./read-file-delta');
 
 const WATCH_PATHS = [
   path.join(os.homedir(), '.aider.chat.history.md'),
@@ -35,17 +36,11 @@ function watchFile(filePath) {
   fs.watch(filePath, { persistent:false }, (evt) => {
     if (evt !== 'change') return;
     try {
-      const stat = fs.statSync(filePath);
-      if (stat.size < lastSizes[filePath]) lastSizes[filePath] = 0;
-      if (stat.size <= lastSizes[filePath]) return;
+      const result = readFileDelta(filePath, lastSizes[filePath]);
+      lastSizes[filePath] = result.newSize;
+      if (result.chunk === null) return;
 
-      const fd = fs.openSync(filePath, 'r');
-      const buf = Buffer.alloc(stat.size - lastSizes[filePath]);
-      fs.readSync(fd, buf, 0, buf.length, lastSizes[filePath]);
-      fs.closeSync(fd);
-      lastSizes[filePath] = stat.size;
-
-      const chunk = buf.toString('utf8');
+      const chunk = result.chunk;
       const toolMatch = chunk.match(/\b(read|edit|write|bash|run)\b/i);
       const tool = toolMatch ? toolMatch[1].charAt(0).toUpperCase() + toolMatch[1].slice(1) : 'Aider';
 
