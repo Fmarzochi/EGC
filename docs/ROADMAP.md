@@ -101,6 +101,18 @@ Closes the commit-privacy scope started in v1.1.12:
 - Official Hugging Face Space launched: https://huggingface.co/spaces/fmarzochi/EGC
 - Dashboard /ping polling survives WebSocket outages on a single self-healing timer chain (#943, @Tyr1onX)
 - The generate() error wrapper deduplicated into one shared hook across the OpenAI-compatible providers (#944, @harshjainnn)
+- Dashboard replay recovers the event file path from the detail field (#950, @Tyr1onX)
+- Dashboard caps WebSocket reconnect attempts and surfaces a visible disconnected state (#951, @Tyr1onX)
+- Dashboard watcher closes a stat-open TOCTOU race by fstat-ing the already-open descriptor (#953, @Tyr1onX)
+- Dependency advisories patched across the MCP servers and fuzz lockfiles (#955)
+- Agent Memory Interchange draft specification published (#947)
+- Token Crusher now rewrites shell commands before they run and is propagated across six hook-capable hosts: Claude Code, Codex, CodeBuddy, Copilot, Antigravity and Continue (#956, #958, #959, #964)
+- Dashboard honors EGC_PORT instead of hardcoding port 7890 (#963, @Maqbool61)
+- Dashboard POST /event preserves multi-byte UTF-8 characters split across TCP chunks (#960, @hanu-14)
+- Explicit per-client HTTP timeout across every LLM provider (#961, @hanu-14)
+- Native Roo Code install target (#957, @Tyr1onX)
+- Native Qwen Code install target (#962, @Tyr1onX)
+- Native Cline install target, bringing EGC to 23 supported AI coding tools (#965, @Tyr1onX)
 
 ## v1.2.0: Teams
 
