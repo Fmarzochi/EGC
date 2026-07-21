@@ -359,7 +359,11 @@ async function runTests() {
     const output = result.stdout.trim();
     if (output) {
       const parsed = JSON.parse(output);
-      assert.ok(parsed.tool_input, 'Should output valid JSON with tool_input');
+      // A transformed command now comes back as hookSpecificOutput.updatedInput
+      // (the schema hosts actually apply); an untouched command stays a bare
+      // tool_input echo. Either is valid output.
+      const command = parsed.hookSpecificOutput?.updatedInput?.command ?? parsed.tool_input?.command;
+      assert.ok(command, 'Should output a command via updatedInput or tool_input');
     }
   })) passed++; else failed++;
 
@@ -543,8 +547,10 @@ async function runTests() {
     const output = result.stdout.trim();
     if (output) {
       const parsed = JSON.parse(output);
-      assert.ok(parsed.tool_input, 'Should output valid JSON with tool_input');
-      assert.ok(parsed.tool_input.command, 'Should have a command in output');
+      // A transform now returns hookSpecificOutput.updatedInput; a passthrough
+      // stays a bare tool_input echo. Accept either and require a command.
+      const command = parsed.hookSpecificOutput?.updatedInput?.command ?? parsed.tool_input?.command;
+      assert.ok(command, 'Should output a command via updatedInput or tool_input');
     }
   })) passed++; else failed++;
 
