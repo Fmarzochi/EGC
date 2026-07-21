@@ -80,7 +80,10 @@ function run(rawInput) {
     let command;
     if (!COMPLEX_SHELL_RE.test(cmd)) {
       command = `egc run ${cmd}`;
-    } else if (!hasBackgrounding(cmd) && !hasRedirection(cmd)) {
+    } else if (process.platform !== 'win32' && !hasBackgrounding(cmd) && !hasRedirection(cmd)) {
+      // shSingleQuote is POSIX escaping; cmd.exe does not treat single quotes as
+      // quoting, so on Windows a pipeline is left untouched (fail-open) rather
+      // than risking a mangled command.
       command = `egc run --shell ${shSingleQuote(cmd)}`;
     } else {
       return JSON.stringify(input);

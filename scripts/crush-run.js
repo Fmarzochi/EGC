@@ -20,9 +20,11 @@ const SPAWN_OPTIONS = {
 
 function runCommand(commandArgs, shell) {
   if (shell) {
-    // The rewrite hook passes the full command line as a single argument, so
-    // bash -c re-parses it exactly as the original shell would have.
-    return spawnSync(commandArgs.join(' '), { ...SPAWN_OPTIONS, shell: '/bin/bash' });
+    // The rewrite hook passes the full command line as a single argument, so the
+    // platform shell (/bin/sh on POSIX, cmd.exe on Windows) re-parses it exactly
+    // as the caller's shell would have. shell: true keeps this portable instead
+    // of hardcoding a bash path that does not exist on every OS.
+    return spawnSync(commandArgs.join(' '), { ...SPAWN_OPTIONS, shell: true });
   }
   return spawnSync(commandArgs[0], commandArgs.slice(1), { ...SPAWN_OPTIONS, shell: false });
 }
