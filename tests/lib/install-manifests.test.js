@@ -198,6 +198,39 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('resolves Cline profile to project-level flat rules only', () => {
+    const projectRoot = '/workspace/app';
+    const plan = resolveInstallPlan({
+      profileId: 'core',
+      target: 'cline',
+      projectRoot,
+    });
+
+    assert.deepStrictEqual(plan.selectedModuleIds, ['rules-core']);
+    assert.ok(plan.skippedModuleIds.includes('agents-core'));
+    assert.ok(plan.skippedModuleIds.includes('commands-core'));
+    assert.ok(plan.skippedModuleIds.includes('hooks-runtime'));
+    assert.strictEqual(plan.targetAdapterId, 'cline-project');
+    assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.clinerules'));
+    assert.strictEqual(
+      plan.installStatePath,
+      path.join(projectRoot, '.clinerules', 'egc-install-state.json')
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.sourceRelativePath === 'rules/common/coding-style.md'
+        && operation.destinationPath === path.join(
+          projectRoot,
+          '.clinerules',
+          'common-coding-style.md'
+        )
+        && operation.strategy === 'flatten-copy'
+      )),
+      'Should materialize Cline rules as flat namespaced files'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves antigravity profiles while skipping only unsupported modules', () => {
     const projectRoot = '/workspace/app';
     const plan = resolveInstallPlan({ profileId: 'core', target: 'antigravity', projectRoot });

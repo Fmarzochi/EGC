@@ -12,7 +12,8 @@
         "egc",
         "cursor",
         "antigravity",
-        "codebuddy"
+        "codebuddy",
+        "cline"
       ],
       "dependencies": [],
       "defaultInstall": true,
