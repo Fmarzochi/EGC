@@ -66,11 +66,6 @@ class VertexAIProvider(GeminiProvider):
         )
 
     def generate(self, input: LLMInput) -> LLMOutput:  # type: ignore[override]
-        if input.stream:
-            # Streaming is not implemented in this adapter. Fail loudly instead
-            # of silently downgrading to a blocking call, which would mislead
-            # callers into thinking they are consuming a stream.
-            raise NotImplementedError("streaming not supported")
         try:
             return super().generate(input)
         except LLMError as exc:

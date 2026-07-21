@@ -1,4 +1,5 @@
 """Tests for CohereProvider."""
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -24,7 +25,11 @@ def _text_response(text: str = "hello") -> SimpleNamespace:
     return SimpleNamespace(message=message, finish_reason="COMPLETE", usage=usage)
 
 
-def _tool_call_response(name: str = "calculator", tool_id: str = "call_1", arguments: str = '{"expr": "2+2"}') -> SimpleNamespace:
+def _tool_call_response(
+    name: str = "calculator",
+    tool_id: str = "call_1",
+    arguments: str = '{"expr": "2+2"}',
+) -> SimpleNamespace:
     function = SimpleNamespace(name=name, arguments=arguments)
     tool_call = SimpleNamespace(id=tool_id, type="function", function=function)
     message = SimpleNamespace(content=[], tool_calls=[tool_call])
@@ -48,7 +53,9 @@ def test_provider_type_is_cohere(provider: CohereProvider) -> None:
 
 
 @pytest.mark.unit
-def test_missing_api_key_raises_authentication_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_api_key_raises_authentication_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("COHERE_API_KEY", raising=False)
     with patch("llm.providers.cohere.cohere") as mock_cohere:
         mock_cohere.ClientV2.return_value = MagicMock()
@@ -102,7 +109,9 @@ def test_generate_returns_text_from_content_blocks(provider: CohereProvider) -> 
 
 @pytest.mark.unit
 def test_generate_extracts_tool_calls(provider: CohereProvider) -> None:
-    provider.client.chat.return_value = _tool_call_response("calculator", "call_99", '{"expr": "2+2"}')
+    provider.client.chat.return_value = _tool_call_response(
+        "calculator", "call_99", '{"expr": "2+2"}'
+    )
     result = provider.generate(_simple_input())
     assert result.tool_calls is not None
     assert result.tool_calls[0].name == "calculator"
@@ -111,9 +120,15 @@ def test_generate_extracts_tool_calls(provider: CohereProvider) -> None:
 
 
 @pytest.mark.unit
-def test_generate_passes_tools_in_openai_json_schema_shape(provider: CohereProvider) -> None:
+def test_generate_passes_tools_in_openai_json_schema_shape(
+    provider: CohereProvider,
+) -> None:
     provider.client.chat.return_value = _text_response("ok")
-    tool = ToolDefinition(name="search", description="search docs", parameters={"type": "object", "properties": {}})
+    tool = ToolDefinition(
+        name="search",
+        description="search docs",
+        parameters={"type": "object", "properties": {}},
+    )
     llm_input = LLMInput(messages=[Message(role=Role.USER, content="hi")], tools=[tool])
     provider.generate(llm_input)
     _, kwargs = provider.client.chat.call_args
@@ -138,7 +153,9 @@ def test_native_sdk_exception_is_wrapped_as_llm_error(provider: CohereProvider) 
 
 
 @pytest.mark.unit
-def test_unauthorized_exception_raises_authentication_error(provider: CohereProvider) -> None:
+def test_unauthorized_exception_raises_authentication_error(
+    provider: CohereProvider,
+) -> None:
     provider.client.chat.side_effect = RuntimeError("401 unauthorized: invalid api key")
     with pytest.raises(AuthenticationError) as exc:
         provider.generate(_simple_input())
@@ -154,6 +171,7 @@ def test_cohere_in_provider_type_enum() -> None:
 def test_get_provider_resolves_cohere(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COHERE_API_KEY", "co-test")
     from llm.providers.resolver import get_provider
+
     with patch("llm.providers.cohere.cohere") as mock_cohere:
         mock_cohere.ClientV2.return_value = MagicMock()
         p = get_provider("cohere")
@@ -161,10 +179,16 @@ def test_get_provider_resolves_cohere(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_get_default_model_returns_cohere_model_when_resolver_bleeds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_default_model_returns_cohere_model_when_resolver_bleeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("COHERE_API_KEY", "co-test")
-    with patch("llm.providers.cohere.cohere") as mock_cohere, \
-         patch("llm.providers.cohere.ModelResolver.resolve", return_value="gemini-2.5-pro"):
+    with (
+        patch("llm.providers.cohere.cohere") as mock_cohere,
+        patch(
+            "llm.providers.cohere.ModelResolver.resolve", return_value="gemini-2.5-pro"
+        ),
+    ):
         mock_cohere.ClientV2.return_value = MagicMock()
         p = CohereProvider()
     assert p.get_default_model() == COHERE_DEFAULT_MODEL
@@ -173,6 +197,7 @@ def test_get_default_model_returns_cohere_model_when_resolver_bleeds(monkeypatch
 @pytest.mark.unit
 def test_provider_for_cohere_model_names() -> None:
     from llm.core.model_resolver import ModelResolver
+
     assert ModelResolver._provider_for("command-a-plus-05-2026") == "cohere"
     assert ModelResolver._provider_for("command-r-plus") == "cohere"
     assert ModelResolver._provider_for("gemini-2.5-pro") != "cohere"
@@ -181,5 +206,18 @@ def test_provider_for_cohere_model_names() -> None:
 @pytest.mark.unit
 def test_model_resolver_default_for_cohere_provider() -> None:
     from llm.core.model_resolver import ModelResolver
+
     resolved = ModelResolver.resolve(None, provider="cohere")
     assert ModelResolver._provider_for(resolved) == "cohere"
+
+
+@pytest.mark.unit
+def test_stream_flag_raises_not_implemented(provider: CohereProvider) -> None:
+    stream_input = LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model=COHERE_DEFAULT_MODEL,
+        stream=True,
+    )
+    with pytest.raises(NotImplementedError, match="streaming not supported"):
+        provider.generate(stream_input)
+    provider.client.chat.assert_not_called()
