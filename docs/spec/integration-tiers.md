@@ -12,7 +12,7 @@ EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This 
 | **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 20 harnesses
+## The 21 harnesses
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
@@ -36,6 +36,7 @@ EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This 
 | 18 | **OpenHands** | 1 | `openhands` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex/Goose) | Skills installed flat; no GateGuard hook wiring; discoverability-only adapter -- the issue asked for `.openhands/microagents/`, but current OpenHands docs recommend the AgentSkills-standard `.agents/skills/<name>/SKILL.md` path (legacy `.openhands/microagents/` still works but isn't the documented target), so this mirrors the Goose adapter instead |
 | 19 | **Aider** | 1 | `aider` | `.aider/skills/<name>.md` (project only, no home target) | Skills copied flat as single `.md` files (Aider does not scan a skill-folder convention); each file's path is merged into the `read:` list of `.aider.conf.yml` via a new `merge-yaml-read-list` operation kind, preserving any unrelated existing keys; install/repair/uninstall all wired |
 | 20 | **Warp** | 1 | `warp` | `.warp/skills/<name>.md` + index in project root `AGENTS.md` (project only, no home target) | Warp only discovers a single root `AGENTS.md`/`WARP.md` file as project rules, not a directory of skill files -- confirmed a plain `AGENTS.md` is sufficient (Warp's own docs call it the default project rules file; `WARP.md` is legacy and only takes priority if both exist). Full skill content is copied flat to `.warp/skills/<name>.md` (read on demand); a short index (name + one-line description + path) is merged into a marked block inside `AGENTS.md` via a new `merge-markdown-skill-index` operation kind, since concatenating all 230+ skills (~2MB) into the always-loaded rules file would blow the context budget. Install/repair/uninstall all wired; uninstall never deletes `AGENTS.md` itself, only the EGC block |
+| 21 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; no hook wiring |
 
 ## Why three tiers (history, not aspiration)
 

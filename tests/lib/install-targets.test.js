@@ -1988,6 +1988,77 @@ function runTests() {
     assert.ok(targets.includes('aider'), 'Should include aider target');
   })) passed++; else failed++;
 
+  if (test('resolves qwen adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('qwen');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'qwen-project');
+    assert.strictEqual(adapter.target, 'qwen');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.qwen'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.qwen', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('qwen adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('qwen');
+    const byId = getInstallTargetAdapter('qwen-project');
+
+    assert.strictEqual(byTarget.id, 'qwen-project');
+    assert.strictEqual(byId.id, 'qwen-project');
+    assert.ok(byTarget.supports('qwen'));
+    assert.ok(byTarget.supports('qwen-project'));
+  })) passed++; else failed++;
+
+  if (test('qwen adapter installs skills into the native .qwen/skills directory', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'qwen',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'testing', paths: ['skills/testing/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'qwen-project');
+    assert.strictEqual(plan.operations.length, 1);
+
+    const operation = plan.operations[0];
+    assert.strictEqual(operation.kind, 'copy-path');
+    assert.strictEqual(
+      normalizedRelativePath(operation.sourceRelativePath),
+      'skills/testing/tdd-workflow'
+    );
+    assert.strictEqual(
+      operation.destinationPath,
+      path.join(projectRoot, '.qwen', 'skills', 'tdd-workflow')
+    );
+  })) passed++; else failed++;
+
+  if (test('qwen adapter passes non-skill paths through and appears in the adapter list', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'qwen',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    assert.strictEqual(plan.operations.length, 1);
+    assert.strictEqual(
+      plan.operations[0].destinationPath,
+      path.join(projectRoot, '.qwen', 'rules')
+    );
+    assert.ok(
+      listInstallTargetAdapters().some(adapter => adapter.target === 'qwen'),
+      'Should include qwen target'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves warp adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('warp');
     const projectRoot = '/workspace/app';

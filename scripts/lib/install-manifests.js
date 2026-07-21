@@ -4,7 +4,7 @@ const path = require('node:path');
 const { getInstallTargetAdapter, planInstallTargetScaffold } = require('./install-targets/registry');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
-const SUPPORTED_INSTALL_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'continue', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'warp'];
+const SUPPORTED_INSTALL_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'continue', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'warp'];
 const COMPONENT_FAMILY_PREFIXES = {
   baseline: 'baseline:',
   language: 'lang:',
