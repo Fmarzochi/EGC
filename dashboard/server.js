@@ -73,20 +73,52 @@ function countStateFileDecisions() {
 function buildStaticManifest(dir) {
   const manifest = new Map();
   if (!fs.existsSync(dir)) return manifest;
+  let topLevelFailed = false;
   function scan(current, base) {
-    for (const name of fs.readdirSync(current)) {
+    let entries;
+    try { entries = fs.readdirSync(current); } catch (_) {
+      if (current === dir) topLevelFailed = true;
+      return;
+    }
+    for (const name of entries) {
       const abs = path.join(current, name);
       const rel  = base + '/' + name;
       try {
-        if (fs.statSync(abs).isDirectory()) scan(abs, rel);
+        const st = fs.lstatSync(abs);
+        if (st.isSymbolicLink()) continue;
+        if (st.isDirectory()) scan(abs, rel);
         else manifest.set(rel, abs);
       } catch (_) {}
     }
   }
   scan(dir, '');
-  return manifest;
+  return topLevelFailed ? null : manifest;
 }
-const STATIC_FILES = buildStaticManifest(PUBLIC);
+
+let lastManifestMtime = 0;
+function manifestMtime(dir) {
+  try { return fs.statSync(dir).mtimeMs; } catch (_) { return 0; }
+}
+let STATIC_FILES = buildStaticManifest(PUBLIC) || new Map();
+
+// Late-added static files (dropped in after an in-place package upgrade while
+// the daemon stays up) must be served without a restart. The manifest also
+// doubles as the path-traversal guard, so raw request paths are never resolved
+// against the filesystem directly - on a miss the manifest is rebuilt from a
+// directory scan, debounced so a burst of misses refreshes at most once per
+// interval. See EGC#918, EGC#928 for the concurrency edge-case fix.
+let staticRefreshAt = 0;
+const STATIC_REFRESH_INTERVAL_MS = 3000;
+function refreshStaticManifestIfStale() {
+  const now = Date.now();
+  if (now - staticRefreshAt < STATIC_REFRESH_INTERVAL_MS) return;
+  staticRefreshAt = now;
+  const mt = manifestMtime(PUBLIC);
+  if (mt === lastManifestMtime) return;
+  lastManifestMtime = mt;
+  const next = buildStaticManifest(PUBLIC);
+  if (next !== null) STATIC_FILES = next;
+}
 
 function detectModel() {
   const candidates = [
@@ -419,8 +451,15 @@ const grandTotal = Object.values(byIde).reduce(
   }
 
   // ── Static files ─────────────────────────────────────────
-  const segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
-  const filePath = STATIC_FILES.get(segment);
+  let segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
+  try { segment = decodeURIComponent(segment); } catch (_) {}
+  let filePath = STATIC_FILES.get(segment);
+  if (!filePath) {
+    // File may have been added after startup; rebuild the manifest (debounced
+    // so a burst of misses refreshes at most once per interval).
+    refreshStaticManifestIfStale();
+    filePath = STATIC_FILES.get(segment);
+  }
   if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
