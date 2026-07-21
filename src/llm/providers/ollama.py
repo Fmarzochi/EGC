@@ -1,4 +1,5 @@
 """Ollama provider adapter for local models."""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,15 @@ from llm.core.interface import (
     LLMProvider,
     RateLimitError,
 )
-from llm.core.types import LLMInput, LLMOutput, Message, ModelInfo, ProviderType, ToolCall
+from llm.core.interface import CLIENT_TIMEOUT
+from llm.core.types import (
+    LLMInput,
+    LLMOutput,
+    Message,
+    ModelInfo,
+    ProviderType,
+    ToolCall,
+)
 
 
 class OllamaProvider(LLMProvider):
@@ -21,7 +30,9 @@ class OllamaProvider(LLMProvider):
         base_url: str | None = None,
         default_model: str | None = None,
     ) -> None:
-        self.base_url = base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.base_url = base_url or os.environ.get(
+            "OLLAMA_BASE_URL", "http://localhost:11434"
+        )
         self.default_model = default_model or os.environ.get("OLLAMA_MODEL", "llama3.2")
         self._models = [
             ModelInfo(
@@ -51,6 +62,11 @@ class OllamaProvider(LLMProvider):
         ]
 
     def generate(self, input: LLMInput) -> LLMOutput:
+        if input.stream:
+            # Streaming is not implemented in this adapter. Fail loudly instead
+            # of silently downgrading to a blocking call, which would mislead
+            # callers into thinking they are consuming a stream.
+            raise NotImplementedError("streaming not supported")
         import urllib.request
         import json
 
@@ -67,9 +83,11 @@ class OllamaProvider(LLMProvider):
                 payload["options"] = {"temperature": input.temperature}
 
             data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(
+                url, data=data, headers={"Content-Type": "application/json"}
+            )
 
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
                 result = json.loads(response.read().decode("utf-8"))
 
             message = result.get("message") or {}
@@ -103,7 +121,9 @@ class OllamaProvider(LLMProvider):
         except Exception as e:
             msg = redact_secrets(str(e))
             if "401" in msg or "connection" in msg.lower():
-                raise AuthenticationError(f"Ollama connection failed: {msg}", provider=ProviderType.OLLAMA) from e
+                raise AuthenticationError(
+                    f"Ollama connection failed: {msg}", provider=ProviderType.OLLAMA
+                ) from e
             if "429" in msg or "rate_limit" in msg.lower():
                 raise RateLimitError(msg, provider=ProviderType.OLLAMA) from e
             if "context" in msg.lower() and "length" in msg.lower():

@@ -48,5 +48,23 @@ class TestOllamaProviderPayload(unittest.TestCase):
         self.assertEqual(result.content, "ok")
 
 
+class TestOllamaProviderStreamGuard(unittest.TestCase):
+    def test_stream_flag_raises_not_implemented(self) -> None:
+        provider = OllamaProvider(
+            base_url="http://localhost:11434",
+            default_model="llama3",
+        )
+        stream_input = LLMInput(
+            messages=[Message(role=Role.USER, content="hi")],
+            model="llama3",
+            stream=True,
+        )
+        with patch("urllib.request.urlopen") as urlopen:
+            with self.assertRaises(NotImplementedError) as ctx:
+                provider.generate(stream_input)
+        self.assertIn("streaming not supported", str(ctx.exception))
+        urlopen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

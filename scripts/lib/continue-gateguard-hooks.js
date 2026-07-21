@@ -15,21 +15,29 @@
 const {
   createGateGuardScriptCopyOperations,
   createPreToolUseGateGuardHookMergeOperation,
+  createCrusherScriptCopyOperations,
+  createPreToolUseCrusherHookMergeOperation,
 } = require('./claude-settings-hooks');
 
 function createContinueGateGuardOperations(adapter, targetRoot, createRemappedOperation) {
-  const copyOperations = createGateGuardScriptCopyOperations(
-    (moduleId, sourceRelativePath, destinationPath, options) => (
-      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-    ),
-    targetRoot
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
+  const copyOperations = createGateGuardScriptCopyOperations(remap, targetRoot);
 
   const mergeOperations = ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
     createPreToolUseGateGuardHookMergeOperation(targetRoot, matcher)
   ));
 
-  return [...copyOperations, ...mergeOperations];
+  // Token Crusher: Continue reads the same hooks.json schema as Claude Code, so
+  // scaffold the standalone hook + its deps and register it on Bash. Fail-open,
+  // so a Continue build that ignores updatedInput just runs the command as-is.
+  const crusherOperations = [
+    ...createCrusherScriptCopyOperations(remap, targetRoot),
+    createPreToolUseCrusherHookMergeOperation(targetRoot, 'Bash'),
+  ];
+
+  return [...copyOperations, ...mergeOperations, ...crusherOperations];
 }
 
 module.exports = { createContinueGateGuardOperations };

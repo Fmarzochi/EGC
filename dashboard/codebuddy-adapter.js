@@ -4,8 +4,7 @@ const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-
-const PORT = 7890;
+const { PORT } = require('./port');
 const WATCH_PATHS = [
   path.join(os.homedir(), '.codebuddy', 'logs'),
   path.join(os.homedir(), '.config', 'codebuddy', 'logs'),

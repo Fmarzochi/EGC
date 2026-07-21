@@ -5,8 +5,8 @@ const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-
-const PORT = 7890;
+const { readFileDelta } = require('./read-file-delta');
+const { PORT } = require('./port');
 
 const LOG_PATHS = [
   path.join(os.homedir(), '.vscode', 'logs'),
@@ -65,16 +65,11 @@ function watch() {
 
     fs.watch(logFile, { persistent:false }, () => {
       try {
-        const stat = fs.statSync(logFile);
-        if (stat.size < lastSize) lastSize = 0;
-        if (stat.size <= lastSize) return;
-        const buf = Buffer.alloc(stat.size - lastSize);
-        const fd = fs.openSync(logFile, 'r');
-        fs.readSync(fd, buf, 0, buf.length, lastSize);
-        fs.closeSync(fd);
-        lastSize = stat.size;
+        const result = readFileDelta(logFile, lastSize);
+        lastSize = result.newSize;
+        if (result.chunk === null) return;
 
-        const chunk = buf.toString('utf8');
+        const chunk = result.chunk;
         if (chunk.includes('request') || chunk.includes('completion') || chunk.includes('edit')) {
           post({ ide:'vscode', event:'pre_tool', tool:'Copilot', agent:'main', detail:chunk.slice(0,60).trim(), status:'running' });
           setTimeout(()=>{ post({ ide:'vscode', event:'post_tool', tool:'Copilot', agent:'main', status:'success' }); }, 400);

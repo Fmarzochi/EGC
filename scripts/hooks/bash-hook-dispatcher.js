@@ -3,6 +3,7 @@
 
 const { isHookEnabled } = require('../lib/hook-flags');
 const { trace } = require('../lib/utils');
+const { toPreToolUseOutput } = require('./pretooluse-output');
 
 const { run: runGuardianValidate } = require('./pre-bash-guardian-validate');
 const { run: runBlockNoVerify } = require('./block-no-verify');
@@ -192,7 +193,10 @@ async function main() {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }
-  process.stdout.write(result.output);
+  const output = mode === 'post'
+    ? result.output
+    : toPreToolUseOutput(raw, result.output);
+  process.stdout.write(output);
   process.exit(result.exitCode);
 }
 
@@ -208,4 +212,5 @@ module.exports = {
   POST_BASH_HOOKS,
   runPreBash,
   runPostBash,
+  toPreToolUseOutput,
 };

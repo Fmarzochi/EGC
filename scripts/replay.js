@@ -2,9 +2,11 @@
 'use strict';
 
 const http = require('node:http');
+const path = require('node:path');
 const { execSync } = require('node:child_process');
+const { PORT } = require(path.join(__dirname, '..', 'dashboard', 'port'));
 
-const DASHBOARD_URL = 'http://localhost:7890';
+const DASHBOARD_URL = `http://localhost:${PORT}`;
 
 function showHelp() {
   console.log(`

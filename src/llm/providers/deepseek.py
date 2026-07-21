@@ -7,6 +7,7 @@ source and default model, so the EGC runtime stays multi-provider without
 re-implementing the wire protocol. All model selection still flows through
 :class:`ModelResolver`.
 """
+
 from __future__ import annotations
 
 import os
@@ -17,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     OpenAI = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMProvider
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMProvider
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
@@ -33,15 +34,22 @@ _REASONER_TEMPERATURE = 1.0
 class DeepSeekProvider(OpenAIProvider):
     provider_type = ProviderType.DEEPSEEK
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, api_key: str | None = None, base_url: str | None = None, **kwargs: Any
+    ) -> None:
         if OpenAI is None:  # NOSONAR
             raise ImportError("openai package is required to use DeepSeekProvider")
         key = api_key or os.environ.get("DEEPSEEK_API_KEY")
         if not key:
-            raise AuthenticationError("No DeepSeek API key provided", provider=ProviderType.DEEPSEEK)
+            raise AuthenticationError(
+                "No DeepSeek API key provided", provider=ProviderType.DEEPSEEK
+            )
         self.client = OpenAI(
             api_key=key,
-            base_url=base_url or os.environ.get("DEEPSEEK_BASE_URL") or DEEPSEEK_BASE_URL,
+            base_url=base_url
+            or os.environ.get("DEEPSEEK_BASE_URL")
+            or DEEPSEEK_BASE_URL,
+            timeout=CLIENT_TIMEOUT,
         )
         self._models = ModelResolver.model_infos("deepseek") or [
             ModelInfo(
@@ -64,6 +72,7 @@ class DeepSeekProvider(OpenAIProvider):
 
     def generate(self, llm_input: "LLMInput") -> "LLMOutput":  # type: ignore[override]
         from llm.core.types import LLMInput, LLMOutput
+
         model = llm_input.model or self.get_default_model()
         if model == "deepseek-reasoner":
             # deepseek-reasoner does not support tool calls or custom

@@ -28,26 +28,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-// ---------------------------------------------------------------------------
-// Helper: the exact post-fix logic from aider-watcher.js / vscode-adapter.js,
-// extracted as a pure function of (filePath, lastSize) -> { chunk, newSize }.
-// This is the same four lines as dashboard/aider-watcher.js:38-46 (and the
-// equivalent in vscode-adapter.js:57-64), just wrapped so it's testable
-// without spinning up fs.watch(), setInterval(), or the HTTP POST side
-// effects that the real watcher scripts perform on require().
-// ---------------------------------------------------------------------------
-function readDelta(filePath, lastSize) {
-  const stat = fs.statSync(filePath);
-  if (stat.size < lastSize) lastSize = 0; // truncated/rotated: reset and re-read from start
-  if (stat.size <= lastSize) return { chunk: null, newSize: lastSize };
-
-  const fd = fs.openSync(filePath, 'r');
-  const buf = Buffer.alloc(stat.size - lastSize);
-  fs.readSync(fd, buf, 0, buf.length, lastSize);
-  fs.closeSync(fd);
-
-  return { chunk: buf.toString('utf8'), newSize: stat.size };
-}
+const { readFileDelta: readDelta } = require('../dashboard/read-file-delta');
 
 function withTempFile(initialContent, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-watcher-test-'));
@@ -177,5 +158,28 @@ test('multiple shrink/grow cycles: watcher keeps emitting correctly across repea
     r = readDelta(filePath, lastSize);
     assert.equal(r.chunk, 'fourth-rotation',
       'second rotation: the fix must keep working across repeated truncations, not just once');
+  });
+});
+
+test('TOCTOU: rotation between stat and open uses the opened file size', () => {
+  withTempFile('old content that is much longer', (filePath) => {
+    const originalOpenSync = fs.openSync;
+    let rotated = false;
+
+    fs.openSync = function patchedOpenSync(target, ...args) {
+      if (!rotated && target === filePath) {
+        rotated = true;
+        fs.writeFileSync(filePath, 'new', 'utf8');
+      }
+      return originalOpenSync.call(fs, target, ...args);
+    };
+
+    try {
+      const result = readDelta(filePath, 0);
+      assert.equal(result.chunk, 'new');
+      assert.equal(result.newSize, 3);
+    } finally {
+      fs.openSync = originalOpenSync;
+    }
   });
 });

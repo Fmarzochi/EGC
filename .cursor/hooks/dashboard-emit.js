@@ -4,6 +4,12 @@
 const { readStdin } = require('./adapter');
 const http = require('http');
 
+// Resolve port inline — this hook may be installed outside the repo tree,
+// so a relative require to dashboard/port.js is not safe.
+const _egcRaw = process.env.EGC_PORT;
+const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : NaN;
+const PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;
+
 readStdin().then(raw => {
   try {
     const input = JSON.parse(raw || '{}');
@@ -14,7 +20,7 @@ readStdin().then(raw => {
 
     const ev = JSON.stringify({ ide:'cursor', event, tool, agent, detail:file, status: event==='pre_tool'?'running':'success' });
     const req = http.request(
-      { hostname:'127.0.0.1', port:7890, path:'/event', method:'POST',
+      { hostname:'127.0.0.1', port:PORT, path:'/event', method:'POST',
         headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(ev)},
         timeout:300 },
       ()=>{}

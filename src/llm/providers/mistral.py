@@ -7,10 +7,10 @@ from typing import Any
 
 try:
     from openai import OpenAI
-except ImportError: 
-    OpenAI = None 
+except ImportError:
+    OpenAI = None
 
-from llm.core.interface import AuthenticationError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
@@ -21,27 +21,32 @@ MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
 class MistralProvider(OpenAIProvider):
     provider_type = ProviderType.MISTRAL
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, api_key: str | None = None, base_url: str | None = None, **kwargs: Any
+    ) -> None:
         if OpenAI is None:
             raise ImportError("openai package is required to use MistralProvider")
-            
+
         # Unify token capture to a singular value
         resolved_key = api_key or os.environ.get("MISTRAL_API_KEY") or ""
         if not resolved_key.strip():
-            raise AuthenticationError("No Mistral API key provided", provider=ProviderType.MISTRAL)
+            raise AuthenticationError(
+                "No Mistral API key provided", provider=ProviderType.MISTRAL
+            )
 
         self.client = OpenAI(
             api_key=resolved_key,
             base_url=base_url or os.environ.get("MISTRAL_BASE_URL") or MISTRAL_BASE_URL,
+            timeout=CLIENT_TIMEOUT,
         )
-        
+
         # Catalogue resolved through the centralized registry fallback pattern
         self._models = ModelResolver.model_infos("mistral") or [
             ModelInfo(
                 name="mistral-large-latest",
                 provider=ProviderType.MISTRAL,
                 supports_tools=True,
-                supports_vision=False,   # Large is text-only; Pixtral is the vision model
+                supports_vision=False,  # Large is text-only; Pixtral is the vision model
                 max_tokens=8192,
                 context_window=128000,
             ),

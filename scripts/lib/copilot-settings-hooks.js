@@ -21,6 +21,8 @@ const path = require('node:path');
 const {
   createGateGuardHookMergeOperationForDestination,
   resolveGateGuardHookScriptDestination,
+  createCrusherHookMergeOperationForDestination,
+  resolveCrusherHookScriptDestination,
 } = require('./claude-settings-hooks');
 
 function resolveCopilotHooksFilePath(homeDir) {
@@ -35,7 +37,19 @@ function createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, matche
   );
 }
 
+// Token Crusher: VS Code's Copilot hooks read the same hooks.json schema, so the
+// crusher hook (installed under the adapter's own ~/.github root) is registered
+// at ~/.copilot/hooks/hooks.json just like the gate.
+function createPreToolUseCrusherHookMergeOperation(targetRoot, homeDir, matcher) {
+  return createCrusherHookMergeOperationForDestination(
+    resolveCopilotHooksFilePath(homeDir),
+    resolveCrusherHookScriptDestination(targetRoot),
+    matcher
+  );
+}
+
 module.exports = {
   createPreToolUseGateGuardHookMergeOperation,
+  createPreToolUseCrusherHookMergeOperation,
   resolveCopilotHooksFilePath,
 };

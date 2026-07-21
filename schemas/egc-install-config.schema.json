@@ -24,6 +24,7 @@
         "antigravity",
         "codex",
         "gemini",
+        "qwen",
         "opencode",
         "codebuddy",
         "windsurf",
@@ -36,8 +37,10 @@
         "junie",
         "goose",
         "amazonq",
+        "roocode",
         "openhands",
         "aider",
+        "cline",
         "warp"
       ]
     },

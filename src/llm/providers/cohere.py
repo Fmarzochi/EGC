@@ -8,6 +8,7 @@ content blocks, not a plain string; usage lives under
 This adapter implements :class:`LLMProvider` directly with Cohere's own
 ``cohere`` SDK instead of subclassing :class:`OpenAIProvider`.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,7 +20,12 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     cohere = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMError, LLMProvider
+from llm.core.interface import (
+    CLIENT_TIMEOUT,
+    AuthenticationError,
+    LLMError,
+    LLMProvider,
+)
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
 from llm.core.types import (
@@ -56,9 +62,11 @@ class CohereProvider(LLMProvider):
             raise ImportError("cohere package is required to use CohereProvider")
         key = api_key or os.environ.get("COHERE_API_KEY")
         if not key:
-            raise AuthenticationError("No Cohere API key provided", provider=ProviderType.COHERE)
+            raise AuthenticationError(
+                "No Cohere API key provided", provider=ProviderType.COHERE
+            )
         self._api_key = key
-        self.client = cohere.ClientV2(api_key=key)
+        self.client = cohere.ClientV2(api_key=key, timeout=CLIENT_TIMEOUT)
         self._models = ModelResolver.model_infos("cohere") or [
             ModelInfo(
                 name=COHERE_DEFAULT_MODEL,
@@ -75,11 +83,13 @@ class CohereProvider(LLMProvider):
         for msg in messages:
             role = msg.role.value
             if role == "tool":
-                mapped.append({
-                    "role": "tool",
-                    "tool_call_id": msg.tool_call_id or "",
-                    "content": msg.content or "",
-                })
+                mapped.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id or "",
+                        "content": msg.content or "",
+                    }
+                )
                 continue
             entry: dict[str, Any] = {"role": role, "content": msg.content or ""}
             if msg.tool_calls:
@@ -87,14 +97,19 @@ class CohereProvider(LLMProvider):
                     {
                         "id": tc.id,
                         "type": "function",
-                        "function": {"name": tc.name, "arguments": _json_dumps(tc.arguments)},
+                        "function": {
+                            "name": tc.name,
+                            "arguments": _json_dumps(tc.arguments),
+                        },
                     }
                     for tc in msg.tool_calls
                 ]
             mapped.append(entry)
         return mapped
 
-    def _map_tools(self, tools: list[ToolDefinition] | None) -> list[dict[str, Any]] | None:
+    def _map_tools(
+        self, tools: list[ToolDefinition] | None
+    ) -> list[dict[str, Any]] | None:
         if not tools:
             return None
         return [tool.to_dict() for tool in tools]
@@ -104,7 +119,11 @@ class CohereProvider(LLMProvider):
         if not raw:
             return None
         return [
-            ToolCall(id=tc.id, name=tc.function.name, arguments=_json_loads(tc.function.arguments))
+            ToolCall(
+                id=tc.id,
+                name=tc.function.name,
+                arguments=_json_loads(tc.function.arguments),
+            )
             for tc in raw
         ]
 
@@ -120,9 +139,13 @@ class CohereProvider(LLMProvider):
 
     def _parse_response(self, response, model: str) -> LLMOutput:
         if response.message is None:
-            raise LLMError("Cohere returned an empty response", provider=ProviderType.COHERE)
+            raise LLMError(
+                "Cohere returned an empty response", provider=ProviderType.COHERE
+            )
         content_blocks = response.message.content or []
-        text = "".join(block.text for block in content_blocks if getattr(block, "text", None))
+        text = "".join(
+            block.text for block in content_blocks if getattr(block, "text", None)
+        )
         tool_calls = self._parse_tool_calls(response)
         return LLMOutput(
             content=text,
@@ -133,6 +156,11 @@ class CohereProvider(LLMProvider):
         )
 
     def generate(self, input: LLMInput) -> LLMOutput:  # type: ignore[override]
+        if input.stream:
+            # Streaming is not implemented in this adapter. Fail loudly instead
+            # of silently downgrading to a blocking call, which would mislead
+            # callers into thinking they are consuming a stream.
+            raise NotImplementedError("streaming not supported")
         try:
             model = ModelResolver.resolve(input.model, provider="cohere")
             kwargs: dict[str, Any] = {

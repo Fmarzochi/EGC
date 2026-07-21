@@ -10,6 +10,7 @@ Model IDs, generation logic, and the model catalog are shared with
 :class:`GeminiProvider`: Vertex AI serves the identical Gemini model family,
 just through GCP service-account/ADC auth instead of an API key.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,7 +21,7 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     genai = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import LLMInput, LLMOutput, ProviderType
 from llm.providers.gemini import GeminiProvider
@@ -31,19 +32,30 @@ _DEFAULT_LOCATION = "us-central1"
 class VertexAIProvider(GeminiProvider):
     provider_type = ProviderType.VERTEX_AI
 
-    def __init__(self, project: str | None = None, location: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, project: str | None = None, location: str | None = None, **kwargs: Any
+    ) -> None:
         if genai is None:  # NOSONAR
-            raise ImportError("google-genai package is required to use VertexAIProvider")
+            raise ImportError(
+                "google-genai package is required to use VertexAIProvider"
+            )
 
         self._project = project or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        self._location = location or os.environ.get("GOOGLE_CLOUD_LOCATION") or _DEFAULT_LOCATION
+        self._location = (
+            location or os.environ.get("GOOGLE_CLOUD_LOCATION") or _DEFAULT_LOCATION
+        )
         if not self._project:
             raise AuthenticationError(
                 "No Google Cloud project configured for Vertex AI (set GOOGLE_CLOUD_PROJECT)",
                 provider=ProviderType.VERTEX_AI,
             )
 
-        self.client = genai.Client(vertexai=True, project=self._project, location=self._location)
+        self.client = genai.Client(
+            vertexai=True,
+            project=self._project,
+            location=self._location,
+            http_options={"timeout": int(CLIENT_TIMEOUT * 1000)},
+        )
 
         # Vertex AI serves the same Gemini model family/catalog: reuse it
         # instead of duplicating registry entries under a second provider key.
@@ -52,7 +64,9 @@ class VertexAIProvider(GeminiProvider):
         # tag_as=VERTEX_AI overrides the registry's own "gemini" provider tag
         # on the borrowed rows, so callers grouping usage/cost by
         # ModelInfo.provider don't attribute Vertex AI traffic to Gemini.
-        self._models = ModelResolver.model_infos("gemini", tag_as=ProviderType.VERTEX_AI)
+        self._models = ModelResolver.model_infos(
+            "gemini", tag_as=ProviderType.VERTEX_AI
+        )
 
     def generate(self, input: LLMInput) -> LLMOutput:  # type: ignore[override]
         try:

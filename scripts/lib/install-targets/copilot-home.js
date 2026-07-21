@@ -10,9 +10,11 @@ const {
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   resolveGateGuardHookScriptDestination,
+  createCrusherScriptCopyOperations,
 } = require('../claude-settings-hooks');
 const {
   createPreToolUseGateGuardHookMergeOperation,
+  createPreToolUseCrusherHookMergeOperation,
 } = require('../copilot-settings-hooks');
 
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
@@ -48,6 +50,15 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'MultiEdit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Bash'),
+    // Token Crusher: same hooks.json schema, scaffold the hook + deps under the
+    // adapter root and register it on Bash at ~/.copilot/hooks/hooks.json.
+    ...createCrusherScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
+    createPreToolUseCrusherHookMergeOperation(targetRoot, homeDir, 'Bash'),
   ];
 }
 

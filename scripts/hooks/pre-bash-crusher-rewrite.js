@@ -29,9 +29,27 @@ function wrappedRe() {
   const prefixes = ['egc', ...extra].join('|');
   return new RegExp(`(?:^\\s*(?:${prefixes})\\s)|(?:--raw\\b)`);
 }
-// Wrapping changes semantics for pipelines, chaining, redirection, substitution
-// and multi-line commands, so those never get rewritten.
+// A command with none of these characters runs through `egc run <cmd>` with no
+// shell. One that has them keeps its exact semantics only when re-parsed by
+// bash, so it goes through `egc run --shell '<cmd>'` when safe (see run()).
 const COMPLEX_SHELL_RE = /[|&;<>$`()\n]/;
+
+// Backgrounding detaches the process, so spawnSync would not capture its output;
+// redirection sends stdout elsewhere, leaving nothing to crush. Neither is ever
+// wrapped. A lone `&` (not part of `&&`) means backgrounding.
+function hasBackgrounding(cmd) {
+  return cmd.replace(/&&/g, '').includes('&');
+}
+
+function hasRedirection(cmd) {
+  return /[<>]/.test(cmd);
+}
+
+// POSIX single-quote escaping: wrap in single quotes and replace every embedded
+// single quote with '\'' so bash -c re-parses the exact original command.
+function shSingleQuote(cmd) {
+  return `'${cmd.replace(/'/g, `'\\''`)}'`;
+}
 
 let egcAvailable = null;
 function hasEgcCli() {
@@ -53,10 +71,21 @@ function run(rawInput) {
       !engine
       || !cmd
       || wrappedRe().test(cmd)
-      || COMPLEX_SHELL_RE.test(cmd)
       || engine.commandKind(cmd) === 'generic'
       || !hasEgcCli()
     ) {
+      return JSON.stringify(input);
+    }
+
+    let command;
+    if (!COMPLEX_SHELL_RE.test(cmd)) {
+      command = `egc run ${cmd}`;
+    } else if (process.platform !== 'win32' && !hasBackgrounding(cmd) && !hasRedirection(cmd)) {
+      // shSingleQuote is POSIX escaping; cmd.exe does not treat single quotes as
+      // quoting, so on Windows a pipeline is left untouched (fail-open) rather
+      // than risking a mangled command.
+      command = `egc run --shell ${shSingleQuote(cmd)}`;
+    } else {
       return JSON.stringify(input);
     }
 
@@ -64,7 +93,7 @@ function run(rawInput) {
       ...input,
       tool_input: {
         ...input.tool_input,
-        command: `egc run ${cmd}`,
+        command,
       },
     });
   } catch {

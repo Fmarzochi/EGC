@@ -19,6 +19,7 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 | Surface | Specified by | Validated by |
 |---------|--------------|--------------|
 | Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` |
+| Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | gap: reference `egc export` / `egc import` pair planned |
 | Hooks contract | `schemas/hooks.schema.json` | `tests/hooks/hooks.test.js` |
 | Plugin manifest | `schemas/plugin.schema.json` | `tests/plugin-manifest.test.js` |
 | Runtime map | `schemas/runtime-map.schema.json` | `tests/test_orchestrator.py` |
@@ -36,6 +37,8 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 ## Entry points by audience
 
 **Adding a new harness?** Read [`integration-tiers.md`](./integration-tiers.md).
+
+**Implementing portable agent memory?** Read [`agent-memory-interchange.md`](./agent-memory-interchange.md).
 
 **Implementing a custom hook?** Read `schemas/hooks.schema.json` and `tests/hooks/hooks.test.js` for working examples.
 

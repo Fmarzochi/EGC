@@ -22,6 +22,8 @@ const path = require('node:path');
 const {
   createGateGuardHookMergeOperationForDestination,
   resolveGateGuardHookScriptDestination,
+  createCrusherHookMergeOperationForDestination,
+  resolveCrusherHookScriptDestination,
 } = require('./claude-settings-hooks');
 
 function resolveAntigravityProjectHooksFilePath(projectRoot) {
@@ -48,9 +50,20 @@ function createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher) {
   );
 }
 
+// Token Crusher: same hooks.json shape, registered at the project hooks file
+// (.agents/hooks.json) pointing at the crusher hook under the adapter root.
+function createProjectCrusherHookMergeOperation(targetRoot, projectRoot, matcher) {
+  return createCrusherHookMergeOperationForDestination(
+    resolveAntigravityProjectHooksFilePath(projectRoot),
+    resolveCrusherHookScriptDestination(targetRoot),
+    matcher
+  );
+}
+
 module.exports = {
   createGlobalGateGuardHookMergeOperation,
   createProjectGateGuardHookMergeOperation,
+  createProjectCrusherHookMergeOperation,
   resolveAntigravityGlobalHooksFilePath,
   resolveAntigravityProjectHooksFilePath,
 };

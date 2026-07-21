@@ -1,15 +1,18 @@
 const aiderProject = require('./aider-project');
 const amazonqProject = require('./amazonq-project');
+const roocodeProject = require('./roocode-project');
 const antigravityProject = require('./antigravity-project');
 const claudeCodeHome = require('./claude-home');
 const egcHome = require('./gemini-home');
 const codebuddyProject = require('./codebuddy-project');
+const clineProject = require('./cline-project');
 const codexHome = require('./codex-home');
 const cursorProject = require('./cursor-project');
 const geminiProject = require('./gemini-project');
 const gooseHome = require('./goose-home');
 const kiroHome = require('./kiro-home');
 const openhandsHome = require('./openhands-home');
+const qwenProject = require('./qwen-project');
 const kiroProject = require('./kiro-project');
 const opencodeHome = require('./opencode-home');
 const windsurfHome = require('./windsurf-home');
@@ -30,13 +33,16 @@ const ADAPTERS = Object.freeze([
   cursorProject,
   antigravityProject,
   amazonqProject,
+  roocodeProject,
   aiderProject,
   codexHome,
   gooseHome,
   openhandsHome,
+  qwenProject,
   geminiProject,
   opencodeHome,
   codebuddyProject,
+  clineProject,
   kiroHome,
   kiroProject,
   windsurfHome,
