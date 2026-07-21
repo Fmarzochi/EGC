@@ -1864,6 +1864,63 @@ function runTests() {
     assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
   })) passed++; else failed++;
 
+  if (test('resolves roocode adapter root to .roo/rules and install-state path', () => {
+    const adapter = getInstallTargetAdapter('roocode');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'roocode-project');
+    assert.strictEqual(adapter.target, 'roocode');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.roo', 'rules'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.roo', 'rules', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('roocode adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('roocode');
+    const byId = getInstallTargetAdapter('roocode-project');
+
+    assert.strictEqual(byTarget.id, 'roocode-project');
+    assert.strictEqual(byId.id, 'roocode-project');
+    assert.ok(byTarget.supports('roocode'));
+    assert.ok(byTarget.supports('roocode-project'));
+  })) passed++; else failed++;
+
+  if (test('roocode adapter preserves category structure under .roo/rules/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'roocode',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'roocode-project');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(
+          projectRoot,
+          '.roo',
+          'rules',
+          'skills',
+          'workflow',
+          'tdd-workflow'
+        )
+      )),
+      'Should preserve skills/<category>/<name> structure under .roo/rules/'
+    );
+  })) passed++; else failed++;
+
+  if (test('roocode adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('roocode'), 'Should include roocode target');
+  })) passed++; else failed++;
+
   if (test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('openhands');
     const homeDir = '/Users/example';
