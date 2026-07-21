@@ -7,6 +7,7 @@ source and default model, so the EGC runtime stays multi-provider without
 re-implementing the wire protocol. All model selection still flows through
 :class:`ModelResolver`.
 """
+
 from __future__ import annotations
 
 import os
@@ -17,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover - SDK optional
     OpenAI = None  # type: ignore[assignment]
 
-from llm.core.interface import AuthenticationError, LLMProvider
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMProvider
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
@@ -29,15 +30,20 @@ _DEFAULT_MODEL = "openai/gpt-oss-120b"
 class GroqProvider(OpenAIProvider):
     provider_type = ProviderType.GROQ
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, api_key: str | None = None, base_url: str | None = None, **kwargs: Any
+    ) -> None:
         if OpenAI is None:  # NOSONAR
             raise ImportError("openai package is required to use GroqProvider")
         key = api_key or os.environ.get("GROQ_API_KEY")
         if not key:
-            raise AuthenticationError("No Groq API key provided", provider=ProviderType.GROQ)
+            raise AuthenticationError(
+                "No Groq API key provided", provider=ProviderType.GROQ
+            )
         self.client = OpenAI(
             api_key=key,
             base_url=base_url or os.environ.get("GROQ_BASE_URL") or GROQ_BASE_URL,
+            timeout=CLIENT_TIMEOUT,
         )
         self._models = ModelResolver.model_infos("groq") or [
             ModelInfo(

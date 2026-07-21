@@ -8,18 +8,27 @@ from typing import Any
 
 try:
     from openai import OpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:
     _OPENAI_AVAILABLE = False
 
 from llm.core.interface import (
+    CLIENT_TIMEOUT,
     AuthenticationError,
     ContextLengthError,
     LLMError,
     LLMProvider,
     RateLimitError,
 )
-from llm.core.types import LLMInput, LLMOutput, Message, ModelInfo, ProviderType, ToolCall
+from llm.core.types import (
+    LLMInput,
+    LLMOutput,
+    Message,
+    ModelInfo,
+    ProviderType,
+    ToolCall,
+)
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
 
@@ -34,7 +43,12 @@ class OpenAIProvider(LLMProvider):
                 "Install with: pip install everything-gemini[openai]"
             )
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"), base_url=base_url)
+
+        self.client = OpenAI(
+            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+            base_url=base_url,
+            timeout=CLIENT_TIMEOUT,
+        )
         self._models = [
             ModelInfo(
                 name="gpt-4o",
@@ -77,10 +91,14 @@ class OpenAIProvider(LLMProvider):
         calls = []
         for tc in choice.message.tool_calls:
             try:
-                args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                args = (
+                    json.loads(tc.function.arguments) if tc.function.arguments else {}
+                )
             except json.JSONDecodeError:
                 args = {}
-            calls.append(ToolCall(id=tc.id or "", name=tc.function.name, arguments=args))
+            calls.append(
+                ToolCall(id=tc.id or "", name=tc.function.name, arguments=args)
+            )
         return calls
 
     def _map_error(self, e: Exception) -> None:
@@ -137,7 +155,10 @@ class OpenAIProvider(LLMProvider):
                 params["tools"] = [tool.to_dict() for tool in input.tools]
             response = self.client.chat.completions.create(**params)
             if not response.choices:
-                raise LLMError("The provider returned an empty choices list", provider=self.provider_type)
+                raise LLMError(
+                    "The provider returned an empty choices list",
+                    provider=self.provider_type,
+                )
             choice = response.choices[0]
             # Some responses omit usage entirely (proxy/gateway upstream of this provider).
             # Degrade to zeros rather than crash.
