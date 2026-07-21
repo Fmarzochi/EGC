@@ -1,10 +1,11 @@
 """Tests for VertexAIProvider."""
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm.core.interface import AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
 from llm.core.types import LLMInput, Message, ProviderType, Role
 from llm.providers import gemini as gemini_module
 from llm.providers.vertex_ai import VertexAIProvider
@@ -56,7 +57,9 @@ def test_provider_type_is_vertex_ai(provider: VertexAIProvider) -> None:
 
 
 @pytest.mark.unit
-def test_missing_project_raises_authentication_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_project_raises_authentication_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     with patch("llm.providers.vertex_ai.genai") as mock_genai:
         mock_genai.Client.return_value = MagicMock()
@@ -73,7 +76,10 @@ def test_project_and_location_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
         mock_genai.Client.return_value = MagicMock()
         provider = VertexAIProvider()
     mock_genai.Client.assert_called_once_with(
-        vertexai=True, project="my-gcp-project", location="europe-west4"
+        vertexai=True,
+        project="my-gcp-project",
+        location="europe-west4",
+        http_options={"timeout": int(CLIENT_TIMEOUT * 1000)},
     )
     assert provider._project == "my-gcp-project"
     assert provider._location == "europe-west4"
@@ -99,7 +105,9 @@ def test_explicit_project_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_list_models_reports_vertex_ai_not_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_models_reports_vertex_ai_not_gemini(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Regression test for audit EGC-128 (medium): model_infos("gemini") is
     reused for the shared catalog, but each ModelInfo comes back tagged
     provider=GEMINI from the registry. Any usage/cost telemetry grouping by
@@ -115,7 +123,9 @@ def test_list_models_reports_vertex_ai_not_gemini(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_validate_config_true_when_project_and_location_set(provider: VertexAIProvider) -> None:
+def test_validate_config_true_when_project_and_location_set(
+    provider: VertexAIProvider,
+) -> None:
     assert provider.validate_config() is True
 
 
@@ -132,20 +142,28 @@ def test_validate_config_false_when_no_location(provider: VertexAIProvider) -> N
 
 
 @pytest.mark.unit
-def test_generate_returns_text_via_shared_gemini_logic(provider: VertexAIProvider) -> None:
+def test_generate_returns_text_via_shared_gemini_logic(
+    provider: VertexAIProvider,
+) -> None:
     """generate() reuses GeminiProvider's message/response handling."""
     with patch.object(gemini_module, "types", _TypesStub):
-        provider.client.models.generate_content.return_value = _gemini_response("hello vertex")
+        provider.client.models.generate_content.return_value = _gemini_response(
+            "hello vertex"
+        )
         result = provider.generate(_simple_input())
     assert result.content == "hello vertex"
 
 
 @pytest.mark.unit
-def test_empty_choices_style_error_is_retagged_as_vertex_ai(provider: VertexAIProvider) -> None:
+def test_empty_choices_style_error_is_retagged_as_vertex_ai(
+    provider: VertexAIProvider,
+) -> None:
     """Errors raised by the inherited generate() must be re-tagged to VERTEX_AI,
     not left as GEMINI, while preserving the original exception subclass."""
     with patch.object(gemini_module, "types", _TypesStub):
-        provider.client.models.generate_content.side_effect = RuntimeError("401 unauthorized")
+        provider.client.models.generate_content.side_effect = RuntimeError(
+            "401 unauthorized"
+        )
         with pytest.raises(LLMError) as exc:
             provider.generate(_simple_input())
     assert exc.value.provider == ProviderType.VERTEX_AI
@@ -161,6 +179,7 @@ def test_vertex_ai_in_provider_type_enum() -> None:
 def test_get_provider_resolves_vertex_ai(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-gcp-project")
     from llm.providers.resolver import get_provider
+
     with patch("llm.providers.vertex_ai.genai") as mock_genai:
         mock_genai.Client.return_value = MagicMock()
         p = get_provider("vertex_ai")
@@ -172,4 +191,7 @@ def test_get_default_model_reuses_gemini_catalog(provider: VertexAIProvider) -> 
     """Vertex AI serves the same Gemini model family; get_default_model()
     must not return a hardcoded or separate model ID."""
     from llm.core.model_resolver import ModelResolver
-    assert provider.get_default_model() == ModelResolver.resolve(None, provider="gemini")
+
+    assert provider.get_default_model() == ModelResolver.resolve(
+        None, provider="gemini"
+    )
