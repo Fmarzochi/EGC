@@ -390,7 +390,7 @@ test('static file added after startup is served, traversal still 404 (EGC#918)',
     });
 
     const finish = (err) => {
-      try { fs.unlinkSync(filePath); } catch (_) {}
+      try { fs.unlinkSync(filePath); } catch (_) { /* best-effort cleanup */ }
       cleanup(err);
     };
 
@@ -433,7 +433,7 @@ test('debounce: burst of misses triggers at most one rebuild per interval (EGC#9
     });
 
     const finish = (err) => {
-      try { fs.unlinkSync(filePath); } catch (_) {}
+      try { fs.unlinkSync(filePath); } catch (_) { /* best-effort cleanup */ }
       cleanup(err);
     };
 

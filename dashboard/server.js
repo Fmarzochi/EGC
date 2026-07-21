@@ -101,12 +101,12 @@ function manifestMtime(dir) {
 }
 let STATIC_FILES = buildStaticManifest(PUBLIC) || new Map();
 
-// Late-added static files (e.g. dropped in after an in-place package upgrade
-// while the daemon stays up) must be served without a restart. The manifest
-// also doubles as the path-traversal guard, so we NEVER resolve raw request
-// paths against the filesystem - on a miss we rebuild the manifest from a
+// Late-added static files (dropped in after an in-place package upgrade while
+// the daemon stays up) must be served without a restart. The manifest also
+// doubles as the path-traversal guard, so raw request paths are never resolved
+// against the filesystem directly - on a miss the manifest is rebuilt from a
 // directory scan, debounced so a burst of misses refreshes at most once per
-// few seconds. See EGC#918, EGC#928 for the concurrency edge-case fix (wrap readdirSync in try/catch).
+// interval. See EGC#918, EGC#928 for the concurrency edge-case fix.
 let staticRefreshAt = 0;
 const STATIC_REFRESH_INTERVAL_MS = 3000;
 function refreshStaticManifestIfStale() {
@@ -143,7 +143,7 @@ function detectOperator() {
 }
 const OPERATOR = detectOperator();
 
-// Pricing per 1M tokens - loaded from prices.json (configurable)
+// Pricing per 1M tokens — loaded from prices.json (configurable)
 const PRICES_PATH = path.join(__dirname, 'prices.json');
 const MODEL_PRICES = {};
 function loadPrices() {
@@ -161,7 +161,7 @@ function loadPrices() {
 loadPrices();
 fs.watchFile(PRICES_PATH, () => loadPrices());
 
-// Shared accumulator - fresh state, production logic
+// Shared accumulator — fresh state, production logic
 const ACC = createAccumulator(MODEL_PRICES);
 const { providerState, sessionHistory, getProvider, accumulateEvent, calcCost, CAPABILITIES } = ACC;
 
@@ -175,10 +175,10 @@ setInterval(() => {
   }
 }, 15_000);
 
-// ?? WebSocket clients ???????????????????????????????????????
+// ── WebSocket clients ───────────────────────────────────────
 const clients = new Set();
 
-// ?? HTTP server ?????????????????????????????????????????????
+// ── HTTP server ─────────────────────────────────────────────
 const server = http.createServer((req, res) => {
   const reqOrigin = req.headers.origin || '';
   res.setHeader('Access-Control-Allow-Origin',
@@ -187,7 +187,7 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
-  // ?? POST /event ?????????????????????????????????????????
+  // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
     const chunks = [];
     let currentSize = 0;
@@ -234,14 +234,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ?? GET /capabilities ????????????????????????????????????
+  // ── GET /capabilities ────────────────────────────────────
   if (req.method === 'GET' && req.url === '/capabilities') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(CAPABILITIES));
     return;
   }
 
-  // ?? GET /telemetry ???????????????????????????????????????
+  // ── GET /telemetry ───────────────────────────────────────
   if (req.method === 'GET' && req.url === '/telemetry') {
     const result = {};
     for (const [ide, p] of Object.entries(providerState)) {
@@ -273,14 +273,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-// ?? GET /replay/sessions ?????????????????????????????
+// ── GET /replay/sessions ─────────────────────────────
   if (req.method === 'GET' && req.url === '/replay/sessions') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(ACC.getReplaySessions()));
     return;
   }
 
-  // ?? GET /replay/events?id=<sessionId> ????????????????
+  // ── GET /replay/events?id=<sessionId> ────────────────
   if (req.method === 'GET' && req.url.startsWith('/replay/events')) {
     const urlObj = new URL(req.url, 'http://localhost');
     const sessionId = urlObj.searchParams.get('id');
@@ -300,7 +300,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ?? GET /session-history ???????????????????????????????
+  // ── GET /session-history ───────────────────────────────
 if (req.method === 'GET' && req.url === '/session-history') {
 
   res.writeHead(200, {
@@ -311,14 +311,14 @@ if (req.method === 'GET' && req.url === '/session-history') {
   return;
 }
 
-  // ?? GET /prices ??????????????????????????????????????????
+  // ── GET /prices ──────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/prices') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(MODEL_PRICES));
     return;
   }
 
-  // ?? GET /cost-summary [? range=today|week|month|all] ????????????????
+  // ── GET /cost-summary [? range=today|week|month|all] ────────────────
   if (req.method === 'GET' && (req.url === '/cost-summary' || req.url.startsWith('/cost-summary?'))) {
     const urlObj = new URL(req.url, 'http://localhost');
     const range  = urlObj.searchParams.get('range') || 'all';
@@ -387,7 +387,7 @@ const grandTotal = Object.values(byIde).reduce(
     return;
   }
 
-  // ?? GET /stats ???????????????????????????????????????????
+  // ── GET /stats ───────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/stats') {
     const cwd       = process.cwd();
     const cwdName   = path.basename(cwd);
@@ -419,14 +419,14 @@ const grandTotal = Object.values(byIde).reduce(
     return;
   }
 
-  // ?? GET /ping ????????????????????????????????????????????
+  // ── GET /ping ────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ts: Date.now() }));
     return;
   }
 
-  // ?? GET /egc-logo.png ????????????????????????????????????
+  // ── GET /egc-logo.png ────────────────────────────────────
   if (req.method === 'GET' && req.url === '/egc-logo.png') {
     const logo = path.join(__dirname, '..', 'assets', 'images', 'egc-logo.png');
     if (fs.existsSync(logo)) {
@@ -438,7 +438,7 @@ const grandTotal = Object.values(byIde).reduce(
     return;
   }
 
-  // ?? GET /config.json ?????????????????????????????????????
+  // ── GET /config.json ─────────────────────────────────────
   if (req.method === 'GET' && req.url === '/config.json') {
     if (fs.existsSync(CFG)) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -450,13 +450,13 @@ const grandTotal = Object.values(byIde).reduce(
     return;
   }
 
-  // ?? Static files ?????????????????????????????????????????
+  // ── Static files ─────────────────────────────────────────
   let segment = (req.url === '/' ? '/index.html' : req.url).split('?')[0];
   try { segment = decodeURIComponent(segment); } catch (_) {}
   let filePath = STATIC_FILES.get(segment);
   if (!filePath) {
-    // File may have been added after startup; rebuild the manifest (guarded by
-    // a debounce so a burst of misses refreshes at most once per interval).
+    // File may have been added after startup; rebuild the manifest (debounced
+    // so a burst of misses refreshes at most once per interval).
     refreshStaticManifestIfStale();
     filePath = STATIC_FILES.get(segment);
   }
@@ -477,7 +477,7 @@ const grandTotal = Object.values(byIde).reduce(
   }
 });
 
-// ?? WebSocket ????????????????????????????????????????????????
+// ── WebSocket ────────────────────────────────────────────────
 try {
   const { WebSocketServer } = require('ws');
   const wss = new WebSocketServer({ server });
