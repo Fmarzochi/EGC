@@ -74,7 +74,9 @@ function buildStaticManifest(dir) {
   const manifest = new Map();
   if (!fs.existsSync(dir)) return manifest;
   function scan(current, base) {
-    for (const name of fs.readdirSync(current)) {
+    let entries;
+    try { entries = fs.readdirSync(current); } catch (_) { return; }
+    for (const name of entries) {
       const abs = path.join(current, name);
       const rel  = base + '/' + name;
       try {
@@ -100,7 +102,7 @@ let STATIC_FILES = buildStaticManifest(PUBLIC);
 // also doubles as the path-traversal guard, so we NEVER resolve raw request
 // paths against the filesystem — on a miss we rebuild the manifest from a
 // directory scan, debounced so a burst of misses refreshes at most once per
-// few seconds. See EGC#918.
+// few seconds. See EGC#918, EGC#928 for the concurrency edge-case fix (wrap readdirSync in try/catch).
 let staticRefreshAt = 0;
 const STATIC_REFRESH_INTERVAL_MS = 3000;
 function refreshStaticManifestIfStale() {
