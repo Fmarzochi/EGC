@@ -3,11 +3,14 @@ const path = require('node:path');
 const {
   createFlatRuleOperations,
   createInstallTargetAdapter,
+  createRemappedOperation,
   isForeignPlatformPath,
   planFlatSkillOperation,
 } = require('./helpers');
 const {
   createPreToolUseGateGuardHookMergeOperation,
+  createPreToolUseCrusherHookMergeOperation,
+  createCrusherScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 // CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
@@ -17,12 +20,23 @@ const {
 // same root the hooks-runtime module scaffolds scripts/hooks/
 // gateguard-fact-force.js and scripts/lib/utils.js into. So the generic
 // Claude merge helper is reusable here without modification.
-function createGateGuardOperations(targetRoot) {
+function createHookOperations(adapter, targetRoot) {
   return [
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Bash'),
+    // Token Crusher: CodeBuddy reads the same hooks.json schema as Claude Code,
+    // so an updatedInput rewrite applies. Scaffold the standalone crusher hook
+    // and its dependency tree explicitly (no content module carries them) and
+    // register it on Bash only, where there is shell output to compress.
+    ...createCrusherScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
+    createPreToolUseCrusherHookMergeOperation(targetRoot, 'Bash'),
   ];
 }
 
@@ -80,7 +94,7 @@ module.exports = createInstallTargetAdapter({
     // mirroring Claude Code's always-on hook registration.
     return [
       ...moduleOperations,
-      ...createGateGuardOperations(targetRoot),
+      ...createHookOperations(adapter, targetRoot),
     ];
   },
 });
