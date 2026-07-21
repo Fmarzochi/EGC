@@ -1,5 +1,6 @@
 const aiderProject = require('./aider-project');
 const amazonqProject = require('./amazonq-project');
+const roocodeProject = require('./roocode-project');
 const antigravityProject = require('./antigravity-project');
 const claudeCodeHome = require('./claude-home');
 const egcHome = require('./gemini-home');
@@ -31,6 +32,7 @@ const ADAPTERS = Object.freeze([
   cursorProject,
   antigravityProject,
   amazonqProject,
+  roocodeProject,
   aiderProject,
   codexHome,
   gooseHome,

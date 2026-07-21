@@ -7,8 +7,7 @@ const fs      = require('fs');
 const os      = require('os');
 const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
-
-const PORT   = 7890;
+const { PORT } = require('./port');
 const PUBLIC = path.join(__dirname, 'public');
 const CFG    = path.join(__dirname, 'config.json');
 
@@ -151,7 +150,7 @@ const clients = new Set();
 const server = http.createServer((req, res) => {
   const reqOrigin = req.headers.origin || '';
   res.setHeader('Access-Control-Allow-Origin',
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin) ? reqOrigin : 'http://localhost:7890');
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin) ? reqOrigin : `http://localhost:${PORT}`);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -424,7 +423,15 @@ const grandTotal = Object.values(byIde).reduce(
   if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(fs.readFileSync(filePath));
+    if (segment === '/index.html') {
+      // Inject the configured port so the frontend WebSocket connects to the
+      // correct address regardless of what EGC_PORT is set to.
+      const html = fs.readFileSync(filePath, 'utf8')
+        .replace('</head>', `<script>window.__EGC_PORT=${PORT};</script></head>`);
+      res.end(html);
+    } else {
+      res.end(fs.readFileSync(filePath));
+    }
   } else {
     res.writeHead(404); res.end('Not found');
   }

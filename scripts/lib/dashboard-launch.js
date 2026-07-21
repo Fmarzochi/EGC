@@ -8,8 +8,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const { spawn, spawnSync } = require('node:child_process');
+const { PORT } = require(path.join(__dirname, '..', '..', 'dashboard', 'port'));
 
-const DASHBOARD_URL = 'http://localhost:7890';
+const DASHBOARD_URL = `http://localhost:${PORT}`;
 
 function pingDashboard() {
   return new Promise(resolve => {
@@ -46,6 +47,7 @@ function launchDashboard({ rootDir, log = () => {} }) {
     const child = spawn(process.execPath, [dashboardScript], {
       detached: true,
       stdio: 'ignore',
+      env: { ...process.env, EGC_PORT: String(PORT) },
       ...(process.platform === 'win32' && { shell: true }),
     });
     child.unref();

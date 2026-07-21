@@ -6,6 +6,7 @@ const path = require('path');
 const http = require('http');
 const os   = require('os');
 const { readFileDelta } = require('./read-file-delta');
+const { PORT } = require('./port');
 
 const WATCH_PATHS = [
   path.join(os.homedir(), '.aider.chat.history.md'),
@@ -13,7 +14,6 @@ const WATCH_PATHS = [
   path.join(process.cwd(), '.aider.chat.history.md'),
 ];
 
-const PORT = 7890;
 let lastSizes = {};
 
 function post(ev) {

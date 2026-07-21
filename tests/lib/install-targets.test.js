@@ -720,6 +720,44 @@ function runTests() {
     assert.ok(libCopyOperation, 'Should copy gateguard-fact-force.js\'s only dependency alongside it');
   })) passed++; else failed++;
 
+  if (test('codex adapter also wires the Token Crusher into ~/.codex/hooks.json on the Bash matcher', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const codexHome = path.join(homeDir, '.codex');
+    const crusherScriptPath = path.join(codexHome, 'scripts', 'hooks', 'crusher-hook.js');
+
+    const crusherHookOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === crusherScriptPath
+    ));
+    assert.strictEqual(crusherHookOps.length, 1, 'Crusher is registered once, on Bash only (apply_patch has nothing to crush)');
+    assert.strictEqual(crusherHookOps[0].hookMatcher, 'Bash');
+    assert.strictEqual(crusherHookOps[0].destinationPath, path.join(codexHome, 'hooks.json'));
+
+    // The whole crusher dependency tree must be scaffolded so the requires resolve.
+    for (const src of [
+      'scripts/hooks/crusher-hook.js',
+      'scripts/hooks/pre-bash-crusher-rewrite.js',
+      'scripts/hooks/pretooluse-output.js',
+      'scripts/lib/crusher/engine.js',
+    ]) {
+      const op = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === src
+        && operation.destinationPath === path.join(codexHome, ...src.split('/'))
+      ));
+      assert.ok(op, `Should scaffold ${src} into ~/.codex`);
+    }
+  })) passed++; else failed++;
+
   for (const [target, expectedRootSegments] of [['continue', ['.continue']], ['continue-project', ['.continue']]]) {
     if (test(`${target} adapter wires GateGuard PreToolUse for Edit/Write/MultiEdit/Bash into settings.json`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
@@ -1483,6 +1521,47 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('crusher hook is registered on Bash and scaffolded for Copilot, Antigravity and Continue', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+      { target: 'continue', input: { homeDir }, hooksFilePath: path.join(homeDir, '.continue', 'settings.json'), root: path.join(homeDir, '.continue') },
+    ];
+
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const crusherScriptPath = path.join(root, 'scripts', 'hooks', 'crusher-hook.js');
+
+      const crusherOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'PreToolUse'
+        && operation.destinationPath === hooksFilePath
+        && operation.hookScriptPath === crusherScriptPath
+      ));
+      assert.strictEqual(crusherOps.length, 1, `${target}: crusher registered once`);
+      assert.strictEqual(crusherOps[0].hookMatcher, 'Bash', `${target}: crusher on Bash`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/crusher-hook.js'
+          && operation.destinationPath === crusherScriptPath
+        )),
+        `${target}: crusher hook script scaffolded`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/crusher/engine.js'
+          && operation.destinationPath === path.join(root, 'scripts', 'lib', 'crusher', 'engine.js')
+        )),
+        `${target}: crusher engine dependency scaffolded`
+      );
+    }
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
@@ -1510,6 +1589,42 @@ function runTests() {
       ['Bash', 'Edit', 'MultiEdit', 'Write'],
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for CodeBuddy'
     );
+  })) passed++; else failed++;
+
+  if (test('codebuddy adapter also registers the Token Crusher on Bash at .codebuddy/settings.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const settingsPath = path.join(projectRoot, '.codebuddy', 'settings.json');
+    const crusherScriptPath = path.join(projectRoot, '.codebuddy', 'scripts', 'hooks', 'crusher-hook.js');
+
+    const crusherOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === settingsPath
+      && operation.hookScriptPath === crusherScriptPath
+    ));
+    assert.strictEqual(crusherOps.length, 1, 'Crusher registered once, on Bash');
+    assert.strictEqual(crusherOps[0].hookMatcher, 'Bash');
+
+    for (const src of [
+      'scripts/hooks/crusher-hook.js',
+      'scripts/hooks/pre-bash-crusher-rewrite.js',
+      'scripts/hooks/pretooluse-output.js',
+      'scripts/lib/crusher/engine.js',
+    ]) {
+      const op = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === src
+        && operation.destinationPath === path.join(projectRoot, '.codebuddy', ...src.split('/'))
+      ));
+      assert.ok(op, `Should scaffold ${src} into .codebuddy`);
+    }
   })) passed++; else failed++;
 
   if (test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
@@ -1862,6 +1977,63 @@ function runTests() {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
+  })) passed++; else failed++;
+
+  if (test('resolves roocode adapter root to .roo/rules and install-state path', () => {
+    const adapter = getInstallTargetAdapter('roocode');
+    const projectRoot = '/workspace/app';
+    const root = adapter.resolveRoot({ projectRoot });
+    const statePath = adapter.getInstallStatePath({ projectRoot });
+
+    assert.strictEqual(adapter.id, 'roocode-project');
+    assert.strictEqual(adapter.target, 'roocode');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(root, path.join(projectRoot, '.roo', 'rules'));
+    assert.strictEqual(statePath, path.join(projectRoot, '.roo', 'rules', 'egc-install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('roocode adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('roocode');
+    const byId = getInstallTargetAdapter('roocode-project');
+
+    assert.strictEqual(byTarget.id, 'roocode-project');
+    assert.strictEqual(byId.id, 'roocode-project');
+    assert.ok(byTarget.supports('roocode'));
+    assert.ok(byTarget.supports('roocode-project'));
+  })) passed++; else failed++;
+
+  if (test('roocode adapter preserves category structure under .roo/rules/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'roocode',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'roocode-project');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(
+          projectRoot,
+          '.roo',
+          'rules',
+          'skills',
+          'workflow',
+          'tdd-workflow'
+        )
+      )),
+      'Should preserve skills/<category>/<name> structure under .roo/rules/'
+    );
+  })) passed++; else failed++;
+
+  if (test('roocode adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('roocode'), 'Should include roocode target');
   })) passed++; else failed++;
 
   if (test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {

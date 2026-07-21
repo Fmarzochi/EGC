@@ -10,9 +10,12 @@ const {
 const {
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  CRUSHER_HOOK_MODULE_ID,
+  CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_OPERATION_KIND,
   PRE_TOOL_USE_EVENT,
   createGateGuardScriptCopyOperations,
+  createCrusherScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 // Codex CLI's skills root (~/.agents, this adapter's own resolveRoot()) and
@@ -39,11 +42,11 @@ function resolveCodexHome(input) {
   return path.join(input.homeDir || os.homedir(), '.codex');
 }
 
-function buildCodexPreToolUseMergeOperation(codexHome, hookScriptPath, matcher) {
+function buildCodexPreToolUseMergeOperation(codexHome, moduleId, sourceRelativePath, hookScriptPath, matcher) {
   return {
     kind: HOOK_OPERATION_KIND,
-    moduleId: GATEGUARD_HOOK_MODULE_ID,
-    sourceRelativePath: GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    moduleId,
+    sourceRelativePath,
     destinationPath: path.join(codexHome, 'hooks.json'),
     strategy: HOOK_OPERATION_KIND,
     ownership: 'managed',
@@ -67,10 +70,41 @@ function createCodexGateGuardOperations(adapter, codexHome) {
   // are matcher aliases only, per codex-rs/core/src/tools/hook_names.rs);
   // "Bash" is used verbatim for both the legacy shell tool and unified_exec.
   const mergeOperations = ['apply_patch', 'Bash'].map(matcher => (
-    buildCodexPreToolUseMergeOperation(codexHome, hookScriptPath, matcher)
+    buildCodexPreToolUseMergeOperation(
+      codexHome,
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      hookScriptPath,
+      matcher
+    )
   ));
 
   return [...copyOperations, ...mergeOperations];
+}
+
+// Token Crusher for Codex: Codex reads the same hooks.json schema as Claude
+// Code, so a crusher-hook.js rewrite returned as
+// hookSpecificOutput.updatedInput.command is applied before the command runs.
+// Only the Bash matcher: the crusher compresses shell output, and apply_patch
+// is a file edit with nothing to crush.
+function createCodexCrusherOperations(adapter, codexHome) {
+  const hookScriptPath = path.join(codexHome, 'scripts', 'hooks', 'crusher-hook.js');
+  const copyOperations = createCrusherScriptCopyOperations(
+    (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    codexHome
+  );
+
+  const mergeOperation = buildCodexPreToolUseMergeOperation(
+    codexHome,
+    CRUSHER_HOOK_MODULE_ID,
+    CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    'Bash'
+  );
+
+  return [...copyOperations, mergeOperation];
 }
 
 module.exports = createInstallTargetAdapter({
@@ -102,9 +136,11 @@ module.exports = createInstallTargetAdapter({
       return paths.map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
     });
 
+    const codexHome = resolveCodexHome(planningInput);
     return [
       ...moduleOperations,
-      ...createCodexGateGuardOperations(adapter, resolveCodexHome(planningInput)),
+      ...createCodexGateGuardOperations(adapter, codexHome),
+      ...createCodexCrusherOperations(adapter, codexHome),
     ];
   },
 });

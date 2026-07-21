@@ -31,6 +31,8 @@ const ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-router.js'
 const ROUTER_HOOK_MODULE_ID = 'claude-prompt-router-hook';
 const GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/gateguard-fact-force.js';
 const GATEGUARD_HOOK_MODULE_ID = 'claude-gateguard-fact-force-hook';
+const CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/crusher-hook.js';
+const CRUSHER_HOOK_MODULE_ID = 'egc-crusher-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -635,6 +637,49 @@ function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot
   ];
 }
 
+// Token Crusher hook (crusher-hook.js): standalone PreToolUse rewrite for hosts
+// other than Claude Code that read hooks.json with the same schema (Codex,
+// CodeBuddy). Its dependency tree is crusher-hook.js -> pre-bash-crusher-rewrite
+// -> lib/crusher/engine, plus the shared pretooluse-output envelope. All are
+// scaffolded together, preserving their relative paths so the requires resolve.
+const CRUSHER_HOOK_LIB_SOURCES = [
+  'scripts/hooks/pre-bash-crusher-rewrite.js',
+  'scripts/hooks/pretooluse-output.js',
+  'scripts/lib/crusher/engine.js',
+];
+
+function resolveCrusherHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'crusher-hook.js');
+}
+
+function createPreToolUseCrusherHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveCrusherHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    CRUSHER_HOOK_MODULE_ID,
+    CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    matcher
+  );
+}
+
+function createCrusherScriptCopyOperations(createRemappedOperation, targetRoot) {
+  return [
+    createRemappedOperation(
+      CRUSHER_HOOK_MODULE_ID,
+      CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveCrusherHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    ...CRUSHER_HOOK_LIB_SOURCES.map(src => createRemappedOperation(
+      CRUSHER_HOOK_MODULE_ID,
+      src,
+      path.join(targetRoot, ...src.split('/')),
+      { strategy: 'preserve-relative-path' }
+    )),
+  ];
+}
+
 // Same merge operation shape as above, but for targets whose hooks.json
 // location cannot be derived from resolveSettingsPath(targetRoot) the way
 // Claude Code's can (e.g. Copilot's ~/.copilot/hooks/hooks.json, or
@@ -655,12 +700,32 @@ function createGateGuardHookMergeOperationForDestination(destinationPath, hookSc
   };
 }
 
+// Crusher variant of the destination-driven merge op, for hosts whose
+// hooks.json path is not derivable from targetRoot (Copilot ~/.copilot/hooks,
+// Antigravity's project/global split). Same Claude hooks.json schema.
+function createCrusherHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: CRUSHER_HOOK_MODULE_ID,
+    sourceRelativePath: CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+  };
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+  CRUSHER_HOOK_MODULE_ID,
+  CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -697,6 +762,10 @@ module.exports = {
   createPreToolUseBashDispatcherHookMergeOperation,
   createGateGuardScriptCopyOperations,
   createPreToolUseGateGuardHookMergeOperation,
+  createCrusherScriptCopyOperations,
+  createPreToolUseCrusherHookMergeOperation,
+  createCrusherHookMergeOperationForDestination,
+  resolveCrusherHookScriptDestination,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,

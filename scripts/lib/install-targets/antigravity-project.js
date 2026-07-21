@@ -12,9 +12,11 @@ const {
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   resolveGateGuardHookScriptDestination,
+  createCrusherScriptCopyOperations,
 } = require('../claude-settings-hooks');
 const {
   createProjectGateGuardHookMergeOperation,
+  createProjectCrusherHookMergeOperation,
 } = require('../antigravity-settings-hooks');
 
 const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills', '.agents', 'AGENTS.md'];
@@ -60,6 +62,15 @@ function createGateGuardOperations(adapter, targetRoot, projectRoot) {
     createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'Write'),
     createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'MultiEdit'),
     createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'Bash'),
+    // Token Crusher: same hooks.json shape, scaffold the hook + deps under the
+    // adapter root and register it on Bash at .agents/hooks.json.
+    ...createCrusherScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
+    createProjectCrusherHookMergeOperation(targetRoot, projectRoot, 'Bash'),
   ];
 }
 

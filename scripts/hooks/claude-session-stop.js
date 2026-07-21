@@ -14,6 +14,9 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const _egcRaw = process.env.EGC_PORT;
+const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : NaN;
+const DASHBOARD_PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;
 
 const DEFAULT_INTERVAL_MINUTES = 30;
 
@@ -61,7 +64,7 @@ function shouldPromptSave(input, nowMs) {
 function post(ev, done) {
   const body = JSON.stringify(ev);
   const req = http.request(
-    { hostname: '127.0.0.1', port: 7890, path: '/event', method: 'POST',
+    { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
       timeout: 300 },
     () => done()
