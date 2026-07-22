@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-🌐 [English](../../README.md) · [العربية](../ar/README.md) · **Español** · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [简体中文](../zh-CN/README.md)
+🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · **Español** · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [简体中文](../zh-CN/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -80,7 +80,7 @@ Un panel en vivo con la actividad, los tokens y los costos de tus agentes arranc
 
 ---
 
-🌐 [English](../../README.md) · [العربية](../ar/README.md) · **Español** · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [简体中文](../zh-CN/README.md)
+🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · **Español** · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [简体中文](../zh-CN/README.md)
 
 ---
 
