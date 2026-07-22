@@ -8,10 +8,12 @@ from typing import Any
 from llm.core.interface import (
     AuthenticationError,
     ContextLengthError,
+    LLMError,
     LLMProvider,
     RateLimitError,
 )
 from llm.core.interface import CLIENT_TIMEOUT
+from llm.core.redact import redact_secrets
 from llm.core.types import (
     LLMInput,
     LLMOutput,
@@ -120,9 +122,15 @@ class OllamaProvider(LLMProvider):
             )
         except Exception as e:
             msg = redact_secrets(str(e))
-            if "401" in msg or "connection" in msg.lower():
+            if "401" in msg:
                 raise AuthenticationError(
-                    f"Ollama connection failed: {msg}", provider=ProviderType.OLLAMA
+                    f"Ollama authentication failed: {msg}", provider=ProviderType.OLLAMA
+                ) from e
+            if "connection" in msg.lower():
+                raise LLMError(
+                    f"Ollama connection failed: {msg}",
+                    provider=ProviderType.OLLAMA,
+                    code="connection_error",
                 ) from e
             if "429" in msg or "rate_limit" in msg.lower():
                 raise RateLimitError(msg, provider=ProviderType.OLLAMA) from e
@@ -138,3 +146,6 @@ class OllamaProvider(LLMProvider):
 
     def get_default_model(self) -> str:
         return self.default_model
+
+
+__all__ = ["OllamaProvider"]
