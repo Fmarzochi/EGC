@@ -68,12 +68,18 @@ function getAvailableLanguages() {
     .sort();
 }
 
-function buildTopSelector(langs) {
+function buildSelectorForLang(currentLang, langs) {
   const links = langs.map((code) => {
     const name = LANGUAGE_NAMES[code] || code.toUpperCase();
-    return `[${name}](translations/${code}/README.md)`;
+    if (code === currentLang) {
+      return `**${name}**`;
+    }
+    const relPath = currentLang === "en" ? `translations/${code}/README.md` : `../${code}/README.md`;
+    return `[${name}](${relPath})`;
   });
-  return `${TOP_START}\n\u{1F310} **English** · ${links.join(" · ")}\n${TOP_END}`;
+
+  const enName = currentLang === "en" ? "**English**" : "[English](../../README.md)";
+  return `\u{1F310} ${enName} · ${links.join(" · ")}`;
 }
 
 function replaceBlock(content, start, end, block) {
@@ -91,16 +97,42 @@ function extractBlock(content, start, end) {
 }
 
 function updateReadme() {
-  const readme = fs.readFileSync(README_PATH, "utf8");
-  const langs  = getAvailableLanguages();
+  const langs = getAvailableLanguages();
 
-  const updated = replaceBlock(readme, TOP_START, TOP_END, buildTopSelector(langs));
+  // 1. Update Root README
+  const enReadme = fs.readFileSync(README_PATH, "utf8");
+  const enSelector = `${TOP_START}\n${buildSelectorForLang("en", langs)}\n${TOP_END}`;
+  let updatedEn = replaceBlock(enReadme, TOP_START, TOP_END, enSelector);
+  
+  // Also update bottom selector in root README if present (matching line starting with 🌐)
+  const bottomSelectorEn = buildSelectorForLang("en", langs);
+  updatedEn = updatedEn.replace(/^🌐 .*$/m, bottomSelectorEn);
 
-  if (updated !== readme) {
-    fs.writeFileSync(README_PATH, updated, "utf8");
-    console.log(`Language selectors updated with ${langs.length} language(s): ${langs.join(", ")}`);
-  } else {
-    console.log("Language selectors already up to date.");
+  if (updatedEn !== enReadme) {
+    fs.writeFileSync(README_PATH, updatedEn, "utf8");
+    console.log(`Root README language selector updated with ${langs.length} language(s).`);
+  }
+
+  // 2. Update All Translation READMEs
+  for (const lang of langs) {
+    const filePath = path.join(TRANSLATIONS, lang, "README.md");
+    if (!fs.existsSync(filePath)) continue;
+
+    const content = fs.readFileSync(filePath, "utf8");
+    const langSelector = buildSelectorForLang(lang, langs);
+    const topBlock = `${TOP_START}\n${langSelector}\n${TOP_END}`;
+
+    let updated = content;
+    if (content.includes(TOP_START) && content.includes(TOP_END)) {
+      updated = replaceBlock(updated, TOP_START, TOP_END, topBlock);
+    }
+    // Update bottom selector (all lines starting with 🌐)
+    updated = updated.replace(/^🌐 .*$/gm, langSelector);
+
+    if (updated !== content) {
+      fs.writeFileSync(filePath, updated, "utf8");
+      console.log(`Updated language selectors (top and bottom) in translations/${lang}/README.md`);
+    }
   }
 }
 
