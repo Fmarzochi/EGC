@@ -106,7 +106,7 @@ function updateReadme() {
 
   // Also update bottom selector in root README if present (matching line starting with /u{1F310})
   const bottomSelectorEn = buildSelectorForLang('en', langs);
-  updatedEn = updatedEn.replace(/^\u{1F310} .*$/gm, bottomSelectorEn);
+  updatedEn = updatedEn.replace(/^\u{1F310} .*$/gmu, bottomSelectorEn);
 
   if (updatedEn !== enReadme) {
     fs.writeFileSync(README_PATH, updatedEn, 'utf8');
@@ -127,7 +127,7 @@ function updateReadme() {
       updated = replaceBlock(updated, TOP_START, TOP_END, topBlock);
     }
     // Update bottom selector (all lines starting with /u{1F310})
-    updated = updated.replace(/^\u{1F310} .*$/gm, langSelector);
+    updated = updated.replace(/^\u{1F310} .*$/gmu, langSelector);
 
     if (updated !== content) {
       fs.writeFileSync(filePath, updated, 'utf8');

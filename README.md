@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-🌐 **English** · [العربية](translations/ar/README.md) · [Deutsch](translations/de/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [简体中文](translations/zh-CN/README.md)
+🌐 **English** · [العربية](translations/ar/README.md) · [Deutsch](translations/de/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [Türkçe](translations/tr/README.md) · [简体中文](translations/zh-CN/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -79,7 +79,7 @@ There is no step two. Open any of your AI tools and just talk: "hi", "let's cont
 A live dashboard displaying agent activity, tokens, and costs spins up automatically right after installation. Prefer manual control? Every command is documented in the [installation guide](docs/installation.md): you will probably never need to type one.
 
 ---
-🌐 **English** · [العربية](translations/ar/README.md) · [Deutsch](translations/de/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [简体中文](translations/zh-CN/README.md)
+🌐 **English** · [العربية](translations/ar/README.md) · [Deutsch](translations/de/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [Türkçe](translations/tr/README.md) · [简体中文](translations/zh-CN/README.md)
 
 ---
 
