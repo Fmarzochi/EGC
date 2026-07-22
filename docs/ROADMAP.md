@@ -116,6 +116,8 @@ Closes the commit-privacy scope started in v1.1.12:
 - `stream=True` now raises `NotImplementedError` across the five remaining native providers (Claude, Cohere, Gemini, Ollama, Vertex AI), completing stream-guard coverage (#924, @hanu-14)
 - Dashboard serves static files added after startup without a restart, with a symlink guard and a debounced manifest rebuild that preserves the traversal protection (#928, @hanu-14)
 - French README translation, the 11th language, wired into every language selector (#948, @ankit24417-sys)
+- Turkish README translation, the 12th language, wired into every language selector (#970, @Iahmacun)
+- German README translation, the 13th language, wired into every language selector (#972, @rathaur-ankit)
 - High-severity advisories cleared: fast-uri and linkify-it across the root and mcp-server lockfiles (#967), and `@hono/node-server` forced to 2.x via npm override to close the last Dependabot and Scorecard findings (#968)
 - ClusterFuzzLite weekly schedule disabled while upstream is dead-locked for JavaScript, keeping manual `workflow_dispatch` (EGC#910)
 
