@@ -1,5 +1,5 @@
 <!-- LANGUAGE-SELECTOR-START -->
-🌐 **English** · [العربية](translations/ar/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [简体中文](translations/zh-CN/README.md)
+🌐 **English** · [العربية](translations/ar/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [Türkçe](translations/tr/README.md) · [简体中文](translations/zh-CN/README.md)
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
