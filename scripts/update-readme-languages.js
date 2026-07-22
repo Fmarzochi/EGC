@@ -106,7 +106,7 @@ function updateReadme() {
   
   // Also update bottom selector in root README if present (matching line starting with 🌐)
   const bottomSelectorEn = buildSelectorForLang("en", langs);
-  updatedEn = updatedEn.replace(/^🌐 .*$/m, bottomSelectorEn);
+  updatedEn = updatedEn.replace(/^🌐 .*$/gm, bottomSelectorEn);
 
   if (updatedEn !== enReadme) {
     fs.writeFileSync(README_PATH, updatedEn, "utf8");
