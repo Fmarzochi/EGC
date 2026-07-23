@@ -3,6 +3,18 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# npm strips the root package-lock.json from the published tarball, and the
+# guardian/memory lockfiles are not in package.json "files", so `npm ci` has no
+# lockfile during a clean `npm install -g @egchq/egc` + `egc install`. Use npm ci
+# only when a lockfile is present (git checkout) and fall back to npm install.
+install_deps() {
+  if [ -f package-lock.json ]; then
+    npm ci --silent
+  else
+    npm install --no-audit --no-fund --silent
+  fi
+}
+
 # Forward --help directly to the Node installer
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   node "$ROOT_DIR/scripts/install-apply.js" "$@"
@@ -48,7 +60,7 @@ if [ "$DRY_RUN" = false ]; then
   # Root dependencies (better-sqlite3 etc.)
   echo "  installing root dependencies..."
   cd "$ROOT_DIR"
-  npm ci --silent
+  install_deps
 
   # egc-guardian
   echo "  building egc-guardian..."
@@ -58,8 +70,12 @@ if [ "$DRY_RUN" = false ]; then
     exit 1
   fi
   cd "$GUARDIAN_DIR"
-  npm ci --silent
-  npm run build
+  install_deps
+  # The published package ships build/ but not src/, so only (re)build from a
+  # git checkout where the TypeScript sources are present.
+  if [ -d src ]; then
+    npm run build
+  fi
 
   # egc-memory
   echo "  building egc-memory..."
@@ -69,8 +85,11 @@ if [ "$DRY_RUN" = false ]; then
     exit 1
   fi
   cd "$MEMORY_DIR"
-  npm ci --silent
-  npm run build
+  install_deps
+  # Published package ships build/ but not src/; only build from a checkout.
+  if [ -d src ]; then
+    npm run build
+  fi
 
   # Initialize database and local directories
   echo "  initializing database..."
