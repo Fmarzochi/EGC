@@ -3,7 +3,7 @@
 EGC is a local-first MCP runtime that gives every AI coding agent a shared
 persistent memory (egc-memory), a safety layer that validates commands and
 writes before they run (egc-guardian), and shell-output compression (Token
-Crusher). It installs into 20 AI coding tools from one npm package
+Crusher). It installs into 23 AI coding tools from one npm package
 (@egchq/egc). Memory lives encrypted in ~/.egc on the user's machine and must
 never reach the repository.
 
