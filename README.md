@@ -16,7 +16,7 @@
 
 ---
 
-EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one, in Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (20 AI coding tools in total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
+EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one, in Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (23 AI coding tools in total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
 Every conversation builds your project's collective intelligence. Every agent inherits it. Every session gets smarter.
 
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **One command, zero config: memory stays local and encrypted on your machine, and never gets committed to git.**
 
 <div align="center">
-  <img src="assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
+  <img src="assets/gifs/install.gif" alt="One command installs EGC across 23 AI coding tools" width="800" />
 </div>
 
 [Full installation guide](docs/installation.md)
