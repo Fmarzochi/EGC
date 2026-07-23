@@ -11,7 +11,10 @@ install_deps() {
   if [ -f package-lock.json ]; then
     npm ci --silent
   else
-    npm install --no-audit --no-fund --silent
+    # No lockfile: install without running untrusted lifecycle scripts, then
+    # rebuild only the already-resolved native modules (e.g. better-sqlite3).
+    npm install --ignore-scripts --no-audit --no-fund --silent
+    npm rebuild --silent
   fi
 }
 
