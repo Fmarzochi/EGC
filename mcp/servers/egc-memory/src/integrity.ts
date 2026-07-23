@@ -32,8 +32,14 @@ export function loadOrCreateKey(): Buffer {
   }
 
   if (fs.existsSync(KEY_PATH)) {
+    let hex: string;
     try {
-      const hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
+      hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
+    } catch {
+      // fall through to regenerate if the file is unreadable
+      hex = '';
+    }
+    if (hex) {
       const key = Buffer.from(hex, 'hex');
       if (key.length === 32) {
         // Harden permissions even on existing key in case it was copied with wrong perms
@@ -41,8 +47,13 @@ export function loadOrCreateKey(): Buffer {
         try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
         return key;
       }
-    } catch {
-      // fall through to regenerate
+      // Do NOT silently regenerate on malformed key; that would invalidate
+      // every existing HMAC sidecar without a clear root-cause error.
+      // Matches encryption.ts loadOrCreateEncKey behavior.
+      throw new Error(
+        `HMAC key file at ${KEY_PATH} is malformed (expected 32 bytes, got ${key.length}). ` +
+        `Remove it to regenerate: rm "${KEY_PATH}"`
+      );
     }
   }
 

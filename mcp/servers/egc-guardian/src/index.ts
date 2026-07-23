@@ -349,16 +349,16 @@ async function handleOrchestrateTask(toolArgs: unknown) {
   const prompt = parsed.prompt;
   const files: string[] = parsed.filepaths ?? [];
 
-  // Read any provided file payloads
+  // Read any provided file payloads using the same hardened loader as
+  // reduce_context (TOCTOU-safe file-handle reads, per-file 10MB and
+  // aggregate 50MB size limits, isFile() check). See SEC-05/SEC-06.
   const rawPayloads: string[] = [];
+  let totalBytesLoaded = 0;
   for (const filePath of files) {
-    try {
-      const abs = path.resolve(filePath);
-      const realAbs = fs.realpathSync(abs);
-      if (!isProtectedPath(realAbs)) rawPayloads.push(fs.readFileSync(realAbs, 'utf8'));
-    } catch (err) {
-      console.error(`[EGC guardian] Failed to read file ${filePath}:`, err);
-    }
+    const loaded = await loadContextFileChunks(filePath, totalBytesLoaded);
+    if (!loaded) continue;
+    rawPayloads.push(...loaded.chunks);
+    totalBytesLoaded += loaded.bytes;
   }
 
   const pipeline = runCompressionPipeline(rawPayloads);

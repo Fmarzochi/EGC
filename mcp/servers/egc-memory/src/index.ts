@@ -646,7 +646,7 @@ async function runLessonDecaySweep(db: Database): Promise<number> {
   const rows = await db.all<LessonRow[]>('SELECT * FROM lessons WHERE archived = 0');
   let affected = 0;
   for (const row of rows) {
-    const decayed = computeLessonDecay(row.confidence, row.last_reinforced, row.created_at, now);
+    const decayed = computeLessonDecay(row.confidence, row.last_recalled, row.created_at, now);
     if (decayed === row.confidence) {
       continue;
     }
