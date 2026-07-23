@@ -1,7 +1,7 @@
 {
   "name": "@egchq/egc",
   "version": "1.1.15",
-  "description": "EGC is a local-first MCP runtime that gives every AI agent the same brain: persistent shared memory, security guardrails, and up to 90% token savings across 20 AI coding tools.",
+  "description": "EGC is a local-first MCP runtime that gives every AI agent the same brain: persistent shared memory, security guardrails, and up to 90% token savings across 23 AI coding tools.",
   "author": "Felipe Marzochi <fmarzochi@gmail.com> (https://github.com/Fmarzochi)",
   "license": "Apache-2.0",
   "prettier": {
