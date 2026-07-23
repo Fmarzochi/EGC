@@ -95,30 +95,25 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('installs deps without a lockfile and skips build when src/ is absent (regression #643)', () => {
+  if (test('install stays a pinned npm ci with shipped lockfiles (regression #643 + Scorecard #322)', () => {
     const script = fs.readFileSync(SCRIPT, 'utf8');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 
-    // A clean `npm install -g @egchq/egc` + `egc install` unpacks a tarball with
-    // no root/guardian/memory package-lock.json (npm strips the root lockfile and
-    // the sub-package lockfiles are not in package.json "files"), so a bare
-    // `npm ci` aborts before Guardian and Memory are ever installed.
+    // A clean `npm install -g @egchq/egc` + `egc install` unpacks a tarball where
+    // npm has stripped the root package-lock.json (its deps are already resolved by
+    // the global install). The sub-package lockfiles travel via package.json
+    // "files", so install_deps runs a pinned `npm ci` wherever a lockfile is
+    // present and never falls back to an unpinned `npm install` (which tripped
+    // Scorecard pinned dependencies and Sonar S6505).
     assert.ok(
       /install_deps\s*\(\)\s*\{/.test(script),
       'install.sh must define an install_deps helper'
     );
+    assert.ok(/npm ci/.test(script), 'install_deps must install with npm ci');
     assert.ok(
-      /-f\s+package-lock\.json/.test(script) && /npm install/.test(script),
-      'install_deps must fall back to npm install when no lockfile is present'
-    );
-
-    // npm ci may appear only inside install_deps, never as a bare install step.
-    const bareNpmCi = script
-      .split('\n')
-      .filter(line => /^\s*npm ci\b/.test(line));
-    assert.strictEqual(
-      bareNpmCi.length,
-      1,
-      `npm ci must live only inside install_deps (found ${bareNpmCi.length} occurrences)`
+      !/^\s*npm install\b/m.test(script),
+      'install.sh must not run npm install (unpinned): use npm ci so supply-chain pinning checks pass'
     );
 
     // The published package ships build/ but not src/, so the TypeScript build
@@ -127,6 +122,14 @@ function runTests() {
       /if\s+\[\s+-d\s+src\s+\]/.test(script),
       'npm run build must be guarded by an "if [ -d src ]" check'
     );
+
+    // The sub-package lockfiles must be published so `npm ci` finds them post-install.
+    for (const f of [
+      'mcp/servers/egc-guardian/package-lock.json',
+      'mcp/servers/egc-memory/package-lock.json'
+    ]) {
+      assert.ok(pkg.files.includes(f), `package.json "files" must publish ${f}`);
+    }
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
