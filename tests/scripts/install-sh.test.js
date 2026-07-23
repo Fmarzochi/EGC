@@ -95,6 +95,40 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('installs deps without a lockfile and skips build when src/ is absent (regression #643)', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    // A clean `npm install -g @egchq/egc` + `egc install` unpacks a tarball with
+    // no root/guardian/memory package-lock.json (npm strips the root lockfile and
+    // the sub-package lockfiles are not in package.json "files"), so a bare
+    // `npm ci` aborts before Guardian and Memory are ever installed.
+    assert.ok(
+      /install_deps\s*\(\)\s*\{/.test(script),
+      'install.sh must define an install_deps helper'
+    );
+    assert.ok(
+      /-f\s+package-lock\.json/.test(script) && /npm install/.test(script),
+      'install_deps must fall back to npm install when no lockfile is present'
+    );
+
+    // npm ci may appear only inside install_deps, never as a bare install step.
+    const bareNpmCi = script
+      .split('\n')
+      .filter(line => /^\s*npm ci\b/.test(line));
+    assert.strictEqual(
+      bareNpmCi.length,
+      1,
+      `npm ci must live only inside install_deps (found ${bareNpmCi.length} occurrences)`
+    );
+
+    // The published package ships build/ but not src/, so the TypeScript build
+    // must be guarded by a src/ presence check.
+    assert.ok(
+      /if\s+\[\s+-d\s+src\s+\]/.test(script),
+      'npm run build must be guarded by an "if [ -d src ]" check'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
