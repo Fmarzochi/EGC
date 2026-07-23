@@ -3,18 +3,13 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-# npm strips the root package-lock.json from the published tarball, and the
-# guardian/memory lockfiles are not in package.json "files", so `npm ci` has no
-# lockfile during a clean `npm install -g @egchq/egc` + `egc install`. Use npm ci
-# only when a lockfile is present (git checkout) and fall back to npm install.
+# npm strips the root package-lock.json from published tarballs, so a globally
+# installed package has no root lockfile (npm already resolved its deps during
+# `npm install -g`). The sub-package lockfiles travel via package.json "files",
+# so run a pinned `npm ci` wherever a lockfile is present and skip otherwise.
 install_deps() {
   if [ -f package-lock.json ]; then
     npm ci --silent
-  else
-    # No lockfile: install without running untrusted lifecycle scripts, then
-    # rebuild only the already-resolved native modules (e.g. better-sqlite3).
-    npm install --ignore-scripts --no-audit --no-fund --silent
-    npm rebuild --silent
   fi
 }
 

@@ -68,6 +68,8 @@ function buildExpectedPublishPaths(repoRoot) {
     "install.ps1",
     "schemas",
     "agent.yaml",
+    "mcp/servers/egc-guardian/package-lock.json",
+    "mcp/servers/egc-memory/package-lock.json",
   ]
 
   const combined = new Set(
