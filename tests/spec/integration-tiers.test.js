@@ -92,8 +92,8 @@ function testPublicHarnessCountMatchesRegistry() {
   const expectedPhrase = `${realHarnessCount} AI coding tools`;
   const sources = [
     ['README.md', fs.readFileSync(README_PATH, 'utf8')],
-    ['package.json description', JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')).description],
-    ['glama.json description', JSON.parse(fs.readFileSync(GLAMA_PATH, 'utf8')).description],
+    ['package.json description', JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')).description || ''],
+    ['glama.json description', JSON.parse(fs.readFileSync(GLAMA_PATH, 'utf8')).description || ''],
     ['.github/copilot-instructions.md', fs.readFileSync(COPILOT_INSTRUCTIONS_PATH, 'utf8')],
   ];
 
