@@ -32,18 +32,27 @@ export function loadOrCreateKey(): Buffer {
   }
 
   if (fs.existsSync(KEY_PATH)) {
+    let hex: string;
     try {
-      const hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
-      const key = Buffer.from(hex, 'hex');
-      if (key.length === 32) {
-        // Harden permissions even on existing key in case it was copied with wrong perms
-        try { fs.chmodSync(KEY_PATH, 0o600); } catch { /* best-effort */ }
-        try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
-        return key;
-      }
-    } catch {
-      // fall through to regenerate
+      hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
+    } catch (readErr: unknown) {
+      throw new Error(
+        `HMAC key file at ${KEY_PATH} exists but could not be read: ${(readErr as Error).message}`
+      );
     }
+
+    if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+      throw new Error(
+        `HMAC key file at ${KEY_PATH} is malformed (expected 64 hex characters). ` +
+        `Remove it to regenerate: rm "${KEY_PATH}"`
+      );
+    }
+
+    const key = Buffer.from(hex, 'hex');
+    // Harden permissions even on existing key in case it was copied with wrong perms
+    try { fs.chmodSync(KEY_PATH, 0o600); } catch { /* best-effort */ }
+    try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
+    return key;
   }
 
   // Generate a fresh key and persist it.

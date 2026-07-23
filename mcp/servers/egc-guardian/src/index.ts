@@ -270,9 +270,19 @@ async function loadContextFileChunks(filepath: string, totalBytesLoaded: number)
       }
 
       const content = await fileHandle.readFile('utf-8');
+      const actualBytes = Buffer.byteLength(content, 'utf-8');
+      if (actualBytes > MAX_FILE_SIZE) {
+        auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `file exceeds 10MB limit (${actualBytes} bytes)` });
+        return null;
+      }
+      if (totalBytesLoaded + actualBytes > MAX_TOTAL_SIZE) {
+        auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: `aggregate size exceeds 50MB limit` });
+        return null;
+      }
+
       // Split context into chunks/paragraphs to allow granular pruning
       const chunks = content.split('\n\n').filter(c => c.trim().length > 0);
-      return { chunks, bytes: Buffer.byteLength(content, 'utf8') };
+      return { chunks, bytes: actualBytes };
     } finally {
       await fileHandle.close();
     }
@@ -349,16 +359,18 @@ async function handleOrchestrateTask(toolArgs: unknown) {
   const prompt = parsed.prompt;
   const files: string[] = parsed.filepaths ?? [];
 
-  // Read any provided file payloads
+  // Read any provided file payloads using the same hardened loader as
+  // reduce_context (TOCTOU-safe file-handle reads, per-file 10MB and
+  // aggregate 50MB size limits, isFile() check). See SEC-05/SEC-06.
   const rawPayloads: string[] = [];
+  let totalBytesLoaded = 0;
+  let filesLoaded = 0;
   for (const filePath of files) {
-    try {
-      const abs = path.resolve(filePath);
-      const realAbs = fs.realpathSync(abs);
-      if (!isProtectedPath(realAbs)) rawPayloads.push(fs.readFileSync(realAbs, 'utf8'));
-    } catch (err) {
-      console.error(`[EGC guardian] Failed to read file ${filePath}:`, err);
-    }
+    const loaded = await loadContextFileChunks(filePath, totalBytesLoaded);
+    if (!loaded) continue;
+    rawPayloads.push(...loaded.chunks);
+    totalBytesLoaded += loaded.bytes;
+    filesLoaded++;
   }
 
   const pipeline = runCompressionPipeline(rawPayloads);
@@ -380,7 +392,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
     bytes_after: pipeline.bytes_after,
     savings_pct: pipeline.savings_pct,
         },
-        files_loaded: rawPayloads.length,
+        files_loaded: filesLoaded,
       }, null, 2),
     }],
   };
