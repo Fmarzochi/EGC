@@ -1,6 +1,7 @@
 /**
  * Validates docs/spec/integration-tiers.md matches reality:
  *   - All harnesses are listed, and the list's length matches SUPPORTED_INSTALL_TARGETS
+ *   - Public English metadata advertises the same harness count
  *   - Every Tier 1 target named in the doc is in SUPPORTED_INSTALL_TARGETS
  *   - Every Tier 2 harness has a real installer script
  *   - Tier 3 entries reference real injection paths in bootstrap-cognitive.js
@@ -12,6 +13,10 @@ const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'spec', 'integration-tiers.md');
+const README_PATH = path.join(REPO_ROOT, 'README.md');
+const PACKAGE_PATH = path.join(REPO_ROOT, 'package.json');
+const GLAMA_PATH = path.join(REPO_ROOT, 'glama.json');
+const COPILOT_INSTRUCTIONS_PATH = path.join(REPO_ROOT, '.github', 'copilot-instructions.md');
 
 const EXPECTED_HARNESSES = [
   'Claude Code',
@@ -24,8 +29,8 @@ const EXPECTED_HARNESSES = [
   'CodeBuddy',
   'Kiro',
   'Trae',
- 'Junie',
- 'Goose',
+  'Junie',
+  'Goose',
   'Amazon Q Developer CLI',
   'Roo Code',
   'OpenHands',
@@ -47,6 +52,13 @@ function loadDoc() {
   return fs.readFileSync(DOC_PATH, 'utf8');
 }
 
+function getSupportedHarnessCount() {
+  const { SUPPORTED_INSTALL_TARGETS } = require(
+    path.join(REPO_ROOT, 'scripts', 'lib', 'install-manifests.js'),
+  );
+  return SUPPORTED_INSTALL_TARGETS.filter(target => target !== 'egc').length;
+}
+
 function testDocListsAllHarnesses() {
   const doc = loadDoc();
   for (const harness of EXPECTED_HARNESSES) {
@@ -64,10 +76,7 @@ function testDocListsAllHarnesses() {
   // without adding it here fails loudly instead of this test silently
   // covering one fewer harness than actually exist. 'egc' itself isn't a
   // third-party harness name, so it's excluded from the count.
-  const { SUPPORTED_INSTALL_TARGETS } = require(
-    path.join(REPO_ROOT, 'scripts', 'lib', 'install-manifests.js'),
-  );
-  const realHarnessCount = SUPPORTED_INSTALL_TARGETS.filter(t => t !== 'egc').length;
+  const realHarnessCount = getSupportedHarnessCount();
   assert.strictEqual(
     EXPECTED_HARNESSES.length,
     realHarnessCount,
@@ -76,6 +85,29 @@ function testDocListsAllHarnesses() {
   );
 
   console.log(`  ✓ integration-tiers.md lists all ${EXPECTED_HARNESSES.length} harnesses (count verified against SUPPORTED_INSTALL_TARGETS)`);
+}
+
+function testPublicHarnessCountMatchesRegistry() {
+  const realHarnessCount = getSupportedHarnessCount();
+  const expectedPhrase = `${realHarnessCount} AI coding tools`;
+  const sources = [
+    ['README.md', fs.readFileSync(README_PATH, 'utf8')],
+    ['package.json description', JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')).description],
+    ['glama.json description', JSON.parse(fs.readFileSync(GLAMA_PATH, 'utf8')).description],
+    ['.github/copilot-instructions.md', fs.readFileSync(COPILOT_INSTRUCTIONS_PATH, 'utf8')],
+  ];
+
+  for (const [label, content] of sources) {
+    const advertisedCounts = content.match(/\b\d+ AI coding tools\b/g) || [];
+    assert.ok(advertisedCounts.length > 0, `${label} must advertise the supported AI coding tool count`);
+    assert.deepStrictEqual(
+      [...new Set(advertisedCounts)],
+      [expectedPhrase],
+      `${label} must advertise ${expectedPhrase}, found: ${advertisedCounts.join(', ')}`,
+    );
+  }
+
+  console.log(`  ✓ public English metadata advertises ${realHarnessCount} AI coding tools`);
 }
 
 function testTier1TargetsMatchSupportedInstallTargets() {
@@ -129,6 +161,7 @@ let passed = 0;
 let failed = 0;
 for (const test of [
   testDocListsAllHarnesses,
+  testPublicHarnessCountMatchesRegistry,
   testTier1TargetsMatchSupportedInstallTargets,
   testTier2InstallersExist,
   testClaudeCodeProtocolInjectionExists,
