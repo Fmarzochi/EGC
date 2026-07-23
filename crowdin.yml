@@ -7,3 +7,6 @@ base_path: "."
 files:
   - source: /README.md
     translation: /translations/%two_letters_code%/README.md
+    languages_mapping:
+      two_letters_code:
+        zh-CN: zh-CN
