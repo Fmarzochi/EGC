@@ -1,7 +1,7 @@
 {
   "$schema": "https://glama.ai/mcp/servers/schema.json",
   "name": "EGC",
-  "description": "Local MCP runtime that gives persistent cross-session memory to 20 AI coding tools (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, Kiro, VS Code Copilot, JetBrains Junie, and more). SQLite-backed state survives context resets, a user-wide global scope shares context across every project, and a session bus lets parallel sessions split territory with cooperative path locks. Bidirectional sync keeps all tool config files in sync. Install: npm install -g @egchq/egc",
+  "description": "Local MCP runtime that gives persistent cross-session memory to 23 AI coding tools (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, Amp, Kiro, VS Code Copilot, JetBrains Junie, and more). SQLite-backed state survives context resets, a user-wide global scope shares context across every project, and a session bus lets parallel sessions split territory with cooperative path locks. Bidirectional sync keeps all tool config files in sync. Install: npm install -g @egchq/egc",
   "license": "Apache-2.0",
   "homepage": "https://github.com/Fmarzochi/EGC",
   "repository": "https://github.com/Fmarzochi/EGC",
