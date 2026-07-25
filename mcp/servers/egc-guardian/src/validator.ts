@@ -216,7 +216,7 @@ export function validateCommandArgs(
     }
 
     case 'gh': {
-      if (args.includes('delete')) {
+      if (args.some(a => a.toLowerCase() === 'delete')) {
         return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
       }
       return { allowed: true, trust_level: 'SAFE_DEV' };
