@@ -123,7 +123,14 @@ Closes the commit-privacy scope started in v1.1.12:
 
 ## Unreleased (on main)
 
-_Nothing yet since v1.1.15._
+Landed on main since v1.1.15, not yet released:
+
+- Bare `egc install` from the published npm package fixed: `install.sh` falls back to `npm install` when the published tarball ships no root lockfile, and only builds when `src/` is present (#985, #986, closes #643)
+- Chinese Simplified mapped to `zh-CN` in Crowdin with the existing repo translations seeded (#988, closes #483)
+- Crowdin sync now writes to the canonical `translations/zh-CN/` path instead of recreating `translations/zh/` (#992)
+- Three runtime bugs from the #987 deep audit fixed: the `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani)
+- High-severity root lockfile advisories cleared: `brace-expansion` and `tar` (#992)
+- Supported-harness count kept in sync across the docs (#984)
 
 ## v1.2.0: Teams
 
@@ -137,7 +144,7 @@ Multi-developer workflows and shared context:
 
 ## v1.3.0: Growth
 
-- Community translations: German, French, Italian, Turkish, Ukrainian, Malay
+- Community translations: Ukrainian, Malay (German, French, Italian, and Turkish shipped across v1.1.14 and v1.1.15)
 - Per-project skill profiles and overrides
 - OSS-Fuzz integration for continuous fuzz testing
 
