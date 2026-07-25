@@ -36,7 +36,7 @@ npm install -g @egchq/egc && egc install
   <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
-[Tam kurulum rehberi](docs/installation.md)
+[Tam kurulum rehberi](../../docs/installation.md)
 
 ---
 
@@ -76,7 +76,7 @@ Bonus olarak EGC size 63 agent, 230 skill, 77 command ve ayrıca 111 rule'a eri�
 
 İkinci adım yok. AI araçlarınızdan herhangi birini açın ve herhangi bir dilde konuşmaya başlayın: "merhaba", "devam edelim", "bu kararı hatırla". Oturumlar anında bağlanır, bellek otomatik yüklenir ve açık olan her sekme diğerlerinin ne yaptığını zaten bilir: iki Cursor sekmesi, bir Claude Code terminali ve bir Antigravity oturumu aynı canlı context'i eşzamanlı olarak paylaşır.
 
-Agent etkinliğini, token'ları ve maliyetleri gösteren canlı bir dashboard kurulumdan hemen sonra otomatik olarak başlar. Manuel kontrol mü tercih ediyorsunuz? Her komut [kurulum rehberinde](docs/installation.md) belgelenmiştir; büyük olasılıkla hiçbirini yazmanız gerekmeyecek.
+Agent etkinliğini, token'ları ve maliyetleri gösteren canlı bir dashboard kurulumdan hemen sonra otomatik olarak başlar. Manuel kontrol mü tercih ediyorsunuz? Her komut [kurulum rehberinde](../../docs/installation.md) belgelenmiştir; büyük olasılıkla hiçbirini yazmanız gerekmeyecek.
 
 ---
 🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · [Español](../es/README.md) · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · **Türkçe** · [简体中文](../zh-CN/README.md)

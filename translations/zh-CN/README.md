@@ -1,5 +1,7 @@
 <!-- LANGUAGE-SELECTOR-START -->
+
 🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · [Español](../es/README.md) · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [Türkçe](../tr/README.md) · **简体中文**
+
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -10,15 +12,15 @@
 
 # EGC - 每个 AI Agent 的共享智脑
 
-**专为 AI 会话打造，自动跨 Agent 、IDE、终端同步的持久记忆中枢。无需复杂 prompt ，无需重建上下文，无需学习。**
+**所有 AI Agent、IDE、终端和会话都会自动共享持久记忆。 无需记忆提示词。 无需重新构建上下文。 直接对话即可。**
 
 </div>
 
 ---
 
-作为AI中台，EGC 绝非又一个平庸的记忆工具，它针对 AI 工作流原生打造，让每个AI Agent都能如指臂使，适用于 Cursor、Copilot、Claude Code、Codex、Aider 等 20 种 AI IDE 及终端 Agent 。EGC 原生支持 Claude、GPT-4o、Gemini、DeepSeek 与 Mistral 等 AI 模型，以及 Groq、Cohere 和 Vertex AI 等 AI 平台，还能通过 OpenRouter 接入 Qwen3、Llama 4 等更多模型。
+EGC 并非又一个记忆工具。 它是一个智能中枢，让每个 AI 都能像从项目第一天起就一直参与其中一样工作，适用于 Cursor、Copilot、Claude Code、Codex、Aider 以及任何终端 Agent（共支持 23 种 AI 编程工具）。 原生支持 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere 和 Vertex AI，还可通过 OpenRouter 接入 Qwen3、Llama 4 等更多模型。
 
-每轮交互都为项目沉淀群体智能。每个 Agent 都与之对齐。每次会话都提升更多效能。
+每次对话都在积累项目的集体智慧。 每个 Agent 都能继承这些信息。 每次会话都会变得更智能。
 
 ---
 
@@ -29,63 +31,54 @@ npm install -g @egchq/egc && egc install
 ```
 
 - **至多减少 90%冗余 token，大幅降低成本，确保 AI 在各会话间状态同步。**
-- **Guardian 组件：命令执行前主动校验，自动拦截危险写入行为，智能识别提示注入攻击。为每个 Agent 提供安全防护。**
+- **Guardian 组件：命令执行前主动校验，自动拦截危险写入行为，智能识别提示注入攻击。为每个 Agent 提供安全防护。** 每个共享智能中枢都内置安全防护层。\*\*
 - **一键启动，无需配置：记忆仅在本地加密存储，绝不误入 Git 仓库。**
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 23 AI coding tools" width="800" />
 </div>
+
 [完整安装指南](../../docs/installation.md)
 
 ---
 
-## 核心机制：EGC 运作原理
+## 深入智能中枢：EGC 如何运作
 
-EGC 并非工具的简单组合。它统合多种官能：记忆、理解、守护、过滤、协调，是统筹多 Agent 工作流的共享智脑。
+EGC 并非工具的简单集合，而是一个具备多种能力的智能中枢。 它能够记忆、理解、保护、过滤和协调，并贯穿你设备上的每个 AI Agent。
 
 <div align="center">
   <img src="../../assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
-### 无需死记硬背 prompt ，像日常对话一样自然交流
+### 无需记忆命令，自然交流即可
 
-随时用自然语言与智脑对话，例如：“保存当前进度”、“之前我们聊的身份验证方案是什么”、“记住这个决定”。EGC 能够精准理解意图，自动存储上下文，并在设备上的任意标签页、终端或工具中实现无缝同步、毫秒级调用。一个中枢，多端联动。无需记忆。
+你可以使用任何语言与智能中枢对话，例如：“保存本次会话”、“我们之前对身份验证做了什么决定？”或“记住这个决定”。 EGC 能够理解你的意图、保存上下文，并在设备上的任意标签页、终端或工具中立即调用。 一个智能中枢。 每个 Agent。 无需记忆任何命令。
 
 ### 项目记忆持久化
 
-数据中台：每个 AI Agent 都可接入。它谨记着你的决策、上下文语境、工作记忆与习得模式，通过自动同步贯穿你的所有开发工具。各会话状态、项目语境与经验可在不同标签页、工具及团队成员间无缝流转：无需手动同步，杜绝上下文丢失。所有记忆存储在本地 `~/.egc` 文件夹中，采用 AES-256-GCM 加密，依照项目分支独立保存，且绝不会被提交进你的仓库。
+EGC 为每个 AI Agent 提供一个持久、共享的智能中枢。 它会记录决策、会话上下文、工作记忆和习得模式，并让这些信息能够立即在你打开的任何其他终端、IDE 或 Agent 中使用。 会话状态、项目历史和积累的经验会在标签页、工具和团队成员之间无缝流转：无需手动同步，也不会丢失上下文。 所有记忆都存储在你设备上的 `~/.egc` 中，使用 AES-256-GCM 加密，按项目分支分别保存，并且绝不会被提交到代码仓库。
 
 ### Guardian：内置安全防护组件
 
-海面下不可见的冰山：作为守护进程，Guardian 组件在智脑后台静默运行。主动校验命令、拦截高危写入、在上下文溢出前压缩、跨 agent 编排多步任务、从每次纠正中自我进化，这一切都无需手动操作。天网恢恢疏而不漏，这一机制让 EGC 在精简上下文的同时确保操作安全，支撑工作流长期自主运行。
+智能中枢的另一部分会在后台运行安全防护机制。 它会在命令执行前进行校验，限制高风险写入，在上下文溢出前进行压缩，跨 Agent 编排多步骤任务，并从每次纠正中学习，而无需你主动调用任何工具。 这是一张不可见的安全网，让上下文保持精简、操作保持安全，并让工作流能够自主运行。
 
 ### Token 优化器：存储记忆前，自动过滤噪声
 
-智脑不只是记忆中枢：EGC 也过滤噪声。在 Shell 输出送达模型前，EGC 的 Token 优化器至多能够减少 90% 的冗余 token，避免 git 日志、冗余测试信息、安装日志和庞大的全量 JSON 数据带来的 token 浪费，并精准保留所有错误与警告细节。运行 `egc saved` 即可查看 token 节省总量，计算仅在本地零成本进行：这不仅降低对话成本，更在事实上扩展了可用上下文。
+这个智能中枢不只是记忆，它还会过滤噪声。 在任何 Shell 输出到达模型之前，EGC 的 Token Crusher 会将 Git 日志、冗余测试输出、安装噪声和巨型 JSON 最多压缩 90%，同时保留每一条错误和警告。 只需用任何语言问一句“我节省了多少？”，答案就会直接从你的本地统计账本中读取，完全零成本：会话更省钱，上下文保留更久。
 
 ---
 
 ## 提示词库
 
-作为附加福利，EGC 还附赠 63 个 Agent、230 项技能、77 条内部命令，外加 111 条预设规则：这些资源包含能够自动审阅代码的专家工具、针对各种语言和场景的最佳实践指南、可一键执行复杂任务序列的快捷指令，以及维护代码规范的一系列风格准则。所有功能均源自真实的工程实践，而非单纯的理论推演。当然，这些都是可选的，即便不使用它们，EGC 的核心功能（**持久化记忆**）依然可以独立运作。
+作为附加内容，EGC 还提供 63 个 Agent、230 项技能、77 条命令以及 111 条规则：其中包括能够自动审查代码的专家、适用于各种语言和场景的最佳实践指南、可一次执行整套任务的快捷方式，以及帮助代码保持一致的风格规则。 所有内容都源自真实的工程实践，而非纸上谈兵。 不想使用这些内容？ 没关系，EGC 的持久记忆功能仍然可以照常工作。
 
 ---
 
 ## 快速上手
 
-只需运行一次 `egc watch`，即可静默生效：
+没有第二步。 打开任意一款 AI 工具，直接用任何语言对它说：“你好”、“继续刚才的内容”或“记住这个决定”即可。 会话会立即连接，记忆会自动加载，每个已打开的标签页都能实时了解其他标签页正在做什么：两个 Cursor 标签页、一个 Claude Code 终端和一个 Antigravity 会话可以同时共享同一份动态上下文。
 
-```bash
-egc watch
-```
-
-在 Cursor 中修改上下文，更改会自动同步到已配置的 Gemini CLI、Copilot、Windsurf、Zed 或任何终端 Agent 中。无需手动操作，告别状态延迟。
-
-在浏览器中实时监控 Agent 的工具调用详情、消耗的 Token 及对应成本：
-
-```bash
-egc dashboard
-```
+安装完成后，一个实时展示 Agent 活动、Token 使用量和费用的仪表盘会自动启动。 更喜欢手动控制？ 所有命令都记录在[安装指南](../../docs/installation.md)中，不过你可能永远都不需要手动输入它们。
 
 ---
 
@@ -111,7 +104,7 @@ EGC 是一个由社区成员独立开发，公开维护的开源免费项目。
 
 #### 工具合作伙伴
 
-与 EGC 原生集成的 AI 辅助编程工具。合作伙伴的 Logo 将会在所有项目的 README 文档和 EGCSite 官网上集中展示。
+与 EGC 原生集成的 AI 编程工具。 与 EGC 原生集成的 AI 辅助编程工具。合作伙伴的 Logo 将会在所有项目的 README 文档和 EGCSite 官网上集中展示。
 
 <a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
@@ -121,8 +114,7 @@ EGC 是一个由社区成员独立开发，公开维护的开源免费项目。
 
 #### 支持者
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
-<a href="https://github.com/jackmcwin"><img src="https://avatars.githubusercontent.com/u/135963880?v=4" width="52" height="52" alt="@jackmcwin" title="@jackmcwin, Chinese Simplified translation" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/jackmcwin"><img src="https://avatars.githubusercontent.com/u/135963880?v=4" width="52" height="52" alt="@jackmcwin" title="@jackmcwin, Chinese Simplified translation" /></a>
 
 #### 月度赞助者 · _虚位以待_
 
@@ -135,7 +127,6 @@ EGC 是一个由社区成员独立开发，公开维护的开源免费项目。
 <br>
 
 <a href="https://bestpractices.dev/projects/13099"><img src="../../assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; <a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
 
 </div>
