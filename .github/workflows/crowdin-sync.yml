@@ -134,7 +134,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C chore/crowdin-translations
           git add -- translations
-          git commit -m "chore: sync translations from Crowdin"
+          git commit -s -m "chore: sync translations from Crowdin"
           git push -f origin chore/crowdin-translations
           if [ -z "$(gh pr list --head chore/crowdin-translations --state open --json number --jq '.[0].number // empty')" ]; then
             gh pr create --base main --head chore/crowdin-translations \
