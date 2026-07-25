@@ -85,7 +85,7 @@ class PersistentLogger {
 
   constructor(serviceName: string) {
     const logDir = path.join(os.homedir(), '.egc', 'logs');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true, mode: 0o700 });
     hideEgcRootOnWindows();
     this.logPath = path.join(logDir, `${serviceName}.log`);
   }
@@ -102,7 +102,7 @@ class PersistentLogger {
       } catch (_e) { // NOSONAR: rotating a missing log file is a no-op
         // file might not exist
       }
-      await fs.promises.appendFile(this.logPath, payload + '\n', 'utf-8');
+      await fs.promises.appendFile(this.logPath, payload + '\n', { encoding: 'utf-8', mode: 0o600 });
     } catch(err) {
       console.error('[EGC Guardian] PersistentLogger failed to write:', err);
     }
