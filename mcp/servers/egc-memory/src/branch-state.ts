@@ -86,6 +86,13 @@ export function resolveStateRead(stateDir: string, projectPath: string, branch: 
     if (fs.existsSync(legacyBranchFile)) {
       return { filePath: legacyBranchFile, source: 'branch', branch };
     }
+    // Current versions write the default branch under its hashed key, so the
+    // fallback must look there first; the plain main.md name is only left
+    // behind by pre-hash versions and would otherwise shadow newer state.
+    const defaultHashedFile = branchStateFile(stateDir, projectPath, 'main');
+    if (fs.existsSync(defaultHashedFile)) {
+      return { filePath: defaultHashedFile, source: 'default-branch', branch };
+    }
     const defaultFile = path.join(stateDir, projectSlug(projectPath), DEFAULT_BRANCH_FILE);
     if (fs.existsSync(defaultFile)) {
       return { filePath: defaultFile, source: 'default-branch', branch };
