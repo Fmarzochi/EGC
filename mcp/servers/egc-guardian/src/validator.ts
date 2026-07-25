@@ -3,7 +3,7 @@ import os from 'os';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git', 'dir', 'where', 'where.exe'];
-export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc', 'egc', 'multica', 'gh', 'docker', 'prisma', 'php', 'pnpm', 'turbo'];
+export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc', 'egc', 'gh', 'docker', 'prisma', 'php', 'pnpm', 'turbo'];
 export const DANGEROUS = ['rm', 'mv'];
 
 export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
@@ -79,171 +79,157 @@ export interface ValidationResult {
   trust_level?: 'SAFE_READONLY' | 'SAFE_DEV' | 'DANGEROUS' | 'BLOCKED';
 }
 
+const READONLY_OK: ValidationResult = { allowed: true, trust_level: 'SAFE_READONLY' };
+const DEV_OK: ValidationResult = { allowed: true, trust_level: 'SAFE_DEV' };
+
+type ArgValidator = (args: string[], baseCommand: string) => ValidationResult;
+
+// First non-flag argument that resolves to a protected path, if any.
+function firstProtectedPositional(args: string[]): string | undefined {
+  return args.find(a => !a.startsWith('-') && isProtectedPath(a));
+}
+
+// True if `token` appears as a standalone arg or in a `--flag=token` form,
+// case-insensitively, so `-X DELETE`, `--method DELETE` and `--method=delete`
+// all match. Used to catch destructive verbs passed as option values.
+function hasArgToken(args: string[], token: string): boolean {
+  const t = token.toLowerCase();
+  return args.some(a => {
+    const lower = a.toLowerCase();
+    return lower === t || lower.endsWith('=' + t);
+  });
+}
+
+function validateGit(args: string[]): ValidationResult {
+  if (
+    args.includes('--force') ||
+    args.includes('-f') ||
+    (args.includes('push') && (args.includes('--force') || args.includes('-f')))
+  ) {
+    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
+  }
+  // Combined short flags like -fu, and --force-with-lease, used with push.
+  if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a) || a === '--force-with-lease')) {
+    return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
+  }
+  return READONLY_OK;
+}
+
+function validateGrep(args: string[]): ValidationResult {
+  const home = os.homedir();
+  const isRecursive = args.some(
+    a => a === '-r' || a === '-R' || a === '--recursive' || /^-[a-zA-Z]*[rR]/.test(a),
+  );
+  // grep [options] PATTERN [FILE...]: first positional is the pattern.
+  const positionalArgs = args.filter(a => a.length > 0 && !a.startsWith('-'));
+  const pathArgs = positionalArgs.slice(1);
+
+  if (isRecursive) {
+    for (const p of pathArgs) {
+      if (p === '/' || p === home || isProtectedPath(p)) {
+        return { allowed: false, reason: `grep recursive over protected path '${p}' is forbidden`, trust_level: 'SAFE_READONLY' };
+      }
+    }
+    if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0]))) {
+      return { allowed: false, reason: `grep over protected path '${positionalArgs[0]}' is forbidden`, trust_level: 'SAFE_READONLY' };
+    }
+  }
+  for (const p of pathArgs) {
+    if (isProtectedPath(p)) {
+      return { allowed: false, reason: `grep over protected path '${p}' is forbidden`, trust_level: 'SAFE_READONLY' };
+    }
+  }
+  return READONLY_OK;
+}
+
+// cat, find, ls, head, stat, and the Windows equivalents dir/where: read-only,
+// but never over a protected path (the previous switch left dir/where without
+// this check, so `dir ~/.ssh` slipped through the default branch).
+function validateReadonlyPaths(args: string[], baseCommand: string): ValidationResult {
+  const hit = firstProtectedPositional(args);
+  if (hit) {
+    return { allowed: false, reason: `${baseCommand} on protected path '${hit}' is forbidden`, trust_level: 'SAFE_READONLY' };
+  }
+  return READONLY_OK;
+}
+
+function validateDocker(args: string[]): ValidationResult {
+  const positional = args.filter(a => !a.startsWith('-'));
+  const destructiveSub = positional.some(a => a === 'prune' || a === 'rm' || a === 'rmi');
+  const downWithVolumes = positional.includes('down') && (args.includes('-v') || args.includes('--volumes'));
+  if (destructiveSub || downWithVolumes) {
+    return { allowed: false, reason: 'destructive docker operation is forbidden', trust_level: 'DANGEROUS' };
+  }
+  // run/create with a host mount or elevated privileges can escape the sandbox.
+  const startsContainer = positional.includes('run') || positional.includes('create');
+  const mountsOrPrivileged = args.some(a =>
+    a === '-v' || a === '--volume' || a === '--mount' || a === '--privileged' || a === '--cap-add' ||
+    a.startsWith('--volume=') || a.startsWith('--mount=') || a.startsWith('--cap-add='),
+  );
+  if (startsContainer && mountsOrPrivileged) {
+    return { allowed: false, reason: 'docker run with host mounts or elevated privileges is forbidden', trust_level: 'DANGEROUS' };
+  }
+  return DEV_OK;
+}
+
+function validateGh(args: string[]): ValidationResult {
+  // Covers `gh <resource> delete`, `gh api -X DELETE`, `gh api --method DELETE`.
+  if (hasArgToken(args, 'delete')) {
+    return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
+  }
+  return DEV_OK;
+}
+
+function validatePrisma(args: string[]): ValidationResult {
+  if (hasArgToken(args, 'reset') || hasArgToken(args, '--force-reset') || hasArgToken(args, '--accept-data-loss')) {
+    return { allowed: false, reason: 'prisma data-loss operation is forbidden', trust_level: 'DANGEROUS' };
+  }
+  const lower = args.map(a => a.toLowerCase());
+  if (lower.includes('db') && lower.includes('execute')) {
+    return { allowed: false, reason: 'prisma db execute runs arbitrary SQL and is forbidden', trust_level: 'DANGEROUS' };
+  }
+  return DEV_OK;
+}
+
+const devOk: ArgValidator = () => DEV_OK;
+
+// Each allowlisted command maps to its argument validator. Commands present in
+// SAFE_READONLY/SAFE_DEV with no entry fall through to a read-only pass. Node,
+// npm, php, pnpm and turbo are trusted dev tools by design, like `node -e`.
+const ARG_VALIDATORS: Record<string, ArgValidator> = {
+  git: validateGit,
+  grep: validateGrep,
+  cat: validateReadonlyPaths,
+  find: validateReadonlyPaths,
+  ls: validateReadonlyPaths,
+  head: validateReadonlyPaths,
+  stat: validateReadonlyPaths,
+  dir: validateReadonlyPaths,
+  where: validateReadonlyPaths,
+  'where.exe': validateReadonlyPaths,
+  docker: validateDocker,
+  gh: validateGh,
+  prisma: validatePrisma,
+  npm: devOk,
+  npx: devOk,
+  node: devOk,
+  tsc: devOk,
+  egc: devOk,
+  php: devOk,
+  pnpm: devOk,
+  turbo: devOk,
+};
+
 /**
  * Validate arguments for a specific allowed command.
  * Returns { allowed: false, reason } if the args are unsafe.
  */
-export function validateCommandArgs(
-  baseCommand: string,
-  args: string[],
-): ValidationResult {
-  const allArgs = args.join(' ');
-
-  switch (baseCommand) {
-    case 'git': {
-      // Block force pushes
-      if (
-        args.includes('--force') ||
-        args.includes('-f') ||
-        (args.includes('push') && (args.includes('--force') || args.includes('-f')))
-      ) {
-        return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
-      }
-      // Additional check for combined flags like -fu, --force-with-lease used destructively
-      if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
-        return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'grep': {
-      const home = os.homedir();
-
-      // Detect if any recursive flag is present
-      const isRecursive = args.some(
-        a => a === '-r' || a === '-R' || a === '--recursive' ||
-             // combined short flags: -rn, -Rn, -rl, etc.
-             /^-[a-zA-Z]*[rR]/.test(a),
-      );
-
-      // Non-flag, non-empty args are candidates for pattern or path.
-      // In grep: grep [options] PATTERN [FILE…]
-      // The first non-flag arg is the pattern; the rest are paths.
-      const positionalArgs = args.filter(a => a.length > 0 && !a.startsWith('-'));
-
-      // Paths are all positional args after the first one (the pattern).
-      const pathArgs = positionalArgs.slice(1);
-
-      if (isRecursive) {
-        for (const p of pathArgs) {
-          if (p === '/' || p === home || isProtectedPath(p)) {
-            return {
-              allowed: false,
-              reason: `grep recursive over protected path '${p}' is forbidden`,
-              trust_level: 'SAFE_READONLY',
-            };
-          }
-        }
-        // If no explicit path args, grep defaults to '.', which is fine.
-        // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-        if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0]))) {
-          return {
-            allowed: false,
-            reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-
-      // Even without -r, block explicit protected paths
-      for (const p of pathArgs) {
-        if (isProtectedPath(p)) {
-          return {
-            allowed: false,
-            reason: `grep over protected path '${p}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'cat': {
-      for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg)) {
-          return {
-            allowed: false,
-            reason: `cat of protected path '${arg}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'find': {
-      // First non-flag arg is typically the search root
-      const pathArgs = args.filter(a => !a.startsWith('-'));
-      for (const p of pathArgs) {
-        if (isProtectedPath(p)) {
-          return {
-            allowed: false,
-            reason: `find over protected path '${p}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'head':
-    case 'stat':
-    case 'ls': {
-      // These are read-only but we still block protected paths
-      for (const arg of args) {
-        if (!arg.startsWith('-') && isProtectedPath(arg)) {
-          return {
-            allowed: false,
-            reason: `${baseCommand} on protected path '${arg}' is forbidden`,
-            trust_level: 'SAFE_READONLY',
-          };
-        }
-      }
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
-    }
-
-    case 'docker': {
-      // Block data-destroying operations; plain build/up/down stay allowed.
-      const positional = args.filter(a => !a.startsWith('-'));
-      if (
-        positional.some(a => a === 'prune' || a === 'rm' || a === 'rmi') ||
-        (positional.includes('down') && (args.includes('-v') || args.includes('--volumes')))
-      ) {
-        return { allowed: false, reason: 'destructive docker operation is forbidden', trust_level: 'DANGEROUS' };
-      }
-      return { allowed: true, trust_level: 'SAFE_DEV' };
-    }
-
-    case 'gh': {
-      if (args.some(a => a.toLowerCase() === 'delete')) {
-        return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
-      }
-      return { allowed: true, trust_level: 'SAFE_DEV' };
-    }
-
-    case 'prisma': {
-      if (args.includes('reset') || args.includes('--force-reset')) {
-        return { allowed: false, reason: 'prisma reset drops data and is forbidden', trust_level: 'DANGEROUS' };
-      }
-      return { allowed: true, trust_level: 'SAFE_DEV' };
-    }
-
-    case 'npm':
-    case 'npx':
-    case 'node':
-    case 'tsc':
-    case 'egc':
-    case 'multica':
-    case 'php':
-    case 'pnpm':
-    case 'turbo': {
-      return { allowed: true, trust_level: 'SAFE_DEV' };
-    }
-
-    default:
-      return { allowed: true, trust_level: 'SAFE_READONLY' };
+export function validateCommandArgs(baseCommand: string, args: string[]): ValidationResult {
+  const validator = ARG_VALIDATORS[baseCommand];
+  if (!validator) {
+    return READONLY_OK;
   }
+  return validator(args, baseCommand);
 }
 
 export function validateCommand(command: string): ValidationResult {
