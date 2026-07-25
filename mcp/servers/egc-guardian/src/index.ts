@@ -417,7 +417,30 @@ async function handleAutoLearn(toolArgs: Record<string, unknown> | undefined) {
     throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
   }
 
-  const result = await autoLearn({ project_path: projectPath, target_file: targetFile, limit });
+  // target_file is written to directly by autoLearn, so an unchecked value
+  // could plant content in ~/.ssh, ~/.bashrc, etc. Resolve it (following
+  // symlinks on the parent dir) and require it to be a non-protected path
+  // inside the project root. The absolute resolved path is passed downstream
+  // so a relative target_file cannot resolve against the process CWD instead.
+  let resolvedTarget = targetFile;
+  if (targetFile !== undefined) {
+    const absTarget = path.resolve(realProjectPath, targetFile);
+    let realTargetDir: string;
+    try {
+      realTargetDir = fs.realpathSync(path.dirname(absTarget));
+    } catch {
+      throw new McpError(ErrorCode.InvalidParams, 'target_file directory does not exist');
+    }
+    resolvedTarget = path.join(realTargetDir, path.basename(absTarget));
+    if (isProtectedPath(resolvedTarget)) {
+      throw new McpError(ErrorCode.InvalidParams, 'target_file must not be a protected path');
+    }
+    if (realTargetDir !== realProjectPath && !realTargetDir.startsWith(realProjectPath + path.sep)) {
+      throw new McpError(ErrorCode.InvalidParams, 'target_file must be inside project_path');
+    }
+  }
+
+  const result = await autoLearn({ project_path: projectPath, target_file: resolvedTarget, limit });
 
   auditLog('AUTO_LEARN', 'MUTATED', {
     project_path: projectPath,
