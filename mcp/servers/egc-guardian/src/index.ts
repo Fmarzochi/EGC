@@ -269,7 +269,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'protected path' });
                continue;
              }
-             const stats = fs.statSync(realResolved);
+             const stats = await fs.promises.stat(realResolved);
              if (!stats.isFile()) {
                auditLog('CONTEXT_LOAD', 'DENIED', { filepath, reason: 'not a regular file' });
                continue;
