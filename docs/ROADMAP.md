@@ -129,7 +129,7 @@ Landed on main since v1.1.15, not yet released:
 - Chinese Simplified mapped to `zh-CN` in Crowdin with the existing repo translations seeded (#988, closes #483)
 - Crowdin sync now writes to the canonical `translations/zh-CN/` path instead of recreating `translations/zh/` (#992)
 - Three runtime bugs from the #987 deep audit fixed: the `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani)
-- High-severity root lockfile advisories cleared: `brace-expansion` and `tar` (#992)
+- All Dependabot and Scorecard advisories cleared to zero: `brace-expansion` and `tar` in the root lockfile (#992), `tar` in the two mcp server lockfiles (#994), and `brace-expansion` in `fuzz` via an override (#995); the Scorecard Vulnerabilities code-scanning alert closed with them
 - Supported-harness count kept in sync across the docs (#984)
 
 ## v1.2.0: Teams
