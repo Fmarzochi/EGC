@@ -2,8 +2,8 @@ import path from 'path';
 import os from 'os';
 
 // Trust level tiers
-export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
-export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc'];
+export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git', 'dir', 'where', 'where.exe'];
+export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc', 'egc', 'multica', 'gh', 'docker', 'prisma', 'php', 'pnpm', 'turbo'];
 export const DANGEROUS = ['rm', 'mv'];
 
 export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
@@ -203,10 +203,41 @@ export function validateCommandArgs(
       return { allowed: true, trust_level: 'SAFE_READONLY' };
     }
 
+    case 'docker': {
+      // Block data-destroying operations; plain build/up/down stay allowed.
+      const positional = args.filter(a => !a.startsWith('-'));
+      if (
+        positional.some(a => a === 'prune' || a === 'rm' || a === 'rmi') ||
+        (positional.includes('down') && (args.includes('-v') || args.includes('--volumes')))
+      ) {
+        return { allowed: false, reason: 'destructive docker operation is forbidden', trust_level: 'DANGEROUS' };
+      }
+      return { allowed: true, trust_level: 'SAFE_DEV' };
+    }
+
+    case 'gh': {
+      if (args.includes('delete')) {
+        return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
+      }
+      return { allowed: true, trust_level: 'SAFE_DEV' };
+    }
+
+    case 'prisma': {
+      if (args.includes('reset') || args.includes('--force-reset')) {
+        return { allowed: false, reason: 'prisma reset drops data and is forbidden', trust_level: 'DANGEROUS' };
+      }
+      return { allowed: true, trust_level: 'SAFE_DEV' };
+    }
+
     case 'npm':
     case 'npx':
     case 'node':
-    case 'tsc': {
+    case 'tsc':
+    case 'egc':
+    case 'multica':
+    case 'php':
+    case 'pnpm':
+    case 'turbo': {
       return { allowed: true, trust_level: 'SAFE_DEV' };
     }
 
