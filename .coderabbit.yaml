@@ -6,14 +6,17 @@ reviews:
   high_level_summary: true
   review_status: true
   auto_review:
-    # Disabled: review is triggered conditionally by
-    # .github/workflows/first-time-contributor-gate.yml instead of firing
-    # on every PR open. Established contributors get an immediate
-    # @coderabbitai review comment; first-time contributors only get one
-    # after basic tests + DCO pass, so review quota isn't spent on PRs
-    # with no real chance of merging.
-    enabled: false
+    # Reviews every PR except the maintainer's own (reviewed by the local
+    # squad before push, so no CodeRabbit credits are spent on them) and
+    # bot PRs. ignore_usernames takes precedence over all other settings.
+    # Native auto_review is used instead of a workflow-posted
+    # "@coderabbitai review" because CodeRabbit ignores commands posted by
+    # github-actions[bot], which left every PR unreviewed.
+    enabled: true
     drafts: false
+    ignore_usernames:
+      - "Fmarzochi"
+      - "dependabot[bot]"
 
   path_filters:
     # Exclude pure prompt/content markdown files from the 150-file review limit.
