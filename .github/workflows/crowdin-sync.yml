@@ -97,24 +97,47 @@ jobs:
             sleep 10
           done
 
-      - name: Download translations and create PR
+      - name: Download translations
         uses: crowdin/github-action@e0c8f73cdc0fafde9396e056c5038217000a32d1 # v2
         with:
           upload_sources: false
           upload_translations: false
           download_translations: true
-          create_pull_request: true
-          pull_request_title: "chore: sync translations from Crowdin"
-          pull_request_body: |
-            Translations synced automatically from [Crowdin](https://crowdin.com/project/egc).
-
-            Only fully translated files are included (`skip_untranslated_files: true`).
-
-            > This PR was created automatically. Do not merge unless all checks pass.
-          pull_request_base_branch_name: main
-          localization_branch_name: chore/crowdin-translations
+          create_pull_request: false
+          push_translations: false
           skip_untranslated_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+
+      # Crowdin resolves %two_letters_code% for Chinese Simplified to "zh", but the
+      # canonical path in this repo is zh-CN. The action/CLI expose no download
+      # language mapping, so the folder is normalized here before opening the PR.
+      - name: Normalize Chinese Simplified path and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The crowdin action runs in Docker and writes files as root, so take
+          # ownership back before the rename and git operations.
+          sudo chown -R "$(id -u):$(id -g)" translations
+          if [ -d translations/zh ]; then
+            mkdir -p translations/zh-CN
+            cp -a translations/zh/. translations/zh-CN/
+            rm -rf translations/zh
+          fi
+          if [ -z "$(git status --porcelain -- translations)" ]; then
+            echo "No translation changes to sync."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C chore/crowdin-translations
+          git add -- translations
+          git commit -m "chore: sync translations from Crowdin"
+          git push -f origin chore/crowdin-translations
+          if [ -z "$(gh pr list --head chore/crowdin-translations --state open --json number --jq '.[0].number // empty')" ]; then
+            gh pr create --base main --head chore/crowdin-translations \
+              --title "chore: sync translations from Crowdin" \
+              --body "Translations synced automatically from Crowdin. Only fully translated files are included. Do not merge unless all checks pass."
+          fi
