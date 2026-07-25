@@ -126,6 +126,17 @@ jobs:
             cp -a translations/zh/. translations/zh-CN/
             rm -rf translations/zh
           fi
+          # Crowdin exports translations of source strings whose links are
+          # root-relative (assets/..., docs/...), but translation files live
+          # two levels down, so those links 404 on GitHub. Rewrite them; the
+          # patterns only match links without a leading path, so already
+          # correct ../../ links are untouched.
+          find translations -name 'README.md' -exec sed -i -E \
+            -e 's|(src=")assets/|\1../../assets/|g' \
+            -e 's|(href=")assets/|\1../../assets/|g' \
+            -e 's|(\]\()assets/|\1../../assets/|g' \
+            -e 's|(href=")docs/|\1../../docs/|g' \
+            -e 's|(\]\()docs/|\1../../docs/|g' {} +
           if [ -z "$(git status --porcelain -- translations)" ]; then
             echo "No translation changes to sync."
             exit 0
