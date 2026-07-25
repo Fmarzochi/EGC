@@ -1,5 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
@@ -179,7 +180,17 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     ? path.join(os.homedir(), p.slice(1))
     : p;
 
-  const normalizedP = path.resolve(baseDir, expanded);
+  let normalizedP = path.resolve(baseDir, expanded);
+  // Resolve symlinks so a link inside an allowed directory cannot point past
+  // this check into a denied path. Fall back to the lexical path (then the
+  // parent) when the target does not exist yet, e.g. a write being created.
+  try {
+    normalizedP = fs.realpathSync(normalizedP);
+  } catch {
+    try {
+      normalizedP = path.join(fs.realpathSync(path.dirname(normalizedP)), path.basename(normalizedP));
+    } catch { /* keep the lexical resolution */ }
+  }
 
   for (const denied of DENIED_PATHS) {
     if (normalizedP === denied || normalizedP.startsWith(denied + path.sep)) {
