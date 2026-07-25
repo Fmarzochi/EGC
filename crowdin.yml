@@ -9,5 +9,4 @@ files:
     translation: /translations/%two_letters_code%/README.md
     languages_mapping:
       two_letters_code:
-        zh: zh-CN
         zh-CN: zh-CN
