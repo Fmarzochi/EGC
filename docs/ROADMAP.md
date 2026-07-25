@@ -129,6 +129,9 @@ Landed on main since v1.1.15, not yet released:
 - Chinese Simplified mapped to `zh-CN` in Crowdin with the existing repo translations seeded (#988, closes #483)
 - Crowdin sync now writes Chinese Simplified to the canonical `translations/zh-CN/` path: the workflow renames `zh` to `zh-CN` after download, since the Crowdin action exposes no download language mapping (#1000; the `crowdin.yml` mapping tried in #992 was invalid and was reverted in #998)
 - CodeRabbit reviews contributor PRs automatically and skips the maintainer's own to save review credits; the first-time-contributor gate workflows were retired (#997)
+- `get_state` no longer time-travels on feature branches: the default-branch fallback prefers the hashed main state file over the legacy plain `main.md` left behind by pre-hash versions, with a new test covering the full resolution order (#1005)
+- Crowdin sync hardened end to end: root-relative asset and doc links are normalized in downloaded translations (#1004) and the sync commit is signed so the DCO check passes on translations PRs (#1006); the first fully green sync PR landed the Turkish and Chinese Simplified updates (#1003)
+- Docs: the MCP server build is invoked with `bash`, matching the install script's shebang (#1007)
 - Three runtime bugs from the #987 deep audit fixed: the `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani)
 - All Dependabot and Scorecard advisories cleared to zero: `brace-expansion` and `tar` in the root lockfile (#992), `tar` in the two mcp server lockfiles (#994), and `brace-expansion` in `fuzz` via an override (#995); the Scorecard Vulnerabilities code-scanning alert closed with them
 - Supported-harness count kept in sync across the docs (#984)
