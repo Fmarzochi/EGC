@@ -14,7 +14,7 @@ function hideEgcRootOnWindows(): void {
   try {
     execSync(`attrib +h "${egcRoot}"`, { stdio: 'ignore' });
   } catch (error) {
-    console.error('non-critical: folder works even if attribute fails', error);
+    console.error('non-critical: folder works even if attribute fails');
   }
 }
 import { z } from 'zod';
