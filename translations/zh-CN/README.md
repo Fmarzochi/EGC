@@ -104,7 +104,7 @@ EGC 是一个由社区成员独立开发，公开维护的开源免费项目。
 
 #### 工具合作伙伴
 
-与 EGC 原生集成的 AI 编程工具。 与 EGC 原生集成的 AI 辅助编程工具。合作伙伴的 Logo 将会在所有项目的 README 文档和 EGCSite 官网上集中展示。
+与 EGC 原生集成的 AI 辅助编程工具。合作伙伴的 Logo 将会在所有项目的 README 文档和 EGCSite 官网上集中展示。
 
 <a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
