@@ -444,7 +444,10 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   }
 
   const parts = command.trim().split(/\s+/);
-  const baseCommand = parts[0];
+  // Judge the command by its final path segment. Spelling out an absolute or
+  // relative path (/bin/rm, ./mv, /usr/bin/python3) must not sidestep the
+  // name-based destructive and inline-eval denials below.
+  const baseCommand = path.basename(parts[0]);
   const args = parts.slice(1);
 
   // 2. Dangerous commands: denied regardless of args
@@ -466,7 +469,10 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   // bypasses every other check in this file, so it must hard-block
   // regardless of allowlist status. Using DANGEROUS here (not BLOCKED) keeps
   // the reason string out of the hook's advisory-reason list.
-  const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand];
+  // A versioned interpreter binary (python3.11, perl5.36) carries the same
+  // eval power as its bare name; fall back to the version-stripped name.
+  const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand]
+    ?? INLINE_EVAL_COMMANDS[baseCommand.replace(/[0-9.]+$/, '')];
   if (evalFlagsForBase && args.some(a => matchesEvalFlag(a, evalFlagsForBase))) {
     return {
       allowed: false,
