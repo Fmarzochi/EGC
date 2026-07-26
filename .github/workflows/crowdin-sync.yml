@@ -24,11 +24,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # upload_translations must stay false: re-uploading the exported files
+      # feeds post-processed content back into Crowdin, and for languages
+      # Crowdin cannot sentence-split (zh-CN) the whole paragraph lands on the
+      # first segment, so the next export duplicates every sentence after it.
       - name: Upload sources to Crowdin
         uses: crowdin/github-action@e0c8f73cdc0fafde9396e056c5038217000a32d1 # v2
         with:
           upload_sources: true
-          upload_translations: true
+          upload_translations: false
           download_translations: false
           create_pull_request: false
         env:
@@ -127,16 +131,18 @@ jobs:
             rm -rf translations/zh
           fi
           # Crowdin exports translations of source strings whose links are
-          # root-relative (assets/..., docs/...), but translation files live
-          # two levels down, so those links 404 on GitHub. Rewrite them; the
-          # patterns only match links without a leading path, so already
-          # correct ../../ links are untouched.
+          # root-relative (assets/..., docs/..., .github/..., translations/...),
+          # but translation files live two levels down, so those links 404 on
+          # GitHub. Rewrite them; the patterns only match links without a
+          # leading path, so already correct ../../ links are untouched.
           find translations -name 'README.md' -exec sed -i -E \
             -e 's|(src=")assets/|\1../../assets/|g' \
             -e 's|(href=")assets/|\1../../assets/|g' \
             -e 's|(\]\()assets/|\1../../assets/|g' \
             -e 's|(href=")docs/|\1../../docs/|g' \
-            -e 's|(\]\()docs/|\1../../docs/|g' {} +
+            -e 's|(\]\()docs/|\1../../docs/|g' \
+            -e 's|(\]\()\.github/|\1../../.github/|g' \
+            -e 's|(\]\()translations/|\1../|g' {} +
           if [ -z "$(git status --porcelain -- translations)" ]; then
             echo "No translation changes to sync."
             exit 0
