@@ -92,7 +92,7 @@ EGC tek bir geliştirici tarafından geliştiriliyor, açık şekilde sürdürü
 - **[GitHub'da sponsor olun](https://github.com/sponsors/Fmarzochi)**: dilediğiniz tutarda
 - **[PayPal ile bağış yapın](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHub hesabı gerekmez
 - **Repository'ye star verin**: diğer geliştiricilerin bulmasına yardımcı olur
-- **[Katkıda bulunun](.github/CONTRIBUTING.md)**: agent'lar, skill'ler, command'lar, hata düzeltmeleri, dokümantasyon
+- **[Katkıda bulunun](../../.github/CONTRIBUTING.md)**: agent'lar, skill'ler, command'lar, hata düzeltmeleri, dokümantasyon
 - **Paylaşın**: EGC çalışma şeklinizi değiştirdiyse birine anlatın
 
 ### Sponsorlar
