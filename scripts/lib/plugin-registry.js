@@ -226,8 +226,18 @@ function reinstallAllPlugins() {
       results.push({ name, success: false, errors: ['plugin.json missing; cannot reinstall'] });
       continue;
     }
-    const result = installPluginFromDir(pluginDir, name);
-    results.push({ name, ...result });
+    // installPluginFromDir wipes the destination before copying, and here the
+    // destination is the plugin's own dir, so reinstalling in place would
+    // erase it. Stage a copy in tmp and install from there.
+    const stageDir = path.join(os.tmpdir(), `egc-plugin-reinstall-${name}-${Date.now()}`);
+    try {
+      fs.mkdirSync(stageDir, { recursive: true });
+      copyRecursive(pluginDir, stageDir);
+      const result = installPluginFromDir(stageDir, name);
+      results.push({ name, ...result });
+    } finally {
+      fs.rmSync(stageDir, { recursive: true, force: true }); // NOSONAR jssecurity:S8707
+    }
   }
 
   return results;
