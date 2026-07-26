@@ -36,6 +36,9 @@ const GIT_COMMANDS_WITH_NO_VERIFY = [
 const VALID_BEFORE_GIT = ' \t\n\r;&|$`(<{!"\']/.~\\';
 
 const GIT_CONFIG_KEY_PREFIX = 'core.hooksPath=';
+// git treats config section/key names case-insensitively, so core.hookspath=
+// and CORE.HOOKSPATH= reach the same setting; compare the prefix lowercased.
+const GIT_CONFIG_KEY_PREFIX_LC = GIT_CONFIG_KEY_PREFIX.toLowerCase();
 
 const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix']);
 
@@ -412,14 +415,14 @@ function hasHooksPathOverride(input, detected) {
 
     if (value === '-c') {
       const next = tokens[i + 1]?.value;
-      if (typeof next === 'string' && next.startsWith(GIT_CONFIG_KEY_PREFIX)) {
+      if (typeof next === 'string' && next.toLowerCase().startsWith(GIT_CONFIG_KEY_PREFIX_LC)) {
         return true;
       }
       i++;
       continue;
     }
 
-    if (value.startsWith(`-c${GIT_CONFIG_KEY_PREFIX}`)) {
+    if (value.toLowerCase().startsWith(`-c${GIT_CONFIG_KEY_PREFIX_LC}`)) {
       return true;
     }
   }
