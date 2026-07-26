@@ -59,15 +59,17 @@ function embeddedPathCandidate(arg: string): string | null {
   return null;
 }
 
-// True if `token` appears as a standalone arg or as a `--flag=token` value,
-// case-insensitively, so `-X DELETE`, `--method DELETE` and `--method=delete`
-// all match. Used to catch destructive verbs passed as option values.
-function hasArgToken(args: string[], token: string): boolean {
-  const t = token.toLowerCase();
-  return args.some(a => {
-    const lower = a.toLowerCase();
-    return lower === t || lower.endsWith('=' + t);
-  });
+// Bare comparison token for the destructive-CLI checks: shell quotes and
+// backslash escapes stripped, lowercased, so `"prune"`, \reset and DELETE
+// all compare equal to their plain spellings (the shell strips those before
+// the real CLI sees them, so the validator must too). Path checks elsewhere
+// keep the raw argument.
+function bareToken(a: string): string {
+  return a.replace(/\\/g, '').replace(/^["']+/, '').replace(/["']+$/, '').toLowerCase();
+}
+
+function positionalsOf(tokens: string[]): string[] {
+  return tokens.filter(t => t.length > 0 && !t.startsWith('-'));
 }
 
 // Destructive variants of CLIs that are otherwise advisory-only at the
@@ -76,40 +78,97 @@ function hasArgToken(args: string[], token: string): boolean {
 // advisory behavior, but the data-destroying forms below hard-block the
 // same way inline eval does. Returning null means "nothing destructive
 // here" and the command falls through to the ordinary allowlist handling.
+
+// docker management groups whose next positional is the real subcommand
+// (`docker system prune`, `docker volume rm`, `docker compose down`).
+const DOCKER_MGMT_GROUPS = new Set(['container', 'image', 'volume', 'network', 'system', 'builder', 'buildx', 'compose']);
+
+// run/create flags that consume the following token as a value; skipping the
+// value keeps the option-window scan below from mistaking it for the image.
+const DOCKER_RUN_VALUE_FLAGS = new Set([
+  '-e', '--env', '-p', '--publish', '-w', '--workdir', '--name', '-u', '--user',
+  '--network', '-l', '--label', '--entrypoint', '--platform', '--pull', '--add-host',
+]);
+
+// In docker syntax every option of run/create precedes the image name, and
+// everything after the image is the command executed INSIDE the container.
+// Scanning only that option window is what lets `docker run alpine rm -rf
+// /tmp/x` or `docker run img tar -xvf a.tar` pass while a host mount or
+// privilege escalation before the image still blocks. The bundled/glued
+// short-flag test (-itv, -v/:/host) is why exact `-v` membership is not enough.
+function runWindowMountsOrPrivileges(tokens: string[], startIdx: number): boolean {
+  for (let i = startIdx + 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (!t.startsWith('-')) return false;
+    if (
+      t === '--privileged' || t === '--mount' || t === '--volume' || t === '--cap-add' ||
+      t.startsWith('--mount=') || t.startsWith('--volume=') || t.startsWith('--cap-add=')
+    ) return true;
+    if (!t.startsWith('--') && /^-[a-z]*v/.test(t)) return true;
+    if (DOCKER_RUN_VALUE_FLAGS.has(t)) i++;
+  }
+  return false;
+}
+
 function checkDockerDestructive(args: string[]): ValidationResult | null {
-  const positional = args.filter(a => !a.startsWith('-'));
-  const destructiveSub = positional.some(a => a === 'prune' || a === 'rm' || a === 'rmi');
-  const downWithVolumes = positional.includes('down') && (args.includes('-v') || args.includes('--volumes'));
-  if (destructiveSub || downWithVolumes) {
+  const tokens = args.map(bareToken);
+  const positionals = positionalsOf(tokens);
+  // The destructive subcommand is the first positional, or the second when
+  // the first is a management group. A later `rm`/`prune` (e.g. the command
+  // run inside a container) is not a docker subcommand and must not match.
+  const sub = DOCKER_MGMT_GROUPS.has(positionals[0] ?? '') ? positionals[1] : positionals[0];
+  if (sub === 'rm' || sub === 'rmi' || sub === 'prune') {
     return { allowed: false, reason: 'destructive docker operation is forbidden', trust_level: 'DANGEROUS' };
   }
-  // run/create with a host mount or elevated privileges escapes the
-  // container boundary, taking every path-based check in this file with it.
-  const startsContainer = positional.includes('run') || positional.includes('create');
-  const mountsOrPrivileged = args.some(a =>
-    a === '-v' || a === '--volume' || a === '--mount' || a === '--privileged' || a === '--cap-add' ||
-    a.startsWith('--volume=') || a.startsWith('--mount=') || a.startsWith('--cap-add='),
-  );
-  if (startsContainer && mountsOrPrivileged) {
+  const volumesFlag = tokens.some(t => t === '-v' || t === '--volumes' || t.startsWith('--volumes='));
+  if (sub === 'down' && volumesFlag) {
+    return { allowed: false, reason: 'destructive docker operation is forbidden', trust_level: 'DANGEROUS' };
+  }
+  const startIdx = tokens.findIndex(t => t === 'run' || t === 'create');
+  if (startIdx >= 0 && runWindowMountsOrPrivileges(tokens, startIdx)) {
     return { allowed: false, reason: 'docker run with host mounts or elevated privileges is forbidden', trust_level: 'DANGEROUS' };
   }
   return null;
 }
 
 function checkGhDestructive(args: string[]): ValidationResult | null {
-  // Covers `gh <resource> delete`, `gh api -X DELETE` and `--method=delete`.
-  if (hasArgToken(args, 'delete')) {
+  const tokens = args.map(bareToken);
+  const positionals = positionalsOf(tokens);
+  // `gh <resource> delete` always puts the verb in the second positional;
+  // a later token spelled delete (an issue title word, a repo actually
+  // named delete in `gh repo view delete`) is data, not a subcommand.
+  if (positionals[1] === 'delete') {
     return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
+  }
+  // gh api with an explicit DELETE method, in every spelling getopt
+  // accepts: -X DELETE, -XDELETE, --method DELETE, --method=delete.
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === '-xdelete' || t === '--method=delete') {
+      return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
+    }
+    if ((t === '-x' || t === '--method') && tokens[i + 1] === 'delete') {
+      return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
+    }
   }
   return null;
 }
 
 function checkPrismaDestructive(args: string[]): ValidationResult | null {
-  if (hasArgToken(args, 'reset') || hasArgToken(args, '--force-reset') || hasArgToken(args, '--accept-data-loss')) {
+  const tokens = args.map(bareToken);
+  const positionals = positionalsOf(tokens);
+  // Subcommand context, not token presence: `prisma migrate dev --name
+  // reset` names a migration and must pass; `prisma migrate reset` wipes.
+  if (positionals[0] === 'migrate' && positionals[1] === 'reset') {
     return { allowed: false, reason: 'prisma data-loss operation is forbidden', trust_level: 'DANGEROUS' };
   }
-  const lower = args.map(a => a.toLowerCase());
-  if (lower.includes('db') && lower.includes('execute')) {
+  if (tokens.some(t =>
+    t === '--force-reset' || t.startsWith('--force-reset=') ||
+    t === '--accept-data-loss' || t.startsWith('--accept-data-loss='),
+  )) {
+    return { allowed: false, reason: 'prisma data-loss operation is forbidden', trust_level: 'DANGEROUS' };
+  }
+  if (positionals[0] === 'db' && positionals[1] === 'execute') {
     return { allowed: false, reason: 'prisma db execute runs arbitrary SQL and is forbidden', trust_level: 'DANGEROUS' };
   }
   return null;
@@ -121,6 +180,30 @@ const DESTRUCTIVE_CLI_CHECKS: Record<string, (args: string[]) => ValidationResul
   gh: checkGhDestructive,
   prisma: checkPrismaDestructive,
 };
+
+// Package runners re-execute their first non-flag argument, so `npx prisma
+// migrate reset` must be judged as prisma, not as npx (which is SAFE_DEV) —
+// and `yarn prisma ...` must not slide through as a plain allowlist miss.
+const RUNNER_CLIS = new Set(['npx', 'pnpx', 'bunx', 'yarn', 'pnpm', 'bun']);
+const RUNNER_SUBCOMMANDS = new Set(['dlx', 'x', 'exec']);
+
+function destructiveVerdict(baseCommand: string, args: string[]): ValidationResult | null {
+  const check = DESTRUCTIVE_CLI_CHECKS[baseCommand];
+  if (check) return check(args);
+  if (!RUNNER_CLIS.has(baseCommand)) return null;
+  let i = 0;
+  while (i < args.length) {
+    const t = bareToken(args[i]);
+    if (!t.startsWith('-') && !RUNNER_SUBCOMMANDS.has(t)) break;
+    i += 1;
+  }
+  if (i >= args.length) return null;
+  // prisma@5.x and ./node_modules/.bin/prisma both resolve to prisma.
+  let inner = path.basename(bareToken(args[i]));
+  if (!inner.startsWith('@')) inner = inner.split('@')[0];
+  const innerCheck = DESTRUCTIVE_CLI_CHECKS[inner];
+  return innerCheck ? innerCheck(args.slice(i + 1)) : null;
+}
 
 const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
   node: ['-e', '--eval', '-p', '--print'],
@@ -559,12 +642,10 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   // prisma reset...) hard-block for the same reason inline eval does: the
   // allowlist miss below is advisory-only at the hook layer, so without this
   // check `docker system prune -af` would execute with nothing but a
-  // warning. Non-destructive forms of these CLIs keep the advisory path.
-  const destructiveCheck = DESTRUCTIVE_CLI_CHECKS[baseCommand];
-  if (destructiveCheck) {
-    const denial = destructiveCheck(args);
-    if (denial) return denial;
-  }
+  // warning. Non-destructive forms of these CLIs keep the advisory path,
+  // and package runners (npx, yarn...) are unwrapped to the inner command.
+  const destructiveDenial = destructiveVerdict(baseCommand, args);
+  if (destructiveDenial) return destructiveDenial;
 
   // 5. Not in any allowlist: blocked
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {

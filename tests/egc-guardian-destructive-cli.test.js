@@ -85,6 +85,38 @@ run('prisma db push --force-reset is hard-blocked', () => assertHardBlocked('pri
 run('prisma db push --accept-data-loss is hard-blocked', () => assertHardBlocked('prisma db push --accept-data-loss'));
 run('prisma db execute is hard-blocked', () => assertHardBlocked('prisma db execute --file drop.sql'));
 
+// Bypass spellings from the adversarial audit: quoting, escapes, bundled
+// and glued short flags, method gluing, value suffixes, package runners.
+run('docker system "prune" (quoted) is hard-blocked', () => assertHardBlocked('docker system "prune"'));
+run("gh repo 'delete' o/r (quoted) is hard-blocked", () => assertHardBlocked("gh repo 'delete' owner/repo"));
+run('prisma migrate \\reset (escaped) is hard-blocked', () => assertHardBlocked('prisma migrate \\reset'));
+run('docker run -itv /:/host (bundled) is hard-blocked', () => assertHardBlocked('docker run -itv /:/host img'));
+run('docker run -v/:/host (glued) is hard-blocked', () => assertHardBlocked('docker run -v/:/host img'));
+run('docker run -e FOO -v /:/host (value flag) is hard-blocked', () => assertHardBlocked('docker run -e FOO -v /:/host img'));
+run('gh api -XDELETE (glued) is hard-blocked', () => assertHardBlocked('gh api -XDELETE repos/o/r'));
+run('gh api --method DELETE is hard-blocked', () => assertHardBlocked('gh api --method DELETE repos/o/r'));
+run('prisma db push --force-reset=true is hard-blocked', () => assertHardBlocked('prisma db push --force-reset=true'));
+run('docker compose down --volumes=true is hard-blocked', () => assertHardBlocked('docker compose down --volumes=true'));
+run('npx prisma migrate reset is hard-blocked', () => assertHardBlocked('npx prisma migrate reset'));
+run('npx -y prisma@5 db execute unwraps and is hard-blocked', () => assertHardBlocked('npx -y prisma@5 db execute --file x.sql'));
+run('pnpm dlx prisma migrate reset is hard-blocked', () => assertHardBlocked('pnpm dlx prisma migrate reset'));
+
+// yarn is outside the allowlist, so the wrapped destructive form must be
+// the DANGEROUS verdict, not the advisory allowlist miss.
+run('yarn prisma migrate reset is hard-blocked', () => assertHardBlocked('yarn prisma migrate reset'));
+
+// False positives from the adversarial audit: all must keep today's
+// advisory (or allowed) behavior.
+run('docker run alpine rm -rf /tmp/foo stays advisory (rm runs inside the container)', () => assertAdvisoryOnly('docker run alpine rm -rf /tmp/foo'));
+run('docker compose run web rm -rf cache stays advisory', () => assertAdvisoryOnly('docker compose run web rm -rf cache'));
+run('docker build -t prune . stays advisory', () => assertAdvisoryOnly('docker build -t prune .'));
+run('docker tag my-image rm stays advisory', () => assertAdvisoryOnly('docker tag my-image rm'));
+run('docker run img tar -xvf a.tar stays advisory (flags after the image)', () => assertAdvisoryOnly('docker run img tar -xvf a.tar'));
+run('gh issue list --search delete stays advisory', () => assertAdvisoryOnly('gh issue list --search delete'));
+run('gh issue create --title "delete old keys" stays advisory', () => assertAdvisoryOnly('gh issue create --title "delete old keys"'));
+run('gh repo view delete stays advisory (repo named delete)', () => assertAdvisoryOnly('gh repo view delete'));
+run('prisma migrate dev --name reset stays advisory (migration named reset)', () => assertAdvisoryOnly('prisma migrate dev --name reset'));
+
 // Benign forms stay advisory: the hook keeps letting them run.
 run('docker ps stays advisory', () => assertAdvisoryOnly('docker ps'));
 run('docker build stays advisory', () => assertAdvisoryOnly('docker build -t img .'));
