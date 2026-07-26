@@ -144,11 +144,8 @@ async function mergeTeamState(): Promise<void> {
   if (syncFiles.length === 0) {
     return; // No remote state yet; preserve local files.
   }
-  const syncedRelativePaths = new Set<string>();
-
   for (const syncFile of syncFiles) {
     const relativePath = path.relative(syncStateDir, syncFile);
-    syncedRelativePaths.add(relativePath);
     const localFile = path.join(localStateDir, relativePath);
 
     const syncContent = fs.readFileSync(syncFile, 'utf-8');
@@ -168,14 +165,10 @@ async function mergeTeamState(): Promise<void> {
     }
   }
 
-  // Propagate remote deletions: remove local files absent from sync repo.
-  const localFiles = getAllFiles(localStateDir);
-  for (const localFile of localFiles) {
-    const relativePath = path.relative(localStateDir, localFile);
-    if (!syncedRelativePaths.has(relativePath)) {
-      fs.unlinkSync(localFile);
-    }
-  }
+  // A team sync never removes local state files: a file absent from the sync
+  // repo may be one this machine created and has not pushed yet, and deleting
+  // it would be silent, unrecoverable memory loss. Remote deletions therefore
+  // do not propagate automatically.
 }
 
 function getAllFiles(dir: string): string[] {
