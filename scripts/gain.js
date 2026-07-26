@@ -86,8 +86,8 @@ function main() {
   console.log(`  Output size:      ${formatBytes(totals.bytesIn)} -> ${formatBytes(totals.bytesOut)}`);
   console.log(`  Tokens saved:     ~${formatTokens(totals.tokensSaved)}`);
   console.log(`  Avg per run:      ~${formatTokens(avg)} tokens`);
-  if (biggest && biggest.command) {
-    console.log(`  Biggest crush:    ~${formatTokens(biggest.tokensSaved || 0)} tokens (${biggest.command})`);
+  if (biggest && biggest.cmd) {
+    console.log(`  Biggest crush:    ~${formatTokens(biggest.tokensSaved || 0)} tokens (${biggest.cmd})`);
   }
   console.log(`  Efficiency:       ${bar(pct)} ${(pct * 100).toFixed(1)}%`);
   console.log('');

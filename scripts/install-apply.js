@@ -204,7 +204,7 @@ function main() {
       }
     }
   } catch (error) {
-    process.stderr.write(`Error: ${error.message}${getHelpText()}`);
+    process.stderr.write(`Error: ${error.message}\n${getHelpText()}`);
     process.exit(1);
   }
 }

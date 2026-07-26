@@ -98,6 +98,14 @@ function main() {
       assert.deepStrictEqual(payload.plan.legacyLanguages, ['typescript']);
       assert.ok(payload.plan.selectedModuleIds.includes('framework-language'));
     }],
+    ['egc budget forwards the subcommand to budget.js (argv slice regression)', () => {
+      const result = runCli(['budget', 'definitely-not-a-subcommand']);
+      // With the old slice(3), budget/plugin/team dropped the subcommand word
+      // and fell through to help with exit 0; slice(2) forwards it, so an
+      // unknown subcommand is reported and exits non-zero.
+      assert.strictEqual(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr + result.stdout, /Unknown budget subcommand/);
+    }],
     ['routes implicit top-level args to install', () => {
       const result = runCli(['--dry-run', '--json', 'typescript']);
       assert.strictEqual(result.status, 0, result.stderr);
