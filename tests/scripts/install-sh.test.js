@@ -132,6 +132,36 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('gates on Node 20, keeps devDeps for the build, and never fakes a config skip', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    // The bash Node gate must match package.json "engines" (>=20) and
+    // scripts/preinstall.js, not the old >=18 floor that let 18/19 reach the
+    // better-sqlite3 and TypeScript build steps.
+    assert.ok(
+      /"\$NODE_MAJOR"\s*-lt\s+20/.test(script),
+      'install.sh must reject Node < 20 to match package.json engines and preinstall.js'
+    );
+    assert.ok(
+      !/"\$NODE_MAJOR"\s*-lt\s+18/.test(script),
+      'install.sh must not still gate on the old Node 18 floor'
+    );
+
+    // An ambient NODE_ENV=production must not prune the devDependency (typescript)
+    // that `npm run build` needs, so npm ci is pinned with --include=dev.
+    assert.ok(
+      /npm ci --include=dev/.test(script),
+      'install_deps must pass --include=dev so NODE_ENV=production does not drop typescript'
+    );
+
+    // A pre-existing config that is not valid JSON must be skipped with an
+    // honest note, never reported as a successful registration.
+    assert.ok(
+      /is not valid JSON/.test(script),
+      'install.sh must print an honest skip note when an existing config cannot be parsed'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

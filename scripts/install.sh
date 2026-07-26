@@ -7,9 +7,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # installed package has no root lockfile (npm already resolved its deps during
 # `npm install -g`). The sub-package lockfiles travel via package.json "files",
 # so run a pinned `npm ci` wherever a lockfile is present and skip otherwise.
+# --include=dev is explicit so an ambient NODE_ENV=production does not prune
+# devDependencies (typescript), which the `npm run build` steps below require.
 install_deps() {
   if [ -f package-lock.json ]; then
-    npm ci --silent
+    npm ci --include=dev --silent
   fi
 }
 
@@ -27,22 +29,24 @@ for _arg in "$@"; do
   [ "$_arg" = "--dry-run" ] && DRY_RUN=true && break
 done
 
-# Node.js version check
+# Node.js version check. Keep this floor in lockstep with package.json "engines"
+# and scripts/preinstall.js, which both require Node 20; a lower gate here would
+# let 18/19 reach the better-sqlite3 build and the TypeScript build steps below.
 NODE_MAJOR=$(node -e "process.stdout.write(process.versions.node.split('.')[0])" 2>/dev/null || echo "0")
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  echo "Error: Node.js >= 18 is required (found: $(node --version 2>/dev/null || echo 'not found'))"
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  echo "Error: Node.js >= 20 is required (found: $(node --version 2>/dev/null || echo 'not found'))"
   exit 1
 fi
 echo "  node $(node --version)"
 
 if ! command -v npm >/dev/null 2>&1; then
-  echo "Error: npm not found. Install Node.js >= 18 (https://nodejs.org)"
+  echo "Error: npm not found. Install Node.js >= 20 (https://nodejs.org)"
   exit 1
 fi
 echo "  npm $(npm --version)"
 
 if ! command -v npx >/dev/null 2>&1; then
-  echo "Error: npx not found. Install Node.js >= 18 (https://nodejs.org)"
+  echo "Error: npx not found. Install Node.js >= 20 (https://nodejs.org)"
   exit 1
 fi
 
@@ -199,7 +203,9 @@ if (fs.existsSync(target)) {
   try {
     obj = JSON.parse(fs.readFileSync(target, "utf8"));
   } catch (_) {
-    process.exit(0);
+    // Existing config is not valid JSON: leave it untouched and signal a skip
+    // (exit 2) so the caller does not print a false "registered" success.
+    process.exit(2);
   }
 }
 if (!obj.mcpServers) obj.mcpServers = {};
@@ -222,6 +228,8 @@ NODEEOF
   local rc=$?
   if [ $rc -eq 0 ]; then
     echo "  ✓ registered in $label ($target)"
+  elif [ $rc -eq 2 ]; then
+    echo "  note: skipped $label ($target): existing config is not valid JSON"
   fi
 }
 
@@ -233,10 +241,15 @@ const path = require("path");
 
 const [,, target, guardianBin, memoryBin] = process.argv;
 
+// Escape backslashes (Windows paths) and double quotes (legal in a POSIX dir
+// name) so the path stays a valid TOML basic string; mirrors tomlEscape in
+// scripts/lib/mcp-register.js.
+const tomlEscape = (p) => p.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+
 const guardianEntry =
-  `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${guardianBin}"]\n`;
+  `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
 const memoryEntry =
-  `\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["${memoryBin}"]\n`;
+  `\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
 
 let content = "";
 if (fs.existsSync(target)) {
@@ -351,7 +364,8 @@ let obsidian;
 try { obsidian = JSON.parse(obsidianBlock); } catch (_) { process.exit(0); }
 let obj = { mcpServers: {} };
 if (fs.existsSync(target)) {
-  try { obj = JSON.parse(fs.readFileSync(target, "utf8")); } catch (_) { process.exit(0); }
+  // Unparseable target config: skip (exit 2), do not report a false success.
+  try { obj = JSON.parse(fs.readFileSync(target, "utf8")); } catch (_) { process.exit(2); }
 }
 if (!obj.mcpServers) obj.mcpServers = {};
 if (obj.mcpServers.obsidian) process.exit(0);
@@ -363,6 +377,8 @@ NODEEOF
   local rc=$?
   if [ $rc -eq 0 ]; then
     echo "  ✓ obsidian synced to $label"
+  elif [ $rc -eq 2 ]; then
+    echo "  note: skipped obsidian sync to $label ($target): existing config is not valid JSON"
   fi
 }
 
