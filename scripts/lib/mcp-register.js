@@ -189,7 +189,7 @@ function registerJson(targetPath, bins) {
  * backslash first so the one added for the quote is not doubled again.
  */
 function tomlEscape(p) {
-  return p.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return p.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
 }
 
 /**
