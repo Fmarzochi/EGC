@@ -38,6 +38,17 @@ function matchesEvalFlag(arg: string, flags: string[]): boolean {
   return false;
 }
 
+// Strip a trailing version suffix (python3.11 -> python) so a versioned
+// interpreter binary resolves to the same inline-eval rule as its bare name.
+// Linear scan rather than a regex to keep this off any backtracking path.
+function bareInterpreterName(name: string): string {
+  let end = name.length;
+  while (end > 0 && (name[end - 1] === '.' || (name[end - 1] >= '0' && name[end - 1] <= '9'))) {
+    end -= 1;
+  }
+  return name.slice(0, end);
+}
+
 // A flag like --file=/path carries a real filesystem target even though the
 // argument starts with '-'; loops that skip dashed args entirely would let
 // protected paths through inside the value.
@@ -472,7 +483,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   // A versioned interpreter binary (python3.11, perl5.36) carries the same
   // eval power as its bare name; fall back to the version-stripped name.
   const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand]
-    ?? INLINE_EVAL_COMMANDS[baseCommand.replace(/[0-9.]+$/, '')];
+    ?? INLINE_EVAL_COMMANDS[bareInterpreterName(baseCommand)];
   if (evalFlagsForBase && args.some(a => matchesEvalFlag(a, evalFlagsForBase))) {
     return {
       allowed: false,
