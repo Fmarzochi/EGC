@@ -15,10 +15,17 @@ process.stdin.on('data', chunk => {
 });
 
 process.stdin.on('end', () => {
-  const result = runPostBash(raw);
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
+  try {
+    const result = runPostBash(raw);
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
+    process.stdout.write(result.output);
+    process.exitCode = result.exitCode;
+  } catch (error) {
+    // Post hooks are observational and cannot gate a command, so a crash is
+    // safe to swallow (fail open) rather than surface a spurious failure.
+    process.stderr.write(`[Hook] post-bash-dispatcher failed: ${error.message}\n`);
+    process.exitCode = 0;
   }
-  process.stdout.write(result.output);
-  process.exitCode = result.exitCode;
 });

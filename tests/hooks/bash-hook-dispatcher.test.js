@@ -117,6 +117,37 @@ function runTests() {
     assert.ok(result.stderr.includes('gh pr review 42 --repo owner/repo'));
   })) passed++; else failed++;
 
+  // ── fail-closed contract for dispatcher-infrastructure crashes ──
+  // A crash in the dispatcher's own plumbing (before or around the hook chain)
+  // must not silently allow a command in pre mode. These lock the exact output
+  // the pre/post dispatchers emit on that path.
+
+  const dispatcher = require('../../scripts/hooks/bash-hook-dispatcher');
+
+  if (test('denyEnvelope emits the host-honored PreToolUse deny schema', () => {
+    const parsed = JSON.parse(dispatcher.denyEnvelope('something broke'));
+    assert.strictEqual(parsed.hookSpecificOutput.hookEventName, 'PreToolUse');
+    assert.strictEqual(parsed.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(parsed.hookSpecificOutput.permissionDecisionReason.includes('something broke'));
+  })) passed++; else failed++;
+
+  if (test('failClosedOutput denies in pre mode and fails open (silent) in post mode', () => {
+    const pre = JSON.parse(dispatcher.failClosedOutput('pre'));
+    assert.strictEqual(pre.hookSpecificOutput.permissionDecision, 'deny',
+      'a dispatcher crash in pre mode must fail closed (deny), never silently allow');
+    assert.strictEqual(dispatcher.failClosedOutput('post'), '',
+      'post hooks are observational, so a crash fails open with no output');
+  })) passed++; else failed++;
+
+  if (test('resolvePreOutput preserves the chain decision if envelope formatting throws', () => {
+    const raw = JSON.stringify({ tool_input: { command: 'ls' } });
+    // Allow with an unchanged command passes straight through.
+    assert.strictEqual(dispatcher.resolvePreOutput(raw, { output: raw, exitCode: 0 }), raw);
+    // A deny signalled by a non-zero exit code (empty stdout) stays empty so the
+    // host still reads the block from the exit code, never a stale allow.
+    assert.strictEqual(dispatcher.resolvePreOutput(raw, { output: '', exitCode: 2 }), '');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

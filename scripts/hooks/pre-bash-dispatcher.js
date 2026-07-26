@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { runPreBash, toPreToolUseOutput } = require('./bash-hook-dispatcher');
+const { runPreBash, resolvePreOutput, failClosedOutput } = require('./bash-hook-dispatcher');
 
 let raw = '';
 const MAX_STDIN = 1024 * 1024;
@@ -15,10 +15,18 @@ process.stdin.on('data', chunk => {
 });
 
 process.stdin.on('end', () => {
-  const result = runPreBash(raw);
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
+  try {
+    const result = runPreBash(raw);
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
+    process.stdout.write(resolvePreOutput(raw, result));
+    process.exitCode = result.exitCode;
+  } catch (error) {
+    // Pre mode gates security: a dispatcher crash must fail closed (deny),
+    // never silently allow the command.
+    process.stderr.write(`[Hook] pre-bash-dispatcher failed: ${error.message}\n`);
+    process.stdout.write(failClosedOutput('pre'));
+    process.exitCode = 0;
   }
-  process.stdout.write(toPreToolUseOutput(raw, result.output));
-  process.exitCode = result.exitCode;
 });

@@ -147,12 +147,20 @@ function runHooks(rawInput, hooks) {
   let stderr = '';
 
   for (const hook of hooks) {
-    if (!isHookEnabled(hook.id, { profiles: hook.profiles })) {
-      trace('hook:dispatch:skipped', { id: hook.id });
-      continue;
-    }
-
     try {
+      // A failure while reading hook flags must never silently skip a
+      // security hook: treat an unreadable flag as enabled so the guard runs.
+      let enabled = true;
+      try {
+        enabled = isHookEnabled(hook.id, { profiles: hook.profiles });
+      } catch (flagError) {
+        trace('hook:dispatch:flag-error', { id: hook.id, error: flagError.message });
+      }
+      if (!enabled) {
+        trace('hook:dispatch:skipped', { id: hook.id });
+        continue;
+      }
+
       trace('hook:dispatch:running', { id: hook.id });
       const result = normalizeHookResult(currentRaw, hook.run(currentRaw));
       currentRaw = result.raw;
@@ -182,6 +190,43 @@ function runPostBash(rawInput) {
   return runHooks(rawInput, POST_BASH_HOOKS);
 }
 
+function denyEnvelope(reason) {
+  // PreToolUse deny envelope honored by Claude Code, Codex and CodeBuddy: the
+  // host blocks the command when this JSON is on stdout AND the process exits 0
+  // (a non-zero exit without valid JSON reads as a crashed hook and falls back
+  // to the host default, which can allow).
+  return JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `[EGC] Blocked for safety: ${reason}`,
+    },
+  });
+}
+
+// Formats the pre-mode stdout for a chain result while preserving the chain's
+// decision: if envelope formatting itself throws, a deny stays a deny and an
+// allow still passes the command through unchanged.
+function resolvePreOutput(raw, result) {
+  try {
+    return toPreToolUseOutput(raw, result.output);
+  } catch (formatError) {
+    process.stderr.write(`[Hook] output formatting failed: ${formatError.message}\n`);
+    return result.exitCode !== 0
+      ? denyEnvelope('a security hook denied the command but its response could not be formatted')
+      : result.output;
+  }
+}
+
+// The stdout a dispatcher emits when its own infrastructure crashes before the
+// chain can decide. Pre mode gates security, so it fails closed (deny); post
+// mode is observational and fails open (emit nothing).
+function failClosedOutput(mode) {
+  return mode === 'post'
+    ? ''
+    : denyEnvelope('the security dispatcher crashed before the guards could run');
+}
+
 async function main() {
   const mode = process.argv[2];
   const raw = await readStdinRaw();
@@ -193,9 +238,7 @@ async function main() {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }
-  const output = mode === 'post'
-    ? result.output
-    : toPreToolUseOutput(raw, result.output);
+  const output = mode === 'post' ? result.output : resolvePreOutput(raw, result);
   process.stdout.write(output);
   process.exit(result.exitCode);
 }
@@ -203,6 +246,13 @@ async function main() {
 if (require.main === module) {
   main().catch(error => {
     process.stderr.write(`[Hook] bash-hook-dispatcher failed: ${error.message}\n`);
+    // Pre mode gates security: a dispatcher-infrastructure crash before the
+    // guards run must fail closed (deny), never silently allow. Post mode is
+    // observational, so a crash there is safe to swallow.
+    const out = failClosedOutput(process.argv[2]);
+    if (out) {
+      process.stdout.write(out);
+    }
     process.exit(0);
   });
 }
@@ -213,4 +263,7 @@ module.exports = {
   runPreBash,
   runPostBash,
   toPreToolUseOutput,
+  denyEnvelope,
+  resolvePreOutput,
+  failClosedOutput,
 };
