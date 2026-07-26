@@ -116,6 +116,17 @@ test('buildOrchestrationPlan requires at least one worker', () => {
   );
 });
 
+test('normalizeSeedPaths rejects a seed path that resolves to the repo root', () => {
+  assert.throws(
+    () => normalizeSeedPaths(['.'], '/tmp/egc'),
+    /not '' or the root itself/
+  );
+  assert.throws(
+    () => normalizeSeedPaths(['sub/..'], '/tmp/egc'),
+    /not '' or the root itself/
+  );
+});
+
 test('buildOrchestrationPlan normalizes global and worker seed paths', () => {
   const plan = buildOrchestrationPlan({
     repoRoot: '/tmp/egc',

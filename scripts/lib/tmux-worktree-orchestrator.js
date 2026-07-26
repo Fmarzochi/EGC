@@ -66,10 +66,11 @@ function normalizeSeedPaths(seedPaths, repoRoot) {
     const relativePath = path.relative(resolvedRepoRoot, absolutePath);
 
     if (
+      relativePath === '' ||
       relativePath.startsWith('..') ||
       path.isAbsolute(relativePath)
     ) {
-      throw new Error(`seedPaths entries must stay inside repoRoot: ${entry}`);
+      throw new Error(`seedPaths entries must name a location inside repoRoot, not '' or the root itself: ${entry}`);
     }
 
     const normalizedPath = relativePath.split(path.sep).join('/');
