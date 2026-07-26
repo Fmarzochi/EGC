@@ -27,13 +27,13 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Build egc-guardian
-        working-directory: mcp/servers/egc-guardian
-        run: npm ci && npm run build
-
-      - name: Install jsfuzz
+      - name: Install fuzz dependencies
         working-directory: fuzz
         run: npm ci
+
+      - name: Build fuzz target
+        working-directory: fuzz
+        run: npm run build:target
 
       - name: Run fuzzer (60-second time-box)
         run: |
