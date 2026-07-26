@@ -1,0 +1,17 @@
+# Keep the Docker build context lean and, more importantly, keep local secrets
+# and version-control metadata out of the image layers. `docker/Dockerfile`
+# ends with `COPY . .`, which would otherwise bake .git/.env and the local
+# node_modules (overwriting the one `npm ci` just installed) into the image.
+.git
+.github
+.gitignore
+/node_modules
+*.log
+.env
+.env.*
+.egc
+coverage
+.nyc_output
+.DS_Store
+.vscode
+.idea
