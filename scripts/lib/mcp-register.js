@@ -287,9 +287,14 @@ function registerContinueYaml(targetDir, bins) {
 function registerZedContextServers(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   const templatePath = path.join(__dirname, '..', '..', 'mcp-configs', 'zed-context-servers.json');
+  // The placeholders sit inside JSON string literals, so a Windows bin path's
+  // backslashes (C:\Users\...) must be escaped before substitution or the
+  // JSON.parse below throws on the invalid "\U" escape. jsonStringBody yields
+  // the escaped body of a JSON string without its surrounding quotes.
+  const jsonStringBody = (p) => JSON.stringify(p).slice(1, -1);
   const template = fs.readFileSync(templatePath, 'utf8')
-    .replaceAll('__GUARDIAN_BIN__', guardianBin)
-    .replaceAll('__MEMORY_BIN__', memoryBin);
+    .replaceAll('__GUARDIAN_BIN__', jsonStringBody(guardianBin))
+    .replaceAll('__MEMORY_BIN__', jsonStringBody(memoryBin));
   const incoming = JSON.parse(template);
 
   let settings = {};

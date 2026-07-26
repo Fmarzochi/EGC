@@ -19,6 +19,7 @@ const {
   registerJson,
   registerToml,
   registerContinueYaml,
+  registerZedContextServers,
   registerMcpServers,
 } = require('../../scripts/lib/mcp-register');
 
@@ -414,6 +415,44 @@ function runTests() {
     const memoryParsed = parseBlock(memoryContent);
     assert.strictEqual(guardianParsed.mcpServers[0].name, 'egc-guardian');
     assert.strictEqual(memoryParsed.mcpServers[0].name, 'egc-memory');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  // ── registerZedContextServers ───────────────────────────────────
+
+  (test('registerZedContextServers keeps a Windows bin path valid JSON (backslash escape)', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
+    const winPath = 'C:\\Users\\person\\egc\\mcp\\servers\\egc-guardian\\build\\index.js';
+
+    // Substituting the raw Windows path into the JSON template unescaped makes
+    // "\U" an invalid JSON escape, so JSON.parse would throw before the file
+    // could ever be written.
+    const changed = registerZedContextServers(target, { guardianBin: winPath, memoryBin: bins.memoryBin });
+    assert.strictEqual(changed, true, 'should register on a fresh settings file');
+
+    const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(
+      parsed.context_servers['egc-guardian'].command.args[0],
+      winPath,
+      'the Windows path should round-trip exactly through JSON.parse'
+    );
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerZedContextServers keeps a POSIX path with a double quote valid JSON', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
+    // A double quote is legal in a POSIX directory name; unescaped it would
+    // terminate the JSON string early and corrupt the template.
+    const quotedPath = '/home/person/we"rd/egc-guardian/index.js';
+
+    registerZedContextServers(target, { guardianBin: quotedPath, memoryBin: bins.memoryBin });
+
+    const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(parsed.context_servers['egc-guardian'].command.args[0], quotedPath, 'a path with a double quote should round-trip exactly');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);

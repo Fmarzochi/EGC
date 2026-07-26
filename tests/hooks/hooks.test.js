@@ -2714,7 +2714,7 @@ async function runTests() {
       // Strip comments to avoid matching "shell: true" in comment text
       const codeOnly = typecheckSource.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
       assert.ok(!codeOnly.includes('shell:'), 'post-edit-typecheck.js should not pass shell option in code');
-      assert.ok(typecheckSource.includes('npx.cmd'), 'Should use npx.cmd for Windows cross-platform safety');
+      assert.ok(codeOnly.includes('process.execPath'), 'Should run the resolved tsc through node (process.execPath): spawning the npx.cmd shim without a shell throws EINVAL on Node >= 20.12 (CVE-2024-27980 mitigation), so the old npx path never ran on Windows, and shell:true would reopen an injection surface');
     })
   )
     passed++;
@@ -5461,6 +5461,41 @@ Some random content without the expected ### Context to Load section
         assert.ok(result.stderr.includes('broken.ts'), `Should reference the edited file basename. Got: ${result.stderr}`);
       }
       // Either way, no crash and data passes through (verified above)
+      cleanupTestDir(testDir);
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    await asyncTest('runs the resolved tsc through node without a shell (Windows EINVAL-safe execution)', async () => {
+      const testDir = createTestDir();
+      // A fake local typescript compiler that only records how it was invoked.
+      const tscBinDir = path.join(testDir, 'node_modules', 'typescript', 'bin');
+      fs.mkdirSync(tscBinDir, { recursive: true });
+      const logFile = path.join(testDir, 'tsc-invocation.log');
+      fs.writeFileSync(
+        path.join(tscBinDir, 'tsc'),
+        [
+          "const fs = require('fs');",
+          `fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({ args: process.argv.slice(2) }) + '\\n');`,
+          'process.exit(0);'
+        ].join('\n')
+      );
+      fs.writeFileSync(path.join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { noEmit: true } }));
+      const testFile = path.join(testDir, 'sample.ts');
+      fs.writeFileSync(testFile, 'export const value = 1;\n');
+
+      const stdinJson = JSON.stringify({ tool_input: { file_path: testFile } });
+      const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
+
+      assert.strictEqual(result.code, 0, 'Should exit 0');
+      // The compiler is run via node on every platform, proving the old Windows
+      // path (execFileSync of npx.cmd without a shell -> EINVAL) is gone.
+      const log = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim() : '';
+      assert.ok(log.length > 0, 'Should have invoked the resolved tsc compiler through node');
+      const entry = JSON.parse(log.split('\n')[0]);
+      assert.deepStrictEqual(entry.args, ['--noEmit', '--pretty', 'false'], 'Should pass the expected tsc flags');
       cleanupTestDir(testDir);
     })
   )

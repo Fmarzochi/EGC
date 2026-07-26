@@ -43,35 +43,61 @@ function findTsConfig(startDir) {
   return null;
 }
 
+function reportTscErrors(output, dir, filePath, resolvedPath) {
+  const relPath = path.relative(dir, resolvedPath);
+  const candidates = new Set([filePath, resolvedPath, relPath]);
+  const relevantLines = output
+    .split("\n")
+    .filter((line) => {
+      for (const candidate of candidates) {
+        if (line.includes(candidate)) return true;
+      }
+      return false;
+    })
+    .slice(0, 10);
+
+  if (relevantLines.length > 0) {
+    console.error(
+      "[Hook] TypeScript errors in " + path.basename(filePath) + ":",
+    );
+    relevantLines.forEach((line) => console.error(line));
+  }
+}
+
+// Resolve the project's own tsc compiler by walking up from startDir for
+// node_modules/typescript/bin/tsc, a plain Node script we run through
+// process.execPath. This deliberately avoids npx: since Node 20.12 (the
+// CVE-2024-27980 mitigation) spawning the npx.cmd shim without a shell throws
+// EINVAL, so the previous execFileSync of npx silently never ran the check on
+// Windows, and adding shell:true would reopen a command-injection surface.
+function resolveTscBin(startDir) {
+  let dir = startDir;
+  const root = path.parse(dir).root;
+  let depth = 0;
+
+  while (depth < 20) {
+    const candidate = path.join(dir, "node_modules", "typescript", "bin", "tsc");
+    if (fs.existsSync(candidate)) return candidate;
+    if (dir === root) break;
+    dir = path.dirname(dir);
+    depth++;
+  }
+  return null;
+}
+
 function runTypeCheck(dir, filePath, resolvedPath) {
+  const tscBin = resolveTscBin(dir);
+  if (!tscBin) return;
+
   try {
-    const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
-    execFileSync(npxBin, ["tsc", "--noEmit", "--pretty", "false"], {
+    execFileSync(process.execPath, [tscBin, "--noEmit", "--pretty", "false"], {
       cwd: dir,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,
     });
   } catch (err) {
-    const output = (err.stdout || "") + (err.stderr || "");
-    const relPath = path.relative(dir, resolvedPath);
-    const candidates = new Set([filePath, resolvedPath, relPath]);
-    const relevantLines = output
-      .split("\n")
-      .filter((line) => {
-        for (const candidate of candidates) {
-          if (line.includes(candidate)) return true;
-        }
-        return false;
-      })
-      .slice(0, 10);
-
-    if (relevantLines.length > 0) {
-      console.error(
-        "[Hook] TypeScript errors in " + path.basename(filePath) + ":",
-      );
-      relevantLines.forEach((line) => console.error(line));
-    }
+    reportTscErrors((err.stdout || "") + (err.stderr || ""), dir, filePath, resolvedPath);
   }
 }
 
