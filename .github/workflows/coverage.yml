@@ -13,7 +13,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -27,6 +27,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # The guardian/memory suites skip when the compiled MCP servers are
+      # absent (build/ is gitignored). Build them here so those defense tests
+      # actually run under coverage instead of silently skipping to a false
+      # green. Ubuntu-only keeps the native sqlite3 build off the Windows matrix.
+      - name: Build MCP servers
+        run: |
+          npm --prefix mcp/servers/egc-guardian ci
+          npm --prefix mcp/servers/egc-guardian run build
+          npm --prefix mcp/servers/egc-memory ci
+          npm --prefix mcp/servers/egc-memory run build
 
       - name: Run tests with coverage
         run: npx c8 --reporter=lcov --reporter=text-summary node tests/run-all.js
