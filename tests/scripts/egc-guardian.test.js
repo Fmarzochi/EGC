@@ -104,6 +104,7 @@ async function runTests() {
   console.log('\n=== validate_command: ALLOWED ===');
 
   run('ls -la',                  () => assertAllowed('ls -la'));
+  run('/bin/ls -la',             () => assertAllowed('/bin/ls -la'));
   run('cat README.md',           () => assertAllowed('cat README.md'));
   run('grep -r "foo" ./src',     () => assertAllowed('grep -r "foo" ./src'));
   run('git status',              () => assertAllowed('git status'));
@@ -127,6 +128,12 @@ async function runTests() {
   run('mv src dest',             () => assertDenied('mv src dest'));
   run('git push --force',        () => assertDenied('git push --force'));
   run('git push -f',             () => assertDenied('git push -f'));
+  // absolute/relative/versioned paths must not sidestep the name-based checks
+  run('/bin/rm -rf .',           () => assertDenied('/bin/rm -rf .'));
+  run('/usr/bin/mv src dest',    () => assertDenied('/usr/bin/mv src dest'));
+  run('/usr/bin/python3 -c ...', () => assertDenied('/usr/bin/python3 -c "import os"'));
+  run('python3.11 -c ...',       () => assertDenied('python3.11 -c "x"'));
+  run('/usr/bin/git push --force',() => assertDenied('/usr/bin/git push --force'));
   run(`cat ~/.aws/credentials`,  () => assertDenied(`cat ${home}/.aws/credentials`));
   run(`cat ~/.ssh/id_rsa`,       () => assertDenied(`cat ${home}/.ssh/id_rsa`));
   run('grep -r "" /',            () => assertDenied('grep -r "" /'));
