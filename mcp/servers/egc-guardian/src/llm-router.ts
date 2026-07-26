@@ -22,11 +22,25 @@ export function tokenize(text: string): Set<string> {
   );
 }
 
+// The catalog is immutable at runtime, so an entry's token set never changes.
+// Memoize it per entry object (weakly keyed so ad-hoc entries stay GC-able)
+// instead of re-tokenizing all ~370 catalog entries on every routing query.
+const entryTokenCache = new WeakMap<object, Set<string>>();
+
+function entryTokensFor(entry: { name: string; description: string }): Set<string> {
+  let tokens = entryTokenCache.get(entry);
+  if (!tokens) {
+    tokens = tokenize(`${entry.name} ${entry.description}`);
+    entryTokenCache.set(entry, tokens);
+  }
+  return tokens;
+}
+
 export function keywordScore(
   promptTokens: Set<string>,
   entry: { name: string; description: string },
 ): number {
-  const entryTokens = tokenize(`${entry.name} ${entry.description}`);
+  const entryTokens = entryTokensFor(entry);
   let matches = 0;
   for (const t of promptTokens) if (entryTokens.has(t)) matches++;
   return matches === 0 ? 0 : Math.round((matches / Math.sqrt(entryTokens.size)) * 100) / 100;
