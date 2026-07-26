@@ -1,7 +1,7 @@
 {
   "name": "egc",
   "version": "1.1.15",
-  "description": "Battle-tested Codex workflows \u2014 228 shared EGC skills, production-ready MCP configs, and selective-install-aligned conventions for TDD, security scanning, code review, and autonomous development.",
+  "description": "Battle-tested Codex workflows \u2014 230 shared EGC skills, production-ready MCP configs, and selective-install-aligned conventions for TDD, security scanning, code review, and autonomous development.",
   "author": {
     "name": "Felipe Marzochi",
     "email": "fmarzochi@gmail.com",
@@ -24,7 +24,7 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "EGC - Extended Global Context",
-    "shortDescription": "228 battle-tested EGC skills plus MCP configs for TDD, security, code review, and autonomous development.",
+    "shortDescription": "230 battle-tested EGC skills plus MCP configs for TDD, security, code review, and autonomous development.",
     "longDescription": "Extended Global Context (EGC) is a community-maintained collection of Codex-ready skills and MCP configs evolved over 10+ months of intensive daily use. It covers TDD workflows, security scanning, code review, architecture decisions, operator workflows, and more \u2014 all in one installable plugin.",
     "developerName": "Felipe Marzochi",
     "category": "Productivity",

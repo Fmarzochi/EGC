@@ -17,9 +17,9 @@ Esta pagina classifica os subsistemas de nivel superior e subarvores notaveis do
 
 | Caminho | Classe | Notas |
 |---|---|---|
-| `agents/` | ACTIVE | 62 definicoes de agentes, fonte da verdade |
-| `commands/` | ACTIVE | 74 comandos de barra |
-| `skills/` | ACTIVE | 228 skills em 14 namespaces |
+| `agents/` | ACTIVE | 63 definicoes de agentes, fonte da verdade |
+| `commands/` | ACTIVE | 77 comandos de barra |
+| `skills/` | ACTIVE | 230 skills em 14 namespaces |
 | `rules/` | ACTIVE | Regras de codificacao para varias linguagens |
 | `hooks/` | ACTIVE | Manifesto (`hooks.json`); implementacoes em `scripts/hooks/` |
 | `scripts/hooks/` | ACTIVE | 25 hooks carregados diretamente pelo `hooks/hooks.json`; restante transitivo |

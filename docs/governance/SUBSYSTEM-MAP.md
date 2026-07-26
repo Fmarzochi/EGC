@@ -20,9 +20,9 @@ dormant.
 
 | Path | Class | Notes |
 |---|---|---|
-| `agents/` | ACTIVE | 62 agent definitions, source of truth |
-| `commands/` | ACTIVE | 74 slash commands |
-| `skills/` | ACTIVE | 228 skills across 14 namespaces |
+| `agents/` | ACTIVE | 63 agent definitions, source of truth |
+| `commands/` | ACTIVE | 77 slash commands |
+| `skills/` | ACTIVE | 230 skills across 14 namespaces |
 | `rules/` | ACTIVE | Cross-language coding rules |
 | `hooks/` | ACTIVE | Manifest (`hooks.json`); implementations live in `scripts/hooks/` |
 | `scripts/hooks/` | ACTIVE | 25 hooks loaded directly by `hooks/hooks.json`; rest transitive |
