@@ -245,7 +245,9 @@ function handleStatus() {
 }
 
 async function main() {
-  const args = process.argv.slice(3); // skip "node team.js" or "egc team"
+  // egc.js already strips the "team" command word before spawning this script,
+  // so argv is ["node", "team.js", ...subcommandArgs]; slice(2) keeps them.
+  const args = process.argv.slice(2);
   const firstArg = args[0];
 
   if (!firstArg || firstArg === '--help' || firstArg === '-h') {
