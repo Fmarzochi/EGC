@@ -81,13 +81,30 @@ function extractFrontmatter(content) {
 
   const frontmatter = {};
   const lines = match[1].split(/\r?\n/);
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Indented lines belong to a block scalar consumed below.
+    if (/^\s/.test(line)) continue;
     const colonIdx = line.indexOf(':');
-    if (colonIdx > 0) {
-      const key = line.slice(0, colonIdx).trim();
-      const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
-      frontmatter[key] = value;
+    if (colonIdx <= 0) continue;
+    const key = line.slice(0, colonIdx).trim();
+    let value = line.slice(colonIdx + 1).trim();
+    // Fold a YAML block scalar (key: >- / |-) into its indented body so a
+    // description written as a block is validated on its real text, not the
+    // bare ">-" indicator that a plain split-on-colon parser would store.
+    if (/^[>|][+-]?$/.test(value)) {
+      const block = [];
+      let j = i + 1;
+      while (j < lines.length && (/^\s+\S/.test(lines[j]) || lines[j].trim() === '')) {
+        block.push(lines[j].trim());
+        j++;
+      }
+      value = block.join(' ').replace(/\s+/g, ' ').trim();
+      i = j - 1;
+    } else {
+      value = value.replace(/^["']|["']$/g, '');
     }
+    frontmatter[key] = value;
   }
   return { frontmatter };
 }

@@ -10,17 +10,74 @@ const outFile = path.join(root, 'mcp', 'servers', 'egc-guardian', 'src', 'catalo
 function parseFrontmatter(content) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return null;
+  const lines = match[1].split(/\r?\n/);
   const fm = {};
-  for (const line of match[1].split('\n')) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Indented lines belong to a block scalar already consumed below.
+    if (/^\s/.test(line)) continue;
     const colon = line.indexOf(':');
-    if (colon === -1) continue;
+    if (colon <= 0) continue;
     const key = line.slice(0, colon).trim();
-    const val = line.slice(colon + 1).trim().replace(/^["']|["']$/g, '');
+    let val = line.slice(colon + 1).trim();
+    // YAML block scalar (key: > / >- / | / |-): the value is the indented
+    // block that follows, not the indicator. Fold it into one spaced line.
+    // A plain split-on-colon parser stored just ">-", corrupting these; a
+    // real YAML loader instead chokes on the many descriptions that carry an
+    // unquoted inline ":" ("... for Android and KMP: structured ..."), so we
+    // keep splitting on the first colon and only special-case block scalars.
+    if (/^[>|][+-]?$/.test(val)) {
+      const block = [];
+      let j = i + 1;
+      while (j < lines.length && (/^\s+\S/.test(lines[j]) || lines[j].trim() === '')) {
+        block.push(lines[j].trim());
+        j++;
+      }
+      val = block.join(' ').replace(/\s+/g, ' ').trim();
+      i = j - 1;
+    } else {
+      val = val.replace(/^["']|["']$/g, '');
+    }
     if (key && val) fm[key] = val;
   }
   return fm;
 }
 
+// Skills are canonically skills/<category>/<name>/SKILL.md (or the flatter
+// skills/<name>/SKILL.md). Only SKILL.md defines a skill; other .md files
+// living under a skill (reference docs, sub-agents) must not be indexed as
+// top-level skills, which is what inflated the catalog past the real count.
+function listSkillMd(skillsRoot) {
+  const results = [];
+  let top;
+  try {
+    top = fs.readdirSync(skillsRoot, { withFileTypes: true });
+  } catch (_) { // NOSONAR
+    return results;
+  }
+  for (const entry of top) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(skillsRoot, entry.name);
+    if (fs.existsSync(path.join(dir, 'SKILL.md'))) {
+      results.push(path.join(dir, 'SKILL.md'));
+      continue;
+    }
+    let children;
+    try {
+      children = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (_) { // NOSONAR
+      continue;
+    }
+    for (const child of children) {
+      if (!child.isDirectory()) continue;
+      const skillMd = path.join(dir, child.name, 'SKILL.md');
+      if (fs.existsSync(skillMd)) results.push(skillMd);
+    }
+  }
+  return results;
+}
+
+// Agents are flat agents/<name>.md files, so every .md is an agent definition.
 function walkMd(dir, results = []) {
   try {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -34,11 +91,11 @@ function walkMd(dir, results = []) {
 
 const entries = [];
 
-for (const f of walkMd(path.join(root, 'skills'))) {
+for (const f of listSkillMd(path.join(root, 'skills'))) {
   try {
     const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
     if (fm?.name && fm?.description) {
-      entries.push({ kind: 'skill', name: fm.name, description: fm.description });
+      entries.push({ kind: 'skill', name: String(fm.name), description: String(fm.description) });
     }
   } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
 }
@@ -47,7 +104,7 @@ for (const f of walkMd(path.join(root, 'agents'))) {
   try {
     const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
     if (fm?.name && fm?.description) {
-      entries.push({ kind: 'agent', name: fm.name, description: fm.description });
+      entries.push({ kind: 'agent', name: String(fm.name), description: String(fm.description) });
     }
   } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
 }

@@ -165,19 +165,19 @@ function parseZhDocsReadmeExpectations(readmeContent) {
 
   const quickStartMatch = readmeContent.match(/你现在可以使用\s+(\d+)\s+个智能体、\s*(\d+)\s*项技能和\s*(\d+)\s*个命令了/i);
   if (!quickStartMatch) {
-    throw new Error('README.zh-CN.md is missing the quick-start catalog summary');
+    throw new Error('docs/zh-CN/README.md is missing the quick-start catalog summary');
   }
 
   expectations.push(
-    { category: 'agents', mode: 'exact', expected: Number(quickStartMatch[1]), source: 'README.zh-CN.md quick-start summary' },
-    { category: 'skills', mode: 'exact', expected: Number(quickStartMatch[2]), source: 'README.zh-CN.md quick-start summary' },
-    { category: 'commands', mode: 'exact', expected: Number(quickStartMatch[3]), source: 'README.zh-CN.md quick-start summary' }
+    { category: 'agents', mode: 'exact', expected: Number(quickStartMatch[1]), source: 'docs/zh-CN/README.md quick-start summary' },
+    { category: 'skills', mode: 'exact', expected: Number(quickStartMatch[2]), source: 'docs/zh-CN/README.md quick-start summary' },
+    { category: 'commands', mode: 'exact', expected: Number(quickStartMatch[3]), source: 'docs/zh-CN/README.md quick-start summary' }
   );
 
   const tablePatterns = [
-    { category: 'agents', regex: /\|\s*智能体\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s*个\s*\|/i, source: 'README.zh-CN.md comparison table' },
-    { category: 'commands', regex: /\|\s*命令\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s*个\s*\|/i, source: 'README.zh-CN.md comparison table' },
-    { category: 'skills', regex: /\|\s*技能\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s*项\s*\|/i, source: 'README.zh-CN.md comparison table' }
+    { category: 'agents', regex: /\|\s*智能体\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s*个\s*\|/i, source: 'docs/zh-CN/README.md comparison table' },
+    { category: 'commands', regex: /\|\s*命令\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s*个\s*\|/i, source: 'docs/zh-CN/README.md comparison table' },
+    { category: 'skills', regex: /\|\s*技能\s*\|\s*(?:(?:PASS:|\u2705)\s*)?(\d+)\s*项\s*\|/i, source: 'docs/zh-CN/README.md comparison table' }
   ];
 
   for (const pattern of tablePatterns) {
