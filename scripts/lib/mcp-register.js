@@ -181,15 +181,15 @@ function registerJson(targetPath, bins) {
 
 /**
  * Escapes a path for use inside a TOML basic (double-quoted) string.
- * Backslashes are the only character we need to worry about here since
- * bin paths never contain control characters or unescaped quotes - but an
- * unescaped backslash matters a lot: TOML reserves "\U" for an 8-hex-digit
- * Unicode escape, so a raw Windows path like C:\Users\... silently corrupts
- * the file (or fails to parse) the moment a backslash happens to precede a
- * hex-ish character.
+ * Two characters can occur in a real filesystem path and break the string: a
+ * backslash (TOML reserves "\U" for an 8-hex-digit Unicode escape, so a raw
+ * Windows path like C:\Users\... silently corrupts the file the moment a
+ * backslash precedes a hex-ish character) and a double quote (legal in a POSIX
+ * directory name, and it would terminate the string early). Escape the
+ * backslash first so the one added for the quote is not doubled again.
  */
 function tomlEscape(p) {
-  return p.replaceAll('\\', '\\\\');
+  return p.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
 }
 
 /**

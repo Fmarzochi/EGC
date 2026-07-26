@@ -218,6 +218,33 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
+  (test('registerToml escapes double quotes so a POSIX path with a quote stays valid TOML', () => {
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed)');
+      return;
+    }
+
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, '');
+    // A double quote is illegal in a Windows path but legal in a POSIX
+    // directory name; unescaped it terminates the TOML basic string early and
+    // corrupts the file, the same class of bug as an unescaped backslash.
+    const quotedPath = '/home/person/we"rd/egc-guardian/index.js';
+
+    registerToml(target, { guardianBin: quotedPath, memoryBin: bins.memoryBin });
+
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    const guardianEntry = parsed.mcp_servers.find(s => s.name === 'egc-guardian');
+    assert.strictEqual(guardianEntry.args[0], quotedPath, 'a path containing a double quote should round-trip exactly');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
   (test('registerToml restores a commented-out entry instead of treating it as already registered (audit EGC-128)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
