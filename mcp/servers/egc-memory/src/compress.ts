@@ -201,7 +201,14 @@ export async function loadRawObservations(
   limit: number = 50,
   since?: string
 ): Promise<RawObservation[]> {
-  const sqliteObservations = await loadRawObservationsFromStateDb(projectPath, limit, since);
+  let sqliteObservations: RawObservation[] = [];
+  try {
+    sqliteObservations = await loadRawObservationsFromStateDb(projectPath, limit, since);
+  } catch (err) {
+    // A locked, busy or corrupt state.db must not sink compression: fall
+    // through to the observations.jsonl reader below instead of throwing.
+    console.error("[EGC compress] state.db read failed, using observations.jsonl fallback:", String(err));
+  }
 
   if (sqliteObservations.length > 0) {
     return sqliteObservations;
@@ -237,8 +244,10 @@ function readObsFile(filePath: string, limit: number, since?: string): RawObserv
           if (time < sinceTime) continue;
         }
 
-        // non-security hash: used for dedup/identity only
-        const id = parsed.id || `obs-${i}-${crypto.createHash("sha256").update(lines[i]).digest("hex").slice(0, 8)}`;
+        // Content-only hash, deliberately position-independent: the same
+        // observation must resolve to the same id here and in
+        // replaceObservation, whose line array is not blank-line filtered.
+        const id = parsed.id || `obs-${crypto.createHash("sha256").update(lines[i]).digest("hex").slice(0, 8)}`;
         observations.push({
           id,
           tool: parsed.tool,
@@ -306,8 +315,9 @@ export async function replaceObservation(projectPath: string, id: string, compre
     if (!lines[i]) continue;
     try {
       const parsed = JSON.parse(lines[i]);
-      // non-security hash: used for dedup/identity only
-      const lineId = parsed.id || `obs-${i}-${crypto.createHash("sha256").update(lines[i]).digest("hex").slice(0, 8)}`;
+      // Position-independent content hash, matching readObsFile so the id
+      // resolves the same despite the differing blank-line handling.
+      const lineId = parsed.id || `obs-${crypto.createHash("sha256").update(lines[i]).digest("hex").slice(0, 8)}`;
       if (lineId === id) {
         lines[i] = JSON.stringify({
           ...compressed,
