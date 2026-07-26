@@ -118,6 +118,23 @@ def test_stream_flag_raises_not_implemented(provider: OpenAIProvider) -> None:
 
 
 @pytest.mark.unit
+def test_unmapped_sdk_error_is_redacted_not_reraised_verbatim(provider: OpenAIProvider) -> None:
+    """A raw SDK exception that misses the 401/429/context classification must
+    not surface verbatim: its message can echo request headers/payloads (and
+    thus the API key). The fallback wraps it in a redacted LLMError instead of
+    re-raising the original."""
+    leak = "Bad request; sent Authorization: Bearer sk-live-abcdefghijklmnop"
+    provider.client.chat.completions.create.side_effect = RuntimeError(leak)
+
+    with pytest.raises(LLMError) as exc:
+        provider.generate(_simple_input())
+
+    assert exc.value.provider == ProviderType.OPENAI
+    assert "sk-live-abcdefghijklmnop" not in str(exc.value)
+    assert "<REDACTED>" in str(exc.value)
+
+
+@pytest.mark.unit
 def test_non_streaming_call_unchanged(provider: OpenAIProvider) -> None:
     """Regression test for issue #903: the non-streaming path (stream=False,
     the default) must continue to work exactly as before."""
