@@ -57,11 +57,6 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
-    "name": "observer",
-    "description": "Background agent that analyzes session observations to detect patterns and create instincts. Uses Haiku for cost-efficiency. v2.1 adds project-scoped instincts."
-  },
-  {
-    "kind": "skill",
     "name": "cost-aware-llm-pipeline",
     "description": "Cost optimization patterns for LLM API usage: model routing by task complexity, budget tracking, retry logic, and prompt caching."
   },
@@ -83,7 +78,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "prompt-optimizer",
-    "description": ">-"
+    "description": "Analyze raw prompts, identify intent and gaps, match EGC components (skills/commands/agents/hooks), and output a ready-to-paste optimized prompt. Advisory role only: never executes the task itself. TRIGGER when: user says \"optimize prompt\", \"improve my prompt\", \"how to write a prompt for\", \"help me prompt\", \"rewrite this prompt\", or explicitly asks to enhance prompt quality. Also triggers on Chinese equivalents: \"优化prompt\", \"改进prompt\", \"怎么写prompt\", \"帮我优化这个指令\". DO NOT TRIGGER when: user wants the task executed directly, or says \"just do it\" / \"直接做\". DO NOT TRIGGER when user says \"优化代码\", \"优化性能\", \"optimize performance\", \"optimize this code\": those are refactoring/performance tasks, not prompt optimization."
   },
   {
     "kind": "skill",
@@ -93,7 +88,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "token-budget-advisor",
-    "description": ">-"
+    "description": "Offers the user an informed choice about how much response depth to consume before answering. Use this skill when the user explicitly wants to control response length, depth, or token budget. TRIGGER when: \"token budget\", \"token count\", \"token usage\", \"token limit\", \"response length\", \"answer depth\", \"short version\", \"brief answer\", \"detailed answer\", \"exhaustive answer\", \"respuesta corta vs larga\", \"cuántos tokens\", \"ahorrar tokens\", \"responde al 50%\", \"dame la versión corta\", \"quiero controlar cuánto usas\", or clear variants where the user is explicitly asking to control answer size or depth. DO NOT TRIGGER when: user has already specified a level in the current session (maintain it), the request is clearly a one-word answer, or \"token\" refers to auth/session/payment tokens rather than response size."
   },
   {
     "kind": "skill",
@@ -118,7 +113,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "blueprint",
-    "description": ">-"
+    "description": "Turn a one-line objective into a step-by-step construction plan for multi-session, multi-agent engineering projects. Each step has a self-contained context brief so a fresh agent can execute it cold. Includes adversarial review gate, dependency graph, parallel step detection, anti-pattern catalog, and plan mutation protocol. TRIGGER when: user requests a plan, blueprint, or roadmap for a complex multi-PR task, or describes work that needs multiple sessions. DO NOT TRIGGER when: task is completable in a single PR or fewer than 3 tool calls, or user says \"just do it\"."
   },
   {
     "kind": "skill",
@@ -148,7 +143,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "carrier-relationship-management",
-    "description": ">"
+    "description": "Codified expertise for managing carrier portfolios, negotiating freight rates, tracking carrier performance, allocating freight, and maintaining strategic carrier relationships. Informed by transportation managers with 15+ years experience. Includes scorecarding frameworks, RFP processes, market intelligence, and compliance vetting. Use when managing carriers, negotiating rates, evaluating carrier performance, or building freight strategies."
   },
   {
     "kind": "skill",
@@ -158,7 +153,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "energy-procurement",
-    "description": ">"
+    "description": "Codified expertise for electricity and gas procurement, tariff optimization, demand charge management, renewable PPA evaluation, and multi-facility energy cost management. Informed by energy procurement managers with 15+ years experience at large commercial and industrial consumers. Includes market structure analysis, hedging strategies, load profiling, and sustainability reporting frameworks. Use when procuring energy, optimizing tariffs, managing demand charges, evaluating PPAs, or developing energy strategies."
   },
   {
     "kind": "skill",
@@ -168,7 +163,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "inventory-demand-planning",
-    "description": ">"
+    "description": "Codified expertise for demand forecasting, safety stock optimization, replenishment planning, and promotional lift estimation at multi-location retailers. Informed by demand planners with 15+ years experience managing hundreds of SKUs. Includes forecasting method selection, ABC/XYZ analysis, seasonal transition management, and vendor negotiation frameworks. Use when forecasting demand, setting safety stock, planning replenishment, managing promotions, or optimizing inventory levels."
   },
   {
     "kind": "skill",
@@ -177,28 +172,8 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
-    "name": "enrichment-agent",
-    "description": "Pulls detailed profile, company, and activity data for qualified leads. Enriches prospects with recent news, funding data, content interests, and mutual overlap."
-  },
-  {
-    "kind": "skill",
-    "name": "mutual-mapper",
-    "description": "Maps the user's social graph (X following, LinkedIn connections) against scored prospects to find mutual connections and rank them by introduction potential."
-  },
-  {
-    "kind": "skill",
-    "name": "outreach-drafter",
-    "description": "Generates personalized outreach messages for qualified leads. Creates warm intro requests, cold emails, X DMs, and follow-up sequences using enriched profile data."
-  },
-  {
-    "kind": "skill",
-    "name": "signal-scorer",
-    "description": "Searches and ranks prospects by relevance signals across X, Exa, and LinkedIn. Assigns weighted scores based on role, industry, activity, influence, and location."
-  },
-  {
-    "kind": "skill",
     "name": "logistics-exception-management",
-    "description": ">"
+    "description": "Codified expertise for handling freight exceptions, shipment delays, damages, losses, and carrier disputes. Informed by logistics professionals with 15+ years operational experience. Includes escalation protocols, carrier-specific behaviors, claims procedures, and judgment frameworks. Use when handling shipping exceptions, freight claims, delivery issues, or carrier disputes."
   },
   {
     "kind": "skill",
@@ -208,17 +183,17 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "production-scheduling",
-    "description": ">"
+    "description": "Codified expertise for production scheduling, job sequencing, line balancing, changeover optimization, and bottleneck resolution in discrete and batch manufacturing. Informed by production schedulers with 15+ years experience. Includes TOC/drum-buffer-rope, SMED, OEE analysis, disruption response frameworks, and ERP/MES interaction patterns. Use when scheduling production, resolving bottlenecks, optimizing changeovers, responding to disruptions, or balancing manufacturing lines."
   },
   {
     "kind": "skill",
     "name": "quality-nonconformance",
-    "description": ">"
+    "description": "Codified expertise for quality control, non-conformance investigation, root cause analysis, corrective action, and supplier quality management in regulated manufacturing. Informed by quality engineers with 15+ years experience across FDA, IATF 16949, and AS9100 environments. Includes NCR lifecycle management, CAPA systems, SPC interpretation, and audit methodology. Use when investigating non-conformances, performing root cause analysis, managing CAPAs, interpreting SPC data, or handling supplier quality issues."
   },
   {
     "kind": "skill",
     "name": "returns-reverse-logistics",
-    "description": ">"
+    "description": "Codified expertise for returns authorization, receipt and inspection, disposition decisions, refund processing, fraud detection, and warranty claims management. Informed by returns operations managers with 15+ years experience. Includes grading frameworks, disposition economics, fraud pattern recognition, and vendor recovery processes. Use when handling product returns, reverse logistics, refund decisions, return fraud detection, or warranty claims."
   },
   {
     "kind": "skill",
@@ -582,146 +557,6 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
-    "name": "3d",
-    "description": "3D content in Remotion using Three.js and React Three Fiber."
-  },
-  {
-    "kind": "skill",
-    "name": "animations",
-    "description": "Fundamental animation skills for Remotion"
-  },
-  {
-    "kind": "skill",
-    "name": "assets",
-    "description": "Importing images, videos, audio, and fonts into Remotion"
-  },
-  {
-    "kind": "skill",
-    "name": "audio",
-    "description": "Using audio and sound in Remotion - importing, trimming, volume, speed, pitch"
-  },
-  {
-    "kind": "skill",
-    "name": "calculate-metadata",
-    "description": "Dynamically set composition duration, dimensions, and props"
-  },
-  {
-    "kind": "skill",
-    "name": "can-decode",
-    "description": "Check if a video can be decoded by the browser using Mediabunny"
-  },
-  {
-    "kind": "skill",
-    "name": "charts",
-    "description": "Chart and data visualization patterns for Remotion. Use when creating bar charts, pie charts, histograms, progress bars, or any data-driven animations."
-  },
-  {
-    "kind": "skill",
-    "name": "compositions",
-    "description": "Defining compositions, stills, folders, default props and dynamic metadata"
-  },
-  {
-    "kind": "skill",
-    "name": "display-captions",
-    "description": "Displaying captions in Remotion with TikTok-style pages and word highlighting"
-  },
-  {
-    "kind": "skill",
-    "name": "extract-frames",
-    "description": "Extract frames from videos at specific timestamps using Mediabunny"
-  },
-  {
-    "kind": "skill",
-    "name": "fonts",
-    "description": "Loading Google Fonts and local fonts in Remotion"
-  },
-  {
-    "kind": "skill",
-    "name": "get-audio-duration",
-    "description": "Getting the duration of an audio file in seconds with Mediabunny"
-  },
-  {
-    "kind": "skill",
-    "name": "get-video-dimensions",
-    "description": "Getting the width and height of a video file with Mediabunny"
-  },
-  {
-    "kind": "skill",
-    "name": "get-video-duration",
-    "description": "Getting the duration of a video file in seconds with Mediabunny"
-  },
-  {
-    "kind": "skill",
-    "name": "gif",
-    "description": "Displaying GIFs, APNG, AVIF and WebP in Remotion"
-  },
-  {
-    "kind": "skill",
-    "name": "images",
-    "description": "Embedding images in Remotion using the <Img> component"
-  },
-  {
-    "kind": "skill",
-    "name": "import-srt-captions",
-    "description": "Importing .srt subtitle files into Remotion using @remotion/captions"
-  },
-  {
-    "kind": "skill",
-    "name": "lottie",
-    "description": "Embedding Lottie animations in Remotion."
-  },
-  {
-    "kind": "skill",
-    "name": "measuring-dom-nodes",
-    "description": "Measuring DOM element dimensions in Remotion"
-  },
-  {
-    "kind": "skill",
-    "name": "measuring-text",
-    "description": "Measuring text dimensions, fitting text to containers, and checking overflow"
-  },
-  {
-    "kind": "skill",
-    "name": "sequencing",
-    "description": "Sequencing patterns for Remotion - delay, trim, limit duration of items"
-  },
-  {
-    "kind": "skill",
-    "name": "tailwind",
-    "description": "Using TailwindCSS in Remotion."
-  },
-  {
-    "kind": "skill",
-    "name": "text-animations",
-    "description": "Typography and text animation patterns for Remotion."
-  },
-  {
-    "kind": "skill",
-    "name": "timing",
-    "description": "Interpolation curves in Remotion - linear, easing, spring animations"
-  },
-  {
-    "kind": "skill",
-    "name": "transcribe-captions",
-    "description": "Transcribing audio to generate captions in Remotion"
-  },
-  {
-    "kind": "skill",
-    "name": "transitions",
-    "description": "Fullscreen scene transitions for Remotion."
-  },
-  {
-    "kind": "skill",
-    "name": "trimming",
-    "description": "Trimming patterns for Remotion - cut the beginning or end of animations"
-  },
-  {
-    "kind": "skill",
-    "name": "videos",
-    "description": "Embedding videos in Remotion - trimming, volume, speed, looping, pitch"
-  },
-  {
-    "kind": "skill",
     "name": "ui-demo",
     "description": "Record polished UI demo videos using Playwright. Use when the user asks to create a demo, walkthrough, screen recording, or tutorial video of a web application. Produces WebM videos with visible cursor, natural pacing, and professional feel."
   },
@@ -923,7 +758,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "openclaw-persona-forge",
-    "description": "|-"
+    "description": "为 OpenClaw AI Agent 锻造完整的龙虾灵魂方案。根据用户偏好或随机抽卡， 输出身份定位、灵魂描述(SOUL.md)、角色化底线规则、名字和头像生图提示词。 如当前环境提供已审核的生图 skill，可自动生成统一风格头像图片。 当用户需要创建、设计或定制 OpenClaw 龙虾灵魂时使用。 不适用于：微调已有 SOUL.md、非 OpenClaw 平台的角色设计、纯工具型无性格 Agent。 触发词：龙虾灵魂、虾魂、OpenClaw 灵魂、养虾灵魂、龙虾角色、龙虾定位、 龙虾剧本杀角色、龙虾游戏角色、龙虾 NPC、龙虾性格、龙虾背景故事、 lobster soul、lobster character、抽卡、随机龙虾、龙虾 SOUL、gacha。"
   },
   {
     "kind": "skill",
@@ -1083,7 +918,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "customs-trade-compliance",
-    "description": ">"
+    "description": "Codified expertise for customs documentation, tariff classification, duty optimization, restricted party screening, and regulatory compliance across multiple jurisdictions. Informed by trade compliance specialists with 15+ years experience. Includes HS classification logic, Incoterms application, FTA utilization, and penalty mitigation. Use when handling customs clearance, tariff classification, trade compliance, import/export documentation, or duty optimization."
   },
   {
     "kind": "skill",
