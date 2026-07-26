@@ -78,6 +78,18 @@ if (test('blocks quoted core.hooksPath override argument', () => {
   assert.ok(r.stderr.includes('core.hooksPath'), `stderr should mention core.hooksPath: ${r.stderr}`);
 })) passed++; else failed++;
 
+// git config section/key names are case-insensitive, so a lowercase or
+// upper-cased key reaches the same setting and must be blocked too.
+if (test('blocks a lowercase core.hookspath override key', () => {
+  const r = runHook({ tool_input: { command: 'git -c core.hookspath=/dev/null commit -m "msg"' } });
+  assert.strictEqual(r.code, 2, `expected exit 2, got ${r.code}`);
+})) passed++; else failed++;
+
+if (test('blocks an upper-cased CORE.HOOKSPATH override key', () => {
+  const r = runHook({ tool_input: { command: 'git -c CORE.HOOKSPATH=/dev/null commit -m "msg"' } });
+  assert.strictEqual(r.code, 2, `expected exit 2, got ${r.code}`);
+})) passed++; else failed++;
+
 // --- Chained command false positive prevention (Comment 2) ---
 
 if (test('does not false-positive on -n belonging to git log in a chain', () => {

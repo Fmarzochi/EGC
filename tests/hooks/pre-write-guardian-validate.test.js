@@ -67,6 +67,31 @@ function runTests() {
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
   })) passed++; else failed++;
 
+  // Harnesses name the write target differently; a protected path must be
+  // caught whether it arrives as file_path, path (Gemini CLI) or TargetFile
+  // (Antigravity).
+  function runHookField(field, filePath) {
+    const rawInput = JSON.stringify({ tool_name: 'Write', tool_input: { [field]: filePath, content: 'x' } });
+    const result = spawnSync('node', [runner, 'pre:write-guardian-validate', 'scripts/hooks/pre-write-guardian-validate.js', 'minimal,standard,strict'], {
+      input: rawInput,
+      encoding: 'utf8',
+      env: { ...process.env, ECC_HOOK_PROFILE: 'standard', EGC_GUARDIAN_CLI: fakeCli },
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return Number.isInteger(result.status) ? result.status : 1;
+  }
+
+  if (test('blocks a protected write arriving via the path field', () => {
+    const code = runHookField('path', path.join(os.homedir(), '.ssh', 'id_rsa'));
+    assert.strictEqual(code, 2, 'Expected block when the target arrives as path');
+  })) passed++; else failed++;
+
+  if (test('blocks a protected write arriving via the TargetFile field', () => {
+    const code = runHookField('TargetFile', path.join(os.homedir(), '.aws', 'credentials'));
+    assert.strictEqual(code, 2, 'Expected block when the target arrives as TargetFile');
+  })) passed++; else failed++;
+
   if (test('fails open silently when the validator crashes', () => {
     const brokenCli = path.join(os.tmpdir(), `egc-broken-cli-${Date.now()}.js`);
     fs.writeFileSync(brokenCli, 'process.exit(1);\n');
