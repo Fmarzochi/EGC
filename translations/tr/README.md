@@ -16,7 +16,7 @@
 
 ---
 
-EGC sıradan bir bellek aracı değildir. Cursor, Copilot, Claude Code, Codex, Aider ve herhangi bir terminal agent'ı dahil olmak üzere toplam 20 AI kodlama aracında, her AI'ın projenizde ilk günden beri çalışıyormuş gibi hareket etmesini sağlayan zeka katmanıdır. Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere ve Vertex AI ile doğrudan çalışır; ayrıca Qwen3, Llama 4 ve daha fazlası için OpenRouter'ı destekler.
+EGC sıradan bir bellek aracı değildir. Cursor, Copilot, Claude Code, Codex, Aider ve herhangi bir terminal agent'ı dahil olmak üzere toplam 23 AI kodlama aracında, her AI'ın projenizde ilk günden beri çalışıyormuş gibi hareket etmesini sağlayan zeka katmanıdır. Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere ve Vertex AI ile doğrudan çalışır; ayrıca Qwen3, Llama 4 ve daha fazlası için OpenRouter'ı destekler.
 
 Her konuşma projenizin kolektif zekasını geliştirir. Her agent bunu devralır. Her oturum daha akıllı hale gelir.
 
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 - **Tek komut, sıfır yapılandırma: bellek makinenizde yerel ve şifreli kalır, git'e asla commit edilmez.**
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 23 AI coding tools" width="800" />
 </div>
 
 [Tam kurulum rehberi](../../docs/installation.md)
