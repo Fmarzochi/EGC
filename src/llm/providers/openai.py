@@ -110,7 +110,14 @@ class OpenAIProvider(LLMProvider):
             raise RateLimitError(safe_msg, provider=self.provider_type) from e
         if "context" in msg.lower() and "length" in msg.lower():
             raise ContextLengthError(safe_msg, provider=self.provider_type) from e
-        raise e
+        if isinstance(e, LLMError):
+            # Our own contract errors carry fixed, secret-free messages and an
+            # already-tagged provider, so they are safe to re-raise verbatim.
+            raise e
+        # Unclassified raw SDK exception: its message can echo request headers
+        # or payloads (and thus the API key), so never re-raise it verbatim.
+        # Wrap it in a redacted LLMError, matching _wrap_generate_errors.
+        raise LLMError(safe_msg, provider=self.provider_type) from e
 
     def _wrap_generate_errors(self, fn):
         """Shared error-mapping wrapper for ``generate()``.
