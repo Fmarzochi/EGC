@@ -59,6 +59,69 @@ function embeddedPathCandidate(arg: string): string | null {
   return null;
 }
 
+// True if `token` appears as a standalone arg or as a `--flag=token` value,
+// case-insensitively, so `-X DELETE`, `--method DELETE` and `--method=delete`
+// all match. Used to catch destructive verbs passed as option values.
+function hasArgToken(args: string[], token: string): boolean {
+  const t = token.toLowerCase();
+  return args.some(a => {
+    const lower = a.toLowerCase();
+    return lower === t || lower.endsWith('=' + t);
+  });
+}
+
+// Destructive variants of CLIs that are otherwise advisory-only at the
+// enforcement hook (see the allowlist-miss comment in validateCommand):
+// plain `docker build` / `gh pr list` / `prisma migrate dev` keep today's
+// advisory behavior, but the data-destroying forms below hard-block the
+// same way inline eval does. Returning null means "nothing destructive
+// here" and the command falls through to the ordinary allowlist handling.
+function checkDockerDestructive(args: string[]): ValidationResult | null {
+  const positional = args.filter(a => !a.startsWith('-'));
+  const destructiveSub = positional.some(a => a === 'prune' || a === 'rm' || a === 'rmi');
+  const downWithVolumes = positional.includes('down') && (args.includes('-v') || args.includes('--volumes'));
+  if (destructiveSub || downWithVolumes) {
+    return { allowed: false, reason: 'destructive docker operation is forbidden', trust_level: 'DANGEROUS' };
+  }
+  // run/create with a host mount or elevated privileges escapes the
+  // container boundary, taking every path-based check in this file with it.
+  const startsContainer = positional.includes('run') || positional.includes('create');
+  const mountsOrPrivileged = args.some(a =>
+    a === '-v' || a === '--volume' || a === '--mount' || a === '--privileged' || a === '--cap-add' ||
+    a.startsWith('--volume=') || a.startsWith('--mount=') || a.startsWith('--cap-add='),
+  );
+  if (startsContainer && mountsOrPrivileged) {
+    return { allowed: false, reason: 'docker run with host mounts or elevated privileges is forbidden', trust_level: 'DANGEROUS' };
+  }
+  return null;
+}
+
+function checkGhDestructive(args: string[]): ValidationResult | null {
+  // Covers `gh <resource> delete`, `gh api -X DELETE` and `--method=delete`.
+  if (hasArgToken(args, 'delete')) {
+    return { allowed: false, reason: 'gh delete operations are forbidden', trust_level: 'DANGEROUS' };
+  }
+  return null;
+}
+
+function checkPrismaDestructive(args: string[]): ValidationResult | null {
+  if (hasArgToken(args, 'reset') || hasArgToken(args, '--force-reset') || hasArgToken(args, '--accept-data-loss')) {
+    return { allowed: false, reason: 'prisma data-loss operation is forbidden', trust_level: 'DANGEROUS' };
+  }
+  const lower = args.map(a => a.toLowerCase());
+  if (lower.includes('db') && lower.includes('execute')) {
+    return { allowed: false, reason: 'prisma db execute runs arbitrary SQL and is forbidden', trust_level: 'DANGEROUS' };
+  }
+  return null;
+}
+
+const DESTRUCTIVE_CLI_CHECKS: Record<string, (args: string[]) => ValidationResult | null> = {
+  docker: checkDockerDestructive,
+  'docker-compose': checkDockerDestructive,
+  gh: checkGhDestructive,
+  prisma: checkPrismaDestructive,
+};
+
 const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
   node: ['-e', '--eval', '-p', '--print'],
   nodejs: ['-e', '--eval', '-p', '--print'],
@@ -492,7 +555,18 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 4. Not in any allowlist: blocked
+  // 4. Destructive variants of common CLIs (docker prune/rm, gh delete,
+  // prisma reset...) hard-block for the same reason inline eval does: the
+  // allowlist miss below is advisory-only at the hook layer, so without this
+  // check `docker system prune -af` would execute with nothing but a
+  // warning. Non-destructive forms of these CLIs keep the advisory path.
+  const destructiveCheck = DESTRUCTIVE_CLI_CHECKS[baseCommand];
+  if (destructiveCheck) {
+    const denial = destructiveCheck(args);
+    if (denial) return denial;
+  }
+
+  // 5. Not in any allowlist: blocked
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
     return {
       allowed: false,
@@ -501,7 +575,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 5. In allowlist: validate args
+  // 6. In allowlist: validate args
   return validateCommandArgs(baseCommand, args, cwd);
 }
 
