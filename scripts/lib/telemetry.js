@@ -122,6 +122,11 @@ function ping(pagePath, title) {
     .then(() => fetch(url, {
       method: 'GET',
       headers: { 'User-Agent': userAgent },
+      // Bound the request: main() sets process.exitCode instead of calling
+      // process.exit, so a slow or unreachable GoatCounter would keep the event
+      // loop alive and stall the CLI's exit until the OS TCP timeout. Abort at
+      // 2s so telemetry stays fire-and-forget without delaying shutdown.
+      signal: AbortSignal.timeout(2000),
     }))
     .catch(() => {});
 }

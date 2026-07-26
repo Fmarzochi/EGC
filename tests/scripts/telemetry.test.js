@@ -264,8 +264,9 @@ async function runTests() {
         JSON.stringify({ enabled: true, version: 1 }), 'utf8');
 
       let capturedUrl = null;
+      let capturedOpts = null;
       const origFetch = global.fetch;
-      global.fetch = (url) => { capturedUrl = url; return Promise.resolve({}); };
+      global.fetch = (url, opts) => { capturedUrl = url; capturedOpts = opts; return Promise.resolve({}); };
 
       const { ping } = loadTelemetry(dir);
       ping('/cli/install', 'EGC Install');
@@ -277,6 +278,9 @@ async function runTests() {
       assert.strictEqual(new URL(capturedUrl).hostname, 'egc.goatcounter.com', 'URL should target GoatCounter host');
       const params = new URL(capturedUrl).searchParams;
       assert.ok(params.get('p') !== null, 'URL should include page path param');
+      // The request must be time-bounded so a stalled GoatCounter can't keep
+      // the CLI process alive past its command (main uses process.exitCode).
+      assert.ok(capturedOpts && capturedOpts.signal instanceof AbortSignal, 'fetch should pass an AbortSignal to bound the request');
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 
