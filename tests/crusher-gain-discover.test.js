@@ -39,6 +39,23 @@ run('gain --history --json returns the raw ledger entries', () => {
   assert.ok(Array.isArray(entries), 'history is an array');
 });
 
+run('gain summary prints the biggest crush with its command', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gain-home-'));
+  const ledgerDir = path.join(home, '.egc', 'metrics');
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  const entry = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
+  fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), `${JSON.stringify(entry)}\n`);
+
+  const res = spawnSync('node', [GAIN], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+  });
+  assert.strictEqual(res.status, 0, res.stderr);
+  // Regression for the .command/.cmd mismatch: the ledger stores `cmd`, so the
+  // Biggest crush line must surface the command instead of never printing.
+  assert.match(res.stdout, /Biggest crush:.*git log --stat/);
+});
+
 run('discover finds a crushable run in a fixture transcript', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-discover-'));
   const bigLog = 'commit abc123 something\n'.repeat(200);
