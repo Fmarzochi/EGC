@@ -1,18 +1,15 @@
 'use strict';
 
-let validateCommand;
-let validateWrite;
-let isProtectedPath;
+// jsfuzz collects coverage only from modules loaded through require(): its
+// istanbul-lib-hook instruments CommonJS, not Node's ESM loader. The guardian
+// is "type":"module", so loading build/validator.js via dynamic import() left
+// the validator un-instrumented and the fuzzer ran blind (no coverage feedback,
+// no guided path discovery). We bundle the validator to a CommonJS artifact
+// (npm run build:target -> validator.cjs) and require it synchronously so the
+// fuzzer actually explores validateCommand/validateWrite/isProtectedPath.
+const { validateCommand, validateWrite, isProtectedPath } = require('./validator.cjs');
 
-const ready = import('../mcp/servers/egc-guardian/build/validator.js').then((mod) => {
-  validateCommand = mod.validateCommand;
-  validateWrite = mod.validateWrite;
-  isProtectedPath = mod.isProtectedPath;
-});
-
-module.exports.fuzz = async function (data) {
-  await ready;
-
+module.exports.fuzz = function (data) {
   const input = data.toString('utf-8');
 
   try { validateCommand(input); } catch (_) { /* fuzz: expected throw */ }
