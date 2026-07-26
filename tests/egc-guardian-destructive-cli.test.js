@@ -105,6 +105,32 @@ run('pnpm dlx prisma migrate reset is hard-blocked', () => assertHardBlocked('pn
 // the DANGEROUS verdict, not the advisory allowlist miss.
 run('yarn prisma migrate reset is hard-blocked', () => assertHardBlocked('yarn prisma migrate reset'));
 
+// Second-round adversarial audit: bypasses that survived the first fix
+// round (commit d60df57c) — an unrecognized value-taking flag terminating
+// the docker run option-window scan early, a global docker flag shifting
+// the subcommand out of position, gh's =-glued method flag and compound
+// noun-delete subcommands, runner value-flags misaligning the inner-command
+// argument slice, and an embedded quote the anchored bareToken strip missed.
+run('docker run -m 512m --privileged (unrecognized value flag) is hard-blocked', () => assertHardBlocked('docker run -m 512m --privileged img'));
+run('docker -H tcp://x system prune -af (global flag before subcommand) is hard-blocked', () => assertHardBlocked('docker -H tcp://x system prune -af'));
+run('docker --log-level debug system prune -af (global flag before subcommand) is hard-blocked', () => assertHardBlocked('docker --log-level debug system prune -af'));
+run('gh api -X=DELETE (glued equals) is hard-blocked', () => assertHardBlocked('gh api -X=DELETE repos/owner/repo'));
+run('gh project item-delete (compound noun-delete subcommand) is hard-blocked', () => assertHardBlocked('gh project item-delete 3 --owner some-owner'));
+run('npx -p prisma prisma migrate reset (runner value flag) is hard-blocked', () => assertHardBlocked('npx -p prisma prisma migrate reset'));
+run('npx -p ./tool prisma migrate reset (runner value flag, path value) is hard-blocked', () => assertHardBlocked('npx -p ./tool prisma migrate reset'));
+run('yarn run prisma migrate reset (run subcommand) is hard-blocked', () => assertHardBlocked('yarn run prisma migrate reset'));
+run('docker system pru"ne" (embedded quote) is hard-blocked', () => assertHardBlocked('docker system pru"ne"'));
+
+// Second-round false positives: a docker named volume is not a host mount.
+run('docker run -v pgdata:/var/lib/postgresql/data (named volume) stays advisory', () => assertAdvisoryOnly('docker run -v pgdata:/var/lib/postgresql/data postgres'));
+run('docker run --volume myvol:/data (named volume, long flag) stays advisory', () => assertAdvisoryOnly('docker run --volume myvol:/data img'));
+
+// Regression guards: the expanded flag sets must not create new false
+// positives on ordinary daily commands.
+run('docker -H tcp://x ps (global flag, benign subcommand) stays advisory', () => assertAdvisoryOnly('docker -H tcp://x ps'));
+run('docker run -h myhost -m 512m img (run-scoped value flags) stays advisory', () => assertAdvisoryOnly('docker run -h myhost -m 512m img'));
+run('yarn run build (non-destructive inner command) stays advisory', () => assertAdvisoryOnly('yarn run build'));
+
 // False positives from the adversarial audit: all must keep today's
 // advisory (or allowed) behavior.
 run('docker run alpine rm -rf /tmp/foo stays advisory (rm runs inside the container)', () => assertAdvisoryOnly('docker run alpine rm -rf /tmp/foo'));
