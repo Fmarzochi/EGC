@@ -57,7 +57,7 @@ This section is deliberately public. Honest gap-tracking beats aspirational omis
 
 ## Compatibility commitments
 
-- The 7 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `cursor`, `antigravity`, `codex`, `gemini`, `opencode`, `codebuddy`) are stable. They will not be renamed within `0.x`
+- All 24 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `claude`, `cursor`, `antigravity`, `codex`, `gemini`, `qwen`, `opencode`, `codebuddy`, `windsurf`, `amp`, `copilot`, `zed`, `continue`, `kiro`, `trae`, `junie`, `goose`, `amazonq`, `roocode`, `openhands`, `aider`, `cline`, `warp`) are stable. They will not be renamed within `0.x`
 - The Tier 2 install entry points (`.kiro/install.sh`, `.trae/install.sh`) are stable within `0.x`
 - The Tier 3 protocol injection target paths (`~/.claude/CLAUDE.md` for Claude Code) are stable within `0.x`
 - JSON Schema field names are stable within `MINOR` versions. Removals require a `MAJOR` bump
