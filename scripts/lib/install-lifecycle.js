@@ -342,7 +342,7 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
-function repairClaudeSettingsHook(operation) {
+function repairManagedHookOperation(operation) {
   if (operation.hookEvent === STOP_EVENT) {
     applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
@@ -430,7 +430,7 @@ function executeRepairOperation(repoRoot, operation) {
   } else if (operation.kind === 'remove') {
     repairRemove(operation);
   } else if (operation.kind === HOOK_OPERATION_KIND) {
-    repairClaudeSettingsHook(operation);
+    repairManagedHookOperation(operation);
   } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
     repairMergeYamlReadList(operation);
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
@@ -542,7 +542,7 @@ function uninstallWarpAgentsIndexEntry(operation) {
   return { removedPaths: [], cleanupTargets: [] };
 }
 
-function uninstallClaudeSettingsHook(operation) {
+function uninstallManagedHookOperation(operation) {
   // Strips only the EGC-managed hook entry. The settings file itself is never
   // deleted because Claude Code and the user own its other keys.
   if (operation.hookEvent === STOP_EVENT) {
@@ -563,7 +563,7 @@ const UNINSTALL_HANDLERS = {
   'copy-file': uninstallCopyFile,
   'merge-json': uninstallMergeJson,
   'remove': uninstallRemove,
-  [HOOK_OPERATION_KIND]: uninstallClaudeSettingsHook,
+  [HOOK_OPERATION_KIND]: uninstallManagedHookOperation,
   [MERGE_YAML_READ_LIST_KIND]: uninstallAiderConfigReadList,
   [MERGE_MARKDOWN_INDEX_KIND]: uninstallWarpAgentsIndexEntry,
 };

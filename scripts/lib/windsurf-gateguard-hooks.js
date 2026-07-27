@@ -66,11 +66,21 @@ function isEgcEntry(entry, command) {
   return isPlainObject(entry) && entry.command === command;
 }
 
+const EGC_ADAPTER_BASENAMES = [
+  path.basename(ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH),
+  path.basename(GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH),
+];
+
 function isStaleEgcEntry(entry, command) {
   if (!isPlainObject(entry) || typeof entry.command !== 'string' || entry.command === command) {
     return false;
   }
-  return entry.command.includes(path.basename(ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH));
+  // Only checking the GateGuard adapter's basename meant a relocated
+  // Guardian entry (e.g. after an install path change) was never
+  // recognized as stale here, so repair appended a duplicate pointing at
+  // the new path instead of migrating the old one in place, leaving both
+  // in hooks.json.
+  return EGC_ADAPTER_BASENAMES.some(basename => entry.command.includes(basename));
 }
 
 function addWindsurfHookEntry(config, event, command) {

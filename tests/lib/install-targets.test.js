@@ -1913,13 +1913,28 @@ function runTests() {
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity global hooks.json, ' +
       'separate from Gemini CLI\'s own ~/.gemini/hooks/hooks.json'
     );
+
+    // cubic-dev-ai review (PR #1052, 2026-07-27): this test already used
+    // modules: [] (no hooks-runtime module selected), so if the script copy
+    // were still implicit/optional the hooks.json entry above would point
+    // at a file that was never actually scaffolded. Asserting the copy
+    // operation exists here, in the same modules: [] scenario, proves the
+    // registration is now self-sufficient regardless of module selection.
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      )),
+      'gateguard-fact-force.js must be copied unconditionally, not only via the hooks-runtime module'
+    );
   })) passed++; else failed++;
 
   // EGC Guardian: cubic-dev-ai review (PR #1052, 2026-07-27) found
   // createGlobalBashGuardianHookMergeOperation existed in
   // antigravity-settings-hooks.js but was never called from gemini-home.js,
   // so global Antigravity installs never got the Guardian despite GateGuard
-  // (test above) being wired.
+  // (test above) being wired. A follow-up review then found the same
+  // registered-but-never-copied gap once it WAS wired.
   if (test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
@@ -1943,6 +1958,16 @@ function runTests() {
     ));
     assert.strictEqual(guardianOperations.length, 1, 'Guardian registered once for the Antigravity global hooks.json');
     assert.strictEqual(guardianOperations[0].hookMatcher, 'Bash', 'Guardian only needs the Bash matcher');
+
+    for (const src of ['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js']) {
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === src
+          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
+        )),
+        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+      );
+    }
   })) passed++; else failed++;
 
   if (test('resolves kiro home adapter root to ~/.kiro and install-state path', () => {

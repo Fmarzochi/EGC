@@ -11,6 +11,10 @@ const {
   createGlobalGateGuardHookMergeOperation,
   createGlobalBashGuardianHookMergeOperation,
 } = require('../antigravity-settings-hooks');
+const {
+  createGateGuardScriptCopyOperations,
+  createBashGuardianScriptCopyOperations,
+} = require('../claude-settings-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
 const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
@@ -20,28 +24,38 @@ const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
 // ~/.gemini/antigravity-cli/hooks.json, distinct from Gemini CLI's
 // ~/.gemini/hooks/hooks.json -- so Gemini CLI's existing GateGuard wiring
 // does not automatically cover Antigravity and needs this separate merge.
-// scripts/hooks/gateguard-fact-force.js is already scaffolded at
-// resolveGateGuardHookScriptDestination(targetRoot) for this target via the
-// hooks-runtime module (paths: scripts/hooks, scripts/lib), so this only
-// adds the hooks.json registration.
-function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir) {
-  return ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
+// scripts/hooks/gateguard-fact-force.js normally also arrives at this
+// target via the hooks-runtime module's own scaffold (paths: scripts/hooks,
+// scripts/lib) -- but hooks-runtime is only a DEFAULT base module for the
+// 'egc' target's legacy profile, not something every install is guaranteed
+// to select (a minimal/custom module selection can omit it). Copying the
+// script explicitly here, unconditional of module selection, closes that
+// gap: cubic-dev-ai review (PR #1052, 2026-07-27) found a minimal install
+// could register this hooks.json entry while the script it points at was
+// never actually copied anywhere, so every Antigravity Bash/Edit/Write call
+// would try to launch a nonexistent file.
+function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, createRemap) {
+  const scriptCopyOperations = createGateGuardScriptCopyOperations(createRemap, targetRoot);
+  const mergeOperations = ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
     createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher)
   ));
+  return [...scriptCopyOperations, ...mergeOperations];
 }
 
-// EGC Guardian: same hooks-runtime scaffold already places
+// EGC Guardian: same reasoning as GateGuard above -- copy
 // pre-bash-guardian-validate.js (and its guardian-bin.js/shell-split.js
-// deps) under this target's scripts/hooks and scripts/lib alongside
-// gateguard-fact-force.js above -- this only adds the hooks.json
-// registration, on Bash only (the Guardian validates shell commands, not
-// file writes). cubic-dev-ai review (PR #1052, 2026-07-27) found
-// createGlobalBashGuardianHookMergeOperation was added to
-// antigravity-settings-hooks.js but never actually called anywhere, so
-// global Antigravity installs never got the Guardian despite the helper
-// existing.
-function createAntigravityGlobalGuardianOperations(targetRoot, homeDir) {
-  return [createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash')];
+// deps) explicitly rather than relying on hooks-runtime having scaffolded
+// them, then register it on Bash only (the Guardian validates shell
+// commands, not file writes). cubic-dev-ai review (PR #1052, 2026-07-27)
+// first found createGlobalBashGuardianHookMergeOperation was added to
+// antigravity-settings-hooks.js but never actually called anywhere, then
+// (once wired) found the same missing-script-copy gap GateGuard had.
+function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRemap) {
+  const scriptCopyOperations = createBashGuardianScriptCopyOperations(createRemap, targetRoot);
+  return [
+    ...scriptCopyOperations,
+    createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash'),
+  ];
 }
 
 function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
@@ -163,13 +177,17 @@ module.exports = createInstallTargetAdapter({
         });
     });
 
+    const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    );
+
     // Deterministic: every egc-home install also registers the GateGuard
     // fact-forcing gate for Antigravity's global hooks.json, even when no
     // content modules are selected.
     return [
       ...moduleOperations,
-      ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir),
-      ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir),
+      ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
+      ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),
     ];
   },
 });

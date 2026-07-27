@@ -90,6 +90,18 @@ function runTests() {
     assert.strictEqual(config.hooks[PRE_WRITE_CODE_EVENT][0].command, 'node /new/path/windsurf-gateguard-adapter.js');
   })) passed++; else failed++;
 
+  if (test('addWindsurfHookEntry migrates a stale GUARDIAN entry (same script, different path) in place instead of duplicating', () => {
+    const base = {
+      hooks: {
+        [PRE_RUN_COMMAND_EVENT]: [{ command: 'node /old/path/windsurf-guardian-adapter.js' }],
+      },
+    };
+    const { config, changed } = addWindsurfHookEntry(base, PRE_RUN_COMMAND_EVENT, 'node /new/path/windsurf-guardian-adapter.js');
+    assert.strictEqual(changed, true);
+    assert.strictEqual(config.hooks[PRE_RUN_COMMAND_EVENT].length, 1, 'must migrate in place, not append a duplicate');
+    assert.strictEqual(config.hooks[PRE_RUN_COMMAND_EVENT][0].command, 'node /new/path/windsurf-guardian-adapter.js');
+  })) passed++; else failed++;
+
   if (test('applyWindsurfGateGuardHookToFile writes both events to a fresh file and is idempotent', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'windsurf-hooks-apply-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
