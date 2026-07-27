@@ -131,7 +131,7 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
     if (heredocState === null && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
       const m = HEREDOC_OPERATOR_RE.exec(command.slice(i));
       if (m) {
-        heredocDelimiter = m[1] ?? m[2] ?? m[3].replace(/\\/g, '');
+        heredocDelimiter = m[1] ?? m[2] ?? m[3].replaceAll('\\', '');
         heredocStripLeadingTabs = m[0].startsWith('<<-');
         heredocState = 'awaiting-body';
         current += m[0];
@@ -181,6 +181,24 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   return segments;
 }
 
+// One scan step for findMatchingParen: given the current quote state,
+// returns how far to additionally advance past this char (an escaped char
+// consumes its pair), the quote state after this char, and how much this
+// char changes the paren depth (0 unless it's an unquoted paren). Splitting
+// this out of the loop keeps each branch a flat, single-condition early
+// return instead of nested ifs, which is what keeps cognitive complexity low.
+function scanParenChar(ch, i, command, quote) {
+  if (quote) {
+    if (ch === '\\' && quote === '"' && i + 1 < command.length) return { advance: 1, quote, delta: 0 };
+    return { advance: 0, quote: ch === quote ? null : quote, delta: 0 };
+  }
+  if (ch === '\\' && i + 1 < command.length) return { advance: 1, quote: null, delta: 0 };
+  if (ch === '"' || ch === "'") return { advance: 0, quote: ch, delta: 0 };
+  if (ch === '(') return { advance: 0, quote: null, delta: 1 };
+  if (ch === ')') return { advance: 0, quote: null, delta: -1 };
+  return { advance: 0, quote: null, delta: 0 };
+}
+
 // Finds the index of the `)` that matches the `(` implicitly opened at
 // `start` (i.e. `start` is the position right after that `(`), honoring
 // quotes so an unbalanced paren inside a quoted string doesn't close early.
@@ -190,19 +208,11 @@ function findMatchingParen(command, start) {
   let depth = 1;
   let quote = null;
   for (let i = start; i < command.length; i++) {
-    const ch = command[i];
-    if (quote) {
-      if (ch === '\\' && quote === '"' && i + 1 < command.length) { i += 1; continue; }
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '\\' && i + 1 < command.length) { i += 1; continue; }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (ch === '(') depth += 1;
-    else if (ch === ')') {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
+    const r = scanParenChar(command[i], i, command, quote);
+    quote = r.quote;
+    i += r.advance;
+    depth += r.delta;
+    if (r.delta && depth === 0) return i;
   }
   return -1;
 }
@@ -269,19 +279,31 @@ function extractSubstitutionBodies(command) {
       continue;
     }
 
-    if (quote === '"') {
-      if (ch === '\\' && i + 1 < command.length) { i += 1; continue; }
-      if (ch === quote) { quote = null; continue; }
-      const end = pushSubstitutionAt(command, i, bodies);
-      if (end !== -1) { i = end; continue; }
+    if (quote === '"' && ch === '\\' && i + 1 < command.length) {
+      i += 1;
       continue;
     }
 
-    if (ch === '\\' && i + 1 < command.length) { i += 1; continue; }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (quote === '"' && ch === quote) {
+      quote = null;
+      continue;
+    }
 
+    if (!quote && ch === '\\' && i + 1 < command.length) {
+      i += 1;
+      continue;
+    }
+
+    if (!quote && (ch === '"' || ch === "'")) {
+      quote = ch;
+      continue;
+    }
+
+    // Reached only in an unquoted or double-quoted context (single-quoted
+    // spans already `continue`d above) — the two contexts where a real
+    // shell still expands $(...)/`...` (see the doc comment above).
     const end = pushSubstitutionAt(command, i, bodies);
-    if (end !== -1) { i = end; continue; }
+    if (end !== -1) i += (end - i);
   }
 
   return bodies;

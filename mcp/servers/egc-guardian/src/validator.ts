@@ -80,7 +80,7 @@ function bareToken(a: string): string {
 // silently consuming (or failing to consume) the wrong number of tokens and
 // misidentifying the real wrapped command.
 function stripQuotes(a: string): string {
-  return a.replace(/\\/g, '').replace(/["']/g, '');
+  return a.replaceAll('\\', '').replaceAll(/["']/g, '');
 }
 
 function positionalsOf(tokens: string[]): string[] {
