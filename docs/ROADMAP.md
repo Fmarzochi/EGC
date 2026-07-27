@@ -132,6 +132,11 @@ Closes the commit-privacy scope started in v1.1.12:
 - CodeRabbit reviews contributor PRs automatically, retiring the manual first-time-contributor gate workflows (#997)
 - CLI, catalog indexer, and Windows install/hook fixes rounding out the squad audit cleanup (#1014, #1015, #1017, #1021, #1022, #1023, #1024, #1025, #1026, #1037)
 
+## v1.1.17: Cross-Platform Install Fixed at the Root (Released 2026-07-27)
+
+- `install.sh` no longer writes unusable POSIX Git Bash paths into MCP config JSON on Windows: `MINGW*`/`MSYS*` is detected via `uname -s` and paths are rewritten through `pwd -W` first (#1045)
+- `install.ps1` resynced with `install.sh` after drifting for several releases: Node floor raised to 20, lockfile-aware dependency install with no fallback, a malformed existing MCP config is left untouched instead of being overwritten, Codex CLI TOML paths are escaped, and builds are guarded behind a `src/` check (#1045)
+
 ## v1.2.0: Teams
 
 Multi-developer workflows and shared context:
