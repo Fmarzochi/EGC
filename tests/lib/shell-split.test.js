@@ -194,6 +194,19 @@ test('heredoc delimiter with an unterminated quote is not treated as a heredoc (
   const segs = splitShellSegments("cat <<'EOF\nrm -rf /\n");
   assert.strictEqual(segs.length, 1, `expected 1 segment, got ${segs.length}: ${JSON.stringify(segs)}`);
 });
+test('heredoc delimiter with an escaped quote inside a double-quoted span is parsed correctly (not truncated at the escaped quote)', () => {
+  const segs = splitShellSegments('cat <<"EO\\"F"\nbody text\nEO"F\necho done\n');
+  assert.deepStrictEqual(segs, ['cat <<"EO\\"F"\nbody text\nEO"F', 'echo done']);
+});
+test('a very long single-line heredoc body does not cause quadratic slowdown', () => {
+  const longLine = 'x'.repeat(200000);
+  const command = `cat <<EOF\n${longLine}\nEOF\n`;
+  const start = Date.now();
+  const segs = splitShellSegments(command);
+  const elapsedMs = Date.now() - start;
+  assert.strictEqual(segs.length, 1, `expected 1 segment, got ${segs.length}`);
+  assert.ok(elapsedMs < 2000, `expected roughly linear-time scan, took ${elapsedMs}ms for a 200k-char line`);
+});
 test('multiple heredocs on one line are consumed in order, not mixed with ordinary segments', () => {
   const segs = splitShellSegments(
     'cat <<MARKERA <<MARKERB\nline one for A\nMARKERA\nline one for B\nMARKERB\necho done\n'
@@ -303,6 +316,23 @@ test('multiple heredocs on one line: each body is scanned per its own delimiter\
     ),
     ['rm -rf /b'],
   );
+});
+test('does not treat pure arithmetic expansion $((...)) as a substitution body', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $((1+2))'), []);
+});
+test('still surfaces a real command substitution nested inside arithmetic expansion (one more extraction level, per the documented non-recursive contract)', () => {
+  const outerBodies = extractSubstitutionBodies('echo $(( $(cat /etc/shadow) + 1 ))');
+  assert.strictEqual(outerBodies.length, 1, 'the arithmetic body containing a real substitution must still be pushed once');
+  assert.deepStrictEqual(extractSubstitutionBodies(outerBodies[0]), ['cat /etc/shadow']);
+});
+test('extractSubstitutionBodies: a very long single-line heredoc body does not cause quadratic slowdown', () => {
+  const longLine = 'x'.repeat(200000);
+  const command = `cat <<EOF\n${longLine}\nEOF\n`;
+  const start = Date.now();
+  const bodies = extractSubstitutionBodies(command);
+  const elapsedMs = Date.now() - start;
+  assert.deepStrictEqual(bodies, []);
+  assert.ok(elapsedMs < 2000, `expected roughly linear-time scan, took ${elapsedMs}ms for a 200k-char line`);
 });
 test('extractSubstitutionBodies honors <<- leading-tab stripping when matching the terminator line', () => {
   assert.deepStrictEqual(

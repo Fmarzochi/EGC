@@ -185,6 +185,23 @@ function runTests() {
     assert.strictEqual(segments, null, `Expected null (too deep to analyze), got: ${JSON.stringify(segments)}`);
   })) passed++; else failed++;
 
+  if (test('extractSegments does not count arithmetic expansion as an extra substitution depth level', () => {
+    // 5 layers of real `echo $(...)` nesting (right at MAX_SUBSTITUTION_DEPTH)
+    // plus one innocuous arithmetic expansion at the bottom -- before the
+    // arithmetic-awareness fix, $((1+2))'s spurious extra "nesting level"
+    // pushed this over the cap and returned null (a false block) even
+    // though nothing is actually hidden inside it.
+    const command = nestedSubstitution(5, 'echo $((1+2))');
+    const segments = extractSegments(command);
+    assert.notStrictEqual(segments, null, 'Arithmetic expansion must not count toward the substitution depth cap');
+  })) passed++; else failed++;
+
+  if (test('extractSegments still finds a real command substitution hidden inside arithmetic expansion', () => {
+    const segments = extractSegments('echo $(( $(cat /etc/shadow) + 1 ))');
+    assert.notStrictEqual(segments, null);
+    assert.ok(segments.includes('cat /etc/shadow'), `Expected 'cat /etc/shadow' to be extracted, got: ${JSON.stringify(segments)}`);
+  })) passed++; else failed++;
+
   if (test('extractSegments still fully analyzes nesting within MAX_SUBSTITUTION_DEPTH (no regression)', () => {
     const command = nestedSubstitution(4, 'rm -rf /');
     const segments = extractSegments(command);

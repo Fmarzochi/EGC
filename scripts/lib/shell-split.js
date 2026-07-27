@@ -70,11 +70,34 @@ function parseHeredocDelimiterWord(command, start) {
       continue;
     }
     if (ch === "'" || ch === '"') {
-      const closeIndex = command.indexOf(ch, i + 1);
-      if (closeIndex === -1) return null;
-      value += command.slice(i + 1, closeIndex);
+      // A plain indexOf() for the closing quote treats an escaped quote
+      // inside a double-quoted span (`<<"EO\"F"`) as the real closer,
+      // truncating the delimiter early — the real terminator line (which
+      // must match the FULL, correctly-unescaped word) then never matches
+      // this too-short guess, so the heredoc body never closes and every
+      // command after it goes unvalidated (the same failure shape as the
+      // EOF-1 truncation bug above, just via escaping instead of a
+      // narrow character class). Single quotes have no escape mechanism in
+      // bash (the first `'` always closes), so only `"` needs this.
+      const quoteChar = ch;
+      let j = i + 1;
+      let inner = '';
+      let closed = false;
+      while (j < command.length) {
+        const c = command[j];
+        if (quoteChar === '"' && c === '\\' && j + 1 < command.length) {
+          inner += command[j + 1];
+          j += 2;
+          continue;
+        }
+        if (c === quoteChar) { closed = true; j += 1; break; }
+        inner += c;
+        j += 1;
+      }
+      if (!closed) return null;
+      value += inner;
       literal = true;
-      i = closeIndex + 1;
+      i = j;
       consumedAny = true;
       continue;
     }
@@ -160,31 +183,43 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   // Heredocs queued on the same operator line after the first (e.g. the `B`
   // in `cmd <<A <<B`), consumed in order as each preceding body closes.
   const heredocQueue = [];
+  // True only for the first character of a body line -- the terminator can
+  // only ever be a whole line, so the expensive indexOf('\n')+slice+compare
+  // below only needs to run there. Re-running it at every character of a
+  // long single-line body was O(line length) work per character, i.e.
+  // O(n^2) for one long line, before Guardian even validated anything.
+  let heredocAtLineStart = false;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
 
     if (heredocState === 'in-body') {
-      const lineEnd = command.indexOf('\n', i);
-      const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
-      const line = rawLine.replace(/\r$/, '');
-      const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
-      if (candidate === heredocDelimiter) {
-        current += rawLine;
-        i += rawLine.length - 1;
-        const next = heredocQueue.shift();
-        if (next) {
-          heredocDelimiter = next.delimiter;
-          heredocStripLeadingTabs = next.stripLeadingTabs;
-          // Stay in 'in-body': the newline right after this terminator line
-          // is also the first character of the next queued heredoc's body,
-          // not a fresh 'awaiting-body' gap.
-        } else {
-          heredocState = null;
-          heredocDelimiter = null;
+      if (heredocAtLineStart) {
+        const lineEnd = command.indexOf('\n', i);
+        const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
+        const line = rawLine.replace(/\r$/, '');
+        const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
+        if (candidate === heredocDelimiter) {
+          current += rawLine;
+          i += rawLine.length - 1;
+          const next = heredocQueue.shift();
+          if (next) {
+            heredocDelimiter = next.delimiter;
+            heredocStripLeadingTabs = next.stripLeadingTabs;
+            // Stay in 'in-body' and at a (new) line start: the newline
+            // right after this terminator line is also the first character
+            // of the next queued heredoc's body, not a fresh
+            // 'awaiting-body' gap.
+          } else {
+            heredocState = null;
+            heredocDelimiter = null;
+            heredocAtLineStart = false;
+          }
+          continue;
         }
-        continue;
+        heredocAtLineStart = false;
       }
+      if (ch === '\n') heredocAtLineStart = true;
       current += ch;
       continue;
     }
@@ -213,6 +248,7 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
     if (heredocState === 'awaiting-body' && ch === '\n') {
       current += ch;
       heredocState = 'in-body';
+      heredocAtLineStart = true;
       continue;
     }
 
@@ -324,6 +360,30 @@ function findMatchingBacktick(command, start) {
 function pushSubstitutionAt(command, i, bodies) {
   const next = command[i + 1] || '';
   const ch = command[i];
+  if (ch === '$' && next === '(' && command[i + 2] === '(') {
+    const end = findMatchingParen(command, i + 2);
+    if (end !== -1) {
+      // Arithmetic expansion $((...)) never executes its expression as a
+      // shell command -- only a real $(...) or `...` substitution does.
+      // findMatchingParen(i+2) treats the arithmetic's own inner '(' as an
+      // extra nesting level and returns the OUTER closing paren, so without
+      // this the whole "(expr)" text gets pushed as if it were command
+      // content -- miscounting as one more level of command-substitution
+      // nesting toward MAX_SUBSTITUTION_DEPTH even for something as
+      // harmless as `$((1+2))`. If the expression's own text contains no
+      // `$(`/backtick anywhere, there is categorically nothing to validate
+      // inside it (both require that literal syntax to exist), so no body
+      // is pushed at all. If it DOES contain one (bash really does execute
+      // `$(( $(cat x) + 1 ))`'s inner substitution), fall through to the
+      // ordinary handling below unchanged -- never unwrap it here directly,
+      // which would recurse outside pre-bash-guardian-validate.js's depth
+      // counter and defeat the cap entirely for deeply-nested arithmetic.
+      const inner = command.slice(i + 3, end - 1);
+      if (!inner.includes('$(') && !inner.includes('`')) {
+        return end;
+      }
+    }
+  }
   if ((ch === '$' || ch === '<' || ch === '>') && next === '(') {
     const end = findMatchingParen(command, i + 2);
     if (end !== -1) {
@@ -381,6 +441,11 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
   let heredocLiteral = false;
   const heredocQueue = [];
   let inComment = false;
+  // True only for the first character of a body line -- see the identical
+  // field in splitShellSegments for why re-checking the terminator at every
+  // character (not just line starts) was an O(n^2) cost on one long body
+  // line.
+  let heredocAtLineStart = false;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
@@ -388,23 +453,28 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
     if (ch === '\n') inComment = false;
 
     if (heredocState === 'in-body') {
-      const lineEnd = command.indexOf('\n', i);
-      const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
-      const line = rawLine.replace(/\r$/, '');
-      const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
-      if (candidate === heredocDelimiter) {
-        i += rawLine.length - 1;
-        const next = heredocQueue.shift();
-        if (next) {
-          heredocDelimiter = next.delimiter;
-          heredocStripLeadingTabs = next.stripLeadingTabs;
-          heredocLiteral = next.literal;
-        } else {
-          heredocState = null;
-          heredocDelimiter = null;
+      if (heredocAtLineStart) {
+        const lineEnd = command.indexOf('\n', i);
+        const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
+        const line = rawLine.replace(/\r$/, '');
+        const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
+        if (candidate === heredocDelimiter) {
+          i += rawLine.length - 1;
+          const next = heredocQueue.shift();
+          if (next) {
+            heredocDelimiter = next.delimiter;
+            heredocStripLeadingTabs = next.stripLeadingTabs;
+            heredocLiteral = next.literal;
+          } else {
+            heredocState = null;
+            heredocDelimiter = null;
+            heredocAtLineStart = false;
+          }
+          continue;
         }
-        continue;
+        heredocAtLineStart = false;
       }
+      if (ch === '\n') heredocAtLineStart = true;
       if (heredocLiteral) continue;
       // Bare/unquoted-delimiter heredoc body: falls through to the normal
       // scan below, since bash still expands $(...) here.
@@ -445,6 +515,7 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
 
     if (heredocState === 'awaiting-body' && ch === '\n') {
       heredocState = 'in-body';
+      heredocAtLineStart = true;
       continue;
     }
 
