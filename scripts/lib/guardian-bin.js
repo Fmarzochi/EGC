@@ -240,12 +240,10 @@ function fromCodexToml() {
     return null;
   }
 
-  let servers;
-  try {
-    servers = parseCodexMcpServers(content);
-  } catch {
-    return null;
-  }
+  // parseCodexMcpServers() never throws for any string input (it skips
+  // unrecognized syntax rather than raising), so this has no try/catch --
+  // one would be dead code, unreachable by construction.
+  const servers = parseCodexMcpServers(content);
 
   const server = servers.find(s => s.name === 'egc-guardian');
   if (!server) return null;
