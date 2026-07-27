@@ -2,6 +2,14 @@
 
 All notable changes to EGC are documented here.
 
+## [1.1.17] - 2026-07-27
+
+### Bug Fixes
+
+- **Windows install fixed at the actual root cause**: `install.sh` wrote MCP server paths in the POSIX form Git Bash exposes (`/c/Users/...`), which native Windows MCP clients such as Claude Desktop and Cursor cannot resolve. `install.sh` now detects `MINGW*`/`MSYS*` via `uname -s` and rewrites those paths through `pwd -W` before they reach the MCP config JSON, closing the item left open since the 2026-07-25 install audit and the real reason the project's "one script, one install" design was not holding on Windows (#1045).
+- **`install.ps1` brought back in line with `install.sh`** after drifting silently for weeks: the Node version floor was still 18 instead of 20; dependency installs had no lockfile-aware path (`npm ci` when a lockfile is present, nothing otherwise, exactly matching `install.sh`); an existing MCP config that failed to parse as JSON was silently overwritten instead of left untouched, which could have discarded a user's real configuration; Codex CLI TOML paths were not escaped, so a raw Windows backslash path could corrupt the TOML file through an accidental `\U` Unicode escape; and the guardian/memory builds were not guarded behind a `src/` check for the published tarball (#1045).
+- Installation guide skill/command counts corrected to 230 skills and 77 commands (#1045).
+
 ## [1.1.16] - 2026-07-26
 
 ### Security
