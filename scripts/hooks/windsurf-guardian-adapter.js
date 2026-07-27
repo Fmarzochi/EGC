@@ -27,20 +27,34 @@ function buildGuardianInput(windsurfEvent) {
   if (actionName !== 'pre_run_command') {
     return null;
   }
-  const command = (windsurfEvent.tool_info || {}).command_line || '';
+  const toolInfo = windsurfEvent.tool_info || {};
+  const command = toolInfo.command_line || '';
   if (!command) {
     return null;
   }
-  return { tool_name: 'Bash', tool_input: { command } };
+  // cwd matters here (unlike for GateGuard's fact-forcing gate): the
+  // Guardian resolves relative protected paths (e.g. `cat .ssh/id_rsa`)
+  // against it. Without it, those checks fall back to this adapter
+  // process's own cwd instead of the directory Windsurf actually runs the
+  // command in.
+  const input = { tool_name: 'Bash', tool_input: { command } };
+  if (typeof toolInfo.cwd === 'string') {
+    input.cwd = toolInfo.cwd;
+  }
+  return input;
 }
 
 function main() {
   const MAX_STDIN = 1024 * 1024;
   let raw = '';
+  let truncated = false;
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
     if (raw.length < MAX_STDIN) {
       raw += chunk.substring(0, MAX_STDIN - raw.length);
+    }
+    if (raw.length >= MAX_STDIN) {
+      truncated = true;
     }
   });
   process.stdin.on('end', () => {
@@ -48,7 +62,19 @@ function main() {
     try {
       windsurfEvent = JSON.parse(raw);
     } catch {
-      // Allow on parse error: same fail-open policy as the other adapters.
+      // A parse failure caused by hitting the size cap is not the same as
+      // ordinary malformed input: an attacker can pad a command past
+      // MAX_STDIN specifically to land here and fail open. Only genuinely
+      // malformed (non-truncated) input gets the fail-open policy the other
+      // adapters use; a truncated payload is unanalyzable and fails closed.
+      if (truncated) {
+        process.stderr.write(
+          'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+          'this validator can safely read, so it could not be parsed or validated. ' +
+          'Simplify the command.\n'
+        );
+        process.exit(2);
+      }
       process.exit(0);
     }
 

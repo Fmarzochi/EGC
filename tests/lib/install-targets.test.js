@@ -1915,6 +1915,36 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  // EGC Guardian: cubic-dev-ai review (PR #1052, 2026-07-27) found
+  // createGlobalBashGuardianHookMergeOperation existed in
+  // antigravity-settings-hooks.js but was never called from gemini-home.js,
+  // so global Antigravity installs never got the Guardian despite GateGuard
+  // (test above) being wired.
+  if (test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    const guardianScriptPath = path.join(
+      homeDir, '.gemini', 'scripts', 'hooks', 'pre-bash-guardian-validate.js'
+    );
+
+    const guardianOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === guardianScriptPath
+    ));
+    assert.strictEqual(guardianOperations.length, 1, 'Guardian registered once for the Antigravity global hooks.json');
+    assert.strictEqual(guardianOperations[0].hookMatcher, 'Bash', 'Guardian only needs the Bash matcher');
+  })) passed++; else failed++;
+
   if (test('resolves kiro home adapter root to ~/.kiro and install-state path', () => {
     const adapter = getInstallTargetAdapter('kiro');
     const homeDir = '/Users/example';

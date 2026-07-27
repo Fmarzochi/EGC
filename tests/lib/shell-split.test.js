@@ -198,6 +198,10 @@ test('heredoc delimiter with an escaped quote inside a double-quoted span is par
   const segs = splitShellSegments('cat <<"EO\\"F"\nbody text\nEO"F\necho done\n');
   assert.deepStrictEqual(segs, ['cat <<"EO\\"F"\nbody text\nEO"F', 'echo done']);
 });
+test('heredoc delimiter with a backslash before a non-special character inside double quotes keeps the backslash literally', () => {
+  const segs = splitShellSegments('cat <<"EO\\NF"\nbody text\nEO\\NF\necho done\n');
+  assert.deepStrictEqual(segs, ['cat <<"EO\\NF"\nbody text\nEO\\NF', 'echo done']);
+});
 test('a very long single-line heredoc body does not cause quadratic slowdown', () => {
   const longLine = 'x'.repeat(200000);
   const command = `cat <<EOF\n${longLine}\nEOF\n`;

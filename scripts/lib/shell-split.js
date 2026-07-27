@@ -86,8 +86,22 @@ function parseHeredocDelimiterWord(command, start) {
       while (j < command.length) {
         const c = command[j];
         if (quoteChar === '"' && c === '\\' && j + 1 < command.length) {
-          inner += command[j + 1];
-          j += 2;
+          const escaped = command[j + 1];
+          // Bash only strips the backslash inside "..." when it precedes
+          // one of these five characters; before anything else the
+          // backslash is kept literally in the string. Always stripping it
+          // (as this used to) computed a too-short delimiter value for
+          // forms like <<"EO\NF" (backslash-N is not special), so the real
+          // terminator line — which bash resolves to the correct, longer
+          // value including the literal backslash — never matched, and the
+          // heredoc body never closed.
+          if (escaped === '$' || escaped === '`' || escaped === '"' || escaped === '\\' || escaped === '\n') {
+            inner += escaped;
+            j += 2;
+          } else {
+            inner += c;
+            j += 1;
+          }
           continue;
         }
         if (c === quoteChar) { closed = true; j += 1; break; }

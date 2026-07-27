@@ -9,6 +9,7 @@ const {
 } = require('./helpers');
 const {
   createGlobalGateGuardHookMergeOperation,
+  createGlobalBashGuardianHookMergeOperation,
 } = require('../antigravity-settings-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
@@ -27,6 +28,20 @@ function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir) {
   return ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
     createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher)
   ));
+}
+
+// EGC Guardian: same hooks-runtime scaffold already places
+// pre-bash-guardian-validate.js (and its guardian-bin.js/shell-split.js
+// deps) under this target's scripts/hooks and scripts/lib alongside
+// gateguard-fact-force.js above -- this only adds the hooks.json
+// registration, on Bash only (the Guardian validates shell commands, not
+// file writes). cubic-dev-ai review (PR #1052, 2026-07-27) found
+// createGlobalBashGuardianHookMergeOperation was added to
+// antigravity-settings-hooks.js but never actually called anywhere, so
+// global Antigravity installs never got the Guardian despite the helper
+// existing.
+function createAntigravityGlobalGuardianOperations(targetRoot, homeDir) {
+  return [createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash')];
 }
 
 function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
@@ -154,6 +169,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...moduleOperations,
       ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir),
+      ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir),
     ];
   },
 });
