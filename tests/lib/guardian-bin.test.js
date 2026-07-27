@@ -413,6 +413,34 @@ function main() {
     }
   });
 
+  run('unescapes a backslash inside a TOML basic string (round-trip through the real tomlEscape())', () => {
+    // path.join() never produces a '\' on Linux, so a path built the normal
+    // way never actually exercises tomlUnescapeBasicString's escape-
+    // resolution branch (it would just take the pass-through path every
+    // time). A literal backslash is a perfectly legal filename character on
+    // Linux, so embedding one in the install dir name forces registerToml()'s
+    // real tomlEscape() to double it, and fromCodexToml() must reverse that
+    // correctly to find the file back.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const { registerToml } = require('../../scripts/lib/mcp-register');
+      const installDir = path.join(fakeHome, 'somewhere', 'weird\\dir', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      registerToml(path.join(fakeHome, '.codex', 'config.toml'), {
+        guardianBin: path.join(installDir, 'index.js'),
+        memoryBin: path.join(installDir, '..', 'egc-memory', 'index.js'),
+      });
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        assert.strictEqual(fromCodexToml(), path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   run('handles a multi-line args array', () => {
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {

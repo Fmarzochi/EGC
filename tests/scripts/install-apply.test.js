@@ -411,6 +411,47 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a Guardian CLI marker write failure warns but does not fail the install (EGC-465)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      // A plain file sitting where the marker's parent directory needs to be
+      // created: mkdirSync(..., {recursive: true}) cannot turn a file into a
+      // directory, so writeGuardianCliMarker()'s write fails -- this must be
+      // swallowed (logged, not thrown), since it is only one of four
+      // resolution strategies and must never break a real install.
+      fs.writeFileSync(path.join(homeDir, '.egc'), 'not a directory');
+
+      // run()'s helper hardcodes stderr to '' on a successful (exit 0) run
+      // -- execFileSync only exposes stderr via the thrown error on
+      // failure. spawnSync captures both streams uniformly regardless of
+      // exit code, which this specific assertion needs.
+      const { spawnSync } = require('child_process');
+      const spawned = spawnSync('node', [SCRIPT, '--profile', 'core'], {
+        cwd: projectDir,
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+        encoding: 'utf8',
+        timeout: DEFAULT_INSTALL_APPLY_TIMEOUT_MS,
+      });
+      const result = { code: spawned.status, stdout: spawned.stdout, stderr: spawned.stderr };
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(
+        result.stderr.includes('Failed to write Guardian CLI marker'),
+        `Expected a warning about the marker write failure, got stderr: ${result.stderr}`
+      );
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      assert.ok(
+        fs.existsSync(path.join(geminiRoot, 'egc', 'install-state.json')),
+        'the rest of the install should still complete normally'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs the Claude Code SessionStart state hook and records install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
