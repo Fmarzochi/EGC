@@ -23,6 +23,8 @@ const {
   resolveGateGuardHookScriptDestination,
   createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
+  createBashGuardianHookMergeOperationForDestination,
+  resolveBashGuardianHookScriptDestination,
 } = require('./claude-settings-hooks');
 
 function resolveCopilotHooksFilePath(homeDir) {
@@ -48,8 +50,22 @@ function createPreToolUseCrusherHookMergeOperation(targetRoot, homeDir, matcher)
   );
 }
 
+// EGC Guardian: same hooks.json schema; GateGuard above only forces
+// investigation before a risky action, it never checks a Bash command
+// against the Guardian's actual allowlist/denylist. 2026-07-27 audit
+// (EGC-462) found this target had GateGuard + Crusher wired but never the
+// Guardian validator itself.
+function createPreToolUseBashGuardianHookMergeOperation(targetRoot, homeDir, matcher) {
+  return createBashGuardianHookMergeOperationForDestination(
+    resolveCopilotHooksFilePath(homeDir),
+    resolveBashGuardianHookScriptDestination(targetRoot),
+    matcher
+  );
+}
+
 module.exports = {
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
+  createPreToolUseBashGuardianHookMergeOperation,
   resolveCopilotHooksFilePath,
 };

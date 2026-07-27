@@ -15,23 +15,26 @@
 const {
   GATEGUARD_HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
+  BASH_GUARDIAN_HOOK_MODULE_ID,
   createGateGuardScriptCopyOperations,
+  createBashGuardianScriptCopyOperations,
 } = require('./claude-settings-hooks');
 const {
   ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+  GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_RUN_COMMAND_EVENT,
   PRE_WRITE_CODE_EVENT,
   resolveAdapterScriptDestination,
+  resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 } = require('./windsurf-gateguard-hooks');
 
 function createWindsurfGateGuardOperations(adapter, targetRoot, createRemappedOperation) {
-  const scriptCopyOperations = createGateGuardScriptCopyOperations(
-    (moduleId, sourceRelativePath, destinationPath, options) => (
-      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-    ),
-    targetRoot
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
+
+  const scriptCopyOperations = createGateGuardScriptCopyOperations(remap, targetRoot);
 
   const adapterScriptDestination = resolveAdapterScriptDestination(targetRoot);
   const adapterCopyOperation = createRemappedOperation(
@@ -55,7 +58,41 @@ function createWindsurfGateGuardOperations(adapter, targetRoot, createRemappedOp
     hookScriptPath: adapterScriptDestination,
   }));
 
-  return [...scriptCopyOperations, adapterCopyOperation, ...mergeOperations];
+  // EGC Guardian: the GateGuard adapter above only forces investigation
+  // before a risky action, it never checks a Bash command against the
+  // Guardian's actual allowlist/denylist. 2026-07-27 audit (EGC-460/462)
+  // found Windsurf's adapter called only gateguard-fact-force.js, never
+  // pre-bash-guardian-validate.js. Registered on pre_run_command only (the
+  // Guardian validates shell commands, not file writes).
+  const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot);
+  const guardianAdapterScriptDestination = resolveGuardianAdapterScriptDestination(targetRoot);
+  const guardianAdapterCopyOperation = createRemappedOperation(
+    adapter,
+    BASH_GUARDIAN_HOOK_MODULE_ID,
+    GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+    guardianAdapterScriptDestination,
+    { strategy: 'preserve-relative-path' }
+  );
+  const guardianMergeOperation = {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: BASH_GUARDIAN_HOOK_MODULE_ID,
+    sourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: hooksJsonPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_RUN_COMMAND_EVENT,
+    hookScriptPath: guardianAdapterScriptDestination,
+  };
+
+  return [
+    ...scriptCopyOperations,
+    adapterCopyOperation,
+    ...mergeOperations,
+    ...guardianScriptCopyOperations,
+    guardianAdapterCopyOperation,
+    guardianMergeOperation,
+  ];
 }
 
 module.exports = { createWindsurfGateGuardOperations };

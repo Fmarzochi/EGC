@@ -15,6 +15,7 @@ const path = require('node:path');
 const PRE_WRITE_CODE_EVENT = 'pre_write_code';
 const PRE_RUN_COMMAND_EVENT = 'pre_run_command';
 const ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/windsurf-gateguard-adapter.js';
+const GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/windsurf-guardian-adapter.js';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -26,6 +27,10 @@ function buildHookCommand(scriptPath) {
 
 function resolveAdapterScriptDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', 'windsurf-gateguard-adapter.js');
+}
+
+function resolveGuardianAdapterScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'windsurf-guardian-adapter.js');
 }
 
 function resolveHooksJsonPath(targetRoot) {
@@ -108,10 +113,12 @@ function applyWindsurfGateGuardHookToFile(hooksJsonPath, event, adapterScriptPat
 
 module.exports = {
   ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+  GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_RUN_COMMAND_EVENT,
   PRE_WRITE_CODE_EVENT,
   addWindsurfHookEntry,
   applyWindsurfGateGuardHookToFile,
   resolveAdapterScriptDestination,
+  resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 };

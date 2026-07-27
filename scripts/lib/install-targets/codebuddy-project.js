@@ -11,6 +11,8 @@ const {
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
   createCrusherScriptCopyOperations,
+  createPreToolUseBashGuardianHookMergeOperation,
+  createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 // CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
@@ -37,6 +39,17 @@ function createHookOperations(adapter, targetRoot) {
       targetRoot
     ),
     createPreToolUseCrusherHookMergeOperation(targetRoot, 'Bash'),
+    // EGC Guardian: GateGuard above only forces investigation before a risky
+    // action; it never checks a Bash command against the Guardian's actual
+    // allowlist/denylist. 2026-07-27 audit (EGC-462) found this target had
+    // GateGuard + Crusher wired but never the Guardian validator itself.
+    ...createBashGuardianScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
+    createPreToolUseBashGuardianHookMergeOperation(targetRoot, 'Bash'),
   ];
 }
 

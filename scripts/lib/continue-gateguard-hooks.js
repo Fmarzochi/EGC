@@ -17,6 +17,8 @@ const {
   createPreToolUseGateGuardHookMergeOperation,
   createCrusherScriptCopyOperations,
   createPreToolUseCrusherHookMergeOperation,
+  createBashGuardianScriptCopyOperations,
+  createPreToolUseBashGuardianHookMergeOperation,
 } = require('./claude-settings-hooks');
 
 function createContinueGateGuardOperations(adapter, targetRoot, createRemappedOperation) {
@@ -37,7 +39,16 @@ function createContinueGateGuardOperations(adapter, targetRoot, createRemappedOp
     createPreToolUseCrusherHookMergeOperation(targetRoot, 'Bash'),
   ];
 
-  return [...copyOperations, ...mergeOperations, ...crusherOperations];
+  // EGC Guardian: GateGuard above only forces investigation before a risky
+  // action; it never checks a Bash command against the Guardian's actual
+  // allowlist/denylist. 2026-07-27 audit (EGC-462) found this target had
+  // GateGuard + Crusher wired but never the Guardian validator itself.
+  const guardianOperations = [
+    ...createBashGuardianScriptCopyOperations(remap, targetRoot),
+    createPreToolUseBashGuardianHookMergeOperation(targetRoot, 'Bash'),
+  ];
+
+  return [...copyOperations, ...mergeOperations, ...crusherOperations, ...guardianOperations];
 }
 
 module.exports = { createContinueGateGuardOperations };
