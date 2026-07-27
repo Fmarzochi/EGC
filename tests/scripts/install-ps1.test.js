@@ -107,17 +107,37 @@ function runTests() {
     assert.strictEqual(ps1Floor[1], bashFloor[1], 'install.ps1 Node floor must match install.sh');
   })) passed++; else failed++;
 
-  if (test('installs dependencies via a lockfile-aware helper, not a bare npm install', () => {
+  if (test('installs dependencies via a lockfile-aware helper matching install.sh exactly (no npm install fallback)', () => {
     assert.ok(scriptSource.includes('function Install-Deps'), 'should define the lockfile-aware helper');
     assert.ok(scriptSource.includes('Test-Path "package-lock.json"'));
     assert.ok(scriptSource.includes('npm ci --silent'));
-    // The helper's own fallback branch is the one legitimate "npm install
-    // --silent" in the file; every install site (root, guardian, memory)
-    // must call the helper instead of its own bare npm install.
-    const bareInstallCalls = scriptSource.match(/^\s*npm install --silent\s*$/gm) || [];
-    assert.strictEqual(bareInstallCalls.length, 1, 'only the Install-Deps fallback branch should call npm install --silent directly');
+    // install.sh's install_deps has no else branch: a global install has
+    // already resolved deps, so the no-lockfile case does nothing at all.
+    // A "npm install --silent" fallback here would be a real behavioral
+    // drift from install.sh, not a harmless equivalent.
+    const bareInstallCalls = scriptSource.match(/npm install --silent/g) || [];
+    assert.strictEqual(bareInstallCalls.length, 0, 'install.ps1 must not have any npm install fallback; install.sh has none either');
     const helperCalls = scriptSource.match(/^\s*Install-Deps\s*$/gm) || [];
     assert.strictEqual(helperCalls.length, 3, 'root, egc-guardian and egc-memory should each call Install-Deps');
+  })) passed++; else failed++;
+
+  if (test('skips (never overwrites) an existing MCP config that fails to parse as JSON', () => {
+    // A pre-existing config with invalid JSON must be left untouched: the
+    // default $obj = @{ mcpServers = @{} } falling through to the merge/
+    // write path below would overwrite the user's real config with just
+    // the two new servers, discarding everything else in the file.
+    assert.ok(
+      /catch\s*\{[^}]*is not valid JSON[^}]*return[^}]*\}/s.test(scriptSource),
+      'the ConvertFrom-Json catch block must warn and return, not fall through to a merge/overwrite'
+    );
+  })) passed++; else failed++;
+
+  if (test('escapes backslashes and quotes before writing a path into Codex CLI TOML', () => {
+    // A raw Windows path (C:\Users\x\...) concatenated into a TOML basic
+    // string is corrupted: TOML treats \U as the start of an 8-hex-digit
+    // Unicode escape. Must mirror install.sh's tomlEscape.
+    assert.ok(scriptSource.includes('tomlEscape'), 'Codex CLI TOML writer must escape paths via a tomlEscape helper');
+    assert.ok(scriptSource.includes('tomlEscape(g)') && scriptSource.includes('tomlEscape(m)'), 'both guardian and memory TOML entries must go through tomlEscape');
   })) passed++; else failed++;
 
   if (test('only builds egc-guardian/egc-memory when src/ is present (published tarball has none)', () => {

@@ -9,12 +9,12 @@ $MemoryBin     = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir 
 # npm strips the root package-lock.json from published tarballs, so a globally
 # installed package has no root lockfile (npm already resolved its deps during
 # `npm install -g`). The sub-package lockfiles travel via package.json "files",
-# so run a pinned `npm ci` wherever a lockfile is present and skip otherwise.
+# so run a pinned `npm ci` wherever a lockfile is present and skip entirely
+# otherwise -- mirrors install.sh's install_deps exactly, including the lack
+# of an npm install fallback (a global install has already resolved deps).
 function Install-Deps {
     if (Test-Path "package-lock.json") {
         npm ci --silent
-    } else {
-        npm install --silent
     }
 }
 
@@ -184,7 +184,17 @@ if (-not $DryRun) {
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
         $obj = @{ mcpServers = @{} }
         if (Test-Path $Target) {
-            try { $obj = Get-Content $Target -Raw | ConvertFrom-Json -AsHashtable } catch {}
+            try {
+                $obj = Get-Content $Target -Raw | ConvertFrom-Json -AsHashtable
+            } catch {
+                # Existing config is not valid JSON: leave it untouched and
+                # skip, matching install.sh's Node helper exactly. Falling
+                # through here would merge the new servers into a fresh empty
+                # hashtable and overwrite the file, destroying whatever the
+                # user already had in it.
+                Write-Host "  - skipped $Label ($Target): existing config is not valid JSON" -ForegroundColor Yellow
+                return
+            }
         }
         if (-not $obj.mcpServers) { $obj.mcpServers = @{} }
         $changed = $false
@@ -253,8 +263,14 @@ if (-not $DryRun) {
         Set-Content -Path $tmpCodexJs -Encoding UTF8 -Value @'
 const fs=require("fs"),path=require("path");
 const[,,t,g,m]=process.argv;
-const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+g+'"]\n';
-const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+m+'"]\n';
+// Escape backslashes (Windows paths are the common case here) and double
+// quotes so the path stays a valid TOML basic string; mirrors tomlEscape in
+// scripts/install.sh and scripts/lib/mcp-register.js. Without this, a raw
+// Windows path like C:\Users\x\... corrupts the TOML (\U... reads as an
+// invalid/wrong Unicode escape).
+const tomlEscape=(p)=>p.split("\\").join("\\\\").split('"').join('\\"');
+const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+tomlEscape(g)+'"]\n';
+const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+tomlEscape(m)+'"]\n';
 let c=fs.existsSync(t)?fs.readFileSync(t,"utf8"):"";
 let ch=false;
 if(!c.includes("egc-guardian")){c+=ge;ch=true;}
