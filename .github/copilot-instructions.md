@@ -42,3 +42,8 @@ never reach the repository.
   must never block the user's command.
 - Version bumps happen only in dedicated release PRs that update the whole
   release surface (11 files); flag any stray version change elsewhere.
+
+<!-- egc:start -->
+## EGC Project Memory
+
+<!-- egc:end -->
