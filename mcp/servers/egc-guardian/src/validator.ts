@@ -605,6 +605,15 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // prompt-injected agent could repoint egc-guardian's own MCP entry at an
   // arbitrary script and have this validator treat it as authoritative.
   /\.gemini[\\/]config[\\/]mcp_config\.json$/,
+  // Antigravity CLI's own MCP server registration file — a separate file
+  // from Gemini CLI's above despite sharing the ~/.gemini home root
+  // (scripts/lib/mcp-register.js's "Antigravity CLI" target). Multica squad
+  // audit (EGC-460/461, 2026-07-27) found guardian-bin.js now also trusts
+  // this file, for the same reasoning as the Gemini CLI entry above.
+  /\.gemini[\\/]antigravity-cli[\\/]mcp_config\.json$/,
+  // OpenCode's real MCP server registration file (scripts/lib/
+  // mcp-register.js's "OpenCode" target); same reasoning and same audit.
+  /\.config[\\/]opencode[\\/]config\.json$/,
   // Codex CLI: OAuth/API key auth file.
   /\.codex[\\/]auth\.json$/,
   // Amp: OAuth tokens live under this subfolder; config is elsewhere.

@@ -256,6 +256,71 @@ function main() {
     }
   });
 
+  run('resolves via ~/.gemini/antigravity-cli/mcp_config.json on an Antigravity-only install', () => {
+    // Multica squad audit (EGC-460/461, 2026-07-27): this is a SEPARATE file
+    // from ~/.gemini/config/mcp_config.json above despite sharing the
+    // ~/.gemini home root -- a pure-Antigravity install (no Claude Code, no
+    // Gemini CLI alongside it) had no working config-based fallback here
+    // either and failed open silently.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      fs.mkdirSync(path.join(fakeHome, '.gemini', 'antigravity-cli'), { recursive: true });
+      fs.writeFileSync(
+        path.join(fakeHome, '.gemini', 'antigravity-cli', 'mcp_config.json'),
+        JSON.stringify({
+          mcpServers: {
+            'egc-guardian': {
+              command: 'node',
+              args: [path.join(installDir, 'index.js')],
+            },
+          },
+        }),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromMcpConfigs } = freshGuardianBin();
+        const resolved = fromMcpConfigs();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('resolves via ~/.config/opencode/config.json on an OpenCode-only install', () => {
+    // Same audit: OpenCode's real MCP registration file (scripts/lib/
+    // mcp-register.js's "OpenCode" target) was never consulted either.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      fs.mkdirSync(path.join(fakeHome, '.config', 'opencode'), { recursive: true });
+      fs.writeFileSync(
+        path.join(fakeHome, '.config', 'opencode', 'config.json'),
+        JSON.stringify({
+          mcpServers: {
+            'egc-guardian': {
+              command: 'node',
+              args: [path.join(installDir, 'index.js')],
+            },
+          },
+        }),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromMcpConfigs } = freshGuardianBin();
+        const resolved = fromMcpConfigs();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   run('no longer checks the dead ~/.gemini/settings.json path', () => {
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {

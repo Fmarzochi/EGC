@@ -175,5 +175,15 @@ run('.gemini/GEMINI.md write stays allowed (functional file, not a credential/tr
   assert.strictEqual(v.allowed, true, `expected .gemini/GEMINI.md to stay allowed, got: ${v.reason}`);
 });
 
+console.log('\nAntigravity/OpenCode cross-CLI fail-open fix (Multica audit EGC-460/461, 2026-07-27):');
+run('.gemini/antigravity-cli/mcp_config.json write is blocked (guardian-bin.js now trusts this file too)', () => {
+  const v = validateWrite('.gemini/antigravity-cli/mcp_config.json');
+  assert.strictEqual(v.allowed, false, 'expected .gemini/antigravity-cli/mcp_config.json write to be blocked');
+});
+run('.config/opencode/config.json write is blocked (guardian-bin.js now trusts this file too)', () => {
+  const v = validateWrite('.config/opencode/config.json');
+  assert.strictEqual(v.allowed, false, 'expected .config/opencode/config.json write to be blocked');
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
