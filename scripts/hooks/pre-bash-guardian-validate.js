@@ -22,12 +22,10 @@
 'use strict';
 
 const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
+const { splitShellSegments } = require('../lib/shell-split');
 
 const MAX_STDIN = 1024 * 1024;
 const VALIDATE_TIMEOUT_MS = 4000;
-
-const SEGMENT_SEPARATORS = /[&|;<>$`\n\r]+/;
-const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command']);
 
 const ADVISORY_REASONS = [
   'Shell chaining/metacharacters are forbidden',
@@ -45,16 +43,19 @@ function parseInput(inputOrRaw) {
   return inputOrRaw && typeof inputOrRaw === 'object' ? inputOrRaw : {};
 }
 
+// Segmentation only splits the compound command on top-level, unquoted
+// operators (&&, ||, ;, &, |, newline) — it no longer strips leading
+// wrappers (sudo, env, xargs, ...) or env-var assignments itself. That
+// unwrapping now happens once, centrally, in the guardian's own
+// validateCommand (mcp/servers/egc-guardian/src/validator.ts), which both
+// this hook and the validate_command MCP tool call through the CLI below —
+// duplicating the same peeling logic in two places is exactly how earlier
+// fixes here ended up covering only the specific wrapper names each audit
+// happened to name (see the project's Guardian bypass post-mortem).
 function extractSegments(command) {
-  const segments = [];
-  for (const rawSegment of command.split(SEGMENT_SEPARATORS)) {
-    let tokens = rawSegment.trim().split(/\s+/).filter(Boolean);
-    while (tokens.length > 0 && (LEADING_WRAPPERS.has(tokens[0]) || /^[A-Za-z_]\w*=/.test(tokens[0]))) {
-      tokens = tokens.slice(1);
-    }
-    if (tokens.length > 0) segments.push(tokens.join(' '));
-  }
-  return segments;
+  return splitShellSegments(command, { splitOnPipe: true })
+    .map(s => s.trim())
+    .filter(Boolean);
 }
 
 function isAdvisory(verdict) {

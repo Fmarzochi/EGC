@@ -76,6 +76,181 @@ function positionalsOf(tokens: string[]): string[] {
   return tokens.filter(t => t.length > 0 && !t.startsWith('-'));
 }
 
+// Splits a command string into words, honoring single/double quotes and
+// backslash escapes so a quoted argument with embedded whitespace (e.g. the
+// prompt text in `sudo -p "enter password" cmd`) stays one token. Without
+// this, a naive whitespace split misaligns the wrapper-flag skipping in
+// unwrapLeadingConstructs below and can leave a stray quote character in the
+// slot later read as the base command. Quote/backslash characters are kept
+// in the returned tokens (not stripped) — bareToken() strips them at the
+// point of use, same as every other check in this file.
+function tokenizeWords(command: string): string[] {
+  const words: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  let hasToken = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+
+    if (quote) {
+      current += ch;
+      hasToken = true;
+      if (ch === quote) quote = null;
+      continue;
+    }
+
+    if (ch === '\\' && i + 1 < command.length) {
+      current += ch + command[i + 1];
+      hasToken = true;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      hasToken = true;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      if (hasToken) { words.push(current); current = ''; hasToken = false; }
+      continue;
+    }
+
+    current += ch;
+    hasToken = true;
+  }
+
+  if (hasToken) words.push(current);
+  return words;
+}
+
+// Wrappers that re-execute a following command: each entry lists the flags
+// that consume a following token as a value (so the scan below does not
+// mistake a flag's value for the wrapped command), plus how many additional
+// non-flag positionals appear before the wrapped command starts (e.g.
+// `timeout 5 cmd` has a mandatory DURATION positional; `flock file cmd` has
+// the lockfile/fd). This replaces a fixed 5-name strip list with a table
+// that both grows easily and — via the while loop in
+// unwrapLeadingConstructs — unwraps stacked wrappers (`sudo timeout 5 xargs
+// -I{} rm -rf {}`) instead of stopping after a single layer. Bundled short
+// flags (-Hu instead of -H -u) are not decomposed, same simplification the
+// docker checks above already accept — not exhaustive, covers the common
+// spelled-out forms.
+interface WrapperSpec {
+  valueFlags: Set<string>;
+  leadingPositionals?: number;
+}
+
+const WRAPPER_SPECS: Record<string, WrapperSpec> = {
+  sudo: { valueFlags: new Set(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-R', '--chroot', '-D', '--chdir']) },
+  doas: { valueFlags: new Set(['-u', '-C']) },
+  env: { valueFlags: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']) },
+  nohup: { valueFlags: new Set() },
+  time: { valueFlags: new Set(['-o', '--output', '-f', '--format']) },
+  command: { valueFlags: new Set() },
+  exec: { valueFlags: new Set() },
+  nice: { valueFlags: new Set(['-n', '--adjustment']) },
+  ionice: { valueFlags: new Set(['-c', '--class', '-n', '--classdata', '-p', '--pid', '-P', '--pgid']) },
+  timeout: { valueFlags: new Set(['-s', '--signal', '-k', '--kill-after']), leadingPositionals: 1 },
+  stdbuf: { valueFlags: new Set(['-i', '--input', '-o', '--output', '-e', '--error']) },
+  xargs: { valueFlags: new Set(['-a', '--arg-file', '-d', '--delimiter', '-E', '-I', '-i', '-L', '-l', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']) },
+  flock: { valueFlags: new Set(['-w', '--timeout', '-E', '--conflict-exit-code']), leadingPositionals: 1 },
+  watch: { valueFlags: new Set(['-n', '--interval']) },
+  strace: { valueFlags: new Set(['-e', '-o', '--output', '-s', '-p', '-P', '-b', '-U']) },
+  'systemd-run': { valueFlags: new Set(['-p', '--property', '-u', '--unit', '--slice', '--uid', '--gid', '--nice', '-E', '--setenv', '--working-directory', '-M', '--machine', '-H', '--host', '--description']) },
+  parallel: { valueFlags: new Set(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']) },
+};
+
+const ENV_ASSIGNMENT_RE = /^([A-Za-z_]\w*)=/;
+
+// Environment variables that let a command persist or override git's hook
+// and execution config the same way `-c core.hooksPath=`/`git config` does
+// (see DANGEROUS_GIT_CONFIG_KEYS below), but via `VAR=value git ...` on the
+// command line instead — a form the old strip-and-ignore VAR= handling let
+// through untouched. GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n are numbered
+// (GIT_CONFIG_COUNT-driven), hence the pattern rather than a fixed name.
+const DANGEROUS_ENV_VAR_EXACT = new Set([
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_EXEC_PATH',
+  'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_EDITOR', 'GIT_PAGER',
+]);
+const DANGEROUS_ENV_VAR_PATTERN = /^GIT_CONFIG_(KEY|VALUE)_\d+$/;
+const DANGEROUS_ENV_VAR_ALIAS_PATTERN = /^GIT_ALIAS_/;
+
+function isDangerousEnvVarName(varName: string): boolean {
+  const upper = varName.toUpperCase();
+  return DANGEROUS_ENV_VAR_EXACT.has(upper)
+    || DANGEROUS_ENV_VAR_PATTERN.test(upper)
+    || DANGEROUS_ENV_VAR_ALIAS_PATTERN.test(upper);
+}
+
+interface UnwrapResult {
+  blocked?: ValidationResultLike;
+  tokens: string[];
+}
+
+// A ValidationResult-shaped object, declared ahead of the real interface
+// (defined further down this file) so unwrapLeadingConstructs can be typed
+// without reordering the whole file.
+interface ValidationResultLike {
+  allowed: boolean;
+  reason?: string;
+  trust_level?: 'SAFE_READONLY' | 'SAFE_DEV' | 'DANGEROUS' | 'BLOCKED';
+}
+
+// Peels leading environment-variable assignments and known wrapper commands
+// off the front of a token list until the real command is reached, looping
+// so stacked wrappers (`sudo timeout 5 xargs rm -rf`) all get unwrapped
+// rather than just the outermost one. A dangerous env assignment (one of
+// the git-persistence variables above) short-circuits with a hard block
+// instead of being silently stripped, since stripping it would judge the
+// command by a name that never actually ran with that override in effect.
+function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
+  let current = tokens;
+  let changed = true;
+  while (changed && current.length > 0) {
+    changed = false;
+    const first = current[0];
+
+    const envMatch = ENV_ASSIGNMENT_RE.exec(first);
+    if (envMatch) {
+      if (isDangerousEnvVarName(envMatch[1])) {
+        return {
+          tokens: [],
+          blocked: {
+            allowed: false,
+            reason: `setting '${envMatch[1]}' persists a git execution/config override and is forbidden`,
+            trust_level: 'DANGEROUS',
+          },
+        };
+      }
+      current = current.slice(1);
+      changed = true;
+      continue;
+    }
+
+    const head = bareToken(first);
+    const spec = WRAPPER_SPECS[head];
+    if (spec) {
+      let i = 1;
+      while (i < current.length && current[i].startsWith('-')) {
+        const flag = bareToken(current[i]);
+        const eq = flag.indexOf('=');
+        const flagName = eq > 0 ? flag.slice(0, eq) : flag;
+        if (eq < 0 && spec.valueFlags.has(flagName)) i += 2;
+        else i += 1;
+      }
+      let skip = spec.leadingPositionals ?? 0;
+      while (skip > 0 && i < current.length) { i += 1; skip -= 1; }
+      current = current.slice(i);
+      changed = true;
+    }
+  }
+  return { tokens: current };
+}
+
 // Destructive variants of CLIs that are otherwise advisory-only at the
 // enforcement hook (see the allowlist-miss comment in validateCommand):
 // plain `docker build` / `gh pr list` / `prisma migrate dev` keep today's
@@ -311,6 +486,11 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
   zsh: ['-c'],
   dash: ['-c'],
   ksh: ['-c'],
+  // su -c runs its whole argument as a shell command under another user,
+  // same risk class as `bash -c` — unlike sudo/doas, su has no separate
+  // "unwrap the next token as the real command" shape (the command is one
+  // string argument to -c), so it is handled here instead of WRAPPER_SPECS.
+  su: ['-c', '--command'],
   pwsh: ['-c', '-command', '-Command'],
   powershell: ['-c', '-command', '-Command'],
   'powershell.exe': ['-c', '-command', '-Command'],
@@ -372,6 +552,15 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /(^|[\\/])\.zprofile$/,
   /(^|[\\/])\.profile$/,
   /(^|[\\/])\.gitconfig$/,
+  // A hook planted directly in .git/hooks/ fires on the next matching git
+  // operation (pre-commit, pre-push, ...) without touching any config file
+  // at all — the same persistence effect as the core.hooksPath/git-config
+  // checks above, via a path validateWrite previously never inspected.
+  // .git/config is the repo-local counterpart of ~/.gitconfig above; both
+  // can carry the same dangerous keys checkGitConfigWrite denies when set
+  // through the `git config` CLI, so a raw file write must be denied too.
+  /(^|[\\/])\.git[\\/]hooks([\\/]|$)/,
+  /(^|[\\/])\.git[\\/]config$/,
 ];
 
 export function buildDeniedPaths(): string[] {
@@ -466,6 +655,82 @@ export interface ValidationResult {
  * Validate arguments for a specific allowed command.
  * Returns { allowed: false, reason } if the args are unsafe.
  */
+// Config keys that persist a hook-bypass or arbitrary-execution mechanism:
+// once set, they take effect on every future git invocation in this repo/
+// environment, not just the one that set them (unlike the inline `-c
+// core.hooksPath=` form, already blocked separately in
+// scripts/hooks/block-no-verify.js). core.hooksPath repoints where git looks
+// for hooks (including the DCO/commit hooks this project relies on);
+// core.pager/core.editor/diff.external run an arbitrary command on ordinary
+// read operations; credential.helper receives every credential request;
+// include.path loads another config file wholesale.
+const DANGEROUS_GIT_CONFIG_KEYS = new Set([
+  'core.hookspath',
+  'core.pager',
+  'core.editor',
+  'core.sshcommand',
+  'credential.helper',
+  'diff.external',
+  'include.path',
+]);
+// A merge driver runs an arbitrary command on every merge that touches a
+// matching path, by design of the merge.<name>.driver mechanism itself —
+// any write to one is dangerous regardless of the command it names.
+const GIT_CONFIG_MERGE_DRIVER_KEY_RE = /^merge\..+\.driver$/;
+// An alias is only a shell-escape risk when its value starts with '!' (git's
+// own syntax for "run this as a shell command" instead of a git subcommand);
+// alias.co = checkout is ordinary and harmless.
+const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
+
+// Flags that make `git config` a read (or a removal) rather than a write —
+// these must never trip the dangerous-key check below.
+const GIT_CONFIG_READONLY_FLAGS = new Set([
+  '--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l',
+  '--edit', '-e', '--unset', '--unset-all', '--name-only', '--show-origin',
+  '--show-scope',
+]);
+const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--default']);
+
+// Called only once the 'config' subcommand itself has been identified;
+// `args` is everything after 'git' (so args[0] === 'config'). Detects a
+// SET (a key positional followed by a value positional, or --add/
+// --replace-all) of one of the dangerous keys above and hard-blocks it —
+// reading or unsetting the same key is left untouched.
+function checkGitConfigWrite(args: string[]): ValidationResult | null {
+  const rest = args.slice(1);
+  let readOnly = false;
+  const positionals: string[] = [];
+
+  for (let i = 0; i < rest.length; i++) {
+    const raw = rest[i];
+    if (raw === '--') { positionals.push(...rest.slice(i + 1).map(bareToken)); break; }
+    if (raw.startsWith('-')) {
+      const flag = bareToken(raw);
+      const eq = flag.indexOf('=');
+      const flagName = eq > 0 ? flag.slice(0, eq) : flag;
+      if (GIT_CONFIG_READONLY_FLAGS.has(flagName)) readOnly = true;
+      if (eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName)) i += 1;
+      continue;
+    }
+    positionals.push(bareToken(raw));
+  }
+
+  if (readOnly || positionals.length < 2) return null;
+
+  const key = positionals[0];
+  const value = positionals[1];
+  const isDangerous = DANGEROUS_GIT_CONFIG_KEYS.has(key)
+    || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(key)
+    || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && value.startsWith('!'));
+
+  if (!isDangerous) return null;
+  return {
+    allowed: false,
+    reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
 function validateGitArgs(args: string[]): ValidationResult {
   // Block force pushes, including --force-with-lease/--force-if-includes
   // (startsWith, not includes, so these are caught even though their
@@ -479,6 +744,10 @@ return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SA
   // Additional check for combined short flags like -fu used destructively
   if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
 return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
+  }
+  if (bareToken(args[0] ?? '') === 'config') {
+    const configDenial = checkGitConfigWrite(args);
+    if (configDenial) return configDenial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
@@ -683,23 +952,45 @@ export function validateCommandArgs(
 }
 
 export function validateCommand(command: string, cwd?: string): ValidationResult {
-  // 1. Shell metacharacters check
-  if (SHELL_META_REGEX.test(command)) {
+  // 1. Tokenize quote-aware (so a quoted wrapper-flag value with embedded
+  // whitespace can't misalign the unwrap below), then peel off leading
+  // environment-variable assignments and known wrapper commands (sudo,
+  // timeout, xargs, ...) recursively until the real command is reached. A
+  // dangerous env assignment (GIT_CONFIG_PARAMETERS, GIT_EXEC_PATH, ...)
+  // hard-blocks here instead of being silently stripped.
+  const rawTokens = tokenizeWords(command);
+  if (rawTokens.length === 0) {
+    return { allowed: true, trust_level: 'SAFE_READONLY' };
+  }
+  const unwrapped = unwrapLeadingConstructs(rawTokens);
+  if (unwrapped.blocked) return unwrapped.blocked as ValidationResult;
+  const tokens = unwrapped.tokens;
+  if (tokens.length === 0) {
+    return { allowed: true, trust_level: 'SAFE_READONLY' };
+  }
+
+  // Judge the command by its final path segment. Spelling out an absolute or
+  // relative path (/bin/rm, ./mv, /usr/bin/python3) must not sidestep the
+  // name-based destructive and inline-eval denials below. bareToken() first
+  // strips quotes/backslashes so `"rm"`, 'rm', and \rm all resolve the same
+  // as a bare rm — without it, a quoted or escaped base command slips past
+  // every check below and falls through to the advisory allowlist-miss path.
+  const baseCommand = path.basename(bareToken(tokens[0]));
+  const args = tokens.slice(1);
+
+  // 2. `eval` executes its entire argument list as shell code — the same
+  // risk class as `bash -c`, but with no separate flag to opt into eval mode
+  // (the invocation itself IS the eval), so it is always denied rather than
+  // matched via INLINE_EVAL_COMMANDS' flag detection below.
+  if (baseCommand === 'eval' && args.length > 0) {
     return {
       allowed: false,
-      reason: 'Shell chaining/metacharacters are forbidden',
-      trust_level: 'BLOCKED',
+      reason: `inline code execution via 'eval' is forbidden — write the code to a file and run it instead`,
+      trust_level: 'DANGEROUS',
     };
   }
 
-  const parts = command.trim().split(/\s+/);
-  // Judge the command by its final path segment. Spelling out an absolute or
-  // relative path (/bin/rm, ./mv, /usr/bin/python3) must not sidestep the
-  // name-based destructive and inline-eval denials below.
-  const baseCommand = path.basename(parts[0]);
-  const args = parts.slice(1);
-
-  // 2. Dangerous commands: denied regardless of args
+  // 3. Dangerous commands: denied regardless of args
   if (DANGEROUS.includes(baseCommand)) {
     return {
       allowed: false,
@@ -708,21 +999,24 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 3. Inline code execution (python3 -c, bash -c, node -e, etc.) is a hard
-  // deny, not an allowlist check. This runs before the allowlist-membership
-  // check on purpose: the base command being outside SAFE_READONLY/SAFE_DEV
-  // (e.g. 'python3', 'bash') is only advisory at the enforcement hook layer,
-  // by design, so that legitimate commands outside this tiny allowlist
-  // (docker, pytest, cargo, go...) don't get hard-blocked wholesale. Inline
-  // eval is different: it lets ANY base command execute arbitrary code that
-  // bypasses every other check in this file, so it must hard-block
-  // regardless of allowlist status. Using DANGEROUS here (not BLOCKED) keeps
-  // the reason string out of the hook's advisory-reason list.
+  // 4. Inline code execution (python3 -c, bash -c, node -e, su -c, etc.) is a
+  // hard deny, not an allowlist check. This runs before the allowlist-
+  // membership check on purpose: the base command being outside
+  // SAFE_READONLY/SAFE_DEV (e.g. 'python3', 'bash') is only advisory at the
+  // enforcement hook layer, by design, so that legitimate commands outside
+  // this tiny allowlist (docker, pytest, cargo, go...) don't get hard-blocked
+  // wholesale. Inline eval is different: it lets ANY base command execute
+  // arbitrary code that bypasses every other check in this file, so it must
+  // hard-block regardless of allowlist status. Using DANGEROUS here (not
+  // BLOCKED) keeps the reason string out of the hook's advisory-reason list.
   // A versioned interpreter binary (python3.11, perl5.36) carries the same
   // eval power as its bare name; fall back to the version-stripped name.
+  // Args are bareToken()'d before matching so a quoted/glued flag (e.g.
+  // "--eval=code" with the whole flag=value inside one pair of quotes)
+  // can't dodge the exact/prefix comparisons in matchesEvalFlag.
   const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand]
     ?? INLINE_EVAL_COMMANDS[bareInterpreterName(baseCommand)];
-  if (evalFlagsForBase && args.some(a => matchesEvalFlag(a, evalFlagsForBase))) {
+  if (evalFlagsForBase && args.map(bareToken).some(a => matchesEvalFlag(a, evalFlagsForBase))) {
     return {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
@@ -730,7 +1024,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 4. Destructive variants of common CLIs (docker prune/rm, gh delete,
+  // 5. Destructive variants of common CLIs (docker prune/rm, gh delete,
   // prisma reset...) hard-block for the same reason inline eval does: the
   // allowlist miss below is advisory-only at the hook layer, so without this
   // check `docker system prune -af` would execute with nothing but a
@@ -739,7 +1033,23 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   const destructiveDenial = destructiveVerdict(baseCommand, args);
   if (destructiveDenial) return destructiveDenial;
 
-  // 5. Not in any allowlist: blocked
+  // 6. Shell metacharacters: an advisory-only signal (see ADVISORY_REASONS
+  // in the enforcement hook), checked only after every hard check above has
+  // had a chance to run against the real, unwrapped base command. Checking
+  // this first (as before) let a stray $/`/pipe elsewhere in the command —
+  // routinely present in legitimate quoted arguments, e.g. `git commit -m
+  // "fix: a && b"` — short-circuit the function before DANGEROUS/inline-eval
+  // ever ran, silently downgrading a real hard-block into an advisory-only
+  // verdict the hook does not act on.
+  if (SHELL_META_REGEX.test(command)) {
+    return {
+      allowed: false,
+      reason: 'Shell chaining/metacharacters are forbidden',
+      trust_level: 'BLOCKED',
+    };
+  }
+
+  // 7. Not in any allowlist: blocked
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
     return {
       allowed: false,
@@ -748,7 +1058,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 6. In allowlist: validate args
+  // 8. In allowlist: validate args
   return validateCommandArgs(baseCommand, args, cwd);
 }
 

@@ -13,8 +13,17 @@
 const fs = require('node:fs');
 const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
 
+// The real validateCommand (mcp/servers/egc-guardian/src/validator.ts) peels
+// leading wrappers like sudo before judging the base command; this fixture
+// only needs to mirror that for the wrappers the hook tests actually assert
+// on (e.g. "blocks a destructive command behind sudo"), not the full unwrap
+// logic — that sophistication is covered by the real guardian tests.
+const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command', 'doas', 'exec']);
+
 function verdictForCommand(segment) {
-  const base = segment.trim().split(/\s+/)[0] || '';
+  let tokens = segment.trim().split(/\s+/).filter(Boolean);
+  while (tokens.length > 0 && LEADING_WRAPPERS.has(tokens[0])) tokens = tokens.slice(1);
+  const base = tokens[0] || '';
   if (base === 'rm' || base === 'mv') {
     return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS' };
   }
