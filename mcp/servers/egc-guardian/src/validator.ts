@@ -616,6 +616,23 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.config[\\/]opencode[\\/]config\.json$/,
   // Codex CLI: OAuth/API key auth file.
   /\.codex[\\/]auth\.json$/,
+  // Codex CLI's real MCP server registration file (scripts/lib/
+  // mcp-register.js's registerToml(), TOML not JSON). guardian-bin.js's
+  // fromCodexToml() now trusts this file the same way fromMcpConfigs()
+  // trusts the JSON configs above, to resolve the guardian CLI for a
+  // Codex-only install: same reasoning, same audit (2026-07-27). A write
+  // here must be denied, or a prompt-injected agent could repoint
+  // egc-guardian's own MCP entry at an arbitrary script and have this
+  // validator treat it as authoritative.
+  /\.codex[\\/]config\.toml$/,
+  // Home-scoped install marker (scripts/lib/install/apply.js's
+  // writeGuardianCliMarker(), 2026-07-27 Multica design review EGC-465).
+  // guardian-bin.js's fromEgcHomeMarker() trusts this file's packageRoot
+  // value to resolve the guardian CLI on installs with no MCP config of
+  // their own (Copilot, CodeBuddy). Same reasoning as the other resolution
+  // sources above: a write here must be denied, or a prompt-injected agent
+  // could point resolution at an arbitrary script.
+  /\.egc[\\/]guardian-cli-path\.json$/,
   // Amp: OAuth tokens live under this subfolder; config is elsewhere.
   /\.amp[\\/]oauth([\\/]|$)/,
   // Kiro: the CLI's token cache lives outside ~/.kiro, under XDG data dir.

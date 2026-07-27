@@ -839,6 +839,48 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('codex adapter also wires EGC Guardian into ~/.codex/hooks.json on the Bash matcher (2026-07-27 gap fix)', () => {
+    // Confirmed via https://developers.openai.com/codex/hooks (redirects to
+    // https://learn.chatgpt.com/docs/hooks) that Codex supports the plain
+    // exit-code-2-plus-stderr blocking contract pre-bash-guardian-validate.js
+    // already uses for Claude Code, as an alternative to the JSON
+    // hookSpecificOutput.permissionDecision form -- so it is wired directly,
+    // with no translation adapter (unlike Windsurf's).
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codex',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const codexHome = path.join(homeDir, '.codex');
+    const guardianScriptPath = path.join(codexHome, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+
+    const guardianHookOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === guardianScriptPath
+    ));
+    assert.strictEqual(guardianHookOps.length, 1, 'Guardian is registered once, on Bash only (it validates shell commands, not file edits)');
+    assert.strictEqual(guardianHookOps[0].hookMatcher, 'Bash');
+    assert.strictEqual(guardianHookOps[0].destinationPath, path.join(codexHome, 'hooks.json'));
+
+    for (const src of [
+      'scripts/hooks/pre-bash-guardian-validate.js',
+      'scripts/lib/guardian-bin.js',
+      'scripts/lib/shell-split.js',
+    ]) {
+      const op = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === src
+        && operation.destinationPath === path.join(codexHome, ...src.split('/'))
+      ));
+      assert.ok(op, `Should scaffold ${src} into ~/.codex`);
+    }
+  })) passed++; else failed++;
+
   for (const [target, expectedRootSegments] of [['continue', ['.continue']], ['continue-project', ['.continue']]]) {
     if (test(`${target} adapter wires GateGuard PreToolUse for Edit/Write/MultiEdit/Bash into settings.json`, () => {
       const repoRoot = path.join(__dirname, '..', '..');

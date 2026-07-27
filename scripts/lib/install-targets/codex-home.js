@@ -12,10 +12,13 @@ const {
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   CRUSHER_HOOK_MODULE_ID,
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  BASH_GUARDIAN_HOOK_MODULE_ID,
+  BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_OPERATION_KIND,
   PRE_TOOL_USE_EVENT,
   createGateGuardScriptCopyOperations,
   createCrusherScriptCopyOperations,
+  createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 // Codex CLI's skills root (~/.agents, this adapter's own resolveRoot()) and
@@ -107,6 +110,42 @@ function createCodexCrusherOperations(adapter, codexHome) {
   return [...copyOperations, mergeOperation];
 }
 
+// EGC Guardian for Codex: the GateGuard hook above only forces investigation
+// before a risky action, it never checks a Bash command against the
+// Guardian's actual allowlist/denylist. 2026-07-27 audit (EGC-460/462, cross-
+// referenced against the 2026-07-27 Guardian-perfection mandate) found Codex
+// wired only GateGuard + Token Crusher into hooks.json, never
+// pre-bash-guardian-validate.js. Wired on the 'Bash' matcher only, the same
+// scope every other install target uses (the Guardian validates shell
+// commands, not file edits; no install target wires a write-validator hook).
+//
+// pre-bash-guardian-validate.js is registered directly, with no translation
+// adapter (unlike Windsurf's windsurf-guardian-adapter.js): Codex's own docs
+// (https://developers.openai.com/codex/hooks, redirects to
+// https://learn.chatgpt.com/docs/hooks) confirm the exit-code-2-plus-stderr
+// contract this hook already uses for Claude Code is explicitly supported as
+// an alternative to the JSON hookSpecificOutput.permissionDecision form -
+// verified against the docs before wiring, not assumed.
+function createCodexGuardianOperations(adapter, codexHome) {
+  const hookScriptPath = path.join(codexHome, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+  const copyOperations = createBashGuardianScriptCopyOperations(
+    (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    codexHome
+  );
+
+  const mergeOperation = buildCodexPreToolUseMergeOperation(
+    codexHome,
+    BASH_GUARDIAN_HOOK_MODULE_ID,
+    BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    'Bash'
+  );
+
+  return [...copyOperations, mergeOperation];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'codex-home',
   target: 'codex',
@@ -141,6 +180,7 @@ module.exports = createInstallTargetAdapter({
       ...moduleOperations,
       ...createCodexGateGuardOperations(adapter, codexHome),
       ...createCodexCrusherOperations(adapter, codexHome),
+      ...createCodexGuardianOperations(adapter, codexHome),
     ];
   },
 });

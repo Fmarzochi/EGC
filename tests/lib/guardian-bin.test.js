@@ -350,6 +350,251 @@ function main() {
     }
   });
 
+  console.log('\nguardian-bin.js: fromCodexToml()');
+
+  run('resolves via ~/.codex/config.toml written by registerToml() (round-trip)', () => {
+    // Uses the real registerToml() writer (scripts/lib/mcp-register.js) so
+    // this test breaks if the two ever drift out of sync with each other,
+    // not just against a hand-written fixture.
+    const { registerToml } = require('../../scripts/lib/mcp-register');
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const configPath = path.join(fakeHome, '.codex', 'config.toml');
+      registerToml(configPath, {
+        guardianBin: path.join(installDir, 'index.js'),
+        memoryBin: path.join(installDir, '..', 'egc-memory', 'index.js'),
+      });
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        const resolved = fromCodexToml();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('ignores unrelated TOML tables and ends the mcp_servers block at the next header', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const configPath = path.join(fakeHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(
+        configPath,
+        [
+          '[some_other_table]',
+          'unrelated = "value"',
+          '',
+          '[[mcp_servers]]',
+          'name = "egc-guardian"',
+          'command = "node"',
+          `args = ["${path.join(installDir, 'index.js').replaceAll('\\', '\\\\')}"]`,
+          '',
+          '[another_table]',
+          'also_unrelated = true',
+          '',
+        ].join('\n'),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        const resolved = fromCodexToml();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('handles a multi-line args array', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const configPath = path.join(fakeHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(
+        configPath,
+        [
+          '[[mcp_servers]]',
+          'name = "egc-guardian"',
+          'command = "node"',
+          'args = [',
+          `  "${path.join(installDir, 'index.js').replaceAll('\\', '\\\\')}",`,
+          ']',
+          '',
+        ].join('\n'),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        const resolved = fromCodexToml();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('rejects a config.toml entry pointing outside the home directory', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    const outsideDir = createTempDir('egc-guardian-bin-outside-');
+    try {
+      const installDir = path.join(outsideDir, 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// outside cli\n');
+      const configPath = path.join(fakeHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(
+        configPath,
+        [
+          '[[mcp_servers]]',
+          'name = "egc-guardian"',
+          'command = "node"',
+          `args = ["${path.join(installDir, 'index.js').replaceAll('\\', '\\\\')}"]`,
+          '',
+        ].join('\n'),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        const resolved = fromCodexToml();
+        assert.notStrictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  run('returns null (never throws) when config.toml does not exist', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        assert.strictEqual(fromCodexToml(), null);
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('returns null (never throws) on a malformed/garbage config.toml', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const configPath = path.join(fakeHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, '[[mcp_servers]\nname = egc-guardian broken toml {{{');
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        assert.strictEqual(fromCodexToml(), null);
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  console.log('\nguardian-bin.js: fromEgcHomeMarker()');
+
+  run('resolves via ~/.egc/guardian-cli-path.json (Copilot/CodeBuddy fallback, EGC-465)', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const packageRoot = path.join(fakeHome, 'somewhere', 'the-package');
+      const installDir = path.join(packageRoot, 'mcp', 'servers', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const markerPath = path.join(fakeHome, '.egc', 'guardian-cli-path.json');
+      fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+      fs.writeFileSync(markerPath, JSON.stringify({ packageRoot }));
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromEgcHomeMarker } = freshGuardianBin();
+        assert.strictEqual(fromEgcHomeMarker(), path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('allows a marker packageRoot outside $HOME (system-wide Node install, no version manager)', () => {
+    // The content is NOT restricted to $HOME, unlike fromMcpConfigs()/
+    // fromCodexToml() -- a system Node install (apt install nodejs + sudo
+    // npm install -g) legitimately puts npm root -g outside $HOME, and
+    // that is exactly the deployment shape this strategy exists to cover.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    const outsideDir = createTempDir('egc-guardian-bin-outside-');
+    try {
+      const packageRoot = outsideDir;
+      const installDir = path.join(packageRoot, 'mcp', 'servers', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const markerPath = path.join(fakeHome, '.egc', 'guardian-cli-path.json');
+      fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+      fs.writeFileSync(markerPath, JSON.stringify({ packageRoot }));
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromEgcHomeMarker } = freshGuardianBin();
+        assert.strictEqual(fromEgcHomeMarker(), path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  run('returns null (never throws) when the marker file does not exist', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromEgcHomeMarker } = freshGuardianBin();
+        assert.strictEqual(fromEgcHomeMarker(), null);
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('returns null (never throws) on a malformed marker file', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const markerPath = path.join(fakeHome, '.egc', 'guardian-cli-path.json');
+      fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+      fs.writeFileSync(markerPath, 'not json {{{');
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromEgcHomeMarker } = freshGuardianBin();
+        assert.strictEqual(fromEgcHomeMarker(), null);
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('returns null when the marker\'s packageRoot has no guardian-cli.js at the expected relative path', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const markerPath = path.join(fakeHome, '.egc', 'guardian-cli-path.json');
+      fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+      fs.writeFileSync(markerPath, JSON.stringify({ packageRoot: path.join(fakeHome, 'nonexistent-package') }));
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromEgcHomeMarker } = freshGuardianBin();
+        assert.strictEqual(fromEgcHomeMarker(), null);
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
