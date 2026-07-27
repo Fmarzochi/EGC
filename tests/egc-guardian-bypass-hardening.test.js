@@ -185,5 +185,19 @@ run('.config/opencode/config.json write is blocked (guardian-bin.js now trusts t
   assert.strictEqual(v.allowed, false, 'expected .config/opencode/config.json write to be blocked');
 });
 
+console.log('\nCodex TOML + install-marker gap fixes (2026-07-27, EGC-465):');
+run('.codex/config.toml write is blocked (guardian-bin.js now trusts this file too)', () => {
+  const v = validateWrite('.codex/config.toml');
+  assert.strictEqual(v.allowed, false, 'expected .codex/config.toml write to be blocked');
+});
+run('.codex/config.toml write via home-relative path is blocked', () => {
+  const v = validateWrite(path.join(require('node:os').homedir(), '.codex', 'config.toml'));
+  assert.strictEqual(v.allowed, false, 'expected ~/.codex/config.toml write to be blocked');
+});
+run('.egc/guardian-cli-path.json write is blocked (guardian-bin.js now trusts this file too)', () => {
+  const v = validateWrite('.egc/guardian-cli-path.json');
+  assert.strictEqual(v.allowed, false, 'expected .egc/guardian-cli-path.json write to be blocked');
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

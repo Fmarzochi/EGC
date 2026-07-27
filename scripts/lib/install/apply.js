@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const { writeInstallState } = require('../install-state');
@@ -215,6 +216,48 @@ function applyMcpCopyFileOperation(operation, disabledServers) {
   fs.writeFileSync(operation.destinationPath, formatJson(filteredConfig), 'utf8');
 }
 
+// apply.js's own location is always the real installed package: unlike
+// guardian-bin.js, shell-split.js, and the hook scripts it copies
+// (createBashGuardianScriptCopyOperations in claude-settings-hooks.js), this
+// file is never itself copied out into an install target, so a __dirname-
+// relative walk-up is reliable for both a repo checkout and a real
+// `npm install -g` (mirrors guardian-bin.js's own fromPackageLayout()).
+function resolvePackageRoot() {
+  return path.join(__dirname, '..', '..', '..');
+}
+
+// Home-scoped, tool-agnostic anchor for guardian-bin.js's
+// fromEgcHomeMarker() resolution strategy (2026-07-27 Multica design
+// review, EGC-465): a Copilot- or CodeBuddy-only install has no MCP config
+// file of its own to trust, so this records the real package root at the
+// one moment it is actually known -- install time -- for any standalone
+// copy of guardian-bin.js to read back later.
+//
+// Deliberately NOT getEGCDir() (scripts/lib/utils.js): that helper is
+// polymorphic on the CALLING process's own env vars (CLAUDE_PROJECT_DIR,
+// VSCODE_AGENT, ...) and would place the marker under the wrong tool's
+// directory depending on which CLI happens to be running `egc install` at
+// the time, defeating the whole point of a tool-agnostic anchor.
+//
+// Written unconditionally on every apply (any target), so it self-heals if
+// the package is reinstalled at a new path. A write failure (read-only
+// HOME, permissions) only removes one of four resolution strategies -- the
+// existing ones are unaffected -- so it is logged and swallowed rather than
+// failing the whole install.
+function writeGuardianCliMarker() {
+  const markerPath = path.join(os.homedir(), '.egc', 'guardian-cli-path.json');
+  try {
+    fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+    fs.writeFileSync(
+      markerPath,
+      `${JSON.stringify({ packageRoot: resolvePackageRoot() }, null, 2)}\n`,
+      'utf8'
+    );
+  } catch (error) {
+    console.error(`Warning: Failed to write Guardian CLI marker: ${error.message}`);
+  }
+}
+
 function applyInstallPlan(plan) {
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
@@ -247,6 +290,7 @@ function applyInstallPlan(plan) {
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
+  writeGuardianCliMarker();
 
   syncInstallStateToStore(plan.statePreview, {
     onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),

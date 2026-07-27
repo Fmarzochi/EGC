@@ -388,6 +388,29 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('writes the home-scoped Guardian CLI marker on every install (EGC-465, Copilot/CodeBuddy resolution gap)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const markerPath = path.join(homeDir, '.egc', 'guardian-cli-path.json');
+      assert.ok(fs.existsSync(markerPath), 'Should write ~/.egc/guardian-cli-path.json');
+      const marker = readJson(markerPath);
+      const repoRoot = path.join(__dirname, '..', '..');
+      assert.strictEqual(path.resolve(marker.packageRoot), path.resolve(repoRoot));
+      assert.ok(
+        fs.existsSync(path.join(marker.packageRoot, 'mcp', 'servers', 'egc-guardian', 'src', 'guardian-cli.ts')),
+        'marker packageRoot should resolve to the real repo root'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs the Claude Code SessionStart state hook and records install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

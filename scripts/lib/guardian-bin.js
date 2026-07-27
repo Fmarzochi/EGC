@@ -89,8 +89,191 @@ function fromMcpConfigs() {
   return null;
 }
 
+// Codex CLI (~/.codex/config.toml) is the only supported target that
+// registers MCP servers in TOML, not JSON (scripts/lib/mcp-register.js's
+// registerToml()). @iarna/toml is a devDependency only -- it never ships in
+// the published package -- and this file is copied standalone into install
+// targets with no node_modules of its own (createBashGuardianScriptCopyOperations),
+// so it cannot require() any TOML library. This is a minimal, hand-rolled
+// reader scoped to exactly the shape registerToml() writes: repeated
+// [[mcp_servers]] blocks with name/command/args keys. It is not a general
+// TOML parser -- unrecognized syntax is simply skipped, never thrown, so a
+// config file with other tables/features registerToml() doesn't touch still
+// resolves fine.
+
+// Reverses tomlEscape() in scripts/lib/mcp-register.js: backslash-escaped
+// backslash and double-quote are the only two escapes that function ever
+// produces, but \n and \t are handled too since they're valid in a TOML
+// basic string and a hand-edited file could contain them.
+function tomlUnescapeBasicString(raw) {
+  let out = '';
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '\\' && i + 1 < raw.length) {
+      const next = raw[i + 1];
+      if (next === '\\') { out += '\\'; i++; continue; }
+      if (next === '"') { out += '"'; i++; continue; }
+      if (next === 'n') { out += '\n'; i++; continue; }
+      if (next === 't') { out += '\t'; i++; continue; }
+      out += ch; // unrecognized escape: keep verbatim rather than guess
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+// Extracts the value of a TOML basic (double-quoted) string, or null if the
+// trimmed text isn't one -- e.g. a literal string ('...'), a bare value, or
+// an already-consumed array element boundary.
+function tomlBasicStringValue(text) {
+  const match = /^"((?:[^"\\]|\\.)*)"$/.exec(text.trim());
+  return match ? tomlUnescapeBasicString(match[1]) : null;
+}
+
+function tomlStringArrayValue(inner) {
+  return inner
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map(tomlBasicStringValue)
+    .filter(item => item !== null);
+}
+
+// Scans for [[mcp_servers]] blocks and returns each as a plain object of its
+// string/string-array keys. Any other table header ([foo] or [[foo]] with a
+// different name) closes the current block without being parsed itself --
+// registerToml() never writes anything else, but a hand-edited file might.
+function parseCodexMcpServers(content) {
+  const servers = [];
+  let current = null;
+  let pendingArray = null; // { key, raw } while a multi-line array is open
+
+  const closeBlock = () => {
+    if (current) servers.push(current);
+    current = null;
+  };
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (pendingArray) {
+      const closeIndex = line.indexOf(']');
+      if (closeIndex === -1) {
+        pendingArray.raw += ` ${line}`;
+        continue;
+      }
+      pendingArray.raw += ` ${line.slice(0, closeIndex)}`;
+      current[pendingArray.key] = tomlStringArrayValue(pendingArray.raw);
+      pendingArray = null;
+      continue;
+    }
+
+    if (/^\[\[\s*mcp_servers\s*\]\]$/.test(line)) {
+      closeBlock();
+      current = {};
+      continue;
+    }
+    if (/^\[/.test(line)) {
+      closeBlock();
+      continue;
+    }
+    if (!current) continue;
+
+    const kv = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
+    if (!kv) continue;
+    const [, key, rawValue] = kv;
+    const value = rawValue.trim();
+
+    if (value.startsWith('[')) {
+      const inner = value.slice(1);
+      const closeIndex = inner.indexOf(']');
+      if (closeIndex === -1) {
+        pendingArray = { key, raw: inner };
+      } else {
+        current[key] = tomlStringArrayValue(inner.slice(0, closeIndex));
+      }
+      continue;
+    }
+
+    const str = tomlBasicStringValue(value);
+    if (str !== null) current[key] = str;
+  }
+  closeBlock();
+  return servers;
+}
+
+function fromCodexToml() {
+  const configPath = path.join(os.homedir(), '.codex', 'config.toml');
+  let content;
+  try {
+    content = fs.readFileSync(configPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  let servers;
+  try {
+    servers = parseCodexMcpServers(content);
+  } catch {
+    return null;
+  }
+
+  const server = servers.find(s => s.name === 'egc-guardian');
+  if (!server) return null;
+  const args = Array.isArray(server.args) ? server.args : [];
+  const indexJs = [server.command, ...args].find(
+    a => typeof a === 'string' && a.replaceAll('\\', '/').endsWith('egc-guardian/build/index.js'),
+  );
+  if (!indexJs) return null;
+
+  // Same home-scoping guard as fromMcpConfigs(): a resolved path must live
+  // under the user's home directory, closing off the same RCE shape (a
+  // tampered/synced config pointing resolution at an attacker-controlled
+  // script elsewhere).
+  const home = path.resolve(os.homedir());
+  const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');
+  if (candidate !== home && !candidate.startsWith(home + path.sep)) return null;
+  return fs.existsSync(candidate) ? candidate : null;
+}
+
+// Last-resort strategy for installs with no MCP config file of their own to
+// trust (Copilot, CodeBuddy: guardian-bin.js is copied standalone into
+// their tree with no fixed path relationship back to the original package,
+// unlike fromPackageLayout()'s repo/npm-install case). scripts/lib/install/
+// apply.js's writeGuardianCliMarker() records the real package root here on
+// every install/repair, so any standalone copy can read it back.
+//
+// 2026-07-27 Multica design review (EGC-465): deliberately does NOT require
+// the resolved candidate to live under the user's home directory, unlike
+// fromMcpConfigs()/fromCodexToml() above. Those two guard against a
+// synced/tampered CONFIG FILE pointing resolution somewhere attacker-
+// controlled. Here the marker file itself is the trust boundary (protected
+// in PROTECTED_FILE_PATTERNS, only ever written by this package's own
+// installer) -- its packageRoot value is expected to legitimately point
+// outside $HOME for a system-wide Node install with no version manager
+// (`apt install nodejs` + `sudo npm install -g`, common in CI runners and
+// containers, puts `npm root -g` under /usr/lib/node_modules). Restricting
+// the marker's content to $HOME would silently defeat this fix for exactly
+// the deployment shape it exists to cover.
+function fromEgcHomeMarker() {
+  const markerPath = path.join(os.homedir(), '.egc', 'guardian-cli-path.json');
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  } catch {
+    return null;
+  }
+
+  const packageRoot = parsed?.packageRoot;
+  if (typeof packageRoot !== 'string' || !packageRoot.trim()) return null;
+
+  const candidate = path.join(packageRoot, 'mcp', 'servers', 'egc-guardian', 'build', 'guardian-cli.js');
+  return fs.existsSync(candidate) ? candidate : null;
+}
+
 function resolveGuardianCli() {
-  return fromEnv() || fromPackageLayout() || fromMcpConfigs();
+  return fromEnv() || fromPackageLayout() || fromMcpConfigs() || fromCodexToml() || fromEgcHomeMarker();
 }
 
 // Invokes the guardian CLI with the payload on stdin, never in argv.
@@ -112,4 +295,12 @@ function callGuardian(cli, args, input, timeoutMs) {
   }
 }
 
-module.exports = { resolveGuardianCli, callGuardian, fromEnv, fromPackageLayout, fromMcpConfigs };
+module.exports = {
+  resolveGuardianCli,
+  callGuardian,
+  fromEnv,
+  fromPackageLayout,
+  fromMcpConfigs,
+  fromCodexToml,
+  fromEgcHomeMarker,
+};
