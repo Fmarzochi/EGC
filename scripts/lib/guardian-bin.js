@@ -36,7 +36,13 @@ function fromPackageLayout() {
 function fromMcpConfigs() {
   const configPaths = [
     path.join(os.homedir(), '.claude.json'),
-    path.join(os.homedir(), '.gemini', 'settings.json'),
+    // Gemini CLI's real MCP registration file (confirmed against
+    // scripts/lib/mcp-register.js's "Gemini CLI" target and live on disk,
+    // 2026-07-27 audit) — NOT ~/.gemini/settings.json, which Gemini CLI
+    // does not use for MCP server config at all. Without this fix, a
+    // Gemini-CLI-only install (no ~/.claude.json alongside it) had no
+    // working fallback here and failed open silently.
+    path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json'),
   ];
 
   // Resolved candidates must live under the user's home directory. This

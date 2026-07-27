@@ -72,6 +72,17 @@ function bareToken(a: string): string {
   return a.replace(/\\/g, '').replace(/["']/g, '').toLowerCase();
 }
 
+// Same quote/backslash stripping as bareToken(), but case-preserving. Used
+// wherever a flag's exact letter case is part of its identity (e.g. a
+// wrapper's -e vs -E are two different flags with different arities) —
+// lowercasing before the membership check would make an unrecognized
+// uppercase flag collide with an unrelated lowercase entry in valueFlags,
+// silently consuming (or failing to consume) the wrong number of tokens and
+// misidentifying the real wrapped command.
+function stripQuotes(a: string): string {
+  return a.replaceAll('\\', '').replaceAll(/["']/g, '');
+}
+
 function positionalsOf(tokens: string[]): string[] {
   return tokens.filter(t => t.length > 0 && !t.startsWith('-'));
 }
@@ -232,11 +243,68 @@ function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
     }
 
     const head = bareToken(first);
+
+    // `export VAR=value` persists the same way a bare `VAR=value` prefix
+    // does (the shell keeps it in the environment for every command that
+    // follows in this session/segment chain, not just the current one), so
+    // it gets the identical dangerous-name check rather than being treated
+    // as an unknown, advisory-only 'export' command. `export` accepts its
+    // own options (-f, -n, -p) and a `--` end-of-options marker before the
+    // assignment, same as any other bash builtin — skipping straight to
+    // current[1] missed `export -- GIT_SSH_COMMAND=...`, which real bash
+    // still treats as an assignment despite the leading `--`.
+    if (head === 'export' && current.length > 1) {
+      let idx = 1;
+      while (idx < current.length) {
+        const flagToken = stripQuotes(current[idx]);
+        if (flagToken === '--') { idx += 1; break; }
+        if (!flagToken.startsWith('-')) break;
+        idx += 1;
+      }
+      const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
+      if (exportMatch) {
+        if (isDangerousEnvVarName(exportMatch[1])) {
+          return {
+            tokens: [],
+            blocked: {
+              allowed: false,
+              reason: `exporting '${exportMatch[1]}' persists a git execution/config override and is forbidden`,
+              trust_level: 'DANGEROUS',
+            },
+          };
+        }
+        current = current.slice(idx + 1);
+        changed = true;
+        continue;
+      }
+    }
+
     const spec = WRAPPER_SPECS[head];
     if (spec) {
+      // env -S/--split-string re-splits its value into a new argv and execs
+      // the first word of that split — the same "string becomes code" shape
+      // as eval, just via env(1) instead of a shell builtin. The value isn't
+      // a simple opaque flag argument to skip past; it can itself be a full
+      // destructive command, so this is a hard deny rather than an unwrap.
+      if (head === 'env') {
+        const hasSplitString = current.slice(1).some(t => {
+          const bare = stripQuotes(t);
+          return bare === '-S' || bare === '--split-string' || bare.startsWith('--split-string=');
+        });
+        if (hasSplitString) {
+          return {
+            tokens: [],
+            blocked: {
+              allowed: false,
+              reason: `'env -S/--split-string' re-splits and executes its value and is forbidden`,
+              trust_level: 'DANGEROUS',
+            },
+          };
+        }
+      }
       let i = 1;
-      while (i < current.length && current[i].startsWith('-')) {
-        const flag = bareToken(current[i]);
+      while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
+        const flag = stripQuotes(current[i]);
         const eq = flag.indexOf('=');
         const flagName = eq > 0 ? flag.slice(0, eq) : flag;
         if (eq < 0 && spec.valueFlags.has(flagName)) i += 2;
@@ -529,6 +597,14 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.gemini[\\/]google_accounts\.json$/,
   /\.gemini[\\/].*mcp-oauth-tokens\.json$/,
   /\.gemini[\\/]a2a-oauth-tokens\.json$/,
+  // Gemini CLI's real MCP server registration file (scripts/lib/
+  // mcp-register.js, confirmed 2026-07-27). guardian-bin.js's
+  // fromMcpConfigs() now trusts this file the same way it already trusts
+  // ~/.claude.json, to resolve the guardian CLI for a Gemini-CLI-only
+  // install — that trust is only sound if a write here is denied, or a
+  // prompt-injected agent could repoint egc-guardian's own MCP entry at an
+  // arbitrary script and have this validator treat it as authoritative.
+  /\.gemini[\\/]config[\\/]mcp_config\.json$/,
   // Codex CLI: OAuth/API key auth file.
   /\.codex[\\/]auth\.json$/,
   // Amp: OAuth tokens live under this subfolder; config is elsewhere.
@@ -669,25 +745,36 @@ const DANGEROUS_GIT_CONFIG_KEYS = new Set([
   'core.pager',
   'core.editor',
   'core.sshcommand',
+  'core.fsmonitor',
   'credential.helper',
   'diff.external',
   'include.path',
 ]);
 // A merge driver runs an arbitrary command on every merge that touches a
 // matching path, by design of the merge.<name>.driver mechanism itself —
-// any write to one is dangerous regardless of the command it names.
+// any write to one is dangerous regardless of the command it names. filter
+// clean/smudge/process drivers and a named diff driver's own command run the
+// same way, on every checkout/diff of a matching path.
 const GIT_CONFIG_MERGE_DRIVER_KEY_RE = /^merge\..+\.driver$/;
+const GIT_CONFIG_FILTER_KEY_RE = /^filter\..+\.(clean|smudge|process)$/;
+const GIT_CONFIG_DIFF_COMMAND_KEY_RE = /^diff\..+\.command$/;
 // An alias is only a shell-escape risk when its value starts with '!' (git's
 // own syntax for "run this as a shell command" instead of a git subcommand);
 // alias.co = checkout is ordinary and harmless.
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
-// Flags that make `git config` a read (or a removal) rather than a write —
-// these must never trip the dangerous-key check below.
+// Flags that make `git config` strictly a read or a removal — never a write
+// — and so must never trip the dangerous-key check below. Output-annotation
+// flags (--show-scope, --show-origin, --name-only) are deliberately NOT
+// here: nothing stops one of them from appearing in argv alongside a real
+// key+value SET, so treating their mere presence as proof of "this is a
+// read" would let a set slip through unchecked (e.g. `git config
+// --show-scope core.hooksPath /tmp/evil`). --edit/-e is excluded for the
+// opposite reason — it IS a write (opens an editor over the config file)
+// and gets its own unconditional deny below instead of an exemption.
 const GIT_CONFIG_READONLY_FLAGS = new Set([
   '--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l',
-  '--edit', '-e', '--unset', '--unset-all', '--name-only', '--show-origin',
-  '--show-scope',
+  '--unset', '--unset-all',
 ]);
 const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--default']);
 
@@ -695,7 +782,9 @@ const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--d
 // `args` is everything after 'git' (so args[0] === 'config'). Detects a
 // SET (a key positional followed by a value positional, or --add/
 // --replace-all) of one of the dangerous keys above and hard-blocks it —
-// reading or unsetting the same key is left untouched.
+// reading or unsetting the same key is left untouched. Also hard-denies
+// --edit/-e outright, since an editor session's eventual changes cannot be
+// inspected the way a plain key/value pair can.
 function checkGitConfigWrite(args: string[]): ValidationResult | null {
   const rest = args.slice(1);
   let readOnly = false;
@@ -703,16 +792,23 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
 
   for (let i = 0; i < rest.length; i++) {
     const raw = rest[i];
-    if (raw === '--') { positionals.push(...rest.slice(i + 1).map(bareToken)); break; }
-    if (raw.startsWith('-')) {
-      const flag = bareToken(raw);
+    if (bareToken(raw) === '--') { positionals.push(...rest.slice(i + 1).map(bareToken)); break; }
+    const flag = bareToken(raw);
+    if (flag.startsWith('-')) {
+      if (flag === '--edit' || flag === '-e') {
+        return {
+          allowed: false,
+          reason: `git config --edit opens an editable session over the config file and is forbidden`,
+          trust_level: 'DANGEROUS',
+        };
+      }
       const eq = flag.indexOf('=');
       const flagName = eq > 0 ? flag.slice(0, eq) : flag;
       if (GIT_CONFIG_READONLY_FLAGS.has(flagName)) readOnly = true;
       if (eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName)) i += 1;
       continue;
     }
-    positionals.push(bareToken(raw));
+    positionals.push(flag);
   }
 
   if (readOnly || positionals.length < 2) return null;
@@ -721,6 +817,8 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
   const value = positionals[1];
   const isDangerous = DANGEROUS_GIT_CONFIG_KEYS.has(key)
     || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(key)
+    || GIT_CONFIG_FILTER_KEY_RE.test(key)
+    || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(key)
     || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && value.startsWith('!'));
 
   if (!isDangerous) return null;
@@ -729,6 +827,31 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
     reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
     trust_level: 'DANGEROUS',
   };
+}
+
+// Global git flags that take a value and can appear BEFORE the subcommand
+// (`git -c foo=bar config ...`, `git -C /path config ...`), mirroring the
+// same set block-no-verify.js already trusts for this exact purpose. Without
+// skipping these (and their values), a global flag in front of `config`
+// shifts the subcommand out of args[0] and the dangerous-key check below is
+// never reached at all.
+const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix']);
+
+// Returns the index of the actual subcommand token (skipping global flags
+// and their values), not just its name — reusing this same index to slice
+// `args` is what keeps "is the subcommand config" and "where does config's
+// own arg list start" from ever disagreeing with each other, which a second,
+// independent indexOf/findIndex scan over the same array could do (e.g. if
+// 'config' also appears earlier as the VALUE of a global flag like `-C`).
+function findGitSubcommandIndex(args: string[]): number {
+  let i = 0;
+  while (i < args.length) {
+    const t = bareToken(args[i]);
+    if (!t.startsWith('-')) return i;
+    if (GIT_GLOBAL_FLAGS_WITH_ARG.has(t)) i += 2;
+    else i += 1;
+  }
+  return -1;
 }
 
 function validateGitArgs(args: string[]): ValidationResult {
@@ -745,8 +868,9 @@ return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SA
   if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
 return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
   }
-  if (bareToken(args[0] ?? '') === 'config') {
-    const configDenial = checkGitConfigWrite(args);
+  const subcommandIdx = findGitSubcommandIndex(args);
+  if (subcommandIdx >= 0 && bareToken(args[subcommandIdx]) === 'config') {
+    const configDenial = checkGitConfigWrite(args.slice(subcommandIdx));
     if (configDenial) return configDenial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };

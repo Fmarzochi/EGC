@@ -9,7 +9,12 @@ const {
 } = require('./helpers');
 const {
   createGlobalGateGuardHookMergeOperation,
+  createGlobalBashGuardianHookMergeOperation,
 } = require('../antigravity-settings-hooks');
+const {
+  createGateGuardScriptCopyOperations,
+  createBashGuardianScriptCopyOperations,
+} = require('../claude-settings-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
 const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
@@ -19,14 +24,80 @@ const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
 // ~/.gemini/antigravity-cli/hooks.json, distinct from Gemini CLI's
 // ~/.gemini/hooks/hooks.json -- so Gemini CLI's existing GateGuard wiring
 // does not automatically cover Antigravity and needs this separate merge.
-// scripts/hooks/gateguard-fact-force.js is already scaffolded at
-// resolveGateGuardHookScriptDestination(targetRoot) for this target via the
-// hooks-runtime module (paths: scripts/hooks, scripts/lib), so this only
-// adds the hooks.json registration.
-function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir) {
-  return ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
+// scripts/hooks/gateguard-fact-force.js normally also arrives at this
+// target via the hooks-runtime module's own scaffold (paths: scripts/hooks,
+// scripts/lib) -- but hooks-runtime is only a DEFAULT base module for the
+// 'egc' target's legacy profile, not something every install is guaranteed
+// to select (a minimal/custom module selection can omit it). Copying the
+// script explicitly here, unconditional of module selection, closes that
+// gap: cubic-dev-ai review (PR #1052, 2026-07-27) found a minimal install
+// could register this hooks.json entry while the script it points at was
+// never actually copied anywhere, so every Antigravity Bash/Edit/Write call
+// would try to launch a nonexistent file.
+function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, createRemap) {
+  const scriptCopyOperations = createGateGuardScriptCopyOperations(createRemap, targetRoot);
+  const mergeOperations = ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
     createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher)
   ));
+  return [...scriptCopyOperations, ...mergeOperations];
+}
+
+// EGC Guardian: same reasoning as GateGuard above -- copy
+// pre-bash-guardian-validate.js (and its guardian-bin.js/shell-split.js
+// deps) explicitly rather than relying on hooks-runtime having scaffolded
+// them, then register it on Bash only (the Guardian validates shell
+// commands, not file writes). cubic-dev-ai review (PR #1052, 2026-07-27)
+// first found createGlobalBashGuardianHookMergeOperation was added to
+// antigravity-settings-hooks.js but never actually called anywhere, then
+// (once wired) found the same missing-script-copy gap GateGuard had.
+function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRemap) {
+  const scriptCopyOperations = createBashGuardianScriptCopyOperations(createRemap, targetRoot);
+  return [
+    ...scriptCopyOperations,
+    createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash'),
+  ];
+}
+
+// The GateGuard/Guardian script copies above are unconditional (needed for
+// minimal installs that skip the hooks-runtime module, see the comments on
+// those two functions), but a default install DOES select hooks-runtime,
+// which independently scaffolds the whole scripts/hooks and scripts/lib
+// directories via the generic module-path flow below -- as ONE 'copy-path'
+// operation per directory (sourceRelativePath exactly 'scripts/hooks' or
+// 'scripts/lib'), not one per file. That directory-level copy already
+// includes every file the explicit ones also copy, so without this a
+// default install recorded a redundant second copy of the same bytes to
+// the same destination for each script (wasteful I/O, duplicate bookkeeping
+// in the install state) per cubic-dev-ai review (PR #1052, 2026-07-27).
+//
+// Deliberately scoped to SOURCE paths under exactly these two directories,
+// not a generic "any copy-path nested under any other copy-path" rule: an
+// earlier version of this function compared DESTINATION paths across the
+// whole operations list, which also caught unrelated --with/skills/rules
+// operations that happened to land under a shared parent directory from a
+// completely different module and dropped them too (a real regression --
+// e.g. a --with-selected skill file nested under a skills/ directory
+// operation from another module). Only a source path that is an actual
+// descendant of one of these two known, hardcoded directories can ever be
+// redundant with them.
+const HOOKS_RUNTIME_DIRECTORY_SOURCES = ['scripts/hooks', 'scripts/lib'];
+
+function dedupeCopyOperations(operations) {
+  const presentDirectorySources = new Set(
+    operations
+      .filter(operation => (
+        operation.kind === 'copy-path' && HOOKS_RUNTIME_DIRECTORY_SOURCES.includes(operation.sourceRelativePath)
+      ))
+      .map(operation => operation.sourceRelativePath)
+  );
+
+  return operations.filter(operation => {
+    if (operation.kind !== 'copy-path') return true;
+    return ![...presentDirectorySources].some(directorySource => (
+      operation.sourceRelativePath !== directorySource
+      && operation.sourceRelativePath.startsWith(`${directorySource}/`)
+    ));
+  });
 }
 
 function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
@@ -148,12 +219,17 @@ module.exports = createInstallTargetAdapter({
         });
     });
 
+    const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    );
+
     // Deterministic: every egc-home install also registers the GateGuard
     // fact-forcing gate for Antigravity's global hooks.json, even when no
     // content modules are selected.
-    return [
+    return dedupeCopyOperations([
       ...moduleOperations,
-      ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir),
-    ];
+      ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
+      ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),
+    ]);
   },
 });

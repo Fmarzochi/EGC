@@ -223,6 +223,68 @@ function main() {
     }
   });
 
+  run('resolves via ~/.gemini/config/mcp_config.json on a Gemini-CLI-only install (no ~/.claude.json)', () => {
+    // 2026-07-27 audit (Guardian cross-CLI fail-open fix): guardian-bin.js
+    // used to check ~/.gemini/settings.json, a file Gemini CLI never writes
+    // for MCP config — a Gemini-only install (no Claude Code alongside it)
+    // had no working config-based fallback at all and failed open silently.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      fs.mkdirSync(path.join(fakeHome, '.gemini', 'config'), { recursive: true });
+      fs.writeFileSync(
+        path.join(fakeHome, '.gemini', 'config', 'mcp_config.json'),
+        JSON.stringify({
+          mcpServers: {
+            'egc-guardian': {
+              command: 'node',
+              args: [path.join(installDir, 'index.js')],
+            },
+          },
+        }),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromMcpConfigs } = freshGuardianBin();
+        const resolved = fromMcpConfigs();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('no longer checks the dead ~/.gemini/settings.json path', () => {
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      fs.mkdirSync(path.join(fakeHome, '.gemini'), { recursive: true });
+      fs.writeFileSync(
+        path.join(fakeHome, '.gemini', 'settings.json'),
+        JSON.stringify({
+          mcpServers: {
+            'egc-guardian': {
+              command: 'node',
+              args: [path.join(installDir, 'index.js')],
+            },
+          },
+        }),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromMcpConfigs } = freshGuardianBin();
+        const resolved = fromMcpConfigs();
+        assert.strictEqual(resolved, null, 'settings.json should no longer be consulted');
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

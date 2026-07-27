@@ -33,6 +33,13 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
 } = require('../../scripts/lib/warp-agents-merge');
+const {
+  GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+  PRE_RUN_COMMAND_EVENT,
+  applyWindsurfGateGuardHookToFile,
+  resolveGuardianAdapterScriptDestination,
+  resolveHooksJsonPath,
+} = require('../../scripts/lib/windsurf-gateguard-hooks');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const CURRENT_PACKAGE_VERSION = JSON.parse(
@@ -160,6 +167,68 @@ function writeClaudeSessionHookState(homeDir, options = {}) {
   });
 
   return { targetRoot, installStatePath, settingsPath, hookScriptPath };
+}
+
+function writeWindsurfGuardianHookState(homeDir, options = {}) {
+  const targetRoot = path.join(homeDir, '.codeium', 'windsurf');
+  const installStatePath = path.join(targetRoot, 'egc', 'install-state.json');
+  const hooksJsonPath = resolveHooksJsonPath(targetRoot);
+  const guardianAdapterScriptPath = resolveGuardianAdapterScriptDestination(targetRoot);
+  const guardianAdapterSourcePath = path.join(REPO_ROOT, GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH);
+
+  fs.mkdirSync(path.dirname(guardianAdapterScriptPath), { recursive: true });
+  fs.copyFileSync(guardianAdapterSourcePath, guardianAdapterScriptPath);
+  if (options.existingHooks) {
+    fs.writeFileSync(hooksJsonPath, JSON.stringify(options.existingHooks, null, 2));
+  }
+  applyWindsurfGateGuardHookToFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, guardianAdapterScriptPath);
+
+  writeState(installStatePath, {
+    adapter: { id: 'windsurf-home', target: 'windsurf', kind: 'home' },
+    targetRoot,
+    installStatePath,
+    request: {
+      profile: null,
+      modules: [],
+      includeComponents: [],
+      excludeComponents: [],
+      legacyLanguages: [],
+      legacyMode: true,
+    },
+    resolution: {
+      selectedModules: [],
+      skippedModules: [],
+    },
+    operations: [
+      {
+        kind: 'copy-file',
+        moduleId: 'egc-bash-guardian-hook',
+        sourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+        destinationPath: guardianAdapterScriptPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      },
+      {
+        kind: 'merge-claude-settings-hooks',
+        moduleId: 'egc-bash-guardian-hook',
+        sourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+        destinationPath: hooksJsonPath,
+        strategy: 'merge-claude-settings-hooks',
+        ownership: 'managed',
+        scaffoldOnly: false,
+        hookEvent: PRE_RUN_COMMAND_EVENT,
+        hookScriptPath: guardianAdapterScriptPath,
+      },
+    ],
+    source: {
+      repoVersion: CURRENT_PACKAGE_VERSION,
+      repoCommit: 'abc123',
+      manifestVersion: CURRENT_MANIFEST_VERSION,
+    },
+  });
+
+  return { targetRoot, installStatePath, hooksJsonPath, guardianAdapterScriptPath };
 }
 
 function managedOperation(kind, destinationPath, overrides = {}) {
@@ -1753,6 +1822,94 @@ function runTests() {
       assert.deepStrictEqual(settings.hooks.PreToolUse, [
         { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo guard' }] },
       ]);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  // Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
+  // Claude's matcher/group settings.json -- doctor/repair/uninstall had no
+  // notion of this at all (cubic-dev-ai review, PR #1052, 2026-07-27):
+  // repair injected a bogus SessionStart group into the Windsurf file
+  // instead of touching pre_run_command, doctor always reported drift on a
+  // healthy install (it checked for that same bogus group), and uninstall
+  // left the real hooks.json entry behind pointing at a script the
+  // copy-file uninstall step had already deleted.
+  if (test('doctor reports a removed Windsurf Guardian hook as drift, not a false positive on a healthy install', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeWindsurfGuardianHookState(homeDir);
+
+      let report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(report.results[0].status, 'ok', 'a freshly-applied hook must not be reported as drift');
+
+      fs.writeFileSync(installed.hooksJsonPath, JSON.stringify({
+        hooks: { pre_write_code: [{ command: 'echo third-party' }] },
+      }, null, 2));
+
+      report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(report.results[0].status, 'warning');
+      const driftIssue = report.results[0].issues.find(issue => issue.code === 'drifted-managed-files');
+      assert.ok(driftIssue, 'Should flag the missing pre_run_command entry as drift');
+      assert.ok(driftIssue.paths.includes(installed.hooksJsonPath));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair restores the Windsurf Guardian hook on pre_run_command without touching third-party hooks or other events', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeWindsurfGuardianHookState(homeDir);
+      fs.writeFileSync(installed.hooksJsonPath, JSON.stringify({
+        hooks: {
+          pre_write_code: [{ command: 'echo third-party' }],
+          pre_run_command: [{ command: 'echo third-party' }],
+        },
+      }, null, 2));
+
+      const result = repairInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(result.results[0].status, 'repaired');
+      assert.ok(result.results[0].repairedPaths.includes(installed.hooksJsonPath));
+
+      const hooksConfig = JSON.parse(fs.readFileSync(installed.hooksJsonPath, 'utf8'));
+      assert.deepStrictEqual(hooksConfig.hooks.pre_write_code, [{ command: 'echo third-party' }]);
+      assert.strictEqual(hooksConfig.hooks.pre_run_command.length, 2);
+      assert.strictEqual(hooksConfig.hooks.pre_run_command[0].command, 'echo third-party');
+      assert.ok(hooksConfig.hooks.pre_run_command[1].command.includes(installed.guardianAdapterScriptPath));
+      assert.strictEqual(hooksConfig.hooks.SessionStart, undefined, 'must never inject a Claude-schema SessionStart group into a Windsurf hooks.json');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('uninstall removes only the EGC Windsurf Guardian entry and keeps third-party hooks and other events', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeWindsurfGuardianHookState(homeDir, {
+        existingHooks: {
+          hooks: {
+            pre_write_code: [{ command: 'echo third-party' }],
+          },
+        },
+      });
+
+      const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(result.results[0].status, 'uninstalled');
+      assert.ok(!fs.existsSync(installed.guardianAdapterScriptPath), 'the adapter script itself must be removed');
+
+      const hooksConfig = JSON.parse(fs.readFileSync(installed.hooksJsonPath, 'utf8'));
+      assert.deepStrictEqual(hooksConfig.hooks.pre_write_code, [{ command: 'echo third-party' }]);
+      assert.strictEqual(hooksConfig.hooks.pre_run_command, undefined, 'the now-empty event key must be dropped, not left as an entry pointing at a deleted script');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

@@ -921,6 +921,64 @@ function runTests() {
     })) passed++; else failed++;
   }
 
+  // EGC Guardian: 2026-07-27 audit (EGC-460/462) found Windsurf had
+  // GateGuard wired (test above) but never the Guardian command validator
+  // itself -- windsurf-gateguard-adapter.js only ever called
+  // gateguard-fact-force.js. Fixed via a dedicated windsurf-guardian-adapter.js
+  // registered on pre_run_command only (Guardian validates shell commands,
+  // not file writes, unlike GateGuard which also covers Edit/Write).
+  for (const [target, rootFn] of [
+    ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
+    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
+  ]) {
+    if (test(`${target} adapter wires the EGC Guardian into hooks.json via its own Windsurf-contract adapter script (pre_run_command only)`, () => {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const homeDir = '/Users/example';
+      const projectRoot = '/workspace/app';
+
+      const plan = planInstallTargetScaffold({
+        target,
+        repoRoot,
+        homeDir,
+        projectRoot,
+        modules: [],
+      });
+
+      const targetRoot = rootFn(homeDir, projectRoot);
+      const guardianAdapterScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'windsurf-guardian-adapter.js');
+      const hooksJsonPath = path.join(targetRoot, 'hooks.json');
+
+      const hookOperations = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookScriptPath === guardianAdapterScriptPath
+        && operation.destinationPath === hooksJsonPath
+      ));
+      const events = hookOperations.map(operation => operation.hookEvent).sort();
+      assert.deepStrictEqual(events, ['pre_run_command'], 'Guardian should only be registered on pre_run_command, not pre_write_code');
+
+      const adapterCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/windsurf-guardian-adapter.js'
+        && operation.destinationPath === guardianAdapterScriptPath
+      ));
+      assert.ok(adapterCopyOperation, 'Should copy the Windsurf-contract Guardian adapter script');
+
+      const guardianScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+      const guardianCopyOperation = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === guardianScriptPath
+      ));
+      assert.ok(guardianCopyOperation, 'Should also copy pre-bash-guardian-validate.js itself (the adapter requires it in-process)');
+
+      for (const lib of ['scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js']) {
+        const libCopyOperation = plan.operations.find(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === lib
+          && operation.destinationPath === path.join(targetRoot, ...lib.split('/'))
+        ));
+        assert.ok(libCopyOperation, `Should copy the Guardian's dependency ${lib}`);
+      }
+    })) passed++; else failed++;
+  }
+
   if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
     const adapter = getInstallTargetAdapter('codex');
     const homeDir = '/Users/example';
@@ -1643,6 +1701,46 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // EGC Guardian: 2026-07-27 audit (EGC-460..464) found these three targets
+  // had GateGuard + Crusher wired (tests above) but never the Guardian
+  // command validator itself -- neither one actually checks a Bash command
+  // against the Guardian's allowlist/denylist.
+  if (test('Guardian hook is registered on Bash and scaffolded for Copilot, Antigravity and Continue', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+      { target: 'continue', input: { homeDir }, hooksFilePath: path.join(homeDir, '.continue', 'settings.json'), root: path.join(homeDir, '.continue') },
+    ];
+
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const guardianScriptPath = path.join(root, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+
+      const guardianOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'PreToolUse'
+        && operation.destinationPath === hooksFilePath
+        && operation.hookScriptPath === guardianScriptPath
+      ));
+      assert.strictEqual(guardianOps.length, 1, `${target}: Guardian registered once`);
+      assert.strictEqual(guardianOps[0].hookMatcher, 'Bash', `${target}: Guardian on Bash`);
+
+      for (const src of ['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js']) {
+        assert.ok(
+          plan.operations.some(operation => (
+            normalizedRelativePath(operation.sourceRelativePath) === src
+            && operation.destinationPath === path.join(root, ...src.split('/'))
+          )),
+          `${target}: ${src} scaffolded`
+        );
+      }
+    }
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
@@ -1699,6 +1797,41 @@ function runTests() {
       'scripts/hooks/pre-bash-crusher-rewrite.js',
       'scripts/hooks/pretooluse-output.js',
       'scripts/lib/crusher/engine.js',
+    ]) {
+      const op = plan.operations.find(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === src
+        && operation.destinationPath === path.join(projectRoot, '.codebuddy', ...src.split('/'))
+      ));
+      assert.ok(op, `Should scaffold ${src} into .codebuddy`);
+    }
+  })) passed++; else failed++;
+
+  if (test('codebuddy adapter also registers the EGC Guardian on Bash at .codebuddy/settings.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const settingsPath = path.join(projectRoot, '.codebuddy', 'settings.json');
+    const guardianScriptPath = path.join(projectRoot, '.codebuddy', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+
+    const guardianOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === settingsPath
+      && operation.hookScriptPath === guardianScriptPath
+    ));
+    assert.strictEqual(guardianOps.length, 1, 'Guardian registered once, on Bash');
+    assert.strictEqual(guardianOps[0].hookMatcher, 'Bash');
+
+    for (const src of [
+      'scripts/hooks/pre-bash-guardian-validate.js',
+      'scripts/lib/guardian-bin.js',
+      'scripts/lib/shell-split.js',
     ]) {
       const op = plan.operations.find(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === src
@@ -1779,6 +1912,121 @@ function runTests() {
       ['Bash', 'Edit', 'MultiEdit', 'Write'],
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity global hooks.json, ' +
       'separate from Gemini CLI\'s own ~/.gemini/hooks/hooks.json'
+    );
+
+    // cubic-dev-ai review (PR #1052, 2026-07-27): this test already used
+    // modules: [] (no hooks-runtime module selected), so if the script copy
+    // were still implicit/optional the hooks.json entry above would point
+    // at a file that was never actually scaffolded. Asserting the copy
+    // operation exists here, in the same modules: [] scenario, proves the
+    // registration is now self-sufficient regardless of module selection.
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+        && operation.destinationPath === gateGuardScriptPath
+      )),
+      'gateguard-fact-force.js must be copied unconditionally, not only via the hooks-runtime module'
+    );
+  })) passed++; else failed++;
+
+  // EGC Guardian: cubic-dev-ai review (PR #1052, 2026-07-27) found
+  // createGlobalBashGuardianHookMergeOperation existed in
+  // antigravity-settings-hooks.js but was never called from gemini-home.js,
+  // so global Antigravity installs never got the Guardian despite GateGuard
+  // (test above) being wired. A follow-up review then found the same
+  // registered-but-never-copied gap once it WAS wired.
+  if (test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    const guardianScriptPath = path.join(
+      homeDir, '.gemini', 'scripts', 'hooks', 'pre-bash-guardian-validate.js'
+    );
+
+    const guardianOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === guardianScriptPath
+    ));
+    assert.strictEqual(guardianOperations.length, 1, 'Guardian registered once for the Antigravity global hooks.json');
+    assert.strictEqual(guardianOperations[0].hookMatcher, 'Bash', 'Guardian only needs the Bash matcher');
+
+    for (const src of ['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js']) {
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === src
+          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
+        )),
+        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+      );
+    }
+  })) passed++; else failed++;
+
+  // cubic-dev-ai review (PR #1052, 2026-07-27): making the copies above
+  // unconditional meant a DEFAULT install (which does select hooks-runtime)
+  // now recorded two copy-path operations per script -- one from
+  // hooks-runtime's own directory-level scaffold of scripts/hooks and
+  // scripts/lib, one from the explicit calls above. Both write the same
+  // bytes to the same destination, but duplicate the install-state
+  // bookkeeping. This must not regress: the explicit per-file operations
+  // should be suppressed whenever the broader directory copy already
+  // covers them.
+  if (test('egc-home adapter does not duplicate GateGuard/Guardian script copies when hooks-runtime IS selected (default install)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'hooks-runtime', paths: ['hooks', 'scripts/hooks', 'scripts/lib'] }],
+    });
+
+    const directoryDestinations = [
+      path.join(homeDir, '.gemini', 'scripts', 'hooks'),
+      path.join(homeDir, '.gemini', 'scripts', 'lib'),
+    ];
+    for (const destination of directoryDestinations) {
+      const matches = plan.operations.filter(operation => (
+        operation.kind === 'copy-path' && operation.destinationPath === destination
+      ));
+      assert.strictEqual(matches.length, 1, `${destination} should be scaffolded once, by hooks-runtime's own directory copy`);
+    }
+
+    for (const src of [
+      'scripts/hooks/gateguard-fact-force.js',
+      'scripts/lib/utils.js',
+      'scripts/hooks/pre-bash-guardian-validate.js',
+      'scripts/lib/guardian-bin.js',
+      'scripts/lib/shell-split.js',
+    ]) {
+      const destination = path.join(homeDir, '.gemini', ...src.split('/'));
+      const fileLevelCopies = plan.operations.filter(operation => (
+        operation.kind === 'copy-path' && operation.destinationPath === destination
+      ));
+      assert.strictEqual(
+        fileLevelCopies.length,
+        0,
+        `${src} must not get its own copy-path operation when the parent directory is already being copied`
+      );
+    }
+
+    // The hooks.json registrations themselves are unrelated to the copy
+    // dedup and must still be present.
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFilePath
+      )),
+      'hooks.json registrations must survive the copy dedup'
     );
   })) passed++; else failed++;
 

@@ -31,6 +31,8 @@ const ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-router.js'
 const ROUTER_HOOK_MODULE_ID = 'claude-prompt-router-hook';
 const GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/gateguard-fact-force.js';
 const GATEGUARD_HOOK_MODULE_ID = 'claude-gateguard-fact-force-hook';
+const BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-bash-guardian-validate.js';
+const BASH_GUARDIAN_HOOK_MODULE_ID = 'egc-bash-guardian-hook';
 const CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/crusher-hook.js';
 const CRUSHER_HOOK_MODULE_ID = 'egc-crusher-hook';
 
@@ -718,9 +720,75 @@ function createCrusherHookMergeOperationForDestination(destinationPath, hookScri
   };
 }
 
+// EGC Guardian command validator (pre-bash-guardian-validate.js): standalone
+// PreToolUse hook, same shape as the Crusher hook above, for hosts other than
+// Claude Code that read hooks.json with the same schema. 2026-07-27 audit
+// (EGC-460..464) found this was the one piece consistently missing from every
+// non-Claude target that already had GateGuard + Crusher wired: those two
+// give investigation-gating and output-compression, but neither one
+// validates a command against the Guardian's actual allowlist/denylist —
+// only pre-bash-guardian-validate.js does, and it was never registered
+// anywhere except Claude Code's own bash-hook-dispatcher.js chain.
+const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
+  'scripts/lib/guardian-bin.js',
+  'scripts/lib/shell-split.js',
+];
+
+function resolveBashGuardianHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+}
+
+function createPreToolUseBashGuardianHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveBashGuardianHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    BASH_GUARDIAN_HOOK_MODULE_ID,
+    BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    matcher
+  );
+}
+
+// Destination-driven variant, for hosts whose hooks.json path is not
+// derivable from targetRoot (Copilot ~/.copilot/hooks, Antigravity's
+// project/global split). Same Claude hooks.json schema.
+function createBashGuardianHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: BASH_GUARDIAN_HOOK_MODULE_ID,
+    sourceRelativePath: BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+  };
+}
+
+function createBashGuardianScriptCopyOperations(createRemappedOperation, targetRoot) {
+  return [
+    createRemappedOperation(
+      BASH_GUARDIAN_HOOK_MODULE_ID,
+      BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveBashGuardianHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    ...BASH_GUARDIAN_HOOK_LIB_SOURCES.map(src => createRemappedOperation(
+      BASH_GUARDIAN_HOOK_MODULE_ID,
+      src,
+      path.join(targetRoot, ...src.split('/')),
+      { strategy: 'preserve-relative-path' }
+    )),
+  ];
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  BASH_GUARDIAN_HOOK_MODULE_ID,
+  BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
@@ -766,6 +834,10 @@ module.exports = {
   createPreToolUseCrusherHookMergeOperation,
   createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
+  createBashGuardianScriptCopyOperations,
+  createPreToolUseBashGuardianHookMergeOperation,
+  createBashGuardianHookMergeOperationForDestination,
+  resolveBashGuardianHookScriptDestination,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,

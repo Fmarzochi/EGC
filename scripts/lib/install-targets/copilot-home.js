@@ -11,10 +11,12 @@ const {
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   resolveGateGuardHookScriptDestination,
   createCrusherScriptCopyOperations,
+  createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 const {
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
+  createPreToolUseBashGuardianHookMergeOperation,
 } = require('../copilot-settings-hooks');
 
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
@@ -59,6 +61,17 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
       targetRoot
     ),
     createPreToolUseCrusherHookMergeOperation(targetRoot, homeDir, 'Bash'),
+    // EGC Guardian: GateGuard above only forces investigation before a risky
+    // action; it never checks a Bash command against the Guardian's actual
+    // allowlist/denylist. 2026-07-27 audit (EGC-462) found this target had
+    // GateGuard + Crusher wired but never the Guardian validator itself.
+    ...createBashGuardianScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
+    createPreToolUseBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash'),
   ];
 }
 

@@ -24,6 +24,8 @@ const {
   resolveGateGuardHookScriptDestination,
   createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
+  createBashGuardianHookMergeOperationForDestination,
+  resolveBashGuardianHookScriptDestination,
 } = require('./claude-settings-hooks');
 
 function resolveAntigravityProjectHooksFilePath(projectRoot) {
@@ -60,10 +62,35 @@ function createProjectCrusherHookMergeOperation(targetRoot, projectRoot, matcher
   );
 }
 
+// EGC Guardian: same hooks.json shape; GateGuard above only forces
+// investigation before a risky action, it never checks a Bash command
+// against the Guardian's actual allowlist/denylist. 2026-07-27 audit
+// (EGC-460) found this target had GateGuard + Crusher wired but never the
+// Guardian validator itself, and separately (EGC-460/461) that Antigravity's
+// own MCP config file was never a trusted candidate for resolving the
+// Guardian CLI either — see PROTECTED_FILE_PATTERNS/guardian-bin.js.
+function createProjectBashGuardianHookMergeOperation(targetRoot, projectRoot, matcher) {
+  return createBashGuardianHookMergeOperationForDestination(
+    resolveAntigravityProjectHooksFilePath(projectRoot),
+    resolveBashGuardianHookScriptDestination(targetRoot),
+    matcher
+  );
+}
+
+function createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, matcher) {
+  return createBashGuardianHookMergeOperationForDestination(
+    resolveAntigravityGlobalHooksFilePath(homeDir),
+    resolveBashGuardianHookScriptDestination(targetRoot),
+    matcher
+  );
+}
+
 module.exports = {
   createGlobalGateGuardHookMergeOperation,
   createProjectGateGuardHookMergeOperation,
   createProjectCrusherHookMergeOperation,
+  createProjectBashGuardianHookMergeOperation,
+  createGlobalBashGuardianHookMergeOperation,
   resolveAntigravityGlobalHooksFilePath,
   resolveAntigravityProjectHooksFilePath,
 };

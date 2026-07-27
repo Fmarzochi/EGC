@@ -31,6 +31,20 @@ const {
   removeStopHookFromFile,
 } = require('./claude-settings-hooks');
 const {
+  PRE_RUN_COMMAND_EVENT: WINDSURF_PRE_RUN_COMMAND_EVENT,
+  PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
+  applyWindsurfGateGuardHookToFile,
+  inspectWindsurfGateGuardHookFile,
+  removeWindsurfGateGuardHookFromFile,
+} = require('./windsurf-gateguard-hooks');
+
+// Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
+// Claude's matcher/group settings.json schema -- an operation whose
+// hookEvent is one of these two needs the Windsurf-specific
+// apply/inspect/remove helpers above, not the Claude ones the rest of this
+// file's HOOK_OPERATION_KIND branches fall back to.
+const WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
+const {
   MERGE_YAML_READ_LIST_KIND,
   REMOVE_SENTINEL: AIDER_REMOVE_SENTINEL,
   mergeAiderConfigReadList,
@@ -328,13 +342,15 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
-function repairClaudeSettingsHook(operation) {
+function repairManagedHookOperation(operation) {
   if (operation.hookEvent === STOP_EVENT) {
     applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
     applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
+  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
+    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -414,7 +430,7 @@ function executeRepairOperation(repoRoot, operation) {
   } else if (operation.kind === 'remove') {
     repairRemove(operation);
   } else if (operation.kind === HOOK_OPERATION_KIND) {
-    repairClaudeSettingsHook(operation);
+    repairManagedHookOperation(operation);
   } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
     repairMergeYamlReadList(operation);
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
@@ -526,7 +542,7 @@ function uninstallWarpAgentsIndexEntry(operation) {
   return { removedPaths: [], cleanupTargets: [] };
 }
 
-function uninstallClaudeSettingsHook(operation) {
+function uninstallManagedHookOperation(operation) {
   // Strips only the EGC-managed hook entry. The settings file itself is never
   // deleted because Claude Code and the user own its other keys.
   if (operation.hookEvent === STOP_EVENT) {
@@ -535,6 +551,8 @@ function uninstallClaudeSettingsHook(operation) {
     removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     removeHookEntryFromFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath);
+  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
+    removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -545,7 +563,7 @@ const UNINSTALL_HANDLERS = {
   'copy-file': uninstallCopyFile,
   'merge-json': uninstallMergeJson,
   'remove': uninstallRemove,
-  [HOOK_OPERATION_KIND]: uninstallClaudeSettingsHook,
+  [HOOK_OPERATION_KIND]: uninstallManagedHookOperation,
   [MERGE_YAML_READ_LIST_KIND]: uninstallAiderConfigReadList,
   [MERGE_MARKDOWN_INDEX_KIND]: uninstallWarpAgentsIndexEntry,
 };
@@ -664,6 +682,9 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
       return inspectResult(inspectHookEntryFile(destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, operation.hookMatcher), operation, destinationPath);
+    }
+    if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
+      return inspectResult(inspectWindsurfGateGuardHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
     }
     return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }
