@@ -33,6 +33,18 @@ const VALIDATE_TIMEOUT_MS = 4000;
 // or pathological input, not a limit anyone should ever hit legitimately.
 const MAX_SUBSTITUTION_DEPTH = 5;
 
+// extractSegments returns null (instead of the usual segment array) when a
+// command nests substitutions deeper than MAX_SUBSTITUTION_DEPTH allows
+// fully unwrapping. Silently returning only the outer, already-parsed
+// segments here (as this used to do) fails OPEN: the innermost
+// substitution — the one actually worth hiding a destructive command in,
+// e.g. `echo $(echo $(...(rm -rf /)...))` nested one level past the cap —
+// is never extracted or validated, and stays buried as inert-looking text
+// inside an outer segment whose own leading token (like `echo`) reads as
+// safe. run() below hard-blocks on a null return instead, so a command too
+// deep to fully analyze fails CLOSED rather than being treated as if
+// nothing were found.
+
 const ADVISORY_REASONS = [
   'Shell chaining/metacharacters are forbidden',
   'is not in the allowlist',
@@ -65,15 +77,23 @@ function parseInput(inputOrRaw) {
 // one benign-looking `echo` segment just because `$`/backtick are not
 // top-level separators.
 function extractSegments(command, depth = 0) {
+  const bodies = extractSubstitutionBodies(command);
+
+  // There is at least one more level of substitution here that recursing
+  // would need to unwrap, and depth is already at the cap: analysis cannot
+  // continue safely. Return null rather than the partial topLevel result so
+  // the caller blocks instead of silently accepting an unanalyzed command.
+  if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
+
   const topLevel = splitShellSegments(command, { splitOnPipe: true })
     .map(s => s.trim())
     .filter(Boolean);
 
-  if (depth >= MAX_SUBSTITUTION_DEPTH) return topLevel;
-
   const nested = [];
-  for (const body of extractSubstitutionBodies(command)) {
-    nested.push(...extractSegments(body, depth + 1));
+  for (const body of bodies) {
+    const nestedSegments = extractSegments(body, depth + 1);
+    if (nestedSegments === null) return null;
+    nested.push(...nestedSegments);
   }
 
   return [...topLevel, ...nested];
@@ -90,21 +110,28 @@ function run(inputOrRaw) {
   if (!command || typeof command !== 'string') return { exitCode: 0 };
 
   const segments = extractSegments(command);
+  if (segments === null) {
+    return {
+      exitCode: 2,
+      stderr:
+        'EGC Guardian BLOCKED this command: nested command/process substitutions ' +
+        'go deeper than this validator can safely unwrap and analyze. Simplify the ' +
+        'command so every substitution can be validated.',
+    };
+  }
   if (segments.length === 0) return { exitCode: 0 };
 
   const cli = resolveGuardianCli();
   // resolveGuardianCli() only returns falsy when all 3 of its resolution
   // strategies fail at once (env var, package-relative build, and both
-  // trusted MCP config files); against a real checkout with its own build
-  // present, fromPackageLayout() always succeeds, so this can't be
-  // triggered deterministically here without environment isolation fragile
-  // enough to break on CI. Covered conceptually by the "fails open" test
-  // below, which exercises the sibling !Array.isArray(verdicts) fail-open.
-  /* c8 ignore start */
+  // trusted MCP config files) — reproduced deterministically in
+  // tests/hooks/pre-bash-guardian-validate.test.js by stubbing guardian-bin
+  // in require.cache before re-requiring this file, so the falsy-cli branch
+  // is genuinely exercised (and its coverage correctly attributed here)
+  // without needing a real "nothing resolves" filesystem/HOME setup.
   if (!cli) {
     return { exitCode: 0 };
   }
-  /* c8 ignore stop */
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
   const verdicts = callGuardian(

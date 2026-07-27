@@ -174,6 +174,35 @@ test('heredoc body line that merely starts with the delimiter text does not end 
   const segs = splitShellSegments('cat <<EOF\nEOFOO not the real terminator\nEOF\n');
   assert.strictEqual(segs.length, 1, `expected 1 segment, got ${segs.length}: ${JSON.stringify(segs)}`);
 });
+test('heredoc delimiter with punctuation (EOF-1) is parsed in full, body closes and later commands are their own segment', () => {
+  const segs = splitShellSegments('cat <<EOF-1\nbody text\nEOF-1\necho done\n');
+  assert.deepStrictEqual(segs, ['cat <<EOF-1\nbody text\nEOF-1', 'echo done']);
+});
+test('heredoc delimiter with a dot (v1.0) is parsed in full, not truncated at the identifier boundary', () => {
+  const segs = splitShellSegments('cat <<v1.0\nbody text\nv1.0\necho done\n');
+  assert.deepStrictEqual(segs, ['cat <<v1.0\nbody text\nv1.0', 'echo done']);
+});
+test('heredoc operator with a space before the delimiter word is recognized the same as no space', () => {
+  const segs = splitShellSegments('cat << EOF\nbody\nEOF\n');
+  assert.strictEqual(segs.length, 1, `expected 1 segment, got ${segs.length}: ${JSON.stringify(segs)}`);
+});
+test('heredoc operator with nothing usable after it (end of string) is not treated as a heredoc', () => {
+  const segs = splitShellSegments('cat <<');
+  assert.deepStrictEqual(segs, ['cat <<']);
+});
+test('heredoc delimiter with an unterminated quote is not treated as a heredoc (fails safe, does not hang or throw)', () => {
+  const segs = splitShellSegments("cat <<'EOF\nrm -rf /\n");
+  assert.strictEqual(segs.length, 1, `expected 1 segment, got ${segs.length}: ${JSON.stringify(segs)}`);
+});
+test('multiple heredocs on one line are consumed in order, not mixed with ordinary segments', () => {
+  const segs = splitShellSegments(
+    'cat <<MARKERA <<MARKERB\nline one for A\nMARKERA\nline one for B\nMARKERB\necho done\n'
+  );
+  assert.deepStrictEqual(segs, [
+    'cat <<MARKERA <<MARKERB\nline one for A\nMARKERA\nline one for B\nMARKERB',
+    'echo done',
+  ]);
+});
 
 // extractSubstitutionBodies (cubic-dev-ai P0: $(...)/`...`/<(...)/>(...) content
 // must be recoverable so a hidden command can be validated, not just skipped)
@@ -241,6 +270,51 @@ test('an escaped char inside a double-quoted span before a substitution does not
 test('a heredoc with no terminator runs to the end of the string without throwing', () => {
   const segs = splitShellSegments('cat <<EOF\nbody with no terminator');
   assert.strictEqual(segs.length, 1, `expected 1 segment, got ${segs.length}: ${JSON.stringify(segs)}`);
+});
+
+// cubic-dev-ai P2 (2026-07-27, second follow-up round): $(...) written only
+// as documentation inside a # comment or a literal (quoted-delimiter)
+// heredoc body must not be extracted, since bash never expands it there.
+test('does not extract $(...) written only as an example inside a # comment', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo hi # example: $(rm -rf /)'), []);
+});
+test('still extracts $(...) when # appears mid-word, not starting a real comment', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo foo#bar $(rm -rf /)'), ['rm -rf /']);
+});
+test('a comment only runs to end of line: a substitution on the next line is still extracted', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo hi # $(rm -rf /a)\necho $(rm -rf /b)'), ['rm -rf /b']);
+});
+test('does not extract $(...) inside a heredoc body whose delimiter was single-quoted (fully literal, no expansion)', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies("cat <<'EOF'\nexample: $(rm -rf /)\nEOF\n"), []);
+});
+test('does not extract $(...) inside a heredoc body whose delimiter was double-quoted (also fully literal)', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('cat <<"EOF"\nexample: $(rm -rf /)\nEOF\n'), []);
+});
+test('does not extract $(...) inside a heredoc body whose delimiter was backslash-escaped (also fully literal)', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('cat <<\\EOF\nexample: $(rm -rf /)\nEOF\n'), []);
+});
+test('still extracts $(...) inside a heredoc body with a bare/unquoted delimiter (bash still expands it there)', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('cat <<EOF\n$(rm -rf /)\nEOF\n'), ['rm -rf /']);
+});
+test('multiple heredocs on one line: each body is scanned per its own delimiter\'s literalness', () => {
+  assert.deepStrictEqual(
+    extractSubstitutionBodies(
+      "cat <<'LIT' <<EXP\nliteral body $(rm -rf /a)\nLIT\nexpandable body $(rm -rf /b)\nEXP\n"
+    ),
+    ['rm -rf /b'],
+  );
+});
+test('extractSubstitutionBodies honors <<- leading-tab stripping when matching the terminator line', () => {
+  assert.deepStrictEqual(
+    extractSubstitutionBodies('cat <<-EOF\n\t$(rm -rf /)\n\tEOF\n'),
+    ['rm -rf /'],
+  );
+});
+test('a heredoc with no terminator still extracts substitutions from its unterminated expandable body', () => {
+  assert.deepStrictEqual(
+    extractSubstitutionBodies('cat <<EOF\nbody with no terminator $(rm -rf /)'),
+    ['rm -rf /'],
+  );
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);

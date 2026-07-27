@@ -135,8 +135,15 @@ run('env --split-string="rm -rf /" is hard-blocked', () => assertHardBlocked('en
 run('env -i FOO=bar npm test stays allowed (ordinary env usage, no -S)', () => assertAllowed('env -i FOO=bar npm test'));
 
 run('export GIT_SSH_COMMAND=/tmp/evil is hard-blocked (persists like a bare VAR= prefix)', () => assertHardBlocked('export GIT_SSH_COMMAND=/tmp/evil'));
-run('export GIT_SSH_COMMAND=/tmp/evil && git fetch is hard-blocked (segment 1 alone already denies)', () => assertHardBlocked('export GIT_SSH_COMMAND=/tmp/evil'));
+run('export GIT_SSH_COMMAND=/tmp/evil && git fetch is hard-blocked (segment 1 alone already denies)', () => assertHardBlocked('export GIT_SSH_COMMAND=/tmp/evil && git fetch'));
 run('export FOO=bar stays allowed (harmless env var)', () => assertAllowed('export FOO=bar'));
+run('export -- GIT_SSH_COMMAND=/tmp/evil is hard-blocked (-- end-of-options no longer hides the assignment)', () => assertHardBlocked('export -- GIT_SSH_COMMAND=/tmp/evil'));
+run('export -f -- GIT_SSH_COMMAND=/tmp/evil is hard-blocked (flag before -- still skipped correctly)', () => assertHardBlocked('export -f -- GIT_SSH_COMMAND=/tmp/evil'));
+run('export -- FOO=bar stays allowed (harmless var behind --)', () => assertAllowed('export -- FOO=bar'));
+run('export -p is not hard-blocked (no assignment present, falls through like any unknown command)', () => {
+  const v = validateCommand('export -p');
+  assert.notStrictEqual(v.trust_level, 'DANGEROUS', 'export -p (listing, no assignment) must not hit the DANGEROUS export check');
+});
 
 run('git config --show-scope core.hooksPath /tmp/evil is hard-blocked (output-annotator flag no longer exempts a real SET)', () => assertHardBlocked('git config --show-scope core.hooksPath /tmp/evil'));
 run('git config --name-only core.hooksPath /tmp/evil is hard-blocked', () => assertHardBlocked('git config --name-only core.hooksPath /tmp/evil'));

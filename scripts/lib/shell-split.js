@@ -39,11 +39,84 @@ function handleSingleAmpersand(ch, next, prev, current, segments) {
   return { current: '', handled: true };
 }
 
-// Matches a heredoc redirect operator (<<EOF, <<-EOF, <<'EOF', <<"EOF") at
-// the start of the given string. Group 1/2 capture a quoted delimiter
-// (quotes stripped, no escape processing needed inside); group 3 captures a
-// bare or backslash-escaped delimiter word.
-const HEREDOC_OPERATOR_RE = /^<<-?\s*(?:'([^']*)'|"([^"]*)"|(\\?[A-Za-z_]\w*))/;
+// Characters that end an unquoted heredoc delimiter word (whitespace or a
+// shell metacharacter) — anything else, including punctuation like `-` or
+// `.`, is part of the word. A bare regex like [A-Za-z_]\w* previously
+// stopped at the first non-identifier character, silently truncating a
+// delimiter such as `EOF-1` down to `EOF`: the parser then waited forever
+// for a body line that read exactly `EOF` (which never appears, since the
+// real terminator is `EOF-1`), so the heredoc body never closed and every
+// command after it was swallowed as inert body text instead of validated.
+const HEREDOC_WORD_STOP_RE = /[\s;&|()<>]/;
+
+// Parses one (possibly quoted/escaped) word starting at `command[start]`,
+// honoring bash's rule that quoted and unquoted parts of the same word can
+// be concatenated (`EO"F"1` is the word `EOF1`). Returns null on an
+// unterminated quote (malformed input — the caller must not guess a
+// delimiter out of it) or if no word is present at all.
+function parseHeredocDelimiterWord(command, start) {
+  let i = start;
+  let value = '';
+  let literal = false;
+  let consumedAny = false;
+
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === '\\' && i + 1 < command.length) {
+      value += command[i + 1];
+      literal = true;
+      i += 2;
+      consumedAny = true;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      const closeIndex = command.indexOf(ch, i + 1);
+      if (closeIndex === -1) return null;
+      value += command.slice(i + 1, closeIndex);
+      literal = true;
+      i = closeIndex + 1;
+      consumedAny = true;
+      continue;
+    }
+    if (HEREDOC_WORD_STOP_RE.test(ch)) break;
+    value += ch;
+    i += 1;
+    consumedAny = true;
+  }
+
+  if (!consumedAny) return null;
+  return { value, literal, consumedLength: i - start };
+}
+
+// Parses a full heredoc redirect operator (<<EOF, <<-EOF, <<'EOF', <<"EOF",
+// <<EO"F"1, ...) starting at command[i]. Caller must already have confirmed
+// command[i..i+1] is an unescaped `<<` (not `<<<`) — both call sites below
+// do this before invoking it, so it is not re-checked here. Returns null if
+// there is no usable delimiter word after the operator (e.g. `<<` with
+// nothing following it) — the caller then treats the `<<` as ordinary text,
+// which is the safe direction: an unrecognized construct is never silently
+// swallowed as a heredoc body.
+function parseHeredocOperator(command, i) {
+  let pos = i + 2;
+  let stripLeadingTabs = false;
+  if (command[pos] === '-') {
+    stripLeadingTabs = true;
+    pos += 1;
+  }
+  while (command[pos] === ' ' || command[pos] === '\t') pos += 1;
+  const word = parseHeredocDelimiterWord(command, pos);
+  if (!word) return null;
+  return {
+    delimiter: word.value,
+    // Any quoted or backslash-escaped part of the delimiter word disables
+    // all expansion inside the heredoc body (parameter/command
+    // substitution) — this is what bash itself keys off of, not merely
+    // whether the WHOLE word happens to be quoted.
+    literal: word.literal,
+    stripLeadingTabs,
+    length: (pos + word.consumedLength) - i,
+  };
+}
 
 /**
  * Split a shell command into segments by operators (&&, ||, ;, &)
@@ -54,9 +127,12 @@ const HEREDOC_OPERATOR_RE = /^<<-?\s*(?:'([^']*)'|"([^"]*)"|(\\?[A-Za-z_]\w*))/;
  * newlines/operators — its content is literal data for the command that
  * requested it, not further shell syntax, so a line inside it that merely
  * resembles a destructive command (e.g. a code example in a commit message
- * template) must not be judged as its own segment. Only one heredoc is
- * tracked at a time (the common case); a line consisting of exactly the
- * delimiter (leading tabs stripped first for the `<<-` form) ends the body.
+ * template) must not be judged as its own segment. A line consisting of
+ * exactly the delimiter (leading tabs stripped first for the `<<-` form)
+ * ends the body. A command line can chain multiple heredocs (`cmd <<A <<B`);
+ * each `<<` found before the first one's body has started is queued, and
+ * bodies are consumed in the order their operators appeared, so the second
+ * heredoc's body is never mistaken for ordinary command segments.
  *
  * options.splitOnPipe (default false) additionally splits on a bare `|`
  * (not `||`, already handled above). Off by default because an existing
@@ -81,6 +157,9 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   let heredocState = null;
   let heredocDelimiter = null;
   let heredocStripLeadingTabs = false;
+  // Heredocs queued on the same operator line after the first (e.g. the `B`
+  // in `cmd <<A <<B`), consumed in order as each preceding body closes.
+  const heredocQueue = [];
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
@@ -93,8 +172,17 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       if (candidate === heredocDelimiter) {
         current += rawLine;
         i += rawLine.length - 1;
-        heredocState = null;
-        heredocDelimiter = null;
+        const next = heredocQueue.shift();
+        if (next) {
+          heredocDelimiter = next.delimiter;
+          heredocStripLeadingTabs = next.stripLeadingTabs;
+          // Stay in 'in-body': the newline right after this terminator line
+          // is also the first character of the next queued heredoc's body,
+          // not a fresh 'awaiting-body' gap.
+        } else {
+          heredocState = null;
+          heredocDelimiter = null;
+        }
         continue;
       }
       current += ch;
@@ -128,14 +216,21 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (heredocState === null && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
-      const m = HEREDOC_OPERATOR_RE.exec(command.slice(i));
-      if (m) {
-        heredocDelimiter = m[1] ?? m[2] ?? m[3].replaceAll('\\', '');
-        heredocStripLeadingTabs = m[0].startsWith('<<-');
-        heredocState = 'awaiting-body';
-        current += m[0];
-        i += m[0].length - 1;
+    if (heredocState !== 'in-body' && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+      const op = parseHeredocOperator(command, i);
+      if (op) {
+        if (heredocState === null) {
+          heredocDelimiter = op.delimiter;
+          heredocStripLeadingTabs = op.stripLeadingTabs;
+          heredocState = 'awaiting-body';
+        } else {
+          // Already awaiting the first heredoc's body on this same command
+          // line — this is a second (or later) chained heredoc; its body
+          // comes after the first one's, so only queue it for now.
+          heredocQueue.push({ delimiter: op.delimiter, stripLeadingTabs: op.stripLeadingTabs });
+        }
+        current += command.slice(i, i + op.length);
+        i += op.length - 1;
         continue;
       }
     }
@@ -262,46 +357,118 @@ function pushSubstitutionAt(command, i, bodies) {
  * substitution (`<(...)`/`>(...)`) has no special meaning inside either
  * quote type (it is a bare word there), so it is only recognized unquoted.
  *
+ * Also honors the two other places bash text can contain a `$(...)`-shaped
+ * substring without it ever being live: a `# comment` (runs to end of line,
+ * never expanded) and a heredoc body whose delimiter was quoted/escaped
+ * (`<<'EOF'`, `<<"EOF"`, `<<\EOF` — fully literal, no expansion at all). A
+ * heredoc with a bare, unquoted delimiter (`<<EOF`) is NOT literal — bash
+ * still expands `$(...)` inside it — so that case still scans normally.
+ * Without this, a code example inside either construct (e.g. `# example:
+ * $(rm -rf /)` in a commit message template) would be extracted and judged
+ * as a live command it can never actually become.
+ *
  * Not recursive by itself — a caller that re-scans each returned body finds
  * substitutions nested inside substitutions; keeping recursion at the call
  * site (with its own depth guard) keeps this function simple and testable
  * in isolation.
  */
-function extractSubstitutionBodies(command) {
+function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state machine kept inline for auditability
   const bodies = [];
   let quote = null;
+  let heredocState = null;
+  let heredocDelimiter = null;
+  let heredocStripLeadingTabs = false;
+  let heredocLiteral = false;
+  const heredocQueue = [];
+  let inComment = false;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
 
-    if (quote === "'") {
+    if (ch === '\n') inComment = false;
+
+    if (heredocState === 'in-body') {
+      const lineEnd = command.indexOf('\n', i);
+      const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
+      const line = rawLine.replace(/\r$/, '');
+      const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
+      if (candidate === heredocDelimiter) {
+        i += rawLine.length - 1;
+        const next = heredocQueue.shift();
+        if (next) {
+          heredocDelimiter = next.delimiter;
+          heredocStripLeadingTabs = next.stripLeadingTabs;
+          heredocLiteral = next.literal;
+        } else {
+          heredocState = null;
+          heredocDelimiter = null;
+        }
+        continue;
+      }
+      if (heredocLiteral) continue;
+      // Bare/unquoted-delimiter heredoc body: falls through to the normal
+      // scan below, since bash still expands $(...) here.
+    }
+
+    if (heredocState !== 'in-body' && quote === "'") {
       if (ch === quote) quote = null;
       continue;
     }
 
-    if (quote === '"' && ch === '\\' && i + 1 < command.length) {
+    if (heredocState !== 'in-body' && quote === '"' && ch === '\\' && i + 1 < command.length) {
       i += 1;
       continue;
     }
 
-    if (quote === '"' && ch === quote) {
+    if (heredocState !== 'in-body' && quote === '"' && ch === quote) {
       quote = null;
       continue;
     }
 
-    if (!quote && ch === '\\' && i + 1 < command.length) {
+    if (heredocState !== 'in-body' && !quote && ch === '\\' && i + 1 < command.length) {
       i += 1;
       continue;
     }
 
-    if (!quote && (ch === '"' || ch === "'")) {
+    if (heredocState !== 'in-body' && !quote && (ch === '"' || ch === "'")) {
       quote = ch;
       continue;
     }
 
-    // Reached only in an unquoted or double-quoted context (single-quoted
-    // spans already `continue`d above) — the two contexts where a real
-    // shell still expands $(...)/`...` (see the doc comment above).
+    if (heredocState !== 'in-body' && !quote && !inComment && ch === '#'
+        && (i === 0 || HEREDOC_WORD_STOP_RE.test(command[i - 1]))) {
+      inComment = true;
+      continue;
+    }
+
+    if (inComment) continue;
+
+    if (heredocState === 'awaiting-body' && ch === '\n') {
+      heredocState = 'in-body';
+      continue;
+    }
+
+    if (heredocState !== 'in-body' && !quote && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+      const op = parseHeredocOperator(command, i);
+      if (op) {
+        if (heredocState === null) {
+          heredocDelimiter = op.delimiter;
+          heredocStripLeadingTabs = op.stripLeadingTabs;
+          heredocLiteral = op.literal;
+          heredocState = 'awaiting-body';
+        } else {
+          heredocQueue.push({ delimiter: op.delimiter, stripLeadingTabs: op.stripLeadingTabs, literal: op.literal });
+        }
+        i += op.length - 1;
+        continue;
+      }
+    }
+
+    // Reached only in an unquoted or double-quoted context, outside a
+    // comment and outside a literal heredoc body (single-quoted spans and
+    // literal heredoc bodies already `continue`d above) — the contexts
+    // where a real shell still expands $(...)/`...` (see the doc comment
+    // above).
     const end = pushSubstitutionAt(command, i, bodies);
     if (end !== -1) i += (end - i);
   }

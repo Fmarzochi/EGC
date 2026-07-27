@@ -248,9 +248,20 @@ function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
     // does (the shell keeps it in the environment for every command that
     // follows in this session/segment chain, not just the current one), so
     // it gets the identical dangerous-name check rather than being treated
-    // as an unknown, advisory-only 'export' command.
+    // as an unknown, advisory-only 'export' command. `export` accepts its
+    // own options (-f, -n, -p) and a `--` end-of-options marker before the
+    // assignment, same as any other bash builtin — skipping straight to
+    // current[1] missed `export -- GIT_SSH_COMMAND=...`, which real bash
+    // still treats as an assignment despite the leading `--`.
     if (head === 'export' && current.length > 1) {
-      const exportMatch = ENV_ASSIGNMENT_RE.exec(current[1]);
+      let idx = 1;
+      while (idx < current.length) {
+        const flagToken = stripQuotes(current[idx]);
+        if (flagToken === '--') { idx += 1; break; }
+        if (!flagToken.startsWith('-')) break;
+        idx += 1;
+      }
+      const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
       if (exportMatch) {
         if (isDangerousEnvVarName(exportMatch[1])) {
           return {
@@ -262,7 +273,7 @@ function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
             },
           };
         }
-        current = current.slice(2);
+        current = current.slice(idx + 1);
         changed = true;
         continue;
       }

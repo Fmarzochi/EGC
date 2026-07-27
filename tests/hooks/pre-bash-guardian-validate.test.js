@@ -10,6 +10,18 @@ const { spawnSync } = require('child_process');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
 const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
+const hookPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+const { extractSegments } = require(hookPath);
+
+// Builds `echo $(echo $(... echo $(innerCommand) ...))` nested `depth` levels
+// deep, matching the shape cubic-dev-ai's review used to demonstrate the
+// silent-truncation bypass (a real destructive command nested one level past
+// MAX_SUBSTITUTION_DEPTH used to be dropped instead of analyzed).
+function nestedSubstitution(depth, innerCommand) {
+  let cmd = innerCommand;
+  for (let i = 0; i < depth; i++) cmd = `echo $(${cmd})`;
+  return cmd;
+}
 
 function test(name, fn) {
   try {
@@ -105,6 +117,40 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('fails open (exercised, not just documented) when no Guardian CLI resolves at all', () => {
+    // resolveGuardianCli() returning falsy is the real "no build, no
+    // override, no trusted MCP config" state, not just a hypothetical.
+    // Reproducing it via a subprocess on a temp copy of the hook would run
+    // the same logic but at a different file path, so c8 could never credit
+    // the coverage to the real scripts/hooks/pre-bash-guardian-validate.js.
+    // Stubbing guardian-bin.js in this process's require.cache and
+    // re-requiring the hook fresh keeps everything on the real file path
+    // while still deterministically forcing the falsy-cli branch.
+    const guardianBinPath = require.resolve(path.join('..', '..', 'scripts', 'lib', 'guardian-bin.js'));
+    const originalGuardianBinEntry = require.cache[guardianBinPath];
+    const originalHookEntry = require.cache[hookPath];
+    try {
+      delete require.cache[guardianBinPath];
+      delete require.cache[hookPath];
+      require.cache[guardianBinPath] = {
+        id: guardianBinPath,
+        filename: guardianBinPath,
+        loaded: true,
+        exports: { resolveGuardianCli: () => null, callGuardian: () => null },
+      };
+
+      const { run: runWithoutResolvedCli } = require(hookPath);
+      const result = runWithoutResolvedCli(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }));
+      assert.strictEqual(result.exitCode, 0, 'Expected fail-open when no CLI resolves');
+      assert.strictEqual(result.stderr, undefined, 'Expected no stderr on fail-open');
+    } finally {
+      delete require.cache[guardianBinPath];
+      delete require.cache[hookPath];
+      if (originalGuardianBinEntry) require.cache[guardianBinPath] = originalGuardianBinEntry;
+      if (originalHookEntry) require.cache[hookPath] = originalHookEntry;
+    }
+  })) passed++; else failed++;
+
   if (test('passes through input without a command field', () => {
     const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: {} });
     const result = spawnSync('node', [runner, 'pre:bash:guardian-validate', 'scripts/hooks/pre-bash-guardian-validate.js', 'minimal,standard,strict'], {
@@ -131,6 +177,24 @@ function runTests() {
   if (test('allows a benign command with a $(...) substitution that resolves to nothing dangerous', () => {
     const result = runHook('echo $(date)');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('extractSegments fails closed (returns null) when a destructive command is nested one level past MAX_SUBSTITUTION_DEPTH', () => {
+    const command = nestedSubstitution(6, 'rm -rf /');
+    const segments = extractSegments(command);
+    assert.strictEqual(segments, null, `Expected null (too deep to analyze), got: ${JSON.stringify(segments)}`);
+  })) passed++; else failed++;
+
+  if (test('extractSegments still fully analyzes nesting within MAX_SUBSTITUTION_DEPTH (no regression)', () => {
+    const command = nestedSubstitution(4, 'rm -rf /');
+    const segments = extractSegments(command);
+    assert.notStrictEqual(segments, null, 'Expected a real segment list, not the too-deep sentinel');
+    assert.ok(segments.includes('rm -rf /'), `Expected 'rm -rf /' to be extracted, got: ${JSON.stringify(segments)}`);
+  })) passed++; else failed++;
+
+  if (test('blocks (fails closed) end-to-end when a destructive command hides past the substitution depth cap', () => {
+    const result = runHook(nestedSubstitution(6, 'rm -rf /'));
+    assert.strictEqual(result.code, 2, `Expected the hook to block instead of silently allowing, got exit ${result.code}`);
   })) passed++; else failed++;
 
   if (test('runs standalone via node (require.main === module stdin path), not just through run-with-flags', () => {
