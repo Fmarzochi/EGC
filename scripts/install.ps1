@@ -6,6 +6,18 @@ $EgcInstall    = Join-Path (Join-Path $RootDir "scripts") "install-apply.js"
 $GuardianBin   = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-guardian") "build") "index.js"
 $MemoryBin     = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-memory") "build") "index.js"
 
+# npm strips the root package-lock.json from published tarballs, so a globally
+# installed package has no root lockfile (npm already resolved its deps during
+# `npm install -g`). The sub-package lockfiles travel via package.json "files",
+# so run a pinned `npm ci` wherever a lockfile is present and skip otherwise.
+function Install-Deps {
+    if (Test-Path "package-lock.json") {
+        npm ci --silent
+    } else {
+        npm install --silent
+    }
+}
+
 # Forward --help directly to the Node installer
 if ($args -contains '--help') {
     node $EgcInstall @args
@@ -14,11 +26,14 @@ if ($args -contains '--help') {
 
 Write-Host "EGC install"
 
-# Node.js version check
+# Node.js version check. Keep this floor in lockstep with package.json
+# "engines" and scripts/preinstall.js, which both require Node 20; a lower
+# gate here would let 18/19 reach the better-sqlite3 build and the
+# TypeScript build steps below.
 try {
     $nodeVersion = node -e "process.stdout.write(process.versions.node.split('.')[0])"
-    if ([int]$nodeVersion -lt 18) {
-        Write-Error "Node.js >= 18 is required (found: $(node --version))"
+    if ([int]$nodeVersion -lt 20) {
+        Write-Error "Node.js >= 20 is required (found: $(node --version))"
         exit 1
     }
     Write-Host "  node $(node --version)"
@@ -33,7 +48,7 @@ if (-not $DryRun) {
     # Root dependencies
     Write-Host "  installing root dependencies..."
     Set-Location -Path $RootDir
-    npm install --silent
+    Install-Deps
 
     # Verify native modules (better-sqlite3 requires Build Tools on Windows)
     $nativeOk = $true
@@ -60,8 +75,12 @@ if (-not $DryRun) {
         exit 1
     }
     Set-Location -Path $GuardianDir
-    npm install --silent
-    npm run build
+    Install-Deps
+    # The published package ships build/ but not src/, so only (re)build from
+    # a git checkout where the TypeScript sources are present.
+    if (Test-Path "src") {
+        npm run build
+    }
 
     # egc-memory
     Write-Host "  building egc-memory..."
@@ -71,8 +90,11 @@ if (-not $DryRun) {
         exit 1
     }
     Set-Location -Path $MemoryDir
-    npm install --silent
-    npm run build
+    Install-Deps
+    # Published package ships build/ but not src/; only build from a checkout.
+    if (Test-Path "src") {
+        npm run build
+    }
 
     # Initialize database
     Write-Host "  initializing database..."

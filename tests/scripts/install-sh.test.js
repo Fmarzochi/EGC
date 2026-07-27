@@ -155,6 +155,38 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('MCP config paths are Windows-native under Git Bash, not the POSIX mount form', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    // Under Git Bash/MSYS on Windows, $ROOT_DIR is a POSIX mount path
+    // (/c/Users/x/EGC) that bash understands but a native Windows MCP
+    // client's own node.exe (Claude Desktop, Cursor, etc. run outside Git
+    // Bash) cannot resolve. Any path written into an MCP config JSON must
+    // use the Windows-native form (`pwd -W`, MSYS's coreutils extension),
+    // detected via `uname -s` so Linux/macOS keep using $ROOT_DIR unchanged.
+    assert.ok(
+      /MINGW\*\|MSYS\*/.test(script),
+      'install.sh must detect Git Bash/MSYS via uname -s'
+    );
+    assert.ok(
+      /pwd -W/.test(script),
+      'install.sh must compute the Windows-native root via pwd -W on Git Bash'
+    );
+    assert.ok(
+      script.includes('GUARDIAN_BIN="$MCP_ROOT_DIR'),
+      'GUARDIAN_BIN must use the Windows-native root, not the POSIX $ROOT_DIR'
+    );
+    assert.ok(
+      script.includes('MEMORY_BIN="$MCP_ROOT_DIR'),
+      'MEMORY_BIN must use the Windows-native root, not the POSIX $ROOT_DIR'
+    );
+    assert.ok(
+      script.includes('"$MCP_ROOT_DIR/mcp/servers/egc-guardian/build/index.js"]') &&
+      script.includes('"$MCP_ROOT_DIR/mcp/servers/egc-memory/build/index.js"]'),
+      '.mcp.egc.json must write the Windows-native root, not the POSIX $ROOT_DIR'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

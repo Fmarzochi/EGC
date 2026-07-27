@@ -9,6 +9,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.ps1');
+const BASH_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
 const PACKAGE_JSON = path.join(__dirname, '..', '..', 'package.json');
 
 function createTempDir(prefix) {
@@ -87,6 +88,43 @@ function runTests() {
   if (test('publishes egc-install through the Node installer runtime for cross-platform npm usage', () => {
     const packageJson = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
     assert.strictEqual(packageJson.bin['egc-install'], 'scripts/install-apply.js');
+  })) passed++; else failed++;
+
+  const scriptSource = fs.readFileSync(SCRIPT, 'utf8');
+  const bashSource = fs.readFileSync(BASH_SCRIPT, 'utf8');
+
+  // Parity checks, not fixed numbers: install.ps1 has drifted from install.sh
+  // before (stuck on a Node >= 18 floor and a bare npm install with no
+  // lockfile/src guards after install.sh got those fixes). Reading install.sh's
+  // actual current value here means the next drift fails CI on its own,
+  // instead of silently shipping until someone happens to compare the two
+  // files by hand again.
+  if (test('Node version floor matches install.sh, not a stale hardcoded value', () => {
+    const bashFloor = bashSource.match(/NODE_MAJOR"\s*-lt\s*(\d+)/);
+    assert.ok(bashFloor, 'could not read the Node floor out of install.sh');
+    const ps1Floor = scriptSource.match(/nodeVersion\s*-lt\s*(\d+)/);
+    assert.ok(ps1Floor, 'could not read the Node floor out of install.ps1');
+    assert.strictEqual(ps1Floor[1], bashFloor[1], 'install.ps1 Node floor must match install.sh');
+  })) passed++; else failed++;
+
+  if (test('installs dependencies via a lockfile-aware helper, not a bare npm install', () => {
+    assert.ok(scriptSource.includes('function Install-Deps'), 'should define the lockfile-aware helper');
+    assert.ok(scriptSource.includes('Test-Path "package-lock.json"'));
+    assert.ok(scriptSource.includes('npm ci --silent'));
+    // The helper's own fallback branch is the one legitimate "npm install
+    // --silent" in the file; every install site (root, guardian, memory)
+    // must call the helper instead of its own bare npm install.
+    const bareInstallCalls = scriptSource.match(/^\s*npm install --silent\s*$/gm) || [];
+    assert.strictEqual(bareInstallCalls.length, 1, 'only the Install-Deps fallback branch should call npm install --silent directly');
+    const helperCalls = scriptSource.match(/^\s*Install-Deps\s*$/gm) || [];
+    assert.strictEqual(helperCalls.length, 3, 'root, egc-guardian and egc-memory should each call Install-Deps');
+  })) passed++; else failed++;
+
+  if (test('only builds egc-guardian/egc-memory when src/ is present (published tarball has none)', () => {
+    const buildGuards = scriptSource.match(/if \(Test-Path "src"\)/g) || [];
+    assert.strictEqual(buildGuards.length, 2, 'both guardian and memory builds should be guarded');
+    const bashGuards = bashSource.match(/if \[ -d src \]/g) || [];
+    assert.strictEqual(buildGuards.length, bashGuards.length, 'install.ps1 and install.sh should guard the same number of builds');
   })) passed++; else failed++;
 
   if (!powerShellCommand) {
