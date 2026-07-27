@@ -7,10 +7,35 @@ All notable changes to EGC are documented here.
 ### Security
 
 - **Destructive-CLI hard blocks in the Guardian validator**: `docker system prune`, `docker rm/rmi`, `docker run --privileged` or host mounts, `gh repo delete`, `gh api -X DELETE`, and `prisma migrate reset` / `--force-reset` / `db execute` now return a hard DANGEROUS verdict instead of an advisory warning, closing a gap where the enforcement hook let these commands run with nothing but a warning (#1041, @fuentes71).
+- **Guardian validator hardened against an absolute-path bypass**: `/bin/rm`, `/usr/bin/mv` and similar path-qualified forms are now matched against the destructive command list instead of slipping through as an allowlist miss (#1012); path resolution and log file permissions were hardened at the same time (#1011).
+- **Bash hook dispatcher fails closed**: an error in the dispatcher's own plumbing used to fail open, silently disabling every guard (Guardian validate, GateGuard) for that command. It now fails closed, the most critical finding of the latest security audit (#1019).
+- **`auto_learn` validates its write target**: `target_file` is now checked against protected paths and must stay inside the project root, closing a write-outside-sandbox path (#1009). Two more destructive filesystem paths were guarded in the plugin and orchestration lib (#1016).
+- **`core.hooksPath` no-verify bypass closed**: git hook-path overrides are now matched case-insensitively (#1013).
+- **`republish.yml` command injection closed**: the version input is now validated instead of interpolated directly into a shell command (#1027).
+- **Docker hardened**: images run as a non-root user via a multi-stage build that keeps the build toolchain out of the final image (#1036), and a `.dockerignore` keeps `.git`, `.env` and `node_modules` out of the build context (#1028).
+- **All remaining Dependabot and Scorecard advisories cleared**: `tar` and `brace-expansion` across the root and both mcp-server lockfiles (#992, #994, #995).
 
 ### Bug Fixes
 
 - **Crowdin translation sync corruption fixed at the root**: `upload_translations` re-uploaded the post-processed export back to Crowdin, and Crowdin does not sentence-segment Chinese, so a whole paragraph collapsed onto the first segment. Sync is now one-way (Crowdin to repo only); the poisoned zh-CN strings were cleaned up via the Crowdin API (#1038, #1039, #1040).
+- **Chinese Simplified Crowdin path fixed end to end**: mapped to the canonical `zh-CN` path with existing repo translations seeded (#988, closes #483), root-relative asset and doc links rewritten in downloaded translations (#1004), and sync commits signed so the DCO check passes (#1006).
+- **Three runtime bugs from the #987 deep audit fixed**: an `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani).
+- **`get_state` no longer time-travels on feature branches**: the default-branch fallback now prefers the hashed main state file over the legacy plain `main.md` left behind by pre-hash versions (#1005).
+- **Bare `egc install` fixed on the published npm package**: `install.sh` falls back to `npm install` when the published tarball ships no root lockfile, and only builds when `src/` is present (#985, #986, closes #643).
+- **Team sync no longer deletes local state files** absent from the remote (#1015); the state store falls back to the jsonl store on a `state.db` error (#1014).
+- **`egc` CLI subcommand forwarding fixed** for `plugin`, `budget` and `team`, and `gain` / `install-apply` output corrected (#1024).
+- **Telemetry ping is time-bound** so it never delays CLI exit (#1023).
+- **Fuzz harness actually fuzzes**: the validator is bundled to CommonJS so `jsfuzz` can instrument it instead of running blind (#1029); CI now builds the MCP servers before the test suite, closing a false-green gap where roughly 20 defense tests were silently skipped (#1030).
+- **Catalog indexer fixed**: only `SKILL.md` files are indexed, and YAML block scalars in frontmatter parse correctly (#1025).
+- **Windows fixes**: the TypeScript check hook runs via `node`, and Zed JSON bin paths are escaped correctly (#1021); `install.sh` aligns the Node version floor, keeps dev dependencies, and hardens config writes (#1017).
+- **OpenAI provider fallback redacts unmapped SDK errors** instead of leaking them (#1022).
+
+### Maintenance
+
+- **CodeRabbit reviews contributor PRs automatically** and skips the maintainer's own to save review credits; the manual first-time-contributor gate workflows were retired (#997).
+- **Supported AI coding tool count synced** across docs, translations and plugin manifests (#984, #1018, #1020, #1031).
+- **Test coverage added** for the dispatcher, tool executor and prompt builder (#1037).
+- **Catalog keyword router memoizes token sets** for faster search (#1026).
 
 ## [1.1.15] - 2026-07-21
 
