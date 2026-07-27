@@ -118,6 +118,60 @@ function runTests() {
     assert.strictEqual(result.stdout, rawInput, 'Expected raw passthrough');
   })) passed++; else failed++;
 
+  if (test('blocks a destructive command hidden inside a $(...) command substitution', () => {
+    const result = runHook('echo $(rm -rf /)');
+    assert.strictEqual(result.code, 2, 'Expected the substitution body to be extracted and blocked');
+  })) passed++; else failed++;
+
+  if (test('blocks a destructive command hidden inside a backtick substitution', () => {
+    const result = runHook('echo `rm -rf /`');
+    assert.strictEqual(result.code, 2, 'Expected the substitution body to be extracted and blocked');
+  })) passed++; else failed++;
+
+  if (test('allows a benign command with a $(...) substitution that resolves to nothing dangerous', () => {
+    const result = runHook('echo $(date)');
+    assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('runs standalone via node (require.main === module stdin path), not just through run-with-flags', () => {
+    const hookPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+    const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git status' } });
+    const result = spawnSync('node', [hookPath], {
+      input: rawInput,
+      encoding: 'utf8',
+      env: { ...process.env, EGC_GUARDIAN_CLI: fakeCli },
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    assert.strictEqual(result.status, 0, `Expected allow, got: ${result.stderr}`);
+    assert.strictEqual(result.stdout, rawInput, 'Expected raw passthrough on stdout');
+  })) passed++; else failed++;
+
+  if (test('runs standalone via node and blocks + writes stderr on a destructive command', () => {
+    const hookPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+    const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } });
+    const result = spawnSync('node', [hookPath], {
+      input: rawInput,
+      encoding: 'utf8',
+      env: { ...process.env, EGC_GUARDIAN_CLI: fakeCli },
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    assert.strictEqual(result.status, 2, 'Expected block exit code');
+    assert.ok(result.stderr.includes('destructive command'), `Expected reason on stderr, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('handles malformed JSON input without crashing (fails open)', () => {
+    const result = spawnSync('node', [runner, 'pre:bash:guardian-validate', 'scripts/hooks/pre-bash-guardian-validate.js', 'minimal,standard,strict'], {
+      input: '{not valid json',
+      encoding: 'utf8',
+      env: { ...process.env, ECC_HOOK_PROFILE: 'standard', EGC_GUARDIAN_CLI: fakeCli },
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    assert.strictEqual(result.status, 0, 'Expected fail-open on malformed JSON input');
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

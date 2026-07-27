@@ -22,10 +22,16 @@
 'use strict';
 
 const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
-const { splitShellSegments } = require('../lib/shell-split');
+const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 
 const MAX_STDIN = 1024 * 1024;
 const VALIDATE_TIMEOUT_MS = 4000;
+
+// Caps recursion into nested command/process substitutions
+// ($(echo $(echo $(...)))) — a real script has no reason to nest these more
+// than a couple of levels deep; this is purely a backstop against adversarial
+// or pathological input, not a limit anyone should ever hit legitimately.
+const MAX_SUBSTITUTION_DEPTH = 5;
 
 const ADVISORY_REASONS = [
   'Shell chaining/metacharacters are forbidden',
@@ -52,10 +58,25 @@ function parseInput(inputOrRaw) {
 // duplicating the same peeling logic in two places is exactly how earlier
 // fixes here ended up covering only the specific wrapper names each audit
 // happened to name (see the project's Guardian bypass post-mortem).
-function extractSegments(command) {
-  return splitShellSegments(command, { splitOnPipe: true })
+//
+// Command/process substitutions ($(...), <(...), >(...), `...`) are also
+// extracted and validated as their own additional segments, recursively (up
+// to MAX_SUBSTITUTION_DEPTH): `echo $(rm -rf /)` must not slip through as
+// one benign-looking `echo` segment just because `$`/backtick are not
+// top-level separators.
+function extractSegments(command, depth = 0) {
+  const topLevel = splitShellSegments(command, { splitOnPipe: true })
     .map(s => s.trim())
     .filter(Boolean);
+
+  if (depth >= MAX_SUBSTITUTION_DEPTH) return topLevel;
+
+  const nested = [];
+  for (const body of extractSubstitutionBodies(command)) {
+    nested.push(...extractSegments(body, depth + 1));
+  }
+
+  return [...topLevel, ...nested];
 }
 
 function isAdvisory(verdict) {
@@ -72,9 +93,18 @@ function run(inputOrRaw) {
   if (segments.length === 0) return { exitCode: 0 };
 
   const cli = resolveGuardianCli();
+  // resolveGuardianCli() only returns falsy when all 3 of its resolution
+  // strategies fail at once (env var, package-relative build, and both
+  // trusted MCP config files); against a real checkout with its own build
+  // present, fromPackageLayout() always succeeds, so this can't be
+  // triggered deterministically here without environment isolation fragile
+  // enough to break on CI. Covered conceptually by the "fails open" test
+  // below, which exercises the sibling !Array.isArray(verdicts) fail-open.
+  /* c8 ignore start */
   if (!cli) {
     return { exitCode: 0 };
   }
+  /* c8 ignore stop */
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
   const verdicts = callGuardian(

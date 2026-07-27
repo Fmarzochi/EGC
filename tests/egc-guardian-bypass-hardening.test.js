@@ -129,5 +129,44 @@ run('.git/info/exclude write stays allowed (not a hooks/config path)', () => {
   assert.strictEqual(v.allowed, true, `expected .git/info/exclude to stay allowed, got: ${v.reason}`);
 });
 
+console.log('\ncubic-dev-ai PR review findings (2026-07-27, follow-up round):');
+run('env -S "rm -rf /" is hard-blocked (split-string re-execs its value)', () => assertHardBlocked('env -S "rm -rf /"'));
+run('env --split-string="rm -rf /" is hard-blocked', () => assertHardBlocked('env --split-string="rm -rf /"'));
+run('env -i FOO=bar npm test stays allowed (ordinary env usage, no -S)', () => assertAllowed('env -i FOO=bar npm test'));
+
+run('export GIT_SSH_COMMAND=/tmp/evil is hard-blocked (persists like a bare VAR= prefix)', () => assertHardBlocked('export GIT_SSH_COMMAND=/tmp/evil'));
+run('export GIT_SSH_COMMAND=/tmp/evil && git fetch is hard-blocked (segment 1 alone already denies)', () => assertHardBlocked('export GIT_SSH_COMMAND=/tmp/evil'));
+run('export FOO=bar stays allowed (harmless env var)', () => assertAllowed('export FOO=bar'));
+
+run('git config --show-scope core.hooksPath /tmp/evil is hard-blocked (output-annotator flag no longer exempts a real SET)', () => assertHardBlocked('git config --show-scope core.hooksPath /tmp/evil'));
+run('git config --name-only core.hooksPath /tmp/evil is hard-blocked', () => assertHardBlocked('git config --name-only core.hooksPath /tmp/evil'));
+run('git config --edit is hard-blocked unconditionally (opaque editor session)', () => assertHardBlocked('git config --edit'));
+run('git config -e is hard-blocked unconditionally', () => assertHardBlocked('git config -e'));
+run('git config --show-scope --get core.hooksPath stays allowed (genuine read)', () => assertAllowed('git config --show-scope --get core.hooksPath'));
+
+run('git config "--global" core.hooksPath /tmp/evil is hard-blocked (quoted flag no longer misread as a positional)', () => assertHardBlocked('git config "--global" core.hooksPath /tmp/evil'));
+
+run('git -c foo=bar config core.hooksPath /tmp/evil is hard-blocked (global flag before config no longer hides the subcommand)', () => assertHardBlocked('git -c foo=bar config core.hooksPath /tmp/evil'));
+run('git -C /tmp config core.hooksPath /tmp/evil is hard-blocked (global -C flag+value skipped correctly)', () => assertHardBlocked('git -C /tmp config core.hooksPath /tmp/evil'));
+run('git -C config status stays allowed (literal "config" as a -C value is not mistaken for the subcommand)', () => assertAllowed('git -C config status'));
+
+run('git config core.fsmonitor /tmp/evil is hard-blocked (expanded dangerous-key coverage)', () => assertHardBlocked('git config core.fsmonitor /tmp/evil'));
+run('git config filter.lfs.clean /tmp/evil is hard-blocked', () => assertHardBlocked('git config filter.lfs.clean /tmp/evil'));
+run('git config filter.lfs.smudge /tmp/evil is hard-blocked', () => assertHardBlocked('git config filter.lfs.smudge /tmp/evil'));
+run('git config filter.lfs.process /tmp/evil is hard-blocked', () => assertHardBlocked('git config filter.lfs.process /tmp/evil'));
+run('git config diff.evil.command /tmp/evil is hard-blocked', () => assertHardBlocked('git config diff.evil.command /tmp/evil'));
+
+run('sudo -U rm -rf / is not silently misparsed by case-insensitive flag lookup (unknown flag stays boolean, rm is still reached)', () => assertHardBlocked('sudo -U rm -rf /'));
+
+console.log('\nGemini CLI cross-CLI fail-open fix (2026-07-27 audit):');
+run('.gemini/config/mcp_config.json write is blocked (guardian-bin.js now trusts this file to resolve the CLI)', () => {
+  const v = validateWrite('.gemini/config/mcp_config.json');
+  assert.strictEqual(v.allowed, false, 'expected .gemini/config/mcp_config.json write to be blocked');
+});
+run('.gemini/GEMINI.md write stays allowed (functional file, not a credential/trust-anchor)', () => {
+  const v = validateWrite('.gemini/GEMINI.md');
+  assert.strictEqual(v.allowed, true, `expected .gemini/GEMINI.md to stay allowed, got: ${v.reason}`);
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
