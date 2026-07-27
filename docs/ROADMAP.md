@@ -82,6 +82,11 @@ Closes the commit-privacy scope started in v1.1.12:
 - Lean repository root: tool configuration files moved to their conventional homes (#891)
 - `egc install` launches the dashboard right after installing (#893)
 
+## v1.1.16: Crowdin Root Fix and Destructive-CLI Hard Blocks (Released 2026-07-26)
+
+- Crowdin sync corruption fixed at the root: one-way sync (Crowdin to repo only), poisoned zh-CN strings cleaned via API (#1038, #1039, #1040)
+- Guardian validator hard-blocks destructive docker/gh/prisma variants instead of just warning (#1041, @fuentes71)
+
 ## v1.1.15: Universal Crusher and Clean Security (Released 2026-07-21)
 
 - Relicensed from MIT to Apache License 2.0 (#906)
