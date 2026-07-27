@@ -43,8 +43,16 @@ function handleSingleAmpersand(ch, next, prev, current, segments) {
  * Split a shell command into segments by operators (&&, ||, ;, &)
  * while respecting quoting (single/double) and escaped characters.
  * Redirection operators (&>, >&, 2>&1) are NOT treated as separators.
+ *
+ * options.splitOnPipe (default false) additionally splits on a bare `|`
+ * (not `||`, already handled above). Off by default because an existing
+ * caller (dev-server-block) is tested against pipelines staying one
+ * segment; the guardian command validator opts in, since a pipeline stage
+ * can itself be a wrapper/destructive command (`echo x | xargs rm -rf`)
+ * that needs to be judged as its own segment.
  */
-function splitShellSegments(command) { // NOSONAR: shell segment parser state machine kept inline for auditability
+function splitShellSegments(command, options = {}) { // NOSONAR: shell segment parser state machine kept inline for auditability
+  const splitOnPipe = Boolean(options.splitOnPipe);
   const segments = [];
   let current = '';
   let quote = null;
@@ -73,6 +81,12 @@ function splitShellSegments(command) { // NOSONAR: shell segment parser state ma
       continue;
     }
 
+    if (ch === '\n' || ch === '\r') {
+      pushSegment(current, segments);
+      current = '';
+      continue;
+    }
+
     const next = command[i + 1] || '';
     const prev = i > 0 ? command[i - 1] : '';
 
@@ -84,6 +98,12 @@ function splitShellSegments(command) { // NOSONAR: shell segment parser state ma
     }
 
     if (ch === ';') {
+      pushSegment(current, segments);
+      current = '';
+      continue;
+    }
+
+    if (splitOnPipe && ch === '|') {
       pushSegment(current, segments);
       current = '';
       continue;
