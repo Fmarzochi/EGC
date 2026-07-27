@@ -74,7 +74,7 @@ sh scripts/install.sh
 
 > **Note:** Gemini CLI free tier was discontinued on June 18, 2026 for individual users. The `~/.gemini/GEMINI.md` target still works for paid Google accounts. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative: EGC supports it via `egc install --target antigravity`.
 4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (63 agents, 229 skills, 76 commands): skipped automatically in CI
+5. Asks interactively whether to install the prompt library (63 agents, 230 skills, 77 commands): skipped automatically in CI
 
 ### Example output
 

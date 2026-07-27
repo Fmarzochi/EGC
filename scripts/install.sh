@@ -3,6 +3,23 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# On Windows via Git Bash/MSYS, $ROOT_DIR is a POSIX-style mount path (e.g.
+# /c/Users/x/EGC) that bash and node-run-from-bash understand, but any path
+# written into an MCP client's config JSON is read by that client's own
+# native Windows node.exe (Claude Desktop, Cursor, etc. are native Windows
+# programs, not Git Bash processes) and cannot resolve the /c/... mount
+# form. `pwd -W` is MSYS's coreutils extension that prints the Windows-
+# native equivalent (C:/Users/x/EGC); use it only for paths destined for a
+# written config, never for bash's own cd/test/node invocations below.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*)
+    MCP_ROOT_DIR="$(cd "$ROOT_DIR" && pwd -W)"
+    ;;
+  *)
+    MCP_ROOT_DIR="$ROOT_DIR"
+    ;;
+esac
+
 # npm strips the root package-lock.json from published tarballs, so a globally
 # installed package has no root lockfile (npm already resolved its deps during
 # `npm install -g`). The sub-package lockfiles travel via package.json "files",
@@ -121,11 +138,11 @@ cat > "$ROOT_DIR/.mcp.egc.json" <<EOF
   "mcpServers": {
     "egc-guardian": {
       "command": "node",
-      "args": ["$ROOT_DIR/mcp/servers/egc-guardian/build/index.js"]
+      "args": ["$MCP_ROOT_DIR/mcp/servers/egc-guardian/build/index.js"]
     },
     "egc-memory": {
       "command": "node",
-      "args": ["$ROOT_DIR/mcp/servers/egc-memory/build/index.js"]
+      "args": ["$MCP_ROOT_DIR/mcp/servers/egc-memory/build/index.js"]
     }
   }
 }
@@ -184,8 +201,8 @@ fi
 
 # ── MCP auto-registration ─────────────────────────────────────────────────────
 
-GUARDIAN_BIN="$ROOT_DIR/mcp/servers/egc-guardian/build/index.js"
-MEMORY_BIN="$ROOT_DIR/mcp/servers/egc-memory/build/index.js"
+GUARDIAN_BIN="$MCP_ROOT_DIR/mcp/servers/egc-guardian/build/index.js"
+MEMORY_BIN="$MCP_ROOT_DIR/mcp/servers/egc-memory/build/index.js"
 
 register_mcp_json() {
   local target="$1"

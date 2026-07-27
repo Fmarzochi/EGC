@@ -6,6 +6,18 @@ $EgcInstall    = Join-Path (Join-Path $RootDir "scripts") "install-apply.js"
 $GuardianBin   = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-guardian") "build") "index.js"
 $MemoryBin     = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-memory") "build") "index.js"
 
+# npm strips the root package-lock.json from published tarballs, so a globally
+# installed package has no root lockfile (npm already resolved its deps during
+# `npm install -g`). The sub-package lockfiles travel via package.json "files",
+# so run a pinned `npm ci` wherever a lockfile is present and skip entirely
+# otherwise -- mirrors install.sh's install_deps exactly, including the lack
+# of an npm install fallback (a global install has already resolved deps).
+function Install-Deps {
+    if (Test-Path "package-lock.json") {
+        npm ci --silent
+    }
+}
+
 # Forward --help directly to the Node installer
 if ($args -contains '--help') {
     node $EgcInstall @args
@@ -14,11 +26,14 @@ if ($args -contains '--help') {
 
 Write-Host "EGC install"
 
-# Node.js version check
+# Node.js version check. Keep this floor in lockstep with package.json
+# "engines" and scripts/preinstall.js, which both require Node 20; a lower
+# gate here would let 18/19 reach the better-sqlite3 build and the
+# TypeScript build steps below.
 try {
     $nodeVersion = node -e "process.stdout.write(process.versions.node.split('.')[0])"
-    if ([int]$nodeVersion -lt 18) {
-        Write-Error "Node.js >= 18 is required (found: $(node --version))"
+    if ([int]$nodeVersion -lt 20) {
+        Write-Error "Node.js >= 20 is required (found: $(node --version))"
         exit 1
     }
     Write-Host "  node $(node --version)"
@@ -33,7 +48,7 @@ if (-not $DryRun) {
     # Root dependencies
     Write-Host "  installing root dependencies..."
     Set-Location -Path $RootDir
-    npm install --silent
+    Install-Deps
 
     # Verify native modules (better-sqlite3 requires Build Tools on Windows)
     $nativeOk = $true
@@ -60,8 +75,12 @@ if (-not $DryRun) {
         exit 1
     }
     Set-Location -Path $GuardianDir
-    npm install --silent
-    npm run build
+    Install-Deps
+    # The published package ships build/ but not src/, so only (re)build from
+    # a git checkout where the TypeScript sources are present.
+    if (Test-Path "src") {
+        npm run build
+    }
 
     # egc-memory
     Write-Host "  building egc-memory..."
@@ -71,8 +90,11 @@ if (-not $DryRun) {
         exit 1
     }
     Set-Location -Path $MemoryDir
-    npm install --silent
-    npm run build
+    Install-Deps
+    # Published package ships build/ but not src/; only build from a checkout.
+    if (Test-Path "src") {
+        npm run build
+    }
 
     # Initialize database
     Write-Host "  initializing database..."
@@ -162,7 +184,17 @@ if (-not $DryRun) {
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
         $obj = @{ mcpServers = @{} }
         if (Test-Path $Target) {
-            try { $obj = Get-Content $Target -Raw | ConvertFrom-Json -AsHashtable } catch {}
+            try {
+                $obj = Get-Content $Target -Raw | ConvertFrom-Json -AsHashtable
+            } catch {
+                # Existing config is not valid JSON: leave it untouched and
+                # skip, matching install.sh's Node helper exactly. Falling
+                # through here would merge the new servers into a fresh empty
+                # hashtable and overwrite the file, destroying whatever the
+                # user already had in it.
+                Write-Host "  - skipped $Label ($Target): existing config is not valid JSON" -ForegroundColor Yellow
+                return
+            }
         }
         if (-not $obj.mcpServers) { $obj.mcpServers = @{} }
         $changed = $false
@@ -231,8 +263,14 @@ if (-not $DryRun) {
         Set-Content -Path $tmpCodexJs -Encoding UTF8 -Value @'
 const fs=require("fs"),path=require("path");
 const[,,t,g,m]=process.argv;
-const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+g+'"]\n';
-const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+m+'"]\n';
+// Escape backslashes (Windows paths are the common case here) and double
+// quotes so the path stays a valid TOML basic string; mirrors tomlEscape in
+// scripts/install.sh and scripts/lib/mcp-register.js. Without this, a raw
+// Windows path like C:\Users\x\... corrupts the TOML (\U... reads as an
+// invalid/wrong Unicode escape).
+const tomlEscape=(p)=>p.split("\\").join("\\\\").split('"').join('\\"');
+const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+tomlEscape(g)+'"]\n';
+const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+tomlEscape(m)+'"]\n';
 let c=fs.existsSync(t)?fs.readFileSync(t,"utf8"):"";
 let ch=false;
 if(!c.includes("egc-guardian")){c+=ge;ch=true;}

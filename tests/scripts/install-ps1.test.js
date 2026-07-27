@@ -9,6 +9,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.ps1');
+const BASH_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
 const PACKAGE_JSON = path.join(__dirname, '..', '..', 'package.json');
 
 function createTempDir(prefix) {
@@ -87,6 +88,63 @@ function runTests() {
   if (test('publishes egc-install through the Node installer runtime for cross-platform npm usage', () => {
     const packageJson = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
     assert.strictEqual(packageJson.bin['egc-install'], 'scripts/install-apply.js');
+  })) passed++; else failed++;
+
+  const scriptSource = fs.readFileSync(SCRIPT, 'utf8');
+  const bashSource = fs.readFileSync(BASH_SCRIPT, 'utf8');
+
+  // Parity checks, not fixed numbers: install.ps1 has drifted from install.sh
+  // before (stuck on a Node >= 18 floor and a bare npm install with no
+  // lockfile/src guards after install.sh got those fixes). Reading install.sh's
+  // actual current value here means the next drift fails CI on its own,
+  // instead of silently shipping until someone happens to compare the two
+  // files by hand again.
+  if (test('Node version floor matches install.sh, not a stale hardcoded value', () => {
+    const bashFloor = bashSource.match(/NODE_MAJOR"\s*-lt\s*(\d+)/);
+    assert.ok(bashFloor, 'could not read the Node floor out of install.sh');
+    const ps1Floor = scriptSource.match(/nodeVersion\s*-lt\s*(\d+)/);
+    assert.ok(ps1Floor, 'could not read the Node floor out of install.ps1');
+    assert.strictEqual(ps1Floor[1], bashFloor[1], 'install.ps1 Node floor must match install.sh');
+  })) passed++; else failed++;
+
+  if (test('installs dependencies via a lockfile-aware helper matching install.sh exactly (no npm install fallback)', () => {
+    assert.ok(scriptSource.includes('function Install-Deps'), 'should define the lockfile-aware helper');
+    assert.ok(scriptSource.includes('Test-Path "package-lock.json"'));
+    assert.ok(scriptSource.includes('npm ci --silent'));
+    // install.sh's install_deps has no else branch: a global install has
+    // already resolved deps, so the no-lockfile case does nothing at all.
+    // A "npm install --silent" fallback here would be a real behavioral
+    // drift from install.sh, not a harmless equivalent.
+    const bareInstallCalls = scriptSource.match(/npm install --silent/g) || [];
+    assert.strictEqual(bareInstallCalls.length, 0, 'install.ps1 must not have any npm install fallback; install.sh has none either');
+    const helperCalls = scriptSource.match(/^\s*Install-Deps\s*$/gm) || [];
+    assert.strictEqual(helperCalls.length, 3, 'root, egc-guardian and egc-memory should each call Install-Deps');
+  })) passed++; else failed++;
+
+  if (test('skips (never overwrites) an existing MCP config that fails to parse as JSON', () => {
+    // A pre-existing config with invalid JSON must be left untouched: the
+    // default $obj = @{ mcpServers = @{} } falling through to the merge/
+    // write path below would overwrite the user's real config with just
+    // the two new servers, discarding everything else in the file.
+    assert.ok(
+      /catch\s*\{[^}]*is not valid JSON[^}]*return[^}]*\}/s.test(scriptSource),
+      'the ConvertFrom-Json catch block must warn and return, not fall through to a merge/overwrite'
+    );
+  })) passed++; else failed++;
+
+  if (test('escapes backslashes and quotes before writing a path into Codex CLI TOML', () => {
+    // A raw Windows path (C:\Users\x\...) concatenated into a TOML basic
+    // string is corrupted: TOML treats \U as the start of an 8-hex-digit
+    // Unicode escape. Must mirror install.sh's tomlEscape.
+    assert.ok(scriptSource.includes('tomlEscape'), 'Codex CLI TOML writer must escape paths via a tomlEscape helper');
+    assert.ok(scriptSource.includes('tomlEscape(g)') && scriptSource.includes('tomlEscape(m)'), 'both guardian and memory TOML entries must go through tomlEscape');
+  })) passed++; else failed++;
+
+  if (test('only builds egc-guardian/egc-memory when src/ is present (published tarball has none)', () => {
+    const buildGuards = scriptSource.match(/if \(Test-Path "src"\)/g) || [];
+    assert.strictEqual(buildGuards.length, 2, 'both guardian and memory builds should be guarded');
+    const bashGuards = bashSource.match(/if \[ -d src \]/g) || [];
+    assert.strictEqual(buildGuards.length, bashGuards.length, 'install.ps1 and install.sh should guard the same number of builds');
   })) passed++; else failed++;
 
   if (!powerShellCommand) {
