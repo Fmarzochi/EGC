@@ -82,11 +82,6 @@ Closes the commit-privacy scope started in v1.1.12:
 - Lean repository root: tool configuration files moved to their conventional homes (#891)
 - `egc install` launches the dashboard right after installing (#893)
 
-## v1.1.16: Crowdin Root Fix and Destructive-CLI Hard Blocks (Released 2026-07-26)
-
-- Crowdin sync corruption fixed at the root: one-way sync (Crowdin to repo only), poisoned zh-CN strings cleaned via API (#1038, #1039, #1040)
-- Guardian validator hard-blocks destructive docker/gh/prisma variants instead of just warning (#1041, @fuentes71)
-
 ## v1.1.15: Universal Crusher and Clean Security (Released 2026-07-21)
 
 - Relicensed from MIT to Apache License 2.0 (#906)
@@ -126,21 +121,16 @@ Closes the commit-privacy scope started in v1.1.12:
 - High-severity advisories cleared: fast-uri and linkify-it across the root and mcp-server lockfiles (#967), and `@hono/node-server` forced to 2.x via npm override to close the last Dependabot and Scorecard findings (#968)
 - ClusterFuzzLite weekly schedule disabled while upstream is dead-locked for JavaScript, keeping manual `workflow_dispatch` (EGC#910)
 
-## Unreleased (on main)
+## v1.1.16: Security Hardening and Crowdin Root Fix (Released 2026-07-26)
 
-Landed on main since v1.1.15, not yet released:
-
-- Bare `egc install` from the published npm package fixed: `install.sh` falls back to `npm install` when the published tarball ships no root lockfile, and only builds when `src/` is present (#985, #986, closes #643)
-- Chinese Simplified mapped to `zh-CN` in Crowdin with the existing repo translations seeded (#988, closes #483)
-- Crowdin sync now writes Chinese Simplified to the canonical `translations/zh-CN/` path: the workflow renames `zh` to `zh-CN` after download, since the Crowdin action exposes no download language mapping (#1000; the `crowdin.yml` mapping tried in #992 was invalid and was reverted in #998)
-- CodeRabbit reviews contributor PRs automatically and skips the maintainer's own to save review credits; the first-time-contributor gate workflows were retired (#997)
-- `get_state` no longer time-travels on feature branches: the default-branch fallback prefers the hashed main state file over the legacy plain `main.md` left behind by pre-hash versions, with a new test covering the full resolution order (#1005)
-- Crowdin sync hardened end to end: root-relative asset and doc links are normalized in downloaded translations (#1004) and the sync commit is signed so the DCO check passes on translations PRs (#1006); the first fully green sync PR landed the Turkish and Chinese Simplified updates (#1003)
-- Docs: the MCP server build is invoked with `bash`, matching the install script's shebang (#1007)
-- Guardian hardening: `auto_learn` now validates `target_file` against protected paths and requires it to stay inside the project root, closing a write-outside-sandbox path found in an internal security audit (#1009)
-- Three runtime bugs from the #987 deep audit fixed: the `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani)
-- All Dependabot and Scorecard advisories cleared to zero: `brace-expansion` and `tar` in the root lockfile (#992), `tar` in the two mcp server lockfiles (#994), and `brace-expansion` in `fuzz` via an override (#995); the Scorecard Vulnerabilities code-scanning alert closed with them
-- Supported-harness count kept in sync across the docs (#984)
+- Guardian validator hardened: the absolute-path bypass on destructive commands closed (#1012), path resolution and log permissions hardened (#1011), `core.hooksPath` no-verify bypass closed (#1013), the bash hook dispatcher fails closed instead of fail-open on its own errors (#1019), `auto_learn` validates its write target against protected paths (#1009), and destructive docker/gh/prisma variants now hard-block instead of just warning (#1041, @fuentes71)
+- Crowdin translation sync fixed at the root: upload was re-poisoning Chinese Simplified because Crowdin does not sentence-segment Chinese; sync is now one-way, Crowdin to repo only, with the zh-CN path mapped correctly end to end (#988, #1000, #1003, #1004, #1005, #1006, #1038, #1039, #1040, closes #483)
+- Three runtime bugs from the #987 deep audit fixed: an `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani)
+- Bare `egc install` fixed on the published npm package: falls back to `npm install` when the tarball ships no root lockfile (#985, #986, closes #643)
+- Docker hardened: non-root user, multi-stage build, `.dockerignore` (#1036, #1028); `republish.yml` command injection closed (#1027); all remaining Dependabot/Scorecard advisories cleared (#992, #994, #995)
+- Fuzz harness actually fuzzes now: validator bundled to CommonJS for `jsfuzz` instrumentation (#1029), and CI builds the MCP servers before running the defense test suite, closing a false-green gap (#1030)
+- CodeRabbit reviews contributor PRs automatically, retiring the manual first-time-contributor gate workflows (#997)
+- CLI, catalog indexer, and Windows install/hook fixes rounding out the squad audit cleanup (#1014, #1015, #1017, #1021, #1022, #1023, #1024, #1025, #1026, #1037)
 
 ## v1.2.0: Teams
 
