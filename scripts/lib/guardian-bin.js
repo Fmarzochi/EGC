@@ -43,6 +43,18 @@ function fromMcpConfigs() {
     // Gemini-CLI-only install (no ~/.claude.json alongside it) had no
     // working fallback here and failed open silently.
     path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json'),
+    // Antigravity CLI's own MCP registration file — a SEPARATE file from
+    // Gemini CLI's above despite sharing the ~/.gemini home root (see
+    // scripts/lib/mcp-register.js's "Antigravity CLI" target). Multica
+    // squad audit (EGC-460/461, 2026-07-27) confirmed a pure-Antigravity
+    // install (no Claude Code, no Gemini CLI alongside it) had no working
+    // fallback here either, for the same fail-open reason as Gemini CLI
+    // above.
+    path.join(os.homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json'),
+    // OpenCode's real MCP registration file (scripts/lib/mcp-register.js's
+    // "OpenCode" target) — same audit, same fail-open gap for a
+    // pure-OpenCode install.
+    path.join(os.homedir(), '.config', 'opencode', 'config.json'),
   ];
 
   // Resolved candidates must live under the user's home directory. This
