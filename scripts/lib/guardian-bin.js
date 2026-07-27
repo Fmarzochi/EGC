@@ -104,21 +104,23 @@ function fromMcpConfigs() {
 // Reverses tomlEscape() in scripts/lib/mcp-register.js: backslash-escaped
 // backslash and double-quote are the only two escapes that function ever
 // produces, but \n and \t are handled too since they're valid in a TOML
-// basic string and a hand-edited file could contain them.
+// basic string and a hand-edited file could contain them. A lookup table
+// (rather than a chain of if/else on each recognized escape) keeps this
+// under SonarCloud's cognitive-complexity ceiling.
+const TOML_ESCAPES = { '\\': '\\', '"': '"', n: '\n', t: '\t' };
+
 function tomlUnescapeBasicString(raw) {
   let out = '';
   for (let i = 0; i < raw.length; i++) {
     const ch = raw[i];
-    if (ch === '\\' && i + 1 < raw.length) {
-      const next = raw[i + 1];
-      if (next === '\\') { out += '\\'; i++; continue; }
-      if (next === '"') { out += '"'; i++; continue; }
-      if (next === 'n') { out += '\n'; i++; continue; }
-      if (next === 't') { out += '\t'; i++; continue; }
-      out += ch; // unrecognized escape: keep verbatim rather than guess
-      continue;
+    const next = ch === '\\' ? raw[i + 1] : undefined;
+    const mapped = next !== undefined ? TOML_ESCAPES[next] : undefined;
+    if (mapped !== undefined) {
+      out += mapped;
+      i++; // consumed the escape char too
+    } else {
+      out += ch; // not an escape, or an unrecognized one: keep verbatim
     }
-    out += ch;
   }
   return out;
 }
@@ -140,6 +142,57 @@ function tomlStringArrayValue(inner) {
     .filter(item => item !== null);
 }
 
+function isMcpServersHeaderLine(line) {
+  return /^\[\[\s*mcp_servers\s*\]\]$/.test(line);
+}
+
+// Parses "key = value" (no interior '=' ambiguity: TOML bare keys can't
+// contain '='). Splitting on the first '=' instead of a single
+// \s*=\s*(.+)$ regex avoids SonarCloud's superlinear-backtracking flag on
+// that combined quantifier shape, and is just as correct here.
+function parseKeyValueLine(line) {
+  const eqIndex = line.indexOf('=');
+  if (eqIndex === -1) return null;
+  const key = line.slice(0, eqIndex).trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(key)) return null;
+  return { key, value: line.slice(eqIndex + 1).trim() };
+}
+
+// Continues a multi-line `args = [ ... ]` array started on a prior line.
+// Returns the still-open pendingArray, or null once the closing ']' lands
+// (at which point current[key] has been set).
+function consumeArrayContinuationLine(current, pendingArray, line) {
+  const closeIndex = line.indexOf(']');
+  if (closeIndex === -1) {
+    pendingArray.raw += ` ${line}`;
+    return pendingArray;
+  }
+  pendingArray.raw += ` ${line.slice(0, closeIndex)}`;
+  current[pendingArray.key] = tomlStringArrayValue(pendingArray.raw);
+  return null;
+}
+
+// Parses a "key = value" line within an open [[mcp_servers]] block. Returns
+// a pendingArray descriptor if the value opens a multi-line array, else null
+// (the value -- string or single-line array -- was already assigned).
+function consumeKeyValueLine(current, line) {
+  const kv = parseKeyValueLine(line);
+  if (!kv) return null;
+  const { key, value } = kv;
+
+  if (!value.startsWith('[')) {
+    const str = tomlBasicStringValue(value);
+    if (str !== null) current[key] = str;
+    return null;
+  }
+
+  const inner = value.slice(1);
+  const closeIndex = inner.indexOf(']');
+  if (closeIndex === -1) return { key, raw: inner };
+  current[key] = tomlStringArrayValue(inner.slice(0, closeIndex));
+  return null;
+}
+
 // Scans for [[mcp_servers]] blocks and returns each as a plain object of its
 // string/string-array keys. Any other table header ([foo] or [[foo]] with a
 // different name) closes the current block without being parsed itself --
@@ -158,46 +211,21 @@ function parseCodexMcpServers(content) {
     const line = rawLine.trim();
 
     if (pendingArray) {
-      const closeIndex = line.indexOf(']');
-      if (closeIndex === -1) {
-        pendingArray.raw += ` ${line}`;
-        continue;
-      }
-      pendingArray.raw += ` ${line.slice(0, closeIndex)}`;
-      current[pendingArray.key] = tomlStringArrayValue(pendingArray.raw);
-      pendingArray = null;
+      pendingArray = consumeArrayContinuationLine(current, pendingArray, line);
       continue;
     }
-
-    if (/^\[\[\s*mcp_servers\s*\]\]$/.test(line)) {
+    if (isMcpServersHeaderLine(line)) {
       closeBlock();
       current = {};
       continue;
     }
-    if (/^\[/.test(line)) {
+    if (line.startsWith('[')) {
       closeBlock();
       continue;
     }
     if (!current) continue;
 
-    const kv = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
-    if (!kv) continue;
-    const [, key, rawValue] = kv;
-    const value = rawValue.trim();
-
-    if (value.startsWith('[')) {
-      const inner = value.slice(1);
-      const closeIndex = inner.indexOf(']');
-      if (closeIndex === -1) {
-        pendingArray = { key, raw: inner };
-      } else {
-        current[key] = tomlStringArrayValue(inner.slice(0, closeIndex));
-      }
-      continue;
-    }
-
-    const str = tomlBasicStringValue(value);
-    if (str !== null) current[key] = str;
+    pendingArray = consumeKeyValueLine(current, line);
   }
   closeBlock();
   return servers;
