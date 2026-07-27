@@ -1970,6 +1970,66 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // cubic-dev-ai review (PR #1052, 2026-07-27): making the copies above
+  // unconditional meant a DEFAULT install (which does select hooks-runtime)
+  // now recorded two copy-path operations per script -- one from
+  // hooks-runtime's own directory-level scaffold of scripts/hooks and
+  // scripts/lib, one from the explicit calls above. Both write the same
+  // bytes to the same destination, but duplicate the install-state
+  // bookkeeping. This must not regress: the explicit per-file operations
+  // should be suppressed whenever the broader directory copy already
+  // covers them.
+  if (test('egc-home adapter does not duplicate GateGuard/Guardian script copies when hooks-runtime IS selected (default install)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'hooks-runtime', paths: ['hooks', 'scripts/hooks', 'scripts/lib'] }],
+    });
+
+    const directoryDestinations = [
+      path.join(homeDir, '.gemini', 'scripts', 'hooks'),
+      path.join(homeDir, '.gemini', 'scripts', 'lib'),
+    ];
+    for (const destination of directoryDestinations) {
+      const matches = plan.operations.filter(operation => (
+        operation.kind === 'copy-path' && operation.destinationPath === destination
+      ));
+      assert.strictEqual(matches.length, 1, `${destination} should be scaffolded once, by hooks-runtime's own directory copy`);
+    }
+
+    for (const src of [
+      'scripts/hooks/gateguard-fact-force.js',
+      'scripts/lib/utils.js',
+      'scripts/hooks/pre-bash-guardian-validate.js',
+      'scripts/lib/guardian-bin.js',
+      'scripts/lib/shell-split.js',
+    ]) {
+      const destination = path.join(homeDir, '.gemini', ...src.split('/'));
+      const fileLevelCopies = plan.operations.filter(operation => (
+        operation.kind === 'copy-path' && operation.destinationPath === destination
+      ));
+      assert.strictEqual(
+        fileLevelCopies.length,
+        0,
+        `${src} must not get its own copy-path operation when the parent directory is already being copied`
+      );
+    }
+
+    // The hooks.json registrations themselves are unrelated to the copy
+    // dedup and must still be present.
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    assert.ok(
+      plan.operations.some(operation => (
+        operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFilePath
+      )),
+      'hooks.json registrations must survive the copy dedup'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves kiro home adapter root to ~/.kiro and install-state path', () => {
     const adapter = getInstallTargetAdapter('kiro');
     const homeDir = '/Users/example';

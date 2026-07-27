@@ -58,6 +58,48 @@ function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRe
   ];
 }
 
+// The GateGuard/Guardian script copies above are unconditional (needed for
+// minimal installs that skip the hooks-runtime module, see the comments on
+// those two functions), but a default install DOES select hooks-runtime,
+// which independently scaffolds the whole scripts/hooks and scripts/lib
+// directories via the generic module-path flow below -- as ONE 'copy-path'
+// operation per directory (sourceRelativePath exactly 'scripts/hooks' or
+// 'scripts/lib'), not one per file. That directory-level copy already
+// includes every file the explicit ones also copy, so without this a
+// default install recorded a redundant second copy of the same bytes to
+// the same destination for each script (wasteful I/O, duplicate bookkeeping
+// in the install state) per cubic-dev-ai review (PR #1052, 2026-07-27).
+//
+// Deliberately scoped to SOURCE paths under exactly these two directories,
+// not a generic "any copy-path nested under any other copy-path" rule: an
+// earlier version of this function compared DESTINATION paths across the
+// whole operations list, which also caught unrelated --with/skills/rules
+// operations that happened to land under a shared parent directory from a
+// completely different module and dropped them too (a real regression --
+// e.g. a --with-selected skill file nested under a skills/ directory
+// operation from another module). Only a source path that is an actual
+// descendant of one of these two known, hardcoded directories can ever be
+// redundant with them.
+const HOOKS_RUNTIME_DIRECTORY_SOURCES = ['scripts/hooks', 'scripts/lib'];
+
+function dedupeCopyOperations(operations) {
+  const presentDirectorySources = new Set(
+    operations
+      .filter(operation => (
+        operation.kind === 'copy-path' && HOOKS_RUNTIME_DIRECTORY_SOURCES.includes(operation.sourceRelativePath)
+      ))
+      .map(operation => operation.sourceRelativePath)
+  );
+
+  return operations.filter(operation => {
+    if (operation.kind !== 'copy-path') return true;
+    return ![...presentDirectorySources].some(directorySource => (
+      operation.sourceRelativePath !== directorySource
+      && operation.sourceRelativePath.startsWith(`${directorySource}/`)
+    ));
+  });
+}
+
 function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
@@ -184,10 +226,10 @@ module.exports = createInstallTargetAdapter({
     // Deterministic: every egc-home install also registers the GateGuard
     // fact-forcing gate for Antigravity's global hooks.json, even when no
     // content modules are selected.
-    return [
+    return dedupeCopyOperations([
       ...moduleOperations,
       ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
       ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),
-    ];
+    ]);
   },
 });
