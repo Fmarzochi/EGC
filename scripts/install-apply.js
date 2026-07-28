@@ -163,7 +163,18 @@ function main() {
       if (spawned.error) {
         process.stderr.write(`Error: failed to launch ${wrapper.cmd}: ${spawned.error.message}\n`);
       }
-      process.exit(spawned.status === null ? 1 : spawned.status);
+      const exitCode = spawned.status === null ? 1 : spawned.status;
+      if (exitCode === 0) {
+        const uvProbe = spawnSync('uv', ['--version'], { stdio: 'ignore' });
+        if (uvProbe.error?.code === 'ENOENT') {
+          console.log('\nOptional dependency not found: uv');
+          console.log('  Required only for Jira and omega-memory MCP servers.');
+          console.log('  Core EGC installation is unaffected.');
+        }
+        console.log('\nDashboard was not started automatically.');
+        console.log("Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup.");
+      }
+      process.exit(exitCode);
     }
     const request = normalizeInstallRequest({
       ...options,
