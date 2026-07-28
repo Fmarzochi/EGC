@@ -22,13 +22,6 @@ const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---/;
 // path) into a marked block inside the project's AGENTS.md, without
 // touching any of the user's own content in that file.
 
-// path.relative() returns backslash-separated paths on Windows; the skill
-// index entry in AGENTS.md should stay forward-slash like every other path
-// in this repo.
-function toPosixRelative(from, to) {
-  return path.relative(from, to).split(path.sep).join('/');
-}
-
 // Truncates on Unicode code points, not UTF-16 code units, so a surrogate
 // pair (e.g. an emoji used in a skill description) is never split in half.
 function truncateDescription(text) {
@@ -114,7 +107,7 @@ function createWarpPlanOperations(input, adapter) {
             scaffoldOnly: false,
             skillName,
             skillDescription: readSkillDescription(sourceSkillPath),
-            relativePath: toPosixRelative(projectRoot, destinationPath),
+            relativePath: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
           };
 
           return [copyOperation, mergeOperation];
@@ -148,7 +141,7 @@ function createWarpPlanOperations(input, adapter) {
             scaffoldOnly: false,
             skillName: 'EGC Session Memory',
             skillDescription: 'Cross-session memory protocol: call get_state at session start, update_state at session end.',
-            relativePath: toPosixRelative(projectRoot, destinationPath),
+            relativePath: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
           };
 
           return [copyOperation, mergeOperation];

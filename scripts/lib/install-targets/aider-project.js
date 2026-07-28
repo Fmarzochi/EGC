@@ -18,12 +18,6 @@ const { MERGE_YAML_READ_LIST_KIND } = require('../aider-config-merge');
 // `read:` list of the project's .aider.conf.yml without touching any of the
 // user's own existing keys (model settings, lint commands, etc).
 
-// path.relative() returns backslash-separated paths on Windows; YAML/the
-// read: list should stay forward-slash like every other path in this repo.
-function toPosixRelative(from, to) {
-  return path.relative(from, to).split(path.sep).join('/');
-}
-
 function createAiderPlanOperations(input, adapter) {
   const modules = Array.isArray(input.modules) ? input.modules : [];
   const planningInput = {
@@ -67,7 +61,7 @@ function createAiderPlanOperations(input, adapter) {
             strategy: MERGE_YAML_READ_LIST_KIND,
             ownership: 'managed',
             scaffoldOnly: false,
-            readEntry: toPosixRelative(projectRoot, destinationPath),
+            readEntry: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
           };
 
           return [copyOperation, mergeOperation];
@@ -99,7 +93,7 @@ function createAiderPlanOperations(input, adapter) {
             strategy: MERGE_YAML_READ_LIST_KIND,
             ownership: 'managed',
             scaffoldOnly: false,
-            readEntry: toPosixRelative(projectRoot, destinationPath),
+            readEntry: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
           };
 
           return [copyOperation, mergeOperation];
