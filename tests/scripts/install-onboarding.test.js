@@ -8,7 +8,19 @@ const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const INSTALL_APPLY = path.join(REPO_ROOT, 'scripts', 'install-apply.js');
+const INSTALL_SH = path.join(REPO_ROOT, 'scripts', 'install.sh');
+const INSTALL_PS1 = path.join(REPO_ROOT, 'scripts', 'install.ps1');
 const INSTALLATION_GUIDE = path.join(REPO_ROOT, 'docs', 'installation.md');
+
+const UV_MESSAGES = [
+  'Optional dependency not found: uv',
+  'Required only for Jira and omega-memory MCP servers.',
+  'Core EGC installation is unaffected.',
+];
+const DASHBOARD_MESSAGES = [
+  'Dashboard was not started automatically.',
+  "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup.",
+];
 
 function test(name, fn) {
   try {
@@ -28,18 +40,31 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  const installSource = fs.readFileSync(INSTALL_APPLY, 'utf8');
+  const installApplySource = fs.readFileSync(INSTALL_APPLY, 'utf8');
+  const bashSource = fs.readFileSync(INSTALL_SH, 'utf8');
+  const powerShellSource = fs.readFileSync(INSTALL_PS1, 'utf8');
   const guide = fs.readFileSync(INSTALLATION_GUIDE, 'utf8');
 
-  if (test('bare install labels uv as optional and scoped', () => {
-    assert.ok(installSource.includes('Optional dependency not found: uv'));
-    assert.ok(installSource.includes('Required only for Jira and omega-memory MCP servers.'));
-    assert.ok(installSource.includes('Core EGC installation is unaffected.'));
+  if (test('bash and PowerShell label uv as optional and scoped', () => {
+    for (const message of UV_MESSAGES) {
+      assert.ok(bashSource.includes(message), `install.sh missing: ${message}`);
+      assert.ok(powerShellSource.includes(message), `install.ps1 missing: ${message}`);
+    }
   })) passed++; else failed++;
 
-  if (test('bare install states that the dashboard was not started', () => {
-    assert.ok(installSource.includes('Dashboard was not started automatically.'));
-    assert.ok(installSource.includes("Run 'egc dashboard' to start it"));
+  if (test('bash and PowerShell explain dashboard startup after bare installs only', () => {
+    for (const message of DASHBOARD_MESSAGES) {
+      assert.ok(bashSource.includes(message), `install.sh missing: ${message}`);
+      assert.ok(powerShellSource.includes(message), `install.ps1 missing: ${message}`);
+    }
+    assert.ok(bashSource.includes('if [ "$_has_install_args" = false ]; then'));
+    assert.ok(powerShellSource.includes('if (-not $hasInstallArgs)'));
+  })) passed++; else failed++;
+
+  if (test('delegating installer does not duplicate wrapper guidance', () => {
+    for (const message of [...UV_MESSAGES, ...DASHBOARD_MESSAGES]) {
+      assert.ok(!installApplySource.includes(message), `install-apply.js should not repeat: ${message}`);
+    }
   })) passed++; else failed++;
 
   if (test('installation guide explains the three setup stages', () => {
