@@ -2344,6 +2344,27 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('amazonq adapter does not double-nest a "rules" module path under .amazonq/rules/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'amazonq',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'amazonq-project');
+    const op = plan.operations.find(o => normalizedRelativePath(o.sourceRelativePath) === 'rules');
+    assert.ok(op, 'should emit an operation for the rules module path');
+    assert.strictEqual(
+      op.destinationPath,
+      path.join(projectRoot, '.amazonq', 'rules'),
+      'rootSegments already ends in "rules": the module path must sync into that root directly, not .amazonq/rules/rules/'
+    );
+  })) passed++; else failed++;
+
   if (test('amazonq adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
@@ -2398,6 +2419,27 @@ function runTests() {
         )
       )),
       'Should preserve skills/<category>/<name> structure under .roo/rules/'
+    );
+  })) passed++; else failed++;
+
+  if (test('roocode adapter does not double-nest a "rules" module path under .roo/rules/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'roocode',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'roocode-project');
+    const op = plan.operations.find(o => normalizedRelativePath(o.sourceRelativePath) === 'rules');
+    assert.ok(op, 'should emit an operation for the rules module path');
+    assert.strictEqual(
+      op.destinationPath,
+      path.join(projectRoot, '.roo', 'rules'),
+      'rootSegments already ends in "rules": the module path must sync into that root directly, not .roo/rules/rules/'
     );
   })) passed++; else failed++;
 

@@ -13,7 +13,15 @@
         "cursor",
         "antigravity",
         "codebuddy",
-        "cline"
+        "cline",
+        "amp",
+        "copilot",
+        "junie",
+        "goose",
+        "amazonq",
+        "roocode",
+        "openhands",
+        "qwen"
       ],
       "dependencies": [],
       "defaultInstall": true,
