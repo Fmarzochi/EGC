@@ -135,6 +135,10 @@ foreach ($arg in $args) {
 }
 if ($hasInstallArgs) {
     node $EgcInstall @args
+    $installExitCode = $LASTEXITCODE
+    if ($DryRun) {
+        exit $installExitCode
+    }
 }
 
 # Interactive ecosystem install (skipped in headless/CI)
