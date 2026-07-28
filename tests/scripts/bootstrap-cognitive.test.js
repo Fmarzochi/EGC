@@ -114,9 +114,11 @@ async function runTests() {
   })) passed++; else failed++;
 
   if (await test('markdownProtocolBody fallback (OpenCode/CodeBuddy) has full session bus and Guardian if the repo source .md ever goes missing', () => {
-    const fakeScript = mktempFakeRepo();
-    const home = mktempHome();
+    let fakeScript;
+    let home;
     try {
+      fakeScript = mktempFakeRepo();
+      home = mktempHome();
       fs.mkdirSync(path.join(home, '.opencode'));
       fs.mkdirSync(path.join(home, '.codebuddy'));
       runScript(fakeScript, home);
@@ -130,8 +132,8 @@ async function runTests() {
         assert.ok(content.includes('orchestrate_task'), 'fallback content must include Guardian Protocol');
       }
     } finally {
-      cleanup(home);
-      cleanup(path.dirname(path.dirname(fakeScript)));
+      if (home) cleanup(home);
+      if (fakeScript) cleanup(path.dirname(path.dirname(fakeScript)));
     }
   })) passed++; else failed++;
 
