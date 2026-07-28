@@ -201,6 +201,27 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('migrates a pre-fix unmarked egc-context.mdc without duplicating memory', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      // Exactly what the old writeCursorContext used to write: frontmatter +
+      // block, no markers at all.
+      const legacyContent = '---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n## EGC Project Memory\n\n**Context:** Old stale context from before the fix.\n';
+      fs.writeFileSync(filePath, legacyContent, 'utf-8');
+
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      const content = fs.readFileSync(result.cursor, 'utf-8');
+      assert.ok(!content.includes('Old stale context from before the fix'), 'legacy unmarked block must not survive as duplicate content');
+      assert.ok(content.includes('description: EGC project memory'), 'frontmatter must be preserved');
+      assert.strictEqual((content.match(/<!-- egc:start -->/g) || []).length, 1, 'exactly one egc block after migration');
+      assert.ok(content.includes('Test project in alpha phase'), 'new context must be present');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('upserts egc section in existing local CLAUDE.md', () => {
     const dir = mktemp();
     try {
@@ -226,14 +247,14 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('upserts egc section in existing .roorules', () => {
+  if (await test('upserts egc section in .roorules when .roo/rules/ has no content (fallback)', () => {
     const dir = mktemp();
     try {
       const rooPath = path.join(dir, '.roorules');
       fs.writeFileSync(rooPath, '# Roo rules\n', 'utf-8');
       const result = propagateStateToTools({ projectPath: dir, ...args });
       assert.ok(result.roo, 'roo path should be returned');
-      assert.strictEqual(result.roo, rooPath, 'should prefer flat .roorules over .roo/rules/');
+      assert.strictEqual(result.roo, rooPath, 'should fall back to flat .roorules when .roo/rules/ is absent');
       const content = fs.readFileSync(result.roo, 'utf-8');
       assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
     } finally {
@@ -248,6 +269,26 @@ async function runTests() {
       const result = propagateStateToTools({ projectPath: dir, ...args });
       assert.ok(result.roo, 'roo path should be returned');
       assert.ok(result.roo.endsWith(path.join('.roo', 'rules', 'egc-context.md')), 'should write under .roo/rules/');
+      const content = fs.readFileSync(result.roo, 'utf-8');
+      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('prefers populated .roo/rules/ over legacy .roorules when both exist', () => {
+    const dir = mktemp();
+    try {
+      const rooRulesPath = path.join(dir, '.roorules');
+      fs.writeFileSync(rooRulesPath, '# legacy roo rules\n', 'utf-8');
+      const rulesDir = path.join(dir, '.roo', 'rules');
+      fs.mkdirSync(rulesDir, { recursive: true });
+      fs.writeFileSync(path.join(rulesDir, 'custom.md'), '# custom rule\n', 'utf-8');
+
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.ok(result.roo.endsWith(path.join('.roo', 'rules', 'egc-context.md')), 'should prefer the populated directory');
+      const legacyContent = fs.readFileSync(rooRulesPath, 'utf-8');
+      assert.ok(!legacyContent.includes('<!-- egc:start -->'), 'legacy .roorules must be left untouched');
     } finally {
       cleanup(dir);
     }
