@@ -49,6 +49,17 @@ run('classifies commands into kinds', () => {
   delete process.env.EGC_CRUSHER_SKIP_PREFIXES;
 });
 
+run('classifies git commands with global flags before the subcommand', () => {
+  assert.strictEqual(commandKind('git -C /path/to/repo log --stat -n 300'), 'git-log');
+  assert.strictEqual(commandKind('git -C /path/to/repo diff HEAD~1'), 'git-diff');
+  assert.strictEqual(commandKind('git --git-dir=/repo/.git log'), 'git-log');
+  assert.strictEqual(commandKind('git --git-dir /repo/.git log'), 'git-log');
+  assert.strictEqual(commandKind('git --work-tree=/repo log'), 'git-log');
+  assert.strictEqual(commandKind('git -c user.name=x log'), 'git-log');
+  assert.strictEqual(commandKind('git -C /a -c user.name=x --no-pager log'), 'git-log');
+  assert.strictEqual(commandKind('git -C /path status'), 'generic');
+});
+
 run('small outputs pass through untouched', () => {
   assert.strictEqual(crushOutput('git log', 'short output'), null);
 });

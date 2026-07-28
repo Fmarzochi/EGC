@@ -51,8 +51,20 @@ function stripProxyPrefix(command) {
   return trimmed;
 }
 
+// Global git flags that can appear between `git` and the subcommand (e.g.
+// `git -C /repo log`, common in scripts and CI). Each alternative consumes
+// its own trailing whitespace so the group can repeat for stacked flags.
+const GIT_GLOBAL_FLAG =
+  '(?:-C|-c|--git-dir|--work-tree|--namespace)(?:=\\S+|\\s+\\S+)\\s+'
+  + '|(?:--no-pager|--paginate|-p)\\s+';
+const GIT_GLOBAL_PREFIX_RE = new RegExp(`^git\\s+(?:${GIT_GLOBAL_FLAG})*`); // NOSONAR: bounded alternation over a fixed flag set, no backtracking blowup
+
+function stripGitGlobalFlags(command) {
+  return command.replace(GIT_GLOBAL_PREFIX_RE, 'git ');
+}
+
 function commandKind(command) {
-  const normalized = stripProxyPrefix(command);
+  const normalized = stripGitGlobalFlags(stripProxyPrefix(command));
   if (/^git\s+log\b/.test(normalized)) return 'git-log';
   if (/^git\s+diff\b/.test(normalized)) return 'git-diff';
   if (/\b(jest|vitest|pytest|mocha)\b/.test(normalized) || /npm\s+(run\s+)?test\b/.test(normalized) || /node\s+\S*tests?\//.test(normalized)) return 'test-runner';
