@@ -138,7 +138,11 @@ function writeRooCodeContext(projectPath: string, block: string): string | null 
   // Roo Code discovers .roo/rules/ over the legacy flat .roorules file when
   // both exist -- .roorules is the documented fallback, not the default.
   if (!rulesDirHasContent && rooRulesExists) {
-    return upsertFileSection(rooRulesPath, block);
+    try {
+      return upsertFileSection(rooRulesPath, block);
+    } catch {
+      return null;
+    }
   }
 
   try {

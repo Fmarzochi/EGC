@@ -294,6 +294,22 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('returns null instead of throwing when .roorules is structurally unreadable', () => {
+    const dir = mktemp();
+    try {
+      // .roorules is a directory, not a file: readFileSync on it fails
+      // (EISDIR) on every OS. update_state must not crash because Roo
+      // Code propagation hit a bad path -- it should just skip it.
+      fs.mkdirSync(path.join(dir, '.roorules'));
+      assert.doesNotThrow(() => {
+        const result = propagateStateToTools({ projectPath: dir, ...args });
+        assert.strictEqual(result.roo, null, 'roo should be null, not throw, on a structural read error');
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('skips Roo Code when neither .roorules nor .roo/ exist', () => {
     const dir = mktemp();
     try {

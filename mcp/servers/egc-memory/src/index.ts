@@ -1314,7 +1314,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   const mergedForPropagation = readStateDoc(filePath);
   const propagated = propagateStateToTools({
     projectPath: projPath,
-    context: (mergedForPropagation['Context'] as string) || undefined,
+    context: ((mergedForPropagation['Context'] as string[] | undefined) ?? []).join('\n') || undefined,
     decisions: ((mergedForPropagation['Active Decisions'] as string[]) || []).map(what => ({ what })),
     next: (mergedForPropagation['Next Session'] as string[]) || undefined,
   });
