@@ -30,15 +30,39 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 // Keep-word list, English plus the error/warning/failure terms of the
 // locales EGC ships READMEs for (pt, es, fr, de, it) -- a localized CLI
 // (e.g. git or a test runner under LANG=pt_BR) must not have its failures
-// silently dropped just because they're not in English.
-const KEEP_LINE_RE = /\b(error|erro|erreur|fehler|errore|fail|failed|failing|falha|fallo|échec|panne|warn|warning|aviso|advertencia|avertissement|warnung|avviso|fatal|denied|negado|denegado|refused|recusado|rechazado|exception|exceção|excepción|panic|pânico)\b/i;
+// silently dropped just because they're not in English. Split into
+// per-language regexes (rather than one large alternation) to keep each
+// one's cyclomatic complexity within SonarCloud's limit.
+const KEEP_WORD_EN_RE = /\b(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)\b/i;
+const KEEP_WORD_PT_RE = /\b(erro|falha|aviso|negado|recusado|exceção|pânico)\b/i;
+const KEEP_WORD_ES_RE = /\b(fallo|advertencia|denegado|rechazado|excepción)\b/i;
+const KEEP_WORD_FR_DE_IT_RE = /\b(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)\b/i;
+
+function matchesKeepWord(line) {
+  return KEEP_WORD_EN_RE.test(line)
+    || KEEP_WORD_PT_RE.test(line)
+    || KEEP_WORD_ES_RE.test(line)
+    || KEEP_WORD_FR_DE_IT_RE.test(line);
+}
 
 // Stack-trace frame lines carry no keep-word of their own (a Python
 // traceback's `File "app.py", line 42, in main` or a JS `at Object.<...>`
 // line never says "error") but dropping them guts the exact context a
 // debugger -- human or model -- needs to find the failure. Matches the
 // common frame shapes across Python, JS/Node, Java, and C/C++ tracebacks.
-const STACK_FRAME_RE = /^\s*(at\s+\S+|File\s+"[^"]+",\s+line\s+\d+|#\d+\s+0x[0-9a-f]+|Caused by:|\.{3}\s+\d+\s+more)/i;
+// Split into one regex per frame shape (rather than one alternation) to
+// keep each one's cyclomatic complexity within SonarCloud's limit.
+const STACK_FRAME_AT_RE = /^\s*at\s+\S+/i;
+const STACK_FRAME_PY_RE = /^\s*File\s+"[^"]+",\s+line\s+\d+/i;
+const STACK_FRAME_NATIVE_RE = /^\s*#\d+\s+0x[0-9a-f]+/i;
+const STACK_FRAME_CAUSE_RE = /^\s*(Caused by:|\.{3}\s+\d+\s+more)/i;
+
+function isStackFrame(line) {
+  return STACK_FRAME_AT_RE.test(line)
+    || STACK_FRAME_PY_RE.test(line)
+    || STACK_FRAME_NATIVE_RE.test(line)
+    || STACK_FRAME_CAUSE_RE.test(line);
+}
 
 // System-level failure signals that never contain the word "error": a
 // killed or crashed process, or an HTTP status line/code carrying a
@@ -49,8 +73,8 @@ const SYSTEM_FAILURE_RE = /\b(segmentation fault|core dumped|killed|out of memor
 const HTTP_ERROR_RE = /\b(?:HTTP\/[\d.]+\s+)?[45]\d{2}\s+(Bad Request|Unauthorized|Forbidden|Not Found|Method Not Allowed|Conflict|Gone|Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b/i;
 
 function shouldKeepLine(line) {
-  return KEEP_LINE_RE.test(line)
-    || STACK_FRAME_RE.test(line)
+  return matchesKeepWord(line)
+    || isStackFrame(line)
     || SYSTEM_FAILURE_RE.test(line)
     || HTTP_ERROR_RE.test(line);
 }
@@ -101,7 +125,13 @@ function isTestRunnerCommand(normalized) {
     || /^go\s+test\b/.test(normalized)
     || /^cargo\s+test\b/.test(normalized)
     || /^dotnet\s+test\b/.test(normalized)
-    || /^(mvn|\.\/?gradlew|gradle)\s+.*\btest\b/.test(normalized)
+    // mvn/gradle take a goal list (e.g. `mvn clean test`), so the goal can
+    // appear anywhere after the binary name. A single `.*\btest\b` regex
+    // for that is super-linear on adversarial input (backtracking blowup
+    // on long inputs with no "test" anywhere); checking the prefix and the
+    // "test" keyword as two separate, individually-linear regexes avoids
+    // that while matching the same commands.
+    || (/^(mvn|\.\/?gradlew|gradle)\s/.test(normalized) && /\btest\b/.test(normalized))
     || /^mix\s+test\b/.test(normalized);
 }
 
