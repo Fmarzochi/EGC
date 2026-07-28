@@ -1307,11 +1307,16 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
     const writtenContent = readStateFile(filePath, _encKey);
     writeHmac(filePath, writtenContent, _integrityKey);
   });
+  // Propagate the merged, persisted doc rather than this call's raw args:
+  // a partial update_state (e.g. next only) would otherwise blank out
+  // context/decisions in every mirror file even though the state file
+  // itself still has them merged in.
+  const mergedForPropagation = readStateDoc(filePath);
   const propagated = propagateStateToTools({
     projectPath: projPath,
-    context: args.context,
-    decisions: args.decisions,
-    next: args.next,
+    context: ((mergedForPropagation['Context'] as string[] | undefined) ?? []).join('\n') || undefined,
+    decisions: ((mergedForPropagation['Active Decisions'] as string[]) || []).map(what => ({ what })),
+    next: (mergedForPropagation['Next Session'] as string[]) || undefined,
   });
   const propagatedTools = Object.entries(propagated)
     .filter(([, p]) => p !== null)

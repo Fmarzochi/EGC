@@ -20,6 +20,9 @@ export interface PropagateResult {
   cursorrules: string | null;
   agents: string | null;
   llms: string | null;
+  claude: string | null;
+  roo: string | null;
+  continue: string | null;
 }
 
 const EGC_START = '<!-- egc:start -->';
@@ -64,6 +67,26 @@ function upsertEgcSection(existing: string, block: string): string {
   return existing ? `${existing.trimEnd()}\n\n${section}\n` : `${section}\n`;
 }
 
+// Shared by the harness writers below: upsert the EGC block into filePath,
+// using defaultContent as the starting point when the file doesn't exist yet.
+function upsertFileSection(filePath: string, block: string, defaultContent = ''): string {
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : defaultContent;
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+// Before this fix, writeCursorContext always overwrote the whole file with
+// just this frontmatter + block, no markers. On the first run after the
+// fix, that old unmarked content would otherwise be preserved as "user
+// content" by upsertEgcSection and get a second, marked block appended
+// below it -- permanent duplication. Recognize and strip it down to just
+// the frontmatter so only the new marked block survives.
+const LEGACY_CURSOR_FRONTMATTER = `---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n`;
+function stripLegacyCursorContent(existing: string): string {
+  if (existing.includes(EGC_START)) return existing;
+  return existing.startsWith(LEGACY_CURSOR_FRONTMATTER) ? LEGACY_CURSOR_FRONTMATTER : existing;
+}
+
 function writeCursorContext(projectPath: string, block: string): string | null {
   const cursorDir = path.join(projectPath, '.cursor');
   try {
@@ -76,9 +99,75 @@ function writeCursorContext(projectPath: string, block: string): string | null {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const filePath = path.join(rulesDir, 'egc-context.mdc');
-  const content = `---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n${block}\n`;
-  fs.writeFileSync(filePath, content, 'utf-8');
+  const existing = fs.existsSync(filePath)
+    ? stripLegacyCursorContent(fs.readFileSync(filePath, 'utf-8'))
+    : LEGACY_CURSOR_FRONTMATTER;
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
+}
+
+function writeClaudeContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, 'CLAUDE.md');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  return upsertFileSection(filePath, block);
+}
+
+function writeRooCodeContext(projectPath: string, block: string): string | null {
+  const rooDir = path.join(projectPath, '.roo');
+  const rulesDir = path.join(rooDir, 'rules');
+  let rulesDirHasContent = false;
+  try {
+    rulesDirHasContent = fs.existsSync(rulesDir) && fs.statSync(rulesDir).isDirectory() && fs.readdirSync(rulesDir).length > 0;
+  } catch {
+    rulesDirHasContent = false;
+  }
+
+  let rooRulesExists = false;
+  const rooRulesPath = path.join(projectPath, '.roorules');
+  try {
+    rooRulesExists = fs.existsSync(rooRulesPath);
+  } catch {
+    rooRulesExists = false;
+  }
+
+  // Roo Code discovers .roo/rules/ over the legacy flat .roorules file when
+  // both exist -- .roorules is the documented fallback, not the default.
+  if (!rulesDirHasContent && rooRulesExists) {
+    try {
+      return upsertFileSection(rooRulesPath, block);
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    if (!fs.existsSync(rooDir) || !fs.statSync(rooDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  fs.mkdirSync(rulesDir, { recursive: true });
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  return upsertFileSection(filePath, block);
+}
+
+function writeContinueContext(projectPath: string, block: string): string | null {
+  const continueDir = path.join(projectPath, '.continue');
+  try {
+    if (!fs.existsSync(continueDir) || !fs.statSync(continueDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(continueDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  return upsertFileSection(filePath, block);
 }
 
 function writeCopilotContext(projectPath: string, block: string): string | null {
@@ -241,5 +330,8 @@ export function propagateStateToTools(args: PropagateArgs): PropagateResult {
     cursorrules: writeLegacyCursorRules(args.projectPath, block),
     agents: writeAgentsContext(args.projectPath, block),
     llms: writeLlmsTxt(args.projectPath, args),
+    claude: writeClaudeContext(args.projectPath, block),
+    roo: writeRooCodeContext(args.projectPath, block),
+    continue: writeContinueContext(args.projectPath, block),
   };
 }
