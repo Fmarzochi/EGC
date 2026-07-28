@@ -61,6 +61,8 @@ function statusLabel(status) {
 function printHuman(report) {
   if (report.results.length === 0) {
     console.log('No EGC install-state files found for the current home/project context.');
+    console.log('This is expected after a bare `egc install`; the core runtime is installed without a managed target profile.');
+    console.log('Run `egc install --target <target> --profile full` when you want to install managed content.');
     return;
   }
 
