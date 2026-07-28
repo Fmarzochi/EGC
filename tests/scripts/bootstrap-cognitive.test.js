@@ -58,7 +58,7 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('BLOCK advertises all 5 Guardian commands', () => {
+  if (await test('BLOCK advertises all 5 core protocol commands (Guardian Protocol + reduce_context)', () => {
     for (const cmd of ['orchestrate_task', 'validate_command', 'validate_write', 'reduce_context', 'auto_learn']) {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
     }
@@ -128,6 +128,35 @@ async function runTests() {
     try {
       const output = run(home);
       assert.ok(!/\[cognitive\] Zed:/.test(output), 'should not mention Zed at all');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('logs an error instead of crashing when the Windsurf target path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codeium'));
+      // 'windsurf' is a file, not a directory: mkdirSync('.codeium/windsurf/memories', {recursive:true})
+      // fails structurally (ENOTDIR) on every OS, unlike a permission-based failure.
+      fs.writeFileSync(path.join(home, '.codeium', 'windsurf'), 'not a directory', 'utf8');
+      const output = run(home);
+      assert.ok(/Windsurf: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('logs an error instead of crashing when the Zed AGENTS.md path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      const zedDir = path.join(home, '.config', 'zed');
+      fs.mkdirSync(zedDir, { recursive: true });
+      // AGENTS.md is a directory, not a file: readFileSync on it fails structurally
+      // (EISDIR) on every OS, unlike a permission-based failure.
+      fs.mkdirSync(path.join(zedDir, 'AGENTS.md'));
+      const output = run(home);
+      assert.ok(/Zed: unexpected error:/.test(output), 'should report the error, not crash');
     } finally {
       cleanup(home);
     }
