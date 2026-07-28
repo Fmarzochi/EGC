@@ -34,6 +34,12 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - I need the full/raw output of that command → rerun it through \`egc run --raw\`
 - Did another session/tab leave me anything? What are the others doing? → call \`session_events\` (and \`session_peers\`)
 - Tell the other session/tab something, hand work off → call \`session_send\`
+- Join session / announce presence → call \`session_announce\`
+- Lock / claim a file path to avoid conflicts with other sessions → call \`claim_path\`
+- Unlock / release a claimed file path → call \`release_path\`
+- Read shared working memory → call \`working_memory_get\`
+- Save a key/value to shared working memory → call \`working_memory_set\`
+- List shared working memory keys → call \`working_memory_list\`
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
 
@@ -297,5 +303,28 @@ try {
     }
   } catch (e) {
     console.log(`  [cognitive] Kiro: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Windsurf (~/.codeium/windsurf/memories/global_rules.md) ──────────────────
+(function bootstrapWindsurf() {
+  try {
+    const codeiumDir = path.join(HOME, '.codeium');
+    if (!fs.existsSync(codeiumDir)) return;
+    const target = path.join(codeiumDir, 'windsurf', 'memories', 'global_rules.md');
+    injectProtocol(target, 'Windsurf');
+  } catch (e) {
+    console.log(`  [cognitive] Windsurf: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Zed (~/.config/zed/AGENTS.md) ─────────────────────────────────────────────
+(function bootstrapZed() {
+  try {
+    const zedDir = path.join(HOME, '.config', 'zed');
+    if (!fs.existsSync(zedDir)) return;
+    injectProtocol(path.join(zedDir, 'AGENTS.md'), 'Zed');
+  } catch (e) {
+    console.log(`  [cognitive] Zed: unexpected error: ${e.message}`);
   }
 })();
