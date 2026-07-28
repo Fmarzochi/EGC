@@ -21,7 +21,9 @@
         "amazonq",
         "roocode",
         "openhands",
-        "qwen"
+        "qwen",
+        "aider",
+        "warp"
       ],
       "dependencies": [],
       "defaultInstall": true,

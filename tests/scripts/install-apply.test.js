@@ -237,6 +237,65 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('installs Aider memory protocol via rules-core and writes valid install-state', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--target', 'aider', '--modules', 'rules-core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const memoryPath = path.join(projectDir, '.aider', 'rules', 'common', 'memory.md');
+      assert.ok(fs.existsSync(memoryPath), 'memory.md should be copied into .aider/rules/common/');
+      assert.ok(fs.readFileSync(memoryPath, 'utf8').includes('get_state'));
+
+      const confPath = path.join(projectDir, '.aider.conf.yml');
+      assert.ok(fs.existsSync(confPath), '.aider.conf.yml should be created');
+      assert.ok(fs.readFileSync(confPath, 'utf8').includes('.aider/rules/common/memory.md'));
+
+      // Regression guard: install-state.schema.json requires sourceRelativePath
+      // on every recorded operation, including merge-kind ones. Missing it
+      // previously made this exact install fail with
+      // "Invalid install-state (create): /operations/1 must have required
+      // property 'sourceRelativePath'" the first time a merge operation was
+      // ever the second operation recorded for a target.
+      const statePath = path.join(projectDir, '.aider', 'egc-install-state.json');
+      const state = readJson(statePath);
+      assert.ok(state.operations.some(op => op.kind === 'merge-yaml-read-list' && op.sourceRelativePath));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('installs Warp memory protocol via rules-core and writes valid install-state', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const result = run(['--target', 'warp', '--modules', 'rules-core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const memoryPath = path.join(projectDir, '.warp', 'rules', 'common', 'memory.md');
+      assert.ok(fs.existsSync(memoryPath), 'memory.md should be copied into .warp/rules/common/');
+      assert.ok(fs.readFileSync(memoryPath, 'utf8').includes('get_state'));
+
+      const agentsPath = path.join(projectDir, 'AGENTS.md');
+      assert.ok(fs.existsSync(agentsPath), 'AGENTS.md should be created');
+      const agentsContent = fs.readFileSync(agentsPath, 'utf8');
+      assert.ok(agentsContent.includes('EGC Session Memory'));
+      assert.ok(agentsContent.includes('.warp/rules/common/memory.md'));
+
+      // Same install-state schema regression guard as the Aider test above.
+      const statePath = path.join(projectDir, '.warp', 'egc-install-state.json');
+      const state = readJson(statePath);
+      assert.ok(state.operations.some(op => op.kind === 'merge-markdown-skill-index' && op.sourceRelativePath));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('installs Cursor MCP config by merging bundled servers into an existing mcp.json', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

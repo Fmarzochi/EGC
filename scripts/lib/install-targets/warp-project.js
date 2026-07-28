@@ -76,33 +76,78 @@ function createWarpPlanOperations(input, adapter) {
     const paths = Array.isArray(module.paths) ? module.paths : [];
     return paths
       .filter(p => !isForeignPlatformPath(p, adapter.target))
-      .filter(p => normalizeRelativePath(p).startsWith('skills/'))
       .flatMap(sourceRelativePath => {
         const normalized = normalizeRelativePath(sourceRelativePath);
-        const skillName = normalized.split('/').pop();
-        const destinationPath = path.join(targetRoot, 'skills', `${skillName}.md`);
-        const sourceSkillPath = path.join(input.repoRoot || '', normalized, 'SKILL.md');
 
-        const copyOperation = createManagedOperation({
-          moduleId: module.id,
-          sourceRelativePath: path.join(normalized, 'SKILL.md'),
-          destinationPath,
-          strategy: 'preserve-relative-path',
-        });
+        if (normalized.startsWith('skills/')) {
+          const skillName = normalized.split('/').pop();
+          const destinationPath = path.join(targetRoot, 'skills', `${skillName}.md`);
+          const sourceSkillPath = path.join(input.repoRoot || '', normalized, 'SKILL.md');
 
-        const mergeOperation = {
-          kind: MERGE_MARKDOWN_INDEX_KIND,
-          moduleId: module.id,
-          destinationPath: agentsFilePath,
-          strategy: MERGE_MARKDOWN_INDEX_KIND,
-          ownership: 'managed',
-          scaffoldOnly: false,
-          skillName,
-          skillDescription: readSkillDescription(sourceSkillPath),
-          relativePath: path.relative(projectRoot, destinationPath),
-        };
+          const copyOperation = createManagedOperation({
+            moduleId: module.id,
+            sourceRelativePath: path.join(normalized, 'SKILL.md'),
+            destinationPath,
+            strategy: 'preserve-relative-path',
+          });
 
-        return [copyOperation, mergeOperation];
+          const mergeOperation = {
+            kind: MERGE_MARKDOWN_INDEX_KIND,
+            moduleId: module.id,
+            // install-state.schema.json requires sourceRelativePath on every
+            // operation; the executor's merge-kind branch doesn't read it
+            // (materializeScaffoldOperation just spreads the operation
+            // through), but the schema check on the recorded install-state
+            // fails without it. Point at the same source the copy operation
+            // above already used.
+            sourceRelativePath: path.join(normalized, 'SKILL.md'),
+            destinationPath: agentsFilePath,
+            strategy: MERGE_MARKDOWN_INDEX_KIND,
+            ownership: 'managed',
+            scaffoldOnly: false,
+            skillName,
+            skillDescription: readSkillDescription(sourceSkillPath),
+            relativePath: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
+          };
+
+          return [copyOperation, mergeOperation];
+        }
+
+        // rules-core's static memory protocol file (rules/common/memory.md,
+        // the get_state/update_state instructions). Warp has no separate
+        // rules-discovery mechanism either, so it goes through the same
+        // skill-index merge into AGENTS.md as a named entry pointing at the
+        // copied file -- consistent with how skills stay out of the
+        // always-loaded file to protect context budget. Hardcodes the
+        // single known file under rules/ rather than a recursive scan,
+        // since that's the only file the module ships today.
+        if (normalized === 'rules') {
+          const destinationPath = path.join(targetRoot, 'rules', 'common', 'memory.md');
+
+          const copyOperation = createManagedOperation({
+            moduleId: module.id,
+            sourceRelativePath: 'rules/common/memory.md',
+            destinationPath,
+            strategy: 'preserve-relative-path',
+          });
+
+          const mergeOperation = {
+            kind: MERGE_MARKDOWN_INDEX_KIND,
+            moduleId: module.id,
+            sourceRelativePath: 'rules/common/memory.md',
+            destinationPath: agentsFilePath,
+            strategy: MERGE_MARKDOWN_INDEX_KIND,
+            ownership: 'managed',
+            scaffoldOnly: false,
+            skillName: 'EGC Session Memory',
+            skillDescription: 'Cross-session memory protocol: call get_state at session start, update_state at session end.',
+            relativePath: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
+          };
+
+          return [copyOperation, mergeOperation];
+        }
+
+        return [];
       });
   });
 }
