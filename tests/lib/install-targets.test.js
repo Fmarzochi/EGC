@@ -2550,7 +2550,7 @@ function runTests() {
     const mergeOp = plan.operations.find(op => op.kind === 'merge-yaml-read-list');
     assert.ok(mergeOp, 'Should emit a merge-yaml-read-list operation for .aider.conf.yml');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, '.aider.conf.yml'));
-    assert.strictEqual(mergeOp.readEntry, path.join('.aider', 'skills', 'tdd-workflow.md'));
+    assert.strictEqual(mergeOp.readEntry, '.aider/skills/tdd-workflow.md');
   })) passed++; else failed++;
 
   if (test('aider adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
@@ -2585,7 +2585,7 @@ function runTests() {
     assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.aider', 'rules', 'common', 'memory.md'));
     assert.ok(mergeOp, 'must emit a merge-yaml-read-list operation');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, '.aider.conf.yml'));
-    assert.strictEqual(mergeOp.readEntry, path.join('.aider', 'rules', 'common', 'memory.md'));
+    assert.strictEqual(mergeOp.readEntry, '.aider/rules/common/memory.md');
   })) passed++; else failed++;
 
   if (test('aider adapter is included in the full adapter list', () => {
@@ -2700,7 +2700,7 @@ function runTests() {
     assert.ok(mergeOp, 'Should emit a merge-markdown-skill-index operation for AGENTS.md');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
     assert.strictEqual(mergeOp.skillName, 'tdd-workflow');
-    assert.strictEqual(mergeOp.relativePath, path.join('.warp', 'skills', 'tdd-workflow.md'));
+    assert.strictEqual(mergeOp.relativePath, '.warp/skills/tdd-workflow.md');
     assert.ok(mergeOp.skillDescription.startsWith('Use this skill when writing new features'));
     assert.ok(mergeOp.skillDescription.length <= 110, 'Description should be truncated to the shared max length');
   })) passed++; else failed++;
