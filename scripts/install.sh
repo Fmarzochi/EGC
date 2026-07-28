@@ -67,7 +67,9 @@ fi
 
 # Optional dependency hints (non-blocking)
 if ! command -v uv >/dev/null 2>&1; then
-  echo "  note: uv not found: jira and omega-memory MCP servers require it (https://docs.astral.sh/uv/)"
+  echo "  Optional dependency not found: uv"
+  echo "    Required only for Jira and omega-memory MCP servers."
+  echo "    Core EGC installation is unaffected. Install: https://docs.astral.sh/uv/"
 fi
 if ! command -v python3 >/dev/null 2>&1; then
   echo "  note: python3 not found: evalview MCP server requires it"
@@ -440,4 +442,8 @@ fi
 
 echo ""
 echo "Installation complete."
+if [ "$_has_install_args" = false ]; then
+  echo "Dashboard was not started automatically."
+  echo "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+fi
 echo "Run 'egc doctor' to verify."
