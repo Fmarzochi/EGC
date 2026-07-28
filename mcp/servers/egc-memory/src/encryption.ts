@@ -170,10 +170,11 @@ export function writeStateFile(filePath: string, plaintext: string, key: Buffer)
   // two concurrent writers to the same state file (different processes, or
   // a lock timeout letting a second write through) overwrite each other's
   // temp file before either renames, producing ciphertext with bytes from
-  // both writes — undecryptable garbage that looks like corruption. Mirrors
-  // the same pid+random suffix loadOrCreateEncKey() already uses for its
-  // own temp file below.
-  const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  // both writes — undecryptable garbage that looks like corruption. A
+  // randomUUID (122 bits of entropy) makes a same-process collision
+  // practically impossible even under heavy concurrency; a 32-bit suffix
+  // (crypto.randomBytes(4)) does not carry the same guarantee.
+  const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
   try {
     fs.writeFileSync(tmpPath, encrypted);
     try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }

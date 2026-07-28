@@ -45,31 +45,31 @@ console.log('\n=== Testing egc-memory integrity (issue #580) ===\n');
 
 if (test('loadOrCreateKey: returns a 32-byte Buffer', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-integrity-test-'));
+  const origHome = process.env.HOME;
   try {
     // Override HOME so key is written to tmpDir
-    const origHome = process.env.HOME;
     process.env.HOME = tmpDir;
     const key = loadOrCreateKey();
-    process.env.HOME = origHome;
     assert.ok(Buffer.isBuffer(key), 'should be a Buffer');
     assert.strictEqual(key.length, 32, 'should be 32 bytes');
   } finally {
+    process.env.HOME = origHome;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
 
 if (test('loadOrCreateKey: key file is created with mode 0600', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-integrity-test-'));
+  const origHome = process.env.HOME;
   try {
-    const origHome = process.env.HOME;
     process.env.HOME = tmpDir;
     loadOrCreateKey();
-    process.env.HOME = origHome;
     const keyPath = path.join(tmpDir, '.egc', 'integrity.key');
     assert.ok(fs.existsSync(keyPath), 'key file should exist');
     const mode = fs.statSync(keyPath).mode & 0o777;
     assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
   } finally {
+    process.env.HOME = origHome;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
@@ -102,14 +102,14 @@ if (test('loadOrCreateKey: resolves $HOME fresh on every call, not just at modul
 
 if (test('loadOrCreateKey: returns same key on second call', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-integrity-test-'));
+  const origHome = process.env.HOME;
   try {
-    const origHome = process.env.HOME;
     process.env.HOME = tmpDir;
     const key1 = loadOrCreateKey();
     const key2 = loadOrCreateKey();
-    process.env.HOME = origHome;
     assert.ok(key1.equals(key2), 'keys should be identical on second load');
   } finally {
+    process.env.HOME = origHome;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
