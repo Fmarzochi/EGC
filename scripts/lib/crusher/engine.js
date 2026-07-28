@@ -141,14 +141,18 @@ function isTestRunnerCommand(normalized) {
 // that is super-linear on adversarial input (backtracking blowup on long
 // inputs with no "test" anywhere), so this checks the prefix and the
 // "test" keyword as two separate, individually-linear regexes instead --
-// but scoped to just the first line of `normalized`, not the whole
-// (possibly multi-line, compound) command string. Without that scoping,
-// an unrelated "test" on a later line of a compound command (e.g.
-// `mvn clean\necho "a test message"`) would wrongly flag the whole thing
-// as a test-runner command.
+// but scoped to just the first LOGICAL line of `normalized`, not the
+// whole (possibly multi-line, compound) command string. Without that
+// scoping, an unrelated "test" on a later line of a compound command
+// (e.g. `mvn clean\necho "a test message"`) would wrongly flag the whole
+// thing as a test-runner command. A backslash immediately before the
+// newline is a shell line continuation (e.g. `mvn clean \` + newline +
+// `test`), not a separate command, so those are joined back into one
+// logical line before splitting -- otherwise a goal on the continuation
+// line would be missed.
 function isMvnGradleTestCommand(normalized) {
-  const firstLine = normalized.split(/\r?\n/, 1)[0];
-  return /^(mvn|\.\/?gradlew|gradle)\s/.test(firstLine) && /\btest\b/.test(firstLine);
+  const logicalFirstLine = normalized.replace(/\\\r?\n/g, ' ').split(/\r?\n/, 1)[0];
+  return /^(mvn|\.\/?gradlew|gradle)\s/.test(logicalFirstLine) && /\btest\b/.test(logicalFirstLine);
 }
 
 // Package/dependency install commands across every language EGC installs

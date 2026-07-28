@@ -144,6 +144,15 @@ run('mvn/gradle test detection stays scoped to the first line, ignoring "test" o
   assert.strictEqual(commandKind('./gradlew clean test'), 'test-runner');
 });
 
+run('mvn/gradle test detection joins shell line-continuations into one logical line (cubic review, audit EGC-490)', () => {
+  // A backslash right before the newline is a shell line continuation --
+  // `mvn clean \` + newline + `test` is one logical command, not two.
+  assert.strictEqual(commandKind('mvn clean \\\ntest'), 'test-runner');
+  assert.strictEqual(commandKind('./gradlew clean \\\ntest'), 'test-runner');
+  // Without a trailing backslash, it's genuinely a separate line/command.
+  assert.strictEqual(commandKind('mvn clean\ntest'), 'generic');
+});
+
 run('crushed output preserves system-failure signals with no "error" keyword (audit EGC-490)', () => {
   const lines = [];
   for (let i = 0; i < 300; i++) lines.push(`  ok step ${i} completed`);
