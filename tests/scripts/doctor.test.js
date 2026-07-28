@@ -77,6 +77,21 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
+  if (test('explains that no install-state is expected after a bare install', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('This is expected after a bare `egc install`'));
+      assert.ok(result.stdout.includes('egc install --target <target> --profile full'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('reports a healthy install with exit code 0', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
