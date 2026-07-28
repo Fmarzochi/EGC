@@ -64,6 +64,92 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  const SESSION_BUS_COMMANDS = [
+    'session_announce', 'session_peers', 'session_events', 'session_send',
+    'claim_path', 'release_path',
+    'working_memory_get', 'working_memory_set', 'working_memory_list',
+  ];
+
+  if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, CodeBuddy, and Continue.dev', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.mkdirSync(path.join(home, '.opencode'));
+      fs.mkdirSync(path.join(home, '.trae'));
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.mkdirSync(path.join(home, '.continue'));
+      // No .cursor/.config/Cursor -> exercises the injectProtocol(BLOCK) fallback,
+      // already covered by the BLOCK-wide assertion above; here we cover the
+      // 5 harnesses that used to ship an abbreviated, hand-duplicated copy.
+      run(home);
+
+      const filesToCheck = [
+        path.join(home, '.codex', 'config.toml'),
+        path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'),
+        path.join(home, '.trae', 'MEMORY.md'),
+        path.join(home, '.codebuddy', 'MEMORY.md'),
+        path.join(home, '.continue', 'prompts', 'egc-memory.prompt'),
+      ];
+      for (const filePath of filesToCheck) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        for (const cmd of SESSION_BUS_COMMANDS) {
+          assert.ok(content.includes(cmd), `${filePath} must reference ${cmd}`);
+        }
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('installs all 9 session bus commands for Cursor via settings.json', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
+
+      run(home);
+
+      const written = fs.readFileSync(settingsFile, 'utf8');
+      const parsed = JSON.parse(written); // throws if bootstrap wrote invalid JSON
+      assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
+      for (const cmd of SESSION_BUS_COMMANDS) {
+        assert.ok(parsed['cursor.rules'].includes(cmd), `cursor.rules must reference ${cmd}`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex config.toml stays a single-line valid TOML string after install', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      run(home);
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      const content = fs.readFileSync(tomlPath, 'utf8');
+      const match = content.match(/^persistent_instructions = "(.*)"$/m);
+      assert.ok(match, 'persistent_instructions must be a single-line double-quoted TOML string');
+      assert.ok(!match[1].includes('"'), 'the TOML string value must not contain an unescaped double-quote');
+      for (const cmd of SESSION_BUS_COMMANDS) {
+        assert.ok(match[1].includes(cmd), `Codex persistent_instructions must reference ${cmd}`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('rules/common/memory.md (Antigravity + Cline, via rules-core) has Guardian and all 9 session bus commands', () => {
+    const memoryMd = fs.readFileSync(path.join(REPO_ROOT, 'rules', 'common', 'memory.md'), 'utf8');
+    for (const cmd of ['orchestrate_task', 'validate_command', 'validate_write', 'reduce_context', 'auto_learn']) {
+      assert.ok(memoryMd.includes(cmd), `rules/common/memory.md must reference ${cmd}`);
+    }
+    for (const cmd of SESSION_BUS_COMMANDS) {
+      assert.ok(memoryMd.includes(cmd), `rules/common/memory.md must reference ${cmd}`);
+    }
+  })) passed++; else failed++;
+
   if (await test('writes Windsurf global_rules.md when ~/.codeium exists', () => {
     const home = mktempHome();
     try {
