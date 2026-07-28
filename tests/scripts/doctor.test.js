@@ -38,6 +38,7 @@ function run(args = [], options = {}) {
   const env = {
     ...process.env,
     HOME: options.homeDir || process.env.HOME,
+    USERPROFILE: options.homeDir || process.env.USERPROFILE,
   };
 
   try {
