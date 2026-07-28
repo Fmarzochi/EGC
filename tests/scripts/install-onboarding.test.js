@@ -39,40 +39,50 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  let sources;
 
-  const installApplySource = fs.readFileSync(INSTALL_APPLY, 'utf8');
-  const bashSource = fs.readFileSync(INSTALL_SH, 'utf8');
-  const powerShellSource = fs.readFileSync(INSTALL_PS1, 'utf8');
-  const guide = fs.readFileSync(INSTALLATION_GUIDE, 'utf8');
+  if (test('loads installer onboarding contract sources', () => {
+    sources = {
+      installApply: fs.readFileSync(INSTALL_APPLY, 'utf8'),
+      bash: fs.readFileSync(INSTALL_SH, 'utf8'),
+      powerShell: fs.readFileSync(INSTALL_PS1, 'utf8'),
+      guide: fs.readFileSync(INSTALLATION_GUIDE, 'utf8'),
+    };
+  })) passed++; else failed++;
+
+  if (!sources) {
+    console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
+    process.exit(1);
+  }
 
   if (test('bash and PowerShell label uv as optional and scoped', () => {
     for (const message of UV_MESSAGES) {
-      assert.ok(bashSource.includes(message), `install.sh missing: ${message}`);
-      assert.ok(powerShellSource.includes(message), `install.ps1 missing: ${message}`);
+      assert.ok(sources.bash.includes(message), `install.sh missing: ${message}`);
+      assert.ok(sources.powerShell.includes(message), `install.ps1 missing: ${message}`);
     }
   })) passed++; else failed++;
 
   if (test('bash and PowerShell explain dashboard startup after bare installs only', () => {
     for (const message of DASHBOARD_MESSAGES) {
-      assert.ok(bashSource.includes(message), `install.sh missing: ${message}`);
-      assert.ok(powerShellSource.includes(message), `install.ps1 missing: ${message}`);
+      assert.ok(sources.bash.includes(message), `install.sh missing: ${message}`);
+      assert.ok(sources.powerShell.includes(message), `install.ps1 missing: ${message}`);
     }
-    assert.ok(bashSource.includes('if [ "$_has_install_args" = false ]; then'));
-    assert.ok(powerShellSource.includes('if (-not $hasInstallArgs)'));
+    assert.ok(sources.bash.includes('if [ "$_has_install_args" = false ]; then'));
+    assert.ok(sources.powerShell.includes('if (-not $hasInstallArgs)'));
   })) passed++; else failed++;
 
   if (test('delegating installer does not duplicate wrapper guidance', () => {
     for (const message of [...UV_MESSAGES, ...DASHBOARD_MESSAGES]) {
-      assert.ok(!installApplySource.includes(message), `install-apply.js should not repeat: ${message}`);
+      assert.ok(!sources.installApply.includes(message), `install-apply.js should not repeat: ${message}`);
     }
   })) passed++; else failed++;
 
   if (test('installation guide explains the three setup stages', () => {
-    assert.ok(guide.includes('## Installation lifecycle'));
-    assert.ok(guide.includes('### 1. Bare install'));
-    assert.ok(guide.includes('### 2. Project setup'));
-    assert.ok(guide.includes('### 3. Full profile'));
-    assert.ok(guide.includes('egc install --target <target> --profile full'));
+    assert.ok(sources.guide.includes('## Installation lifecycle'));
+    assert.ok(sources.guide.includes('### 1. Bare install'));
+    assert.ok(sources.guide.includes('### 2. Project setup'));
+    assert.ok(sources.guide.includes('### 3. Full profile'));
+    assert.ok(sources.guide.includes('egc install --target <target> --profile full'));
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
