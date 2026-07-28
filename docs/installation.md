@@ -56,6 +56,44 @@ No `--target` flag is needed -- Continue.dev is auto-detected during install.
 
 ---
 
+## Installation lifecycle
+
+EGC setup has three distinct stages. You can stop after the stage that matches what you need.
+
+### 1. Bare install
+
+```bash
+egc install
+```
+
+This prepares the core runtime, initializes the shared state store, and registers the MCP servers in detected tools. A bare install does **not** create managed target install-state files, so `egc doctor` may report that none exist. That is expected, not an error.
+
+The dashboard also does not start automatically after a bare install. Start it manually with `egc dashboard`, or continue with project setup.
+
+### 2. Project setup
+
+Run this from the root of a project you want EGC to manage:
+
+```bash
+egc init
+```
+
+This bootstraps the cognitive protocol, registers MCP servers, configures project-local memory protections, verifies the setup, and starts the dashboard.
+
+### 3. Full profile
+
+Install the complete managed content set for a specific target when you want rules, skills, agents, commands, and platform configuration tracked by `egc doctor` and `egc repair`:
+
+```bash
+egc install --target <target> --profile full
+```
+
+Use `egc catalog` to inspect available targets, profiles, and components before installing.
+
+> **Optional dependency:** `uv` is required only for the Jira and omega-memory MCP servers. Core EGC installation and all other targets are unaffected when `uv` is not installed.
+
+---
+
 ## Linux / macOS (from source)
 
 Not sure if you have Node.js 20? Run `node --version`. If it shows 20 or higher, you're ready.
@@ -154,15 +192,17 @@ egc telemetry status
 
 ## Dashboard
 
-After install, EGC starts a local dashboard server at `http://localhost:7890`. It streams everything your AI does in real time: tool calls, file edits, shell commands, token usage, cost per session, and agent status, across every IDE you have running.
+The dashboard starts automatically when you run `egc init`. A bare `egc install` configures the runtime but does not start the dashboard.
 
-The dashboard starts automatically when you run `egc init`. You can also control it manually:
+You can control it manually:
 
 ```bash
 egc dashboard          # start the dashboard server
 egc dashboard stop     # stop it
 egc dashboard status   # check if it is running
 ```
+
+The local server is available at `http://localhost:7890`. It streams everything your AI does in real time: tool calls, file edits, shell commands, token usage, cost per session, and agent status, across every IDE you have running.
 
 **What you see:**
 
