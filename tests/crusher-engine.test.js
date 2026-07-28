@@ -11,7 +11,7 @@
 const assert = require('node:assert');
 const path = require('node:path');
 
-const { CRUSH_MARKER, commandKind, crushOutput, estimateTokens } = require(
+const { CRUSH_MARKER, commandKind, crushOutput, estimateTokens, looksLikeJsonPayload } = require(
   path.join(__dirname, '..', 'scripts', 'lib', 'crusher', 'engine.js')
 );
 const { aggregate } = require(
@@ -151,12 +151,38 @@ run('HTTP-error keep pattern does not false-positive on ordinary 3-digit counts 
   }
 });
 
-run('generic commands whose output looks like JSON are still crushed (audit EGC-490, "giant JSONs" gap)', () => {
+run('looksLikeJsonPayload detects JSON objects and arrays, rejects malformed lookalikes (audit EGC-490, "giant JSONs" gap)', () => {
+  // Tested as a pure function, not through crushOutput(): the actual
+  // compression for a detected JSON payload delegates to arrayCrusher from
+  // egc-guardian's build output, which the main CI workflow (unlike
+  // coverage.yml) never compiles -- asserting on crushOutput()'s result
+  // here would make this test's pass/fail depend on a build artifact from
+  // a different module entirely, not on the detection logic this PR adds.
+  const rows = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item-${i}` }));
+  assert.strictEqual(looksLikeJsonPayload(JSON.stringify(rows)), true, 'a JSON array must be detected');
+  assert.strictEqual(looksLikeJsonPayload(JSON.stringify({ ok: true, data: rows })), true, 'a JSON object must be detected');
+  assert.strictEqual(looksLikeJsonPayload(`{ this is not valid json ${'x'.repeat(3000)}`), false, 'malformed content starting with { must not be misclassified as JSON');
+  assert.strictEqual(looksLikeJsonPayload('plain text output, not json at all'), false, 'plain text must not be misclassified as JSON');
+});
+
+run('generic commands whose output looks like JSON route to json-output when the array-crusher build is present (audit EGC-490)', () => {
+  // Best-effort integration check: only asserts the strong "was crushed"
+  // claim when mcp/servers/egc-guardian/build/egc-array-crusher.js is
+  // actually present (built locally, or by workflows like coverage.yml
+  // that compile it first). Otherwise falls back to asserting the
+  // documented fail-open behavior (engine.js's own top-of-file comment:
+  // "JSON payloads stay uncompressed otherwise rather than duplicating
+  // that logic"), so this test is meaningful and non-flaky in both cases.
+  const guardianBuildPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-array-crusher.js');
   const rows = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item-${i}`, active: i % 2 === 0 }));
   const output = JSON.stringify(rows, null, 2);
   const result = crushOutput('curl -s https://api.example.com/items', output);
-  assert.ok(result, 'a curl command emitting a large JSON array should be crushed even though curl matches no specific command kind');
-  assert.strictEqual(result.kind, 'json-output');
+  if (require('node:fs').existsSync(guardianBuildPath)) {
+    assert.ok(result, 'a curl command emitting a large JSON array should be crushed when the array-crusher build is present');
+    assert.strictEqual(result.kind, 'json-output');
+  } else {
+    assert.strictEqual(result, null, 'without the array-crusher build, detected JSON must fail open (pass through), not throw or fabricate a result');
+  }
 });
 
 run('generic commands whose output is not valid JSON are left untouched (no false-positive json-output)', () => {

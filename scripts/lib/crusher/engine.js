@@ -247,4 +247,5 @@ module.exports = {
   commandKind,
   crushOutput,
   estimateTokens,
+  looksLikeJsonPayload,
 };
