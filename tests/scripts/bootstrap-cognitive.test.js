@@ -25,6 +25,28 @@ function run(homeDir) {
   });
 }
 
+// Copies bootstrap-cognitive.js into a throwaway "fake repo" whose
+// .opencode/.codebuddy source files are intentionally absent, so __dirname
+// resolution inside the copy sees them as missing without ever touching
+// this real repo's actual .opencode/instructions/EGC_MEMORY.md or
+// .codebuddy/MEMORY.md -- exercises the markdownProtocolBody() fallback
+// branch (only reachable if those repo files ever went missing, e.g. from
+// an npm package that excluded them).
+function mktempFakeRepo() {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bootstrap-fakerepo-'));
+  const scriptsDir = path.join(repoDir, 'scripts');
+  fs.mkdirSync(scriptsDir, { recursive: true });
+  fs.copyFileSync(SCRIPT_PATH, path.join(scriptsDir, 'bootstrap-cognitive.js'));
+  return path.join(scriptsDir, 'bootstrap-cognitive.js');
+}
+
+function runScript(scriptPath, homeDir) {
+  return execFileSync('node', [scriptPath], {
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    encoding: 'utf8',
+  });
+}
+
 async function test(name, fn) {
   try {
     await fn();
@@ -37,23 +59,19 @@ async function test(name, fn) {
   }
 }
 
+const SESSION_BUS_COMMANDS = [
+  'session_announce', 'session_peers', 'session_events', 'session_send',
+  'claim_path', 'release_path',
+  'working_memory_get', 'working_memory_set', 'working_memory_list',
+];
+
 async function runTests() {
   console.log('\n=== Testing scripts/bootstrap-cognitive.js ===\n');
   let passed = 0;
   let failed = 0;
 
   if (await test('BLOCK advertises all 9 session bus commands', () => {
-    for (const cmd of [
-      'session_announce',
-      'session_peers',
-      'session_events',
-      'session_send',
-      'claim_path',
-      'release_path',
-      'working_memory_get',
-      'working_memory_set',
-      'working_memory_list',
-    ]) {
+    for (const cmd of SESSION_BUS_COMMANDS) {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
     }
   })) passed++; else failed++;
@@ -61,6 +79,110 @@ async function runTests() {
   if (await test('BLOCK advertises all 5 core protocol commands (Guardian Protocol + reduce_context)', () => {
     for (const cmd of ['orchestrate_task', 'validate_command', 'validate_write', 'reduce_context', 'auto_learn']) {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
+    }
+  })) passed++; else failed++;
+
+  if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, CodeBuddy, and Continue.dev', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.mkdirSync(path.join(home, '.opencode'));
+      fs.mkdirSync(path.join(home, '.trae'));
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.mkdirSync(path.join(home, '.continue'));
+      // No .cursor/.config/Cursor -> exercises the injectProtocol(BLOCK) fallback,
+      // already covered by the BLOCK-wide assertion above; here we cover the
+      // 5 harnesses that used to ship an abbreviated, hand-duplicated copy.
+      run(home);
+
+      const filesToCheck = [
+        path.join(home, '.codex', 'config.toml'),
+        path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'),
+        path.join(home, '.trae', 'MEMORY.md'),
+        path.join(home, '.codebuddy', 'MEMORY.md'),
+        path.join(home, '.continue', 'prompts', 'egc-memory.prompt'),
+      ];
+      for (const filePath of filesToCheck) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        for (const cmd of SESSION_BUS_COMMANDS) {
+          assert.ok(content.includes(cmd), `${filePath} must reference ${cmd}`);
+        }
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('markdownProtocolBody fallback (OpenCode/CodeBuddy) has full session bus and Guardian if the repo source .md ever goes missing', () => {
+    let fakeScript;
+    let home;
+    try {
+      fakeScript = mktempFakeRepo();
+      home = mktempHome();
+      fs.mkdirSync(path.join(home, '.opencode'));
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      runScript(fakeScript, home);
+
+      const opencodeContent = fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8');
+      const codebuddyContent = fs.readFileSync(path.join(home, '.codebuddy', 'MEMORY.md'), 'utf8');
+      for (const content of [opencodeContent, codebuddyContent]) {
+        for (const cmd of SESSION_BUS_COMMANDS) {
+          assert.ok(content.includes(cmd), `fallback content must reference ${cmd}`);
+        }
+        assert.ok(content.includes('orchestrate_task'), 'fallback content must include Guardian Protocol');
+      }
+    } finally {
+      if (home) cleanup(home);
+      if (fakeScript) cleanup(path.dirname(path.dirname(fakeScript)));
+    }
+  })) passed++; else failed++;
+
+  if (await test('installs all 9 session bus commands for Cursor via settings.json', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
+
+      run(home);
+
+      const written = fs.readFileSync(settingsFile, 'utf8');
+      const parsed = JSON.parse(written); // throws if bootstrap wrote invalid JSON
+      assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
+      for (const cmd of SESSION_BUS_COMMANDS) {
+        assert.ok(parsed['cursor.rules'].includes(cmd), `cursor.rules must reference ${cmd}`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex config.toml stays a single-line valid TOML string after install', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      run(home);
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      const content = fs.readFileSync(tomlPath, 'utf8');
+      const match = content.match(/^persistent_instructions = "(.*)"$/m);
+      assert.ok(match, 'persistent_instructions must be a single-line double-quoted TOML string');
+      assert.ok(!match[1].includes('"'), 'the TOML string value must not contain an unescaped double-quote');
+      for (const cmd of SESSION_BUS_COMMANDS) {
+        assert.ok(match[1].includes(cmd), `Codex persistent_instructions must reference ${cmd}`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('rules/common/memory.md (Antigravity + Cline, via rules-core) has Guardian and all 9 session bus commands', () => {
+    const memoryMd = fs.readFileSync(path.join(REPO_ROOT, 'rules', 'common', 'memory.md'), 'utf8');
+    for (const cmd of ['orchestrate_task', 'validate_command', 'validate_write', 'reduce_context', 'auto_learn']) {
+      assert.ok(memoryMd.includes(cmd), `rules/common/memory.md must reference ${cmd}`);
+    }
+    for (const cmd of SESSION_BUS_COMMANDS) {
+      assert.ok(memoryMd.includes(cmd), `rules/common/memory.md must reference ${cmd}`);
     }
   })) passed++; else failed++;
 

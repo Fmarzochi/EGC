@@ -31,7 +31,7 @@ update_state({
 
 Only include fields that changed this session. `update_state` merges with existing state: it does not erase previous memory.
 
-## Auto-Intuition
+## EGC Auto-Intuition
 
 Act on user intent, not keywords. When what the user says implies an EGC action, call the right tool immediately -- no explicit command needed.
 
@@ -41,6 +41,18 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - What failed? What did we decide? → call `search_history` or `query_history`
 - Review code or a PR → spawn `/review-pr` agents
 - Context is heavy or slow → call `reduce_context`
+- How much did I save? How many tokens did this session save or cost? → run `egc gain` (short form: `egc saved`)
+- What savings am I missing? What is wasting my tokens? → run `egc discover`
+- Show me the savings history → run `egc gain --history`
+- I need the full/raw output of that command → rerun it through `egc run --raw`
+- Did another session/tab leave me anything? What are the others doing? → call `session_events` (and `session_peers`)
+- Tell the other session/tab something, hand work off → call `session_send`
+- Join session / announce presence → call `session_announce`
+- Lock / claim a file path to avoid conflicts with other sessions → call `claim_path`
+- Unlock / release a claimed file path → call `release_path`
+- Read shared working memory → call `working_memory_get`
+- Save a key/value to shared working memory → call `working_memory_set`
+- List shared working memory keys → call `working_memory_list`
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
 
