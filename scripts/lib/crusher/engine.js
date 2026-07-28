@@ -33,10 +33,17 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 // silently dropped just because they're not in English. Split into
 // per-language regexes (rather than one large alternation) to keep each
 // one's cyclomatic complexity within SonarCloud's limit.
-const KEEP_WORD_EN_RE = /\b(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)\b/i;
-const KEEP_WORD_PT_RE = /\b(erro|falha|aviso|negado|recusado|exceção|pânico)\b/i;
-const KEEP_WORD_ES_RE = /\b(fallo|advertencia|denegado|rechazado|excepción)\b/i;
-const KEEP_WORD_FR_DE_IT_RE = /\b(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)\b/i;
+//
+// \b in JavaScript regex is ASCII-only ([A-Za-z0-9_]): it does not treat
+// accented letters as "word" characters, so a standalone word starting
+// with one (e.g. "Échec", "Pânico") can sit between two non-word
+// positions and never trigger a \b boundary at all, silently failing to
+// match. \p{L}/\p{N} (with the u flag) are Unicode-aware, so lookaround
+// built from them correctly treats accented letters as word characters.
+const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_PT_RE = /(?<![\p{L}\p{N}_])(erro|falha|aviso|negado|recusado|exceção|pânico)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_FR_DE_IT_RE = /(?<![\p{L}\p{N}_])(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)(?![\p{L}\p{N}_])/iu;
 
 function matchesKeepWord(line) {
   return KEEP_WORD_EN_RE.test(line)
@@ -125,14 +132,23 @@ function isTestRunnerCommand(normalized) {
     || /^go\s+test\b/.test(normalized)
     || /^cargo\s+test\b/.test(normalized)
     || /^dotnet\s+test\b/.test(normalized)
-    // mvn/gradle take a goal list (e.g. `mvn clean test`), so the goal can
-    // appear anywhere after the binary name. A single `.*\btest\b` regex
-    // for that is super-linear on adversarial input (backtracking blowup
-    // on long inputs with no "test" anywhere); checking the prefix and the
-    // "test" keyword as two separate, individually-linear regexes avoids
-    // that while matching the same commands.
-    || (/^(mvn|\.\/?gradlew|gradle)\s/.test(normalized) && /\btest\b/.test(normalized))
+    || isMvnGradleTestCommand(normalized)
     || /^mix\s+test\b/.test(normalized);
+}
+
+// mvn/gradle take a goal list (e.g. `mvn clean test`), so the goal can
+// appear anywhere after the binary name. A single `.*\btest\b` regex for
+// that is super-linear on adversarial input (backtracking blowup on long
+// inputs with no "test" anywhere), so this checks the prefix and the
+// "test" keyword as two separate, individually-linear regexes instead --
+// but scoped to just the first line of `normalized`, not the whole
+// (possibly multi-line, compound) command string. Without that scoping,
+// an unrelated "test" on a later line of a compound command (e.g.
+// `mvn clean\necho "a test message"`) would wrongly flag the whole thing
+// as a test-runner command.
+function isMvnGradleTestCommand(normalized) {
+  const firstLine = normalized.split(/\r?\n/, 1)[0];
+  return /^(mvn|\.\/?gradlew|gradle)\s/.test(firstLine) && /\btest\b/.test(firstLine);
 }
 
 // Package/dependency install commands across every language EGC installs

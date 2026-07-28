@@ -119,6 +119,31 @@ run('crushed output preserves localized (non-English) error/warning terms (audit
   assert.ok(result.crushed.includes('Erreur système'), 'French error line survives');
 });
 
+run('crushed output preserves localized failures that start with an accented letter (cubic review, audit EGC-490)', () => {
+  // \b in JS regex is ASCII-only, so a standalone word beginning with an
+  // accented letter (no preceding word-character to form a real boundary)
+  // could sit between two "non-word" positions and never match \b at all.
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok caso de teste ${i} passou normalmente`);
+  lines.push('Échec du build');
+  lines.push('Excepción no controlada');
+  lines.push('Exceção não tratada');
+  lines.push('Pânico: estado inválido');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('Échec du build'), 'French failure line starting with an accented letter survives');
+  assert.ok(result.crushed.includes('Excepción no controlada'), 'Spanish exception line starting with an accented letter survives');
+  assert.ok(result.crushed.includes('Exceção não tratada'), 'Portuguese exception line starting with an accented letter survives');
+  assert.ok(result.crushed.includes('Pânico: estado inválido'), 'Portuguese panic line starting with an accented letter survives');
+});
+
+run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (cubic review, audit EGC-490)', () => {
+  assert.strictEqual(commandKind('mvn clean\necho "just a test message, unrelated to mvn goals"'), 'generic');
+  assert.strictEqual(commandKind('mvn clean test'), 'test-runner');
+  assert.strictEqual(commandKind('./gradlew clean test'), 'test-runner');
+});
+
 run('crushed output preserves system-failure signals with no "error" keyword (audit EGC-490)', () => {
   const lines = [];
   for (let i = 0; i < 300; i++) lines.push(`  ok step ${i} completed`);
