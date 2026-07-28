@@ -20,6 +20,9 @@ export interface PropagateResult {
   cursorrules: string | null;
   agents: string | null;
   llms: string | null;
+  claude: string | null;
+  roo: string | null;
+  continue: string | null;
 }
 
 const EGC_START = '<!-- egc:start -->';
@@ -76,8 +79,67 @@ function writeCursorContext(projectPath: string, block: string): string | null {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const filePath = path.join(rulesDir, 'egc-context.mdc');
-  const content = `---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n${block}\n`;
-  fs.writeFileSync(filePath, content, 'utf-8');
+  const defaultFrontmatter = `---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n`;
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : defaultFrontmatter;
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeClaudeContext(projectPath: string, block: string): string | null {
+  const filePath = path.join(projectPath, 'CLAUDE.md');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const existing = fs.readFileSync(filePath, 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeRooCodeContext(projectPath: string, block: string): string | null {
+  const rooRulesPath = path.join(projectPath, '.roorules');
+  try {
+    if (fs.existsSync(rooRulesPath)) {
+      const existing = fs.readFileSync(rooRulesPath, 'utf-8');
+      fs.writeFileSync(rooRulesPath, upsertEgcSection(existing, block), 'utf-8');
+      return rooRulesPath;
+    }
+  } catch {
+    return null;
+  }
+
+  const rooDir = path.join(projectPath, '.roo');
+  try {
+    if (!fs.existsSync(rooDir) || !fs.statSync(rooDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(rooDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  return filePath;
+}
+
+function writeContinueContext(projectPath: string, block: string): string | null {
+  const continueDir = path.join(projectPath, '.continue');
+  try {
+    if (!fs.existsSync(continueDir) || !fs.statSync(continueDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const rulesDir = path.join(continueDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
@@ -241,5 +303,8 @@ export function propagateStateToTools(args: PropagateArgs): PropagateResult {
     cursorrules: writeLegacyCursorRules(args.projectPath, block),
     agents: writeAgentsContext(args.projectPath, block),
     llms: writeLlmsTxt(args.projectPath, args),
+    claude: writeClaudeContext(args.projectPath, block),
+    roo: writeRooCodeContext(args.projectPath, block),
+    continue: writeContinueContext(args.projectPath, block),
   };
 }

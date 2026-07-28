@@ -168,6 +168,124 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('upserts egc section in .cursor/rules/egc-context.mdc without destroying user content', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'), { recursive: true });
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      fs.writeFileSync(filePath, '---\ndescription: custom\n---\n\nDo not use var.\n', 'utf-8');
+
+      propagateStateToTools({ projectPath: dir, ...args });
+      const first = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(first.includes('Do not use var'), 'original content must be preserved');
+      assert.ok(first.includes('<!-- egc:start -->'), 'egc block must be present');
+
+      propagateStateToTools({
+        projectPath: dir,
+        context: 'Updated context.',
+        decisions: [{ what: 'Use ESM' }],
+        next: ['Deploy to prod'],
+      });
+      const second = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(second.includes('Do not use var'), 'original content preserved after update');
+      assert.ok(second.includes('Updated context'), 'context should be updated');
+      assert.ok(!second.includes('Test project in alpha phase'), 'old context should be gone');
+      assert.strictEqual(
+        (second.match(/<!-- egc:start -->/g) || []).length,
+        1,
+        'only one egc block'
+      );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('upserts egc section in existing local CLAUDE.md', () => {
+    const dir = mktemp();
+    try {
+      const claudePath = path.join(dir, 'CLAUDE.md');
+      fs.writeFileSync(claudePath, '# Project instructions\n\nUse strict mode.\n', 'utf-8');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.ok(result.claude, 'claude path should be returned');
+      const content = fs.readFileSync(result.claude, 'utf-8');
+      assert.ok(content.includes('Use strict mode'), 'original content preserved');
+      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips local CLAUDE.md when file does not exist', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.claude, null, 'claude should be null when file absent');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('upserts egc section in existing .roorules', () => {
+    const dir = mktemp();
+    try {
+      const rooPath = path.join(dir, '.roorules');
+      fs.writeFileSync(rooPath, '# Roo rules\n', 'utf-8');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.ok(result.roo, 'roo path should be returned');
+      assert.strictEqual(result.roo, rooPath, 'should prefer flat .roorules over .roo/rules/');
+      const content = fs.readFileSync(result.roo, 'utf-8');
+      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes .roo/rules/egc-context.md when .roo/ exists and no .roorules', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.roo'));
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.ok(result.roo, 'roo path should be returned');
+      assert.ok(result.roo.endsWith(path.join('.roo', 'rules', 'egc-context.md')), 'should write under .roo/rules/');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Roo Code when neither .roorules nor .roo/ exist', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.roo, null, 'roo should be null when nothing exists');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes .continue/rules/egc-context.md when .continue/ exists', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.continue'));
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.ok(result.continue, 'continue path should be returned');
+      const content = fs.readFileSync(result.continue, 'utf-8');
+      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Continue.dev when .continue/ does not exist', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.continue, null, 'continue should be null when dir absent');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('handles missing context and next gracefully', () => {
     const dir = mktemp();
     try {
