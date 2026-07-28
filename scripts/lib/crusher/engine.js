@@ -55,9 +55,9 @@ function stripProxyPrefix(command) {
 // `git -C /repo log`, common in scripts and CI). Each alternative consumes
 // its own trailing whitespace so the group can repeat for stacked flags.
 const GIT_GLOBAL_FLAG =
-  '(?:-C|-c|--git-dir|--work-tree|--namespace)(?:=\\S+|\\s+\\S+)\\s+'
-  + '|(?:--no-pager|--paginate|-p)\\s+';
-const GIT_GLOBAL_PREFIX_RE = new RegExp(`^git\\s+(?:${GIT_GLOBAL_FLAG})*`); // NOSONAR: bounded alternation over a fixed flag set, no backtracking blowup
+  String.raw`(?:-C|-c|--git-dir|--work-tree|--namespace)(?:=\S+|\s+\S+)\s+`
+  + String.raw`|(?:--no-pager|--paginate|-p)\s+`;
+const GIT_GLOBAL_PREFIX_RE = new RegExp(String.raw`^git\s+(?:${GIT_GLOBAL_FLAG})*`); // NOSONAR: bounded alternation over a fixed flag set, no backtracking blowup
 
 function stripGitGlobalFlags(command) {
   return command.replace(GIT_GLOBAL_PREFIX_RE, 'git ');
