@@ -44,6 +44,13 @@ try {
 
 $DryRun = $args -contains '--dry-run'
 
+# Optional dependency hints (non-blocking)
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Host "  Optional dependency not found: uv"
+    Write-Host "    Required only for Jira and omega-memory MCP servers."
+    Write-Host "    Core EGC installation is unaffected. Install: https://docs.astral.sh/uv/"
+}
+
 if (-not $DryRun) {
     # Root dependencies
     Write-Host "  installing root dependencies..."
@@ -128,6 +135,10 @@ foreach ($arg in $args) {
 }
 if ($hasInstallArgs) {
     node $EgcInstall @args
+    $installExitCode = $LASTEXITCODE
+    if ($DryRun) {
+        exit $installExitCode
+    }
 }
 
 # Interactive ecosystem install (skipped in headless/CI)
@@ -334,5 +345,9 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
 
     Write-Host ""
     Write-Host "Installation complete."
+    if (-not $hasInstallArgs) {
+        Write-Host "Dashboard was not started automatically."
+        Write-Host "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+    }
     Write-Host "Run 'egc doctor' to verify."
 }
