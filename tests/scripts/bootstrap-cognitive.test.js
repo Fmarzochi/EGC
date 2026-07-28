@@ -25,6 +25,28 @@ function run(homeDir) {
   });
 }
 
+// Copies bootstrap-cognitive.js into a throwaway "fake repo" whose
+// .opencode/.codebuddy source files are intentionally absent, so __dirname
+// resolution inside the copy sees them as missing without ever touching
+// this real repo's actual .opencode/instructions/EGC_MEMORY.md or
+// .codebuddy/MEMORY.md -- exercises the markdownProtocolBody() fallback
+// branch (only reachable if those repo files ever went missing, e.g. from
+// an npm package that excluded them).
+function mktempFakeRepo() {
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bootstrap-fakerepo-'));
+  const scriptsDir = path.join(repoDir, 'scripts');
+  fs.mkdirSync(scriptsDir, { recursive: true });
+  fs.copyFileSync(SCRIPT_PATH, path.join(scriptsDir, 'bootstrap-cognitive.js'));
+  return path.join(scriptsDir, 'bootstrap-cognitive.js');
+}
+
+function runScript(scriptPath, homeDir) {
+  return execFileSync('node', [scriptPath], {
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    encoding: 'utf8',
+  });
+}
+
 async function test(name, fn) {
   try {
     await fn();
@@ -37,23 +59,19 @@ async function test(name, fn) {
   }
 }
 
+const SESSION_BUS_COMMANDS = [
+  'session_announce', 'session_peers', 'session_events', 'session_send',
+  'claim_path', 'release_path',
+  'working_memory_get', 'working_memory_set', 'working_memory_list',
+];
+
 async function runTests() {
   console.log('\n=== Testing scripts/bootstrap-cognitive.js ===\n');
   let passed = 0;
   let failed = 0;
 
   if (await test('BLOCK advertises all 9 session bus commands', () => {
-    for (const cmd of [
-      'session_announce',
-      'session_peers',
-      'session_events',
-      'session_send',
-      'claim_path',
-      'release_path',
-      'working_memory_get',
-      'working_memory_set',
-      'working_memory_list',
-    ]) {
+    for (const cmd of SESSION_BUS_COMMANDS) {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
     }
   })) passed++; else failed++;
@@ -63,12 +81,6 @@ async function runTests() {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
     }
   })) passed++; else failed++;
-
-  const SESSION_BUS_COMMANDS = [
-    'session_announce', 'session_peers', 'session_events', 'session_send',
-    'claim_path', 'release_path',
-    'working_memory_get', 'working_memory_set', 'working_memory_list',
-  ];
 
   if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, CodeBuddy, and Continue.dev', () => {
     const home = mktempHome();
@@ -98,6 +110,28 @@ async function runTests() {
       }
     } finally {
       cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('markdownProtocolBody fallback (OpenCode/CodeBuddy) has full session bus and Guardian if the repo source .md ever goes missing', () => {
+    const fakeScript = mktempFakeRepo();
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.opencode'));
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      runScript(fakeScript, home);
+
+      const opencodeContent = fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8');
+      const codebuddyContent = fs.readFileSync(path.join(home, '.codebuddy', 'MEMORY.md'), 'utf8');
+      for (const content of [opencodeContent, codebuddyContent]) {
+        for (const cmd of SESSION_BUS_COMMANDS) {
+          assert.ok(content.includes(cmd), `fallback content must reference ${cmd}`);
+        }
+        assert.ok(content.includes('orchestrate_task'), 'fallback content must include Guardian Protocol');
+      }
+    } finally {
+      cleanup(home);
+      cleanup(path.dirname(path.dirname(fakeScript)));
     }
   })) passed++; else failed++;
 
