@@ -2553,7 +2553,21 @@ function runTests() {
     assert.strictEqual(mergeOp.readEntry, path.join('.aider', 'skills', 'tdd-workflow.md'));
   })) passed++; else failed++;
 
-  if (test('aider adapter filters out non-skill module paths (rules, agents, commands)', () => {
+  if (test('aider adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'aider',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'agents-core', paths: ['agents'] }, { id: 'commands-core', paths: ['commands'] }],
+    });
+
+    assert.strictEqual(plan.operations.length, 0, 'Non-skill, non-rules module paths should not produce operations');
+  })) passed++; else failed++;
+
+  if (test("aider adapter copies rules-core's memory.md and merges it into the read: list", () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2564,7 +2578,14 @@ function runTests() {
       modules: [{ id: 'rules-core', paths: ['rules'] }],
     });
 
-    assert.strictEqual(plan.operations.length, 0, 'Non-skill module paths should not produce operations');
+    assert.strictEqual(plan.operations.length, 2, 'should emit a copy operation and a read-list merge operation');
+    const copyOp = plan.operations.find(o => o.strategy === 'preserve-relative-path');
+    const mergeOp = plan.operations.find(o => o.kind === 'merge-yaml-read-list');
+    assert.ok(copyOp, 'must emit a copy operation for memory.md');
+    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.aider', 'rules', 'common', 'memory.md'));
+    assert.ok(mergeOp, 'must emit a merge-yaml-read-list operation');
+    assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, '.aider.conf.yml'));
+    assert.strictEqual(mergeOp.readEntry, path.join('.aider', 'rules', 'common', 'memory.md'));
   })) passed++; else failed++;
 
   if (test('aider adapter is included in the full adapter list', () => {
@@ -2717,7 +2738,21 @@ function runTests() {
     assert.strictEqual(mergeOp.skillDescription, '');
   })) passed++; else failed++;
 
-  if (test('warp adapter filters out non-skill module paths (rules, agents, commands)', () => {
+  if (test('warp adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'warp',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'agents-core', paths: ['agents'] }, { id: 'commands-core', paths: ['commands'] }],
+    });
+
+    assert.strictEqual(plan.operations.length, 0, 'Non-skill, non-rules module paths should not produce operations');
+  })) passed++; else failed++;
+
+  if (test("warp adapter copies rules-core's memory.md and merges an index entry into AGENTS.md", () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2728,7 +2763,14 @@ function runTests() {
       modules: [{ id: 'rules-core', paths: ['rules'] }],
     });
 
-    assert.strictEqual(plan.operations.length, 0, 'Non-skill module paths should not produce operations');
+    assert.strictEqual(plan.operations.length, 2, 'should emit a copy operation and an AGENTS.md merge operation');
+    const copyOp = plan.operations.find(o => o.strategy === 'preserve-relative-path');
+    const mergeOp = plan.operations.find(o => o.kind === 'merge-markdown-skill-index');
+    assert.ok(copyOp, 'must emit a copy operation for memory.md');
+    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'rules', 'common', 'memory.md'));
+    assert.ok(mergeOp, 'must emit a merge-markdown-skill-index operation');
+    assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
+    assert.strictEqual(mergeOp.skillName, 'EGC Session Memory');
   })) passed++; else failed++;
 
   if (test('warp adapter is included in the full adapter list', () => {
