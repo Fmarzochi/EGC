@@ -60,6 +60,111 @@ run('classifies git commands with global flags before the subcommand', () => {
   assert.strictEqual(commandKind('git -C /path status'), 'generic');
 });
 
+run('classifies test runners across languages beyond the original JS-only set (audit EGC-490)', () => {
+  assert.strictEqual(commandKind('go test ./...'), 'test-runner');
+  assert.strictEqual(commandKind('cargo test'), 'test-runner');
+  assert.strictEqual(commandKind('dotnet test'), 'test-runner');
+  assert.strictEqual(commandKind('mvn test'), 'test-runner');
+  assert.strictEqual(commandKind('./gradlew test'), 'test-runner');
+  assert.strictEqual(commandKind('gradle test'), 'test-runner');
+  assert.strictEqual(commandKind('mix test'), 'test-runner');
+  assert.strictEqual(commandKind('phpunit'), 'test-runner');
+  assert.strictEqual(commandKind('pest'), 'test-runner');
+  assert.strictEqual(commandKind('rspec'), 'test-runner');
+  assert.strictEqual(commandKind('pnpm test'), 'test-runner');
+  assert.strictEqual(commandKind('yarn test'), 'test-runner');
+  assert.strictEqual(commandKind('bun test'), 'test-runner');
+});
+
+run('classifies package installs across languages beyond the original npm-only set (audit EGC-490)', () => {
+  assert.strictEqual(commandKind('pip install requests'), 'pm-install');
+  assert.strictEqual(commandKind('pip3 install requests'), 'pm-install');
+  assert.strictEqual(commandKind('poetry install'), 'pm-install');
+  assert.strictEqual(commandKind('pipenv install'), 'pm-install');
+  assert.strictEqual(commandKind('uv sync'), 'pm-install');
+  assert.strictEqual(commandKind('cargo build'), 'pm-install');
+  assert.strictEqual(commandKind('cargo install ripgrep'), 'pm-install');
+  assert.strictEqual(commandKind('go mod download'), 'pm-install');
+  assert.strictEqual(commandKind('go get ./...'), 'pm-install');
+  assert.strictEqual(commandKind('composer install'), 'pm-install');
+  assert.strictEqual(commandKind('bundle install'), 'pm-install');
+});
+
+run('crushed test/install output preserves stack-trace frames with no keep-word of their own (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('Traceback (most recent call last):');
+  lines.push('  File "app.py", line 42, in main');
+  lines.push('  File "app.py", line 10, in helper');
+  lines.push('ValueError: something broke');
+  lines.push('Tests: 1 failed, 300 passed, 301 total');
+  const result = crushOutput('pytest', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('File "app.py", line 42, in main'), 'traceback frame survives');
+  assert.ok(result.crushed.includes('File "app.py", line 10, in helper'), 'second traceback frame survives');
+  assert.ok(result.crushed.includes('ValueError: something broke'), 'exception line survives');
+});
+
+run('crushed output preserves localized (non-English) error/warning terms (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok caso de teste ${i} passou normalmente`);
+  lines.push('Erro: arquivo não encontrado');
+  lines.push('Advertencia: uso obsoleto detectado');
+  lines.push('Erreur système: connexion refusée');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('Erro: arquivo não encontrado'), 'Portuguese error line survives');
+  assert.ok(result.crushed.includes('Advertencia: uso obsoleto'), 'Spanish warning line survives');
+  assert.ok(result.crushed.includes('Erreur système'), 'French error line survives');
+});
+
+run('crushed output preserves system-failure signals with no "error" keyword (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok step ${i} completed`);
+  lines.push('Segmentation fault (core dumped)');
+  lines.push('HTTP/1.1 404 Not Found');
+  lines.push('Request failed with 502 Bad Gateway');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('Segmentation fault'), 'segfault line survives');
+  assert.ok(result.crushed.includes('404 Not Found'), 'HTTP 404 line survives');
+  assert.ok(result.crushed.includes('502 Bad Gateway'), 'HTTP 502 line survives');
+});
+
+run('HTTP-error keep pattern does not false-positive on ordinary 3-digit counts (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 150; i++) lines.push(`  ok step ${i} completed`);
+  lines.push('processed 404 items successfully');
+  for (let i = 150; i < 300; i++) lines.push(`  ok step ${i} completed`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  // No real failure anywhere in this output, so nothing should force a
+  // keep beyond the summary tail -- the ordinary count line, buried well
+  // outside the tail, must not be mistaken for an HTTP error and kept.
+  if (result) {
+    assert.ok(
+      !result.crushed.includes('processed 404 items'),
+      'a bare count containing "404" must not be kept as an HTTP error line'
+    );
+  }
+});
+
+run('generic commands whose output looks like JSON are still crushed (audit EGC-490, "giant JSONs" gap)', () => {
+  const rows = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item-${i}`, active: i % 2 === 0 }));
+  const output = JSON.stringify(rows, null, 2);
+  const result = crushOutput('curl -s https://api.example.com/items', output);
+  assert.ok(result, 'a curl command emitting a large JSON array should be crushed even though curl matches no specific command kind');
+  assert.strictEqual(result.kind, 'json-output');
+});
+
+run('generic commands whose output is not valid JSON are left untouched (no false-positive json-output)', () => {
+  const output = `{ this is not valid json ${'x'.repeat(3000)}`;
+  const result = crushOutput('cat notes.txt', output);
+  assert.strictEqual(result, null, 'malformed content starting with { must not be misclassified as JSON');
+});
+
 run('small outputs pass through untouched', () => {
   assert.strictEqual(crushOutput('git log', 'short output'), null);
 });
