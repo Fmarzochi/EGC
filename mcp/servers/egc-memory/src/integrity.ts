@@ -16,15 +16,28 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const KEY_DIR = path.join(os.homedir(), '.egc');
-const KEY_PATH = path.join(KEY_DIR, 'integrity.key');
 const HMAC_ALGORITHM = 'sha256';
+
+// Functions, not module-level constants: see the matching comment on
+// defaultEncKeyPath() in encryption.ts — a frozen os.homedir() would keep
+// resolving to whatever $HOME was in effect when this module first loaded,
+// diverging from getStateDir() (index.ts) if the process later observes a
+// different $HOME.
+function keyDir(): string {
+  return path.join(os.homedir(), '.egc');
+}
+
+function keyPath(): string {
+  return path.join(keyDir(), 'integrity.key');
+}
 
 /**
  * Load or create the HMAC key at ~/.egc/integrity.key.
  * The key is 32 random bytes encoded as hex (64 hex chars on disk).
  */
 export function loadOrCreateKey(): Buffer {
+  const KEY_DIR = keyDir();
+  const KEY_PATH = keyPath();
   try {
     fs.mkdirSync(KEY_DIR, { recursive: true, mode: 0o700 });
   } catch {

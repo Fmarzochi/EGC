@@ -450,8 +450,22 @@ async function getDb(): Promise<Database> {
 }
 
 const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" }, { capabilities: { tools: {} } });
-const _integrityKey: Buffer = loadOrCreateKey();
-const _encKey: Buffer = loadOrCreateEncKey();
+// Functions, not module-level constants: both loadOrCreateKey() and
+// loadOrCreateEncKey() resolve their key path from os.homedir() internally.
+// Caching the returned Buffer once at process boot (the previous shape:
+// `const _encKey = loadOrCreateEncKey()`) meant getStateDir() below — which
+// already recomputes os.homedir() on every call — could point at a state
+// file directory computed under a different $HOME than the one the cached
+// key was derived from, if this process ever observed $HOME change after
+// boot. Writes and reads would then silently use different keys against
+// the same file: GCM auth-tag verification fails on read, indistinguishable
+// from disk corruption. Recomputing per call costs one ~64-byte file read.
+function getIntegrityKey(): Buffer {
+  return loadOrCreateKey();
+}
+function getEncKey(): Buffer {
+  return loadOrCreateEncKey();
+}
 
 function getStateDir(): string {
   const dir = path.join(os.homedir(), '.egc', 'state');
@@ -511,7 +525,7 @@ function resolveProjectPath(provided?: string): string {
 const H2_RE = /^## (.+)/;
 function readStateDoc(filePath: string): Record<string, string[]|string> {
   if (!fs.existsSync(filePath)) return {};
-  const content = readStateFile(filePath, _encKey);
+  const content = readStateFile(filePath, getEncKey());
   const result: Record<string, string[]|string> = {};
   let currentSection = '';
   for (const line of content.split('\n')) {
@@ -577,7 +591,7 @@ function writeStateDoc(filePath: string, projectPath: string, data: {
     ``
   ];
 
-  writeStateFile(filePath, lines.join('\n'), _encKey);
+  writeStateFile(filePath, lines.join('\n'), getEncKey());
 }
 
 const LESSON_REINFORCE_DELTA = 0.15;
@@ -1201,12 +1215,12 @@ async function handleGetState(db: Database, toolArgs: unknown) {
 
   let content: string;
   try {
-    content = readStateFile(resolved.filePath, _encKey);
+    content = readStateFile(resolved.filePath, getEncKey());
   } catch (err) {
     log('ERROR', '[EGC encryption] Failed to decrypt state file', { file: resolved.filePath, error: String(err) });
     return { content: [{ type: "text", text: `State file exists but could not be decrypted. The encryption key may have changed.\nPath: ${resolved.filePath}` }] };
   }
-  const verify = verifyHmac(resolved.filePath, content, _integrityKey);
+  const verify = verifyHmac(resolved.filePath, content, getIntegrityKey());
   if (!verify.ok) {
     log('WARN', '[EGC integrity] State file integrity check failed', { file: resolved.filePath, reason: (verify as { ok: false; reason: string }).reason });
     log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: (verify as { ok: false; reason: string }).reason });
@@ -1273,8 +1287,8 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
         }
       }
       writeStateDoc(globalFile, 'global', args, existingGlobal, null);
-      const writtenGlobal = readStateFile(globalFile, _encKey);
-      writeHmac(globalFile, writtenGlobal, _integrityKey);
+      const writtenGlobal = readStateFile(globalFile, getEncKey());
+      writeHmac(globalFile, writtenGlobal, getIntegrityKey());
       log('INFO', 'Global state updated', { decisions: args.decisions?.length || 0 });
       return { content: [{ type: "text", text: `Global memory updated (shared across all projects).\nFile: ${globalFile}\nDecisions saved: ${args.decisions?.length || 0}` }] };
     });
@@ -1304,8 +1318,8 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     writeStateDoc(filePath, projPath, args, existing, branch);
-    const writtenContent = readStateFile(filePath, _encKey);
-    writeHmac(filePath, writtenContent, _integrityKey);
+    const writtenContent = readStateFile(filePath, getEncKey());
+    writeHmac(filePath, writtenContent, getIntegrityKey());
   });
   // Propagate the merged, persisted doc rather than this call's raw args:
   // a partial update_state (e.g. next only) would otherwise blank out
