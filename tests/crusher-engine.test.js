@@ -11,7 +11,7 @@
 const assert = require('node:assert');
 const path = require('node:path');
 
-const { CRUSH_MARKER, commandKind, crushOutput, estimateTokens } = require(
+const { CRUSH_MARKER, commandKind, crushOutput, estimateTokens, looksLikeJsonPayload } = require(
   path.join(__dirname, '..', 'scripts', 'lib', 'crusher', 'engine.js')
 );
 const { aggregate } = require(
@@ -58,6 +58,171 @@ run('classifies git commands with global flags before the subcommand', () => {
   assert.strictEqual(commandKind('git -c user.name=x log'), 'git-log');
   assert.strictEqual(commandKind('git -C /a -c user.name=x --no-pager log'), 'git-log');
   assert.strictEqual(commandKind('git -C /path status'), 'generic');
+});
+
+run('classifies test runners across languages beyond the original JS-only set (audit EGC-490)', () => {
+  assert.strictEqual(commandKind('go test ./...'), 'test-runner');
+  assert.strictEqual(commandKind('cargo test'), 'test-runner');
+  assert.strictEqual(commandKind('dotnet test'), 'test-runner');
+  assert.strictEqual(commandKind('mvn test'), 'test-runner');
+  assert.strictEqual(commandKind('./gradlew test'), 'test-runner');
+  assert.strictEqual(commandKind('gradle test'), 'test-runner');
+  assert.strictEqual(commandKind('mix test'), 'test-runner');
+  assert.strictEqual(commandKind('phpunit'), 'test-runner');
+  assert.strictEqual(commandKind('pest'), 'test-runner');
+  assert.strictEqual(commandKind('rspec'), 'test-runner');
+  assert.strictEqual(commandKind('pnpm test'), 'test-runner');
+  assert.strictEqual(commandKind('yarn test'), 'test-runner');
+  assert.strictEqual(commandKind('bun test'), 'test-runner');
+});
+
+run('classifies package installs across languages beyond the original npm-only set (audit EGC-490)', () => {
+  assert.strictEqual(commandKind('pip install requests'), 'pm-install');
+  assert.strictEqual(commandKind('pip3 install requests'), 'pm-install');
+  assert.strictEqual(commandKind('poetry install'), 'pm-install');
+  assert.strictEqual(commandKind('pipenv install'), 'pm-install');
+  assert.strictEqual(commandKind('uv sync'), 'pm-install');
+  assert.strictEqual(commandKind('cargo build'), 'pm-install');
+  assert.strictEqual(commandKind('cargo install ripgrep'), 'pm-install');
+  assert.strictEqual(commandKind('go mod download'), 'pm-install');
+  assert.strictEqual(commandKind('go get ./...'), 'pm-install');
+  assert.strictEqual(commandKind('composer install'), 'pm-install');
+  assert.strictEqual(commandKind('bundle install'), 'pm-install');
+});
+
+run('crushed test/install output preserves stack-trace frames with no keep-word of their own (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('Traceback (most recent call last):');
+  lines.push('  File "app.py", line 42, in main');
+  lines.push('  File "app.py", line 10, in helper');
+  lines.push('ValueError: something broke');
+  lines.push('Tests: 1 failed, 300 passed, 301 total');
+  const result = crushOutput('pytest', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('File "app.py", line 42, in main'), 'traceback frame survives');
+  assert.ok(result.crushed.includes('File "app.py", line 10, in helper'), 'second traceback frame survives');
+  assert.ok(result.crushed.includes('ValueError: something broke'), 'exception line survives');
+});
+
+run('crushed output preserves localized (non-English) error/warning terms (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok caso de teste ${i} passou normalmente`);
+  lines.push('Erro: arquivo não encontrado');
+  lines.push('Advertencia: uso obsoleto detectado');
+  lines.push('Erreur système: connexion refusée');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('Erro: arquivo não encontrado'), 'Portuguese error line survives');
+  assert.ok(result.crushed.includes('Advertencia: uso obsoleto'), 'Spanish warning line survives');
+  assert.ok(result.crushed.includes('Erreur système'), 'French error line survives');
+});
+
+run('crushed output preserves localized failures that start with an accented letter (cubic review, audit EGC-490)', () => {
+  // \b in JS regex is ASCII-only, so a standalone word beginning with an
+  // accented letter (no preceding word-character to form a real boundary)
+  // could sit between two "non-word" positions and never match \b at all.
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok caso de teste ${i} passou normalmente`);
+  lines.push('Échec du build');
+  lines.push('Excepción no controlada');
+  lines.push('Exceção não tratada');
+  lines.push('Pânico: estado inválido');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('Échec du build'), 'French failure line starting with an accented letter survives');
+  assert.ok(result.crushed.includes('Excepción no controlada'), 'Spanish exception line starting with an accented letter survives');
+  assert.ok(result.crushed.includes('Exceção não tratada'), 'Portuguese exception line starting with an accented letter survives');
+  assert.ok(result.crushed.includes('Pânico: estado inválido'), 'Portuguese panic line starting with an accented letter survives');
+});
+
+run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (cubic review, audit EGC-490)', () => {
+  assert.strictEqual(commandKind('mvn clean\necho "just a test message, unrelated to mvn goals"'), 'generic');
+  assert.strictEqual(commandKind('mvn clean test'), 'test-runner');
+  assert.strictEqual(commandKind('./gradlew clean test'), 'test-runner');
+});
+
+run('mvn/gradle test detection joins shell line-continuations into one logical line (cubic review, audit EGC-490)', () => {
+  // A backslash right before the newline is a shell line continuation --
+  // `mvn clean \` + newline + `test` is one logical command, not two.
+  assert.strictEqual(commandKind('mvn clean \\\ntest'), 'test-runner');
+  assert.strictEqual(commandKind('./gradlew clean \\\ntest'), 'test-runner');
+  // Without a trailing backslash, it's genuinely a separate line/command.
+  assert.strictEqual(commandKind('mvn clean\ntest'), 'generic');
+});
+
+run('crushed output preserves system-failure signals with no "error" keyword (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok step ${i} completed`);
+  lines.push('Segmentation fault (core dumped)');
+  lines.push('HTTP/1.1 404 Not Found');
+  lines.push('Request failed with 502 Bad Gateway');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('Segmentation fault'), 'segfault line survives');
+  assert.ok(result.crushed.includes('404 Not Found'), 'HTTP 404 line survives');
+  assert.ok(result.crushed.includes('502 Bad Gateway'), 'HTTP 502 line survives');
+});
+
+run('HTTP-error keep pattern does not false-positive on ordinary 3-digit counts (audit EGC-490)', () => {
+  const lines = [];
+  for (let i = 0; i < 150; i++) lines.push(`  ok step ${i} completed`);
+  lines.push('processed 404 items successfully');
+  for (let i = 150; i < 300; i++) lines.push(`  ok step ${i} completed`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  // No real failure anywhere in this output, so nothing should force a
+  // keep beyond the summary tail -- the ordinary count line, buried well
+  // outside the tail, must not be mistaken for an HTTP error and kept.
+  if (result) {
+    assert.ok(
+      !result.crushed.includes('processed 404 items'),
+      'a bare count containing "404" must not be kept as an HTTP error line'
+    );
+  }
+});
+
+run('looksLikeJsonPayload detects JSON objects and arrays, rejects malformed lookalikes (audit EGC-490, "giant JSONs" gap)', () => {
+  // Tested as a pure function, not through crushOutput(): the actual
+  // compression for a detected JSON payload delegates to arrayCrusher from
+  // egc-guardian's build output, which the main CI workflow (unlike
+  // coverage.yml) never compiles -- asserting on crushOutput()'s result
+  // here would make this test's pass/fail depend on a build artifact from
+  // a different module entirely, not on the detection logic this PR adds.
+  const rows = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item-${i}` }));
+  assert.strictEqual(looksLikeJsonPayload(JSON.stringify(rows)), true, 'a JSON array must be detected');
+  assert.strictEqual(looksLikeJsonPayload(JSON.stringify({ ok: true, data: rows })), true, 'a JSON object must be detected');
+  assert.strictEqual(looksLikeJsonPayload(`{ this is not valid json ${'x'.repeat(3000)}`), false, 'malformed content starting with { must not be misclassified as JSON');
+  assert.strictEqual(looksLikeJsonPayload('plain text output, not json at all'), false, 'plain text must not be misclassified as JSON');
+});
+
+run('generic commands whose output looks like JSON route to json-output when the array-crusher build is present (audit EGC-490)', () => {
+  // Best-effort integration check: only asserts the strong "was crushed"
+  // claim when mcp/servers/egc-guardian/build/egc-array-crusher.js is
+  // actually present (built locally, or by workflows like coverage.yml
+  // that compile it first). Otherwise falls back to asserting the
+  // documented fail-open behavior (engine.js's own top-of-file comment:
+  // "JSON payloads stay uncompressed otherwise rather than duplicating
+  // that logic"), so this test is meaningful and non-flaky in both cases.
+  const guardianBuildPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-array-crusher.js');
+  const rows = Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item-${i}`, active: i % 2 === 0 }));
+  const output = JSON.stringify(rows, null, 2);
+  const result = crushOutput('curl -s https://api.example.com/items', output);
+  if (require('node:fs').existsSync(guardianBuildPath)) {
+    assert.ok(result, 'a curl command emitting a large JSON array should be crushed when the array-crusher build is present');
+    assert.strictEqual(result.kind, 'json-output');
+  } else {
+    assert.strictEqual(result, null, 'without the array-crusher build, detected JSON must fail open (pass through), not throw or fabricate a result');
+  }
+});
+
+run('generic commands whose output is not valid JSON are left untouched (no false-positive json-output)', () => {
+  const output = `{ this is not valid json ${'x'.repeat(3000)}`;
+  const result = crushOutput('cat notes.txt', output);
+  assert.strictEqual(result, null, 'malformed content starting with { must not be misclassified as JSON');
 });
 
 run('small outputs pass through untouched', () => {

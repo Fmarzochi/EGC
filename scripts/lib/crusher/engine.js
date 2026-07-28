@@ -27,7 +27,64 @@ function tryRequire(modulePath) {
 // payloads stay uncompressed otherwise rather than duplicating that logic.
 const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-array-crusher.js');
 
-const KEEP_LINE_RE = /\b(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception)\b/i;
+// Keep-word list, English plus the error/warning/failure terms of the
+// locales EGC ships READMEs for (pt, es, fr, de, it) -- a localized CLI
+// (e.g. git or a test runner under LANG=pt_BR) must not have its failures
+// silently dropped just because they're not in English. Split into
+// per-language regexes (rather than one large alternation) to keep each
+// one's cyclomatic complexity within SonarCloud's limit.
+//
+// \b in JavaScript regex is ASCII-only ([A-Za-z0-9_]): it does not treat
+// accented letters as "word" characters, so a standalone word starting
+// with one (e.g. "Échec", "Pânico") can sit between two non-word
+// positions and never trigger a \b boundary at all, silently failing to
+// match. \p{L}/\p{N} (with the u flag) are Unicode-aware, so lookaround
+// built from them correctly treats accented letters as word characters.
+const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_PT_RE = /(?<![\p{L}\p{N}_])(erro|falha|aviso|negado|recusado|exceção|pânico)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_FR_DE_IT_RE = /(?<![\p{L}\p{N}_])(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)(?![\p{L}\p{N}_])/iu;
+
+function matchesKeepWord(line) {
+  return KEEP_WORD_EN_RE.test(line)
+    || KEEP_WORD_PT_RE.test(line)
+    || KEEP_WORD_ES_RE.test(line)
+    || KEEP_WORD_FR_DE_IT_RE.test(line);
+}
+
+// Stack-trace frame lines carry no keep-word of their own (a Python
+// traceback's `File "app.py", line 42, in main` or a JS `at Object.<...>`
+// line never says "error") but dropping them guts the exact context a
+// debugger -- human or model -- needs to find the failure. Matches the
+// common frame shapes across Python, JS/Node, Java, and C/C++ tracebacks.
+// Split into one regex per frame shape (rather than one alternation) to
+// keep each one's cyclomatic complexity within SonarCloud's limit.
+const STACK_FRAME_AT_RE = /^\s*at\s+\S+/i;
+const STACK_FRAME_PY_RE = /^\s*File\s+"[^"]+",\s+line\s+\d+/i;
+const STACK_FRAME_NATIVE_RE = /^\s*#\d+\s+0x[0-9a-f]+/i;
+const STACK_FRAME_CAUSE_RE = /^\s*(Caused by:|\.{3}\s+\d+\s+more)/i;
+
+function isStackFrame(line) {
+  return STACK_FRAME_AT_RE.test(line)
+    || STACK_FRAME_PY_RE.test(line)
+    || STACK_FRAME_NATIVE_RE.test(line)
+    || STACK_FRAME_CAUSE_RE.test(line);
+}
+
+// System-level failure signals that never contain the word "error": a
+// killed or crashed process, or an HTTP status line/code carrying a
+// standard reason phrase. The HTTP pattern requires a known reason phrase
+// (not just any 3-digit number) so it doesn't false-positive on ordinary
+// counts like "processed 404 items".
+const SYSTEM_FAILURE_RE = /\b(segmentation fault|core dumped|killed|out of memory|oom[- ]?killed|aborted|stack overflow)\b/i;
+const HTTP_ERROR_RE = /\b(?:HTTP\/[\d.]+\s+)?[45]\d{2}\s+(Bad Request|Unauthorized|Forbidden|Not Found|Method Not Allowed|Conflict|Gone|Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b/i;
+
+function shouldKeepLine(line) {
+  return matchesKeepWord(line)
+    || isStackFrame(line)
+    || SYSTEM_FAILURE_RE.test(line)
+    || HTTP_ERROR_RE.test(line);
+}
 
 // Terminal color codes glue onto words (ESC[31merror) and break the \b
 // word boundary, silently dropping colored error lines from the kept set.
@@ -63,12 +120,63 @@ function stripGitGlobalFlags(command) {
   return command.replace(GIT_GLOBAL_PREFIX_RE, 'git ');
 }
 
+// Test runners across every language EGC ships coding-style rules for, not
+// just the JS ones: go/cargo/dotnet/mvn/gradle/phpunit/pest/rspec/mix each
+// produce their own kind of noisy pass/fail spam that never touched
+// crushTestRunner() before, silently falling through to 'generic' (0%
+// compression) for the majority of the catalog's supported languages.
+function isTestRunnerCommand(normalized) {
+  return /\b(jest|vitest|pytest|mocha|phpunit|pest|rspec)\b/.test(normalized)
+    || /(?:^|\s)(npm|pnpm|yarn|bun)\s+(run\s+)?test\b/.test(normalized)
+    || /node\s+\S*tests?\//.test(normalized)
+    || /^go\s+test\b/.test(normalized)
+    || /^cargo\s+test\b/.test(normalized)
+    || /^dotnet\s+test\b/.test(normalized)
+    || isMvnGradleTestCommand(normalized)
+    || /^mix\s+test\b/.test(normalized);
+}
+
+// mvn/gradle take a goal list (e.g. `mvn clean test`), so the goal can
+// appear anywhere after the binary name. A single `.*\btest\b` regex for
+// that is super-linear on adversarial input (backtracking blowup on long
+// inputs with no "test" anywhere), so this checks the prefix and the
+// "test" keyword as two separate, individually-linear regexes instead --
+// but scoped to just the first LOGICAL line of `normalized`, not the
+// whole (possibly multi-line, compound) command string. Without that
+// scoping, an unrelated "test" on a later line of a compound command
+// (e.g. `mvn clean\necho "a test message"`) would wrongly flag the whole
+// thing as a test-runner command. A backslash immediately before the
+// newline is a shell line continuation (e.g. `mvn clean \` + newline +
+// `test`), not a separate command, so those are joined back into one
+// logical line before splitting -- otherwise a goal on the continuation
+// line would be missed.
+function isMvnGradleTestCommand(normalized) {
+  const logicalFirstLine = normalized.replace(/\\\r?\n/g, ' ').split(/\r?\n/, 1)[0];
+  return /^(mvn|\.\/?gradlew|gradle)\s/.test(logicalFirstLine) && /\btest\b/.test(logicalFirstLine);
+}
+
+// Package/dependency install commands across every language EGC installs
+// rules for, not just the npm ecosystem -- pip/poetry/cargo/go/composer/
+// bundle installs each emit their own kind of noisy install spam that fell
+// through to 'generic' before.
+function isPmInstallCommand(normalized) {
+  return /^(npm|yarn|pnpm|bun)\s+(install|ci|add|i)\b/.test(normalized)
+    || /^pip3?\s+install\b/.test(normalized)
+    || /^poetry\s+(install|add|update)\b/.test(normalized)
+    || /^pipenv\s+install\b/.test(normalized)
+    || /^uv\s+(sync|add|pip\s+install)\b/.test(normalized)
+    || /^cargo\s+(build|install|add)\b/.test(normalized)
+    || /^go\s+(mod\s+download|get)\b/.test(normalized)
+    || /^composer\s+(install|update|require)\b/.test(normalized)
+    || /^bundle\s+install\b/.test(normalized);
+}
+
 function commandKind(command) {
   const normalized = stripGitGlobalFlags(stripProxyPrefix(command));
   if (/^git\s+log\b/.test(normalized)) return 'git-log';
   if (/^git\s+diff\b/.test(normalized)) return 'git-diff';
-  if (/\b(jest|vitest|pytest|mocha)\b/.test(normalized) || /npm\s+(run\s+)?test\b/.test(normalized) || /node\s+\S*tests?\//.test(normalized)) return 'test-runner';
-  if (/^(npm|yarn|pnpm|bun)\s+(install|ci|add|i)\b/.test(normalized)) return 'pm-install';
+  if (isTestRunnerCommand(normalized)) return 'test-runner';
+  if (isPmInstallCommand(normalized)) return 'pm-install';
   if (/^gh\b.*--json\b/.test(normalized)) return 'gh-json';
   return 'generic';
 }
@@ -104,7 +212,7 @@ function crushTestRunner(output) {
   const lines = output.split('\n');
   const kept = lines.filter(raw => {
     const l = stripAnsi(raw);
-    return KEEP_LINE_RE.test(l)
+    return shouldKeepLine(l)
       || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i.test(l.trim())
       || /^\s*\d+ (passed|failed|skipped|pending)/i.test(l);
   });
@@ -116,7 +224,7 @@ function crushTestRunner(output) {
 
 function crushPmInstall(output) {
   const lines = output.split('\n');
-  const kept = lines.filter(l => KEEP_LINE_RE.test(stripAnsi(l)));
+  const kept = lines.filter(l => shouldKeepLine(stripAnsi(l)));
   const tail = lines.slice(-6).filter(l => l.trim());
   const merged = [...new Set([...kept, ...tail])];
   if (merged.length >= lines.length) return null;
@@ -130,12 +238,33 @@ function crushGhJson(output) {
   return `${result.crushed}\n(${result.rows_before} rows reduced to ${result.rows_after})`;
 }
 
+// `gh ... --json` was the only command pattern that ever routed to
+// crushGhJson, so a `curl`, `kubectl -o json`, or `cat big.json` payload
+// -- equally "giant JSON" by any reasonable reading of that promise --
+// fell through to 'generic' untouched. Detecting by the shape of the
+// OUTPUT rather than enumerating every possible JSON-emitting command
+// generalizes this without needing to keep chasing new command names.
+// Only runs past the byte-length gate crushOutput() already applies, and
+// only when the command didn't already match a more specific kind.
+function looksLikeJsonPayload(output) {
+  const trimmed = output.trim();
+  const first = trimmed[0];
+  if (first !== '{' && first !== '[') return false;
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const CRUSHERS = {
   'git-log': crushGitLog,
   'git-diff': crushGitDiff,
   'test-runner': crushTestRunner,
   'pm-install': crushPmInstall,
   'gh-json': crushGhJson,
+  'json-output': crushGhJson,
   generic: () => null,
 };
 
@@ -145,7 +274,10 @@ function crushOutput(command, output) {
   if (!output || Buffer.byteLength(output, 'utf8') < MIN_BYTES_TO_CRUSH) return null;
   if (output.includes(CRUSH_MARKER)) return null;
 
-  const kind = commandKind(command);
+  let kind = commandKind(command);
+  if (kind === 'generic' && looksLikeJsonPayload(output)) {
+    kind = 'json-output';
+  }
   const crushed = CRUSHERS[kind](output);
   if (crushed === null || Buffer.byteLength(crushed, 'utf8') >= Buffer.byteLength(output, 'utf8')) {
     return null;
@@ -165,4 +297,5 @@ module.exports = {
   commandKind,
   crushOutput,
   estimateTokens,
+  looksLikeJsonPayload,
 };
