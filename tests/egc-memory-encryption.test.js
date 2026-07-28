@@ -171,6 +171,84 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
   }
 })) passed++; else failed++;
 
+if (test('loadOrCreateEncKey: default keyPath resolves $HOME fresh on every call, not just at module load (regression)', () => {
+  // Regression for the bug behind repeated "encryption key may have
+  // changed" failures on main.md: ENC_KEY_PATH used to be a module-level
+  // constant computed once from os.homedir() at import time, so a $HOME
+  // change mid-process had no effect on which key file the default
+  // parameter resolved to — while getStateDir() in index.ts (a live
+  // os.homedir() lookup on every call) tracked the real $HOME, letting the
+  // encrypting key and the state file directory silently diverge.
+  const homeA = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-homeA-'));
+  const homeB = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-homeB-'));
+  const origHome = process.env.HOME;
+  try {
+    process.env.HOME = homeA;
+    const keyA = loadOrCreateEncKey();
+    process.env.HOME = homeB;
+    const keyB = loadOrCreateEncKey();
+    assert.ok(fs.existsSync(path.join(homeA, '.egc', 'encryption.key')), 'key A must land under homeA');
+    assert.ok(fs.existsSync(path.join(homeB, '.egc', 'encryption.key')), 'key B must land under homeB, not homeA');
+    assert.ok(!keyA.equals(keyB), 'each $HOME must get its own independently generated key');
+  } finally {
+    process.env.HOME = origHome;
+    fs.rmSync(homeA, { recursive: true, force: true });
+    fs.rmSync(homeB, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+// ── writeStateFile concurrency ──────────────────────────────────────────────
+
+if (test('writeStateFile: concurrent writers to the same path use distinct temp files (regression)', () => {
+  // Regression for the second cause behind repeated main.md corruption:
+  // writeStateFile used a fixed `${filePath}.tmp` name, so two concurrent
+  // writers (e.g. two egc-memory processes racing an update_state on the
+  // same state file) could each write to the same temp path and clobber
+  // each other's bytes before either renamed, producing ciphertext that
+  // decrypts to nothing — indistinguishable from disk corruption. This
+  // spies on fs.writeFileSync to capture every temp path writeStateFile
+  // uses across concurrent-looking calls and asserts none collide.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  const filePath = path.join(tmpDir, 'main.md');
+  const key = crypto.randomBytes(32);
+  const seenTmpPaths = [];
+  const originalWriteFileSync = fs.writeFileSync;
+  fs.writeFileSync = (target, ...rest) => {
+    if (typeof target === 'string' && target.startsWith(`${filePath}.tmp`)) {
+      seenTmpPaths.push(target);
+    }
+    return originalWriteFileSync(target, ...rest);
+  };
+  try {
+    for (let i = 0; i < 5; i++) {
+      writeStateFile(filePath, `write #${i}`, key);
+    }
+    assert.strictEqual(seenTmpPaths.length, 5, 'expected one temp-file write per call');
+    assert.strictEqual(
+      new Set(seenTmpPaths).size,
+      seenTmpPaths.length,
+      `every writeStateFile call must use a distinct temp path, got: ${JSON.stringify(seenTmpPaths)}`
+    );
+    assert.strictEqual(readStateFile(filePath, key), 'write #4', 'final content must be the last write, uncorrupted');
+  } finally {
+    fs.writeFileSync = originalWriteFileSync;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('writeStateFile: cleans up its temp file after a successful write', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  try {
+    const filePath = path.join(tmpDir, 'state.md');
+    const key = crypto.randomBytes(32);
+    writeStateFile(filePath, 'content', key);
+    const leftoverTmp = fs.readdirSync(tmpDir).filter(name => name.includes('.tmp-'));
+    assert.deepStrictEqual(leftoverTmp, [], `no leftover temp files expected, found: ${JSON.stringify(leftoverTmp)}`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
 // ── quarantineUndecryptableStateFile ────────────────────────────────────────
 
 if (test('quarantineUndecryptableStateFile: renames the corrupted file to a backup path and leaves it readable', () => {

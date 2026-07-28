@@ -59,12 +59,45 @@ if (test('loadOrCreateKey: returns a 32-byte Buffer', () => {
 })) passed++; else failed++;
 
 if (test('loadOrCreateKey: key file is created with mode 0600', () => {
-  // KEY_PATH is resolved at module load time from os.homedir()
-  const keyPath = path.join(os.homedir(), '.egc', 'integrity.key');
-  loadOrCreateKey();
-  assert.ok(fs.existsSync(keyPath), 'key file should exist');
-  const mode = fs.statSync(keyPath).mode & 0o777;
-  assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-integrity-test-'));
+  try {
+    const origHome = process.env.HOME;
+    process.env.HOME = tmpDir;
+    loadOrCreateKey();
+    process.env.HOME = origHome;
+    const keyPath = path.join(tmpDir, '.egc', 'integrity.key');
+    assert.ok(fs.existsSync(keyPath), 'key file should exist');
+    const mode = fs.statSync(keyPath).mode & 0o777;
+    assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('loadOrCreateKey: resolves $HOME fresh on every call, not just at module load (regression)', () => {
+  // Before the fix, KEY_DIR/KEY_PATH were module-level constants computed
+  // once from os.homedir() at import time, so a $HOME change mid-process
+  // (e.g. a different effective $HOME on a later process boot) had no
+  // effect: the key path stayed frozen while getStateDir() in index.ts
+  // (a live os.homedir() lookup on every call) tracked the real $HOME,
+  // producing a state directory and a key directory that could silently
+  // diverge from each other.
+  const homeA = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-integrity-test-homeA-'));
+  const homeB = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-integrity-test-homeB-'));
+  const origHome = process.env.HOME;
+  try {
+    process.env.HOME = homeA;
+    const keyA = loadOrCreateKey();
+    process.env.HOME = homeB;
+    const keyB = loadOrCreateKey();
+    assert.ok(fs.existsSync(path.join(homeA, '.egc', 'integrity.key')), 'key A must land under homeA');
+    assert.ok(fs.existsSync(path.join(homeB, '.egc', 'integrity.key')), 'key B must land under homeB, not homeA');
+    assert.ok(!keyA.equals(keyB), 'each $HOME must get its own independently generated key');
+  } finally {
+    process.env.HOME = origHome;
+    fs.rmSync(homeA, { recursive: true, force: true });
+    fs.rmSync(homeB, { recursive: true, force: true });
+  }
 })) passed++; else failed++;
 
 if (test('loadOrCreateKey: returns same key on second call', () => {

@@ -15,12 +15,22 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const KEY_DIR = path.join(os.homedir(), '.egc');
-const ENC_KEY_PATH = path.join(KEY_DIR, 'encryption.key');
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 const MAGIC = 'EGC1:';
+
+// A function, not a module-level constant: os.homedir() must be read fresh
+// on every call. A frozen constant would keep resolving to whatever $HOME
+// was in effect when this module first loaded, even if the MCP server
+// process later observes a different $HOME — silently diverging from
+// getStateDir() (index.ts), which already recomputes os.homedir() per call.
+// That divergence is what let a state file get encrypted under one key and
+// later fail decryption under another, long after the key file itself had
+// stopped changing.
+function defaultEncKeyPath(): string {
+  return path.join(os.homedir(), '.egc', 'encryption.key');
+}
 
 /**
  * Load or create the AES-256-GCM encryption key at ~/.egc/encryption.key.
@@ -28,7 +38,7 @@ const MAGIC = 'EGC1:';
  * Throws if the key file exists but cannot be read or is malformed —
  * only generates a new key when the file genuinely does not exist.
  */
-export function loadOrCreateEncKey(keyPath: string = ENC_KEY_PATH): Buffer {
+export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffer {
   const dir = path.dirname(keyPath);
   try {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -156,10 +166,21 @@ export function readStateFile(filePath: string, key: Buffer): string {
  */
 export function writeStateFile(filePath: string, plaintext: string, key: Buffer): void {
   const encrypted = encryptState(plaintext, key);
-  const tmpPath = `${filePath}.tmp`;
-  fs.writeFileSync(tmpPath, encrypted);
-  try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
-  fs.renameSync(tmpPath, filePath);
+  // Unique per call, not just per file: a fixed `${filePath}.tmp` name lets
+  // two concurrent writers to the same state file (different processes, or
+  // a lock timeout letting a second write through) overwrite each other's
+  // temp file before either renames, producing ciphertext with bytes from
+  // both writes — undecryptable garbage that looks like corruption. Mirrors
+  // the same pid+random suffix loadOrCreateEncKey() already uses for its
+  // own temp file below.
+  const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  try {
+    fs.writeFileSync(tmpPath, encrypted);
+    try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
+    fs.renameSync(tmpPath, filePath);
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already renamed away; best-effort cleanup */ }
+  }
 }
 
 /**
