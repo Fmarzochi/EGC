@@ -6,13 +6,9 @@ const {
   isForeignPlatformPath,
 } = require('./helpers');
 const {
-  BASH_GUARDIAN_HOOK_MODULE_ID,
-  BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-  CRUSHER_HOOK_MODULE_ID,
-  CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-  HOOK_OPERATION_KIND,
-  PRE_TOOL_USE_EVENT,
+  createBashGuardianHookMergeOperationForDestination,
   createBashGuardianScriptCopyOperations,
+  createCrusherHookMergeOperationForDestination,
   createCrusherScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
@@ -24,24 +20,15 @@ const {
 // states Trae can import an existing Claude Code hook configuration. The
 // shell/terminal tool's matcher is "RunCommand" (not "Bash" like Claude
 // Code/Codex, not "Shell" like Cursor) -- confirmed the same way, not
-// assumed from the other hosts' naming.
+// assumed from the other hosts' naming. Uses the same destination-driven
+// merge builders Copilot/Antigravity already share (cubic review, PR #1079)
+// instead of a Trae-local reimplementation of the operation shape.
 function resolveTraeRoot(adapter, input) {
   return adapter.resolveRoot(input);
 }
 
-function buildTraePreToolUseMergeOperation(traeRoot, moduleId, sourceRelativePath, hookScriptPath) {
-  return {
-    kind: HOOK_OPERATION_KIND,
-    moduleId,
-    sourceRelativePath,
-    destinationPath: path.join(traeRoot, 'hooks.json'),
-    strategy: HOOK_OPERATION_KIND,
-    ownership: 'managed',
-    scaffoldOnly: false,
-    hookEvent: PRE_TOOL_USE_EVENT,
-    hookMatcher: 'RunCommand',
-    hookScriptPath,
-  };
+function resolveTraeHooksJsonPath(traeRoot) {
+  return path.join(traeRoot, 'hooks.json');
 }
 
 // Every Trae install registers the Guardian Bash validator on
@@ -58,11 +45,10 @@ function createTraeGuardianOperations(adapter, traeRoot) {
     traeRoot
   );
 
-  const mergeOperation = buildTraePreToolUseMergeOperation(
-    traeRoot,
-    BASH_GUARDIAN_HOOK_MODULE_ID,
-    BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-    hookScriptPath
+  const mergeOperation = createBashGuardianHookMergeOperationForDestination(
+    resolveTraeHooksJsonPath(traeRoot),
+    hookScriptPath,
+    'RunCommand'
   );
 
   return [...copyOperations, mergeOperation];
@@ -81,11 +67,10 @@ function createTraeCrusherOperations(adapter, traeRoot) {
     traeRoot
   );
 
-  const mergeOperation = buildTraePreToolUseMergeOperation(
-    traeRoot,
-    CRUSHER_HOOK_MODULE_ID,
-    CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-    hookScriptPath
+  const mergeOperation = createCrusherHookMergeOperationForDestination(
+    resolveTraeHooksJsonPath(traeRoot),
+    hookScriptPath,
+    'RunCommand'
   );
 
   return [...copyOperations, mergeOperation];
