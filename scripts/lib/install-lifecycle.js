@@ -19,11 +19,7 @@ const {
   POST_COMPACT_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
-  applyCompactHookOperation,
-  applyHookEntryToFile,
-  applyIntuitionHookToFile,
-  applySessionStartHookToFile,
-  applyStopHookToFile,
+  applyManagedHookOperation,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
   inspectPreCompactHookFile,
@@ -38,7 +34,6 @@ const {
 const {
   PRE_RUN_COMMAND_EVENT: WINDSURF_PRE_RUN_COMMAND_EVENT,
   PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
-  applyWindsurfGateGuardHookToFile,
   inspectWindsurfGateGuardHookFile,
   removeWindsurfGateGuardHookFromFile,
 } = require('./windsurf-gateguard-hooks');
@@ -347,22 +342,6 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
-function repairManagedHookOperation(operation) {
-  if (operation.hookEvent === STOP_EVENT) {
-    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
-  } else if (applyCompactHookOperation(operation)) {
-    // EGC-495: PreCompact/PostCompact handled by the shared helper.
-  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else {
-    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
-  }
-}
-
 function repairCopyFile(repoRoot, operation) {
   const sourcePath = resolveOperationSourcePath(repoRoot, operation);
   if (!sourcePath || !fs.existsSync(sourcePath)) {
@@ -437,7 +416,7 @@ function executeRepairOperation(repoRoot, operation) {
   } else if (operation.kind === 'remove') {
     repairRemove(operation);
   } else if (operation.kind === HOOK_OPERATION_KIND) {
-    repairManagedHookOperation(operation);
+    applyManagedHookOperation(operation);
   } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
     repairMergeYamlReadList(operation);
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {

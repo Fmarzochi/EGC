@@ -11,6 +11,13 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const {
+  PRE_RUN_COMMAND_EVENT: WINDSURF_PRE_RUN_COMMAND_EVENT,
+  PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
+  applyWindsurfGateGuardHookToFile,
+} = require('./windsurf-gateguard-hooks');
+
+const MANAGED_WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -909,10 +916,6 @@ function createPostCompactHookMergeOperation(targetRoot) {
   };
 }
 
-// Shared by every HOOK_OPERATION_KIND dispatcher that applies an operation
-// (install/apply.js's applyHookOperation, install-lifecycle.js's
-// repairManagedHookOperation): both need the identical PreCompact/PostCompact
-// branch, so the logic lives here once instead of being duplicated per caller.
 function applyCompactHookOperation(operation) {
   if (operation.hookEvent === PRE_COMPACT_EVENT) {
     applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath);
@@ -923,6 +926,26 @@ function applyCompactHookOperation(operation) {
     return true;
   }
   return false;
+}
+
+// Shared by install/apply.js and install-lifecycle.js's repair path: both
+// need the exact same HOOK_OPERATION_KIND dispatch (SessionStart is the
+// fallback for any event not explicitly handled above it), so it lives here
+// once instead of being duplicated per caller.
+function applyManagedHookOperation(operation) {
+  if (operation.hookEvent === STOP_EVENT) {
+    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
+    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
+    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
+  } else if (applyCompactHookOperation(operation)) {
+    // handled above
+  } else if (MANAGED_WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
+    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else {
+    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
+  }
 }
 
 module.exports = {
@@ -963,10 +986,10 @@ module.exports = {
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
-  applyCompactHookOperation,
   applyGateGuardHookToFile,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
+  applyManagedHookOperation,
   applyPreCompactHookToFile,
   applyRouterHookToFile,
   applySessionStartHookToFile,
