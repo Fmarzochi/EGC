@@ -117,6 +117,22 @@ function runTests() {
     assert.strictEqual(response.permission, 'deny');
   })) passed++; else failed++;
 
+  if (test('CLI: a truncated payload that still happens to parse as valid JSON also fails CLOSED (exit 2)', () => {
+    // Distinct from the test above: JSON.parse allows trailing whitespace
+    // after a complete value, so padding with spaces (instead of 'x') past
+    // the 1MB cap produces a capped-length prefix that is STILL valid JSON
+    // -- the truncated flag must be checked unconditionally, not only when
+    // parsing also happened to fail, or this exact shape would slip through
+    // as a trusted "ok: true" result (cubic-dev-ai finding on PR #1073,
+    // also present here since this file predates the shared helper fix).
+    const oversizedWhitespacePadding = ' '.repeat(2 * 1024 * 1024);
+    const oversizedInput = JSON.stringify({ command: 'git status', cwd: '/tmp' }) + oversizedWhitespacePadding;
+    const result = runAdapterCli(oversizedInput);
+    assert.strictEqual(result.code, 2, `Expected fail-closed on a truncated-but-parseable payload, got exit ${result.code}`);
+    const response = JSON.parse(result.stdout);
+    assert.strictEqual(response.permission, 'deny');
+  })) passed++; else failed++;
+
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
 }
