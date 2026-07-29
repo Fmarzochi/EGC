@@ -25,7 +25,7 @@ jobs:
         id: build
         # Pinned to Maqbool61/clusterfuzzlite@fix/js-sanitizer-none (EGC#910):
         # patches config_utils.py inside the Docker image to allow SANITIZER=none
-        # for JavaScript projects. Revert to google/clusterfuzzlite/actions/build_fuzzers@v1
+        # for JavaScript projects. Revert to google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
         # once google/oss-fuzz#15907 is resolved upstream.
         uses: Maqbool61/clusterfuzzlite/actions/build_fuzzers@f3fd422fd0d55f2b4b2c3c1795ed4bcb7084ca41
         with:
