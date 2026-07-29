@@ -21,7 +21,7 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
-const { runPlainExitCodeGuardianAdapter } = require('../lib/adapter-stdin-json');
+const { bootstrapPlainExitCodeAdapter } = require('../lib/adapter-stdin-json');
 
 function buildGuardianInput(event) {
   if (!event || typeof event !== 'object') {
@@ -41,12 +41,8 @@ function buildGuardianInput(event) {
   return input;
 }
 
-function main() {
-  runPlainExitCodeGuardianAdapter(buildGuardianInput, run);
-}
-
-if (require.main === module) {
-  main();
-}
-
-module.exports = { buildGuardianInput };
+module.exports = bootstrapPlainExitCodeAdapter({
+  isMain: require.main === module,
+  buildGuardianInput,
+  runGuardian: run,
+});

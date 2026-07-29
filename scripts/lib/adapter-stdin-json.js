@@ -91,4 +91,21 @@ function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
   });
 }
 
-module.exports = { MAX_STDIN, readAdapterStdinJson, runPlainExitCodeGuardianAdapter };
+// Shared entrypoint for the plain-exit-code adapters (Amazon Q, Goose,
+// OpenHands -- Kiro predates this helper and keeps its own inline copy):
+// collapses each adapter's identical "run when invoked directly, always
+// export buildGuardianInput for tests" boilerplate into one call, so those
+// three near-identical translation scripts stop duplicating it verbatim.
+function bootstrapPlainExitCodeAdapter({ isMain, buildGuardianInput, runGuardian }) {
+  if (isMain) {
+    runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian);
+  }
+  return { buildGuardianInput };
+}
+
+module.exports = {
+  MAX_STDIN,
+  bootstrapPlainExitCodeAdapter,
+  readAdapterStdinJson,
+  runPlainExitCodeGuardianAdapter,
+};
