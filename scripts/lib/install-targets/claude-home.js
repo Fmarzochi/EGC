@@ -34,6 +34,7 @@ const {
   createPreToolUseGateGuardHookMergeOperation,
   createPreCompactHookMergeOperation,
   createPostCompactHookMergeOperation,
+  createEgcMemorySaveScriptCopyOperations,
   resolveHookScriptDestination,
   resolveStopHookScriptDestination,
 } = require('../claude-settings-hooks');
@@ -78,11 +79,18 @@ function createSessionStateHookOperations(adapter, targetRoot) {
     createStopHookMergeOperation(targetRoot),
     // PreCompact -> egc-memory-save.js (guaranteed snapshot save + prompts
     // update_state), PostCompact -> reuses claude-session-start.js (same
-    // proven state-load-and-print logic SessionStart already uses). Closes
-    // EGC-495 (no mechanism previously re-injected state after a context
-    // compaction). Scripts are covered by the default hooks-runtime module's
-    // scripts/hooks + scripts/lib directory scaffold, same as the Crusher/
-    // GateGuard/BashDispatcher hooks above -- no extra copy operation needed.
+    // proven state-load-and-print logic SessionStart already uses, already
+    // copied above via HOOK_SCRIPT_SOURCE_RELATIVE_PATH/libOperations).
+    // Closes EGC-495 (no mechanism previously re-injected state after a
+    // context compaction). Like SessionStart/Stop above, egc-memory-save.js
+    // and its lib dependencies are copied unconditionally here rather than
+    // left to an optional module, so a minimal install never registers a
+    // PreCompact hook pointing at a script that was never copied to disk.
+    ...createEgcMemorySaveScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) =>
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options),
+      targetRoot
+    ),
     createPreCompactHookMergeOperation(targetRoot),
     createPostCompactHookMergeOperation(targetRoot),
     createUserPromptSubmitHookMergeOperation(targetRoot),

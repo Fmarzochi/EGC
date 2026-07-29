@@ -995,6 +995,7 @@ module.exports = {
   applySessionStartHookToFile,
   applyStopHookToFile,
   applyWriteValidatorHookToFile,
+  buildHookCommand,
   buildSessionStartCommand,
   buildStopCommand,
   createGateGuardHookMergeOperationForDestination,

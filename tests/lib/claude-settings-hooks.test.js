@@ -45,6 +45,7 @@ const {
   applySessionStartHookToFile,
   applyStopHookToFile,
   applyWriteValidatorHookToFile,
+  buildHookCommand,
   buildSessionStartCommand,
   buildStopCommand,
   createPreToolUseBashDispatcherHookMergeOperation,
@@ -633,6 +634,10 @@ function runTests() {
     assert.strictEqual(operation.scaffoldOnly, false);
     assert.strictEqual(operation.hookEvent, PRE_COMPACT_EVENT);
     assert.strictEqual(operation.hookScriptPath, resolveEgcMemorySaveHookScriptDestination(targetRoot));
+    assert.strictEqual(
+      operation.hookCommand,
+      buildHookCommand(resolveEgcMemorySaveHookScriptDestination(targetRoot))
+    );
   })) passed++; else failed++;
 
   if (test('createPreCompactHookMergeOperationForDestination targets an arbitrary hooks.json path', () => {
