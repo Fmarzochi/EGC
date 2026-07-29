@@ -52,29 +52,38 @@ function runTests() {
 
   if (test('computeUpdatedInput rewrites a crushable Shell command', () => {
     process.env.EGC_ASSUME_EGC_CLI = '1';
-    const updated = computeUpdatedInput({
-      tool_name: 'Shell',
-      tool_input: { command: 'git log --stat -n 300', working_directory: '/repo' },
-    });
-    assert.ok(updated, 'expected a rewritten tool_input');
-    assert.strictEqual(updated.command, 'egc run git log --stat -n 300');
-    assert.strictEqual(updated.working_directory, '/repo', 'must preserve other tool_input fields');
-    delete process.env.EGC_ASSUME_EGC_CLI;
+    try {
+      const updated = computeUpdatedInput({
+        tool_name: 'Shell',
+        tool_input: { command: 'git log --stat -n 300', working_directory: '/repo' },
+      });
+      assert.ok(updated, 'expected a rewritten tool_input');
+      assert.strictEqual(updated.command, 'egc run git log --stat -n 300');
+      assert.strictEqual(updated.working_directory, '/repo', 'must preserve other tool_input fields');
+    } finally {
+      delete process.env.EGC_ASSUME_EGC_CLI;
+    }
   })) passed++; else failed++;
 
   if (test('computeUpdatedInput returns null for a non-crushable Shell command', () => {
     process.env.EGC_ASSUME_EGC_CLI = '1';
-    assert.strictEqual(computeUpdatedInput({ tool_name: 'Shell', tool_input: { command: 'echo hi' } }), null);
-    delete process.env.EGC_ASSUME_EGC_CLI;
+    try {
+      assert.strictEqual(computeUpdatedInput({ tool_name: 'Shell', tool_input: { command: 'echo hi' } }), null);
+    } finally {
+      delete process.env.EGC_ASSUME_EGC_CLI;
+    }
   })) passed++; else failed++;
 
   if (test('computeUpdatedInput returns null for a non-Shell tool_name', () => {
     process.env.EGC_ASSUME_EGC_CLI = '1';
-    assert.strictEqual(
-      computeUpdatedInput({ tool_name: 'Read', tool_input: { command: 'git log --stat -n 300' } }),
-      null
-    );
-    delete process.env.EGC_ASSUME_EGC_CLI;
+    try {
+      assert.strictEqual(
+        computeUpdatedInput({ tool_name: 'Read', tool_input: { command: 'git log --stat -n 300' } }),
+        null
+      );
+    } finally {
+      delete process.env.EGC_ASSUME_EGC_CLI;
+    }
   })) passed++; else failed++;
 
   if (test('computeUpdatedInput returns null when there is no command', () => {
