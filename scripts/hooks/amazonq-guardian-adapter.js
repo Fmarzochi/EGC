@@ -21,25 +21,9 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
-const { bootstrapPlainExitCodeAdapter } = require('../lib/adapter-stdin-json');
+const { bootstrapPlainExitCodeAdapter, createBashToolGuardianInputMapper } = require('../lib/adapter-stdin-json');
 
-function buildGuardianInput(event) {
-  if (!event || typeof event !== 'object') {
-    return null;
-  }
-  if (event.tool_name !== 'execute_bash') {
-    return null;
-  }
-  const command = event.tool_input?.command;
-  if (!command || typeof command !== 'string') {
-    return null;
-  }
-  const input = { tool_name: 'Bash', tool_input: { command } };
-  if (typeof event.cwd === 'string') {
-    input.cwd = event.cwd;
-  }
-  return input;
-}
+const buildGuardianInput = createBashToolGuardianInputMapper({ shellToolName: 'execute_bash', cwdKey: 'cwd' });
 
 module.exports = bootstrapPlainExitCodeAdapter({
   isMain: require.main === module,
