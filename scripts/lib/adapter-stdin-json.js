@@ -43,20 +43,22 @@ function readAdapterStdinJson(onComplete) {
 // runGuardian: pre-bash-guardian-validate.js's own run().
 function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
   readAdapterStdinJson(({ ok, truncated, value }) => {
+    // Checked before `ok`, unconditionally: a capped-length prefix can
+    // still happen to be syntactically valid JSON (e.g. the cut lands
+    // exactly at the end of a complete value), which previously reached
+    // the `ok: true` branch below with truncated data treated as trusted.
+    // Any truncated payload is unanalyzable -- some of what the caller
+    // sent was discarded -- so it always fails closed, regardless of
+    // whether JSON.parse happened to succeed on what remained.
+    if (truncated) {
+      process.stderr.write(
+        'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+        'this validator can safely read, so it could not be parsed or validated. ' +
+        'Simplify the command.\n'
+      );
+      process.exit(2);
+    }
     if (!ok) {
-      // A parse failure caused by hitting the size cap is not the same as
-      // ordinary malformed input: an attacker can pad a command past the
-      // stdin cap specifically to land here and fail open. Only genuinely
-      // malformed (non-truncated) input gets the fail-open policy the other
-      // adapters use; a truncated payload is unanalyzable and fails closed.
-      if (truncated) {
-        process.stderr.write(
-          'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
-          'this validator can safely read, so it could not be parsed or validated. ' +
-          'Simplify the command.\n'
-        );
-        process.exit(2);
-      }
       process.exit(0);
     }
 
