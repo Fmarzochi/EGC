@@ -74,6 +74,7 @@ tokens/
 .claude-cache/
 .gemini-cache/
 .ai-history/
+.feedback/
 
 # =========================================================
 # LOCAL ARCHIVES & DEPRECATED STATE
