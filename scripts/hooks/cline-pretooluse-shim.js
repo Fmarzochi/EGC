@@ -13,8 +13,8 @@
 
 'use strict';
 
-const path = require('path');
-const { spawnSync } = require('child_process');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 // NOT '../lib/adapter-stdin-json': this shim is installed at <root>/hooks/
 // PreToolUse, a sibling of <root>/scripts/ (not inside it) -- unlike
 // cline-guardian-adapter.js, which lives at <root>/scripts/hooks/ and so
