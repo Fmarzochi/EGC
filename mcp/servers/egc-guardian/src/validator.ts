@@ -1213,9 +1213,20 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
     const candidatePaths = args.flatMap(rawArg => {
       const arg = bareToken(rawArg);
-      if (!arg.startsWith('-')) return [arg];
+      if (!arg.startsWith('-')) {
+        // A URI operand (http://..., ftp://...) is a download/read target,
+        // not a local path -- passing it to isProtectedPath would resolve it
+        // relative to cwd and could false-positive hard-block a benign
+        // download whose URL happens to end in a protected-looking name.
+        return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [arg];
+      }
       const eq = arg.indexOf('=');
-      return eq > 0 ? [arg.slice(eq + 1)] : [];
+      if (eq > 0) return [arg.slice(eq + 1)];
+      // A short option's value can be glued directly to its flag with no
+      // separator (`-o~/.bashrc`, equivalent to `-o ~/.bashrc`) -- without
+      // this, that form never produces a candidate and stays advisory-only.
+      if (!arg.startsWith('--') && arg.length > 2) return [arg.slice(2)];
+      return [];
     });
     const protectedTarget = candidatePaths.find(arg => isProtectedPath(arg, cwd));
     if (protectedTarget) {

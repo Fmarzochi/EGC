@@ -270,7 +270,11 @@ function runTests() {
     const result = spawnSync('node', [hookPath], {
       input: rawInput,
       encoding: 'utf8',
-      env: process.env,
+      // Filtered, not inherited raw: a developer/CI environment that
+      // happens to have EGC_GUARDIAN_CLI set (shell profile, another test)
+      // would silently redirect this at that override instead of the real
+      // built CLI this test exists to exercise.
+      env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'EGC_GUARDIAN_CLI')),
       timeout: 15000,
       stdio: ['pipe', 'pipe', 'pipe']
     });
