@@ -803,6 +803,31 @@ function createBashGuardianScriptCopyOperations(createRemappedOperation, targetR
   ];
 }
 
+// Windsurf's, Cursor's, and Kiro's translation adapters
+// (windsurf-guardian-adapter.js, cursor-guardian-adapter.js,
+// kiro-guardian-adapter.js) all require ../lib/adapter-stdin-json.js for
+// their truncation-aware stdin reader -- unlike pre-bash-guardian-
+// validate.js itself, which every other target (Claude Code, Codex,
+// Copilot, CodeBuddy, Antigravity) calls directly with no translation
+// layer and so never needs this file. Kept separate from
+// createBashGuardianScriptCopyOperations (shared by every target,
+// including ones with no adapter) instead of folding it into
+// BASH_GUARDIAN_HOOK_LIB_SOURCES, so targets without an adapter don't get
+// a copy of a file they never require(). Confirmed missing on the real
+// machine for all three hosts after merge (2026-07-29): the adapter
+// crashed with MODULE_NOT_FOUND on every invocation because this file was
+// never part of any target's copy operations.
+const ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH = 'scripts/lib/adapter-stdin-json.js';
+
+function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot) {
+  return createRemappedOperation(
+    BASH_GUARDIAN_HOOK_MODULE_ID,
+    ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH,
+    path.join(targetRoot, ...ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH.split('/')),
+    { strategy: 'preserve-relative-path' }
+  );
+}
+
 // PreCompact -> egc-memory-save hook: closes EGC-495 (no mechanism re-injected
 // state after a context compaction). egc-memory-save.js writes a guaranteed
 // on-disk snapshot (writeSnapshotToDisk, no AI cooperation required) and
@@ -1022,6 +1047,8 @@ module.exports = {
   createPreToolUseBashGuardianHookMergeOperation,
   createBashGuardianHookMergeOperationForDestination,
   resolveBashGuardianHookScriptDestination,
+  ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH,
+  createAdapterStdinJsonCopyOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
