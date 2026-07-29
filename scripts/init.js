@@ -236,11 +236,19 @@ function runDoctor() {
   }
 }
 
+const AUTHOR_NAME = 'Felipe Marzochi';
+const AUTHOR_URL = 'https://github.com/Fmarzochi';
+const authorText = `Powered by ${AUTHOR_NAME}`;
+const authorDisplay = isTTY
+  ? `\x1b]8;;${AUTHOR_URL}\x1b\\${authorText}\x1b]8;;\x1b\\`
+  : authorText;
+
 const banner = [
   '',
   `  ${c.cyan}${c.bold}╭──────────────────────────────────────────╮${c.reset}`,
-  `  ${c.cyan}${c.bold}│${c.reset}  ${c.bold}EGC${c.reset} ${c.dim}·${c.reset} AI context manager${' '.repeat(16)}${c.cyan}${c.bold}│${c.reset}`,
+  `  ${c.cyan}${c.bold}│${c.reset}  ${c.bold}EGC${c.reset} ${c.dim}·${c.reset} Extended Global Context${' '.repeat(11)}${c.cyan}${c.bold}│${c.reset}`,
   `  ${c.cyan}${c.bold}│${c.reset}  ${c.dim}v${PKG_VERSION}${' '.repeat(39 - PKG_VERSION.length)}${c.reset}${c.cyan}${c.bold}│${c.reset}`,
+  `  ${c.cyan}${c.bold}│${c.reset}  ${c.dim}${authorDisplay}${' '.repeat(40 - authorText.length)}${c.reset}${c.cyan}${c.bold}│${c.reset}`,
   `  ${c.cyan}${c.bold}╰──────────────────────────────────────────╯${c.reset}`,
   '',
 ];
