@@ -85,9 +85,18 @@ for (const testFile of testFiles) {
   if (stdout) console.log(stdout);
   if (stderr) console.log(stderr);
 
+  // Test files in this repo report their summary in two different casings:
+  // "Passed: N" / "Results: Passed: N, Failed: M" (most files), or
+  // "N passed, M failed" (adapter CLI tests like cursor-guardian-adapter.test.js,
+  // predating this fix). Falling back to the lowercase form when the first
+  // doesn't match means every file's real count is aggregated here, instead
+  // of silently contributing 0 to the total the way the lowercase-only files
+  // did before -- discovered while adding junie-guardian-adapter.test.js and
+  // junie-crusher-adapter.test.js (PR #1081), whose 16 passing assertions
+  // never moved this script's own "Total Tests" figure.
   const combined = stdout + stderr;
-  const passedMatch = combined.match(/Passed:\s*(\d+)/);
-  const failedMatch = combined.match(/Failed:\s*(\d+)/);
+  const passedMatch = combined.match(/Passed:\s*(\d+)/i) || combined.match(/(\d+)\s+passed\b/i);
+  const failedMatch = combined.match(/Failed:\s*(\d+)/i) || combined.match(/(\d+)\s+failed\b/i);
 
   if (passedMatch) totalPassed += parseInt(passedMatch[1], 10);
   if (failedMatch) totalFailed += parseInt(failedMatch[1], 10);

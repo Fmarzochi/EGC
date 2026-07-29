@@ -14,6 +14,13 @@ const MAX_STDIN = 1024 * 1024;
 function readAdapterStdinJson(onComplete) {
   let raw = '';
   let truncated = false;
+  let done = false;
+  const complete = result => {
+    if (done) return;
+    done = true;
+    onComplete(result);
+  };
+
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
     if (raw.length < MAX_STDIN) {
@@ -23,15 +30,21 @@ function readAdapterStdinJson(onComplete) {
       truncated = true;
     }
   });
+  // Without this, a stream error (e.g. the parent process closing the pipe
+  // abruptly) leaves onComplete never called -- the adapter hangs, and since
+  // stdin is an EventEmitter, an 'error' event with no listener throws an
+  // uncaught exception by default. Fails open (ok: false), matching every
+  // other unreadable-input path this reader already has.
+  process.stdin.on('error', () => complete({ ok: false, truncated }));
   process.stdin.on('end', () => {
     let value;
     try {
       value = JSON.parse(raw);
     } catch {
-      onComplete({ ok: false, truncated });
+      complete({ ok: false, truncated });
       return;
     }
-    onComplete({ ok: true, truncated, value });
+    complete({ ok: true, truncated, value });
   });
 }
 

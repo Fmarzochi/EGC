@@ -17,12 +17,16 @@
  *
  * Fail-open throughout: Crusher is a performance optimization, never a
  * security boundary (unlike cursor-guardian-adapter.js), so any error or
- * ambiguity here just means the original command runs unmodified.
+ * ambiguity here just means the original command runs unmodified. Uses
+ * computeCrushedCommand (shared with junie-crusher-adapter.js) for the
+ * actual rewrite decision, rather than each host reimplementing its own
+ * JSON.parse(run(JSON.stringify(...))) wrapper (cubic-dev-ai finding, PR
+ * #1081).
  */
 
 'use strict';
 
-const { run: runCrusherRewrite } = require('./pre-bash-crusher-rewrite');
+const { computeCrushedCommand } = require('./pre-bash-crusher-rewrite');
 const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
 // Returns the rewritten tool_input object, or null when nothing should
@@ -32,28 +36,18 @@ function computeUpdatedInput(event) {
     return null;
   }
   const command = event.tool_input?.command;
-  if (!command) {
-    return null;
-  }
-
-  let rewritten;
-  try {
-    const result = JSON.parse(runCrusherRewrite(JSON.stringify({ tool_input: { command } })));
-    rewritten = result?.tool_input?.command;
-  } catch {
-    return null;
-  }
-
-  if (typeof rewritten !== 'string' || rewritten === command) {
-    return null;
-  }
-
-  return { ...event.tool_input, command: rewritten };
+  const rewritten = command ? computeCrushedCommand(command) : null;
+  return rewritten ? { ...event.tool_input, command: rewritten } : null;
 }
 
 function respond(payload) {
+  // Sets exitCode and lets Node drain stdout naturally instead of forcing
+  // process.exit() right after write(): on POSIX, stdout writes to a pipe
+  // are asynchronous, so a forced exit can race the write and truncate the
+  // response before Cursor reads it (same class of bug cubic-dev-ai found
+  // in junie-crusher-adapter.js, PR #1081).
+  process.exitCode = 0;
   process.stdout.write(JSON.stringify(payload));
-  process.exit(0);
 }
 
 function main() {

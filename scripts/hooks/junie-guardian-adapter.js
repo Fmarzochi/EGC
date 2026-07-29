@@ -20,9 +20,14 @@ const { run } = require('./pre-bash-guardian-validate');
 const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
 function respond(decision, reason) {
+  // Sets exitCode and lets Node drain stdout naturally instead of forcing
+  // process.exit() right after write(): on POSIX, stdout writes to a pipe
+  // (which is what a hook subprocess always has) are asynchronous, so a
+  // forced exit can race the write and truncate the response before Junie
+  // reads it (cubic-dev-ai finding, PR #1081).
   const payload = reason ? { decision, reason } : { decision };
+  process.exitCode = decision === 'deny' ? 2 : 0;
   process.stdout.write(JSON.stringify(payload));
-  process.exit(decision === 'deny' ? 2 : 0);
 }
 
 function main() {
