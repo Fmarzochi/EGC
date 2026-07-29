@@ -31,7 +31,7 @@ function computeUpdatedInput(event) {
   if (!event || typeof event !== 'object' || event.tool_name !== 'Shell') {
     return null;
   }
-  const command = event.tool_input && event.tool_input.command;
+  const command = event.tool_input?.command;
   if (!command) {
     return null;
   }
@@ -39,7 +39,7 @@ function computeUpdatedInput(event) {
   let rewritten;
   try {
     const result = JSON.parse(runCrusherRewrite(JSON.stringify({ tool_input: { command } })));
-    rewritten = result && result.tool_input && result.tool_input.command;
+    rewritten = result?.tool_input?.command;
   } catch {
     return null;
   }
