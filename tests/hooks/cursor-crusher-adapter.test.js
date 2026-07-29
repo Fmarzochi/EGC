@@ -87,6 +87,45 @@ function runTests() {
     assert.strictEqual(computeUpdatedInput(42), null);
   })) passed++; else failed++;
 
+  if (test('computeUpdatedInput returns null (does not throw) when the shared rewrite dependency itself throws', () => {
+    // pre-bash-crusher-rewrite.js's own run() always self-catches and
+    // returns a valid JSON string, so this catch branch is unreachable via
+    // any real input through the normal path -- reproduced the same way
+    // tests/hooks/pre-bash-guardian-validate.test.js covers its own
+    // unreachable-via-real-input branch: stub the dependency in this
+    // process's require.cache and re-require the adapter fresh, so c8
+    // still credits the coverage to the real file path.
+    const rewritePath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-crusher-rewrite.js');
+    const originalRewriteEntry = require.cache[rewritePath];
+    const originalAdapterEntry = require.cache[adapterScript];
+    try {
+      delete require.cache[rewritePath];
+      delete require.cache[adapterScript];
+      require.cache[rewritePath] = {
+        id: rewritePath,
+        filename: rewritePath,
+        loaded: true,
+        exports: {
+          run: () => {
+            throw new Error('simulated dependency failure');
+          },
+        },
+      };
+
+      const { computeUpdatedInput: computeWithThrowingDependency } = require(adapterScript);
+      const result = computeWithThrowingDependency({
+        tool_name: 'Shell',
+        tool_input: { command: 'git log --stat -n 300' },
+      });
+      assert.strictEqual(result, null, 'Expected null when the rewrite dependency throws, not a crash');
+    } finally {
+      delete require.cache[rewritePath];
+      delete require.cache[adapterScript];
+      if (originalRewriteEntry) require.cache[rewritePath] = originalRewriteEntry;
+      if (originalAdapterEntry) require.cache[adapterScript] = originalAdapterEntry;
+    }
+  })) passed++; else failed++;
+
   if (test('CLI: rewrites a crushable Shell command with updated_input.command', () => {
     const result = runAdapterCli({
       tool_name: 'Shell',
