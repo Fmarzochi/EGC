@@ -909,6 +909,22 @@ function createPostCompactHookMergeOperation(targetRoot) {
   };
 }
 
+// Shared by every HOOK_OPERATION_KIND dispatcher that applies an operation
+// (install/apply.js's applyHookOperation, install-lifecycle.js's
+// repairManagedHookOperation): both need the identical PreCompact/PostCompact
+// branch, so the logic lives here once instead of being duplicated per caller.
+function applyCompactHookOperation(operation) {
+  if (operation.hookEvent === PRE_COMPACT_EVENT) {
+    applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath);
+    return true;
+  }
+  if (operation.hookEvent === POST_COMPACT_EVENT) {
+    applyHookEntryToFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
+    return true;
+  }
+  return false;
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -947,6 +963,7 @@ module.exports = {
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
+  applyCompactHookOperation,
   applyGateGuardHookToFile,
   applyHookEntryToFile,
   applyIntuitionHookToFile,

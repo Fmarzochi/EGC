@@ -19,9 +19,9 @@ const {
   POST_COMPACT_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
+  applyCompactHookOperation,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
-  applyPreCompactHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
   inspectHookEntryFile,
@@ -354,10 +354,8 @@ function repairManagedHookOperation(operation) {
     applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
-  } else if (operation.hookEvent === PRE_COMPACT_EVENT) {
-    applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === POST_COMPACT_EVENT) {
-    applyHookEntryToFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
+  } else if (applyCompactHookOperation(operation)) {
+    // EGC-495: PreCompact/PostCompact handled by the shared helper.
   } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
