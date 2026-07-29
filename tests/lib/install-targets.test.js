@@ -2549,6 +2549,81 @@ function runTests() {
     assert.ok(targets.includes('trae'), 'Should include trae target');
   })) passed++; else failed++;
 
+  if (test('trae adapter always plans Guardian and Crusher on PreToolUse/RunCommand, even with no modules selected', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const targetRoot = path.join(projectRoot, '.trae');
+    const hooksJsonPath = path.join(targetRoot, 'hooks.json');
+
+    const plan = planInstallTargetScaffold({
+      target: 'trae',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === hooksJsonPath);
+    assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into .trae/hooks.json');
+    assert.ok(
+      mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'RunCommand'),
+      'Both merges must target PreToolUse with the RunCommand matcher (Trae\'s tool_name for shell, not Bash/Shell)'
+    );
+
+    const guardianMerge = mergeOperations.find(operation => operation.moduleId === 'egc-bash-guardian-hook');
+    const crusherMerge = mergeOperations.find(operation => operation.moduleId === 'egc-crusher-hook');
+    assert.ok(guardianMerge, 'Should plan the Guardian merge');
+    assert.ok(crusherMerge, 'Should plan the Crusher merge');
+    assert.strictEqual(guardianMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js'));
+    assert.strictEqual(crusherMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'crusher-hook.js'));
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === guardianMerge.hookScriptPath
+      )),
+      'Should plan the shared Guardian validator script copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/crusher-hook.js'
+        && operation.destinationPath === crusherMerge.hookScriptPath
+      )),
+      'Should plan the shared Crusher hook script copy even with no modules selected'
+    );
+  })) passed++; else failed++;
+
+  if (test('trae adapter accepts a singular input.module and treats a fully empty input as no modules', () => {
+    // planInstallTargetScaffold() (used by the tests above) always normalizes
+    // to an array before calling adapter.planOperations(), so these two
+    // fallback branches are only reachable by calling the adapter directly --
+    // the same shape install-executor.js's non-array call sites use.
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const adapter = getInstallTargetAdapter('trae');
+    const planningInput = { repoRoot, projectRoot, homeDir: '/home/example' };
+
+    const singularModuleOperations = adapter.planOperations({
+      ...planningInput,
+      module: { id: 'workflow', paths: ['skills/workflow/tdd-workflow'] },
+    });
+    assert.ok(
+      singularModuleOperations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+      )),
+      'A singular input.module should still be scaffolded like a one-element modules array'
+    );
+
+    const noModulesOperations = adapter.planOperations({ ...planningInput });
+    const hooksJsonOps = noModulesOperations.filter(operation => (
+      operation.destinationPath === path.join(projectRoot, '.trae', 'hooks.json')
+    ));
+    assert.strictEqual(
+      hooksJsonOps.length,
+      2,
+      'Guardian and Crusher should still be planned unconditionally when neither modules nor module is present'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves goose adapter root to ~/.agents (shared with Codex) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('goose');
     const homeDir = '/Users/example';
