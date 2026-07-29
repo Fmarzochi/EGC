@@ -151,15 +151,5 @@ runCase('computeCrushedCommand returns null for an empty/falsy command', () => {
   assert.strictEqual(computeCrushedCommand(undefined), null);
 });
 
-// computeCrushedCommand's own try/catch around JSON.parse(run(...)) is
-// unreachable via any real input the same way run()'s own internal catch
-// already is (see the file-level coverage note: run() always self-catches
-// and returns a valid JSON string for any string input, so JSON.parse never
-// throws downstream either) -- run and computeCrushedCommand share this
-// module's closure, not a require()'d dependency, so the require.cache
-// substitution trick other adapters use to reach an equivalent branch does
-// not apply here. Left uncovered, matching the pre-existing, accepted gap
-// on run()'s own analogous catch branch in this exact file.
-
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
