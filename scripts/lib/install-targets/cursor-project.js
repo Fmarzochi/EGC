@@ -7,8 +7,58 @@ const {
   createFlatRuleOperations,
   createInstallTargetAdapter,
   createManagedOperation,
+  createRemappedOperation,
   isForeignPlatformPath,
 } = require('./helpers');
+const {
+  HOOK_OPERATION_KIND,
+  createBashGuardianScriptCopyOperations,
+} = require('../claude-settings-hooks');
+const {
+  BEFORE_SHELL_EXECUTION_EVENT,
+  GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+  resolveGuardianAdapterScriptDestination,
+  resolveHooksJsonPath,
+} = require('../cursor-guardian-hooks');
+
+// EGC-494/EGC-498: every Cursor install registers the Guardian Bash
+// validator on beforeShellExecution, even when no content modules are
+// selected -- the same "deterministic, unconditional" pattern
+// claude-home.js/windsurf-gateguard-operations.js already use for their own
+// security hooks, so a minimal install is never silently unprotected.
+function createCursorGuardianOperations(adapter, targetRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot);
+  const adapterModuleId = 'egc-cursor-guardian-hook';
+  const adapterScriptDestination = resolveGuardianAdapterScriptDestination(targetRoot);
+  const adapterCopyOperation = createRemappedOperation(
+    adapter,
+    adapterModuleId,
+    GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+    adapterScriptDestination,
+    { strategy: 'preserve-relative-path' }
+  );
+  const mergeOperation = {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: adapterModuleId,
+    sourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveHooksJsonPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: BEFORE_SHELL_EXECUTION_EVENT,
+    hookScriptPath: adapterScriptDestination,
+  };
+
+  return [
+    ...guardianScriptCopyOperations,
+    adapterCopyOperation,
+    mergeOperation,
+  ];
+}
 
 function toCursorRuleFileName(fileName, sourceRelativeFile) {
   if (path.basename(sourceRelativeFile).toLowerCase() === 'readme.md') {
@@ -132,7 +182,7 @@ module.exports = createInstallTargetAdapter({
       });
     }
 
-    return entries.flatMap(({ module, sourceRelativePath }) => {
+    return [...entries.flatMap(({ module, sourceRelativePath }) => {
       const cursorMcpOperation = createJsonMergeOperation({
         moduleId: module.id,
         repoRoot,
@@ -210,6 +260,6 @@ module.exports = createInstallTargetAdapter({
       return takeUniqueOperations([
         adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
       ]);
-    });
+    }), ...createCursorGuardianOperations(adapter, targetRoot)];
   },
 });

@@ -161,6 +161,42 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('cursor adapter always plans the Guardian beforeShellExecution hook, even with no modules selected (EGC-494/EGC-498)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+    const targetRoot = path.join(projectRoot, '.cursor');
+    const adapterScriptDestination = path.join(targetRoot, 'scripts', 'hooks', 'cursor-guardian-adapter.js');
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js')
+      )),
+      'Should plan the shared Guardian validator copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/cursor-guardian-adapter.js'
+        && operation.destinationPath === adapterScriptDestination
+      )),
+      'Should plan the Cursor-specific adapter copy even with no modules selected'
+    );
+
+    const mergeOperation = plan.operations.find(
+      operation => operation.kind === 'merge-claude-settings-hooks' && operation.hookEvent === 'beforeShellExecution'
+    );
+    assert.ok(mergeOperation, 'Should plan the beforeShellExecution hooks.json merge');
+    assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'hooks.json'));
+    assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
+  })) passed++; else failed++;
+
   if (test('plans cursor rules with flat namespaced filenames to avoid rule collisions', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';

@@ -16,6 +16,10 @@ const {
   PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
   applyWindsurfGateGuardHookToFile,
 } = require('./windsurf-gateguard-hooks');
+const {
+  BEFORE_SHELL_EXECUTION_EVENT: CURSOR_BEFORE_SHELL_EXECUTION_EVENT,
+  applyCursorGuardianHookToFile,
+} = require('./cursor-guardian-hooks');
 
 const MANAGED_WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 
@@ -943,6 +947,8 @@ function applyManagedHookOperation(operation) {
     // handled above
   } else if (MANAGED_WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
+    applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }
