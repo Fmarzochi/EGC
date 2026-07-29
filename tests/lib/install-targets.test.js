@@ -217,12 +217,35 @@ function runTests() {
     const hooksJsonDestination = path.join(targetRoot, 'hooks.json');
 
     const operationsForHooksJson = plan.operations.filter(operation => operation.destinationPath === hooksJsonDestination);
-    assert.strictEqual(operationsForHooksJson.length, 1, 'Exactly one operation should target hooks.json (the Guardian merge)');
-    assert.strictEqual(operationsForHooksJson[0].kind, 'merge-claude-settings-hooks');
     assert.strictEqual(
-      operationsForHooksJson[0].seedPath,
+      operationsForHooksJson.length,
+      2,
+      'Exactly two operations should target hooks.json: the Guardian merge (beforeShellExecution) and the Crusher merge (preToolUse) -- never a raw copy'
+    );
+    assert.ok(
+      operationsForHooksJson.every(operation => operation.kind === 'merge-claude-settings-hooks'),
+      'Every operation targeting hooks.json must be a merge, never a raw copy that would clobber the other event\'s entry'
+    );
+
+    const guardianMerge = operationsForHooksJson.find(operation => operation.hookEvent === 'beforeShellExecution');
+    assert.ok(guardianMerge, 'Should include the Guardian beforeShellExecution merge');
+    assert.strictEqual(
+      guardianMerge.seedPath,
       path.join(repoRoot, '.cursor', 'hooks.json'),
-      'The merge operation should carry the repo\'s own hooks.json as a seed, so a fresh install still gets EGC\'s other platform hooks (sessionStart, GateGuard, etc.), not just the Guardian entry'
+      'The Guardian merge operation should carry the repo\'s own hooks.json as a seed, so a fresh install still gets EGC\'s other platform hooks (sessionStart, GateGuard, etc.), not just the Guardian entry'
+    );
+
+    const crusherMerge = operationsForHooksJson.find(operation => operation !== guardianMerge);
+    assert.ok(crusherMerge, 'Should include the Crusher preToolUse merge');
+    assert.strictEqual(
+      crusherMerge.hookEvent,
+      'cursor:preToolUse',
+      'The Crusher merge must use its own internal dispatch key, distinct from Kiro\'s preToolUse operation.hookEvent, which uses the same literal event name for a different merge schema'
+    );
+    assert.strictEqual(
+      crusherMerge.seedPath,
+      undefined,
+      'The Crusher merge should never carry a seedPath -- only the Guardian merge seeds the fresh file, so the repo\'s own hooks.json is never seeded twice'
     );
   })) passed++; else failed++;
 

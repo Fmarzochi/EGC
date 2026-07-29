@@ -21,6 +21,10 @@ const {
   applyCursorGuardianHookToFile,
 } = require('./cursor-guardian-hooks');
 const {
+  CRUSHER_HOOK_DISPATCH_EVENT: CURSOR_CRUSHER_HOOK_DISPATCH_EVENT,
+  applyCursorCrusherHookToFile,
+} = require('./cursor-crusher-hooks');
+const {
   PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
   applyKiroGuardianHookToFile,
 } = require('./kiro-guardian-hooks');
@@ -978,6 +982,8 @@ function applyManagedHookOperation(operation) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
     applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath, { seedPath: operation.seedPath });
+  } else if (operation.hookEvent === CURSOR_CRUSHER_HOOK_DISPATCH_EVENT) {
+    applyCursorCrusherHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
     applyKiroGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
@@ -993,6 +999,7 @@ module.exports = {
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+  CRUSHER_HOOK_LIB_SOURCES,
   CRUSHER_HOOK_MODULE_ID,
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_COMPACT_EVENT,
