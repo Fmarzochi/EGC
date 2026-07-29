@@ -779,26 +779,30 @@ function runTests() {
     const fs = require('fs');
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cline-hook-test-'));
-    const hooksDir = path.join(projectRoot, '.clinerules', 'hooks');
-    fs.mkdirSync(hooksDir, { recursive: true });
+    try {
+      const hooksDir = path.join(projectRoot, '.clinerules', 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
 
-    const foreignHookPath = path.join(hooksDir, 'PreToolUse');
-    fs.writeFileSync(foreignHookPath, '#!/usr/bin/env node\n// a user\'s own unrelated hook, nothing to do with EGC\n');
+      const foreignHookPath = path.join(hooksDir, 'PreToolUse');
+      fs.writeFileSync(foreignHookPath, '#!/usr/bin/env node\n// a user\'s own unrelated hook, nothing to do with EGC\n');
 
-    const planWithForeignFile = planInstallTargetScaffold({ target: 'cline', repoRoot, projectRoot, modules: [] });
-    assert.ok(
-      !planWithForeignFile.operations.some(operation => operation.destinationPath === foreignHookPath),
-      'Should NOT plan an operation that would overwrite the pre-existing foreign PreToolUse file'
-    );
+      const planWithForeignFile = planInstallTargetScaffold({ target: 'cline', repoRoot, projectRoot, modules: [] });
+      assert.ok(
+        !planWithForeignFile.operations.some(operation => operation.destinationPath === foreignHookPath),
+        'Should NOT plan an operation that would overwrite the pre-existing foreign PreToolUse file'
+      );
 
-    // Once EGC's own shim is the one on disk (recognizable by its header
-    // marker), reinstall/repair must still work normally.
-    fs.copyFileSync(path.join(repoRoot, 'scripts', 'hooks', 'cline-pretooluse-shim.js'), foreignHookPath);
-    const planOverOwnFile = planInstallTargetScaffold({ target: 'cline', repoRoot, projectRoot, modules: [] });
-    assert.ok(
-      planOverOwnFile.operations.some(operation => operation.destinationPath === foreignHookPath),
-      'Should plan the normal reinstall operation once the existing file is recognizably EGC\'s own'
-    );
+      // Once EGC's own shim is the one on disk (recognizable by its header
+      // marker), reinstall/repair must still work normally.
+      fs.copyFileSync(path.join(repoRoot, 'scripts', 'hooks', 'cline-pretooluse-shim.js'), foreignHookPath);
+      const planOverOwnFile = planInstallTargetScaffold({ target: 'cline', repoRoot, projectRoot, modules: [] });
+      assert.ok(
+        planOverOwnFile.operations.some(operation => operation.destinationPath === foreignHookPath),
+        'Should plan the normal reinstall operation once the existing file is recognizably EGC\'s own'
+      );
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   if (test('codebuddy adapter supports lookup by target and adapter id', () => {

@@ -46,14 +46,25 @@ const CLINE_HOOK_OWNERSHIP_MARKERS = {
 };
 
 function isForeignHookFile(destinationPath, marker) {
-  if (!fs.existsSync(destinationPath)) {
-    return false;
+  let stats;
+  try {
+    stats = fs.lstatSync(destinationPath);
+  } catch {
+    return false; // Doesn't exist yet -- safe to install.
+  }
+  if (!stats.isFile()) {
+    // A FIFO at this exact path would make fs.readFileSync block
+    // indefinitely waiting for a writer, hanging the whole install
+    // (cubic-dev-ai finding, PR #1087); a directory, socket, or symlink to
+    // either is equally not something to read as text. Only a plain file
+    // is safe to inspect -- anything else is foreign, refuse to touch it.
+    return true;
   }
   try {
     return !fs.readFileSync(destinationPath, 'utf8').includes(marker);
   } catch {
-    // Unreadable (permissions, not a regular file, ...): treat as foreign
-    // rather than risk clobbering something we can't even inspect.
+    // Unreadable (permissions, ...): treat as foreign rather than risk
+    // clobbering something we can't even inspect.
     return true;
   }
 }

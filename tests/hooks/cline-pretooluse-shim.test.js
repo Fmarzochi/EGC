@@ -62,12 +62,28 @@ function runShim(shimPath, input) {
 // decisions for real commands are covered where they belong, at the
 // adapter layer (tests/hooks/cline-guardian-adapter.test.js) and by a real
 // isolated `egc install` end-to-end check.
+const tempRoots = [];
+
 function buildInstalledLayout({ targetScript }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cline-shim-test-'));
+  tempRoots.push(root);
   const hooksDir = path.join(root, 'hooks');
   fs.mkdirSync(hooksDir, { recursive: true });
   const shimPath = path.join(hooksDir, 'PreToolUse');
   fs.copyFileSync(shimSource, shimPath);
+
+  // Matches the exact destination cline-project.js's planOperations
+  // produces for the shared adapter-stdin-json.js dependency, which the
+  // shim itself now requires (../scripts/lib/adapter-stdin-json relative to
+  // <root>/hooks/PreToolUse) to read ITS OWN stdin -- unconditional,
+  // independent of whether a target adapter is present, since the shim
+  // needs this before it even attempts to spawn one.
+  const scriptsLibDir = path.join(root, 'scripts', 'lib');
+  fs.mkdirSync(scriptsLibDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(repoRoot, 'scripts', 'lib', 'adapter-stdin-json.js'),
+    path.join(scriptsLibDir, 'adapter-stdin-json.js')
+  );
 
   if (targetScript) {
     const scriptsHooksDir = path.join(root, 'scripts', 'hooks');
@@ -76,6 +92,12 @@ function buildInstalledLayout({ targetScript }) {
   }
 
   return shimPath;
+}
+
+function cleanupTempRoots() {
+  for (const root of tempRoots) {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function runTests() {
@@ -100,6 +122,7 @@ function runTests() {
 
     const result = runShim(isolatedShim, JSON.stringify({ preToolUse: { toolName: 'execute_command', parameters: { command: 'git status' } } }));
 
+    assert.notStrictEqual(result.code, 0, 'Expected a non-zero exit when the target never produced a usable response');
     const response = JSON.parse(result.stdout);
     assert.strictEqual(response.cancel, true, 'A crashed/malformed target response must not be treated as an implicit allow');
   })) passed++; else failed++;
@@ -137,6 +160,8 @@ function runTests() {
     const response = JSON.parse(result.stdout);
     assert.strictEqual(response.echoedStdin, payload, 'The exact stdin this test sent to the shim must reach the target unchanged');
   })) passed++; else failed++;
+
+  cleanupTempRoots();
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
