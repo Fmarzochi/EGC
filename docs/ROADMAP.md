@@ -5,6 +5,8 @@ This document describes the planned development direction for EGC (Extended Glob
 ## Unreleased
 
 - Guardian Bash command validator extended to three more hosts with a genuine pre-action blocking hook: Cursor (#1071), OpenCode (#1072), and Kiro CLI (#1073), each wired through a host-specific translation adapter that reuses shared stdin-parsing and hooks-merge libraries; Token Crusher wired into OpenCode (#1072) and into Antigravity's global hooks.json (#1067)
+- Guardian wired into Cline's PreToolUse hook (#1087), researched directly against the cline/cline source rather than the docs (mid-migration to a new SDK plugin system not yet applicable to the VS Code extension); Token Crusher confirmed impossible there (no command-rewrite field in the hook output schema), the same status as Kiro and Windsurf
+- Roo Code confirmed to have no hook mechanism at all (Guardian and Token Crusher both impossible, not just Crusher): its own issue tracker shows hooks were never implemented (issue #11504 is an open, unresolved feature request), and the project has been archived since 2026-05-15
 - Guardian command validator hardened against wrapper and quoting bypasses across every CLI, plus npm packaging, Codex/TOML, and Copilot/CodeBuddy gaps (#1051-#1055)
 - A truncated-but-still-JSON-valid stdin payload could bypass the Guardian's 1MB cap check; the truncation flag is now checked unconditionally in every translation adapter (#1074, and closed for Cursor/Windsurf/Kiro alike)
 - NLI session bus and memory protocol coverage extended to 8+ more harnesses, including Aider, Warp, Windsurf, and Zed (#1059-#1062)
