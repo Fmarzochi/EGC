@@ -3020,14 +3020,12 @@ function runTests() {
     });
 
     assert.strictEqual(plan.adapter.id, 'qwen-project');
-    assert.strictEqual(plan.operations.length, 1);
 
-    const operation = plan.operations[0];
+    const operation = plan.operations.find(op => (
+      normalizedRelativePath(op.sourceRelativePath) === 'skills/testing/tdd-workflow'
+    ));
+    assert.ok(operation, 'Should plan the skill copy operation');
     assert.strictEqual(operation.kind, 'copy-path');
-    assert.strictEqual(
-      normalizedRelativePath(operation.sourceRelativePath),
-      'skills/testing/tdd-workflow'
-    );
     assert.strictEqual(
       operation.destinationPath,
       path.join(projectRoot, '.qwen', 'skills', 'tdd-workflow')
@@ -3045,14 +3043,53 @@ function runTests() {
       modules: [{ id: 'rules-core', paths: ['rules'] }],
     });
 
-    assert.strictEqual(plan.operations.length, 1);
-    assert.strictEqual(
-      plan.operations[0].destinationPath,
-      path.join(projectRoot, '.qwen', 'rules')
-    );
+    const rulesOperation = plan.operations.find(operation => (
+      operation.destinationPath === path.join(projectRoot, '.qwen', 'rules')
+    ));
+    assert.ok(rulesOperation, 'Should pass the non-skill rules path through unchanged');
     assert.ok(
       listInstallTargetAdapters().some(adapter => adapter.target === 'qwen'),
       'Should include qwen target'
+    );
+  })) passed++; else failed++;
+
+  if (test('qwen adapter always plans Guardian and Crusher on PreToolUse/run_shell_command, even with no modules selected', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const settingsJsonPath = path.join(projectRoot, '.qwen', 'settings.json');
+
+    const plan = planInstallTargetScaffold({
+      target: 'qwen',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === settingsJsonPath);
+    assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into .qwen/settings.json');
+    assert.ok(
+      mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'run_shell_command'),
+      'Both merges must target PreToolUse with the run_shell_command matcher (Qwen\'s tool_name for shell)'
+    );
+
+    const guardianMerge = mergeOperations.find(operation => operation.moduleId === 'egc-bash-guardian-hook');
+    const crusherMerge = mergeOperations.find(operation => operation.moduleId === 'egc-crusher-hook');
+    assert.ok(guardianMerge, 'Should plan the Guardian merge');
+    assert.ok(crusherMerge, 'Should plan the Crusher merge');
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === guardianMerge.hookScriptPath
+      )),
+      'Should plan the shared Guardian validator script copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/crusher-hook.js'
+        && operation.destinationPath === crusherMerge.hookScriptPath
+      )),
+      'Should plan the shared Crusher hook script copy even with no modules selected'
     );
   })) passed++; else failed++;
 
