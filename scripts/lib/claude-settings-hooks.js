@@ -28,6 +28,14 @@ const {
   PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
   applyKiroGuardianHookToFile,
 } = require('./kiro-guardian-hooks');
+const {
+  OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
+  applyAmazonQGuardianHookToFile,
+} = require('./amazonq-guardian-hooks');
+const {
+  PRE_TOOL_USE_EVENT: OPENHANDS_PRE_TOOL_USE_EVENT,
+  applyOpenHandsGuardianHookToFile,
+} = require('./openhands-guardian-hooks');
 
 const MANAGED_WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 
@@ -986,6 +994,10 @@ function applyManagedHookOperation(operation) {
     applyCursorCrusherHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
     applyKiroGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else if (operation.hookEvent === AMAZONQ_OPERATION_DISPATCH_TAG) {
+    applyAmazonQGuardianHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
+    applyOpenHandsGuardianHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }

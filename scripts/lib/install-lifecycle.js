@@ -52,6 +52,16 @@ const {
   inspectKiroGuardianHookFile,
   removeKiroGuardianHookFromFile,
 } = require('./kiro-guardian-hooks');
+const {
+  OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
+  inspectAmazonQGuardianHookFile,
+  removeAmazonQGuardianHookFromFile,
+} = require('./amazonq-guardian-hooks');
+const {
+  PRE_TOOL_USE_EVENT: OPENHANDS_PRE_TOOL_USE_EVENT,
+  inspectOpenHandsGuardianHookFile,
+  removeOpenHandsGuardianHookFromFile,
+} = require('./openhands-guardian-hooks');
 
 // Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
 // Claude's matcher/group settings.json schema -- an operation whose
@@ -564,6 +574,10 @@ function uninstallManagedHookOperation(operation) {
     removeCursorCrusherHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
     removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else if (operation.hookEvent === AMAZONQ_OPERATION_DISPATCH_TAG) {
+    removeAmazonQGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
+    removeOpenHandsGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -711,6 +725,12 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
       return inspectResult(inspectKiroGuardianHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === AMAZONQ_OPERATION_DISPATCH_TAG) {
+      return inspectResult(inspectAmazonQGuardianHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
+      return inspectResult(inspectOpenHandsGuardianHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
     }
     return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }

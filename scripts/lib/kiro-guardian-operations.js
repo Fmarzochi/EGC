@@ -9,12 +9,7 @@
 // this identical operation shape, differing only in rootSegments/
 // installStatePathSegments.
 
-const {
-  BASH_GUARDIAN_HOOK_MODULE_ID,
-  HOOK_OPERATION_KIND,
-  createBashGuardianScriptCopyOperations,
-  createAdapterStdinJsonCopyOperation,
-} = require('./claude-settings-hooks');
+const { createFlatHookGuardianOperations } = require('./guardian-flat-hook-operations');
 const {
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_TOOL_USE_EVENT,
@@ -23,42 +18,15 @@ const {
 } = require('./kiro-guardian-hooks');
 
 function createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation) {
-  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
-    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-  );
-
-  const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot);
-
-  const adapterScriptDestination = resolveGuardianAdapterScriptDestination(targetRoot);
-  const adapterCopyOperation = createRemappedOperation(
+  return createFlatHookGuardianOperations({
     adapter,
-    BASH_GUARDIAN_HOOK_MODULE_ID,
-    GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
-    adapterScriptDestination,
-    { strategy: 'preserve-relative-path' }
-  );
-
-  const agentConfigPath = resolveAgentConfigPath(targetRoot);
-  const mergeOperation = {
-    kind: HOOK_OPERATION_KIND,
-    moduleId: BASH_GUARDIAN_HOOK_MODULE_ID,
-    sourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
-    destinationPath: agentConfigPath,
-    strategy: HOOK_OPERATION_KIND,
-    ownership: 'managed',
-    scaffoldOnly: false,
+    targetRoot,
+    createRemappedOperation,
+    guardianAdapterSourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
     hookEvent: PRE_TOOL_USE_EVENT,
-    hookScriptPath: adapterScriptDestination,
-  };
-
-  const adapterStdinJsonCopyOperation = createAdapterStdinJsonCopyOperation(remap, targetRoot);
-
-  return [
-    ...guardianScriptCopyOperations,
-    adapterCopyOperation,
-    adapterStdinJsonCopyOperation,
-    mergeOperation,
-  ];
+    resolveAgentConfigPath,
+    resolveGuardianAdapterScriptDestination,
+  });
 }
 
 module.exports = { createKiroGuardianOperations };

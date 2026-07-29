@@ -91,4 +91,49 @@ function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
   });
 }
 
-module.exports = { MAX_STDIN, readAdapterStdinJson, runPlainExitCodeGuardianAdapter };
+// Shared entrypoint for the plain-exit-code adapters (Amazon Q, Goose,
+// OpenHands -- Kiro predates this helper and keeps its own inline copy):
+// collapses each adapter's identical "run when invoked directly, always
+// export buildGuardianInput for tests" boilerplate into one call, so those
+// three near-identical translation scripts stop duplicating it verbatim.
+function bootstrapPlainExitCodeAdapter({ isMain, buildGuardianInput, runGuardian }) {
+  if (isMain) {
+    runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian);
+  }
+  return { buildGuardianInput };
+}
+
+// Amazon Q, Goose, and OpenHands all deliver {tool_name, tool_input:
+// {command}, <cwdKey>} on stdin for their shell tool, differing only in
+// the shell tool's name and which top-level field carries the working
+// directory -- this builds the translation function each adapter exports
+// as buildGuardianInput, instead of every host repeating the same four
+// guard checks with different literals.
+function createBashToolGuardianInputMapper({ shellToolName, cwdKey }) {
+  return function buildGuardianInput(event) {
+    if (!event || typeof event !== 'object') {
+      return null;
+    }
+    if (event.tool_name !== shellToolName) {
+      return null;
+    }
+    const command = event.tool_input?.command;
+    if (!command || typeof command !== 'string') {
+      return null;
+    }
+    const input = { tool_name: 'Bash', tool_input: { command } };
+    const cwdValue = event[cwdKey];
+    if (typeof cwdValue === 'string') {
+      input.cwd = cwdValue;
+    }
+    return input;
+  };
+}
+
+module.exports = {
+  MAX_STDIN,
+  bootstrapPlainExitCodeAdapter,
+  createBashToolGuardianInputMapper,
+  readAdapterStdinJson,
+  runPlainExitCodeGuardianAdapter,
+};
