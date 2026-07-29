@@ -1554,6 +1554,69 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('amp home adapter plans the Guardian+Crusher plugin under ~/.config/amp/, not ~/.amp/ (EGC-507)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const configRoot = path.join(homeDir, '.config', 'amp');
+
+    const plan = planInstallTargetScaffold({
+      target: 'amp',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'amp-home');
+    const pluginOperation = plan.operations.find(operation => (
+      operation.destinationPath === path.join(configRoot, 'plugins', 'egc-guardian-crusher.ts')
+    ));
+    assert.ok(pluginOperation, 'Should plan the plugin copy under ~/.config/amp/plugins/, not ~/.amp/plugins/');
+    assert.strictEqual(normalizedRelativePath(pluginOperation.sourceRelativePath), 'scripts/hooks/amp-guardian-crusher-plugin.ts');
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === path.join(configRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js')
+      )),
+      'Should plan the shared Guardian validator copy next to the plugin, even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-crusher-rewrite.js'
+        && operation.destinationPath === path.join(configRoot, 'scripts', 'hooks', 'pre-bash-crusher-rewrite.js')
+      )),
+      'Should plan the shared Crusher rewrite engine copy next to the plugin, even with no modules selected'
+    );
+  })) passed++; else failed++;
+
+  if (test('amp project adapter plans the Guardian+Crusher plugin under .amp/plugins/ (EGC-507)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const targetRoot = path.join(projectRoot, '.amp');
+
+    const plan = planInstallTargetScaffold({
+      target: 'amp-project',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'amp-project');
+    const pluginOperation = plan.operations.find(operation => (
+      operation.destinationPath === path.join(targetRoot, 'plugins', 'egc-guardian-crusher.ts')
+    ));
+    assert.ok(pluginOperation, 'Should plan the plugin copy under .amp/plugins/');
+    assert.strictEqual(normalizedRelativePath(pluginOperation.sourceRelativePath), 'scripts/hooks/amp-guardian-crusher-plugin.ts');
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js')
+      )),
+      'Should plan the shared Guardian validator copy under the same .amp/ root as skills, even with no modules selected'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves copilot home adapter root to ~/.github and install-state path', () => {
     const adapter = getInstallTargetAdapter('copilot');
     const homeDir = '/Users/example';
