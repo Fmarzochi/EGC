@@ -24,7 +24,7 @@ EGC supports 23 AI coding tools through 3 distinct integration mechanisms. This 
 | 6 | **OpenCode** | 1 | `opencode` | `~/.config/opencode/skills/<name>/SKILL.md` | Native plugin events for hooks |
 | 7 | **CodeBuddy** | 1 | `codebuddy` | `.codebuddy/skills/<name>/SKILL.md` | Context injection |
 | 8 | **Windsurf** | 1 | `windsurf` | `~/.codeium/windsurf/skills/<name>/SKILL.md` | Skills installed flat |
-| 9 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat |
+| 9 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat; Guardian + Token Crusher wired via Amp's Plugin API (`tool.call` event, `.amp/plugins/` project or `~/.config/amp/plugins/` home -- a genuinely different root than the skills path above), executed in-process by Amp's own Bun runtime, same pattern as OpenCode's plugin |
 | 10 | **VS Code Copilot** | 1 | `copilot` | `~/.github/skills/<name>/SKILL.md` | Skills installed flat |
 | 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); MCP via `context_servers` in `settings.json`; cognitive bootstrap into `~/.config/zed/AGENTS.md` |
 | 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<name>/SKILL.md` | Skills installed flat; MCP via YAML block files in `~/.continue/mcpServers/`; memory protocol prompt in `~/.continue/prompts/`; rules discovered natively at workspace `.continue/rules/` |
