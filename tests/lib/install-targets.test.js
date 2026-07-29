@@ -717,6 +717,45 @@ function runTests() {
     assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
   })) passed++; else failed++;
 
+  if (test('claude adapter copies egc-memory-save.js and its lib deps even with no modules selected (EGC-495)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const scriptDestination = path.join(
+      homeDir, '.claude', 'scripts', 'hooks', 'egc-memory-save.js'
+    );
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/egc-memory-save.js'
+        && operation.destinationPath === scriptDestination
+      )),
+      'Should plan the egc-memory-save.js copy even with no modules selected, so PreCompact never points at a missing script'
+    );
+
+    for (const libSource of ['scripts/lib/state-snapshot.js', 'scripts/lib/branch-state.js']) {
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === libSource
+          && operation.destinationPath === path.join(homeDir, '.claude', ...libSource.split('/'))
+        )),
+        `Should plan the ${libSource} copy even with no modules selected`
+      );
+    }
+
+    const preCompactMergeOperation = plan.operations.find(
+      operation => operation.kind === 'merge-claude-settings-hooks' && operation.hookEvent === 'PreCompact'
+    );
+    assert.ok(preCompactMergeOperation, 'Should plan the PreCompact settings.json hook merge');
+    assert.strictEqual(preCompactMergeOperation.hookScriptPath, scriptDestination);
+  })) passed++; else failed++;
+
   if (test('claude adapter registers the GateGuard fact-force hook on Edit/Write/MultiEdit, not just Bash', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

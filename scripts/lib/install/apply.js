@@ -9,19 +9,8 @@ const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
-  PRE_TOOL_USE_EVENT,
-  STOP_EVENT,
-  USER_PROMPT_SUBMIT_EVENT,
-  applyHookEntryToFile,
-  applyIntuitionHookToFile,
-  applySessionStartHookToFile,
-  applyStopHookToFile,
+  applyManagedHookOperation,
 } = require('../claude-settings-hooks');
-const {
-  PRE_RUN_COMMAND_EVENT,
-  PRE_WRITE_CODE_EVENT,
-  applyWindsurfGateGuardHookToFile,
-} = require('../windsurf-gateguard-hooks');
 const {
   MERGE_YAML_READ_LIST_KIND,
   mergeAiderConfigReadList,
@@ -30,8 +19,6 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
 } = require('../warp-agents-merge');
-
-const WINDSURF_HOOK_EVENTS = new Set([PRE_WRITE_CODE_EVENT, PRE_RUN_COMMAND_EVENT]);
 
 function readJsonObject(filePath, label) {
   let parsed;
@@ -140,20 +127,6 @@ function buildResolvedClaudeHooks(plan) {
       hooks: resolvedHooks,
     },
   };
-}
-
-function applyHookOperation(operation) {
-  if (operation.hookEvent === STOP_EVENT) {
-    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
-  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else {
-    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
-  }
 }
 
 function applyMergeJsonOperation(operation, disabledServers) {
@@ -266,7 +239,7 @@ function applyInstallPlan(plan) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
     if (operation.kind === HOOK_OPERATION_KIND) {
-      applyHookOperation(operation);
+      applyManagedHookOperation(operation);
     } else if (operation.kind === 'merge-json') {
       applyMergeJsonOperation(operation, disabledServers);
     } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {

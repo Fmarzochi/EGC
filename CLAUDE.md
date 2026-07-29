@@ -107,3 +107,8 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - Tell the other session/tab something, hand work off → call `session_send`
 
 Judge by the full conversation context, never by literal words. A remark to someone nearby is not a command. When intent is ambiguous, keep working.
+
+<!-- egc:start -->
+## EGC Project Memory
+
+<!-- egc:end -->

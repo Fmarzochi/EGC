@@ -15,25 +15,25 @@ const {
 const {
   HOOK_OPERATION_KIND,
   PRE_TOOL_USE_EVENT,
+  PRE_COMPACT_EVENT,
+  POST_COMPACT_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
-  applyHookEntryToFile,
-  applyIntuitionHookToFile,
-  applySessionStartHookToFile,
-  applyStopHookToFile,
+  applyManagedHookOperation,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
+  inspectPreCompactHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
   removeHookEntryFromFile,
   removeIntuitionHookFromFile,
+  removePreCompactHookFromFile,
   removeSessionStartHookFromFile,
   removeStopHookFromFile,
 } = require('./claude-settings-hooks');
 const {
   PRE_RUN_COMMAND_EVENT: WINDSURF_PRE_RUN_COMMAND_EVENT,
   PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
-  applyWindsurfGateGuardHookToFile,
   inspectWindsurfGateGuardHookFile,
   removeWindsurfGateGuardHookFromFile,
 } = require('./windsurf-gateguard-hooks');
@@ -342,20 +342,6 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
-function repairManagedHookOperation(operation) {
-  if (operation.hookEvent === STOP_EVENT) {
-    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
-  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else {
-    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
-  }
-}
-
 function repairCopyFile(repoRoot, operation) {
   const sourcePath = resolveOperationSourcePath(repoRoot, operation);
   if (!sourcePath || !fs.existsSync(sourcePath)) {
@@ -430,7 +416,7 @@ function executeRepairOperation(repoRoot, operation) {
   } else if (operation.kind === 'remove') {
     repairRemove(operation);
   } else if (operation.kind === HOOK_OPERATION_KIND) {
-    repairManagedHookOperation(operation);
+    applyManagedHookOperation(operation);
   } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
     repairMergeYamlReadList(operation);
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
@@ -551,6 +537,10 @@ function uninstallManagedHookOperation(operation) {
     removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     removeHookEntryFromFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath);
+  } else if (operation.hookEvent === PRE_COMPACT_EVENT) {
+    removePreCompactHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === POST_COMPACT_EVENT) {
+    removeHookEntryFromFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
   } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
@@ -682,6 +672,12 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
       return inspectResult(inspectHookEntryFile(destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, operation.hookMatcher), operation, destinationPath);
+    }
+    if (operation.hookEvent === PRE_COMPACT_EVENT) {
+      return inspectResult(inspectPreCompactHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === POST_COMPACT_EVENT) {
+      return inspectResult(inspectHookEntryFile(destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath), operation, destinationPath);
     }
     if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
       return inspectResult(inspectWindsurfGateGuardHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);

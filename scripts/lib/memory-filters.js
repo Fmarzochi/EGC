@@ -32,6 +32,9 @@ const PROPAGATION_FILES = [
   '.cursorrules',
   'CONVENTIONS.md',
   'llms.txt',
+  'CLAUDE.md',
+  '.roo/rules/egc-context.md',
+  '.continue/rules/egc-context.md',
 ];
 
 function gitDir(projectDir) {
