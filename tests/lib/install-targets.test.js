@@ -2012,6 +2012,46 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Token Crusher: 2026-07-21 audit left Antigravity's PROJECT-level
+  // registration (.agents/hooks.json, antigravity-project.js) wired but its
+  // GLOBAL registration (this egc-home target, ~/.gemini/antigravity-cli/
+  // hooks.json) unverified/unwired -- same pattern as the GateGuard/Guardian
+  // global gaps above. Closed 2026-07-28.
+  if (test('egc-home adapter registers the Token Crusher on Bash for Antigravity global scope too', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
+    const crusherScriptPath = path.join(
+      homeDir, '.gemini', 'scripts', 'hooks', 'crusher-hook.js'
+    );
+
+    const crusherOperations = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.destinationPath === hooksFilePath
+      && operation.hookScriptPath === crusherScriptPath
+    ));
+    assert.strictEqual(crusherOperations.length, 1, 'Crusher registered once for the Antigravity global hooks.json');
+    assert.strictEqual(crusherOperations[0].hookMatcher, 'Bash', 'Crusher only needs the Bash matcher');
+
+    for (const src of ['scripts/hooks/crusher-hook.js', 'scripts/hooks/pre-bash-crusher-rewrite.js', 'scripts/hooks/pretooluse-output.js', 'scripts/lib/crusher/engine.js']) {
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === src
+          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
+        )),
+        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+      );
+    }
+  })) passed++; else failed++;
+
   // cubic-dev-ai review (PR #1052, 2026-07-27): making the copies above
   // unconditional meant a DEFAULT install (which does select hooks-runtime)
   // now recorded two copy-path operations per script -- one from
@@ -2049,6 +2089,10 @@ function runTests() {
       'scripts/hooks/pre-bash-guardian-validate.js',
       'scripts/lib/guardian-bin.js',
       'scripts/lib/shell-split.js',
+      'scripts/hooks/crusher-hook.js',
+      'scripts/hooks/pre-bash-crusher-rewrite.js',
+      'scripts/hooks/pretooluse-output.js',
+      'scripts/lib/crusher/engine.js',
     ]) {
       const destination = path.join(homeDir, '.gemini', ...src.split('/'));
       const fileLevelCopies = plan.operations.filter(operation => (

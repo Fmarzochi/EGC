@@ -62,6 +62,19 @@ function createProjectCrusherHookMergeOperation(targetRoot, projectRoot, matcher
   );
 }
 
+// Global counterpart of the above: registers at ~/.gemini/antigravity-cli/hooks.json
+// instead of the per-project file. Only Antigravity's global GateGuard/Guardian
+// wiring existed until now (egc-home target) -- this closed the gap where a
+// user who only installs the `egc` target (not `antigravity`) never got Crusher
+// compression on Antigravity's global-scope Bash calls.
+function createGlobalCrusherHookMergeOperation(targetRoot, homeDir, matcher) {
+  return createCrusherHookMergeOperationForDestination(
+    resolveAntigravityGlobalHooksFilePath(homeDir),
+    resolveCrusherHookScriptDestination(targetRoot),
+    matcher
+  );
+}
+
 // EGC Guardian: same hooks.json shape; GateGuard above only forces
 // investigation before a risky action, it never checks a Bash command
 // against the Guardian's actual allowlist/denylist. 2026-07-27 audit
@@ -89,6 +102,7 @@ module.exports = {
   createGlobalGateGuardHookMergeOperation,
   createProjectGateGuardHookMergeOperation,
   createProjectCrusherHookMergeOperation,
+  createGlobalCrusherHookMergeOperation,
   createProjectBashGuardianHookMergeOperation,
   createGlobalBashGuardianHookMergeOperation,
   resolveAntigravityGlobalHooksFilePath,

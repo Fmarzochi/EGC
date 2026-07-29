@@ -9,10 +9,12 @@ const {
 } = require('./helpers');
 const {
   createGlobalGateGuardHookMergeOperation,
+  createGlobalCrusherHookMergeOperation,
   createGlobalBashGuardianHookMergeOperation,
 } = require('../antigravity-settings-hooks');
 const {
   createGateGuardScriptCopyOperations,
+  createCrusherScriptCopyOperations,
   createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
@@ -40,6 +42,22 @@ function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, createR
     createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher)
   ));
   return [...scriptCopyOperations, ...mergeOperations];
+}
+
+// Token Crusher: same reasoning as GateGuard above -- copy the standalone
+// crusher hook + its deps explicitly (needed for minimal installs that skip
+// hooks-runtime), then register it on Bash only (the Crusher compresses
+// shell output, it does not touch file writes). Antigravity's PROJECT-level
+// registration (.agents/hooks.json, antigravity-project.js) already had this;
+// the GLOBAL registration (this file, ~/.gemini/antigravity-cli/hooks.json)
+// did not, so a user who only installs the `egc` target (not `antigravity`)
+// never got Crusher compression on Antigravity's global-scope Bash calls.
+function createAntigravityGlobalCrusherOperations(targetRoot, homeDir, createRemap) {
+  const scriptCopyOperations = createCrusherScriptCopyOperations(createRemap, targetRoot);
+  return [
+    ...scriptCopyOperations,
+    createGlobalCrusherHookMergeOperation(targetRoot, homeDir, 'Bash'),
+  ];
 }
 
 // EGC Guardian: same reasoning as GateGuard above -- copy
@@ -229,6 +247,7 @@ module.exports = createInstallTargetAdapter({
     return dedupeCopyOperations([
       ...moduleOperations,
       ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
+      ...createAntigravityGlobalCrusherOperations(targetRoot, homeDir, remap),
       ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),
     ]);
   },
