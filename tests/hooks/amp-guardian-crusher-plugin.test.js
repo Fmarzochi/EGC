@@ -29,6 +29,12 @@ function bunAvailable() {
   return !result.error && result.status === 0;
 }
 
+// Without this build, runGuardian() fails open (returns { exitCode: 0 }),
+// same fallback every other Guardian-dependent test in this repo checks for
+// (tests/guardian-smart-crusher.test.js et al.) -- so this test would
+// falsely observe 'allow' on the destructive-command case.
+const guardianBuildPath = path.join(repoRoot, 'mcp', 'servers', 'egc-guardian', 'build', 'guardian-cli.js');
+
 function test(name, fn) {
   try {
     fn();
@@ -121,6 +127,11 @@ function runTests() {
 
   if (!bunAvailable()) {
     console.log('  [SKIP] bun not found on PATH -- this is Amp\'s actual runtime, cannot verify without it');
+    process.exit(0);
+  }
+
+  if (!fs.existsSync(guardianBuildPath)) {
+    console.log('  [SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
     process.exit(0);
   }
 
