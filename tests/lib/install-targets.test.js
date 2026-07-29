@@ -2592,6 +2592,38 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('trae adapter accepts a singular input.module and treats a fully empty input as no modules', () => {
+    // planInstallTargetScaffold() (used by the tests above) always normalizes
+    // to an array before calling adapter.planOperations(), so these two
+    // fallback branches are only reachable by calling the adapter directly --
+    // the same shape install-executor.js's non-array call sites use.
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const adapter = getInstallTargetAdapter('trae');
+    const planningInput = { repoRoot, projectRoot, homeDir: '/home/example' };
+
+    const singularModuleOperations = adapter.planOperations({
+      ...planningInput,
+      module: { id: 'workflow', paths: ['skills/workflow/tdd-workflow'] },
+    });
+    assert.ok(
+      singularModuleOperations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+      )),
+      'A singular input.module should still be scaffolded like a one-element modules array'
+    );
+
+    const noModulesOperations = adapter.planOperations({ ...planningInput });
+    const hooksJsonOps = noModulesOperations.filter(operation => (
+      operation.destinationPath === path.join(projectRoot, '.trae', 'hooks.json')
+    ));
+    assert.strictEqual(
+      hooksJsonOps.length,
+      2,
+      'Guardian and Crusher should still be planned unconditionally when neither modules nor module is present'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves goose adapter root to ~/.agents (shared with Codex) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('goose');
     const homeDir = '/Users/example';
