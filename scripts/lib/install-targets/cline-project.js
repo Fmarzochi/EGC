@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const path = require('node:path');
 const {
   createFlatRuleOperations,
@@ -31,11 +32,52 @@ const {
 const CLINE_GUARDIAN_HOOK_MODULE_ID = 'egc-guardian-cline-hook';
 const CLINE_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH = 'scripts/hooks/cline-guardian-adapter.js';
 
+// Unlike every other host, Cline has no hooks.json to MERGE a new entry
+// into -- it looks up exactly one file per hook name, so a user's own
+// pre-existing .clinerules/hooks/PreToolUse (unrelated to EGC) would be
+// silently overwritten by install and then permanently deleted by
+// uninstall, with no way to preserve or restore it (cubic-dev-ai P1
+// finding, PR #1087). These markers, taken verbatim from each shim's own
+// header comment, let install recognize "this file is already ours" (safe
+// to overwrite/reinstall) versus a foreign file (refuse to touch).
+const CLINE_HOOK_OWNERSHIP_MARKERS = {
+  PreToolUse: 'Installed verbatim as .clinerules/hooks/PreToolUse (Unix, executable).',
+  'PreToolUse.ps1': 'Cline (VS Code extension) Guardian hook -- Windows.',
+};
+
+function isForeignHookFile(destinationPath, marker) {
+  if (!fs.existsSync(destinationPath)) {
+    return false;
+  }
+  try {
+    return !fs.readFileSync(destinationPath, 'utf8').includes(marker);
+  } catch {
+    // Unreadable (permissions, not a regular file, ...): treat as foreign
+    // rather than risk clobbering something we can't even inspect.
+    return true;
+  }
+}
+
 function createClineGuardianHookOperations(adapter, targetRoot) {
   const hooksDir = path.join(targetRoot, 'hooks');
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
+
+  const hookFileOperations = [
+    ['scripts/hooks/cline-pretooluse-shim.js', path.join(hooksDir, 'PreToolUse'), 'PreToolUse'],
+    ['scripts/hooks/cline-guardian-adapter.ps1', path.join(hooksDir, 'PreToolUse.ps1'), 'PreToolUse.ps1'],
+  ].flatMap(([sourceRelativePath, destinationPath, hookFileName]) => {
+    if (isForeignHookFile(destinationPath, CLINE_HOOK_OWNERSHIP_MARKERS[hookFileName])) {
+      console.error(
+        `Warning: ${destinationPath} already exists and was not installed by EGC -- ` +
+        'leaving it untouched. The EGC Guardian will not be active for Cline in this project ' +
+        'until the conflicting file is removed or merged manually.'
+      );
+      return [];
+    }
+    return [remap(CLINE_GUARDIAN_HOOK_MODULE_ID, sourceRelativePath, destinationPath, { strategy: 'preserve-relative-path' })];
+  });
 
   return [
     ...createBashGuardianScriptCopyOperations(remap, targetRoot),
@@ -46,18 +88,7 @@ function createClineGuardianHookOperations(adapter, targetRoot) {
       path.join(targetRoot, ...CLINE_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH.split('/')),
       { strategy: 'preserve-relative-path' }
     ),
-    remap(
-      CLINE_GUARDIAN_HOOK_MODULE_ID,
-      'scripts/hooks/cline-pretooluse-shim.js',
-      path.join(hooksDir, 'PreToolUse'),
-      { strategy: 'preserve-relative-path' }
-    ),
-    remap(
-      CLINE_GUARDIAN_HOOK_MODULE_ID,
-      'scripts/hooks/cline-guardian-adapter.ps1',
-      path.join(hooksDir, 'PreToolUse.ps1'),
-      { strategy: 'preserve-relative-path' }
-    ),
+    ...hookFileOperations,
   ];
 }
 

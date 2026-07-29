@@ -11,6 +11,11 @@
 # This wrapper pipes stdin through unchanged to that real implementation via
 # `node`, and forwards its stdout and exit code.
 
+# Console::In defaults to the system code page, not UTF-8 -- the JS adapter
+# on the other end of this pipe reads stdin as UTF-8, so non-ASCII bytes in
+# the JSON payload would otherwise be corrupted before reaching the
+# validator (cubic-dev-ai finding, PR #1087).
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $stdin = [Console]::In.ReadToEnd()
 $hooksDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $clinerulesDir = Split-Path -Parent $hooksDir

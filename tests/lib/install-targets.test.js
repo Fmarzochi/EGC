@@ -755,14 +755,49 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js')
       )),
-      'Should plan the shared Guardian validator script copy even with no modules selected'
+      'Should plan the shared Guardian validator script copy at the destination cline-guardian-adapter.js requires as a sibling'
     );
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/adapter-stdin-json.js'
+        && operation.destinationPath === path.join(targetRoot, 'scripts', 'lib', 'adapter-stdin-json.js')
       )),
-      'Should plan the shared adapter-stdin-json.js dependency copy even with no modules selected'
+      'Should plan the shared adapter-stdin-json.js dependency copy at the destination cline-guardian-adapter.js requires as a sibling'
+    );
+  })) passed++; else failed++;
+
+  if (test('cline adapter refuses to overwrite a pre-existing, non-EGC PreToolUse hook, but reinstalls over its own', () => {
+    // Cline has no hooks.json to merge into -- unlike every other host, it
+    // looks up exactly one file per hook name, so silently overwriting a
+    // user's own unrelated .clinerules/hooks/PreToolUse (and later deleting
+    // it on uninstall, with no restore) would destroy their file with no
+    // way back (cubic-dev-ai P1 finding, PR #1087). This needs a real
+    // filesystem, not the synthetic /workspace/app paths every other test
+    // in this file uses, since the check reads the actual destination.
+    const fs = require('fs');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cline-hook-test-'));
+    const hooksDir = path.join(projectRoot, '.clinerules', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+
+    const foreignHookPath = path.join(hooksDir, 'PreToolUse');
+    fs.writeFileSync(foreignHookPath, '#!/usr/bin/env node\n// a user\'s own unrelated hook, nothing to do with EGC\n');
+
+    const planWithForeignFile = planInstallTargetScaffold({ target: 'cline', repoRoot, projectRoot, modules: [] });
+    assert.ok(
+      !planWithForeignFile.operations.some(operation => operation.destinationPath === foreignHookPath),
+      'Should NOT plan an operation that would overwrite the pre-existing foreign PreToolUse file'
+    );
+
+    // Once EGC's own shim is the one on disk (recognizable by its header
+    // marker), reinstall/repair must still work normally.
+    fs.copyFileSync(path.join(repoRoot, 'scripts', 'hooks', 'cline-pretooluse-shim.js'), foreignHookPath);
+    const planOverOwnFile = planInstallTargetScaffold({ target: 'cline', repoRoot, projectRoot, modules: [] });
+    assert.ok(
+      planOverOwnFile.operations.some(operation => operation.destinationPath === foreignHookPath),
+      'Should plan the normal reinstall operation once the existing file is recognizably EGC\'s own'
     );
   })) passed++; else failed++;
 
