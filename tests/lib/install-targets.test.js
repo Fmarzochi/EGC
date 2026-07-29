@@ -2885,7 +2885,31 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('goose adapter has no GateGuard hook wiring (unlike codex-home)', () => {
+  if (test('goose adapter wires the Guardian hook under its own self-contained plugin root (EGC-498 corrected)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'goose',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    const mergeOperation = plan.operations.find(operation => operation.kind === 'merge-claude-settings-hooks');
+    assert.ok(mergeOperation, 'Goose adapter should register a Guardian hook merge operation (real hook confirmed against aaif-goose/goose docs)');
+    assert.strictEqual(
+      mergeOperation.destinationPath,
+      path.join(homeDir, '.agents', 'plugins', 'egc-guardian', 'hooks', 'hooks.json')
+    );
+
+    const adapterScriptOperation = plan.operations.find(operation => (
+      operation.destinationPath === path.join(homeDir, '.agents', 'plugins', 'egc-guardian', 'scripts', 'hooks', 'goose-guardian-adapter.js')
+    ));
+    assert.ok(adapterScriptOperation, 'Goose adapter should copy goose-guardian-adapter.js as a sibling of the shared Guardian scripts, not the shared .agents/scripts/ root');
+  })) passed++; else failed++;
+
+  if (test('goose adapter has no Token Crusher wiring (no rewrite capability documented)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2897,8 +2921,8 @@ function runTests() {
     });
 
     assert.ok(
-      !plan.operations.some(operation => operation.kind === 'merge-claude-settings-hooks'),
-      'Goose adapter should not register any hook merge operations'
+      !plan.operations.some(operation => operation.destinationPath && operation.destinationPath.includes('crusher')),
+      'Goose adapter should not register any Crusher-related operation'
     );
   })) passed++; else failed++;
 
@@ -2971,6 +2995,89 @@ function runTests() {
       path.join(projectRoot, '.amazonq', 'rules'),
       'rootSegments already ends in "rules": the module path must sync into that root directly, not .amazonq/rules/rules/'
     );
+  })) passed++; else failed++;
+
+  if (test('amazonq-project adapter wires the Guardian hook as a sibling of rules/, not nested inside it (EGC-498 corrected)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'amazonq',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'amazonq-project');
+    const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('egc-guardian.json'));
+    assert.ok(mergeOperation, 'amazonq-project should register the Guardian agent-config merge operation');
+    assert.strictEqual(
+      mergeOperation.destinationPath,
+      path.join(projectRoot, '.amazonq', 'cli-agents', 'egc-guardian.json')
+    );
+  })) passed++; else failed++;
+
+  if (test('amazonq-home adapter resolves to ~/.aws/amazonq and wires ONLY the Guardian hook, no rules scaffold', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const adapter = getInstallTargetAdapter('amazonq-home');
+    assert.strictEqual(adapter.target, 'amazonq');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.aws', 'amazonq'));
+
+    const plan = planInstallTargetScaffold({
+      target: 'amazonq-home',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      !plan.operations.some(o => normalizedRelativePath(o.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
+      'amazonq-home should not scaffold skills -- rules distribution stays project-scoped via amazonq-project.js'
+    );
+    const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('egc-guardian.json'));
+    assert.ok(mergeOperation, 'amazonq-home should register the Guardian agent-config merge operation');
+    assert.strictEqual(
+      mergeOperation.destinationPath,
+      path.join(homeDir, '.aws', 'amazonq', 'cli-agents', 'egc-guardian.json')
+    );
+  })) passed++; else failed++;
+
+  if (test('bare "amazonq" target still resolves to amazonq-project by default (amazonq-home is reached only by id)', () => {
+    const byTarget = getInstallTargetAdapter('amazonq');
+    assert.strictEqual(byTarget.id, 'amazonq-project');
+  })) passed++; else failed++;
+
+  if (test('openhands-project adapter resolves to .openhands and wires ONLY the Guardian hook, no skill scaffold (EGC-498 corrected)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const adapter = getInstallTargetAdapter('openhands-project');
+    assert.strictEqual(adapter.target, 'openhands');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.openhands'));
+
+    const plan = planInstallTargetScaffold({
+      target: 'openhands-project',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      !plan.operations.some(o => normalizedRelativePath(o.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
+      'openhands-project should not scaffold skills -- skill discovery stays home-scoped via openhands-home.js'
+    );
+    const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('hooks.json'));
+    assert.ok(mergeOperation, 'openhands-project should register the Guardian hooks.json merge operation');
+    assert.strictEqual(mergeOperation.destinationPath, path.join(projectRoot, '.openhands', 'hooks.json'));
+  })) passed++; else failed++;
+
+  if (test('bare "openhands" target still resolves to openhands-home by default (openhands-project is reached only by id)', () => {
+    const byTarget = getInstallTargetAdapter('openhands');
+    assert.strictEqual(byTarget.id, 'openhands-home');
   })) passed++; else failed++;
 
   if (test('amazonq adapter is included in the full adapter list', () => {
