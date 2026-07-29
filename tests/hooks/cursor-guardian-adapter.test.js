@@ -62,6 +62,18 @@ function runTests() {
     assert.strictEqual(buildGuardianInput({ cwd: '/tmp' }), null);
   })) passed++; else failed++;
 
+  if (test('returns null (does not throw) for a non-object event, e.g. valid JSON "null"', () => {
+    assert.strictEqual(buildGuardianInput(null), null);
+    assert.strictEqual(buildGuardianInput('a string'), null);
+    assert.strictEqual(buildGuardianInput(42), null);
+  })) passed++; else failed++;
+
+  if (test('CLI: a valid JSON "null" payload allows (exit 0) instead of crashing', () => {
+    const result = runAdapterCli('null');
+    assert.strictEqual(result.code, 0);
+    assert.deepStrictEqual(JSON.parse(result.stdout), { permission: 'allow' });
+  })) passed++; else failed++;
+
   if (test('CLI: blocks a destructive command with exit 2 and a JSON deny response', () => {
     const result = runAdapterCli({ command: 'rm -rf /', cwd: '/tmp' });
     assert.strictEqual(result.code, 2);
@@ -92,9 +104,13 @@ function runTests() {
   if (test('CLI: an oversized payload that gets truncated into invalid JSON fails CLOSED (exit 2), not open', () => {
     // Same fail-closed-on-truncation guard as windsurf-guardian-adapter.js:
     // padding the payload past the 1MB stdin cap must not let an attacker
-    // dodge validation by making the JSON unparseable.
+    // dodge validation by making the JSON unparseable. Uses a SAFE command
+    // (not a command the Guardian would block on its own merits) so this
+    // only passes when the truncation guard itself fires -- with a
+    // destructive command, a regression that dropped the 1MB cap entirely
+    // would still exit 2 (ordinary command validation), masking the bug.
     const oversizedPadding = 'x'.repeat(2 * 1024 * 1024);
-    const oversizedInput = JSON.stringify({ command: 'rm -rf /', cwd: '/tmp', padding: oversizedPadding });
+    const oversizedInput = JSON.stringify({ command: 'git status', cwd: '/tmp', padding: oversizedPadding });
     const result = runAdapterCli(oversizedInput);
     assert.strictEqual(result.code, 2, `Expected fail-closed on truncated oversized input, got exit ${result.code}`);
     const response = JSON.parse(result.stdout);

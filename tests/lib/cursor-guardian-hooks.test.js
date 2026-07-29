@@ -115,6 +115,53 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('applyCursorGuardianHookToFile seeds a fresh file from seedPath, keeping the seed\'s other hooks', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-seed-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    const seedPath = path.join(tempDir, 'seed-hooks.json');
+    try {
+      fs.writeFileSync(seedPath, JSON.stringify({
+        version: 1,
+        hooks: { sessionStart: [{ command: 'node .cursor/hooks/session-start.js' }] },
+      }, null, 2));
+
+      const result = applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js', { seedPath });
+      assert.strictEqual(result.changed, true);
+
+      const onDisk = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.deepStrictEqual(onDisk.hooks.sessionStart, [{ command: 'node .cursor/hooks/session-start.js' }]);
+      assert.strictEqual(onDisk.hooks[BEFORE_SHELL_EXECUTION_EVENT].length, 1);
+      assert.ok(onDisk.hooks[BEFORE_SHELL_EXECUTION_EVENT][0].command.includes('adapter.js'));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('applyCursorGuardianHookToFile ignores seedPath once the destination already exists', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-seed-existing-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    const seedPath = path.join(tempDir, 'seed-hooks.json');
+    try {
+      fs.writeFileSync(hooksJsonPath, JSON.stringify({
+        version: 1,
+        hooks: { afterFileEdit: [{ command: 'node .cursor/hooks/after-file-edit.js' }] },
+      }, null, 2));
+      fs.writeFileSync(seedPath, JSON.stringify({
+        version: 1,
+        hooks: { sessionStart: [{ command: 'node .cursor/hooks/session-start.js' }] },
+      }, null, 2));
+
+      applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js', { seedPath });
+
+      const onDisk = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.deepStrictEqual(onDisk.hooks.afterFileEdit, [{ command: 'node .cursor/hooks/after-file-edit.js' }]);
+      assert.strictEqual(onDisk.hooks.sessionStart, undefined, 'Should not pull in the seed once the real file already exists');
+      assert.strictEqual(onDisk.hooks[BEFORE_SHELL_EXECUTION_EVENT].length, 1);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('applyCursorGuardianHookToFile preserves a hand-written hooks.json on disk', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-preserve-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');

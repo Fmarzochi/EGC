@@ -83,6 +83,17 @@ function runTests() {
     assert.strictEqual(buildGuardianInput({ agent_action_name: 'pre_run_command', tool_info: {} }), null);
   })) passed++; else failed++;
 
+  if (test('returns null (does not throw) for a non-object event, e.g. valid JSON "null"', () => {
+    assert.strictEqual(buildGuardianInput(null), null);
+    assert.strictEqual(buildGuardianInput('a string'), null);
+    assert.strictEqual(buildGuardianInput(42), null);
+  })) passed++; else failed++;
+
+  if (test('CLI: a valid JSON "null" payload allows (exit 0) instead of crashing', () => {
+    const result = runAdapterCli('null');
+    assert.strictEqual(result.code, 0);
+  })) passed++; else failed++;
+
   if (test('CLI: blocks a destructive command with exit 2 and a reason on stderr', () => {
     const result = runAdapterCli({
       agent_action_name: 'pre_run_command',
@@ -121,11 +132,15 @@ function runTests() {
     // truncated, syntactically invalid document -- before the fix this hit
     // the generic "malformed input" catch and allowed the command through
     // unvalidated, letting an attacker pad any command past the cap to
-    // bypass the Guardian entirely.
+    // bypass the Guardian entirely. Uses a SAFE command (not one the
+    // Guardian would block on its own merits) so this only passes when the
+    // truncation guard itself fires -- with a destructive command, a
+    // regression that dropped the 1MB cap entirely would still exit 2 via
+    // ordinary command validation, masking the bug.
     const oversizedPadding = 'x'.repeat(2 * 1024 * 1024);
     const oversizedInput = JSON.stringify({
       agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'rm -rf /', padding: oversizedPadding },
+      tool_info: { command_line: 'git status', padding: oversizedPadding },
     });
     const result = runAdapterCli(oversizedInput);
     assert.strictEqual(result.code, 2, `Expected fail-closed on truncated oversized input, got exit ${result.code}`);

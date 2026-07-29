@@ -948,7 +948,7 @@ function applyManagedHookOperation(operation) {
   } else if (MANAGED_WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
-    applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+    applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath, { seedPath: operation.seedPath });
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }

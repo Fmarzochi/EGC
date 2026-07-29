@@ -172,12 +172,15 @@ function runTests() {
     assert.strictEqual(plan.installStatePath, path.join(projectRoot, '.cursor', 'egc-install-state.json'));
     assert.ok(plan.operations.length > 0, 'Should include scaffold operations');
     assert.ok(
+      !plan.operations.some(operation => operation.sourceRelativePath === '.cursor/hooks.json'),
+      'Should not copy the repo\'s own .cursor/hooks.json raw -- the Guardian merge operation owns that destination alone'
+    );
+    assert.ok(
       plan.operations.some(operation => (
-        operation.sourceRelativePath === '.cursor/hooks.json'
-        && operation.destinationPath === path.join(projectRoot, '.cursor', 'hooks.json')
-        && operation.strategy === 'preserve-relative-path'
+        operation.destinationPath === path.join(projectRoot, '.cursor', 'hooks.json')
+        && operation.kind === 'merge-claude-settings-hooks'
       )),
-      'Should preserve non-rule Cursor platform files'
+      'hooks.json should still be planned, but only via the Guardian merge operation'
     );
     assert.ok(
       plan.operations.some(operation => (

@@ -26,21 +26,37 @@ const {
 // selected -- the same "deterministic, unconditional" pattern
 // claude-home.js/windsurf-gateguard-operations.js already use for their own
 // security hooks, so a minimal install is never silently unprotected.
-function createCursorGuardianOperations(adapter, targetRoot) {
+function createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot) {
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
 
-  const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot);
+  // hooks-runtime already scaffolds the whole scripts/hooks and scripts/lib
+  // trees (install-modules.json), which includes every file the Guardian
+  // copy operations below would otherwise duplicate -- drop the redundant
+  // per-file copies when that module is selected, keeping only the merge
+  // operation (never redundant: it is the sole writer of hooks.json's
+  // Guardian entry).
+  const selectedPaths = new Set(modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])));
+  const alreadyScaffolded = sourceRelativePath => (
+    (selectedPaths.has('scripts/hooks') && sourceRelativePath.startsWith('scripts/hooks/'))
+    || (selectedPaths.has('scripts/lib') && sourceRelativePath.startsWith('scripts/lib/'))
+  );
+
+  const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot)
+    .filter(operation => !alreadyScaffolded(operation.sourceRelativePath));
   const adapterModuleId = 'egc-cursor-guardian-hook';
   const adapterScriptDestination = resolveGuardianAdapterScriptDestination(targetRoot);
-  const adapterCopyOperation = createRemappedOperation(
-    adapter,
-    adapterModuleId,
-    GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
-    adapterScriptDestination,
-    { strategy: 'preserve-relative-path' }
-  );
+  const adapterCopyOperation = alreadyScaffolded(GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH)
+    ? null
+    : createRemappedOperation(
+      adapter,
+      adapterModuleId,
+      GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+      adapterScriptDestination,
+      { strategy: 'preserve-relative-path' }
+    );
+  const seedPath = repoRoot ? path.join(repoRoot, '.cursor', 'hooks.json') : null;
   const mergeOperation = {
     kind: HOOK_OPERATION_KIND,
     moduleId: adapterModuleId,
@@ -51,11 +67,12 @@ function createCursorGuardianOperations(adapter, targetRoot) {
     scaffoldOnly: false,
     hookEvent: BEFORE_SHELL_EXECUTION_EVENT,
     hookScriptPath: adapterScriptDestination,
+    ...(seedPath ? { seedPath } : {}),
   };
 
   return [
     ...guardianScriptCopyOperations,
-    adapterCopyOperation,
+    ...(adapterCopyOperation ? [adapterCopyOperation] : []),
     mergeOperation,
   ];
 }
@@ -224,7 +241,7 @@ module.exports = createInstallTargetAdapter({
 
         const childOperations = fs.readdirSync(cursorRoot, { withFileTypes: true })
           .sort((left, right) => left.name.localeCompare(right.name))
-          .filter(entry => entry.name !== 'rules')
+          .filter(entry => entry.name !== 'rules' && entry.name !== 'hooks.json')
           .map(entry => createManagedOperation({
             moduleId: module.id,
             sourceRelativePath: path.join('.cursor', entry.name),
@@ -260,6 +277,6 @@ module.exports = createInstallTargetAdapter({
       return takeUniqueOperations([
         adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
       ]);
-    }), ...createCursorGuardianOperations(adapter, targetRoot)];
+    }), ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot)];
   },
 });

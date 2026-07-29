@@ -21,8 +21,12 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
+const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
 function buildGuardianInput(windsurfEvent) {
+  if (!windsurfEvent || typeof windsurfEvent !== 'object') {
+    return null;
+  }
   const actionName = windsurfEvent.agent_action_name || '';
   if (actionName !== 'pre_run_command') {
     return null;
@@ -45,26 +49,11 @@ function buildGuardianInput(windsurfEvent) {
 }
 
 function main() {
-  const MAX_STDIN = 1024 * 1024;
-  let raw = '';
-  let truncated = false;
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
-    }
-    if (raw.length >= MAX_STDIN) {
-      truncated = true;
-    }
-  });
-  process.stdin.on('end', () => {
-    let windsurfEvent;
-    try {
-      windsurfEvent = JSON.parse(raw);
-    } catch {
+  readAdapterStdinJson(({ ok, truncated, value }) => {
+    if (!ok) {
       // A parse failure caused by hitting the size cap is not the same as
-      // ordinary malformed input: an attacker can pad a command past
-      // MAX_STDIN specifically to land here and fail open. Only genuinely
+      // ordinary malformed input: an attacker can pad a command past the
+      // stdin cap specifically to land here and fail open. Only genuinely
       // malformed (non-truncated) input gets the fail-open policy the other
       // adapters use; a truncated payload is unanalyzable and fails closed.
       if (truncated) {
@@ -78,7 +67,7 @@ function main() {
       process.exit(0);
     }
 
-    const guardianInput = buildGuardianInput(windsurfEvent);
+    const guardianInput = buildGuardianInput(value);
     if (!guardianInput) {
       process.exit(0);
     }

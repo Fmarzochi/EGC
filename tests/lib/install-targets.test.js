@@ -135,8 +135,12 @@ function runTests() {
     assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.cursor'));
     assert.strictEqual(plan.installStatePath, path.join(projectRoot, '.cursor', 'egc-install-state.json'));
 
-    const hooksJson = plan.operations.find(operation => (
+    const hooksJsonRawCopy = plan.operations.find(operation => (
       normalizedRelativePath(operation.sourceRelativePath) === '.cursor/hooks.json'
+    ));
+    const hooksJsonMerge = plan.operations.find(operation => (
+      operation.destinationPath === path.join(projectRoot, '.cursor', 'hooks.json')
+      && operation.kind === 'merge-claude-settings-hooks'
     ));
     const mcpJson = plan.operations.find(operation => (
       normalizedRelativePath(operation.sourceRelativePath) === '.mcp.json'
@@ -145,9 +149,11 @@ function runTests() {
       normalizedRelativePath(operation.sourceRelativePath) === '.cursor/rules/common-coding-style.md'
     ));
 
-    assert.ok(hooksJson, 'Should preserve non-rule Cursor platform config files');
-    assert.strictEqual(hooksJson.strategy, 'preserve-relative-path');
-    assert.strictEqual(hooksJson.destinationPath, path.join(projectRoot, '.cursor', 'hooks.json'));
+    assert.ok(
+      !hooksJsonRawCopy,
+      'Should not copy the repo\'s own .cursor/hooks.json raw -- the Guardian merge operation owns that destination alone'
+    );
+    assert.ok(hooksJsonMerge, 'hooks.json should still be planned, but only via the Guardian merge operation');
     assert.ok(mcpJson, 'Should materialize a Cursor MCP config from the shared root MCP config');
     assert.strictEqual(mcpJson.kind, 'merge-json');
     assert.strictEqual(mcpJson.strategy, 'merge-json');
@@ -195,6 +201,50 @@ function runTests() {
     assert.ok(mergeOperation, 'Should plan the beforeShellExecution hooks.json merge');
     assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'hooks.json'));
     assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
+  })) passed++; else failed++;
+
+  if (test('cursor .cursor module never copies the repo\'s own hooks.json raw (the Guardian merge owns that destination alone)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'platform-configs', paths: ['.cursor'] }],
+    });
+    const targetRoot = path.join(projectRoot, '.cursor');
+    const hooksJsonDestination = path.join(targetRoot, 'hooks.json');
+
+    const operationsForHooksJson = plan.operations.filter(operation => operation.destinationPath === hooksJsonDestination);
+    assert.strictEqual(operationsForHooksJson.length, 1, 'Exactly one operation should target hooks.json (the Guardian merge)');
+    assert.strictEqual(operationsForHooksJson[0].kind, 'merge-claude-settings-hooks');
+    assert.strictEqual(
+      operationsForHooksJson[0].seedPath,
+      path.join(repoRoot, '.cursor', 'hooks.json'),
+      'The merge operation should carry the repo\'s own hooks.json as a seed, so a fresh install still gets EGC\'s other platform hooks (sessionStart, GateGuard, etc.), not just the Guardian entry'
+    );
+  })) passed++; else failed++;
+
+  if (test('cursor hooks-runtime module does not duplicate the Guardian\'s own per-file copies (its directory scaffold already covers them)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'hooks-runtime', paths: ['scripts/hooks', 'scripts/lib'] }],
+    });
+
+    const guardianAdapterCopies = plan.operations.filter(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/cursor-guardian-adapter.js'
+    ));
+    assert.strictEqual(
+      guardianAdapterCopies.length,
+      1,
+      'The adapter script should come from the scripts/hooks directory scaffold exactly once, not also as a redundant standalone copy'
+    );
   })) passed++; else failed++;
 
   if (test('plans cursor rules with flat namespaced filenames to avoid rule collisions', () => {
@@ -351,11 +401,15 @@ function runTests() {
       'Should not preserve .md Cursor platform rule files'
     );
     assert.ok(
+      !plan.operations.some(operation => normalizedRelativePath(operation.sourceRelativePath) === '.cursor/hooks.json'),
+      'Should not copy the repo\'s own .cursor/hooks.json raw -- the Guardian merge operation owns that destination alone'
+    );
+    assert.ok(
       plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === '.cursor/hooks.json'
-        && operation.destinationPath === path.join(projectRoot, '.cursor', 'hooks.json')
+        operation.destinationPath === path.join(projectRoot, '.cursor', 'hooks.json')
+        && operation.kind === 'merge-claude-settings-hooks'
       )),
-      'Should preserve non-rule Cursor platform config files'
+      'hooks.json should still be planned, but only via the Guardian merge operation'
     );
     assert.ok(
       plan.operations.some(operation => (

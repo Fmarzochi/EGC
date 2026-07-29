@@ -97,7 +97,7 @@ function runTests() {
       assert.ok(installStdout.includes('Done. Install-state written'));
 
       const normalizedProjectRoot = fs.realpathSync(projectRoot);
-      const managedPath = path.join(normalizedProjectRoot, '.cursor', 'hooks.json');
+      const managedPath = path.join(normalizedProjectRoot, '.cursor', 'scripts', 'hooks', 'cursor-guardian-adapter.js');
       const statePath = path.join(normalizedProjectRoot, '.cursor', 'egc-install-state.json');
       const unrelatedPath = path.join(normalizedProjectRoot, '.cursor', 'custom-user-note.txt');
       fs.writeFileSync(unrelatedPath, 'leave me alone');

@@ -22,6 +22,9 @@ const { run } = require('./pre-bash-guardian-validate');
 const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
 function buildGuardianInput(cursorEvent) {
+  if (!cursorEvent || typeof cursorEvent !== 'object') {
+    return null;
+  }
   const command = cursorEvent.command || '';
   if (!command) {
     return null;

@@ -7,6 +7,7 @@
 // too, plus a top-level `version` field Windsurf's file does not have.
 // Docs: https://cursor.com/docs/agent/hooks
 
+const fs = require('node:fs');
 const path = require('node:path');
 const {
   addFlatHookEntry,
@@ -15,6 +16,7 @@ const {
   inspectFlatHookFile,
   removeFlatHookEntry,
   removeFlatHookFromFile,
+  writeFlatHooksFile,
 } = require('./flat-hooks-json-merge');
 
 const HOST_LABEL = 'Cursor';
@@ -43,7 +45,23 @@ function addCursorHookEntry(config, event, command) {
   return addFlatHookEntry(config, event, command, { isOwnBasename, buildExtraTopLevel });
 }
 
-function applyCursorGuardianHookToFile(hooksJsonPath, event, adapterScriptPath) {
+function applyCursorGuardianHookToFile(hooksJsonPath, event, adapterScriptPath, options = {}) {
+  const seedPath = options?.seedPath;
+  if (seedPath && !fs.existsSync(hooksJsonPath) && fs.existsSync(seedPath)) {
+    try {
+      const seedConfig = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+      const command = buildHookCommand(adapterScriptPath);
+      const { config } = addFlatHookEntry(seedConfig, event, command, {
+        isOwnBasename,
+        buildExtraTopLevel,
+      });
+      writeFlatHooksFile(hooksJsonPath, config);
+      return { changed: true };
+    } catch {
+      // Fall back to default empty-file merge if seed read fails
+    }
+  }
+
   return applyFlatHookToFile(hooksJsonPath, HOST_LABEL, event, buildHookCommand(adapterScriptPath), {
     isOwnBasename,
     buildExtraTopLevel,
