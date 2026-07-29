@@ -12,6 +12,7 @@ const {
 } = require('./helpers');
 const {
   HOOK_OPERATION_KIND,
+  CRUSHER_HOOK_LIB_SOURCES,
   createBashGuardianScriptCopyOperations,
   createAdapterStdinJsonCopyOperation,
   ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH,
@@ -22,6 +23,11 @@ const {
   resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 } = require('../cursor-guardian-hooks');
+const {
+  CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+  CRUSHER_HOOK_DISPATCH_EVENT,
+  resolveCrusherAdapterScriptDestination,
+} = require('../cursor-crusher-hooks');
 
 // EGC-494/EGC-498: every Cursor install registers the Guardian Bash
 // validator on beforeShellExecution, even when no content modules are
@@ -86,6 +92,62 @@ function createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot) 
     ...guardianScriptCopyOperations,
     ...(adapterCopyOperation ? [adapterCopyOperation] : []),
     ...(adapterStdinJsonCopyOperation ? [adapterStdinJsonCopyOperation] : []),
+    mergeOperation,
+  ];
+}
+
+// Every Cursor install also registers the Token Crusher on preToolUse,
+// unconditionally, the same way createCursorGuardianOperations above always
+// registers the Guardian validator on beforeShellExecution -- a minimal
+// install is never silently uncompressed. Cursor's beforeShellExecution
+// response cannot rewrite a command (confirmed against
+// https://cursor.com/docs/agent/hooks), so the Crusher needs its own
+// adapter script on a different event (preToolUse) rather than reusing the
+// Guardian's. adapter-stdin-json.js itself is NOT copied here: the Guardian
+// operations above always run too and already guarantee it exists.
+function createCursorCrusherOperations(adapter, targetRoot, modules) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  const selectedPaths = new Set(modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])));
+  const alreadyScaffolded = sourceRelativePath => (
+    (selectedPaths.has('scripts/hooks') && sourceRelativePath.startsWith('scripts/hooks/'))
+    || (selectedPaths.has('scripts/lib') && sourceRelativePath.startsWith('scripts/lib/'))
+  );
+
+  const adapterModuleId = 'egc-cursor-crusher-hook';
+  const adapterScriptDestination = resolveCrusherAdapterScriptDestination(targetRoot);
+
+  const adapterCopyOperation = alreadyScaffolded(CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH)
+    ? null
+    : createRemappedOperation(
+      adapter,
+      adapterModuleId,
+      CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+      adapterScriptDestination,
+      { strategy: 'preserve-relative-path' }
+    );
+
+  const libCopyOperations = CRUSHER_HOOK_LIB_SOURCES
+    .filter(src => !alreadyScaffolded(src))
+    .map(src => remap(adapterModuleId, src, path.join(targetRoot, ...src.split('/')), { strategy: 'preserve-relative-path' }));
+
+  const mergeOperation = {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: adapterModuleId,
+    sourceRelativePath: CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveHooksJsonPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: CRUSHER_HOOK_DISPATCH_EVENT,
+    hookScriptPath: adapterScriptDestination,
+  };
+
+  return [
+    ...libCopyOperations,
+    ...(adapterCopyOperation ? [adapterCopyOperation] : []),
     mergeOperation,
   ];
 }
@@ -290,6 +352,7 @@ module.exports = createInstallTargetAdapter({
       return takeUniqueOperations([
         adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
       ]);
-    }), ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot)];
+    }), ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot),
+    ...createCursorCrusherOperations(adapter, targetRoot, modules)];
   },
 });

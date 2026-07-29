@@ -85,6 +85,7 @@ module.exports = {
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   addCursorHookEntry,
   applyCursorGuardianHookToFile,
+  buildExtraTopLevel,
   inspectCursorGuardianHookFile,
   removeCursorGuardianHookFromFile,
   removeCursorHookEntry,
