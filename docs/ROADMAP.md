@@ -2,6 +2,16 @@
 
 This document describes the planned development direction for EGC (Extended Global Context).
 
+## Unreleased
+
+- Guardian Bash command validator extended to three more hosts with a genuine pre-action blocking hook: Cursor (#1071), OpenCode (#1072), and Kiro CLI (#1073), each wired through a host-specific translation adapter that reuses shared stdin-parsing and hooks-merge libraries; Token Crusher wired into OpenCode (#1072) and into Antigravity's global hooks.json (#1067)
+- Guardian command validator hardened against wrapper and quoting bypasses across every CLI, plus npm packaging, Codex/TOML, and Copilot/CodeBuddy gaps (#1051-#1055)
+- A truncated-but-still-JSON-valid stdin payload could bypass the Guardian's 1MB cap check; the truncation flag is now checked unconditionally in every translation adapter (#1074, and closed for Cursor/Windsurf/Kiro alike)
+- NLI session bus and memory protocol coverage extended to 8+ more harnesses, including Aider, Warp, Windsurf, and Zed (#1059-#1062)
+- `update_state` no longer clobbers project rule files on propagation (#1058); `$HOME` is now resolved fresh on every key lookup instead of once at process boot (#1065)
+- Uncatalogued commands that write to protected files now hard-block instead of only warning (#1070)
+- Claude Code re-injects project context after compaction (#1069)
+
 ## v1.1.2: Bidirectional Sync (Released 2026-06-20)
 
 - `egc watch`: bidirectional sync daemon - edits in any tool config file propagate to all others and back to `~/.egc/state/` automatically (issues #302, #303)
