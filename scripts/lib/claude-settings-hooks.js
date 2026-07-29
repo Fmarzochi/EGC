@@ -35,6 +35,10 @@ const BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-bash-g
 const BASH_GUARDIAN_HOOK_MODULE_ID = 'egc-bash-guardian-hook';
 const CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/crusher-hook.js';
 const CRUSHER_HOOK_MODULE_ID = 'egc-crusher-hook';
+const PRE_COMPACT_EVENT = 'PreCompact';
+const POST_COMPACT_EVENT = 'PostCompact';
+const EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/egc-memory-save.js';
+const EGC_MEMORY_SAVE_HOOK_MODULE_ID = 'egc-memory-save-hook';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -784,6 +788,127 @@ function createBashGuardianScriptCopyOperations(createRemappedOperation, targetR
   ];
 }
 
+// PreCompact -> egc-memory-save hook: closes EGC-495 (no mechanism re-injected
+// state after a context compaction). egc-memory-save.js writes a guaranteed
+// on-disk snapshot (writeSnapshotToDisk, no AI cooperation required) and
+// echoes a promptForAssistant asking the model to call update_state with the
+// session's decisions/preferences/next-steps -- this stdout is what a
+// PreCompact hook contributes to the surviving post-compaction context
+// (confirmed empirically: PreCompact hook stdout is not swept away by
+// summarization the way regular turn history is). Its dependency chain is
+// egc-memory-save.js -> lib/state-snapshot.js -> lib/branch-state.js.
+const EGC_MEMORY_SAVE_HOOK_LIB_SOURCES = [
+  'scripts/lib/state-snapshot.js',
+  'scripts/lib/branch-state.js',
+];
+
+function resolveEgcMemorySaveHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'egc-memory-save.js');
+}
+
+function hasPreCompactHook(settings, hookScriptPath) {
+  return hasHookEntry(settings, PRE_COMPACT_EVENT, hookScriptPath);
+}
+
+function addPreCompactHook(settings, hookScriptPath) {
+  return addHookEntry(settings, PRE_COMPACT_EVENT, hookScriptPath);
+}
+
+function removePreCompactHook(settings, hookScriptPath) {
+  return removeHookEntry(settings, PRE_COMPACT_EVENT, hookScriptPath);
+}
+
+function applyPreCompactHookToFile(settingsPath, hookScriptPath) {
+  return applyHookEntryToFile(settingsPath, PRE_COMPACT_EVENT, hookScriptPath);
+}
+
+function removePreCompactHookFromFile(settingsPath, hookScriptPath) {
+  return removeHookEntryFromFile(settingsPath, PRE_COMPACT_EVENT, hookScriptPath);
+}
+
+function inspectPreCompactHookFile(settingsPath, hookScriptPath) {
+  return inspectHookEntryFile(settingsPath, PRE_COMPACT_EVENT, hookScriptPath);
+}
+
+function createPreCompactHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveEgcMemorySaveHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: EGC_MEMORY_SAVE_HOOK_MODULE_ID,
+    sourceRelativePath: EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_COMPACT_EVENT,
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
+// Destination-driven variant, for hosts whose hooks.json path is not
+// derivable from targetRoot (Copilot ~/.copilot/hooks, Antigravity's
+// project/global split). Same Claude hooks.json schema. Only wire this for a
+// host confirmed to actually fire PreCompact -- unlike PreToolUse, this event
+// is not documented publicly for every host, so callers must verify first
+// (see EGC-497) rather than wiring it blindly the way Crusher's Fase B did.
+function createPreCompactHookMergeOperationForDestination(destinationPath, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: EGC_MEMORY_SAVE_HOOK_MODULE_ID,
+    sourceRelativePath: EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_COMPACT_EVENT,
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
+function createEgcMemorySaveScriptCopyOperations(createRemappedOperation, targetRoot) {
+  return [
+    createRemappedOperation(
+      EGC_MEMORY_SAVE_HOOK_MODULE_ID,
+      EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveEgcMemorySaveHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    ...EGC_MEMORY_SAVE_HOOK_LIB_SOURCES.map(src => createRemappedOperation(
+      EGC_MEMORY_SAVE_HOOK_MODULE_ID,
+      src,
+      path.join(targetRoot, ...src.split('/')),
+      { strategy: 'preserve-relative-path' }
+    )),
+  ];
+}
+
+// PostCompact -> reuses claude-session-start.js (already scaffolded for
+// SessionStart, no extra copy operation needed). readStdinJson() there
+// already falls back to {} on missing/invalid stdin and resolveProjectPath()
+// falls back to CLAUDE_PROJECT_DIR/PWD/cwd() when input.cwd is absent, so the
+// exact same tested, proven state-load-and-print logic that opens every
+// session also re-injects state right after a compaction finishes -- closes
+// EGC-495 without inventing new untested logic. Confirmed real by the
+// Multica squad (EGC-497) via Claude Code binary inspection: PostCompact is
+// an actual hook event (executePostCompactHooks, markPostCompaction).
+function createPostCompactHookMergeOperation(targetRoot) {
+  const hookScriptPath = resolveHookScriptDestination(targetRoot);
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: HOOK_MODULE_ID,
+    sourceRelativePath: HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveSettingsPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: POST_COMPACT_EVENT,
+    hookScriptPath,
+    hookCommand: buildHookCommand(hookScriptPath),
+  };
+}
+
 module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -794,6 +919,10 @@ module.exports = {
   GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
   CRUSHER_HOOK_MODULE_ID,
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  PRE_COMPACT_EVENT,
+  POST_COMPACT_EVENT,
+  EGC_MEMORY_SAVE_HOOK_MODULE_ID,
+  EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -812,6 +941,7 @@ module.exports = {
   addBashDispatcherHook,
   addGateGuardHook,
   addIntuitionHook,
+  addPreCompactHook,
   addRouterHook,
   addSessionStartHook,
   addStopHook,
@@ -820,6 +950,7 @@ module.exports = {
   applyGateGuardHookToFile,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
+  applyPreCompactHookToFile,
   applyRouterHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
@@ -843,9 +974,15 @@ module.exports = {
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
   createUserPromptSubmitRouterHookMergeOperation,
+  createEgcMemorySaveScriptCopyOperations,
+  createPreCompactHookMergeOperation,
+  createPreCompactHookMergeOperationForDestination,
+  createPostCompactHookMergeOperation,
+  resolveEgcMemorySaveHookScriptDestination,
   hasBashDispatcherHook,
   hasGateGuardHook,
   hasIntuitionHook,
+  hasPreCompactHook,
   hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
@@ -854,6 +991,7 @@ module.exports = {
   inspectGateGuardHookFile,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
+  inspectPreCompactHookFile,
   inspectRouterHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
@@ -866,6 +1004,8 @@ module.exports = {
   removeHookEntryFromFile,
   removeIntuitionHook,
   removeIntuitionHookFromFile,
+  removePreCompactHook,
+  removePreCompactHookFromFile,
   removeRouterHook,
   removeRouterHookFromFile,
   removeSessionStartHook,

@@ -18,6 +18,10 @@ const {
   INTUITION_HOOK_MODULE_ID,
   INTUITION_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_TOOL_USE_EVENT,
+  PRE_COMPACT_EVENT,
+  POST_COMPACT_EVENT,
+  EGC_MEMORY_SAVE_HOOK_MODULE_ID,
+  EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   SESSION_START_EVENT,
   STOP_EVENT,
   STOP_HOOK_MODULE_ID,
@@ -28,12 +32,15 @@ const {
   addBashDispatcherHook,
   addGateGuardHook,
   addIntuitionHook,
+  addPreCompactHook,
   addSessionStartHook,
   addStopHook,
   addWriteValidatorHook,
   applyBashDispatcherHookToFile,
   applyGateGuardHookToFile,
+  applyHookEntryToFile,
   applyIntuitionHookToFile,
+  applyPreCompactHookToFile,
   applyRouterHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
@@ -46,9 +53,14 @@ const {
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,
+  createPreCompactHookMergeOperation,
+  createPreCompactHookMergeOperationForDestination,
+  createPostCompactHookMergeOperation,
+  resolveEgcMemorySaveHookScriptDestination,
   hasBashDispatcherHook,
   hasGateGuardHook,
   hasIntuitionHook,
+  hasPreCompactHook,
   hasRouterHook,
   hasSessionStartHook,
   hasStopHook,
@@ -56,12 +68,15 @@ const {
   inspectBashDispatcherHookFile,
   inspectGateGuardHookFile,
   inspectIntuitionHookFile,
+  inspectPreCompactHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
   inspectWriteValidatorHookFile,
   removeBashDispatcherHook,
   removeGateGuardHook,
   removeIntuitionHook,
+  removePreCompactHook,
+  removePreCompactHookFromFile,
   removeSessionStartHook,
   removeSessionStartHookFromFile,
   removeStopHook,
@@ -82,6 +97,7 @@ const INTUITION_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/prompt-intu
 const BASH_DISPATCHER_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/bash-hook-dispatcher.js';
 const WRITE_VALIDATOR_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/pre-write-guardian-validate.js';
 const GATEGUARD_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/gateguard-fact-force.js';
+const EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH = '/home/user/.claude/scripts/hooks/egc-memory-save.js';
 
 function test(name, fn) {
   try {
@@ -510,6 +526,164 @@ function runTests() {
       operation.hookCommand,
       buildStopCommand(resolveStopHookScriptDestination(targetRoot))
     );
+  })) passed++; else failed++;
+
+  console.log('\n--- PreCompact hook (egc-memory-save.js, closes EGC-495) ---\n');
+
+  if (test('addPreCompactHook adds the PreCompact hook to empty settings', () => {
+    const { settings, changed } = addPreCompactHook({}, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(settings.hooks[PRE_COMPACT_EVENT], [
+      { hooks: [{ type: 'command', command: buildStopCommand(EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH) }] },
+    ]);
+    assert.ok(hasPreCompactHook(settings, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('addPreCompactHook is idempotent and reports no change when the hook exists', () => {
+    const first = addPreCompactHook({}, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+    const second = addPreCompactHook(first.settings, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(second.changed, false);
+    assert.strictEqual(second.settings.hooks[PRE_COMPACT_EVENT].length, 1);
+  })) passed++; else failed++;
+
+  if (test('addPreCompactHook preserves third-party PreCompact hooks and unrelated settings keys', () => {
+    const base = {
+      model: 'opus',
+      hooks: {
+        PreCompact: [
+          { hooks: [{ type: 'command', command: 'echo third-party-precompact' }] },
+        ],
+      },
+    };
+    const { settings } = addPreCompactHook(base, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(settings.model, 'opus');
+    assert.strictEqual(settings.hooks[PRE_COMPACT_EVENT].length, 2);
+    assert.strictEqual(
+      settings.hooks[PRE_COMPACT_EVENT][0].hooks[0].command,
+      'echo third-party-precompact'
+    );
+    assert.ok(hasPreCompactHook(settings, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('removePreCompactHook strips only the EGC PreCompact entry', () => {
+    const installed = addPreCompactHook({ model: 'opus' }, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH).settings;
+    const { settings, changed } = removePreCompactHook(installed, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(settings, { model: 'opus' });
+    assert.ok(!hasPreCompactHook(settings, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH));
+  })) passed++; else failed++;
+
+  if (test('applyPreCompactHookToFile creates settings.json with PreCompact hook when absent', () => {
+    const homeDir = createTempDir('claude-precompact-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, '.claude', 'settings.json');
+      const result = applyPreCompactHookToFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+
+      assert.strictEqual(result.changed, true);
+      assert.ok(hasPreCompactHook(readJson(settingsPath), EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH));
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('removePreCompactHookFromFile is a no-op when settings.json is absent', () => {
+    const homeDir = createTempDir('claude-precompact-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      const result = removePreCompactHookFromFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+
+      assert.strictEqual(result.changed, false);
+      assert.ok(!fs.existsSync(settingsPath));
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('inspectPreCompactHookFile reports ok, drifted, and invalid JSON as drifted', () => {
+    const homeDir = createTempDir('claude-precompact-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+
+      fs.writeFileSync(settingsPath, JSON.stringify({ model: 'opus' }));
+      assert.strictEqual(inspectPreCompactHookFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH), 'drifted');
+
+      applyPreCompactHookToFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+      assert.strictEqual(inspectPreCompactHookFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH), 'ok');
+
+      fs.writeFileSync(settingsPath, '{ not json');
+      assert.strictEqual(inspectPreCompactHookFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH), 'drifted');
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('createPreCompactHookMergeOperation builds a managed operation for the target root', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createPreCompactHookMergeOperation(targetRoot);
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, EGC_MEMORY_SAVE_HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.ownership, 'managed');
+    assert.strictEqual(operation.scaffoldOnly, false);
+    assert.strictEqual(operation.hookEvent, PRE_COMPACT_EVENT);
+    assert.strictEqual(operation.hookScriptPath, resolveEgcMemorySaveHookScriptDestination(targetRoot));
+  })) passed++; else failed++;
+
+  if (test('createPreCompactHookMergeOperationForDestination targets an arbitrary hooks.json path', () => {
+    const destination = '/home/user/.copilot/hooks/hooks.json';
+    const hookScriptPath = '/home/user/.copilot/scripts/hooks/egc-memory-save.js';
+    const operation = createPreCompactHookMergeOperationForDestination(destination, hookScriptPath);
+
+    assert.strictEqual(operation.destinationPath, destination);
+    assert.strictEqual(operation.hookEvent, PRE_COMPACT_EVENT);
+    assert.strictEqual(operation.hookScriptPath, hookScriptPath);
+    assert.strictEqual(operation.moduleId, EGC_MEMORY_SAVE_HOOK_MODULE_ID);
+  })) passed++; else failed++;
+
+  console.log('\n--- PostCompact hook (reuses claude-session-start.js, closes EGC-495) ---\n');
+
+  if (test('createPostCompactHookMergeOperation reuses the SessionStart script and module id', () => {
+    const targetRoot = path.join('/home/user', '.claude');
+    const operation = createPostCompactHookMergeOperation(targetRoot);
+
+    assert.strictEqual(operation.kind, HOOK_OPERATION_KIND);
+    assert.strictEqual(operation.moduleId, HOOK_MODULE_ID);
+    assert.strictEqual(operation.sourceRelativePath, HOOK_SCRIPT_SOURCE_RELATIVE_PATH);
+    assert.strictEqual(operation.destinationPath, resolveSettingsPath(targetRoot));
+    assert.strictEqual(operation.hookEvent, POST_COMPACT_EVENT);
+    assert.strictEqual(operation.hookScriptPath, resolveHookScriptDestination(targetRoot));
+    assert.strictEqual(
+      operation.hookCommand,
+      buildSessionStartCommand(resolveHookScriptDestination(targetRoot))
+    );
+  })) passed++; else failed++;
+
+  if (test('PreCompact and PostCompact operations coexist without clobbering the SessionStart entry', () => {
+    const homeDir = createTempDir('claude-compact-hooks-');
+    try {
+      const settingsPath = path.join(homeDir, 'settings.json');
+      applySessionStartHookToFile(settingsPath, HOOK_SCRIPT_PATH);
+      applyPreCompactHookToFile(settingsPath, EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH);
+      const result = applyHookEntryToFile(settingsPath, POST_COMPACT_EVENT, HOOK_SCRIPT_PATH);
+      assert.strictEqual(result.changed, true);
+
+      const final = readJson(settingsPath);
+      assert.strictEqual(final.hooks[SESSION_START_EVENT].length, 1);
+      assert.strictEqual(final.hooks[PRE_COMPACT_EVENT].length, 1);
+      assert.strictEqual(final.hooks[POST_COMPACT_EVENT].length, 1);
+      assert.strictEqual(
+        final.hooks[PRE_COMPACT_EVENT][0].hooks[0].command,
+        buildStopCommand(EGC_MEMORY_SAVE_HOOK_SCRIPT_PATH)
+      );
+    } finally {
+      cleanup(homeDir);
+    }
   })) passed++; else failed++;
 
   console.log('\n--- UserPromptSubmit (intuition) hook ---\n');

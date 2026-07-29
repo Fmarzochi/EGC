@@ -10,10 +10,13 @@ const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
   PRE_TOOL_USE_EVENT,
+  PRE_COMPACT_EVENT,
+  POST_COMPACT_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
+  applyPreCompactHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
 } = require('../claude-settings-hooks');
@@ -149,6 +152,18 @@ function applyHookOperation(operation) {
     applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
+  } else if (operation.hookEvent === PRE_COMPACT_EVENT) {
+    // EGC-495: PreCompact -> egc-memory-save.js, a script distinct from
+    // SessionStart's, so it must NOT fall through to the SessionStart
+    // default below (that bug shipped PreCompact entries into
+    // hooks.SessionStart instead of hooks.PreCompact until this fix).
+    applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === POST_COMPACT_EVENT) {
+    // EGC-495: PostCompact intentionally reuses claude-session-start.js
+    // (same script/module as SessionStart), so applying it via the generic
+    // event-aware helper under its own event name is correct and distinct
+    // from the SessionStart default below.
+    applyHookEntryToFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
   } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {

@@ -15,18 +15,23 @@ const {
 const {
   HOOK_OPERATION_KIND,
   PRE_TOOL_USE_EVENT,
+  PRE_COMPACT_EVENT,
+  POST_COMPACT_EVENT,
   STOP_EVENT,
   USER_PROMPT_SUBMIT_EVENT,
   applyHookEntryToFile,
   applyIntuitionHookToFile,
+  applyPreCompactHookToFile,
   applySessionStartHookToFile,
   applyStopHookToFile,
   inspectHookEntryFile,
   inspectIntuitionHookFile,
+  inspectPreCompactHookFile,
   inspectSessionStartHookFile,
   inspectStopHookFile,
   removeHookEntryFromFile,
   removeIntuitionHookFromFile,
+  removePreCompactHookFromFile,
   removeSessionStartHookFromFile,
   removeStopHookFromFile,
 } = require('./claude-settings-hooks');
@@ -349,6 +354,10 @@ function repairManagedHookOperation(operation) {
     applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
+  } else if (operation.hookEvent === PRE_COMPACT_EVENT) {
+    applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === POST_COMPACT_EVENT) {
+    applyHookEntryToFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
   } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
@@ -551,6 +560,10 @@ function uninstallManagedHookOperation(operation) {
     removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
     removeHookEntryFromFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath);
+  } else if (operation.hookEvent === PRE_COMPACT_EVENT) {
+    removePreCompactHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === POST_COMPACT_EVENT) {
+    removeHookEntryFromFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
   } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
@@ -682,6 +695,12 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
       return inspectResult(inspectHookEntryFile(destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, operation.hookMatcher), operation, destinationPath);
+    }
+    if (operation.hookEvent === PRE_COMPACT_EVENT) {
+      return inspectResult(inspectPreCompactHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === POST_COMPACT_EVENT) {
+      return inspectResult(inspectHookEntryFile(destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath), operation, destinationPath);
     }
     if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
       return inspectResult(inspectWindsurfGateGuardHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
