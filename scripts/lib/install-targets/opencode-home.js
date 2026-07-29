@@ -6,6 +6,50 @@ const {
   isForeignPlatformPath,
   normalizeRelativePath,
 } = require('./helpers');
+const {
+  BASH_GUARDIAN_HOOK_MODULE_ID,
+  createBashGuardianScriptCopyOperations,
+  createCrusherScriptCopyOperations,
+} = require('../claude-settings-hooks');
+
+// OpenCode plugins run IN-PROCESS (Bun runtime), unlike every other target's
+// externally-spawned hooks.json subprocess -- opencode-egc-plugin.js
+// `require()`s pre-bash-guardian-validate.js's and
+// pre-bash-crusher-rewrite.js's own run() functions directly, so there is no
+// stdin/stdout translation adapter to wire, only a plugin file to drop into
+// OpenCode's auto-discovered plugins/ directory (docs:
+// https://opencode.ai/docs/plugins) alongside the same Guardian/Crusher
+// script trees every other target copies via the shared builders below.
+// EGC-498: OpenCode is the only one of the newly-researched hosts (Windsurf,
+// Cursor, OpenCode, Kiro) whose hook contract can mutate the tool call
+// (`output.args.command = ...`) before it runs, which the Token Crusher's
+// rewrite-based design requires -- so it is the only one of the four wired
+// for both the Guardian and the Crusher, not the Guardian alone.
+const PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/opencode-egc-plugin.js';
+
+function resolvePluginScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'plugins', 'opencode-egc-plugin.js');
+}
+
+function createOpenCodeGuardianCrusherOperations(adapter, targetRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  const pluginCopyOperation = createRemappedOperation(
+    adapter,
+    BASH_GUARDIAN_HOOK_MODULE_ID,
+    PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH,
+    resolvePluginScriptDestination(targetRoot),
+    { strategy: 'preserve-relative-path' }
+  );
+
+  return [
+    ...createBashGuardianScriptCopyOperations(remap, targetRoot),
+    ...createCrusherScriptCopyOperations(remap, targetRoot),
+    pluginCopyOperation,
+  ];
+}
 
 module.exports = createInstallTargetAdapter({
   id: 'opencode-home',
@@ -30,7 +74,7 @@ module.exports = createInstallTargetAdapter({
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
-    return modules.flatMap(module => {
+    const moduleOperations = modules.flatMap(module => {
       const paths = (Array.isArray(module.paths) ? module.paths : [])
         .filter(p => !isForeignPlatformPath(p, adapter.target));
       return paths.flatMap(sourceRelativePath => {
@@ -55,5 +99,10 @@ module.exports = createInstallTargetAdapter({
         return [adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput)];
       });
     });
+
+    return [
+      ...moduleOperations,
+      ...createOpenCodeGuardianCrusherOperations(adapter, targetRoot),
+    ];
   },
 });

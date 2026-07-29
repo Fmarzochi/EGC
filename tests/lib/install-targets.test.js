@@ -1192,6 +1192,35 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('opencode adapter always plans the Guardian+Crusher plugin, even with no modules selected (EGC-494/EGC-498)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'opencode',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const pluginDestination = path.join(homeDir, '.config', 'opencode', 'plugins', 'opencode-egc-plugin.js');
+    assert.ok(
+      plan.operations.some(op => (
+        normalizedRelativePath(op.sourceRelativePath) === 'scripts/hooks/opencode-egc-plugin.js'
+        && op.destinationPath === pluginDestination
+      )),
+      'Should copy the OpenCode Guardian+Crusher plugin into ~/.config/opencode/plugins/'
+    );
+    assert.ok(
+      plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'),
+      'Should copy pre-bash-guardian-validate.js so the plugin\'s require() resolves'
+    );
+    assert.ok(
+      plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'scripts/hooks/pre-bash-crusher-rewrite.js'),
+      'Should copy pre-bash-crusher-rewrite.js so the plugin\'s require() resolves'
+    );
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
