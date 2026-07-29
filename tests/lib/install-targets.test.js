@@ -226,6 +226,28 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('cursor Guardian merge omits seedPath when the .cursor module was not selected (minimal/rules-only installs stay minimal)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+    const targetRoot = path.join(projectRoot, '.cursor');
+    const hooksJsonDestination = path.join(targetRoot, 'hooks.json');
+
+    const mergeOperation = plan.operations.find(operation => operation.destinationPath === hooksJsonDestination);
+    assert.ok(mergeOperation, 'The Guardian merge should still be planned unconditionally');
+    assert.strictEqual(
+      mergeOperation.seedPath,
+      undefined,
+      'Should not seed this repo\'s own platform hooks (dashboard-emit, tmux blocker, etc.) into an install that never selected .cursor'
+    );
+  })) passed++; else failed++;
+
   if (test('cursor hooks-runtime module does not duplicate the Guardian\'s own per-file copies (its directory scaffold already covers them)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';

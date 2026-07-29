@@ -56,7 +56,13 @@ function createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot) 
       adapterScriptDestination,
       { strategy: 'preserve-relative-path' }
     );
-  const seedPath = repoRoot ? path.join(repoRoot, '.cursor', 'hooks.json') : null;
+  // Only seed from this repo's own .cursor/hooks.json (sessionStart,
+  // dashboard-emit, tmux blocker, etc.) when the install actually selected
+  // the .cursor module path -- a minimal or rules-only install that never
+  // asked for EGC's platform hooks should not have them silently enabled
+  // just because the Guardian's merge operation happens to seed a fresh
+  // destination file.
+  const seedPath = repoRoot && selectedPaths.has('.cursor') ? path.join(repoRoot, '.cursor', 'hooks.json') : null;
   const mergeOperation = {
     kind: HOOK_OPERATION_KIND,
     moduleId: adapterModuleId,
