@@ -19,6 +19,7 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
+const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
 function buildGuardianInput(cursorEvent) {
   const command = cursorEvent.command || '';
@@ -37,55 +38,43 @@ function buildGuardianInput(cursorEvent) {
   return input;
 }
 
+function respond(permission, message) {
+  const payload = message ? { permission, user_message: message, agent_message: message } : { permission };
+  process.stdout.write(JSON.stringify(payload));
+  process.exit(permission === 'deny' ? 2 : 0);
+}
+
 function main() {
-  const MAX_STDIN = 1024 * 1024;
-  let raw = '';
-  let truncated = false;
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
-    }
-    if (raw.length >= MAX_STDIN) {
-      truncated = true;
-    }
-  });
-  process.stdin.on('end', () => {
-    let cursorEvent;
-    try {
-      cursorEvent = JSON.parse(raw);
-    } catch {
+  readAdapterStdinJson(({ ok, truncated, value }) => {
+    if (!ok) {
       // A parse failure caused by hitting the size cap is not the same as
-      // ordinary malformed input: an attacker can pad a command past
-      // MAX_STDIN specifically to land here and fail open. Only genuinely
+      // ordinary malformed input: an attacker can pad a command past the
+      // stdin cap specifically to land here and fail open. Only genuinely
       // malformed (non-truncated) input gets the fail-open policy the other
       // adapters use; a truncated payload is unanalyzable and fails closed.
       if (truncated) {
-        const message = 'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+        respond('deny', 'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
           'this validator can safely read, so it could not be parsed or validated. ' +
-          'Simplify the command.';
-        process.stdout.write(JSON.stringify({ permission: 'deny', user_message: message, agent_message: message }));
-        process.exit(2);
+          'Simplify the command.');
+        return;
       }
-      process.stdout.write(JSON.stringify({ permission: 'allow' }));
-      process.exit(0);
+      respond('allow');
+      return;
     }
 
-    const guardianInput = buildGuardianInput(cursorEvent);
+    const guardianInput = buildGuardianInput(value);
     if (!guardianInput) {
-      process.stdout.write(JSON.stringify({ permission: 'allow' }));
-      process.exit(0);
+      respond('allow');
+      return;
     }
 
     const result = run(guardianInput);
     if (result.exitCode === 2) {
-      const reason = result.stderr || 'Blocked by the EGC Guardian.';
-      process.stdout.write(JSON.stringify({ permission: 'deny', user_message: reason, agent_message: reason }));
-      process.exit(2);
+      respond('deny', result.stderr || 'Blocked by the EGC Guardian.');
+      return;
     }
 
-    process.stdout.write(JSON.stringify({ permission: 'allow' }));
-    process.exit(0);
+    respond('allow');
   });
 }
 
