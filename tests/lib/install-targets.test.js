@@ -2549,6 +2549,49 @@ function runTests() {
     assert.ok(targets.includes('trae'), 'Should include trae target');
   })) passed++; else failed++;
 
+  if (test('trae adapter always plans Guardian and Crusher on PreToolUse/RunCommand, even with no modules selected', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const targetRoot = path.join(projectRoot, '.trae');
+    const hooksJsonPath = path.join(targetRoot, 'hooks.json');
+
+    const plan = planInstallTargetScaffold({
+      target: 'trae',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === hooksJsonPath);
+    assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into .trae/hooks.json');
+    assert.ok(
+      mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'RunCommand'),
+      'Both merges must target PreToolUse with the RunCommand matcher (Trae\'s tool_name for shell, not Bash/Shell)'
+    );
+
+    const guardianMerge = mergeOperations.find(operation => operation.moduleId === 'egc-bash-guardian-hook');
+    const crusherMerge = mergeOperations.find(operation => operation.moduleId === 'egc-crusher-hook');
+    assert.ok(guardianMerge, 'Should plan the Guardian merge');
+    assert.ok(crusherMerge, 'Should plan the Crusher merge');
+    assert.strictEqual(guardianMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js'));
+    assert.strictEqual(crusherMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'crusher-hook.js'));
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+        && operation.destinationPath === guardianMerge.hookScriptPath
+      )),
+      'Should plan the shared Guardian validator script copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/crusher-hook.js'
+        && operation.destinationPath === crusherMerge.hookScriptPath
+      )),
+      'Should plan the shared Crusher hook script copy even with no modules selected'
+    );
+  })) passed++; else failed++;
+
   if (test('resolves goose adapter root to ~/.agents (shared with Codex) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('goose');
     const homeDir = '/Users/example';
