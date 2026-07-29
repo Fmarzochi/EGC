@@ -718,6 +718,54 @@ function runTests() {
     assert.ok(targets.includes('cline'), 'Should include cline target');
   })) passed++; else failed++;
 
+  if (test('cline adapter always plans the Guardian PreToolUse hook (Unix + Windows), even with no modules selected', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const targetRoot = path.join(projectRoot, '.clinerules');
+    const hooksDir = path.join(targetRoot, 'hooks');
+
+    const plan = planInstallTargetScaffold({
+      target: 'cline',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    // Cline has no hooks.json to merge into -- discovery is by filename, so
+    // this is a plain file copy per platform, not a HOOK_OPERATION_KIND merge.
+    // PreToolUse/PreToolUse.ps1 are thin shims (Cline requires this exact
+    // filename); the real adapter, with its own require()'d dependencies,
+    // installs at the normal .clinerules/scripts/hooks/ location instead.
+    const unixShim = plan.operations.find(operation => operation.destinationPath === path.join(hooksDir, 'PreToolUse'));
+    const windowsShim = plan.operations.find(operation => operation.destinationPath === path.join(hooksDir, 'PreToolUse.ps1'));
+
+    assert.ok(unixShim, 'Should plan the Unix PreToolUse shim copy even with no modules selected');
+    assert.ok(windowsShim, 'Should plan the Windows PreToolUse.ps1 shim copy even with no modules selected');
+    assert.strictEqual(normalizedRelativePath(unixShim.sourceRelativePath), 'scripts/hooks/cline-pretooluse-shim.js');
+    assert.strictEqual(normalizedRelativePath(windowsShim.sourceRelativePath), 'scripts/hooks/cline-guardian-adapter.ps1');
+
+    const realAdapterDestination = path.join(targetRoot, 'scripts', 'hooks', 'cline-guardian-adapter.js');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/cline-guardian-adapter.js'
+        && operation.destinationPath === realAdapterDestination
+      )),
+      'Should plan the real adapter at .clinerules/scripts/hooks/, next to its own dependencies'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+      )),
+      'Should plan the shared Guardian validator script copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/adapter-stdin-json.js'
+      )),
+      'Should plan the shared adapter-stdin-json.js dependency copy even with no modules selected'
+    );
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('codebuddy');
     const byId = getInstallTargetAdapter('codebuddy-project');
