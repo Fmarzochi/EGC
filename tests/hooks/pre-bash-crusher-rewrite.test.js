@@ -15,7 +15,8 @@ const assert = require('node:assert');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { run } = require(path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-crusher-rewrite.js'));
+const rewriteScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-crusher-rewrite.js');
+const { run, computeCrushedCommand } = require(rewriteScript);
 
 const POSIX = process.platform !== 'win32';
 
@@ -133,6 +134,22 @@ if (POSIX) {
     assert.strictEqual(invoke('git log && git status'), 'git log && git status');
   });
 }
+
+// --- computeCrushedCommand: shared by cursor-crusher-adapter.js and
+// junie-crusher-adapter.js (cubic-dev-ai duplication finding, PR #1081) ---
+
+runCase('computeCrushedCommand returns the rewritten command for a crushable input', () => {
+  assert.strictEqual(computeCrushedCommand('git log --stat -n 300'), 'egc run git log --stat -n 300');
+});
+
+runCase('computeCrushedCommand returns null for a non-crushable command', () => {
+  assert.strictEqual(computeCrushedCommand('echo hi'), null);
+});
+
+runCase('computeCrushedCommand returns null for an empty/falsy command', () => {
+  assert.strictEqual(computeCrushedCommand(''), null);
+  assert.strictEqual(computeCrushedCommand(undefined), null);
+});
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

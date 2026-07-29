@@ -2489,8 +2489,21 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.trae', 'egc-install-state.json'));
   })) passed++; else failed++;
 
-     if (test('resolves junie adapter root and install-state path from project root', () => {
+  if (test('resolves junie home adapter root to ~/.junie and install-state path', () => {
     const adapter = getInstallTargetAdapter('junie');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'junie-home');
+    assert.strictEqual(adapter.target, 'junie');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.junie'));
+    assert.strictEqual(statePath, path.join(homeDir, '.junie', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('resolves junie project adapter root and install-state path from project root', () => {
+    const adapter = getInstallTargetAdapter('junie-project');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
     const statePath = adapter.getInstallStatePath({ projectRoot });
@@ -2501,15 +2514,69 @@ function runTests() {
     assert.strictEqual(root, path.join(projectRoot, '.junie'));
     assert.strictEqual(statePath, path.join(projectRoot, '.junie', 'egc-install-state.json'));
   })) passed++; else failed++;
- 
-    if (test('junie adapter supports lookup by target and adapter id', () => {
-    const byTarget = getInstallTargetAdapter('junie');
-    const byId = getInstallTargetAdapter('junie-project');
 
-    assert.strictEqual(byTarget.id, 'junie-project');
-    assert.strictEqual(byId.id, 'junie-project');
+  if (test('junie adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('junie');
+    const byId = getInstallTargetAdapter('junie-home');
+    const projectById = getInstallTargetAdapter('junie-project');
+
+    assert.strictEqual(byTarget.id, 'junie-home');
+    assert.strictEqual(byId.id, 'junie-home');
+    assert.strictEqual(projectById.id, 'junie-project');
     assert.ok(byTarget.supports('junie'));
-    assert.ok(byTarget.supports('junie-project'));
+    assert.ok(byTarget.supports('junie-home'));
+    assert.ok(projectById.supports('junie'));
+    assert.ok(projectById.supports('junie-project'));
+  })) passed++; else failed++;
+
+  if (test('junie home adapter always plans Guardian and Crusher on PreToolUse/Bash, even with no modules selected', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const targetRoot = path.join(homeDir, '.junie');
+    const configJsonPath = path.join(targetRoot, 'config.json');
+
+    const plan = planInstallTargetScaffold({
+      target: 'junie',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const mergeOperations = plan.operations.filter(operation => operation.destinationPath === configJsonPath);
+    assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into ~/.junie/config.json');
+    assert.ok(
+      mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'Bash'),
+      'Both merges must target PreToolUse with the Bash matcher'
+    );
+
+    const guardianMerge = mergeOperations.find(operation => operation.moduleId === 'egc-bash-guardian-hook');
+    const crusherMerge = mergeOperations.find(operation => operation.moduleId === 'egc-crusher-hook');
+    assert.ok(guardianMerge, 'Should plan the Guardian merge');
+    assert.ok(crusherMerge, 'Should plan the Crusher merge');
+    assert.strictEqual(guardianMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'junie-guardian-adapter.js'));
+    assert.strictEqual(crusherMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'junie-crusher-adapter.js'));
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/junie-guardian-adapter.js'
+        && operation.destinationPath === guardianMerge.hookScriptPath
+      )),
+      'Should plan the Junie-specific Guardian translation adapter copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/junie-crusher-adapter.js'
+        && operation.destinationPath === crusherMerge.hookScriptPath
+      )),
+      'Should plan the Junie-specific Crusher translation adapter copy even with no modules selected'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/adapter-stdin-json.js'
+        && operation.destinationPath === path.join(targetRoot, 'scripts', 'lib', 'adapter-stdin-json.js')
+      )),
+      'Should plan the shared adapter-stdin-json.js copy (both Junie adapters require it) -- regression guard for the exact MODULE_NOT_FOUND gap fixed in #1076'
+    );
   })) passed++; else failed++;
 
   if (test('trae adapter supports lookup by target and adapter id', () => {

@@ -101,4 +101,25 @@ function run(rawInput) {
   }
 }
 
-module.exports = { run };
+// Shared by every host-specific translation adapter that needs the rewrite
+// decision for a single command string, without Claude Code's own
+// {tool_input: {command}} envelope round-trip (Cursor, Junie -- cubic-dev-ai
+// duplication finding, PR #1081: both adapters had grown their own near-
+// identical JSON.parse(run(JSON.stringify(...))) wrapper). Returns the
+// rewritten command, or null when nothing should change (no CLI, no engine,
+// already wrapped, or a generic/non-crushable command).
+//
+// No try/catch here: run()'s own contract (see its header comment) is to
+// fail open on any internal error by echoing back the exact JSON string it
+// was given, so JSON.parse can never fail on run()'s output -- it is always
+// either the rewritten object or the same valid JSON this function just
+// built. A defensive catch around that would be unreachable dead code
+// (confirmed: Codecov flagged it as uncovered on this exact PR).
+function computeCrushedCommand(command) {
+  if (!command) return null;
+  const result = JSON.parse(run(JSON.stringify({ tool_input: { command } })));
+  const rewritten = result?.tool_input?.command;
+  return typeof rewritten === 'string' && rewritten !== command ? rewritten : null;
+}
+
+module.exports = { run, computeCrushedCommand };
