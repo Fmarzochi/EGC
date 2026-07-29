@@ -13,6 +13,8 @@ const {
 const {
   HOOK_OPERATION_KIND,
   createBashGuardianScriptCopyOperations,
+  createAdapterStdinJsonCopyOperation,
+  ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH,
 } = require('../claude-settings-hooks');
 const {
   BEFORE_SHELL_EXECUTION_EVENT,
@@ -76,9 +78,14 @@ function createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot) 
     ...(seedPath ? { seedPath } : {}),
   };
 
+  const adapterStdinJsonCopyOperation = alreadyScaffolded(ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH)
+    ? null
+    : createAdapterStdinJsonCopyOperation(remap, targetRoot);
+
   return [
     ...guardianScriptCopyOperations,
     ...(adapterCopyOperation ? [adapterCopyOperation] : []),
+    ...(adapterStdinJsonCopyOperation ? [adapterStdinJsonCopyOperation] : []),
     mergeOperation,
   ];
 }

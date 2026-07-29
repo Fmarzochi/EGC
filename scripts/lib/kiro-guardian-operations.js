@@ -13,6 +13,7 @@ const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
   HOOK_OPERATION_KIND,
   createBashGuardianScriptCopyOperations,
+  createAdapterStdinJsonCopyOperation,
 } = require('./claude-settings-hooks');
 const {
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -50,9 +51,12 @@ function createKiroGuardianOperations(adapter, targetRoot, createRemappedOperati
     hookScriptPath: adapterScriptDestination,
   };
 
+  const adapterStdinJsonCopyOperation = createAdapterStdinJsonCopyOperation(remap, targetRoot);
+
   return [
     ...guardianScriptCopyOperations,
     adapterCopyOperation,
+    adapterStdinJsonCopyOperation,
     mergeOperation,
   ];
 }

@@ -2420,6 +2420,39 @@ function runTests() {
     assert.ok(targets.includes('kiro'), 'Should include kiro target');
   })) passed++; else failed++;
 
+  if (test('Cursor/Windsurf/Kiro all plan a copy of adapter-stdin-json.js, the shared dependency their translation adapters require() (2026-07-29 MODULE_NOT_FOUND regression)', () => {
+    // cubic-dev-ai flagged this on PR #1073 (Kiro) as a P1: the adapter
+    // scripts require('../lib/adapter-stdin-json') for their
+    // truncation-aware stdin reader, but none of the three hosts' copy
+    // operations ever included that file -- confirmed for real on the
+    // local machine after merge: every one of the three adapters crashed
+    // with MODULE_NOT_FOUND on its very first invocation. No prior test
+    // caught it because every other test either stubs the adapter's
+    // require() away or only checks the hooks.json/agent-config merge
+    // content, never the full file set an install actually produces.
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+    const adapterStdinJsonSource = 'scripts/lib/adapter-stdin-json.js';
+
+    for (const { label, target, targetRoot, extra, modules } of [
+      { label: 'cursor', target: 'cursor', targetRoot: path.join(projectRoot, '.cursor'), extra: { projectRoot }, modules: [] },
+      { label: 'windsurf-home', target: 'windsurf', targetRoot: path.join(homeDir, '.codeium', 'windsurf'), extra: { homeDir }, modules: [] },
+      { label: 'windsurf-project', target: 'windsurf-project', targetRoot: path.join(projectRoot, '.windsurf'), extra: { projectRoot }, modules: [] },
+      { label: 'kiro-home', target: 'kiro', targetRoot: path.join(homeDir, '.kiro'), extra: { homeDir }, modules: [] },
+      { label: 'kiro-project', target: 'kiro-project', targetRoot: path.join(projectRoot, '.kiro'), extra: { projectRoot }, modules: [] },
+    ]) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules, ...extra });
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === adapterStdinJsonSource
+          && operation.destinationPath === path.join(targetRoot, 'scripts', 'lib', 'adapter-stdin-json.js')
+        )),
+        `[${label}] Should plan a copy of adapter-stdin-json.js alongside the Guardian adapter`
+      );
+    }
+  })) passed++; else failed++;
+
   if (test('resolves trae adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('trae');
     const projectRoot = '/workspace/app';

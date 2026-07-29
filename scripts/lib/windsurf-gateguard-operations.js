@@ -18,6 +18,7 @@ const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
   createGateGuardScriptCopyOperations,
   createBashGuardianScriptCopyOperations,
+  createAdapterStdinJsonCopyOperation,
 } = require('./claude-settings-hooks');
 const {
   ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -85,12 +86,15 @@ function createWindsurfGateGuardOperations(adapter, targetRoot, createRemappedOp
     hookScriptPath: guardianAdapterScriptDestination,
   };
 
+  const adapterStdinJsonCopyOperation = createAdapterStdinJsonCopyOperation(remap, targetRoot);
+
   return [
     ...scriptCopyOperations,
     adapterCopyOperation,
     ...mergeOperations,
     ...guardianScriptCopyOperations,
     guardianAdapterCopyOperation,
+    adapterStdinJsonCopyOperation,
     guardianMergeOperation,
   ];
 }
