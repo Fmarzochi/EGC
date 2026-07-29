@@ -1199,8 +1199,43 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 7. Not in any allowlist: blocked
+  // 7. Not in any allowlist: advisory-only at the hook layer (see
+  // ADVISORY_REASONS in pre-bash-guardian-validate.js) -- UNLESS the command
+  // targets a protected file, in which case it hard-blocks here instead
+  // (EGC-494). Catalogued commands (SAFE_READONLY/SAFE_DEV) already get
+  // their own protected-path checks per-command in validateCommandArgs
+  // below (step 8); this only runs for commands outside both lists (wget,
+  // curl, cp, sed -i, tee, ...), which previously had zero protected-path
+  // coverage since validateCommandArgs is never reached for them -- the
+  // generic "not in the allowlist" advisory swallowed every case, including
+  // `wget -O ~/.bashrc <url>`. Flag values (--output=path) are unwrapped so
+  // a protected target glued to its flag isn't skipped as a non-path arg.
   if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
+    const candidatePaths = args.flatMap(rawArg => {
+      const arg = bareToken(rawArg);
+      if (!arg.startsWith('-')) {
+        // A URI operand (http://..., ftp://...) is a download/read target,
+        // not a local path -- passing it to isProtectedPath would resolve it
+        // relative to cwd and could false-positive hard-block a benign
+        // download whose URL happens to end in a protected-looking name.
+        return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [arg];
+      }
+      const eq = arg.indexOf('=');
+      if (eq > 0) return [arg.slice(eq + 1)];
+      // A short option's value can be glued directly to its flag with no
+      // separator (`-o~/.bashrc`, equivalent to `-o ~/.bashrc`) -- without
+      // this, that form never produces a candidate and stays advisory-only.
+      if (!arg.startsWith('--') && arg.length > 2) return [arg.slice(2)];
+      return [];
+    });
+    const protectedTarget = candidatePaths.find(arg => isProtectedPath(arg, cwd));
+    if (protectedTarget) {
+      return {
+        allowed: false,
+        reason: `'${baseCommand}' targets a protected file (${protectedTarget}) and is always denied, regardless of allowlist status`,
+        trust_level: 'DANGEROUS',
+      };
+    }
     return {
       allowed: false,
       reason: `Command '${baseCommand}' is not in the allowlist`,
