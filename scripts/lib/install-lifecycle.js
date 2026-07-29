@@ -42,6 +42,11 @@ const {
   inspectCursorGuardianHookFile,
   removeCursorGuardianHookFromFile,
 } = require('./cursor-guardian-hooks');
+const {
+  PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
+  inspectKiroGuardianHookFile,
+  removeKiroGuardianHookFromFile,
+} = require('./kiro-guardian-hooks');
 
 // Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
 // Claude's matcher/group settings.json schema -- an operation whose
@@ -550,6 +555,8 @@ function uninstallManagedHookOperation(operation) {
     removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
     removeCursorGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
+    removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -691,6 +698,9 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
       return inspectResult(inspectCursorGuardianHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
+      return inspectResult(inspectKiroGuardianHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
     }
     return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }

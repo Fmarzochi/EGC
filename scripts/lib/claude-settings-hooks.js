@@ -20,6 +20,10 @@ const {
   BEFORE_SHELL_EXECUTION_EVENT: CURSOR_BEFORE_SHELL_EXECUTION_EVENT,
   applyCursorGuardianHookToFile,
 } = require('./cursor-guardian-hooks');
+const {
+  PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
+  applyKiroGuardianHookToFile,
+} = require('./kiro-guardian-hooks');
 
 const MANAGED_WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 
@@ -949,6 +953,8 @@ function applyManagedHookOperation(operation) {
     applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
     applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath, { seedPath: operation.seedPath });
+  } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
+    applyKiroGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }
