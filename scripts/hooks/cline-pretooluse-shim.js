@@ -27,7 +27,8 @@ let stdin = '';
 try {
   stdin = fs.readFileSync(0, 'utf8');
 } catch {
-  stdin = '';
+  // Left as '' -- the target's own fail-open-on-malformed-input logic
+  // handles a blank stdin the same as if it had been invoked directly.
 }
 
 const target = path.join(__dirname, '..', 'scripts', 'hooks', 'cline-guardian-adapter.js');
