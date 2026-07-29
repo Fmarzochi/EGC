@@ -1,7 +1,9 @@
 const {
   createFlatSkillPlanOperations,
   createInstallTargetAdapter,
+  createRemappedOperation,
 } = require('./helpers');
+const { createKiroGuardianOperations } = require('../kiro-guardian-operations');
 
 module.exports = createInstallTargetAdapter({
   id: 'kiro-home',
@@ -10,5 +12,17 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.kiro'],
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.kiro',
-  planOperations: createFlatSkillPlanOperations,
+  planOperations(input, adapter) {
+    const planningInput = {
+      repoRoot: input.repoRoot,
+      projectRoot: input.projectRoot,
+      homeDir: input.homeDir,
+    };
+    const targetRoot = adapter.resolveRoot(planningInput);
+
+    return [
+      ...createFlatSkillPlanOperations(input, adapter),
+      ...createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation),
+    ];
+  },
 });

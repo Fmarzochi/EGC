@@ -2378,6 +2378,42 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('kiro home and project adapters always plan the Guardian preToolUse hook, even with no modules selected (EGC-494/EGC-498)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    for (const { target, targetRoot, extra } of [
+      { target: 'kiro', targetRoot: path.join(homeDir, '.kiro'), extra: { homeDir } },
+      { target: 'kiro-project', targetRoot: path.join(projectRoot, '.kiro'), extra: { projectRoot } },
+    ]) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...extra });
+      const adapterScriptDestination = path.join(targetRoot, 'scripts', 'hooks', 'kiro-guardian-adapter.js');
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-bash-guardian-validate.js'
+          && operation.destinationPath === path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js')
+        )),
+        `[${target}] Should plan the shared Guardian validator copy even with no modules selected`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/kiro-guardian-adapter.js'
+          && operation.destinationPath === adapterScriptDestination
+        )),
+        `[${target}] Should plan the Kiro-specific adapter copy even with no modules selected`
+      );
+
+      const mergeOperation = plan.operations.find(
+        operation => operation.kind === 'merge-claude-settings-hooks' && operation.hookEvent === 'preToolUse'
+      );
+      assert.ok(mergeOperation, `[${target}] Should plan the preToolUse agent-config merge`);
+      assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'agents', 'default.json'));
+      assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
+    }
+  })) passed++; else failed++;
+
   if (test('kiro adapters are included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);

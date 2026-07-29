@@ -62,7 +62,11 @@ function isStaleEgcEntry(entry, command, isOwnBasename) {
 // buildExtraTopLevel: (base: object) => object, merged into the result
 // alongside `hooks` -- e.g. Cursor's {version} field, which Windsurf's
 // hooks.json does not have.
-function addFlatHookEntry(config, event, command, { isOwnBasename, buildExtraTopLevel } = {}) {
+// extraEntryFields: object merged into a newly-appended entry alongside
+// `command` -- e.g. Kiro's {matcher: 'execute_bash'}, needed because its
+// preToolUse array covers every tool (fs_read, fs_write, execute_bash), not
+// just shell commands the way Cursor's beforeShellExecution already is.
+function addFlatHookEntry(config, event, command, { isOwnBasename, buildExtraTopLevel, extraEntryFields } = {}) {
   const base = isPlainObject(config) ? config : {};
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
   const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
@@ -83,7 +87,7 @@ function addFlatHookEntry(config, event, command, { isOwnBasename, buildExtraTop
   });
 
   if (!migrated) {
-    nextEntries.push({ command });
+    nextEntries.push({ ...(extraEntryFields || {}), command });
   }
 
   hooks[event] = nextEntries;

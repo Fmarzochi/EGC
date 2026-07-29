@@ -1,19 +1,17 @@
 /**
- * Tests for scripts/hooks/windsurf-guardian-adapter.js
+ * Tests for scripts/hooks/kiro-guardian-adapter.js
  *
- * Windsurf's pre_run_command hook uses a different wire contract than
- * Claude Code's PreToolUse hook (see windsurf-gateguard-adapter.js for the
- * same distinction) -- this file exercises both the pure translation
- * function and the real CLI entrypoint end to end, including the
- * cwd-preservation and oversized-input fail-closed fixes from the
- * 2026-07-27 cubic-dev-ai review.
+ * Kiro's preToolUse hook uses a different wire contract than Claude Code's
+ * PreToolUse hook (see cursor-guardian-adapter.test.js for the same
+ * pattern this mirrors) -- this file exercises both the pure translation
+ * function and the real CLI entrypoint end to end.
  */
 
 const assert = require('assert');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const adapterScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'windsurf-guardian-adapter.js');
+const adapterScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'kiro-guardian-adapter.js');
 const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { buildGuardianInput } = require(adapterScript);
 
@@ -45,42 +43,39 @@ function runAdapterCli(input, env = {}) {
 }
 
 function runTests() {
-  console.log('\n=== Testing windsurf-guardian-adapter ===\n');
+  console.log('\n=== Testing kiro-guardian-adapter ===\n');
 
   let passed = 0;
   let failed = 0;
 
-  if (test('maps pre_run_command to a Guardian Bash input', () => {
+  if (test('maps an execute_bash preToolUse event to a Guardian Bash input', () => {
     const mapped = buildGuardianInput({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'echo hi' },
+      hook_event_name: 'preToolUse',
+      cwd: '/Users/example/project',
+      tool_name: 'execute_bash',
+      tool_input: { command: 'echo hi' },
     });
-    assert.deepStrictEqual(mapped, { tool_name: 'Bash', tool_input: { command: 'echo hi' } });
+    assert.deepStrictEqual(mapped, { tool_name: 'Bash', tool_input: { command: 'echo hi' }, cwd: '/Users/example/project' });
   })) passed++; else failed++;
 
-  if (test('preserves tool_info.cwd on the mapped input (relative protected-path checks need it)', () => {
-    const mapped = buildGuardianInput({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'cat .ssh/id_rsa', cwd: '/Users/example/project' },
-    });
-    assert.strictEqual(mapped.cwd, '/Users/example/project');
+  if (test('also maps the "shell" and "execute_cmd" tool_name aliases', () => {
+    assert.ok(buildGuardianInput({ tool_name: 'shell', tool_input: { command: 'echo hi' } }));
+    assert.ok(buildGuardianInput({ tool_name: 'execute_cmd', tool_input: { command: 'echo hi' } }));
   })) passed++; else failed++;
 
-  if (test('omits cwd when tool_info has none (not a string)', () => {
-    const mapped = buildGuardianInput({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'echo hi' },
-    });
+  if (test('omits cwd when the event has none (not a string)', () => {
+    const mapped = buildGuardianInput({ tool_name: 'execute_bash', tool_input: { command: 'echo hi' } });
     assert.strictEqual('cwd' in mapped, false);
   })) passed++; else failed++;
 
-  if (test('returns null for unmapped Windsurf events (pre_write_code, pre_read_code, ...)', () => {
-    assert.strictEqual(buildGuardianInput({ agent_action_name: 'pre_write_code', tool_info: {} }), null);
-    assert.strictEqual(buildGuardianInput({ agent_action_name: 'pre_read_code', tool_info: {} }), null);
+  if (test('returns null for a non-bash tool_name (fs_read, fs_write, ...)', () => {
+    assert.strictEqual(buildGuardianInput({ tool_name: 'fs_read', tool_input: {} }), null);
+    assert.strictEqual(buildGuardianInput({ tool_name: 'fs_write', tool_input: {} }), null);
   })) passed++; else failed++;
 
-  if (test('returns null for pre_run_command with no command_line', () => {
-    assert.strictEqual(buildGuardianInput({ agent_action_name: 'pre_run_command', tool_info: {} }), null);
+  if (test('returns null for an execute_bash event with no tool_input.command', () => {
+    assert.strictEqual(buildGuardianInput({ tool_name: 'execute_bash', tool_input: {} }), null);
+    assert.strictEqual(buildGuardianInput({ tool_name: 'execute_bash' }), null);
   })) passed++; else failed++;
 
   if (test('returns null (does not throw) for a non-object event, e.g. valid JSON "null"', () => {
@@ -96,8 +91,9 @@ function runTests() {
 
   if (test('CLI: blocks a destructive command with exit 2 and a reason on stderr', () => {
     const result = runAdapterCli({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'rm -rf /' },
+      hook_event_name: 'preToolUse',
+      tool_name: 'execute_bash',
+      tool_input: { command: 'rm -rf /' },
     });
     assert.strictEqual(result.code, 2);
     assert.ok(result.stderr.length > 0, 'expected a reason on stderr');
@@ -105,17 +101,19 @@ function runTests() {
 
   if (test('CLI: allows a safe allowlisted command (exit 0)', () => {
     const result = runAdapterCli({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'git status' },
+      hook_event_name: 'preToolUse',
+      tool_name: 'execute_bash',
+      tool_input: { command: 'git status' },
     });
     assert.strictEqual(result.code, 0);
     assert.strictEqual(result.stderr, '');
   })) passed++; else failed++;
 
-  if (test('CLI: unmapped event (pre_write_code) exits 0 with no output', () => {
+  if (test('CLI: non-bash tool_name (fs_write) exits 0 with no output', () => {
     const result = runAdapterCli({
-      agent_action_name: 'pre_write_code',
-      tool_info: { file_path: '/tmp/some-file.js' },
+      hook_event_name: 'preToolUse',
+      tool_name: 'fs_write',
+      tool_input: { path: '/tmp/some-file.js' },
     });
     assert.strictEqual(result.code, 0);
     assert.strictEqual(result.stdout, '');
@@ -128,19 +126,14 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('CLI: an oversized payload that gets truncated into invalid JSON fails CLOSED (exit 2), not open', () => {
-    // Pads well past the adapter's 1MB stdin cap so JSON.parse() sees a
-    // truncated, syntactically invalid document -- before the fix this hit
-    // the generic "malformed input" catch and allowed the command through
-    // unvalidated, letting an attacker pad any command past the cap to
-    // bypass the Guardian entirely. Uses a SAFE command (not one the
-    // Guardian would block on its own merits) so this only passes when the
-    // truncation guard itself fires -- with a destructive command, a
-    // regression that dropped the 1MB cap entirely would still exit 2 via
-    // ordinary command validation, masking the bug.
+    // Same fail-closed-on-truncation guard as the other adapters. Uses a
+    // SAFE command so this only passes when the truncation guard itself
+    // fires, not because the command would be blocked on its own merits.
     const oversizedPadding = 'x'.repeat(2 * 1024 * 1024);
     const oversizedInput = JSON.stringify({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'git status', padding: oversizedPadding },
+      hook_event_name: 'preToolUse',
+      tool_name: 'execute_bash',
+      tool_input: { command: 'git status', padding: oversizedPadding },
     });
     const result = runAdapterCli(oversizedInput);
     assert.strictEqual(result.code, 2, `Expected fail-closed on truncated oversized input, got exit ${result.code}`);
@@ -155,8 +148,9 @@ function runTests() {
     // as a trusted "ok: true" result (cubic-dev-ai finding on PR #1073).
     const oversizedWhitespacePadding = ' '.repeat(2 * 1024 * 1024);
     const oversizedInput = JSON.stringify({
-      agent_action_name: 'pre_run_command',
-      tool_info: { command_line: 'git status' },
+      hook_event_name: 'preToolUse',
+      tool_name: 'execute_bash',
+      tool_input: { command: 'git status' },
     }) + oversizedWhitespacePadding;
     const result = runAdapterCli(oversizedInput);
     assert.strictEqual(result.code, 2, `Expected fail-closed on a truncated-but-parseable payload, got exit ${result.code}`);

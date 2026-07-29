@@ -35,4 +35,47 @@ function readAdapterStdinJson(onComplete) {
   });
 }
 
-module.exports = { MAX_STDIN, readAdapterStdinJson };
+// Shared main() body for host adapters that block with a plain exit-code-2-
+// plus-stderr contract (Windsurf, Kiro) -- as opposed to Cursor, which also
+// needs a {permission, ...} JSON envelope on stdout and so builds its own
+// main() around readAdapterStdinJson directly instead of this helper.
+// buildGuardianInput: (parsedEvent) => Guardian input object | null.
+// runGuardian: pre-bash-guardian-validate.js's own run().
+function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
+  readAdapterStdinJson(({ ok, truncated, value }) => {
+    // Checked before `ok`, unconditionally: a capped-length prefix can
+    // still happen to be syntactically valid JSON (e.g. the cut lands
+    // exactly at the end of a complete value), which previously reached
+    // the `ok: true` branch below with truncated data treated as trusted.
+    // Any truncated payload is unanalyzable -- some of what the caller
+    // sent was discarded -- so it always fails closed, regardless of
+    // whether JSON.parse happened to succeed on what remained.
+    if (truncated) {
+      process.stderr.write(
+        'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+        'this validator can safely read, so it could not be parsed or validated. ' +
+        'Simplify the command.\n'
+      );
+      process.exit(2);
+    }
+    if (!ok) {
+      process.exit(0);
+    }
+
+    const guardianInput = buildGuardianInput(value);
+    if (!guardianInput) {
+      process.exit(0);
+    }
+
+    const result = runGuardian(guardianInput);
+    if (result.exitCode === 2) {
+      const reason = result.stderr || 'Blocked by the EGC Guardian.';
+      process.stderr.write(reason.endsWith('\n') ? reason : `${reason}\n`);
+      process.exit(2);
+    }
+
+    process.exit(0);
+  });
+}
+
+module.exports = { MAX_STDIN, readAdapterStdinJson, runPlainExitCodeGuardianAdapter };
