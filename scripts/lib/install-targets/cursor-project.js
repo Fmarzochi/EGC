@@ -7,8 +7,81 @@ const {
   createFlatRuleOperations,
   createInstallTargetAdapter,
   createManagedOperation,
+  createRemappedOperation,
   isForeignPlatformPath,
 } = require('./helpers');
+const {
+  HOOK_OPERATION_KIND,
+  createBashGuardianScriptCopyOperations,
+} = require('../claude-settings-hooks');
+const {
+  BEFORE_SHELL_EXECUTION_EVENT,
+  GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+  resolveGuardianAdapterScriptDestination,
+  resolveHooksJsonPath,
+} = require('../cursor-guardian-hooks');
+
+// EGC-494/EGC-498: every Cursor install registers the Guardian Bash
+// validator on beforeShellExecution, even when no content modules are
+// selected -- the same "deterministic, unconditional" pattern
+// claude-home.js/windsurf-gateguard-operations.js already use for their own
+// security hooks, so a minimal install is never silently unprotected.
+function createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  // hooks-runtime already scaffolds the whole scripts/hooks and scripts/lib
+  // trees (install-modules.json), which includes every file the Guardian
+  // copy operations below would otherwise duplicate -- drop the redundant
+  // per-file copies when that module is selected, keeping only the merge
+  // operation (never redundant: it is the sole writer of hooks.json's
+  // Guardian entry).
+  const selectedPaths = new Set(modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])));
+  const alreadyScaffolded = sourceRelativePath => (
+    (selectedPaths.has('scripts/hooks') && sourceRelativePath.startsWith('scripts/hooks/'))
+    || (selectedPaths.has('scripts/lib') && sourceRelativePath.startsWith('scripts/lib/'))
+  );
+
+  const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot)
+    .filter(operation => !alreadyScaffolded(operation.sourceRelativePath));
+  const adapterModuleId = 'egc-cursor-guardian-hook';
+  const adapterScriptDestination = resolveGuardianAdapterScriptDestination(targetRoot);
+  const adapterCopyOperation = alreadyScaffolded(GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH)
+    ? null
+    : createRemappedOperation(
+      adapter,
+      adapterModuleId,
+      GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+      adapterScriptDestination,
+      { strategy: 'preserve-relative-path' }
+    );
+  // Only seed from this repo's own .cursor/hooks.json (sessionStart,
+  // dashboard-emit, tmux blocker, etc.) when the install actually selected
+  // the .cursor module path -- a minimal or rules-only install that never
+  // asked for EGC's platform hooks should not have them silently enabled
+  // just because the Guardian's merge operation happens to seed a fresh
+  // destination file.
+  const seedPath = repoRoot && selectedPaths.has('.cursor') ? path.join(repoRoot, '.cursor', 'hooks.json') : null;
+  const mergeOperation = {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: adapterModuleId,
+    sourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveHooksJsonPath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: BEFORE_SHELL_EXECUTION_EVENT,
+    hookScriptPath: adapterScriptDestination,
+    ...(seedPath ? { seedPath } : {}),
+  };
+
+  return [
+    ...guardianScriptCopyOperations,
+    ...(adapterCopyOperation ? [adapterCopyOperation] : []),
+    mergeOperation,
+  ];
+}
 
 function toCursorRuleFileName(fileName, sourceRelativeFile) {
   if (path.basename(sourceRelativeFile).toLowerCase() === 'readme.md') {
@@ -132,7 +205,7 @@ module.exports = createInstallTargetAdapter({
       });
     }
 
-    return entries.flatMap(({ module, sourceRelativePath }) => {
+    return [...entries.flatMap(({ module, sourceRelativePath }) => {
       const cursorMcpOperation = createJsonMergeOperation({
         moduleId: module.id,
         repoRoot,
@@ -174,7 +247,7 @@ module.exports = createInstallTargetAdapter({
 
         const childOperations = fs.readdirSync(cursorRoot, { withFileTypes: true })
           .sort((left, right) => left.name.localeCompare(right.name))
-          .filter(entry => entry.name !== 'rules')
+          .filter(entry => entry.name !== 'rules' && entry.name !== 'hooks.json')
           .map(entry => createManagedOperation({
             moduleId: module.id,
             sourceRelativePath: path.join('.cursor', entry.name),
@@ -210,6 +283,6 @@ module.exports = createInstallTargetAdapter({
       return takeUniqueOperations([
         adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
       ]);
-    });
+    }), ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot)];
   },
 });

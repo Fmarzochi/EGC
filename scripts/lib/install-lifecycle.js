@@ -37,6 +37,11 @@ const {
   inspectWindsurfGateGuardHookFile,
   removeWindsurfGateGuardHookFromFile,
 } = require('./windsurf-gateguard-hooks');
+const {
+  BEFORE_SHELL_EXECUTION_EVENT: CURSOR_BEFORE_SHELL_EXECUTION_EVENT,
+  inspectCursorGuardianHookFile,
+  removeCursorGuardianHookFromFile,
+} = require('./cursor-guardian-hooks');
 
 // Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
 // Claude's matcher/group settings.json schema -- an operation whose
@@ -543,6 +548,8 @@ function uninstallManagedHookOperation(operation) {
     removeHookEntryFromFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
   } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
     removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
+  } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
+    removeCursorGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -681,6 +688,9 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
       return inspectResult(inspectWindsurfGateGuardHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
+      return inspectResult(inspectCursorGuardianHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
     }
     return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }

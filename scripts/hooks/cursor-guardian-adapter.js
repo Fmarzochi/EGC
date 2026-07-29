@@ -1,21 +1,19 @@
 #!/usr/bin/env node
 /**
- * Windsurf Cascade Hooks adapter for the EGC Guardian command validator.
+ * Cursor Agent Hooks adapter for the EGC Guardian command validator.
  *
- * Windsurf's pre_run_command hook uses a different wire contract than Claude
- * Code's PreToolUse hook (see windsurf-gateguard-adapter.js for the same
- * distinction this file mirrors): {agent_action_name, tool_info:
- * {command_line}} on stdin instead of {tool_name, tool_input}, and a plain
- * exit-code-2-with-stderr block instead of a hookSpecificOutput JSON
- * envelope on stdout.
+ * Cursor's beforeShellExecution hook uses a different wire contract than
+ * Claude Code's PreToolUse hook (see windsurf-guardian-adapter.js for the
+ * same distinction this file mirrors): {command, cwd, ...} on stdin instead
+ * of {tool_name, tool_input}, and a JSON {permission, user_message,
+ * agent_message} response on stdout in addition to the block/allow exit
+ * code (docs: https://cursor.com/docs/agent/hooks -- exit code 2 blocks
+ * regardless of stdout, other codes fail open).
  *
  * pre-bash-guardian-validate.js's own run() already returns {exitCode,
  * stderr} directly (no JSON envelope to unwrap), so unlike the GateGuard
  * adapter this translation only needs to build its input shape and relay
- * its output as-is.
- *
- * Registered only on Windsurf's pre_run_command event (not
- * pre_write_code) — the Guardian validates shell commands, not file writes.
+ * its output as-is, plus the permission JSON Cursor's contract expects.
  */
 
 'use strict';
@@ -23,29 +21,30 @@
 const { run } = require('./pre-bash-guardian-validate');
 const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
-function buildGuardianInput(windsurfEvent) {
-  if (!windsurfEvent || typeof windsurfEvent !== 'object') {
+function buildGuardianInput(cursorEvent) {
+  if (!cursorEvent || typeof cursorEvent !== 'object') {
     return null;
   }
-  const actionName = windsurfEvent.agent_action_name || '';
-  if (actionName !== 'pre_run_command') {
-    return null;
-  }
-  const toolInfo = windsurfEvent.tool_info || {};
-  const command = toolInfo.command_line || '';
+  const command = cursorEvent.command || '';
   if (!command) {
     return null;
   }
   // cwd matters here (unlike for GateGuard's fact-forcing gate): the
   // Guardian resolves relative protected paths (e.g. `cat .ssh/id_rsa`)
   // against it. Without it, those checks fall back to this adapter
-  // process's own cwd instead of the directory Windsurf actually runs the
+  // process's own cwd instead of the directory Cursor actually runs the
   // command in.
   const input = { tool_name: 'Bash', tool_input: { command } };
-  if (typeof toolInfo.cwd === 'string') {
-    input.cwd = toolInfo.cwd;
+  if (typeof cursorEvent.cwd === 'string') {
+    input.cwd = cursorEvent.cwd;
   }
   return input;
+}
+
+function respond(permission, message) {
+  const payload = message ? { permission, user_message: message, agent_message: message } : { permission };
+  process.stdout.write(JSON.stringify(payload));
+  process.exit(permission === 'deny' ? 2 : 0);
 }
 
 function main() {
@@ -57,29 +56,28 @@ function main() {
       // malformed (non-truncated) input gets the fail-open policy the other
       // adapters use; a truncated payload is unanalyzable and fails closed.
       if (truncated) {
-        process.stderr.write(
-          'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+        respond('deny', 'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
           'this validator can safely read, so it could not be parsed or validated. ' +
-          'Simplify the command.\n'
-        );
-        process.exit(2);
+          'Simplify the command.');
+        return;
       }
-      process.exit(0);
+      respond('allow');
+      return;
     }
 
     const guardianInput = buildGuardianInput(value);
     if (!guardianInput) {
-      process.exit(0);
+      respond('allow');
+      return;
     }
 
     const result = run(guardianInput);
     if (result.exitCode === 2) {
-      const reason = result.stderr || 'Blocked by the EGC Guardian.';
-      process.stderr.write(reason.endsWith('\n') ? reason : `${reason}\n`);
-      process.exit(2);
+      respond('deny', result.stderr || 'Blocked by the EGC Guardian.');
+      return;
     }
 
-    process.exit(0);
+    respond('allow');
   });
 }
 
