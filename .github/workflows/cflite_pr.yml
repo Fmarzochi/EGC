@@ -17,20 +17,25 @@ jobs:
     steps:
       - name: Build Fuzzers
         id: build
-        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
+        # Pinned to Maqbool61/clusterfuzzlite@fix/js-sanitizer-none (EGC#910):
+        # patches config_utils.py inside the Docker image to allow SANITIZER=none
+        # for JavaScript projects. Revert to google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
+        # once google/oss-fuzz#15907 is resolved upstream.
+        uses: Maqbool61/clusterfuzzlite/actions/build_fuzzers@f3fd422fd0d55f2b4b2c3c1795ed4bcb7084ca41
         with:
           language: javascript
-          sanitizer: address
+          sanitizer: none
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Fuzzers
         id: run
-        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
+        uses: Maqbool61/clusterfuzzlite/actions/run_fuzzers@f3fd422fd0d55f2b4b2c3c1795ed4bcb7084ca41
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 300
           mode: code-change
-          sanitizer: address
+          language: javascript
+          sanitizer: none
           output-sarif: true
 
       - name: Upload SARIF
