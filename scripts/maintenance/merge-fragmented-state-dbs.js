@@ -49,6 +49,60 @@ function pickPk(row, pk) {
   return out;
 }
 
+function quoteColumns(cols) {
+  return cols.map(c => `"${c}"`).join(', ');
+}
+
+function buildPkWhereClause(pk) {
+  const conditions = pk.map(k => `"${k}" = @${k}`);
+  return conditions.join(' AND ');
+}
+
+function buildNamedPlaceholders(cols) {
+  const placeholders = cols.map(c => `@${c}`);
+  return placeholders.join(', ');
+}
+
+function mergeOneTable(canonicalDb, srcDb, name, pk, apply) {
+  if (!tableExists(srcDb, name) || !tableExists(canonicalDb, name)) {
+    return { skipped: 'table missing in source or canonical' };
+  }
+
+  const srcCols = getColumns(srcDb, name);
+  const dstCols = getColumns(canonicalDb, name);
+  const commonCols = srcCols.filter(c => dstCols.includes(c));
+  const missingPk = pk.filter(k => !commonCols.includes(k));
+  if (missingPk.length > 0) {
+    return { skipped: `primary key column(s) missing: ${missingPk.join(', ')}` };
+  }
+
+  const colList = quoteColumns(commonCols);
+  const rows = srcDb.prepare(`SELECT ${colList} FROM "${name}"`).all();
+  const whereClause = buildPkWhereClause(pk);
+  const placeholders = buildNamedPlaceholders(commonCols);
+  const existsStmt = canonicalDb.prepare(`SELECT 1 FROM "${name}" WHERE ${whereClause}`);
+  const insertStmt = canonicalDb.prepare(`INSERT INTO "${name}" (${colList}) VALUES (${placeholders})`);
+
+  let count = 0;
+  let alreadyPresent = 0;
+  for (const row of rows) {
+    if (existsStmt.get(pickPk(row, pk))) {
+      alreadyPresent++;
+      continue;
+    }
+    if (apply) insertStmt.run(row);
+    count++;
+  }
+
+  return {
+    rowsInSource: rows.length,
+    alreadyPresent,
+    [apply ? 'inserted' : 'wouldInsert']: count,
+    columnsCopied: commonCols,
+    columnsDroppedFromSource: srcCols.filter(c => !dstCols.includes(c)),
+  };
+}
+
 async function mergeOneSource(canonicalDb, srcPath, apply) {
   const srcReport = { source: srcPath, tables: {} };
 
@@ -58,51 +112,8 @@ async function mergeOneSource(canonicalDb, srcPath, apply) {
   }
 
   const srcDb = await openDatabase(srcPath);
-
   for (const { name, pk } of MERGE_TABLES) {
-    if (!tableExists(srcDb, name) || !tableExists(canonicalDb, name)) {
-      srcReport.tables[name] = { skipped: 'table missing in source or canonical' };
-      continue;
-    }
-
-    const srcCols = getColumns(srcDb, name);
-    const dstCols = getColumns(canonicalDb, name);
-    const commonCols = srcCols.filter(c => dstCols.includes(c));
-    const missingPk = pk.filter(k => !commonCols.includes(k));
-    if (missingPk.length > 0) {
-      srcReport.tables[name] = { skipped: `primary key column(s) missing: ${missingPk.join(', ')}` };
-      continue;
-    }
-
-    const colList = commonCols.map(c => `"${c}"`).join(', ');
-    const rows = srcDb.prepare(`SELECT ${colList} FROM "${name}"`).all();
-
-    let count = 0;
-    let alreadyPresent = 0;
-    const existsStmt = canonicalDb.prepare(
-      `SELECT 1 FROM "${name}" WHERE ${pk.map(k => `"${k}" = @${k}`).join(' AND ')}`
-    );
-    const insertStmt = canonicalDb.prepare(
-      `INSERT INTO "${name}" (${colList}) VALUES (${commonCols.map(c => `@${c}`).join(', ')})`
-    );
-
-    for (const row of rows) {
-      const exists = existsStmt.get(pickPk(row, pk));
-      if (exists) {
-        alreadyPresent++;
-        continue;
-      }
-      if (apply) insertStmt.run(row);
-      count++;
-    }
-
-    srcReport.tables[name] = {
-      rowsInSource: rows.length,
-      alreadyPresent,
-      [apply ? 'inserted' : 'wouldInsert']: count,
-      columnsCopied: commonCols,
-      columnsDroppedFromSource: srcCols.filter(c => !dstCols.includes(c)),
-    };
+    srcReport.tables[name] = mergeOneTable(canonicalDb, srcDb, name, pk, apply);
   }
 
   return srcReport;
