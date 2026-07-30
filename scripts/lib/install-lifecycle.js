@@ -153,7 +153,7 @@ function areFilesEqual(leftPath, rightPath) {
     // rewrite step like buildResolvedClaudeHooks() that always emits LF via
     // JSON.stringify), not a real edit to the managed file -- never flag it
     // as drift.
-    return left.toString('utf8').replace(/\r\n/g, '\n') === right.toString('utf8').replace(/\r\n/g, '\n');
+    return left.toString('utf8').replaceAll('\r\n', '\n') === right.toString('utf8').replaceAll('\r\n', '\n');
   } catch (_error) { // NOSONAR: unreadable files are treated as different
     return false;
   }
