@@ -173,8 +173,13 @@ if [ ! -f "$ROOT_DIR/mcp/servers/egc-memory/build/index.js" ]; then
 fi
 echo "  ✓ egc-memory build verified"
 
-# Final validation
-node scripts/egc.js doctor
+# Final validation. `egc doctor` exits 1 on warnings, not just errors (by
+# design, for standalone/CI use) -- under this script's `set -e`, an
+# untreated non-zero exit here would silently abort the rest of the install
+# (MCP registration, ecosystem install, the Token Crusher shim below) on any
+# warning, however minor. This is a status report, not a gate: never let it
+# be fatal to the install.
+node scripts/egc.js doctor || true
 
 # Interactive ecosystem install (skipped in CI/headless environments)
 if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
@@ -447,6 +452,16 @@ if [ -d "$ROOT_DIR/.git" ] && [ "$DRY_RUN" = false ]; then
   else
     echo "  ✓ git pre-commit hook already installed"
   fi
+fi
+
+# Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort: a
+# failure here (permission, unsupported shell config, ...) must never abort
+# an otherwise successful install. Skipped in --dry-run, same as the rest of
+# this section.
+if [ "$DRY_RUN" = false ]; then
+  echo ""
+  echo "Installing Token Crusher binary shim..."
+  node "$ROOT_DIR/scripts/crusher-shim.js" install || echo "  note: crusher-shim install failed (non-fatal). Run 'node scripts/crusher-shim.js install' manually to retry."
 fi
 
 echo ""

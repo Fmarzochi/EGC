@@ -359,6 +359,21 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
         Remove-Item $propObsTmp -ErrorAction SilentlyContinue
     }
 
+    # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort:
+    # a failure here (permission, unsupported shell profile, ...) must never
+    # abort an otherwise successful install.
+    Write-Host ""
+    Write-Host "  installing Token Crusher binary shim..."
+    $CrusherShim = Join-Path (Join-Path $RootDir "scripts") "crusher-shim.js"
+    try {
+        node $CrusherShim install
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  note: crusher-shim install failed (non-fatal). Run 'node scripts\crusher-shim.js install' manually to retry." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  note: crusher-shim install failed (non-fatal). Run 'node scripts\crusher-shim.js install' manually to retry." -ForegroundColor Yellow
+    }
+
     Write-Host ""
     Write-Host "Installation complete."
     if (-not $hasInstallArgs) {
