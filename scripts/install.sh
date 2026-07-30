@@ -458,7 +458,7 @@ fi
 # failure here (permission, unsupported shell config, ...) must never abort
 # an otherwise successful install. Skipped in --dry-run, same as the rest of
 # this section.
-if [ "$DRY_RUN" = false ]; then
+if [[ "$DRY_RUN" = false ]]; then
   echo ""
   echo "Installing Token Crusher binary shim..."
   node "$ROOT_DIR/scripts/crusher-shim.js" install || echo "  note: crusher-shim install failed (non-fatal). Run 'node scripts/crusher-shim.js install' manually to retry."
