@@ -43,7 +43,7 @@ function posixLauncherSource(name) {
     'try {',
     `  require(${JSON.stringify(DISPATCH_MODULE)}).runShim(${JSON.stringify(name)}, process.argv.slice(2));`,
     '} catch (e) {',
-    `  if (e.code === 'MODULE_NOT_FOUND') { process.stderr.write(${JSON.stringify(launcherNotFoundMessage(name))} + '\\n'); process.exit(127); }`,
+    String.raw`  if (e.code === 'MODULE_NOT_FOUND') { process.stderr.write(${JSON.stringify(launcherNotFoundMessage(name))} + '\n'); process.exit(127); }`,
     '  throw e;',
     '}',
     '',
@@ -128,7 +128,7 @@ function uninstallPosixPath() {
 // Single-quoting with '' as the escape for an embedded ' is the standard,
 // safe way to embed an arbitrary string in a PowerShell script.
 function powershellSingleQuote(value) {
-  return `'${value.replace(/'/g, "''")}'`;
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 function runPowerShell(script) {
