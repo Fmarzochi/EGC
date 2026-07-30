@@ -28,10 +28,24 @@ const DISPATCH_MODULE = path.join(__dirname, 'shim-dispatch.js');
 const PATH_MARKER = 'EGC Token Crusher shim';
 const RC_CANDIDATES = ['.bashrc', '.zshrc', '.bash_profile', '.profile'];
 
+function launcherNotFoundMessage(name) {
+  // The launcher hardcodes an absolute path back into this repo checkout
+  // (there is nowhere else for it to point to). If that checkout is moved,
+  // renamed, or deleted, require() throws MODULE_NOT_FOUND -- catching it
+  // here trades Node's raw stack trace for a message that actually tells
+  // the person what to do about it.
+  return `${name}: the EGC Token Crusher shim can't find its own code (was the EGC checkout moved or deleted?). Run 'egc crusher-shim install' again from wherever it lives now, or 'egc crusher-shim uninstall' to remove this shim.`;
+}
+
 function posixLauncherSource(name) {
   return [
     '#!/usr/bin/env node',
-    `require(${JSON.stringify(DISPATCH_MODULE)}).runShim(${JSON.stringify(name)}, process.argv.slice(2));`,
+    'try {',
+    `  require(${JSON.stringify(DISPATCH_MODULE)}).runShim(${JSON.stringify(name)}, process.argv.slice(2));`,
+    '} catch (e) {',
+    `  if (e.code === 'MODULE_NOT_FOUND') { process.stderr.write(${JSON.stringify(launcherNotFoundMessage(name))} + '\\n'); process.exit(127); }`,
+    '  throw e;',
+    '}',
     '',
   ].join('\n');
 }
@@ -39,9 +53,16 @@ function posixLauncherSource(name) {
 function windowsLauncherSource(name) {
   // cmd.exe/PowerShell resolve PATHEXT-listed extensions; a POSIX shebang
   // does not execute there, so this spawns node on shim-dispatch.js as a
-  // separate process instead of requiring it in-process.
+  // separate process instead of requiring it in-process. Batch has no
+  // exception handling, so the existence check happens up front instead of
+  // catching node's own error after the fact (see posixLauncherSource for
+  // why this check exists at all).
   return [
     '@echo off',
+    `if not exist "${DISPATCH_MODULE}" (`,
+    `  echo ${launcherNotFoundMessage(name)}`,
+    '  exit /b 127',
+    ')',
     `node "${DISPATCH_MODULE}" ${name} %*`,
     '',
   ].join('\r\n');
@@ -100,20 +121,48 @@ function uninstallPosixPath() {
   return RC_CANDIDATES.map(name => removeFromRcFile(path.join(home, name)));
 }
 
+// PowerShell double-quoted strings ("...") interpolate $variables; single
+// quotes ('...') do not. JSON.stringify() always emits double quotes, so
+// embedding it directly would let a $ anywhere in the path (rare, but valid
+// in a Windows username) be misread as a PowerShell variable reference.
+// Single-quoting with '' as the escape for an embedded ' is the standard,
+// safe way to embed an arbitrary string in a PowerShell script.
+function powershellSingleQuote(value) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function runPowerShell(script) {
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- this IS the feature: prepending our own ~/.egc/bin (never user/attacker-writable beyond the local account already running this installer) ahead of the existing user PATH, read/written only through Windows's own SetEnvironmentVariable API
+  if (result.error) {
+    return { ok: false, stdout: '', error: result.error.message };
+  }
+  if (result.status !== 0) {
+    // spawnSync only ever populates result.error for a failure to launch
+    // powershell.exe itself; a script-level failure (bad syntax, denied
+    // registry write, execution policy) instead surfaces as a non-zero
+    // status with nothing in result.error, which the previous version of
+    // this code silently treated as success.
+    return { ok: false, stdout: result.stdout || '', error: (result.stderr || `powershell exited with status ${result.status}`).trim() };
+  }
+  return { ok: true, stdout: result.stdout || '', error: null };
+}
+
 // Best-effort: not exercised on real Windows by this repo's CI or by any
 // test in this suite (process.platform !== 'win32' everywhere else here).
 // Persisting a user env var on Windows has no direct Node API; this shells
 // out to PowerShell, which every supported Windows version ships.
 function installWindowsPath(dir) {
-  const script = `$dir = ${JSON.stringify(dir)}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; if (($current -split ';') -notcontains $dir) { [Environment]::SetEnvironmentVariable('Path', "$dir;$current", 'User'); Write-Output 'changed' } else { Write-Output 'already-present' }`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- this IS the feature: prepending our own ~/.egc/bin (never user/attacker-writable beyond the local account already running this installer) ahead of the existing user PATH, read/written only through Windows's own SetEnvironmentVariable API
-  return { changed: !result.error && /changed/.test(result.stdout || ''), error: result.error ? result.error.message : null };
+  const safeDir = powershellSingleQuote(dir);
+  const script = `$dir = ${safeDir}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ }; if ($parts -notcontains $dir) { [Environment]::SetEnvironmentVariable('Path', (@($dir) + $parts -join ';'), 'User'); Write-Output 'changed' } else { Write-Output 'already-present' }`;
+  const result = runPowerShell(script);
+  return { changed: result.ok && /changed/.test(result.stdout), error: result.error };
 }
 
 function uninstallWindowsPath(dir) {
-  const script = `$dir = ${JSON.stringify(dir)}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ -ne $dir }; [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User'); Write-Output 'done'`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- same PATH edit as installWindowsPath, in reverse
-  return { changed: !result.error, error: result.error ? result.error.message : null };
+  const safeDir = powershellSingleQuote(dir);
+  const script = `$dir = ${safeDir}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ }; if ($parts -contains $dir) { [Environment]::SetEnvironmentVariable('Path', (($parts | Where-Object { $_ -ne $dir }) -join ';'), 'User'); Write-Output 'changed' } else { Write-Output 'not-present' }`;
+  const result = runPowerShell(script);
+  return { changed: result.ok && /changed/.test(result.stdout), error: result.error };
 }
 
 function install() {
@@ -168,4 +217,4 @@ function status() {
   };
 }
 
-module.exports = { install, uninstall, status, SHIM_BINARY_NAMES };
+module.exports = { install, uninstall, status, SHIM_BINARY_NAMES, powershellSingleQuote };

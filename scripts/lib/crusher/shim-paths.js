@@ -41,6 +41,16 @@ function pathEnvKey() {
   return Object.keys(process.env).find(k => k.toLowerCase() === 'path') || 'PATH';
 }
 
+// Windows and default macOS (HFS+/APFS) filesystems are case-insensitive, so
+// a PATH entry that differs from shimDir() only in casing would otherwise
+// slip past the filter below and resolve back to the shim itself --
+// structurally the exact infinite-recursion case this filter exists to rule
+// out. Linux stays case-sensitive, matching its case-sensitive filesystem.
+function normalizePathForCompare(p) {
+  const resolved = path.resolve(p);
+  return process.platform === 'win32' || process.platform === 'darwin' ? resolved.toLowerCase() : resolved;
+}
+
 // Resolves the real binary on PATH with the shim directory filtered out, so
 // this never just finds the shim itself (directly at install time, before
 // any manifest exists, and as a fallback at dispatch time if the manifest is
@@ -48,9 +58,10 @@ function pathEnvKey() {
 function resolveWithoutShim(name) {
   const dir = shimDir();
   const key = pathEnvKey();
+  const normalizedDir = normalizePathForCompare(dir);
   const filtered = (process.env[key] || '')
     .split(path.delimiter)
-    .filter(p => p && path.resolve(p) !== path.resolve(dir));
+    .filter(p => p && normalizePathForCompare(p) !== normalizedDir);
 
   const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], { // NOSONAR jssecurity:S8705 -- name is always a hardcoded SHIM_BINARY_NAMES entry or the launcher's own baked-in name, never untrusted input; array-form with no shell also rules out injection
     encoding: 'utf8',
@@ -74,6 +85,7 @@ module.exports = {
   manifestPath,
   readManifest,
   pathEnvKey,
+  normalizePathForCompare,
   resolveWithoutShim,
   resolveRealBinary,
 };
