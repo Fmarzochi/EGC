@@ -73,7 +73,7 @@ async function runCursorAndCodexUpgradeTests() {
   let passed = 0;
   let failed = 0;
 
-  if (await test('Cursor settings.json: a pre-versioning legacy cursor.rules (no marker) is upgraded to v2 with the Crusher tag, preserving unrelated settings', () => {
+  if (await test('Cursor settings.json: a pre-versioning legacy cursor.rules (no marker, no closing tag) is upgraded by appending v2 with the Crusher tag, never deleting the old text', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
@@ -85,16 +85,34 @@ async function runCursorAndCodexUpgradeTests() {
       }), 'utf8');
 
       const output = run(home);
-      assert.ok(/Cursor: memory protocol upgraded/.test(output), `should report an upgrade, got: ${output}`);
+      assert.ok(/Cursor: memory protocol upgraded v1 -> v2/.test(output), `should report a v1 -> v2 upgrade, got: ${output}`);
 
       const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
       assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
+      assert.ok(parsed['cursor.rules'].includes('Legacy pre-Crusher rules'), 'the old unclosed legacy block is never deleted, since there is no reliable end marker to cut it at');
       assert.ok(parsed['cursor.rules'].includes('[egc-token-crusher]'), 'upgraded cursor.rules must include the Crusher tag');
       assert.ok(parsed['cursor.rules'].includes('[egc-memory-protocol:v2]'), 'marker must be stamped with the current version');
-      assert.strictEqual(
-        (parsed['cursor.rules'].match(/\[egc-memory-protocol(?::v\d+)?\]/g) || []).length,
-        1,
-        'exactly one protocol marker after the upgrade, no duplication'
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor settings.json: rules the user appended after an old unclosed legacy block survive the upgrade (cubic review, PR #1095)', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({
+        'cursor.rules': '[egc-memory-protocol] Legacy pre-Crusher rules mentioning get_state and update_state.\n\nAlways use tabs, never spaces, in this project.',
+      }), 'utf8');
+
+      run(home);
+
+      const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+      assert.ok(
+        parsed['cursor.rules'].includes('Always use tabs, never spaces, in this project.'),
+        'a rule the user appended after the old unclosed EGC block must survive the upgrade, not be silently deleted'
       );
     } finally {
       cleanup(home);
@@ -139,6 +157,24 @@ async function runCursorAndCodexUpgradeTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('Codex config.toml: escapes double quotes and backslashes when upgrading a single-quoted persistent_instructions (cubic review, PR #1095)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      fs.writeFileSync(tomlPath, 'persistent_instructions = \'Legacy text mentioning get_state with a "quoted word" and a backslash \\ here.\'\n', 'utf8');
+
+      run(home);
+
+      const content = fs.readFileSync(tomlPath, 'utf8');
+      assert.ok(/^persistent_instructions = "/m.test(content), 'must be rewritten as a double-quoted TOML string');
+      assert.ok(content.includes('\\"quoted word\\"'), 'the original double quotes must be escaped, not left bare inside the new double-quoted string');
+      assert.ok(content.includes('backslash \\\\ here'), 'the original backslash must be escaped (doubled), not left bare');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('Codex config.toml: a v2 install is left untouched on rerun (idempotent)', () => {
     const home = mktempHome();
     try {
@@ -161,6 +197,7 @@ async function runStandaloneTargetUpgradeTests() {
   const STANDALONE_TARGETS = [
     { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
     { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae (.trae)' },
+    { home: '.trae-cn', target: ['.trae-cn', 'MEMORY.md'], label: 'Trae (.trae-cn)' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
     { home: '.continue', target: ['.continue', 'prompts', 'egc-memory.prompt'], label: 'Continue.dev' },
   ];

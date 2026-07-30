@@ -17,11 +17,13 @@ const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/
 // Cursor's cursor.rules setting is a single flat string (no markdown), so it
 // gets its own bracket-tag marker/block pair instead of the HTML-comment one
 // above, versioned the same way for the same reason: an already-configured
-// install should not stay frozen when a new protocol section ships. Matches
-// a trailing [/egc-memory-protocol] when present (v2+), or falls through to
-// end-of-string when absent, since the pre-versioning format (v1, always
-// appended last) never wrote a closing tag at all.
-const CURSOR_BLOCK_RE = /\[egc-memory-protocol(?::v(\d+))?\][\s\S]*?(?:\[\/egc-memory-protocol\]|$)/;
+// install should not stay frozen when a new protocol section ships. Only
+// matches a block that has both the versioned opening tag and the closing
+// tag (v2+); the pre-versioning format (v1) never wrote a closing tag, so an
+// unbounded end-of-string fallback here would risk deleting any Cursor rules
+// the user appended after an old, unclosed block. bootstrapCursor() falls
+// back to appending rather than replacing when this does not match.
+const CURSOR_BLOCK_RE = /\[egc-memory-protocol:v(\d+)\][\s\S]*?\[\/egc-memory-protocol\]/;
 
 // Shared by every harness's protocol text below (BLOCK and the markdown
 // fallbacks) so the 9 session bus commands and 5 Guardian commands can't
@@ -208,7 +210,10 @@ function cursorRulesBlock() {
       }
       const existing = obj['cursor.rules'] || '';
       const blockMatch = existing.match(CURSOR_BLOCK_RE);
-      const installedVersion = blockMatch ? (blockMatch[1] ? Number(blockMatch[1]) : 1) : 0;
+      // No closed block: an old unversioned tag with no closing marker (v1)
+      // still counts as an installed-but-outdated version.
+      const hasLegacyTag = !blockMatch && existing.includes('[egc-memory-protocol]');
+      const installedVersion = blockMatch ? Number(blockMatch[1]) : (hasLegacyTag ? 1 : 0);
       if (installedVersion >= PROTOCOL_VERSION) {
         console.log(`  [cognitive] Cursor: already configured (v${installedVersion})`);
         return;
@@ -217,12 +222,15 @@ function cursorRulesBlock() {
       if (blockMatch) {
         obj['cursor.rules'] = existing.replace(CURSOR_BLOCK_RE, cursorRulesBlock());
       } else {
+        // Nothing at all, or an old unclosed v1 tag with no reliable end
+        // marker: append rather than guess where a legacy block ends, so
+        // nothing the user wrote is ever deleted.
         const separator = existing.trim() ? '\n\n' : '';
         obj['cursor.rules'] = existing + separator + cursorRulesBlock();
       }
       fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
       fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-      const action = blockMatch ? `upgraded v${installedVersion || 'legacy'} -> v${PROTOCOL_VERSION}` : 'installed';
+      const action = installedVersion > 0 ? `upgraded v${installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
       console.log(`  [cognitive] Cursor: memory protocol ${action} (${settingsFile.replace(HOME, '~')})`);
     } else {
       injectProtocol(path.join(HOME, '.cursor', 'rules'), 'Cursor');
@@ -278,9 +286,13 @@ function cursorRulesBlock() {
           (_, pre, val, post) => `${pre}${foldSuffix(val)}${post}`
         );
       } else if (RE_SINGLE.test(originalContent)) {
+        // Moving from a single-quoted literal string to a double-quoted basic
+        // string changes which characters need escaping: backslashes and
+        // double quotes in the existing value must be escaped now, or they
+        // corrupt the TOML (cubic review, PR #1095).
         newContent = originalContent.replace(
           RE_SINGLE,
-          (_, _pre, val, _post) => `persistent_instructions = "${foldSuffix(val)}"`
+          (_, _pre, val, _post) => `persistent_instructions = "${foldSuffix(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
         );
       } else if (hasKey) {
         console.log('  [cognitive] Codex: persistent_instructions in unrecognized format: skipping');
