@@ -274,6 +274,20 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('--repo-root with no path argument fails loudly instead of silently falling back', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run(['--repo-root'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 1);
+      assert.ok(result.stderr.includes('--repo-root requires a path argument'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

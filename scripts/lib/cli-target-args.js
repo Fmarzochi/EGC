@@ -18,8 +18,11 @@ function parseTargetArgs(argv, { supportsDryRun = false } = {}) {
       parsed.targets.push(args[index + 1] || null);
       index += 1;
     } else if (arg === '--repo-root') {
-      const rawRepoRoot = args[index + 1] || null;
-      parsed.repoRoot = rawRepoRoot ? path.resolve(rawRepoRoot) : null;
+      const rawRepoRoot = args[index + 1];
+      if (!rawRepoRoot) {
+        throw new Error('--repo-root requires a path argument');
+      }
+      parsed.repoRoot = path.resolve(rawRepoRoot);
       index += 1;
     } else if (supportsDryRun && arg === '--dry-run') {
       parsed.dryRun = true;
