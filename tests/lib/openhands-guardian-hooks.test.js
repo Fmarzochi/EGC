@@ -58,8 +58,7 @@ function runTests() {
 
   if (test('buildHookCommand quotes the node binary and script path', () => {
     const command = buildHookCommand('/abs/adapter.js');
-    assert.ok(command.includes(process.execPath));
-    assert.ok(command.includes('/abs/adapter.js'));
+    assert.strictEqual(command, `"${process.execPath}" "/abs/adapter.js"`);
   })) passed++; else failed++;
 
   if (test('addOpenHandsHookEntry appends a brand-new matcher group on an empty config', () => {
