@@ -299,6 +299,196 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('prints a human-readable message when no install-state files exist', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 0, repairResult.stderr);
+      assert.ok(repairResult.stdout.includes(
+        'No EGC install-state files found for the current home/project context.'
+      ));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('prints a human-readable repair summary for repaired entries', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const targetRoot = path.join(projectRoot, '.cursor');
+      fs.mkdirSync(targetRoot, { recursive: true });
+      const normalizedTargetRoot = fs.realpathSync(targetRoot);
+      const statePath = path.join(normalizedTargetRoot, 'egc-install-state.json');
+      const jsonPath = path.join(normalizedTargetRoot, 'hooks.json');
+      fs.writeFileSync(jsonPath, JSON.stringify({ existing: true, managed: false }, null, 2));
+
+      writeState(statePath, {
+        adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
+        targetRoot: normalizedTargetRoot,
+        installStatePath: statePath,
+        request: {
+          profile: null,
+          modules: ['platform-configs'],
+          includeComponents: [],
+          excludeComponents: [],
+          legacyLanguages: [],
+          legacyMode: false,
+        },
+        resolution: {
+          selectedModules: ['platform-configs'],
+          skippedModules: [],
+        },
+        operations: [
+          {
+            kind: 'merge-json',
+            moduleId: 'platform-configs',
+            sourceRelativePath: '.cursor/hooks.json',
+            destinationPath: jsonPath,
+            strategy: 'merge-json',
+            ownership: 'managed',
+            scaffoldOnly: false,
+            mergePayload: {
+              managed: true,
+            },
+          },
+        ],
+        source: {
+          repoVersion: CURRENT_PACKAGE_VERSION,
+          repoCommit: 'abc123',
+          manifestVersion: CURRENT_MANIFEST_VERSION,
+        },
+      });
+
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 0, repairResult.stderr);
+      assert.ok(repairResult.stdout.includes('Repair summary:'));
+      assert.ok(repairResult.stdout.includes('- cursor-project'));
+      assert.ok(repairResult.stdout.includes('Status: REPAIRED'));
+      assert.ok(repairResult.stdout.includes(`Install-state: ${statePath}`));
+      assert.ok(repairResult.stdout.includes('Repaired paths: 1'));
+      assert.ok(/Summary: checked=1, repaired=1, errors=0/.test(repairResult.stdout));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('prints a human-readable error line when an install-state entry cannot be read', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const targetRoot = path.join(projectRoot, '.cursor');
+      fs.mkdirSync(targetRoot, { recursive: true });
+      const normalizedTargetRoot = fs.realpathSync(targetRoot);
+      const statePath = path.join(normalizedTargetRoot, 'egc-install-state.json');
+      fs.writeFileSync(statePath, '{ not valid json');
+
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 1, repairResult.stderr);
+      assert.ok(repairResult.stdout.includes('Repair summary:'));
+      assert.ok(repairResult.stdout.includes('Status: ERROR'));
+      assert.ok(repairResult.stdout.includes('Error: '));
+      assert.ok(!repairResult.stdout.includes('Repaired paths:'));
+      assert.ok(/Summary: checked=1, repaired=0, errors=1/.test(repairResult.stdout));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('includes plugin reinstall results in JSON output when plugins are installed', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const pluginsDir = path.join(homeDir, '.egc', 'plugins');
+      fs.mkdirSync(pluginsDir, { recursive: true });
+      fs.writeFileSync(path.join(pluginsDir, 'plugins.json'), JSON.stringify({
+        schemaVersion: 'egc.plugins.v1',
+        installed: {
+          'example-plugin': { name: 'example-plugin', version: '1.0.0' },
+        },
+      }, null, 2));
+
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor', '--json'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 1, repairResult.stderr);
+
+      const parsed = JSON.parse(repairResult.stdout);
+      assert.ok(Array.isArray(parsed.pluginRepairs));
+      assert.strictEqual(parsed.pluginRepairs.length, 1);
+      assert.strictEqual(parsed.pluginRepairs[0].name, 'example-plugin');
+      assert.strictEqual(parsed.pluginRepairs[0].success, false);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('prints plugin reinstall results in human-readable output', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const pluginsDir = path.join(homeDir, '.egc', 'plugins');
+      fs.mkdirSync(pluginsDir, { recursive: true });
+      fs.writeFileSync(path.join(pluginsDir, 'plugins.json'), JSON.stringify({
+        schemaVersion: 'egc.plugins.v1',
+        installed: {
+          'example-plugin': { name: 'example-plugin', version: '1.0.0' },
+        },
+      }, null, 2));
+
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 1, repairResult.stderr);
+      assert.ok(repairResult.stdout.includes(
+        'No EGC install-state files found for the current home/project context.'
+      ));
+      assert.ok(repairResult.stdout.includes('Plugin reinstall:'));
+      assert.ok(repairResult.stdout.includes('✗ example-plugin: plugin.json missing; cannot reinstall'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('exits with an error message for an unknown CLI argument', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const repairResult = runNode(REPAIR_SCRIPT, ['--not-a-real-flag'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(repairResult.code, 1);
+      assert.ok(repairResult.stderr.includes('Error: Unknown argument: --not-a-real-flag'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

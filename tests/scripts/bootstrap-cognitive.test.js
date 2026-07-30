@@ -65,6 +65,78 @@ const SESSION_BUS_COMMANDS = [
   'working_memory_get', 'working_memory_set', 'working_memory_list',
 ];
 
+// Claude Code and Gemini CLI share injectProtocol() with Windsurf/Zed below,
+// but unlike those two, no other test in this suite ever creates ~/.claude
+// or ~/.gemini, so their install and error-catch branches were never
+// exercised. Split out to keep runTests() shallow, same reasoning as the
+// helpers below.
+async function runClaudeCodeAndGeminiCliTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('Claude Code: appends the protocol block to an existing CLAUDE.md that has no marker at all, preserving prior content', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.claude'));
+      const target = path.join(home, '.claude', 'CLAUDE.md');
+      const original = '# My custom instructions\n\nKeep this line.\n';
+      fs.writeFileSync(target, original, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Claude Code: memory protocol installed/.test(output), `should report install, got: ${output}`);
+
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.includes('Keep this line.'), 'prior content must be preserved, not overwritten');
+      assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'protocol block must be appended');
+      assert.strictEqual(fs.readFileSync(target + '.egc.bak', 'utf8'), original, 'backup must hold the pre-append content');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Claude Code: logs an error instead of crashing when the CLAUDE.md path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.claude'));
+      // CLAUDE.md is a directory, not a file: readFileSync on it fails structurally
+      // (EISDIR) on every OS, unlike a permission-based failure.
+      fs.mkdirSync(path.join(home, '.claude', 'CLAUDE.md'));
+      const output = run(home);
+      assert.ok(/Claude Code: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes Gemini CLI GEMINI.md when ~/.gemini exists', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.gemini'));
+      const output = run(home);
+      assert.ok(/Gemini CLI: memory protocol installed/.test(output), 'should report install');
+      const target = path.join(home, '.gemini', 'GEMINI.md');
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Gemini CLI: logs an error instead of crashing when the GEMINI.md path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.gemini'));
+      fs.mkdirSync(path.join(home, '.gemini', 'GEMINI.md'));
+      const output = run(home);
+      assert.ok(/Gemini CLI: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 // Split out from runTests() to keep its cyclomatic complexity down: covers
 // the two non-markdown protocol formats (Cursor's JSON cursor.rules, Codex's
 // TOML persistent_instructions), each needing its own upgrade-from-legacy
@@ -190,6 +262,134 @@ async function runCursorAndCodexUpgradeTests() {
   return [passed, failed];
 }
 
+// Additional Cursor/Codex branches not covered by the upgrade-focused tests
+// above: the injectProtocol() fallback used when no settings.json exists at
+// all, the invalid-JSON skip path, Codex's two skip statuses (multiline and
+// unrecognized), Codex appending fresh when the key is entirely absent, and
+// both bootstrap functions' own top-level catch blocks. Split out for the
+// same complexity-budget reason as runCursorAndCodexUpgradeTests().
+async function runCursorAndCodexEdgeCaseTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('Cursor: falls back to injectProtocol on ~/.cursor/rules when no settings.json exists anywhere', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.cursor'));
+      const output = run(home);
+      assert.ok(/Cursor: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const target = path.join(home, '.cursor', 'rules');
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'protocol block must be written to ~/.cursor/rules');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor: settings.json with invalid JSON (JSONC-style) is skipped without modification', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      const invalidJson = '{\n  // a JSONC comment, invalid in strict JSON\n  "editor.fontSize": 14,\n}\n';
+      fs.writeFileSync(settingsFile, invalidJson, 'utf8');
+
+      const output = run(home);
+      assert.ok(/settings\.json is not valid JSON \(JSONC\?\): skipping/.test(output), `should report the skip, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(settingsFile, 'utf8'), invalidJson, 'invalid settings.json must be left untouched');
+      assert.ok(!fs.existsSync(settingsFile + '.egc.bak'), 'no backup should be written when the file is skipped');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor: logs an error instead of crashing when the settings.json path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      // settings.json is a directory, not a file: readFileSync on it fails
+      // structurally (EISDIR) on every OS, unlike a permission-based failure.
+      fs.mkdirSync(path.join(cursorSettingsDir, 'settings.json'));
+      const output = run(home);
+      assert.ok(/Cursor: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex: a triple-quoted multiline persistent_instructions is skipped without modification', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      const original = 'persistent_instructions = """\nLegacy multiline text mentioning get_state.\n"""\n';
+      fs.writeFileSync(tomlPath, original, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Codex: persistent_instructions multiline: skipping/.test(output), `should report the skip, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), original, 'multiline persistent_instructions must be left untouched');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex: an unrecognized (non-string) persistent_instructions value is skipped without modification', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      const original = 'persistent_instructions = 12345\n';
+      fs.writeFileSync(tomlPath, original, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Codex: persistent_instructions in unrecognized format: skipping/.test(output), `should report the skip, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), original, 'unrecognized persistent_instructions must be left untouched');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex: an existing config.toml with no persistent_instructions key at all gets one appended fresh', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      const original = '[some_other_section]\nfoo = "bar"\n';
+      fs.writeFileSync(tomlPath, original, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Codex: memory protocol installed/.test(output), `should report a fresh install, got: ${output}`);
+
+      const content = fs.readFileSync(tomlPath, 'utf8');
+      assert.ok(content.includes('[some_other_section]'), 'pre-existing unrelated TOML content must be preserved');
+      assert.ok(content.includes('foo = "bar"'), 'pre-existing unrelated TOML content must be preserved');
+      const match = content.match(/^persistent_instructions = "(.*)"$/m);
+      assert.ok(match, 'persistent_instructions must be appended as a single-line double-quoted TOML string');
+      assert.ok(match[1].includes('[egc-protocol:v2]'), 'appended value must carry the current version marker');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex: logs an error instead of crashing when the config.toml path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      // config.toml is a directory, not a file: readFileSync on it fails
+      // structurally (EISDIR) on every OS, unlike a permission-based failure.
+      fs.mkdirSync(path.join(home, '.codex', 'config.toml'));
+      const output = run(home);
+      assert.ok(/Codex: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 // Same complexity-budget reasoning as above: the 4 standalone markdown
 // targets (OpenCode, Trae, CodeBuddy, Continue.dev) each need the same pair
 // of upgrade-from-legacy / stay-idempotent-at-v2 cases.
@@ -241,15 +441,115 @@ async function runStandaloneTargetUpgradeTests() {
   return [passed, failed];
 }
 
+// Each standalone markdown target's own top-level catch block (OpenCode,
+// Trae, CodeBuddy, Continue.dev) was never exercised by any existing test,
+// since none of them ever hand injectStandaloneProtocol() a structurally
+// broken path. Split out for the same complexity-budget reason as the
+// helpers above.
+async function runStandaloneCatchBlockTests() {
+  const BROKEN_PATH_TARGETS = [
+    { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
+    { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae' },
+    { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
+    { home: '.continue', target: ['.continue', 'prompts', 'egc-memory.prompt'], label: 'Continue.dev' },
+  ];
+
+  let passed = 0;
+  let failed = 0;
+
+  for (const spec of BROKEN_PATH_TARGETS) {
+    if (await test(`${spec.label}: logs an error instead of crashing when its target path is structurally broken`, () => {
+      const home = mktempHome();
+      try {
+        fs.mkdirSync(path.join(home, spec.home), { recursive: true });
+        // The target file is itself a directory: readFileSync on it fails
+        // structurally (EISDIR) on every OS, unlike a permission-based failure.
+        fs.mkdirSync(path.join(home, ...spec.target), { recursive: true });
+        const output = run(home);
+        assert.ok(output.includes(`${spec.label}: unexpected error:`), `should report the error for ${spec.label}, not crash, got: ${output}`);
+      } finally {
+        cleanup(home);
+      }
+    })) passed++; else failed++;
+  }
+
+  return [passed, failed];
+}
+
+// Kiro's bootstrap function was entirely untested: with no ~/.kiro directory
+// created by any test above, the early existsSync guard always took the
+// false branch, so the hook-copy loop, the installed/already-configured
+// messages, and the catch block never ran.
+async function runKiroTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('Kiro: installs session hooks when ~/.kiro exists and the hooks directory is missing', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.kiro'));
+      const output = run(home);
+      assert.ok(/Kiro: session hooks installed/.test(output), `should report install, got: ${output}`);
+
+      const hooksDir = path.join(home, '.kiro', 'hooks');
+      for (const hook of ['session-restore.kiro.hook', 'session-save.kiro.hook']) {
+        assert.ok(fs.existsSync(path.join(hooksDir, hook)), `${hook} must be copied into ~/.kiro/hooks`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Kiro: already-installed hooks are left untouched on rerun (idempotent)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.kiro'));
+      run(home);
+      const second = run(home);
+      assert.ok(/Kiro: already configured/.test(second), `second run should report already configured, got: ${second}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Kiro: logs an error instead of crashing when the hooks path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.kiro'));
+      // hooks is a file, not a directory: copying a hook into it fails
+      // structurally (ENOTDIR) on every OS, unlike a permission-based failure.
+      fs.writeFileSync(path.join(home, '.kiro', 'hooks'), 'not a directory', 'utf8');
+      const output = run(home);
+      assert.ok(/Kiro: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runTests() {
   console.log('\n=== Testing scripts/bootstrap-cognitive.js ===\n');
   let passed = 0;
   let failed = 0;
 
   {
+    const [claudeGeminiPassed, claudeGeminiFailed] = await runClaudeCodeAndGeminiCliTests();
+    passed += claudeGeminiPassed;
+    failed += claudeGeminiFailed;
+  }
+
+  {
     const [cursorCodexPassed, cursorCodexFailed] = await runCursorAndCodexUpgradeTests();
     passed += cursorCodexPassed;
     failed += cursorCodexFailed;
+  }
+
+  {
+    const [cursorCodexEdgePassed, cursorCodexEdgeFailed] = await runCursorAndCodexEdgeCaseTests();
+    passed += cursorCodexEdgePassed;
+    failed += cursorCodexEdgeFailed;
   }
 
   if (await test('BLOCK advertises all 9 session bus commands', () => {
@@ -453,6 +753,18 @@ async function runTests() {
     const [standalonePassed, standaloneFailed] = await runStandaloneTargetUpgradeTests();
     passed += standalonePassed;
     failed += standaloneFailed;
+  }
+
+  {
+    const [standaloneCatchPassed, standaloneCatchFailed] = await runStandaloneCatchBlockTests();
+    passed += standaloneCatchPassed;
+    failed += standaloneCatchFailed;
+  }
+
+  {
+    const [kiroPassed, kiroFailed] = await runKiroTests();
+    passed += kiroPassed;
+    failed += kiroFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {
