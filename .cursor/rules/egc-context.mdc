@@ -38,3 +38,8 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks if a file path is safe to write → `validate_write`
 - User asks to organize a complex task → `orchestrate_task`
 - User asks AI to learn from session errors → `auto_learn`
+
+<!-- egc:start -->
+## EGC Project Memory
+
+<!-- egc:end -->
