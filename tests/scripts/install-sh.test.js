@@ -187,6 +187,19 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('installs the Token Crusher binary shim as a best-effort, non-fatal step', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    assert.ok(
+      /node "\$ROOT_DIR\/scripts\/crusher-shim\.js" install/.test(script),
+      'install.sh must invoke crusher-shim.js install so future downloads get the shim automatically'
+    );
+    assert.ok(
+      /crusher-shim\.js" install \|\|/.test(script),
+      'the crusher-shim install call must be wired with a || fallback so a failure never aborts the install'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

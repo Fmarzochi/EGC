@@ -147,6 +147,17 @@ function runTests() {
     assert.strictEqual(buildGuards.length, bashGuards.length, 'install.ps1 and install.sh should guard the same number of builds');
   })) passed++; else failed++;
 
+  if (test('installs the Token Crusher binary shim as a best-effort, non-fatal step', () => {
+    assert.ok(
+      scriptSource.includes('$CrusherShim = Join-Path (Join-Path $RootDir "scripts") "crusher-shim.js"'),
+      'install.ps1 must invoke crusher-shim.js install so future downloads get the shim automatically'
+    );
+    assert.ok(
+      /try\s*\{\s*node \$CrusherShim install/.test(scriptSource),
+      'the crusher-shim install call must be wrapped so a failure never aborts the install'
+    );
+  })) passed++; else failed++;
+
   if (!powerShellCommand) {
     console.log('  - skipped delegation test; PowerShell is not available in PATH');
   } else if (test('delegates to the Node installer and preserves dry-run output', () => {
