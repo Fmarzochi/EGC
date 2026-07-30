@@ -16,13 +16,19 @@ function cleanup(dirPath) {
 }
 
 function withHome(tempHome, fn) {
-  const saved = process.env.HOME;
+  // os.homedir() reads USERPROFILE on Windows, HOME everywhere else -- both
+  // must be overridden or the real runner/user home leaks into the test.
+  const savedHome = process.env.HOME;
+  const savedUserProfile = process.env.USERPROFILE;
   process.env.HOME = tempHome;
+  process.env.USERPROFILE = tempHome;
   try {
     return fn();
   } finally {
-    if (saved === undefined) delete process.env.HOME;
-    else process.env.HOME = saved;
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    if (savedUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = savedUserProfile;
   }
 }
 

@@ -52,7 +52,7 @@ function resolveWithoutShim(name) {
     .split(path.delimiter)
     .filter(p => p && path.resolve(p) !== path.resolve(dir));
 
-  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], {
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], { // NOSONAR jssecurity:S8705 -- name is always a hardcoded SHIM_BINARY_NAMES entry or the launcher's own baked-in name, never untrusted input; array-form with no shell also rules out injection
     encoding: 'utf8',
     env: { ...process.env, [key]: filtered.join(path.delimiter) },
   });

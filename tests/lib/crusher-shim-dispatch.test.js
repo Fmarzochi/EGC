@@ -28,9 +28,11 @@ function seedManifest(homeDir, entries) {
 }
 
 function runShim(homeDir, name, args, options = {}) {
+  // os.homedir() reads USERPROFILE on Windows, HOME everywhere else -- both
+  // must be set or the real runner/user home leaks into the child process.
   return spawnSync(process.execPath, [DISPATCH_SCRIPT, name, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, HOME: homeDir },
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
     ...options,
   });
 }

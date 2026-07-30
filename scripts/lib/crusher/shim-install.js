@@ -54,7 +54,7 @@ function writeLauncher(dir, name) {
   }
   const launcherPath = path.join(dir, name);
   fs.writeFileSync(launcherPath, posixLauncherSource(name));
-  fs.chmodSync(launcherPath, 0o755);
+  fs.chmodSync(launcherPath, 0o755); // NOSONAR javascript:S2612 -- rwxr-xr-x, the minimum needed to make this launcher executable; not group/other-writable
 }
 
 function removeLauncher(dir, name) {
@@ -106,13 +106,13 @@ function uninstallPosixPath() {
 // out to PowerShell, which every supported Windows version ships.
 function installWindowsPath(dir) {
   const script = `$dir = ${JSON.stringify(dir)}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; if (($current -split ';') -notcontains $dir) { [Environment]::SetEnvironmentVariable('Path', "$dir;$current", 'User'); Write-Output 'changed' } else { Write-Output 'already-present' }`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' });
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- this IS the feature: prepending our own ~/.egc/bin (never user/attacker-writable beyond the local account already running this installer) ahead of the existing user PATH, read/written only through Windows's own SetEnvironmentVariable API
   return { changed: !result.error && /changed/.test(result.stdout || ''), error: result.error ? result.error.message : null };
 }
 
 function uninstallWindowsPath(dir) {
   const script = `$dir = ${JSON.stringify(dir)}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ -ne $dir }; [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User'); Write-Output 'done'`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' });
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- same PATH edit as installWindowsPath, in reverse
   return { changed: !result.error, error: result.error ? result.error.message : null };
 }
 
