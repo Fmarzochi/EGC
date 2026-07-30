@@ -120,6 +120,21 @@ function isStaleWrite(existingContent, stateUpdated) {
   return stateMs <= existingMs;
 }
 
+const LEGACY_CURSOR_FRONTMATTER = `---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n`;
+const LEGACY_BLOCK_HEADER = '## EGC Project Memory';
+
+// Before this fix, writeCursorContext always overwrote the whole file with
+// just frontmatter + block, no markers -- destroying any real content a
+// human added below the frontmatter. Only the pre-marker writer's own
+// auto-generated block is safe to drop during migration; anything else
+// must be kept and the marked block appended below it.
+function stripLegacyCursorContent(existing) {
+  if (existing.includes(EGC_START)) return existing;
+  if (!existing.startsWith(LEGACY_CURSOR_FRONTMATTER)) return existing;
+  const rest = existing.slice(LEGACY_CURSOR_FRONTMATTER.length);
+  return rest.trimStart().startsWith(LEGACY_BLOCK_HEADER) ? LEGACY_CURSOR_FRONTMATTER : existing;
+}
+
 function writeCursorContext(projectPath, block, stateUpdated) {
   const cursorDir = path.join(projectPath, '.cursor');
   try {
@@ -132,10 +147,10 @@ function writeCursorContext(projectPath, block, stateUpdated) {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const filePath = path.join(rulesDir, 'egc-context.mdc');
-  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  const content = `---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n${block}\n`;
-  fs.writeFileSync(filePath, content, 'utf-8');
+  const existingRaw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  if (isStaleWrite(existingRaw, stateUpdated)) return filePath;
+  const existing = existingRaw ? stripLegacyCursorContent(existingRaw) : LEGACY_CURSOR_FRONTMATTER;
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
