@@ -5,7 +5,14 @@ const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
 
-const MARKER = '<!-- egc-memory-protocol -->';
+// Bump when BLOCK's content changes in a way that already-configured installs
+// should receive (e.g. a new protocol section). injectProtocol() upgrades any
+// file stamped with an older (or absent) version instead of skipping it, so
+// existing installs pick up new sections on the next `egc init`/auto-update
+// instead of staying frozen at whatever was present on first install.
+const PROTOCOL_VERSION = 2;
+const MARKER = `<!-- egc-memory-protocol:v${PROTOCOL_VERSION} -->`;
+const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/egc-memory-protocol -->\n?/;
 
 // Shared by every harness's protocol text below (BLOCK and the markdown
 // fallbacks) so the 9 session bus commands and 5 Guardian commands can't
@@ -56,7 +63,7 @@ const CRUSHER_MD = `## EGC Token Crusher Protocol
 If you genuinely need the full, uncompressed output, use \`egc run --raw <command>\` -- never skip the wrapper entirely for a command that would otherwise be crushable.`;
 
 const BLOCK = `
-<!-- egc-memory-protocol -->
+${MARKER}
 ## EGC Session Memory
 
 The \`egc-memory\` MCP server is installed. Use it to maintain cross-session memory:
@@ -94,8 +101,16 @@ function injectProtocol(filepath, label) {
   const exists = fs.existsSync(filepath);
   if (exists) {
     const raw = fs.readFileSync(filepath, 'utf8');
-    if (raw.includes(MARKER)) {
-      console.log(`  [cognitive] ${label}: already configured`);
+    const blockMatch = raw.match(MARKER_BLOCK_RE);
+    if (blockMatch) {
+      const installedVersion = blockMatch[1] ? Number(blockMatch[1]) : 1;
+      if (installedVersion >= PROTOCOL_VERSION) {
+        console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
+        return;
+      }
+      fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
+      fs.writeFileSync(filepath, raw.replace(MARKER_BLOCK_RE, BLOCK.trim() + '\n'), 'utf8');
+      console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
       return;
     }
     fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
