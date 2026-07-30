@@ -580,31 +580,39 @@ function runTests() {
   })) passed += 1; else failed += 1;
 
   if (test('deriveRepoRootFromState skips fallback entries missing a relative path or resolving to zero path segments', () => {
-    const state = {
-      operations: [
-        {
-          // Present sourcePath but no sourceRelativePath at all: the fallback
-          // loop must skip past it instead of dereferencing a missing field.
-          sourcePath: path.join('/tmp', 'egc-fallback', 'no-relative-path.js'),
-          sourceRelativePath: undefined,
-        },
-        {
-          // Backslashes are not path separators on POSIX, so path.join keeps
-          // this out of the __dirname fast path (the joined path never
-          // exists), while the fallback loop's split(/[\\/]+/) regex still
-          // treats them as separators and collapses this to zero segments.
-          sourcePath: path.join('/tmp', 'egc-fallback', 'zero-segments.js'),
-          sourceRelativePath: '\\\\',
-        },
-        {
-          sourcePath: path.join('/tmp', 'egc-fallback', 'pkg', 'nested', 'file.js'),
-          sourceRelativePath: 'custom-nonexistent-marker.js',
-        },
-      ],
-    };
+    const operations = [
+      {
+        // Present sourcePath but no sourceRelativePath at all: the fallback
+        // loop must skip past it instead of dereferencing a missing field.
+        sourcePath: path.join('/tmp', 'egc-fallback', 'no-relative-path.js'),
+        sourceRelativePath: undefined,
+      },
+    ];
+
+    // A sourceRelativePath made only of separator characters is what makes
+    // the fallback loop's split(/[\\/]+/) regex collapse to zero segments.
+    // On POSIX, backslashes are not path separators, so path.join keeps this
+    // entry out of the __dirname fast path (the joined path never exists) and
+    // the fallback loop reaches the zero-segments skip. On Windows, path.join
+    // treats backslashes exactly like forward slashes and normalizes a
+    // pure-separator argument away entirely, so the joined path collapses to
+    // the (always-existing) package root itself and wrongly satisfies the
+    // fast path. There is no separator-only string that defeats the fast
+    // path on Windows, so this specific sub-case is POSIX-only.
+    if (process.platform !== 'win32') {
+      operations.push({
+        sourcePath: path.join('/tmp', 'egc-fallback', 'zero-segments.js'),
+        sourceRelativePath: '\\\\',
+      });
+    }
+
+    operations.push({
+      sourcePath: path.join('/tmp', 'egc-fallback', 'pkg', 'nested', 'file.js'),
+      sourceRelativePath: 'custom-nonexistent-marker.js',
+    });
 
     assert.strictEqual(
-      deriveRepoRootFromState(state),
+      deriveRepoRootFromState({ operations }),
       path.resolve(path.join('/tmp', 'egc-fallback', 'pkg', 'nested'))
     );
   })) passed += 1; else failed += 1;
