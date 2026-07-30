@@ -7,6 +7,17 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const DISPATCH_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'lib', 'crusher', 'shim-dispatch.js');
+const { needsShellOnWindows } = require('../../scripts/lib/crusher/shim-dispatch');
+
+function withPlatform(value, fn) {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value, configurable: true });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, 'platform', original);
+  }
+}
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -16,9 +27,32 @@ function cleanup(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
 }
 
-function writeFakeBinary(filePath, scriptBody) {
-  fs.writeFileSync(filePath, `#!/bin/sh\n${scriptBody}\n`, 'utf8');
-  fs.chmodSync(filePath, 0o755);
+// Fake binaries are small Node scripts, not shell scripts: a POSIX shebang
+// script does not execute at all on Windows (no shell, no chmod semantics),
+// so the underlying behavior is expressed once, in Node, and only the
+// per-platform launcher mechanics differ (a shebang file vs. a .cmd
+// wrapper), matching how the real npm.cmd/npx.cmd wrappers work there.
+function implBody({ stdout, exitCode = 0, echoStdin = false }) {
+  if (echoStdin) {
+    return "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(d);process.exit(0);});";
+  }
+  return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.exit(${exitCode});`;
+}
+
+function writeFakeBinary(dir, name, spec) {
+  const implPath = path.join(dir, `${name}.impl.js`);
+  fs.writeFileSync(implPath, implBody(spec), 'utf8');
+
+  if (process.platform === 'win32') {
+    const binPath = path.join(dir, `${name}.cmd`);
+    fs.writeFileSync(binPath, `@echo off\r\nnode "${implPath}" %*\r\n`);
+    return binPath;
+  }
+
+  const binPath = path.join(dir, name);
+  fs.writeFileSync(binPath, `#!/usr/bin/env node\nrequire(${JSON.stringify(implPath)});\n`);
+  fs.chmodSync(binPath, 0o755);
+  return binPath;
 }
 
 function seedManifest(homeDir, entries) {
@@ -57,9 +91,8 @@ function runTests() {
   if (test('a non-generic command with large output gets compressed with the crusher marker', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const fakeGit = path.join(dir, 'fake-git');
       const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
-      writeFakeBinary(fakeGit, `cat <<'EOF'\n${bigBody}\nEOF`);
+      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
       seedManifest(dir, { git: fakeGit });
 
       const result = runShim(dir, 'git', ['log', '--stat']);
@@ -74,9 +107,8 @@ function runTests() {
   if (test('a generic command (git status) never gets captured or compressed, even with large output', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const fakeGit = path.join(dir, 'fake-git');
       const bigBody = 'x'.repeat(5000);
-      writeFakeBinary(fakeGit, `printf '%s' '${bigBody}'`);
+      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
       seedManifest(dir, { git: fakeGit });
 
       const result = runShim(dir, 'git', ['status']);
@@ -91,8 +123,7 @@ function runTests() {
   if (test('small non-generic output (below the crush threshold) passes through unchanged', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const fakeGit = path.join(dir, 'fake-git');
-      writeFakeBinary(fakeGit, `echo 'commit abc123'`);
+      const fakeGit = writeFakeBinary(dir, 'git', { stdout: 'commit abc123\n' });
       seedManifest(dir, { git: fakeGit });
 
       const result = runShim(dir, 'git', ['log']);
@@ -106,8 +137,7 @@ function runTests() {
   if (test('the real exit code is preserved through the shim', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const fakeGit = path.join(dir, 'fake-git');
-      writeFakeBinary(fakeGit, `echo 'failure'\nexit 7`);
+      const fakeGit = writeFakeBinary(dir, 'git', { stdout: 'failure\n', exitCode: 7 });
       seedManifest(dir, { git: fakeGit });
 
       const result = runShim(dir, 'git', ['status']);
@@ -120,9 +150,8 @@ function runTests() {
   if (test('stdin is passed through to the real binary untouched', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const fakeCat = path.join(dir, 'fake-npm');
-      writeFakeBinary(fakeCat, 'cat');
-      seedManifest(dir, { npm: fakeCat });
+      const fakeNpm = writeFakeBinary(dir, 'npm', { echoStdin: true });
+      seedManifest(dir, { npm: fakeNpm });
 
       const result = runShim(dir, 'npm', ['status'], { input: 'hello from stdin' });
       assert.strictEqual(result.status, 0);
@@ -157,6 +186,18 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
+  })) passed++; else failed++;
+
+  if (test('needsShellOnWindows requires shell only for .cmd/.bat on win32, never on POSIX', () => {
+    withPlatform('win32', () => {
+      assert.strictEqual(needsShellOnWindows('C:\\Program Files\\nodejs\\npm.cmd'), true);
+      assert.strictEqual(needsShellOnWindows('C:\\Program Files\\nodejs\\npm.CMD'), true);
+      assert.strictEqual(needsShellOnWindows('C:\\tools\\ruby\\bundle.bat'), true);
+      assert.strictEqual(needsShellOnWindows('C:\\Program Files\\Git\\bin\\git.exe'), false);
+    });
+    withPlatform('linux', () => {
+      assert.strictEqual(needsShellOnWindows('/usr/local/bin/npm.cmd'), false, 'never true off win32, regardless of extension');
+    });
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

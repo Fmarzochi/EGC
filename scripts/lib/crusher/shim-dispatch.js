@@ -28,8 +28,17 @@ const SPAWN_OPTIONS = {
   maxBuffer: 64 * 1024 * 1024,
 };
 
+// npm, yarn, pnpm, corepack-shimmed bun etc. ship as .cmd/.bat wrappers on
+// Windows, not native .exe binaries. Node's spawn/spawnSync cannot launch a
+// .cmd/.bat directly without a shell (a well-documented Windows-only
+// child_process gotcha) -- shell: true is the standard fix, same as the
+// cross-spawn package uses for the same reason.
+function needsShellOnWindows(binaryPath) {
+  return process.platform === 'win32' && /\.(cmd|bat)$/i.test(binaryPath);
+}
+
 function passthrough(realBinary, args) {
-  const result = spawnSync(realBinary, args, { stdio: 'inherit' });
+  const result = spawnSync(realBinary, args, { stdio: 'inherit', shell: needsShellOnWindows(realBinary) });
   if (result.error) {
     process.stderr.write(`${path.basename(realBinary)}: ${result.error.message}\n`);
     process.exit(127);
@@ -62,7 +71,7 @@ function runShim(name, args) {
     return passthrough(realBinary, args);
   }
 
-  const result = spawnSync(realBinary, args, SPAWN_OPTIONS);
+  const result = spawnSync(realBinary, args, { ...SPAWN_OPTIONS, shell: needsShellOnWindows(realBinary) });
   if (result.error) {
     process.stderr.write(`${name}: ${result.error.message}\n`);
     process.exit(127);
@@ -99,4 +108,4 @@ if (require.main === module) {
   runShim(process.argv[2], process.argv.slice(3));
 }
 
-module.exports = { runShim };
+module.exports = { runShim, needsShellOnWindows };
