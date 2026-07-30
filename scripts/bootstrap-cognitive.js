@@ -25,6 +25,15 @@ const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/
 // back to appending rather than replacing when this does not match.
 const CURSOR_BLOCK_RE = /\[egc-memory-protocol:v(\d+)\][\s\S]*?\[\/egc-memory-protocol\]/;
 
+// Shared by every version-marker check below: a versioned match wins on its
+// own number, an unversioned match is an implicit v1, and no match at all
+// falls back to whatever the caller passes (0 for "nothing installed", or a
+// legacy-indicator-derived value for formats with no reliable delimiter).
+function resolveInstalledVersion(match, fallbackWhenNoMatch) {
+  if (!match) return fallbackWhenNoMatch;
+  return match[1] ? Number(match[1]) : 1;
+}
+
 // Shared by every harness's protocol text below (BLOCK and the markdown
 // fallbacks) so the 9 session bus commands and 5 Guardian commands can't
 // drift out of sync across the 9+ copies the way they did before this fix.
@@ -148,7 +157,7 @@ function injectStandaloneProtocol(filepath, label, content) {
   if (exists) {
     const raw = fs.readFileSync(filepath, 'utf8');
     const blockMatch = raw.match(MARKER_BLOCK_RE);
-    const installedVersion = blockMatch ? (blockMatch[1] ? Number(blockMatch[1]) : 1) : 0;
+    const installedVersion = resolveInstalledVersion(blockMatch, 0);
     if (installedVersion >= PROTOCOL_VERSION) {
       console.log(`  [cognitive] ${label}: already configured (v${installedVersion || 'legacy'})`);
       return;
@@ -187,6 +196,27 @@ function cursorRulesBlock() {
   return `[egc-memory-protocol:v${PROTOCOL_VERSION}] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. [egc-guardian] Before every non-trivial task call orchestrate_task. Before every shell command call validate_command. Before every new file write/edit call validate_write. After every work block call auto_learn. [egc-token-crusher] The automatic hook rewrite is silently ignored for assistant-issued Bash calls, a confirmed Claude Code limitation not planned to be fixed, so prefix any command likely to produce large output yourself with egc run <command> instead of running it directly (e.g. egc run git log --stat, egc run npm install). Use egc run --raw <command> only when you genuinely need the uncompressed output. [/egc-memory-protocol]`;
 }
 
+// Computes the new cursor.rules value and the version it is upgraded from,
+// pulled out of bootstrapCursor() to keep that function's own branching
+// shallow. Nothing at all, or an old unclosed v1 tag with no reliable end
+// marker, appends rather than guessing where a legacy block ends, so nothing
+// the user wrote is ever deleted.
+function computeCursorRulesUpdate(existing) {
+  const blockMatch = existing.match(CURSOR_BLOCK_RE);
+  const hasLegacyTag = !blockMatch && existing.includes('[egc-memory-protocol]');
+  const installedVersion = resolveInstalledVersion(blockMatch, hasLegacyTag ? 1 : 0);
+
+  if (installedVersion >= PROTOCOL_VERSION) {
+    return { upToDate: true, installedVersion };
+  }
+
+  const newRules = blockMatch
+    ? existing.replace(CURSOR_BLOCK_RE, cursorRulesBlock())
+    : existing + (existing.trim() ? '\n\n' : '') + cursorRulesBlock();
+
+  return { upToDate: false, installedVersion, newRules };
+}
+
 // ── Cursor (global User Rules via settings.json) ──────────────────────────────
 (function bootstrapCursor() {
   try {
@@ -199,46 +229,102 @@ function cursorRulesBlock() {
     const settingsFile = settingsPaths.find(p => fs.existsSync(p));
     if (!settingsFile && !fs.existsSync(path.join(HOME, '.cursor'))) return;
 
-    if (settingsFile) {
-      const rawContent = fs.readFileSync(settingsFile, 'utf8');
-      let obj;
-      try {
-        obj = JSON.parse(rawContent);
-      } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
-        console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping');
-        return;
-      }
-      const existing = obj['cursor.rules'] || '';
-      const blockMatch = existing.match(CURSOR_BLOCK_RE);
-      // No closed block: an old unversioned tag with no closing marker (v1)
-      // still counts as an installed-but-outdated version.
-      const hasLegacyTag = !blockMatch && existing.includes('[egc-memory-protocol]');
-      const installedVersion = blockMatch ? Number(blockMatch[1]) : (hasLegacyTag ? 1 : 0);
-      if (installedVersion >= PROTOCOL_VERSION) {
-        console.log(`  [cognitive] Cursor: already configured (v${installedVersion})`);
-        return;
-      }
-
-      if (blockMatch) {
-        obj['cursor.rules'] = existing.replace(CURSOR_BLOCK_RE, cursorRulesBlock());
-      } else {
-        // Nothing at all, or an old unclosed v1 tag with no reliable end
-        // marker: append rather than guess where a legacy block ends, so
-        // nothing the user wrote is ever deleted.
-        const separator = existing.trim() ? '\n\n' : '';
-        obj['cursor.rules'] = existing + separator + cursorRulesBlock();
-      }
-      fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
-      fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-      const action = installedVersion > 0 ? `upgraded v${installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
-      console.log(`  [cognitive] Cursor: memory protocol ${action} (${settingsFile.replace(HOME, '~')})`);
-    } else {
+    if (!settingsFile) {
       injectProtocol(path.join(HOME, '.cursor', 'rules'), 'Cursor');
+      return;
     }
+
+    const rawContent = fs.readFileSync(settingsFile, 'utf8');
+    let obj;
+    try {
+      obj = JSON.parse(rawContent);
+    } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
+      console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping');
+      return;
+    }
+
+    const update = computeCursorRulesUpdate(obj['cursor.rules'] || '');
+    if (update.upToDate) {
+      console.log(`  [cognitive] Cursor: already configured (v${update.installedVersion})`);
+      return;
+    }
+
+    obj['cursor.rules'] = update.newRules;
+    fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
+    fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+    const action = update.installedVersion > 0 ? `upgraded v${update.installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
+    console.log(`  [cognitive] Cursor: memory protocol ${action} (${settingsFile.replace(HOME, '~')})`);
   } catch (e) {
     console.log(`  [cognitive] Cursor: unexpected error: ${e.message}`);
   }
 })();
+
+const CODEX_RE_TRIPLE_D = /^persistent_instructions\s*=\s*"""/m;
+const CODEX_RE_TRIPLE_S = /^persistent_instructions\s*=\s*'''/m;
+const CODEX_RE_DOUBLE   = /^(persistent_instructions\s*=\s*")(.*?)(")\s*$/m;
+const CODEX_RE_SINGLE   = /^(persistent_instructions\s*=\s*')(.*?)(')\s*$/m;
+
+// Computes the new config.toml content and the version it is upgraded from,
+// pulled out of bootstrapCodex() to keep that function's own branching
+// shallow. Returns { status, installedVersion, newContent }; status is
+// 'up-to-date', 'skip-multiline', 'skip-unrecognized', or 'update'.
+function upgradeCodexTomlContent(originalContent) {
+  const markerMatch = originalContent.match(CODEX_PROTOCOL_MARKER_RE);
+  // No marker at all but the legacy pre-marker text is present (it always
+  // mentions get_state): treat as an implicit v1 needing an upgrade.
+  const installedVersion = resolveInstalledVersion(markerMatch, originalContent.includes('get_state') ? 1 : null);
+
+  if (installedVersion !== null && installedVersion >= PROTOCOL_VERSION) {
+    return { status: 'up-to-date', installedVersion };
+  }
+
+  if (CODEX_RE_TRIPLE_D.test(originalContent) || CODEX_RE_TRIPLE_S.test(originalContent)) {
+    return { status: 'skip-multiline' };
+  }
+
+  // Marker present: replace just that segment with the current suffix.
+  // No marker but legacy text present: append the versioned block so the
+  // next run's marker check succeeds, leaving the old text in place rather
+  // than guessing where it ends without a delimiter. Neither: append fresh,
+  // same as a brand-new install.
+  const foldSuffix = (val) => markerMatch
+    ? val.replace(CODEX_PROTOCOL_MARKER_RE, CODEX_PROTOCOL_SUFFIX.trim())
+    : `${val}${CODEX_PROTOCOL_SUFFIX}`;
+
+  if (CODEX_RE_DOUBLE.test(originalContent)) {
+    return {
+      status: 'update',
+      installedVersion,
+      newContent: originalContent.replace(CODEX_RE_DOUBLE, (_, pre, val, post) => `${pre}${foldSuffix(val)}${post}`),
+    };
+  }
+
+  if (CODEX_RE_SINGLE.test(originalContent)) {
+    // Moving from a single-quoted literal string to a double-quoted basic
+    // string changes which characters need escaping: backslashes and double
+    // quotes in the existing value must be escaped now, or they corrupt the
+    // TOML (cubic review, PR #1095).
+    return {
+      status: 'update',
+      installedVersion,
+      newContent: originalContent.replace(
+        CODEX_RE_SINGLE,
+        (_, _pre, val, _post) => `persistent_instructions = "${foldSuffix(val).replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"`
+      ),
+    };
+  }
+
+  if (/^persistent_instructions\s*=/m.test(originalContent)) {
+    return { status: 'skip-unrecognized' };
+  }
+
+  return { status: 'update', installedVersion, newContent: originalContent + '\n' + CODEX_PROTOCOL_FULL };
+}
+
+const CODEX_SKIP_MESSAGES = {
+  'skip-multiline': 'persistent_instructions multiline: skipping',
+  'skip-unrecognized': 'persistent_instructions in unrecognized format: skipping',
+};
 
 // ── Codex CLI (persistent_instructions in ~/.codex/config.toml) ───────────────
 (function bootstrapCodex() {
@@ -247,71 +333,30 @@ function cursorRulesBlock() {
     if (!fs.existsSync(codexDir)) return;
     const tomlPath = path.join(codexDir, 'config.toml');
 
-    if (fs.existsSync(tomlPath)) {
-      const originalContent = fs.readFileSync(tomlPath, 'utf8');
-      const markerMatch = originalContent.match(CODEX_PROTOCOL_MARKER_RE);
-      // No marker at all but the legacy pre-marker text is present (it always
-      // mentions get_state): treat as an implicit v1 needing an upgrade.
-      const installedVersion = markerMatch ? Number(markerMatch[1]) : (originalContent.includes('get_state') ? 1 : null);
-
-      if (installedVersion !== null && installedVersion >= PROTOCOL_VERSION) {
-        console.log(`  [cognitive] Codex: already configured (v${installedVersion})`);
-        return;
-      }
-
-      const RE_TRIPLE_D = /^persistent_instructions\s*=\s*"""/m;
-      const RE_TRIPLE_S = /^persistent_instructions\s*=\s*'''/m;
-      const RE_DOUBLE   = /^(persistent_instructions\s*=\s*")(.*?)(")\s*$/m;
-      const RE_SINGLE   = /^(persistent_instructions\s*=\s*')(.*?)(')\s*$/m;
-      const hasKey      = /^persistent_instructions\s*=/m.test(originalContent);
-
-      if (RE_TRIPLE_D.test(originalContent) || RE_TRIPLE_S.test(originalContent)) {
-        console.log('  [cognitive] Codex: persistent_instructions multiline: skipping');
-        return;
-      }
-
-      // Marker present: replace just that segment with the current suffix.
-      // No marker but legacy text present: append the versioned block so the
-      // next run's marker check succeeds, leaving the old text in place
-      // rather than guessing where it ends without a delimiter. Neither:
-      // append fresh, same as a brand-new install.
-      const foldSuffix = (val) => markerMatch
-        ? val.replace(CODEX_PROTOCOL_MARKER_RE, CODEX_PROTOCOL_SUFFIX.trim())
-        : `${val}${CODEX_PROTOCOL_SUFFIX}`;
-
-      let newContent;
-      if (RE_DOUBLE.test(originalContent)) {
-        newContent = originalContent.replace(
-          RE_DOUBLE,
-          (_, pre, val, post) => `${pre}${foldSuffix(val)}${post}`
-        );
-      } else if (RE_SINGLE.test(originalContent)) {
-        // Moving from a single-quoted literal string to a double-quoted basic
-        // string changes which characters need escaping: backslashes and
-        // double quotes in the existing value must be escaped now, or they
-        // corrupt the TOML (cubic review, PR #1095).
-        newContent = originalContent.replace(
-          RE_SINGLE,
-          (_, _pre, val, _post) => `persistent_instructions = "${foldSuffix(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
-        );
-      } else if (hasKey) {
-        console.log('  [cognitive] Codex: persistent_instructions in unrecognized format: skipping');
-        return;
-      } else {
-        newContent = originalContent + '\n' + CODEX_PROTOCOL_FULL;
-      }
-
-      fs.writeFileSync(tomlPath + '.egc.bak', originalContent, 'utf8');
-      fs.writeFileSync(tomlPath, newContent, 'utf8');
-      const action = installedVersion !== null ? `upgraded v${installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
-      console.log(`  [cognitive] Codex: memory protocol ${action} (${tomlPath.replace(HOME, '~')})`);
+    if (!fs.existsSync(tomlPath)) {
+      const dir = path.dirname(tomlPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(tomlPath, CODEX_PROTOCOL_FULL);
+      console.log(`  [cognitive] Codex: memory protocol installed (${tomlPath.replace(HOME, '~')})`);
       return;
     }
 
-    const dir = path.dirname(tomlPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(tomlPath, CODEX_PROTOCOL_FULL);
-    console.log(`  [cognitive] Codex: memory protocol installed (${tomlPath.replace(HOME, '~')})`);
+    const originalContent = fs.readFileSync(tomlPath, 'utf8');
+    const result = upgradeCodexTomlContent(originalContent);
+
+    if (result.status === 'up-to-date') {
+      console.log(`  [cognitive] Codex: already configured (v${result.installedVersion})`);
+      return;
+    }
+    if (result.status !== 'update') {
+      console.log(`  [cognitive] Codex: ${CODEX_SKIP_MESSAGES[result.status]}`);
+      return;
+    }
+
+    fs.writeFileSync(tomlPath + '.egc.bak', originalContent, 'utf8');
+    fs.writeFileSync(tomlPath, result.newContent, 'utf8');
+    const action = result.installedVersion !== null ? `upgraded v${result.installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
+    console.log(`  [cognitive] Codex: memory protocol ${action} (${tomlPath.replace(HOME, '~')})`);
   } catch (e) {
     console.log(`  [cognitive] Codex: unexpected error: ${e.message}`);
   }
