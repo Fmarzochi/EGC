@@ -40,56 +40,21 @@ function getClaudeDir() {
   return getEGCDir();
 }
 
-/**
- * Get the EGC config directory for the active harness.
- *
- * Resolution order:
- *   1. EGC_DIR env var (explicit override)
- *   2. Harness-specific env vars injected at hook time (see docs/spec/harness-env-vars.md)
- *   3. __dirname prefix match against known harness home dirs (production install)
- *   4. ~/.egc (harness-agnostic fallback)
- */
-function getEGCDir() {
-  if (process.env.EGC_DIR) return process.env.EGC_DIR;
+// Tier 1: harness-specific env vars injected at hook time (see docs/spec/harness-env-vars.md).
+// Gemini CLI is checked before Claude Code because Gemini CLI sets both as a compat alias.
+function resolveHarnessDirFromEnv(env, home) {
+  if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) return path.join(home, '.gemini');
+  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) return path.join(home, '.claude');
+  if (env.CODEBUDDY_PROJECT_DIR || env.CODEBUDDY_PLUGIN_ROOT) return path.join(home, '.codebuddy');
+  if (env.VSCODE_AGENT || env.GITHUB_COPILOT_API_TOKEN) return path.join(home, '.github');
+  if (env.KIRO_HOOK_FILE || env.KIRO_FILE_PATH) return path.join(home, '.kiro');
+  if (env.TRAE_ENV) return path.join(home, env.TRAE_ENV === 'cn' ? '.trae-cn' : '.trae');
+  return null;
+}
 
-  const home = getHomeDir();
-  const env = process.env;
-
-  // Gemini CLI / Antigravity AGY: GEMINI_PROJECT_DIR is injected by the CLI at hook time.
-  // Check this before CLAUDE_PROJECT_DIR because Gemini CLI sets both as a compat alias.
-  if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) {
-    return path.join(home, '.gemini');
-  }
-
-  // Claude Code: CLAUDE_PROJECT_DIR or CLAUDE_PLUGIN_ROOT is injected by the CLI.
-  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) {
-    return path.join(home, '.claude');
-  }
-
-  // CodeBuddy: CODEBUDDY_PROJECT_DIR or CODEBUDDY_PLUGIN_ROOT is injected at hook time.
-  if (env.CODEBUDDY_PROJECT_DIR || env.CODEBUDDY_PLUGIN_ROOT) {
-    return path.join(home, '.codebuddy');
-  }
-
-  // VS Code Copilot: VSCODE_AGENT is set when running inside a Copilot agent action.
-  if (env.VSCODE_AGENT || env.GITHUB_COPILOT_API_TOKEN) {
-    return path.join(home, '.github');
-  }
-
-  // Kiro (AWS): KIRO_HOOK_FILE is set for file-triggered hooks.
-  if (env.KIRO_HOOK_FILE || env.KIRO_FILE_PATH) {
-    return path.join(home, '.kiro');
-  }
-
-  // Trae (ByteDance): TRAE_ENV distinguishes China vs global build.
-  if (env.TRAE_ENV) {
-    return path.join(home, env.TRAE_ENV === 'cn' ? '.trae-cn' : '.trae');
-  }
-
-  // Tier 2: __dirname prefix match (harnesses without unique runtime env vars at hook time).
-  // Longest-prefix-first to avoid false matches (e.g. .config/opencode before .config).
-  const sep = path.sep;
-  const harnessDirs = [
+// Longest-prefix-first to avoid false matches (e.g. .config/opencode before .config).
+function getKnownHarnessDirs(home) {
+  return [
     path.join(home, '.codeium', 'windsurf'),
     path.join(home, '.config', 'opencode'),
     path.join(home, '.config', 'zed'),
@@ -104,32 +69,54 @@ function getEGCDir() {
     path.join(home, '.trae'),
     path.join(home, '.trae-cn'),
   ];
+}
 
+// Tier 2: __dirname prefix match (harnesses without unique runtime env vars at hook time).
+function resolveHarnessDirFromDirname(harnessDirs) {
+  const sep = path.sep;
   for (const dir of harnessDirs) {
-    if (__dirname === dir || __dirname.startsWith(dir + sep)) {
-      return dir;
-    }
+    if (__dirname === dir || __dirname.startsWith(dir + sep)) return dir;
   }
+  return null;
+}
 
-  // Tier 3a: the true tool-agnostic default wins if it already exists (BUG-08).
-  // Without this, a bare terminal invocation (no CLI hook env vars, __dirname
-  // outside every harness dir -- e.g. running from this source checkout, or
-  // any plain `egc <command>`) fell through to "first installed harness dir",
-  // which silently pointed CLI/doctor/state-store calls at whichever tool
-  // happened to be installed (often OpenCode) instead of the shared store
-  // the MCP memory server actually uses -- splitting state across two
-  // databases that never saw each other's writes.
-  const egcDir = path.join(home, '.egc');
-  if (fs.existsSync(egcDir)) return egcDir;
-
-  // Tier 3b: first existing harness dir under HOME (dev/test environments where
-  // __dirname points to the source repo rather than a harness install path,
-  // and ~/.egc hasn't been created yet).
+// Tier 3b: first existing harness dir under HOME (dev/test environments where
+// __dirname points to the source repo rather than a harness install path,
+// and ~/.egc hasn't been created yet).
+function resolveFirstExistingHarnessDir(harnessDirs) {
   for (const dir of harnessDirs) {
     if (fs.existsSync(dir)) return dir;
   }
+  return null;
+}
 
-  return egcDir;
+/**
+ * Get the EGC config directory for the active harness.
+ *
+ * Resolution order:
+ *   1. EGC_DIR env var (explicit override)
+ *   2. Harness-specific env vars injected at hook time
+ *   3. __dirname prefix match against known harness home dirs (production install)
+ *   4. ~/.egc if it already exists (BUG-08: the tool-agnostic default must win over
+ *      "first installed harness dir" once initialized, or a bare terminal invocation
+ *      silently splits state into whichever tool happens to be installed)
+ *   5. first existing harness dir under HOME, else ~/.egc (fresh dev/test environment)
+ */
+function getEGCDir() {
+  if (process.env.EGC_DIR) return process.env.EGC_DIR;
+
+  const home = getHomeDir();
+  const envMatch = resolveHarnessDirFromEnv(process.env, home);
+  if (envMatch) return envMatch;
+
+  const harnessDirs = getKnownHarnessDirs(home);
+  const dirnameMatch = resolveHarnessDirFromDirname(harnessDirs);
+  if (dirnameMatch) return dirnameMatch;
+
+  const egcDir = path.join(home, '.egc');
+  if (fs.existsSync(egcDir)) return egcDir;
+
+  return resolveFirstExistingHarnessDir(harnessDirs) || egcDir;
 }
 
 /**
