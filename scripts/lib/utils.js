@@ -111,13 +111,25 @@ function getEGCDir() {
     }
   }
 
-  // Tier 3: first existing harness dir under HOME (dev/test environments where
-  // __dirname points to the source repo rather than a harness install path).
+  // Tier 3a: the true tool-agnostic default wins if it already exists (BUG-08).
+  // Without this, a bare terminal invocation (no CLI hook env vars, __dirname
+  // outside every harness dir -- e.g. running from this source checkout, or
+  // any plain `egc <command>`) fell through to "first installed harness dir",
+  // which silently pointed CLI/doctor/state-store calls at whichever tool
+  // happened to be installed (often OpenCode) instead of the shared store
+  // the MCP memory server actually uses -- splitting state across two
+  // databases that never saw each other's writes.
+  const egcDir = path.join(home, '.egc');
+  if (fs.existsSync(egcDir)) return egcDir;
+
+  // Tier 3b: first existing harness dir under HOME (dev/test environments where
+  // __dirname points to the source repo rather than a harness install path,
+  // and ~/.egc hasn't been created yet).
   for (const dir of harnessDirs) {
     if (fs.existsSync(dir)) return dir;
   }
 
-  return path.join(home, '.egc');
+  return egcDir;
 }
 
 /**

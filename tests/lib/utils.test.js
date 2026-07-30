@@ -111,6 +111,59 @@ function runTests() {
     assert.ok(egcDir !== homeDir, 'EGC dir should be a subdirectory of home');
   })) passed++; else failed++;
 
+  if (test('getEGCDir (BUG-08): ~/.egc wins over an installed harness dir in a bare context', () => {
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    const originalEgcDir = process.env.EGC_DIR;
+    const os = require('os');
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-getegcdir-test-'));
+    try {
+      delete process.env.EGC_DIR;
+      process.env.HOME = fakeHome;
+      process.env.USERPROFILE = '';
+
+      // Simulate the real machine: an unrelated harness (OpenCode) is
+      // installed, but ~/.egc also already exists. Before this fix, the
+      // "first existing harness dir" loop ran BEFORE checking ~/.egc, so
+      // OpenCode's dir won even for a plain, tool-agnostic invocation.
+      fs.mkdirSync(path.join(fakeHome, '.config', 'opencode'), { recursive: true });
+      fs.mkdirSync(path.join(fakeHome, '.egc'), { recursive: true });
+
+      const resolved = utils.getEGCDir();
+      assert.strictEqual(resolved, path.join(fakeHome, '.egc'), 'the tool-agnostic ~/.egc must win, not the first installed harness dir');
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME; else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = originalUserProfile;
+      if (originalEgcDir === undefined) delete process.env.EGC_DIR; else process.env.EGC_DIR = originalEgcDir;
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('getEGCDir (BUG-08): still falls back to an installed harness dir when ~/.egc does not exist yet', () => {
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    const originalEgcDir = process.env.EGC_DIR;
+    const os = require('os');
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-getegcdir-test-'));
+    try {
+      delete process.env.EGC_DIR;
+      process.env.HOME = fakeHome;
+      process.env.USERPROFILE = '';
+
+      // Original dev/test scenario this tier was built for: no ~/.egc yet,
+      // but a harness dir is present -- must still resolve to it.
+      fs.mkdirSync(path.join(fakeHome, '.config', 'opencode'), { recursive: true });
+
+      const resolved = utils.getEGCDir();
+      assert.strictEqual(resolved, path.join(fakeHome, '.config', 'opencode'), 'should still fall back to the installed harness dir');
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME; else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = originalUserProfile;
+      if (originalEgcDir === undefined) delete process.env.EGC_DIR; else process.env.EGC_DIR = originalEgcDir;
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('getSessionsDir returns path under EGC dir', () => {
     const sessionsDir = utils.getSessionsDir();
     const egcDir = utils.getEGCDir();
