@@ -88,21 +88,26 @@ function runTests() {
   let failed = 0;
 
   if (test('parseArgs reads repo-root, target, dry-run, and json flags', () => {
-    const parsed = parseArgs([
-      'node',
-      'scripts/auto-update.js',
-      '--target',
-      'cursor',
-      '--repo-root',
-      '/tmp/egc',
-      '--dry-run',
-      '--json',
-    ]);
+    const repoRootDir = createTempDir('auto-update-parseargs-repo-');
+    try {
+      const parsed = parseArgs([
+        'node',
+        'scripts/auto-update.js',
+        '--target',
+        'cursor',
+        '--repo-root',
+        repoRootDir,
+        '--dry-run',
+        '--json',
+      ]);
 
-    assert.deepStrictEqual(parsed.targets, ['cursor']);
-    assert.strictEqual(parsed.repoRoot, '/tmp/egc');
-    assert.strictEqual(parsed.dryRun, true);
-    assert.strictEqual(parsed.json, true);
+      assert.deepStrictEqual(parsed.targets, ['cursor']);
+      assert.strictEqual(parsed.repoRoot, repoRootDir);
+      assert.strictEqual(parsed.dryRun, true);
+      assert.strictEqual(parsed.json, true);
+    } finally {
+      cleanup(repoRootDir);
+    }
   })) passed += 1; else failed += 1;
 
   if (test('parseArgs rejects unknown arguments', () => {
@@ -384,6 +389,145 @@ function runTests() {
         '--json',
       ]);
       assert.strictEqual(commands[2].options.cwd, projectRoot);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(repoRoot);
+    }
+  })) passed += 1; else failed += 1;
+
+  if (test('runAutoUpdate also re-runs bootstrap-cognitive.js when the repo has it, so already-configured global protocol files get refreshed', () => {
+    const homeDir = createTempDir('auto-update-home-');
+    const projectRoot = createTempDir('auto-update-project-');
+    const repoRoot = createTempDir('auto-update-repo-');
+
+    try {
+      ensureFakeRepo(repoRoot);
+      fs.writeFileSync(
+        path.join(repoRoot, 'scripts', 'bootstrap-cognitive.js'),
+        '#!/usr/bin/env node\nconsole.log("[cognitive] Claude Code: memory protocol upgraded v1 -> v2");\n'
+      );
+
+      const records = [
+        makeRecord({
+          repoRoot,
+          homeDir,
+          projectRoot,
+          adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+          request: {
+            profile: null,
+            modules: [],
+            includeComponents: [],
+            excludeComponents: [],
+            legacyLanguages: ['typescript'],
+            legacyMode: true,
+          },
+          resolution: { selectedModules: ['legacy-egc-rules'], skippedModules: [] },
+          operations: [
+            {
+              kind: 'copy-file',
+              moduleId: 'legacy-egc-rules',
+              sourcePath: path.join(repoRoot, 'rules', 'common', 'coding-style.md'),
+              sourceRelativePath: path.join('rules', 'common', 'coding-style.md'),
+              destinationPath: path.join(homeDir, '.gemini', 'rules', 'common', 'coding-style.md'),
+              strategy: 'preserve-relative-path',
+              ownership: 'managed',
+              scaffoldOnly: false,
+            },
+          ],
+        }),
+      ];
+
+      const commands = [];
+      const result = runAutoUpdate(
+        {
+          homeDir,
+          projectRoot,
+          repoRoot,
+          dryRun: false,
+        },
+        {
+          discoverInstalledStates: () => records,
+          runExternalCommand: (command, args, options) => {
+            commands.push({ command, args, options });
+            if (args[0] === path.join(repoRoot, 'scripts', 'bootstrap-cognitive.js')) {
+              return { stdout: '[cognitive] Claude Code: memory protocol upgraded v1 -> v2\n', stderr: '' };
+            }
+            if (command === process.execPath) {
+              return { stdout: JSON.stringify({ dryRun: false, result: {} }), stderr: '' };
+            }
+            return { stdout: '', stderr: '' };
+          },
+        }
+      );
+
+      assert.deepStrictEqual(commands.map(entry => [entry.command, entry.args[0]]), [
+        ['git', 'fetch'],
+        ['git', 'pull'],
+        [process.execPath, path.join(repoRoot, 'scripts', 'bootstrap-cognitive.js')],
+        [process.execPath, path.join(repoRoot, 'scripts', 'install-apply.js')],
+      ]);
+      assert.strictEqual(result.cognitiveBootstrap.status, 'ok');
+      assert.ok(result.cognitiveBootstrap.output.includes('upgraded v1 -> v2'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(repoRoot);
+    }
+  })) passed += 1; else failed += 1;
+
+  if (test('runAutoUpdate skips bootstrap-cognitive.js when the repo root does not have it (e.g. an npm package that excludes it) and does not run it on dry-run', () => {
+    const homeDir = createTempDir('auto-update-home-');
+    const projectRoot = createTempDir('auto-update-project-');
+    const repoRoot = createTempDir('auto-update-repo-');
+
+    try {
+      ensureFakeRepo(repoRoot);
+
+      const records = [
+        makeRecord({
+          repoRoot,
+          homeDir,
+          projectRoot,
+          adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+          request: {
+            profile: null,
+            modules: [],
+            includeComponents: [],
+            excludeComponents: [],
+            legacyLanguages: ['typescript'],
+            legacyMode: true,
+          },
+          resolution: { selectedModules: ['legacy-egc-rules'], skippedModules: [] },
+          operations: [
+            {
+              kind: 'copy-file',
+              moduleId: 'legacy-egc-rules',
+              sourcePath: path.join(repoRoot, 'rules', 'common', 'coding-style.md'),
+              sourceRelativePath: path.join('rules', 'common', 'coding-style.md'),
+              destinationPath: path.join(homeDir, '.gemini', 'rules', 'common', 'coding-style.md'),
+              strategy: 'preserve-relative-path',
+              ownership: 'managed',
+              scaffoldOnly: false,
+            },
+          ],
+        }),
+      ];
+
+      const result = runAutoUpdate(
+        {
+          homeDir,
+          projectRoot,
+          repoRoot,
+          dryRun: true,
+        },
+        {
+          discoverInstalledStates: () => records,
+          runExternalCommand: () => { throw new Error('should not be called on dry-run'); },
+        }
+      );
+
+      assert.strictEqual(result.cognitiveBootstrap, null);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

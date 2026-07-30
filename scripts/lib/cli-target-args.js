@@ -15,7 +15,11 @@ function parseTargetArgs(argv, { supportsDryRun = false } = {}) {
     const arg = args[index];
 
     if (arg === '--target') {
-      parsed.targets.push(args[index + 1] || null);
+      const rawTarget = args[index + 1];
+      if (!rawTarget) {
+        throw new Error('--target requires a value');
+      }
+      parsed.targets.push(rawTarget);
       index += 1;
     } else if (arg === '--repo-root') {
       const rawRepoRoot = args[index + 1];
