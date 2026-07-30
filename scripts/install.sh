@@ -81,6 +81,15 @@ if [ "$DRY_RUN" = false ]; then
   cd "$ROOT_DIR"
   install_deps
 
+  # Point the "egc" command at this checkout, so the "egc doctor" the message
+  # at the end of this script tells the user to run (and anything else they
+  # type afterward) targets the code that was just installed rather than a
+  # stale prior global install left on PATH from an earlier npm publish.
+  # Best-effort: some environments lack permission to the global npm prefix,
+  # and that must not abort the rest of the install.
+  echo "  linking the egc command to this checkout..."
+  npm link --silent 2>/dev/null || echo "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts/egc.js <command>' from this checkout."
+
   # egc-guardian
   echo "  building egc-guardian..."
   GUARDIAN_DIR="$ROOT_DIR/mcp/servers/egc-guardian"

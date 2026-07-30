@@ -57,6 +57,22 @@ if (-not $DryRun) {
     Set-Location -Path $RootDir
     Install-Deps
 
+    # Point the "egc" command at this checkout, so the "egc doctor" the
+    # message at the end of this script tells the user to run (and anything
+    # else they type afterward) targets the code that was just installed
+    # rather than a stale prior global install left on PATH from an earlier
+    # npm publish. Best-effort: some environments lack permission to the
+    # global npm prefix, and that must not abort the rest of the install.
+    Write-Host "  linking the egc command to this checkout..."
+    # PowerShell does not treat a non-zero exit code from a native command as
+    # a terminating error, so a try/catch here would never fire: check
+    # $LASTEXITCODE explicitly instead, matching the "||" pattern install.sh
+    # uses for the same fallback (cubic review, PR #1096).
+    npm link --silent 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts\egc.js <command>' from this checkout." -ForegroundColor Yellow
+    }
+
     # Verify native modules (better-sqlite3 requires Build Tools on Windows)
     $nativeOk = $true
     try {

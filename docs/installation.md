@@ -293,6 +293,8 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 | `egc claw` | NanoClaw REPL: persistent session-aware agent loop with Markdown history |
 | `egc harness-audit` | Score the harness setup across tool coverage, quality gates, memory, and security |
 
+`egc doctor`, `egc repair`, and `egc auto-update` all accept `--repo-root <path>`, pointing them at a local development checkout instead of wherever the running `egc` binary was installed from. Without it, they compare your managed files against the published npm package, which reports every unreleased change as missing or drifted. Pass a `--repo-root` pointing at your local checkout when running any of these three commands so all agree on the source of truth.
+
 ---
 
 ## Troubleshooting
