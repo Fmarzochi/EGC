@@ -295,6 +295,10 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 
 `egc doctor`, `egc repair`, and `egc auto-update` all accept `--repo-root <path>`, pointing them at a local development checkout instead of wherever the running `egc` binary was installed from. Without it, they compare your managed files against the published npm package, which reports every unreleased change as missing or drifted. Pass a `--repo-root` pointing at your local checkout when running any of these three commands so all agree on the source of truth.
 
+### Getting a fix before it ships to npm
+
+`egc auto-update` only runs a real `git pull` when the install directory has a `.git` folder (i.e. you installed via `git clone`, not `npm install -g`). On a git-based install, `auto-update` pulls straight from `origin/main`, so a fix that has merged but not yet been published as an npm release still reaches you. On an npm-only install, there is no repository to pull from: `auto-update` prints a reminder to run `npm install -g @egchq/egc@latest`, which only helps once a new version has actually been published. If you need a fix that is on `main` but not yet released, `git clone` + `sh scripts/install.sh` (or `.\scripts\install.ps1`) is the reliable path, not `npm install -g`.
+
 ---
 
 ## Troubleshooting
