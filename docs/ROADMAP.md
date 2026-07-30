@@ -19,6 +19,7 @@ This document describes the planned development direction for EGC (Extended Glob
 - The cognitive protocol marker is now versioned across all 11 install targets (Claude Code, Gemini CLI, Cursor, Codex, Windsurf, Zed, OpenCode, Trae, Trae-CN, CodeBuddy, and Continue.dev), so an already-configured install picks up a new protocol section, like the Token Crusher one, on the next `egc init` or `auto-update` instead of staying frozen at whatever shipped on first install; `auto-update` now re-runs the bootstrap step itself so this reaches every user who runs the update command they already use, not just fresh installs (#1093, #1095)
 - `egc run`'s git log summary now counts real commits remaining instead of raw lines, which had wildly overstated the count for verbose formats like `--stat` (#1094)
 - `install.sh` and `install.ps1` link the `egc` command to the checkout they just set up, so running `egc doctor` or `egc --version` afterward targets the code that was installed rather than a stale prior global install left on PATH (#1096)
+- Closed real test-coverage gaps the CI had flagged and left unresolved across the day's work: `openhands-guardian-hooks.js` and `amazonq-guardian-hooks.js` went from 34.53%/74.03% to 100%, and `doctor.js`, `repair.js`, `bootstrap-cognitive.js`, `auto-update.js` from 65-88% to 98.5-100% (#1099)
 
 ## v1.1.2: Bidirectional Sync (Released 2026-06-20)
 
