@@ -222,6 +222,35 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('preserves real hand-written content added after the legacy frontmatter', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      // Same frontmatter the pre-marker writer used to produce, but with a
+      // real note a human added below it instead of the auto-generated
+      // block -- this must survive, unlike the pure-leftover case above.
+      const realContent = '---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n## My own rule -- never delete this\n';
+      fs.writeFileSync(filePath, realContent, 'utf-8');
+
+      propagateStateToTools({ projectPath: dir, ...args });
+      const first = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(first.includes('My own rule -- never delete this'), 'real content must survive the first call');
+
+      propagateStateToTools({
+        projectPath: dir,
+        context: 'Second call context.',
+        decisions: [{ what: 'Use ESM' }],
+        next: ['Deploy to prod'],
+      });
+      const second = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(second.includes('My own rule -- never delete this'), 'real content must survive a second call too');
+      assert.ok(second.includes('Second call context'), 'egc block must still update');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('upserts egc section in existing local CLAUDE.md', () => {
     const dir = mktemp();
     try {

@@ -70,6 +70,61 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('does not create cursor context when .cursor/ absent', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.cursor, null);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('preserves real hand-written content added after the legacy cursor frontmatter', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      // Same frontmatter this writer used to produce unconditionally before
+      // this fix, but with a real note a human added below it -- must survive.
+      const realContent = '---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n## My own rule -- never delete this\n';
+      fs.writeFileSync(filePath, realContent, 'utf-8');
+
+      propagateStateContent(dir, SAMPLE_STATE);
+      const first = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(first.includes('My own rule -- never delete this'), 'real content must survive the first call');
+
+      const newerState = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z');
+      propagateStateContent(dir, newerState);
+      const second = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(second.includes('My own rule -- never delete this'), 'real content must survive a second call too');
+      assert.ok(second.includes('<!-- egc:start -->'), 'egc block must be present');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('migrates a pre-fix unmarked cursor context without duplicating memory', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      // Exactly what this writer used to produce before this fix: frontmatter
+      // + block, no markers at all.
+      const legacyContent = '---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n## EGC Project Memory\n\n**Context:** Old stale context from before the fix.\n';
+      fs.writeFileSync(filePath, legacyContent, 'utf-8');
+
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const content = fs.readFileSync(result.cursor, 'utf-8');
+      assert.ok(!content.includes('Old stale context from before the fix'), 'legacy unmarked block must not survive as duplicate content');
+      assert.ok(content.includes('description: EGC project memory'), 'frontmatter must be preserved');
+      assert.strictEqual((content.match(/<!-- egc:start -->/g) || []).length, 1, 'exactly one egc block after migration');
+      assert.ok(content.includes('EGC v1.1.1 stable'), 'new context must be present');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('does not create copilot-instructions.md when only .github/ exists', () => {
     const dir = mktemp();
     try {
