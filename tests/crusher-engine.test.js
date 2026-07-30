@@ -242,6 +242,39 @@ run('git log beyond the cap is truncated with a count', () => {
   assert.ok(result.tokensSaved > 0);
 });
 
+run('verbose git log (--stat) reports the real remaining commit count, not the remaining line count', () => {
+  const COMMIT_COUNT = 30;
+  const LINES_PER_COMMIT = 8; // header, Author, Date, blank, message, blank, 2 diffstat lines
+  const commitBlocks = Array.from({ length: COMMIT_COUNT }, (_, i) => [
+    `commit ${(i + 1).toString(16).padStart(40, '0')}`,
+    `Author: Someone <someone@example.com>`,
+    `Date:   Wed Jul 29 00:00:0${i % 10} 2026 -0300`,
+    '',
+    `    commit message number ${i}`,
+    '',
+    ` some/file-${i}.js | 3 +--`,
+    ` 1 file changed, 2 insertions(+), 1 deletion(-)`,
+  ]);
+  const output = commitBlocks.flat().join('\n');
+  const totalLines = COMMIT_COUNT * LINES_PER_COMMIT;
+  const shownCommits = Math.floor(40 / LINES_PER_COMMIT); // GIT_LOG_MAX_LINES = 40, verified via the shown-lines slice below
+  const expectedRemainingCommits = COMMIT_COUNT - shownCommits;
+
+  const result = crushOutput('git log --stat -n 300', output);
+  assert.ok(result, 'output with 30 verbose commits (240 lines) must be crushed');
+
+  const match = result.crushed.match(/\((\d+) more commits\)/);
+  assert.ok(match, 'crushed output must report a "N more commits" summary');
+  const reportedRemaining = Number(match[1]);
+
+  assert.ok(
+    reportedRemaining <= expectedRemainingCommits,
+    `reported remaining commits (${reportedRemaining}) must not exceed the real remaining commit count (${expectedRemainingCommits}); ` +
+    `counting raw lines instead of "commit <hash>" headers would report close to ${totalLines - 40} instead`
+  );
+  assert.ok(reportedRemaining > 0, 'this fixture truncates mid-history, so some commits must remain');
+});
+
 run('test-runner output keeps failures and summary, drops noise', () => {
   const lines = [];
   for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
