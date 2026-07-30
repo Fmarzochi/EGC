@@ -199,6 +199,65 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('--repo-root overrides the default reference repo (dev-checkout sync scenario)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+    const altRepoRoot = createTempDir('doctor-altrepo-');
+
+    try {
+      fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(altRepoRoot, 'manifests'), { recursive: true });
+      const altSourcePath = path.join(altRepoRoot, 'rules', 'common', 'coding-style.md');
+      fs.mkdirSync(path.dirname(altSourcePath), { recursive: true });
+      fs.writeFileSync(altSourcePath, 'ALT REPO CONTENT, not the real repo file\n');
+
+      const targetRoot = path.join(homeDir, '.gemini');
+      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
+      const managedFile = path.join(targetRoot, 'rules', 'common', 'coding-style.md');
+      fs.mkdirSync(path.dirname(managedFile), { recursive: true });
+      fs.writeFileSync(managedFile, 'ALT REPO CONTENT, not the real repo file\n');
+
+      writeState(statePath, {
+        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+        targetRoot,
+        installStatePath: statePath,
+        request: { profile: null, modules: [], legacyLanguages: ['typescript'], legacyMode: true },
+        resolution: { selectedModules: ['legacy-egc-rules'], skippedModules: [] },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'legacy-egc-rules',
+            sourceRelativePath: 'rules/common/coding-style.md',
+            destinationPath: managedFile,
+            strategy: 'preserve-relative-path',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      // Without --repo-root: compares against THIS repo's real coding-style.md,
+      // which does not match the installed "ALT REPO CONTENT" -- drifted.
+      const withoutOverride = run(['--target', 'egc', '--json'], { cwd: projectRoot, homeDir });
+      const withoutParsed = JSON.parse(withoutOverride.stdout);
+      assert.ok(
+        withoutParsed.results[0].issues.some(issue => issue.code === 'drifted-managed-files'),
+        'expected drift when comparing against the real repo, not the alt one the file actually came from'
+      );
+
+      // With --repo-root pointed at the alt repo: the installed file DOES
+      // match that repo's copy -- healthy.
+      const withOverride = run(['--target', 'egc', '--repo-root', altRepoRoot, '--json'], { cwd: projectRoot, homeDir });
+      const withParsed = JSON.parse(withOverride.stdout);
+      assert.strictEqual(withOverride.code, 0, withOverride.stderr);
+      assert.strictEqual(withParsed.results[0].status, 'ok');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(altRepoRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

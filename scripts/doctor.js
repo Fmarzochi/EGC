@@ -9,9 +9,16 @@ const { getEGCDir } = require('./lib/utils');
 
 function showHelp(exitCode = 0) {
   console.log(`
-Usage: node scripts/doctor.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--json]
+Usage: node scripts/doctor.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--repo-root <path>] [--json]
 
 Diagnose drift and missing managed files for EGC install-state in the current context.
+
+Without --repo-root, the reference repo is always wherever the running \`egc\`
+binary lives (the published npm package for a global install). If the install
+was synced from a local dev checkout via \`egc auto-update --repo-root\`
+instead of an npm publish, pass that same --repo-root here so doctor compares
+against the actual source instead of reporting every file the npm package
+doesn't have yet as missing.
 `);
   process.exit(exitCode);
 }
@@ -20,6 +27,7 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   const parsed = {
     targets: [],
+    repoRoot: null,
     json: false,
     help: false,
   };
@@ -29,6 +37,9 @@ function parseArgs(argv) {
 
     if (arg === '--target') {
       parsed.targets.push(args[index + 1] || null);
+      index += 1;
+    } else if (arg === '--repo-root') {
+      parsed.repoRoot = args[index + 1] || null;
       index += 1;
     } else if (arg === '--json') {
       parsed.json = true;
@@ -109,7 +120,7 @@ function main() {
     }
 
     const report = buildDoctorReport({
-      repoRoot: path.join(__dirname, '..'),
+      repoRoot: options.repoRoot ? path.resolve(options.repoRoot) : path.join(__dirname, '..'),
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,
