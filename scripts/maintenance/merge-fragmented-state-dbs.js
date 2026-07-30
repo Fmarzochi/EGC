@@ -17,10 +17,10 @@
 // CLI usage:
 //   node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply]
 
-const path = require('node:path');
 const fs = require('node:fs');
 const { openDatabase } = require('../lib/state-store/db-adapter');
 const { applyMigrations } = require('../lib/state-store/migrations');
+const { resolveStateStorePath } = require('../lib/state-store');
 
 const MERGE_TABLES = [
   { name: 'sessions', pk: ['id'] },
@@ -108,8 +108,19 @@ async function mergeOneSource(canonicalDb, srcPath, apply) {
   return srcReport;
 }
 
+function backupBeforeApply(canonicalPath) {
+  if (canonicalPath === ':memory:' || !fs.existsSync(canonicalPath)) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = `${canonicalPath}.backup-${stamp}`;
+  fs.copyFileSync(canonicalPath, backupPath);
+  return backupPath;
+}
+
 async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false }) {
-  const canonicalDb = await openDatabase(canonicalPath);
+  const resolvedCanonicalPath = canonicalPath || resolveStateStorePath();
+  const backupPath = apply ? backupBeforeApply(resolvedCanonicalPath) : null;
+
+  const canonicalDb = await openDatabase(resolvedCanonicalPath);
   canonicalDb.pragma('foreign_keys = ON');
   applyMigrations(canonicalDb); // idempotent, additive-only (CREATE TABLE IF NOT EXISTS / ALTER ADD COLUMN)
 
@@ -121,7 +132,7 @@ async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false }) {
   if (apply) await canonicalDb.flush();
   canonicalDb.close();
 
-  return { apply, canonical: canonicalPath, reports };
+  return { apply, canonical: resolvedCanonicalPath, backupPath, reports };
 }
 
 function parseArgs(argv) {
@@ -137,8 +148,9 @@ function parseArgs(argv) {
 
 async function main() {
   const { canonicalPath, sourcePaths, apply } = parseArgs(process.argv.slice(2));
-  if (!canonicalPath || sourcePaths.length === 0) {
-    console.error('Usage: node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply]');
+  if (sourcePaths.length === 0) {
+    console.error('Usage: node merge-fragmented-state-dbs.js [--canonical <path>] --source <path> [--source <path> ...] [--apply]');
+    console.error('  --canonical defaults to the real resolveStateStorePath() (~/.egc/egc/state.db) when omitted.');
     process.exitCode = 1;
     return;
   }

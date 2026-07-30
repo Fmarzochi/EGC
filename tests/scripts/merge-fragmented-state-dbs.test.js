@@ -187,6 +187,26 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('--apply creates a timestamped backup of the canonical db before writing, dry-run does not', async () => {
+    const dir = createTempDir('egc-merge-backup-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      await seedDb(sourcePath);
+
+      const dryRun = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: false });
+      assert.strictEqual(dryRun.backupPath, null, 'dry run must not create a backup');
+
+      const applied = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
+      assert.ok(applied.backupPath, 'apply must create a backup');
+      assert.ok(fs.existsSync(applied.backupPath), 'backup file must actually exist on disk');
+      assert.ok(applied.backupPath.startsWith(canonicalPath), 'backup path must be derived from the canonical path');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('a missing source path is reported as an error instead of throwing', async () => {
     const dir = createTempDir('egc-merge-missing-');
     try {
