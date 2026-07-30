@@ -258,6 +258,22 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('--repo-root rejects a path that does not exist with a clear error', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const missingPath = path.join(projectRoot, 'does-not-exist');
+      const result = run(['--repo-root', missingPath, '--json'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 1);
+      assert.ok(result.stderr.includes('--repo-root path does not exist'));
+      assert.ok(result.stderr.includes(missingPath));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

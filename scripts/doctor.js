@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const { buildDoctorReport } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir } = require('./lib/utils');
+const { parseTargetArgs } = require('./lib/cli-target-args');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -24,33 +25,7 @@ doesn't have yet as missing.
 }
 
 function parseArgs(argv) {
-  const args = argv.slice(2);
-  const parsed = {
-    targets: [],
-    repoRoot: null,
-    json: false,
-    help: false,
-  };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--target') {
-      parsed.targets.push(args[index + 1] || null);
-      index += 1;
-    } else if (arg === '--repo-root') {
-      parsed.repoRoot = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return parsed;
+  return parseTargetArgs(argv);
 }
 
 function statusLabel(status) {
@@ -120,7 +95,7 @@ function main() {
     }
 
     const report = buildDoctorReport({
-      repoRoot: options.repoRoot ? path.resolve(options.repoRoot) : path.join(__dirname, '..'),
+      repoRoot: options.repoRoot || path.join(__dirname, '..'),
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,

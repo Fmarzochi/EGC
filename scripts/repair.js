@@ -4,6 +4,7 @@ const os = require('node:os');
 const { repairInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { reinstallAllPlugins, listInstalledPlugins } = require('./lib/plugin-registry');
+const { parseTargetArgs } = require('./lib/cli-target-args');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -22,36 +23,7 @@ package doesn't have yet as unrepairable.
 }
 
 function parseArgs(argv) {
-  const args = argv.slice(2);
-  const parsed = {
-    targets: [],
-    repoRoot: null,
-    dryRun: false,
-    json: false,
-    help: false,
-  };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--target') {
-      parsed.targets.push(args[index + 1] || null);
-      index += 1;
-    } else if (arg === '--repo-root') {
-      parsed.repoRoot = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--dry-run') {
-      parsed.dryRun = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return parsed;
+  return parseTargetArgs(argv, { supportsDryRun: true });
 }
 
 function printHuman(result) {
@@ -111,7 +83,7 @@ function main() {
     }
 
     const result = repairInstalledStates({
-      repoRoot: options.repoRoot ? require('node:path').resolve(options.repoRoot) : require('node:path').join(__dirname, '..'),
+      repoRoot: options.repoRoot || require('node:path').join(__dirname, '..'),
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,
