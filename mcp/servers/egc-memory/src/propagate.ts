@@ -82,9 +82,14 @@ function upsertFileSection(filePath: string, block: string, defaultContent = '')
 // below it -- permanent duplication. Recognize and strip it down to just
 // the frontmatter so only the new marked block survives.
 const LEGACY_CURSOR_FRONTMATTER = `---\ndescription: EGC project memory (auto-updated by update_state)\nalwaysApply: true\n---\n\n`;
+const LEGACY_BLOCK_HEADER = '## EGC Project Memory';
 function stripLegacyCursorContent(existing: string): string {
   if (existing.includes(EGC_START)) return existing;
-  return existing.startsWith(LEGACY_CURSOR_FRONTMATTER) ? LEGACY_CURSOR_FRONTMATTER : existing;
+  if (!existing.startsWith(LEGACY_CURSOR_FRONTMATTER)) return existing;
+  // Only the pre-marker writer's own auto-generated block is safe to drop here.
+  // Anything else after the frontmatter (a note a human added) must be kept.
+  const rest = existing.slice(LEGACY_CURSOR_FRONTMATTER.length);
+  return rest.trimStart().startsWith(LEGACY_BLOCK_HEADER) ? LEGACY_CURSOR_FRONTMATTER : existing;
 }
 
 function writeCursorContext(projectPath: string, block: string): string | null {
