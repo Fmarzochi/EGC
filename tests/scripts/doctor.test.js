@@ -20,6 +20,7 @@ const {
   createInstallState,
   writeInstallState,
 } = require('../../scripts/lib/install-state');
+const { getEGCDir } = require('../../scripts/lib/utils');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -32,6 +33,30 @@ function cleanup(dirPath) {
 function writeState(filePath, options) {
   const state = createInstallState(options);
   writeInstallState(filePath, state);
+}
+
+// getEGCDir() resolves purely from process.env at call time, so swapping
+// HOME/USERPROFILE here and calling it in-process reproduces exactly what
+// the spawned child (run() below, which sets the same two vars) will resolve.
+function computeEGCDirForHome(homeDir) {
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
+  try {
+    return getEGCDir();
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    if (previousUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = previousUserProfile;
+    }
+  }
 }
 
 function run(args = [], options = {}) {
@@ -282,6 +307,167 @@ function runTests() {
       const result = run(['--repo-root'], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 1);
       assert.ok(result.stderr.includes('--repo-root requires a path argument'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('--help prints usage and exits 0 without running a diagnosis', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run(['--help'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('Usage: node scripts/doctor.js'));
+      assert.ok(result.stdout.includes('--repo-root <path>'));
+      assert.ok(result.stdout.includes('egc auto-update --repo-root'));
+      assert.ok(!result.stdout.includes('Doctor report'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('-h prints usage and exits 0', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run(['-h'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('Usage: node scripts/doctor.js'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('reports a drifted install as WARNING with issue detail in human-readable output', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const targetRoot = path.join(homeDir, '.gemini');
+      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
+      const managedFile = path.join(targetRoot, 'rules', 'common', 'coding-style.md');
+      fs.mkdirSync(path.dirname(managedFile), { recursive: true });
+      fs.writeFileSync(managedFile, 'DRIFTED CONTENT, does not match the repo file\n');
+
+      writeState(statePath, {
+        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+        targetRoot,
+        installStatePath: statePath,
+        request: {
+          profile: null,
+          modules: [],
+          legacyLanguages: ['typescript'],
+          legacyMode: true,
+        },
+        resolution: {
+          selectedModules: ['legacy-egc-rules'],
+          skippedModules: [],
+        },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'legacy-egc-rules',
+            sourceRelativePath: 'rules/common/coding-style.md',
+            destinationPath: managedFile,
+            strategy: 'preserve-relative-path',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: {
+          repoVersion: CURRENT_PACKAGE_VERSION,
+          repoCommit: 'abc123',
+          manifestVersion: CURRENT_MANIFEST_VERSION,
+        },
+      });
+
+      const result = run(['--target', 'egc'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 1, result.stderr);
+      assert.ok(result.stdout.includes('Status: WARNING'));
+      assert.ok(result.stdout.includes('[warning] drifted-managed-files'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('reports missing managed files as ERROR with issue detail in human-readable output', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const targetRoot = path.join(projectRoot, '.cursor');
+      const statePath = path.join(targetRoot, 'egc-install-state.json');
+      fs.mkdirSync(targetRoot, { recursive: true });
+
+      writeState(statePath, {
+        adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
+        targetRoot,
+        installStatePath: statePath,
+        request: {
+          profile: null,
+          modules: ['platform-configs'],
+          legacyLanguages: [],
+          legacyMode: false,
+        },
+        resolution: {
+          selectedModules: ['platform-configs'],
+          skippedModules: [],
+        },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'platform-configs',
+            sourceRelativePath: '.cursor/hooks.json',
+            destinationPath: path.join(targetRoot, 'hooks.json'),
+            strategy: 'sync-root-children',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: {
+          repoVersion: CURRENT_PACKAGE_VERSION,
+          repoCommit: 'abc123',
+          manifestVersion: CURRENT_MANIFEST_VERSION,
+        },
+      });
+
+      const result = run(['--target', 'cursor'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 1);
+      assert.ok(result.stdout.includes('Status: ERROR'));
+      assert.ok(result.stdout.includes('[error] missing-managed-files'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('warns about a divergent database architecture when both harness and memory state.db exist', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const egcDir = computeEGCDirForHome(homeDir);
+      const dbPath = path.join(egcDir, 'egc', 'state.db');
+      const memoryDbPath = path.join(egcDir, 'memory', 'state.db');
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+      fs.mkdirSync(path.dirname(memoryDbPath), { recursive: true });
+      fs.writeFileSync(dbPath, '');
+      fs.writeFileSync(memoryDbPath, '');
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('State store:'));
+      assert.ok(result.stdout.includes('WARNING: Divergent database architecture detected!'));
+      assert.ok(result.stdout.includes(`Harness DB: ${dbPath}`));
+      assert.ok(result.stdout.includes(`Memory DB:  ${memoryDbPath}`));
+      assert.ok(result.stdout.includes('known architectural limitation'));
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
