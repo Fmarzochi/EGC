@@ -2,6 +2,13 @@
 
 All notable changes to EGC are documented here.
 
+## [Unreleased]
+
+### Bug Fixes
+
+- **Memory corruption from an orphaned marker fixed at the root**: a stale marker left behind in propagated context files (`.cursor`, `.trae`, `AGENTS.md`, `GEMINI.md` and 10 more) could delete real user content instead of just the EGC-managed section; an outdated MCP runtime made it worse by overwriting `.cursor` with no marker at all. Reported directly by Helal Ferrari Cabral (@helalferrari). 57 new tests, CI green on all 3 OSes (#1102, #1103).
+- **`egc doctor` / state-store divergence fixed**: a bare terminal invocation of `getEGCDir()` fell back to the first harness directory that happened to exist on disk (for example OpenCode) instead of the tool-agnostic `~/.egc` default, silently routing commands to the wrong `state.db`. Reported directly by Helal Ferrari Cabral (@helalferrari) (#1104).
+
 ## [1.1.17] - 2026-07-27
 
 ### Bug Fixes
