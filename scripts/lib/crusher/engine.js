@@ -190,10 +190,25 @@ function headTail(lines, head, tail) {
   ];
 }
 
+// Verbose formats (--stat, the default, etc.) emit one "commit <hash>" header
+// line per commit followed by several body lines (author, date, message,
+// diffstat) -- counting raw lines omitted would wildly overstate how many
+// commits remain. Formats with no such header (e.g. --oneline) put exactly
+// one commit per line, so falling back to a line count there is accurate.
+const GIT_LOG_COMMIT_HEADER_RE = /^commit [0-9a-f]{7,40}\b/;
+
 function crushGitLog(output) {
   const lines = output.split('\n');
   if (lines.length <= GIT_LOG_MAX_LINES) return null;
-  return [...lines.slice(0, GIT_LOG_MAX_LINES), `... (${lines.length - GIT_LOG_MAX_LINES} more commits)`].join('\n');
+
+  const shownLines = lines.slice(0, GIT_LOG_MAX_LINES);
+  const remainingLines = lines.slice(GIT_LOG_MAX_LINES);
+  const hasCommitHeaders = lines.some(line => GIT_LOG_COMMIT_HEADER_RE.test(line));
+  const remainingCount = hasCommitHeaders
+    ? remainingLines.filter(line => GIT_LOG_COMMIT_HEADER_RE.test(line)).length
+    : remainingLines.length;
+
+  return [...shownLines, `... (${remainingCount} more commits)`].join('\n');
 }
 
 function crushGitDiff(output) {
