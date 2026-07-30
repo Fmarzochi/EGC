@@ -137,6 +137,10 @@ const COMMANDS = {
     script: 'discover.js',
     description: 'Scan recent session transcripts for crushable output that skipped the Token Crusher',
   },
+  'crusher-shim': {
+    script: 'crusher-shim.js',
+    description: 'Install/uninstall a PATH-level Token Crusher binary shim (works for any tool that shells out, not just harnesses with hook rewrite support)',
+  },
   claw: {
     script: 'claw.js',
     description: 'NanoClaw REPL: persistent session-aware agent loop with Markdown history',
@@ -176,6 +180,7 @@ const PRIMARY_COMMANDS = [
   'saved',
   'gain',
   'discover',
+  'crusher-shim',
   'claw',
   'harness-audit',
 ];
