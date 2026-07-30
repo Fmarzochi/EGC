@@ -283,6 +283,113 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a CRLF-only difference (Windows checkout vs. a rewrite that always emits LF) is not drift (audit issue #1049)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+    const altRepoRoot = createTempDir('doctor-altrepo-');
+
+    try {
+      fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(altRepoRoot, 'manifests'), { recursive: true });
+      const altSourcePath = path.join(altRepoRoot, 'hooks', 'hooks.json');
+      fs.mkdirSync(path.dirname(altSourcePath), { recursive: true });
+      // The repo's own copy is LF, as git stores it (git ls-files --eol).
+      fs.writeFileSync(altSourcePath, '{\n  "hooks": {}\n}\n');
+
+      const targetRoot = path.join(homeDir, '.gemini');
+      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
+      const managedFile = path.join(targetRoot, 'hooks', 'hooks.json');
+      fs.mkdirSync(path.dirname(managedFile), { recursive: true });
+      // Same content, CRLF line endings -- what a Windows checkout with
+      // core.autocrlf=true (no .gitattributes forcing LF) actually produces
+      // on disk, or what a rewrite step re-emitting the file via
+      // JSON.stringify(...) would differ by in the other direction. Either
+      // way this is not a real edit to the managed file.
+      fs.writeFileSync(managedFile, '{\r\n  "hooks": {}\r\n}\r\n');
+
+      writeState(statePath, {
+        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+        targetRoot,
+        installStatePath: statePath,
+        request: { profile: null, modules: [], legacyLanguages: ['typescript'], legacyMode: true },
+        resolution: { selectedModules: ['hooks-runtime'], skippedModules: [] },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'hooks-runtime',
+            sourceRelativePath: 'hooks/hooks.json',
+            destinationPath: managedFile,
+            strategy: 'preserve-relative-path',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      const result = run(['--target', 'egc', '--repo-root', altRepoRoot, '--json'], { cwd: projectRoot, homeDir });
+      const parsed = JSON.parse(result.stdout);
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(parsed.results[0].status, 'ok', 'a CRLF/LF-only difference must not be reported as drift');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(altRepoRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('a real content difference is still reported as drift even when both files use CRLF', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+    const altRepoRoot = createTempDir('doctor-altrepo-');
+
+    try {
+      fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(altRepoRoot, 'manifests'), { recursive: true });
+      const altSourcePath = path.join(altRepoRoot, 'hooks', 'hooks.json');
+      fs.mkdirSync(path.dirname(altSourcePath), { recursive: true });
+      fs.writeFileSync(altSourcePath, '{\r\n  "hooks": {}\r\n}\r\n');
+
+      const targetRoot = path.join(homeDir, '.gemini');
+      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
+      const managedFile = path.join(targetRoot, 'hooks', 'hooks.json');
+      fs.mkdirSync(path.dirname(managedFile), { recursive: true });
+      // Genuinely different content (not just line endings) -- must still
+      // be caught as drift so the CRLF normalization does not mask real edits.
+      fs.writeFileSync(managedFile, '{\r\n  "hooks": { "edited": true }\r\n}\r\n');
+
+      writeState(statePath, {
+        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+        targetRoot,
+        installStatePath: statePath,
+        request: { profile: null, modules: [], legacyLanguages: ['typescript'], legacyMode: true },
+        resolution: { selectedModules: ['hooks-runtime'], skippedModules: [] },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'hooks-runtime',
+            sourceRelativePath: 'hooks/hooks.json',
+            destinationPath: managedFile,
+            strategy: 'preserve-relative-path',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      const result = run(['--target', 'egc', '--repo-root', altRepoRoot, '--json'], { cwd: projectRoot, homeDir });
+      const parsed = JSON.parse(result.stdout);
+      assert.strictEqual(result.code, 1);
+      assert.ok(
+        parsed.results[0].issues.some(issue => issue.code === 'drifted-managed-files'),
+        'a real content edit must still be reported as drift, CRLF normalization must not mask it'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(altRepoRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('--repo-root rejects a path that does not exist with a clear error', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');

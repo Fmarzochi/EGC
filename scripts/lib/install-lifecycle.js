@@ -141,7 +141,19 @@ function areFilesEqual(leftPath, rightPath) {
       return false;
     }
 
-    return fs.readFileSync(leftPath).equals(fs.readFileSync(rightPath));
+    const left = fs.readFileSync(leftPath);
+    const right = fs.readFileSync(rightPath);
+    if (left.equals(right)) {
+      return true;
+    }
+
+    // A byte mismatch that disappears once CRLF/LF are normalized is a
+    // line-ending artifact of the install pipeline (e.g. Windows
+    // core.autocrlf rewriting the repo's LF source on checkout, or a
+    // rewrite step like buildResolvedClaudeHooks() that always emits LF via
+    // JSON.stringify), not a real edit to the managed file -- never flag it
+    // as drift.
+    return left.toString('utf8').replace(/\r\n/g, '\n') === right.toString('utf8').replace(/\r\n/g, '\n');
   } catch (_error) { // NOSONAR: unreadable files are treated as different
     return false;
   }
