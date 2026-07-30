@@ -5,7 +5,14 @@ const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
 
-const MARKER = '<!-- egc-memory-protocol -->';
+// Bump when BLOCK's content changes in a way that already-configured installs
+// should receive (e.g. a new protocol section). injectProtocol() upgrades any
+// file stamped with an older (or absent) version instead of skipping it, so
+// existing installs pick up new sections on the next `egc init`/auto-update
+// instead of staying frozen at whatever was present on first install.
+const PROTOCOL_VERSION = 2;
+const MARKER = `<!-- egc-memory-protocol:v${PROTOCOL_VERSION} -->`;
+const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/egc-memory-protocol -->\n?/;
 
 // Shared by every harness's protocol text below (BLOCK and the markdown
 // fallbacks) so the 9 session bus commands and 5 Guardian commands can't
@@ -47,8 +54,16 @@ These calls are automatic and non-negotiable. Never wait for the user to ask.
 
 Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.`;
 
+const CRUSHER_MD = `## EGC Token Crusher Protocol
+
+**Route heavy commands through \`egc run\` yourself -- do not wait for a hook to rewrite them.** The Guardian hook attempts an automatic PreToolUse rewrite, but Anthropic confirmed and closed as "not planned" that this rewrite is silently ignored when the assistant itself issues the Bash tool call (not a human typing in a terminal). Relying on the hook alone means noisy output reaches you uncompressed every time.
+
+**Before running any command likely to produce large or noisy output, prefix it yourself:** \`egc run <command>\` instead of \`<command>\` directly. Examples: \`egc run git log --stat -n 50\`, \`egc run git diff\`, \`egc run npm install\`, \`egc run npm test\`, \`egc run find . -name "*.ts"\`.
+
+If you genuinely need the full, uncompressed output, use \`egc run --raw <command>\` -- never skip the wrapper entirely for a command that would otherwise be crushable.`;
+
 const BLOCK = `
-<!-- egc-memory-protocol -->
+${MARKER}
 ## EGC Session Memory
 
 The \`egc-memory\` MCP server is installed. Use it to maintain cross-session memory:
@@ -61,6 +76,8 @@ State files live at \`~/.egc/state/<project-slug>.md\`: plain Markdown, one file
 ${AUTO_INTUITION_MD}
 
 ${GUARDIAN_MD}
+
+${CRUSHER_MD}
 <!-- /egc-memory-protocol -->
 `;
 
@@ -68,14 +85,14 @@ ${GUARDIAN_MD}
 // file instead of a global rules block (OpenCode/CodeBuddy fallback content,
 // mirrors the .opencode/.codebuddy source files copied below).
 function markdownProtocolBody(title) {
-  return `# ${title}\n\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n`;
+  return `# ${title}\n\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n`;
 }
 
 // Single-line TOML string (matches the pre-existing persistent_instructions
 // format): kept flattened rather than switched to a triple-quoted multiline
 // TOML string, to avoid restructuring a value format that already installs
 // correctly in production rather than risk a new TOML parsing edge case.
-const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. Guardian Protocol (mandatory): before every non-trivial task call orchestrate_task, before every shell command call validate_command, before every new file write/edit call validate_write, after every work block call auto_learn.';
+const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. Guardian Protocol (mandatory): before every non-trivial task call orchestrate_task, before every shell command call validate_command, before every new file write/edit call validate_write, after every work block call auto_learn. Token Crusher Protocol (mandatory): the automatic hook rewrite is silently ignored for assistant-issued Bash calls (confirmed Claude Code limitation, not planned to be fixed) -- prefix any command likely to produce large output yourself with egc run <command> instead of running it directly, e.g. egc run git log --stat, egc run npm install, egc run npm test; use egc run --raw <command> only when you genuinely need the uncompressed output.';
 const CODEX_PROTOCOL_FULL   = `persistent_instructions = "State lives at ~/.egc/state/<slug>.md.${CODEX_PROTOCOL_SUFFIX}"\n`;
 
 const HOME = os.homedir();
@@ -84,8 +101,16 @@ function injectProtocol(filepath, label) {
   const exists = fs.existsSync(filepath);
   if (exists) {
     const raw = fs.readFileSync(filepath, 'utf8');
-    if (raw.includes(MARKER)) {
-      console.log(`  [cognitive] ${label}: already configured`);
+    const blockMatch = raw.match(MARKER_BLOCK_RE);
+    if (blockMatch) {
+      const installedVersion = blockMatch[1] ? Number(blockMatch[1]) : 1;
+      if (installedVersion >= PROTOCOL_VERSION) {
+        console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
+        return;
+      }
+      fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
+      fs.writeFileSync(filepath, raw.replace(MARKER_BLOCK_RE, BLOCK.trim() + '\n'), 'utf8');
+      console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
       return;
     }
     fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
@@ -290,7 +315,7 @@ try {
       return;
     }
     if (!fs.existsSync(promptsDir)) fs.mkdirSync(promptsDir, { recursive: true });
-    fs.writeFileSync(target, `name: EGC Session Memory\ndescription: Restore and persist EGC cross-session memory\n---\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n`);
+    fs.writeFileSync(target, `name: EGC Session Memory\ndescription: Restore and persist EGC cross-session memory\n---\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n`);
     console.log('  [cognitive] Continue.dev: memory protocol installed (~/.continue/prompts/egc-memory.prompt)');
   } catch (e) {
     console.log(`  [cognitive] Continue.dev: unexpected error: ${e.message}`);

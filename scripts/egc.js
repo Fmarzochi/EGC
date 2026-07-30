@@ -215,7 +215,9 @@ Examples:
   egc consolidate --dry-run
   egc list-installed --json
   egc doctor --target cursor
+  egc doctor --repo-root /path/to/dev/checkout
   egc repair --dry-run
+  egc repair --repo-root /path/to/dev/checkout
   egc auto-update --dry-run
   egc status --json
   egc overview

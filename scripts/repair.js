@@ -4,44 +4,26 @@ const os = require('node:os');
 const { repairInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { reinstallAllPlugins, listInstalledPlugins } = require('./lib/plugin-registry');
+const { parseTargetArgs } = require('./lib/cli-target-args');
 
 function showHelp(exitCode = 0) {
   console.log(`
-Usage: node scripts/repair.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--dry-run] [--json]
+Usage: node scripts/repair.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--repo-root <path>] [--dry-run] [--json]
 
 Rebuild EGC-managed files recorded in install-state for the current context.
 Also reinstalls all plugins from the plugin lock file.
+
+Without --repo-root, the reference repo is always wherever the running \`egc\`
+binary lives (the published npm package for a global install) -- pass the
+same --repo-root used with \`egc auto-update\` if the install was synced from
+a local dev checkout instead, or repair will report source files the npm
+package doesn't have yet as unrepairable.
 `);
   process.exit(exitCode);
 }
 
 function parseArgs(argv) {
-  const args = argv.slice(2);
-  const parsed = {
-    targets: [],
-    dryRun: false,
-    json: false,
-    help: false,
-  };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--target') {
-      parsed.targets.push(args[index + 1] || null);
-      index += 1;
-    } else if (arg === '--dry-run') {
-      parsed.dryRun = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return parsed;
+  return parseTargetArgs(argv, { supportsDryRun: true });
 }
 
 function printHuman(result) {
@@ -101,7 +83,7 @@ function main() {
     }
 
     const result = repairInstalledStates({
-      repoRoot: require('node:path').join(__dirname, '..'),
+      repoRoot: options.repoRoot || require('node:path').join(__dirname, '..'),
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       projectRoot: process.cwd(),
       targets: options.targets,

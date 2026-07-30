@@ -194,7 +194,7 @@ async function runTests() {
       assert.ok(/Windsurf: memory protocol installed/.test(output), 'should report install');
       const target = path.join(home, '.codeium', 'windsurf', 'memories', 'global_rules.md');
       const content = fs.readFileSync(target, 'utf8');
-      assert.ok(content.includes('<!-- egc-memory-protocol -->'), 'marker must be present');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
       assert.ok(content.includes('EGC Session Memory'), 'protocol block must be present');
     } finally {
       cleanup(home);
@@ -222,10 +222,46 @@ async function runTests() {
       const target = path.join(home, '.codeium', 'windsurf', 'memories', 'global_rules.md');
       const content = fs.readFileSync(target, 'utf8');
       assert.strictEqual(
-        (content.match(/<!-- egc-memory-protocol -->/g) || []).length,
+        (content.match(/<!-- egc-memory-protocol(?::v\d+)? -->/g) || []).length,
         1,
         'only one protocol marker after two runs'
       );
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('upgrades a v1-marked file (pre-Token-Crusher) to the current protocol version, preserving surrounding content', () => {
+    const home = mktempHome();
+    try {
+      const codeiumDir = path.join(home, '.codeium');
+      fs.mkdirSync(codeiumDir);
+      const targetDir = path.join(codeiumDir, 'windsurf', 'memories');
+      fs.mkdirSync(targetDir, { recursive: true });
+      const target = path.join(targetDir, 'global_rules.md');
+      const oldBlock = [
+        '<!-- egc-memory-protocol -->',
+        '## EGC Session Memory',
+        '',
+        'Old v1 content, no Token Crusher section yet.',
+        '<!-- /egc-memory-protocol -->',
+        '',
+      ].join('\n');
+      fs.writeFileSync(target, `# My custom rules\n\nKeep this line.\n\n${oldBlock}\nKeep this line too.\n`, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Windsurf: memory protocol upgraded v1 -> v2/.test(output), 'should report a v1 -> v2 upgrade');
+
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.includes('Keep this line.'), 'content before the block must survive');
+      assert.ok(content.includes('Keep this line too.'), 'content after the block must survive');
+      assert.ok(content.includes('EGC Token Crusher Protocol'), 'upgraded block must include the new Crusher section');
+      assert.strictEqual(
+        (content.match(/<!-- egc-memory-protocol(?::v\d+)? -->/g) || []).length,
+        1,
+        'exactly one protocol marker after the upgrade, no duplication'
+      );
+      assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'marker must be stamped with the current version');
     } finally {
       cleanup(home);
     }
@@ -239,7 +275,7 @@ async function runTests() {
       assert.ok(/Zed: memory protocol installed/.test(output), 'should report install');
       const target = path.join(home, '.config', 'zed', 'AGENTS.md');
       const content = fs.readFileSync(target, 'utf8');
-      assert.ok(content.includes('<!-- egc-memory-protocol -->'), 'marker must be present');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
     } finally {
       cleanup(home);
     }

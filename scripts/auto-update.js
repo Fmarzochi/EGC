@@ -8,6 +8,7 @@ const { version: PKG_VERSION } = require('../package.json');
 
 const { discoverInstalledStates } = require('./lib/install-lifecycle');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
+const { parseTargetArgs } = require('./lib/cli-target-args');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -20,36 +21,7 @@ using the original install-state request.
 }
 
 function parseArgs(argv) {
-  const args = argv.slice(2);
-  const parsed = {
-    targets: [],
-    repoRoot: null,
-    dryRun: false,
-    json: false,
-    help: false,
-  };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--target') {
-      parsed.targets.push(args[index + 1] || null);
-      index += 1;
-    } else if (arg === '--repo-root') {
-      parsed.repoRoot = args[index + 1] || null;
-      index += 1;
-    } else if (arg === '--dry-run') {
-      parsed.dryRun = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return parsed;
+  return parseTargetArgs(argv, { supportsDryRun: true });
 }
 
 function deriveRepoRootFromState(state) {
@@ -193,6 +165,20 @@ function performGitUpdate(repoRoot, env, execute) {
   }
 }
 
+function runCognitiveBootstrap(repoRoot, env, execute) {
+  const bootstrapScript = path.join(repoRoot, 'scripts', 'bootstrap-cognitive.js');
+  if (!fs.existsSync(bootstrapScript)) {
+    return null;
+  }
+
+  try {
+    const result = execute(process.execPath, [bootstrapScript], { cwd: repoRoot, env });
+    return { status: 'ok', output: (result.stdout || '').trim() };
+  } catch (error) {
+    return { status: 'error', error: error.message };
+  }
+}
+
 function applyInstalls(validRecords, options, repoRoot, env, execute) {
   const results = [];
   for (const entry of validRecords) {
@@ -241,32 +227,7 @@ function applyInstalls(validRecords, options, repoRoot, env, execute) {
   return results;
 }
 
-function runAutoUpdate(options = {}, dependencies = {}) {
-  const discover = dependencies.discoverInstalledStates || discoverInstalledStates;
-  const execute = dependencies.runExternalCommand || runExternalCommand;
-  const homeDir = options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir();
-  const projectRoot = options.projectRoot || process.cwd();
-  const requestedRepoRoot = options.repoRoot ? validateRepoRoot(options.repoRoot) : null;
-  const records = discover({
-    homeDir,
-    projectRoot,
-    targets: options.targets,
-  }).filter(record => record.exists);
-
-  const results = [];
-  if (records.length === 0) {
-    return {
-      dryRun: Boolean(options.dryRun),
-      repoRoot: requestedRepoRoot,
-      results,
-      summary: {
-        checkedCount: 0,
-        updatedCount: 0,
-        errorCount: 0,
-      },
-    };
-  }
-
+function resolveRepoRootForRecords(records, requestedRepoRoot, results) {
   const validRecords = [];
   const inferredRepoRoots = [];
   for (const record of records) {
@@ -295,7 +256,39 @@ function runAutoUpdate(options = {}, dependencies = {}) {
     }
   }
 
-  const repoRoot = requestedRepoRoot || inferredRepoRoots[0] || null;
+  return {
+    validRecords,
+    repoRoot: requestedRepoRoot || inferredRepoRoots[0] || null,
+  };
+}
+
+function runAutoUpdate(options = {}, dependencies = {}) {
+  const discover = dependencies.discoverInstalledStates || discoverInstalledStates;
+  const execute = dependencies.runExternalCommand || runExternalCommand;
+  const homeDir = options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir();
+  const projectRoot = options.projectRoot || process.cwd();
+  const requestedRepoRoot = options.repoRoot ? validateRepoRoot(options.repoRoot) : null;
+  const records = discover({
+    homeDir,
+    projectRoot,
+    targets: options.targets,
+  }).filter(record => record.exists);
+
+  const results = [];
+  if (records.length === 0) {
+    return {
+      dryRun: Boolean(options.dryRun),
+      repoRoot: requestedRepoRoot,
+      results,
+      summary: {
+        checkedCount: 0,
+        updatedCount: 0,
+        errorCount: 0,
+      },
+    };
+  }
+
+  const { validRecords, repoRoot } = resolveRepoRootForRecords(records, requestedRepoRoot, results);
   if (!repoRoot) {
     return {
       dryRun: Boolean(options.dryRun),
@@ -319,11 +312,14 @@ function runAutoUpdate(options = {}, dependencies = {}) {
     performGitUpdate(repoRoot, env, execute);
   }
 
+  const cognitiveBootstrap = options.dryRun ? null : runCognitiveBootstrap(repoRoot, env, execute);
+
   results.push(...applyInstalls(validRecords, options, repoRoot, env, execute));
 
   return {
     dryRun: Boolean(options.dryRun),
     repoRoot,
+    cognitiveBootstrap,
     results,
     summary: {
       checkedCount: results.length,
@@ -342,6 +338,17 @@ function printHuman(result) {
   console.log(`${result.dryRun ? 'Auto-update dry run' : 'Auto-update summary'}:\n`);
   if (result.repoRoot) {
     console.log(`Repo root: ${result.repoRoot}\n`);
+  }
+
+  if (result.cognitiveBootstrap) {
+    console.log(`Cognitive protocol bootstrap: ${result.cognitiveBootstrap.status.toUpperCase()}`);
+    if (result.cognitiveBootstrap.output) {
+      console.log(result.cognitiveBootstrap.output);
+    }
+    if (result.cognitiveBootstrap.error) {
+      console.log(`  Error: ${result.cognitiveBootstrap.error}`);
+    }
+    console.log('');
   }
 
   for (const entry of result.results) {
@@ -396,5 +403,6 @@ module.exports = {
   deriveRepoRootFromState,
   buildInstallApplyArgs,
   determineInstallCwd,
+  runCognitiveBootstrap,
   runAutoUpdate,
 };

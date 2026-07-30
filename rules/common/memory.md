@@ -67,3 +67,11 @@ These calls are automatic and non-negotiable. Never wait for the user to ask.
 **At the end of every significant work block:** call `auto_learn({ project_path: "<cwd>" })`
 
 Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.
+
+## EGC Token Crusher Protocol
+
+**Route heavy commands through `egc run` yourself -- do not wait for a hook to rewrite them.** The Guardian hook attempts an automatic PreToolUse rewrite, but Anthropic confirmed and closed as "not planned" that this rewrite is silently ignored when the assistant itself issues the Bash tool call (not a human typing in a terminal). Relying on the hook alone means noisy output reaches you uncompressed every time.
+
+**Before running any command likely to produce large or noisy output, prefix it yourself:** `egc run <command>` instead of `<command>` directly. Examples: `egc run git log --stat -n 50`, `egc run git diff`, `egc run npm install`, `egc run npm test`, `egc run find . -name "*.ts"`.
+
+If you genuinely need the full, uncompressed output, use `egc run --raw <command>` -- never skip the wrapper entirely for a command that would otherwise be crushable.
