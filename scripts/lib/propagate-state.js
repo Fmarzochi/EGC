@@ -90,14 +90,22 @@ function buildSummaryBlock(parsed) {
 
 function upsertEgcSection(existing, block) {
   const section = `${EGC_START}\n${block}\n${EGC_END}`;
+  const startCount = (existing.match(/<!-- egc:start -->/g) ?? []).length;
+  const endCount = (existing.match(/<!-- egc:end -->/g) ?? []).length;
   const startIdx = existing.indexOf(EGC_START);
   const endIdx = existing.indexOf(EGC_END);
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+  if (startCount === 1 && endCount === 1 && startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
     return existing.slice(0, startIdx) + section + existing.slice(endIdx + EGC_END.length);
   }
 
-  return existing ? `${existing.trimEnd()}\n\n${section}\n` : `${section}\n`;
+  // Anything other than exactly one correctly paired marker set (missing,
+  // orphaned, duplicated, or inverted) is not safe to slice in place -- an
+  // orphaned <!-- egc:start --> left over from a stray edit previously made
+  // the NEXT call delete everything between it and a fresh end marker.
+  // Strip only the bare marker tags and append one fresh, paired block.
+  const stripped = existing.replace(/<!-- egc:(start|end) -->/g, '').trim();
+  return stripped ? `${stripped}\n\n${section}\n` : `${section}\n`;
 }
 
 const STATE_UPDATED_RE = /<!-- egc:state-updated:(\S+) -->/;
@@ -130,8 +138,11 @@ const LEGACY_BLOCK_HEADER = '## EGC Project Memory';
 // must be kept and the marked block appended below it.
 function stripLegacyCursorContent(existing) {
   if (existing.includes(EGC_START)) return existing;
-  if (!existing.startsWith(LEGACY_CURSOR_FRONTMATTER)) return existing;
-  const rest = existing.slice(LEGACY_CURSOR_FRONTMATTER.length);
+  // Normalize CRLF for the comparison only -- a file saved with Windows line
+  // endings must still be recognized as the legacy auto-generated shape.
+  const normalized = existing.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith(LEGACY_CURSOR_FRONTMATTER)) return existing;
+  const rest = normalized.slice(LEGACY_CURSOR_FRONTMATTER.length);
   return rest.trimStart().startsWith(LEGACY_BLOCK_HEADER) ? LEGACY_CURSOR_FRONTMATTER : existing;
 }
 

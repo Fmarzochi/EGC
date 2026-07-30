@@ -125,6 +125,69 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('does not delete real content when the end marker is orphaned (missing)', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      const REAL = 'REAL CONTENT BEFORE ORPHAN MARKER -- MUST SURVIVE';
+      fs.writeFileSync(filePath, `${REAL}\n<!-- egc:start -->\nold block, no end marker\n`, 'utf-8');
+
+      propagateStateContent(dir, SAMPLE_STATE);
+      const after1 = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(after1.includes(REAL), 'real content must survive the first call');
+
+      const newerState = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z');
+      propagateStateContent(dir, newerState);
+      const after2 = fs.readFileSync(filePath, 'utf-8');
+      assert.ok(after2.includes(REAL), 'real content must survive the second call too');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('collapses duplicated marker pairs to one without losing real content', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), 'REAL AGENTS CONTENT\n<!-- egc:start -->\nblock A\n<!-- egc:end -->\n<!-- egc:start -->\nblock B\n<!-- egc:end -->\n', 'utf-8');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const content = fs.readFileSync(result.agents, 'utf-8');
+      assert.ok(content.includes('REAL AGENTS CONTENT'), 'real content must survive');
+      assert.strictEqual((content.match(/<!-- egc:start -->/g) || []).length, 1, 'exactly one start marker should remain');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not delete real content when markers are in inverted order', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'GEMINI.md'), 'REAL GEMINI CONTENT\n<!-- egc:end -->\nstray\n<!-- egc:start -->\n', 'utf-8');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const content = fs.readFileSync(result.gemini, 'utf-8');
+      assert.ok(content.includes('REAL GEMINI CONTENT'), 'real content must survive inverted markers');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('migrates a legacy cursor file saved with CRLF line endings', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+      const filePath = path.join(dir, '.cursor', 'rules', 'egc-context.mdc');
+      const crlf = '---\r\ndescription: EGC project memory (auto-updated)\r\nalwaysApply: true\r\n---\r\n\r\n## EGC Project Memory\r\n\r\n**Context:** old\r\n';
+      fs.writeFileSync(filePath, crlf, 'utf-8');
+
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const content = fs.readFileSync(result.cursor, 'utf-8');
+      assert.ok(!content.includes('**Context:** old'), 'old CRLF-saved block must not survive as a duplicate');
+      assert.strictEqual((content.match(/<!-- egc:start -->/g) || []).length, 1, 'exactly one start marker after migration');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('does not create copilot-instructions.md when only .github/ exists', () => {
     const dir = mktemp();
     try {
