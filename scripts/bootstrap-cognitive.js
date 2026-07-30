@@ -14,6 +14,26 @@ const PROTOCOL_VERSION = 2;
 const MARKER = `<!-- egc-memory-protocol:v${PROTOCOL_VERSION} -->`;
 const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/egc-memory-protocol -->\n?/;
 
+// Cursor's cursor.rules setting is a single flat string (no markdown), so it
+// gets its own bracket-tag marker/block pair instead of the HTML-comment one
+// above, versioned the same way for the same reason: an already-configured
+// install should not stay frozen when a new protocol section ships. Only
+// matches a block that has both the versioned opening tag and the closing
+// tag (v2+); the pre-versioning format (v1) never wrote a closing tag, so an
+// unbounded end-of-string fallback here would risk deleting any Cursor rules
+// the user appended after an old, unclosed block. bootstrapCursor() falls
+// back to appending rather than replacing when this does not match.
+const CURSOR_BLOCK_RE = /\[egc-memory-protocol:v(\d+)\][\s\S]*?\[\/egc-memory-protocol\]/;
+
+// Shared by every version-marker check below: a versioned match wins on its
+// own number, an unversioned match is an implicit v1, and no match at all
+// falls back to whatever the caller passes (0 for "nothing installed", or a
+// legacy-indicator-derived value for formats with no reliable delimiter).
+function resolveInstalledVersion(match, fallbackWhenNoMatch) {
+  if (!match) return fallbackWhenNoMatch;
+  return match[1] ? Number(match[1]) : 1;
+}
+
 // Shared by every harness's protocol text below (BLOCK and the markdown
 // fallbacks) so the 9 session bus commands and 5 Guardian commands can't
 // drift out of sync across the 9+ copies the way they did before this fix.
@@ -82,17 +102,23 @@ ${CRUSHER_MD}
 `;
 
 // Standalone Markdown file used by harnesses that read a static instructions
-// file instead of a global rules block (OpenCode/CodeBuddy fallback content,
-// mirrors the .opencode/.codebuddy source files copied below).
+// file instead of a global rules block (OpenCode/Trae/CodeBuddy/Continue.dev).
+// Carries the same version marker as BLOCK so injectStandaloneProtocol() can
+// detect and upgrade an already-installed copy instead of leaving it frozen.
 function markdownProtocolBody(title) {
-  return `# ${title}\n\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n`;
+  return `${MARKER}\n# ${title}\n\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n<!-- /egc-memory-protocol -->\n`;
 }
 
 // Single-line TOML string (matches the pre-existing persistent_instructions
 // format): kept flattened rather than switched to a triple-quoted multiline
 // TOML string, to avoid restructuring a value format that already installs
 // correctly in production rather than risk a new TOML parsing edge case.
-const CODEX_PROTOCOL_SUFFIX = ' At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. Guardian Protocol (mandatory): before every non-trivial task call orchestrate_task, before every shell command call validate_command, before every new file write/edit call validate_write, after every work block call auto_learn. Token Crusher Protocol (mandatory): the automatic hook rewrite is silently ignored for assistant-issued Bash calls (confirmed Claude Code limitation, not planned to be fixed) -- prefix any command likely to produce large output yourself with egc run <command> instead of running it directly, e.g. egc run git log --stat, egc run npm install, egc run npm test; use egc run --raw <command> only when you genuinely need the uncompressed output.';
+// Wrapped in its own [egc-protocol:vN]...[/egc-protocol] marker (distinct
+// from the HTML-comment MARKER above, since this lives inside a TOML string
+// value) so bootstrapCodex() can detect and upgrade an outdated segment
+// in place instead of leaving already-configured installs frozen.
+const CODEX_PROTOCOL_MARKER_RE = /\[egc-protocol:v(\d+)\][\s\S]*?\[\/egc-protocol\]/;
+const CODEX_PROTOCOL_SUFFIX = ` [egc-protocol:v${PROTOCOL_VERSION}] At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. Guardian Protocol (mandatory): before every non-trivial task call orchestrate_task, before every shell command call validate_command, before every new file write/edit call validate_write, after every work block call auto_learn. Token Crusher Protocol (mandatory): the automatic hook rewrite is silently ignored for assistant-issued Bash calls (confirmed Claude Code limitation, not planned to be fixed), so prefix any command likely to produce large output yourself with egc run <command> instead of running it directly, e.g. egc run git log --stat, egc run npm install, egc run npm test; use egc run --raw <command> only when you genuinely need the uncompressed output. [/egc-protocol]`;
 const CODEX_PROTOCOL_FULL   = `persistent_instructions = "State lives at ~/.egc/state/<slug>.md.${CODEX_PROTOCOL_SUFFIX}"\n`;
 
 const HOME = os.homedir();
@@ -123,6 +149,31 @@ function injectProtocol(filepath, label) {
   console.log(`  [cognitive] ${label}: memory protocol installed (${filepath.replace(HOME, '~')})`);
 }
 
+// Variant of injectProtocol() for targets whose file is entirely EGC-managed
+// (no surrounding user content to preserve), so an outdated copy is replaced
+// wholesale rather than block-patched in place.
+function injectStandaloneProtocol(filepath, label, content) {
+  const exists = fs.existsSync(filepath);
+  if (exists) {
+    const raw = fs.readFileSync(filepath, 'utf8');
+    const blockMatch = raw.match(MARKER_BLOCK_RE);
+    const installedVersion = resolveInstalledVersion(blockMatch, 0);
+    if (installedVersion >= PROTOCOL_VERSION) {
+      console.log(`  [cognitive] ${label}: already configured (v${installedVersion || 'legacy'})`);
+      return;
+    }
+    fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
+    fs.writeFileSync(filepath, content, 'utf8');
+    console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion || 'legacy'} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
+    return;
+  }
+
+  const dir = path.dirname(filepath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filepath, content, 'utf8');
+  console.log(`  [cognitive] ${label}: memory protocol installed (${filepath.replace(HOME, '~')})`);
+}
+
 // ── Claude Code ───────────────────────────────────────────────────────────────
 try {
   if (fs.existsSync(path.join(HOME, '.claude'))) {
@@ -141,6 +192,32 @@ try {
   console.log(`  [cognitive] Gemini CLI: unexpected error: ${e.message}`);
 }
 
+function cursorRulesBlock() {
+  return `[egc-memory-protocol:v${PROTOCOL_VERSION}] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. [egc-guardian] Before every non-trivial task call orchestrate_task. Before every shell command call validate_command. Before every new file write/edit call validate_write. After every work block call auto_learn. [egc-token-crusher] The automatic hook rewrite is silently ignored for assistant-issued Bash calls, a confirmed Claude Code limitation not planned to be fixed, so prefix any command likely to produce large output yourself with egc run <command> instead of running it directly (e.g. egc run git log --stat, egc run npm install). Use egc run --raw <command> only when you genuinely need the uncompressed output. [/egc-memory-protocol]`;
+}
+
+// Computes the new cursor.rules value and the version it is upgraded from,
+// pulled out of bootstrapCursor() to keep that function's own branching
+// shallow. Nothing at all, or an old unclosed v1 tag with no reliable end
+// marker, appends rather than guessing where a legacy block ends, so nothing
+// the user wrote is ever deleted.
+function computeCursorRulesUpdate(existing) {
+  const blockMatch = existing.match(CURSOR_BLOCK_RE);
+  const hasLegacyTag = !blockMatch && existing.includes('[egc-memory-protocol]');
+  const installedVersion = resolveInstalledVersion(blockMatch, hasLegacyTag ? 1 : 0);
+
+  if (installedVersion >= PROTOCOL_VERSION) {
+    return { upToDate: true, installedVersion };
+  }
+
+  const separator = existing.trim() ? '\n\n' : '';
+  const newRules = blockMatch
+    ? existing.replace(CURSOR_BLOCK_RE, cursorRulesBlock())
+    : existing + separator + cursorRulesBlock();
+
+  return { upToDate: false, installedVersion, newRules };
+}
+
 // ── Cursor (global User Rules via settings.json) ──────────────────────────────
 (function bootstrapCursor() {
   try {
@@ -153,32 +230,105 @@ try {
     const settingsFile = settingsPaths.find(p => fs.existsSync(p));
     if (!settingsFile && !fs.existsSync(path.join(HOME, '.cursor'))) return;
 
-    if (settingsFile) {
-      const rawContent = fs.readFileSync(settingsFile, 'utf8');
-      let obj;
-      try {
-        obj = JSON.parse(rawContent);
-      } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
-        console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping');
-        return;
-      }
-      const existing = obj['cursor.rules'] || '';
-      if (existing.includes('[egc-memory-protocol]')) {
-        console.log('  [cognitive] Cursor: already configured');
-        return;
-      }
-      const separator = existing.trim() ? '\n\n' : '';
-      obj['cursor.rules'] = existing + separator + '[egc-memory-protocol] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this->lesson_save or store_decision, what failed->search_history, review PR->review-pr agents, context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. [egc-guardian] Before every non-trivial task call orchestrate_task. Before every shell command call validate_command. Before every new file write/edit call validate_write. After every work block call auto_learn.';
-      fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
-      fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-      console.log(`  [cognitive] Cursor: memory protocol installed (${settingsFile.replace(HOME, '~')})`);
-    } else {
+    if (!settingsFile) {
       injectProtocol(path.join(HOME, '.cursor', 'rules'), 'Cursor');
+      return;
     }
+
+    const rawContent = fs.readFileSync(settingsFile, 'utf8');
+    let obj;
+    try {
+      obj = JSON.parse(rawContent);
+    } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
+      console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping');
+      return;
+    }
+
+    const update = computeCursorRulesUpdate(obj['cursor.rules'] || '');
+    if (update.upToDate) {
+      console.log(`  [cognitive] Cursor: already configured (v${update.installedVersion})`);
+      return;
+    }
+
+    obj['cursor.rules'] = update.newRules;
+    fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
+    fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+    const action = update.installedVersion > 0 ? `upgraded v${update.installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
+    console.log(`  [cognitive] Cursor: memory protocol ${action} (${settingsFile.replace(HOME, '~')})`);
   } catch (e) {
     console.log(`  [cognitive] Cursor: unexpected error: ${e.message}`);
   }
 })();
+
+const CODEX_RE_TRIPLE_D = /^persistent_instructions\s*=\s*"""/m;
+const CODEX_RE_TRIPLE_S = /^persistent_instructions\s*=\s*'''/m;
+const CODEX_RE_DOUBLE   = /^(persistent_instructions\s*=\s*")(.*?)(")\s*$/m;
+const CODEX_RE_SINGLE   = /^(persistent_instructions\s*=\s*')(.*?)(')\s*$/m;
+
+// Computes the new config.toml content and the version it is upgraded from,
+// pulled out of bootstrapCodex() to keep that function's own branching
+// shallow. Returns { status, installedVersion, newContent }; status is
+// 'up-to-date', 'skip-multiline', 'skip-unrecognized', or 'update'.
+function upgradeCodexTomlContent(originalContent) {
+  const markerMatch = originalContent.match(CODEX_PROTOCOL_MARKER_RE);
+  // No marker at all but the legacy pre-marker text is present (it always
+  // mentions get_state): treat as an implicit v1 needing an upgrade.
+  const installedVersion = resolveInstalledVersion(markerMatch, originalContent.includes('get_state') ? 1 : null);
+
+  if (installedVersion !== null && installedVersion >= PROTOCOL_VERSION) {
+    return { status: 'up-to-date', installedVersion };
+  }
+
+  if (CODEX_RE_TRIPLE_D.test(originalContent) || CODEX_RE_TRIPLE_S.test(originalContent)) {
+    return { status: 'skip-multiline' };
+  }
+
+  // Marker present: replace just that segment with the current suffix.
+  // No marker but legacy text present: append the versioned block so the
+  // next run's marker check succeeds, leaving the old text in place rather
+  // than guessing where it ends without a delimiter. Neither: append fresh,
+  // same as a brand-new install.
+  const foldSuffix = (val) => markerMatch
+    ? val.replace(CODEX_PROTOCOL_MARKER_RE, CODEX_PROTOCOL_SUFFIX.trim())
+    : `${val}${CODEX_PROTOCOL_SUFFIX}`;
+
+  if (CODEX_RE_DOUBLE.test(originalContent)) {
+    return {
+      status: 'update',
+      installedVersion,
+      newContent: originalContent.replace(CODEX_RE_DOUBLE, (_, pre, val, post) => `${pre}${foldSuffix(val)}${post}`),
+    };
+  }
+
+  if (CODEX_RE_SINGLE.test(originalContent)) {
+    // Moving from a single-quoted literal string to a double-quoted basic
+    // string changes which characters need escaping: backslashes and double
+    // quotes in the existing value must be escaped now, or they corrupt the
+    // TOML (cubic review, PR #1095).
+    return {
+      status: 'update',
+      installedVersion,
+      newContent: originalContent.replace(
+        CODEX_RE_SINGLE,
+        (_, _pre, val, _post) => {
+          const escaped = foldSuffix(val).replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`);
+          return `persistent_instructions = "${escaped}"`;
+        }
+      ),
+    };
+  }
+
+  if (/^persistent_instructions\s*=/m.test(originalContent)) {
+    return { status: 'skip-unrecognized' };
+  }
+
+  return { status: 'update', installedVersion, newContent: originalContent + '\n' + CODEX_PROTOCOL_FULL };
+}
+
+const CODEX_SKIP_MESSAGES = {
+  'skip-multiline': 'persistent_instructions multiline: skipping',
+  'skip-unrecognized': 'persistent_instructions in unrecognized format: skipping',
+};
 
 // ── Codex CLI (persistent_instructions in ~/.codex/config.toml) ───────────────
 (function bootstrapCodex() {
@@ -187,74 +337,47 @@ try {
     if (!fs.existsSync(codexDir)) return;
     const tomlPath = path.join(codexDir, 'config.toml');
 
-    if (fs.existsSync(tomlPath)) {
-      const originalContent = fs.readFileSync(tomlPath, 'utf8');
-      if (originalContent.includes('egc-memory-protocol') || originalContent.includes('get_state')) {
-        console.log('  [cognitive] Codex: already configured');
-        return;
-      }
-
-      const RE_TRIPLE_D = /^persistent_instructions\s*=\s*"""/m;
-      const RE_TRIPLE_S = /^persistent_instructions\s*=\s*'''/m;
-      const RE_DOUBLE   = /^(persistent_instructions\s*=\s*")(.*?)(")\s*$/m;
-      const RE_SINGLE   = /^(persistent_instructions\s*=\s*')(.*?)(')\s*$/m;
-      const hasKey      = /^persistent_instructions\s*=/m.test(originalContent);
-
-      if (RE_TRIPLE_D.test(originalContent) || RE_TRIPLE_S.test(originalContent)) {
-        console.log('  [cognitive] Codex: persistent_instructions multiline: skipping');
-        return;
-      }
-
-      let newContent;
-      if (RE_DOUBLE.test(originalContent)) {
-        newContent = originalContent.replace(
-          RE_DOUBLE,
-          (_, pre, val, post) => `${pre}${val}${CODEX_PROTOCOL_SUFFIX}${post}`
-        );
-      } else if (RE_SINGLE.test(originalContent)) {
-        newContent = originalContent.replace(
-          RE_SINGLE,
-          (_, _pre, val, _post) => `persistent_instructions = "${val}${CODEX_PROTOCOL_SUFFIX}"`
-        );
-      } else if (hasKey) {
-        console.log('  [cognitive] Codex: persistent_instructions in unrecognized format: skipping');
-        return;
-      } else {
-        newContent = originalContent + '\n' + CODEX_PROTOCOL_FULL;
-      }
-
-      fs.writeFileSync(tomlPath + '.egc.bak', originalContent, 'utf8');
-      fs.writeFileSync(tomlPath, newContent, 'utf8');
-    } else {
+    if (!fs.existsSync(tomlPath)) {
       const dir = path.dirname(tomlPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(tomlPath, CODEX_PROTOCOL_FULL);
+      console.log(`  [cognitive] Codex: memory protocol installed (${tomlPath.replace(HOME, '~')})`);
+      return;
     }
-    console.log(`  [cognitive] Codex: memory protocol installed (${tomlPath.replace(HOME, '~')})`);
+
+    const originalContent = fs.readFileSync(tomlPath, 'utf8');
+    const result = upgradeCodexTomlContent(originalContent);
+
+    if (result.status === 'up-to-date') {
+      console.log(`  [cognitive] Codex: already configured (v${result.installedVersion})`);
+      return;
+    }
+    if (result.status !== 'update') {
+      console.log(`  [cognitive] Codex: ${CODEX_SKIP_MESSAGES[result.status]}`);
+      return;
+    }
+
+    fs.writeFileSync(tomlPath + '.egc.bak', originalContent, 'utf8');
+    fs.writeFileSync(tomlPath, result.newContent, 'utf8');
+    const action = result.installedVersion !== null ? `upgraded v${result.installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
+    console.log(`  [cognitive] Codex: memory protocol ${action} (${tomlPath.replace(HOME, '~')})`);
   } catch (e) {
     console.log(`  [cognitive] Codex: unexpected error: ${e.message}`);
   }
 })();
 
 // ── OpenCode (~/.opencode/instructions/EGC_MEMORY.md) ────────────────────────
+// Generated straight from markdownProtocolBody() rather than copied from a
+// static repo file, so its content can never drift out of sync with the
+// canonical protocol text the way the old copied-file version did.
 (function bootstrapOpenCode() {
   try {
     const opencodeDir = path.join(HOME, '.opencode');
     if (!fs.existsSync(opencodeDir)) return;
     const instructionsDir = path.join(opencodeDir, 'instructions');
-    const target = path.join(instructionsDir, 'EGC_MEMORY.md');
-    if (fs.existsSync(target)) {
-      console.log('  [cognitive] OpenCode: already configured');
-      return;
-    }
     if (!fs.existsSync(instructionsDir)) fs.mkdirSync(instructionsDir, { recursive: true });
-    const src = path.join(__dirname, '..', '.opencode', 'instructions', 'EGC_MEMORY.md');
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, target);
-    } else {
-      fs.writeFileSync(target, markdownProtocolBody('EGC Session Memory'));
-    }
-    console.log(`  [cognitive] OpenCode: memory protocol installed (${target.replace(HOME, '~')})`);
+    const target = path.join(instructionsDir, 'EGC_MEMORY.md');
+    injectStandaloneProtocol(target, 'OpenCode', markdownProtocolBody('EGC Session Memory'));
   } catch (e) {
     console.log(`  [cognitive] OpenCode: unexpected error: ${e.message}`);
   }
@@ -263,18 +386,11 @@ try {
 // ── Trae (~/.trae/MEMORY.md and ~/.trae-cn/MEMORY.md) ────────────────────────
 (function bootstrapTrae() {
   try {
-    const src = path.join(__dirname, '..', '.trae', 'MEMORY.md');
-    if (!fs.existsSync(src)) return;
     for (const dir of ['.trae', '.trae-cn']) {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
       const target = path.join(traeDir, 'MEMORY.md');
-      if (fs.existsSync(target)) {
-        console.log(`  [cognitive] Trae (${dir}): already configured`);
-        continue;
-      }
-      fs.copyFileSync(src, target);
-      console.log(`  [cognitive] Trae (${dir}): memory protocol installed (~/${dir}/MEMORY.md)`);
+      injectStandaloneProtocol(target, `Trae (${dir})`, markdownProtocolBody('EGC Session Memory'));
     }
   } catch (e) {
     console.log(`  [cognitive] Trae: unexpected error: ${e.message}`);
@@ -287,17 +403,7 @@ try {
     const codebuddyDir = path.join(HOME, '.codebuddy');
     if (!fs.existsSync(codebuddyDir)) return;
     const target = path.join(codebuddyDir, 'MEMORY.md');
-    if (fs.existsSync(target)) {
-      console.log('  [cognitive] CodeBuddy: already configured');
-      return;
-    }
-    const src = path.join(__dirname, '..', '.codebuddy', 'MEMORY.md');
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, target);
-    } else {
-      fs.writeFileSync(target, markdownProtocolBody('Session Memory'));
-    }
-    console.log('  [cognitive] CodeBuddy: memory protocol installed (~/.codebuddy/MEMORY.md)');
+    injectStandaloneProtocol(target, 'CodeBuddy', markdownProtocolBody('Session Memory'));
   } catch (e) {
     console.log(`  [cognitive] CodeBuddy: unexpected error: ${e.message}`);
   }
@@ -309,14 +415,10 @@ try {
     const continueDir = path.join(HOME, '.continue');
     if (!fs.existsSync(continueDir)) return;
     const promptsDir = path.join(continueDir, 'prompts');
-    const target = path.join(promptsDir, 'egc-memory.prompt');
-    if (fs.existsSync(target)) {
-      console.log('  [cognitive] Continue.dev: already configured');
-      return;
-    }
     if (!fs.existsSync(promptsDir)) fs.mkdirSync(promptsDir, { recursive: true });
-    fs.writeFileSync(target, `name: EGC Session Memory\ndescription: Restore and persist EGC cross-session memory\n---\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n`);
-    console.log('  [cognitive] Continue.dev: memory protocol installed (~/.continue/prompts/egc-memory.prompt)');
+    const target = path.join(promptsDir, 'egc-memory.prompt');
+    const content = `name: EGC Session Memory\ndescription: Restore and persist EGC cross-session memory\n---\n${MARKER}\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n<!-- /egc-memory-protocol -->\n`;
+    injectStandaloneProtocol(target, 'Continue.dev', content);
   } catch (e) {
     console.log(`  [cognitive] Continue.dev: unexpected error: ${e.message}`);
   }

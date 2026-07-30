@@ -65,10 +65,192 @@ const SESSION_BUS_COMMANDS = [
   'working_memory_get', 'working_memory_set', 'working_memory_list',
 ];
 
+// Split out from runTests() to keep its cyclomatic complexity down: covers
+// the two non-markdown protocol formats (Cursor's JSON cursor.rules, Codex's
+// TOML persistent_instructions), each needing its own upgrade-from-legacy
+// and stay-idempotent-at-v2 case.
+async function runCursorAndCodexUpgradeTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('Cursor settings.json: a pre-versioning legacy cursor.rules (no marker, no closing tag) is upgraded by appending v2 with the Crusher tag, never deleting the old text', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({
+        'editor.fontSize': 14,
+        'cursor.rules': '[egc-memory-protocol] Legacy pre-Crusher rules mentioning get_state and update_state.',
+      }), 'utf8');
+
+      const output = run(home);
+      assert.ok(/Cursor: memory protocol upgraded v1 -> v2/.test(output), `should report a v1 -> v2 upgrade, got: ${output}`);
+
+      const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+      assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
+      assert.ok(parsed['cursor.rules'].includes('Legacy pre-Crusher rules'), 'the old unclosed legacy block is never deleted, since there is no reliable end marker to cut it at');
+      assert.ok(parsed['cursor.rules'].includes('[egc-token-crusher]'), 'upgraded cursor.rules must include the Crusher tag');
+      assert.ok(parsed['cursor.rules'].includes('[egc-memory-protocol:v2]'), 'marker must be stamped with the current version');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor settings.json: rules the user appended after an old unclosed legacy block survive the upgrade (cubic review, PR #1095)', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({
+        'cursor.rules': '[egc-memory-protocol] Legacy pre-Crusher rules mentioning get_state and update_state.\n\nAlways use tabs, never spaces, in this project.',
+      }), 'utf8');
+
+      run(home);
+
+      const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+      assert.ok(
+        parsed['cursor.rules'].includes('Always use tabs, never spaces, in this project.'),
+        'a rule the user appended after the old unclosed EGC block must survive the upgrade, not be silently deleted'
+      );
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor settings.json: a v2 install is left untouched on rerun (idempotent)', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
+
+      run(home);
+      const second = run(home);
+      assert.ok(/Cursor: already configured \(v2\)/.test(second), `second run should report already configured, got: ${second}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex config.toml: a pre-versioning legacy persistent_instructions (no marker) is upgraded to v2 with the Crusher text, staying a valid single-line TOML string', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      fs.writeFileSync(tomlPath, 'persistent_instructions = "State lives at ~/.egc/state/<slug>.md. Legacy pre-Crusher text mentioning get_state and update_state."\n', 'utf8');
+
+      const output = run(home);
+      assert.ok(/Codex: memory protocol upgraded v1 -> v2/.test(output), `should report a v1 -> v2 upgrade, got: ${output}`);
+
+      const content = fs.readFileSync(tomlPath, 'utf8');
+      const match = content.match(/^persistent_instructions = "(.*)"$/m);
+      assert.ok(match, 'persistent_instructions must remain a single-line double-quoted TOML string');
+      assert.ok(!match[1].includes('"'), 'the TOML string value must not contain an unescaped double-quote');
+      assert.ok(match[1].includes('[egc-protocol:v2]'), 'upgraded value must carry the current version marker');
+      assert.ok(match[1].includes('Token Crusher Protocol'), 'upgraded value must include the Crusher section');
+      assert.ok(match[1].includes('Legacy pre-Crusher text'), 'pre-marker legacy text is left in place rather than guessed-and-removed');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex config.toml: escapes double quotes and backslashes when upgrading a single-quoted persistent_instructions (cubic review, PR #1095)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      fs.writeFileSync(tomlPath, 'persistent_instructions = \'Legacy text mentioning get_state with a "quoted word" and a backslash \\ here.\'\n', 'utf8');
+
+      run(home);
+
+      const content = fs.readFileSync(tomlPath, 'utf8');
+      assert.ok(/^persistent_instructions = "/m.test(content), 'must be rewritten as a double-quoted TOML string');
+      assert.ok(content.includes('\\"quoted word\\"'), 'the original double quotes must be escaped, not left bare inside the new double-quoted string');
+      assert.ok(content.includes('backslash \\\\ here'), 'the original backslash must be escaped (doubled), not left bare');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex config.toml: a v2 install is left untouched on rerun (idempotent)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      run(home);
+      const second = run(home);
+      assert.ok(/Codex: already configured \(v2\)/.test(second), `second run should report already configured, got: ${second}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
+// Same complexity-budget reasoning as above: the 4 standalone markdown
+// targets (OpenCode, Trae, CodeBuddy, Continue.dev) each need the same pair
+// of upgrade-from-legacy / stay-idempotent-at-v2 cases.
+async function runStandaloneTargetUpgradeTests() {
+  const STANDALONE_TARGETS = [
+    { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
+    { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae (.trae)' },
+    { home: '.trae-cn', target: ['.trae-cn', 'MEMORY.md'], label: 'Trae (.trae-cn)' },
+    { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
+    { home: '.continue', target: ['.continue', 'prompts', 'egc-memory.prompt'], label: 'Continue.dev' },
+  ];
+
+  let passed = 0;
+  let failed = 0;
+
+  for (const spec of STANDALONE_TARGETS) {
+    if (await test(`${spec.label}: a pre-versioning legacy install (no marker at all) is upgraded to v2 with the Crusher section, not left frozen`, () => {
+      const home = mktempHome();
+      try {
+        fs.mkdirSync(path.join(home, spec.home), { recursive: true });
+        const target = path.join(home, ...spec.target);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, '# EGC Session Memory\n\nLegacy pre-marker content, written before versioning existed. Mentions get_state and update_state so the old plain existsSync check would have skipped it forever.\n', 'utf8');
+
+        const output = run(home);
+        assert.ok(output.includes(`${spec.label}: memory protocol upgraded`), `should report an upgrade for ${spec.label}, got: ${output}`);
+
+        const content = fs.readFileSync(target, 'utf8');
+        assert.ok(content.includes('EGC Token Crusher Protocol'), 'upgraded content must include the Crusher section');
+        assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'upgraded content must carry the current version marker');
+      } finally {
+        cleanup(home);
+      }
+    })) passed++; else failed++;
+
+    if (await test(`${spec.label}: a v2 install is left untouched on rerun (idempotent)`, () => {
+      const home = mktempHome();
+      try {
+        fs.mkdirSync(path.join(home, spec.home), { recursive: true });
+        run(home);
+        const second = run(home);
+        assert.ok(second.includes(`${spec.label}: already configured (v2)`), `second run should report ${spec.label} as already configured, got: ${second}`);
+      } finally {
+        cleanup(home);
+      }
+    })) passed++; else failed++;
+  }
+
+  return [passed, failed];
+}
+
 async function runTests() {
   console.log('\n=== Testing scripts/bootstrap-cognitive.js ===\n');
   let passed = 0;
   let failed = 0;
+
+  {
+    const [cursorCodexPassed, cursorCodexFailed] = await runCursorAndCodexUpgradeTests();
+    passed += cursorCodexPassed;
+    failed += cursorCodexFailed;
+  }
 
   if (await test('BLOCK advertises all 9 session bus commands', () => {
     for (const cmd of SESSION_BUS_COMMANDS) {
@@ -266,6 +448,12 @@ async function runTests() {
       cleanup(home);
     }
   })) passed++; else failed++;
+
+  {
+    const [standalonePassed, standaloneFailed] = await runStandaloneTargetUpgradeTests();
+    passed += standalonePassed;
+    failed += standaloneFailed;
+  }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {
     const home = mktempHome();
