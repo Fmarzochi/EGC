@@ -64,9 +64,12 @@ if (-not $DryRun) {
     # npm publish. Best-effort: some environments lack permission to the
     # global npm prefix, and that must not abort the rest of the install.
     Write-Host "  linking the egc command to this checkout..."
-    try {
-        npm link --silent 2>$null
-    } catch {
+    # PowerShell does not treat a non-zero exit code from a native command as
+    # a terminating error, so a try/catch here would never fire: check
+    # $LASTEXITCODE explicitly instead, matching the "||" pattern install.sh
+    # uses for the same fallback (cubic review, PR #1096).
+    npm link --silent 2>$null
+    if ($LASTEXITCODE -ne 0) {
         Write-Host "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts\egc.js <command>' from this checkout." -ForegroundColor Yellow
     }
 
