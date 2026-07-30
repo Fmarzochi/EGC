@@ -7,14 +7,18 @@ This document describes the planned development direction for EGC (Extended Glob
 - Guardian Bash command validator extended to three more hosts with a genuine pre-action blocking hook: Cursor (#1071), OpenCode (#1072), and Kiro CLI (#1073), each wired through a host-specific translation adapter that reuses shared stdin-parsing and hooks-merge libraries; Token Crusher wired into OpenCode (#1072) and into Antigravity's global hooks.json (#1067)
 - Guardian wired into Cline's PreToolUse hook (#1087), researched directly against the cline/cline source rather than the docs (mid-migration to a new SDK plugin system not yet applicable to the VS Code extension); Token Crusher confirmed impossible there (no command-rewrite field in the hook output schema), the same status as Kiro and Windsurf
 - Roo Code confirmed to have no hook mechanism at all (Guardian and Token Crusher both impossible, not just Crusher): its own issue tracker shows hooks were never implemented (issue #11504 is an open, unresolved feature request), and the project has been archived since 2026-05-15
-- Guardian and Token Crusher wired into Amp via its Plugin API (`tool.call` event, design reviewed with the Multica squad -- EGC-507): the old hooks doc this had been blocked on (Sourcegraph-internal only) 404s now, replaced by a public, in-process plugin mechanism running under Amp's own Bun runtime -- same architecture as OpenCode's plugin, so Amp gets both mechanisms, not Guardian alone
-- Corrected an earlier viability report (EGC-498) that had wrongly classified Amazon Q Developer CLI, Goose, and OpenHands as prompt-only (no hook): each has a real, documented `preToolUse`-style hook (confirmed directly against each project's own docs/source, not the earlier report). Guardian wired into all three; Token Crusher stays out of scope for all three (allow/deny only, no rewrite capability documented anywhere). Amazon Q's custom-agent config (`.amazonq/cli-agents/egc-guardian.json`, project and home) is real but not auto-activated by default due to an open upstream bug (aws/amazon-q-developer-cli#2922) -- the user must run `q settings chat.defaultAgent egc-guardian` once, or pass `--agent egc-guardian` per session. Goose's hook format is byte-for-byte identical to Claude Code's own settings.json schema (confirmed against aaif-goose/goose's docs, which describe it as following that convention), so its installer reuses the same destination-driven merge builders Junie and Trae already use, at a new self-contained `~/.agents/plugins/egc-guardian/` root. OpenHands' `.openhands/hooks.json` is project-only, with a genuinely different (unwrapped, snake_case) shape from every other host wired so far
+- Guardian and Token Crusher wired into Amp via its Plugin API (`tool.call` event): the old hooks doc this had been blocked on (Sourcegraph-internal only) 404s now, replaced by a public, in-process plugin mechanism running under Amp's own Bun runtime, the same architecture as OpenCode's plugin, so Amp gets both mechanisms, not Guardian alone
+- Corrected an earlier viability report (EGC-498) that had wrongly classified Amazon Q Developer CLI, Goose, and OpenHands as prompt-only (no hook): each has a real, documented `preToolUse`-style hook (confirmed directly against each project's own docs/source, not the earlier report). Guardian wired into all three; Token Crusher stays out of scope for all three (allow/deny only, no rewrite capability documented anywhere). Amazon Q's custom-agent config (`.amazonq/cli-agents/egc-guardian.json`, project and home) is real but not auto-activated by default due to an open upstream bug (aws/amazon-q-developer-cli#2922): the user must run `q settings chat.defaultAgent egc-guardian` once, or pass `--agent egc-guardian` per session. Goose's hook format is byte-for-byte identical to Claude Code's own settings.json schema (confirmed against aaif-goose/goose's docs, which describe it as following that convention), so its installer reuses the same destination-driven merge builders Junie and Trae already use, at a new self-contained `~/.agents/plugins/egc-guardian/` root. OpenHands' `.openhands/hooks.json` is project-only, with a genuinely different (unwrapped, snake_case) shape from every other host wired so far
 - Guardian command validator hardened against wrapper and quoting bypasses across every CLI, plus npm packaging, Codex/TOML, and Copilot/CodeBuddy gaps (#1051-#1055)
 - A truncated-but-still-JSON-valid stdin payload could bypass the Guardian's 1MB cap check; the truncation flag is now checked unconditionally in every translation adapter (#1074, and closed for Cursor/Windsurf/Kiro alike)
 - NLI session bus and memory protocol coverage extended to 8+ more harnesses, including Aider, Warp, Windsurf, and Zed (#1059-#1062)
 - `update_state` no longer clobbers project rule files on propagation (#1058); `$HOME` is now resolved fresh on every key lookup instead of once at process boot (#1065)
 - Uncatalogued commands that write to protected files now hard-block instead of only warning (#1070)
 - Claude Code re-injects project context after compaction (#1069)
+- `doctor`, `repair`, and `auto-update` accept `--repo-root <path>` to compare against a local development checkout instead of the running binary's own install location, closing a false-drift report that had nothing to do with the install itself (#1093)
+- The cognitive protocol marker is now versioned across all 12 install targets (Claude Code, Gemini CLI, Cursor, Codex, Windsurf, Zed, OpenCode, Trae, Trae-CN, CodeBuddy, and Continue.dev), so an already-configured install picks up a new protocol section, like the Token Crusher one, on the next `egc init` or `auto-update` instead of staying frozen at whatever shipped on first install; `auto-update` now re-runs the bootstrap step itself so this reaches every user who runs the update command they already use, not just fresh installs (#1093, #1095)
+- `egc run`'s git log summary now counts real commits remaining instead of raw lines, which had wildly overstated the count for verbose formats like `--stat` (#1094)
+- `install.sh` and `install.ps1` link the `egc` command to the checkout they just set up, so running `egc doctor` or `egc --version` afterward targets the code that was installed rather than a stale prior global install left on PATH (#1096)
 
 ## v1.1.2: Bidirectional Sync (Released 2026-06-20)
 
@@ -43,7 +47,7 @@ This document describes the planned development direction for EGC (Extended Glob
 - State consolidation pipeline on each `update_state` call (issue #143)
 - SessionStart hook runs idempotently across harness reinstalls
 
-## v1.1.3 -- v1.1.6: Stability and Ecosystem (Released 2026-07)
+## v1.1.3 to v1.1.6: Stability and Ecosystem (Released 2026-07)
 
 What shipped in the 1.1.x patch series:
 
@@ -53,15 +57,15 @@ What shipped in the 1.1.x patch series:
 - Guardian enforcement fully harness-level: UserPromptSubmit + PreToolUse hooks wired, prompt routing active on every session (#633)
 - `egc replay`: session playback with timeline scrubbing (#618, @Maqbool61)
 - `egc budget`: per-session token and cost limits enforced at the PreToolUse hook (#610, @Kunall7890)
-- `egc plugin`: community plugin registry -- `egc plugin install <name>` (#611, @Kunall7890)
+- `egc plugin`: community plugin registry (`egc plugin install <name>`) (#611, @Kunall7890)
 - Team memory sync via git backend (#606, @Kunall7890)
-- Native Zed IDE integration -- `egc install --target zed` (#626, @Maqbool61)
+- Native Zed IDE integration (`egc install --target zed`) (#626, @Maqbool61)
 - AES-256-GCM encryption for state files at rest (#627, @Maqbool61)
 - HMAC-SHA256 integrity check on state files (#625, @Maqbool61)
 - Continue.dev native MCP registration (#564, @Maqbool61)
 - VS Code + GitHub Copilot installation guide in all 8 language READMEs (#631)
 - Security batch: audit.log chmod 600, path traversal guard, scoped rate limiter per project, POST /event body cap at 256 KB, XSS escaping
-- Community translations: Arabic, Hindi, Korean, Russian, Japanese, Spanish, Portuguese -- 8 languages total
+- Community translations: Arabic, Hindi, Korean, Russian, Japanese, Spanish, Portuguese: 8 languages total
 - 14 supported AI coding tools
 
 ## v1.1.12: Omnipresent Context (Released 2026-07-18)
@@ -69,7 +73,7 @@ What shipped in the 1.1.x patch series:
 Memory everywhere, tokens crushed, sessions coordinated:
 
 - User-wide global memory: `update_state` with `scope: "global"` shares preferences and lessons across every project; `get_state` and the session-start hooks append a deduplicated Global Memory section with strict project-over-global precedence (#855)
-- Session Bus MVP: `session_announce`, `session_peers`, `claim_path`, `release_path` -- parallel sessions split territory with fail-fast cooperative locks, dead sessions swept after 10 minutes (#858)
+- Session Bus MVP: `session_announce`, `session_peers`, `claim_path`, `release_path`: parallel sessions split territory with fail-fast cooperative locks, dead sessions swept after 10 minutes (#858)
 - Commit privacy enforced in three layers: `check-state-leak.js`, tracked pre-commit hook, and a CI tree guard; the public baseline of the propagation files now ships zeroed (#856)
 - Token Crusher: native shell-output compression engine with `egc run` and the zero-cost `egc saved` report (#857), silent tier A rewrite in the bash dispatcher (#860), status line at `egc init` (#859)
 - Multi-session SQLite write arbitration hardened with equal jitter and deeper retries (#853)
