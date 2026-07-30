@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { install, uninstall, status, SHIM_BINARY_NAMES } = require('../../scripts/lib/crusher/shim-install');
+const { install, uninstall, status, SHIM_BINARY_NAMES, powershellSingleQuote } = require('../../scripts/lib/crusher/shim-install');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -48,6 +48,16 @@ function runTests() {
   console.log('\n=== Testing scripts/lib/crusher/shim-install.js ===\n');
   let passed = 0;
   let failed = 0;
+
+  if (test('powershellSingleQuote escapes embedded quotes and never leaves a $ open to interpolation (audit EGC-518)', () => {
+    assert.strictEqual(powershellSingleQuote('C:\\Users\\felipe\\.egc\\bin'), "'C:\\Users\\felipe\\.egc\\bin'");
+    assert.strictEqual(powershellSingleQuote("C:\\Users\\o'brien\\.egc\\bin"), "'C:\\Users\\o''brien\\.egc\\bin'");
+    // The whole point: JSON.stringify's double quotes let PowerShell try to
+    // interpolate $user; single-quoting the same path must not.
+    const withDollar = 'C:\\Users\\$user\\.egc\\bin';
+    assert.strictEqual(powershellSingleQuote(withDollar), "'C:\\Users\\$user\\.egc\\bin'");
+    assert.ok(powershellSingleQuote(withDollar).startsWith("'") && powershellSingleQuote(withDollar).endsWith("'"));
+  })) passed++; else failed++;
 
   if (test('install() accounts for every SHIM_BINARY_NAMES entry as installed or skipped, never dropped', () => {
     const dir = createTempDir('egc-shim-install-');

@@ -11,6 +11,7 @@ const {
   manifestPath,
   readManifest,
   pathEnvKey,
+  normalizePathForCompare,
   resolveWithoutShim,
   resolveRealBinary,
 } = require('../../scripts/lib/crusher/shim-paths');
@@ -21,6 +22,16 @@ function createTempDir(prefix) {
 
 function cleanup(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
+}
+
+function withPlatform(value, fn) {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value, configurable: true });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, 'platform', original);
+  }
 }
 
 function withHome(tempHome, fn) {
@@ -100,6 +111,21 @@ function runTests() {
 
   if (test('pathEnvKey finds the PATH variable regardless of case', () => {
     assert.ok(['PATH', 'Path'].includes(pathEnvKey()));
+  })) passed++; else failed++;
+
+  if (test('normalizePathForCompare is case-insensitive on win32/darwin, case-sensitive on linux (audit EGC-520)', () => {
+    const upper = '/Users/Felipe/.egc/bin';
+    const lower = '/users/felipe/.egc/bin';
+
+    withPlatform('win32', () => {
+      assert.strictEqual(normalizePathForCompare(upper), normalizePathForCompare(lower));
+    });
+    withPlatform('darwin', () => {
+      assert.strictEqual(normalizePathForCompare(upper), normalizePathForCompare(lower));
+    });
+    withPlatform('linux', () => {
+      assert.notStrictEqual(normalizePathForCompare(upper), normalizePathForCompare(lower));
+    });
   })) passed++; else failed++;
 
   if (test('resolveWithoutShim finds a real system binary (node itself)', () => {

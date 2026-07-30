@@ -37,13 +37,27 @@ function needsShellOnWindows(binaryPath) {
   return process.platform === 'win32' && /\.(cmd|bat)$/i.test(binaryPath);
 }
 
+// A child killed by a signal (Ctrl+C/SIGINT, SIGTERM, ...) has result.status
+// === null and result.signal set. Re-raising the same signal on this
+// process (rather than exiting with a made-up status code) makes it
+// terminate the same way the real binary did, so a parent shell or process
+// manager watching for that signal sees the standard 128+n convention
+// instead of an opaque, unrelated exit code.
+function exitLikeChild(result) {
+  if (result.signal) {
+    process.kill(process.pid, result.signal);
+    return;
+  }
+  process.exit(typeof result.status === 'number' ? result.status : 1);
+}
+
 function passthrough(realBinary, args) {
   const result = spawnSync(realBinary, args, { stdio: 'inherit', shell: needsShellOnWindows(realBinary) });
   if (result.error) {
     process.stderr.write(`${path.basename(realBinary)}: ${result.error.message}\n`);
     process.exit(127);
   }
-  process.exit(typeof result.status === 'number' ? result.status : 1);
+  exitLikeChild(result);
 }
 
 function loadCrusher() {
@@ -73,8 +87,15 @@ function runShim(name, args) {
 
   const result = spawnSync(realBinary, args, { ...SPAWN_OPTIONS, shell: needsShellOnWindows(realBinary) });
   if (result.error) {
+    // ENOBUFS (output exceeded maxBuffer) is not "command not found" -- exit
+    // 127 there would be actively misleading to anything inspecting the
+    // status code. The child was already killed mid-run by spawnSync itself
+    // in this case, so there is nothing safe left to fall back to (retrying
+    // via passthrough would re-execute whatever side effects the command
+    // already had, possibly a second time).
+    const isBufferOverflow = result.error.code === 'ENOBUFS' || /maxBuffer/i.test(result.error.message || '');
     process.stderr.write(`${name}: ${result.error.message}\n`);
-    process.exit(127);
+    process.exit(isBufferOverflow ? 1 : 127);
   }
 
   const stdout = result.stdout || '';
@@ -98,7 +119,7 @@ function runShim(name, args) {
     process.stdout.write(stdout);
   }
 
-  process.exit(typeof result.status === 'number' ? result.status : 1);
+  exitLikeChild(result);
 }
 
 // Windows launchers (.cmd) cannot shebang directly into this file the way a
@@ -108,4 +129,4 @@ if (require.main === module) {
   runShim(process.argv[2], process.argv.slice(3));
 }
 
-module.exports = { runShim, needsShellOnWindows };
+module.exports = { runShim, needsShellOnWindows, exitLikeChild };

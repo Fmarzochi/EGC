@@ -32,9 +32,14 @@ function cleanup(dirPath) {
 // so the underlying behavior is expressed once, in Node, and only the
 // per-platform launcher mechanics differ (a shebang file vs. a .cmd
 // wrapper), matching how the real npm.cmd/npx.cmd wrappers work there.
-function implBody({ stdout, exitCode = 0, echoStdin = false }) {
+function implBody({ stdout, exitCode = 0, echoStdin = false, selfSignal }) {
   if (echoStdin) {
     return "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(d);process.exit(0);});";
+  }
+  if (selfSignal) {
+    // Simulates a process killed by a signal (Ctrl+C/SIGINT, SIGTERM, ...):
+    // spawnSync reports this as status=null, signal=<name> for the parent.
+    return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.kill(process.pid, ${JSON.stringify(selfSignal)});setTimeout(()=>{},1000);`;
   }
   return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.exit(${exitCode});`;
 }
@@ -142,6 +147,21 @@ function runTests() {
 
       const result = runShim(dir, 'git', ['status']);
       assert.strictEqual(result.status, 7);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a child killed by a signal makes the shim die by the same signal, not a generic exit code (audit EGC-520)', () => {
+    if (process.platform === 'win32') return; // POSIX signal semantics only
+    const dir = createTempDir('egc-shim-dispatch-');
+    try {
+      const fakeGit = writeFakeBinary(dir, 'git', { selfSignal: 'SIGTERM' });
+      seedManifest(dir, { git: fakeGit });
+
+      const result = runShim(dir, 'git', ['status']);
+      assert.strictEqual(result.signal, 'SIGTERM');
+      assert.strictEqual(result.status, null);
     } finally {
       cleanup(dir);
     }
