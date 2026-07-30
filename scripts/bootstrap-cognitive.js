@@ -210,9 +210,10 @@ function computeCursorRulesUpdate(existing) {
     return { upToDate: true, installedVersion };
   }
 
+  const separator = existing.trim() ? '\n\n' : '';
   const newRules = blockMatch
     ? existing.replace(CURSOR_BLOCK_RE, cursorRulesBlock())
-    : existing + (existing.trim() ? '\n\n' : '') + cursorRulesBlock();
+    : existing + separator + cursorRulesBlock();
 
   return { upToDate: false, installedVersion, newRules };
 }
@@ -309,7 +310,10 @@ function upgradeCodexTomlContent(originalContent) {
       installedVersion,
       newContent: originalContent.replace(
         CODEX_RE_SINGLE,
-        (_, _pre, val, _post) => `persistent_instructions = "${foldSuffix(val).replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"`
+        (_, _pre, val, _post) => {
+          const escaped = foldSuffix(val).replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`);
+          return `persistent_instructions = "${escaped}"`;
+        }
       ),
     };
   }
