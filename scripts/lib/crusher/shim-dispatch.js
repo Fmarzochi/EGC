@@ -20,6 +20,7 @@
 
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { writeSync } = require('node:fs');
 const { resolveRealBinary } = require('./shim-paths');
 
 const SPAWN_OPTIONS = {
@@ -110,8 +111,14 @@ function runShim(name, args) {
     crushed = null;
   }
 
+  // fs.writeSync(1, ...), not process.stdout.write(), matters here: stdout to
+  // a pipe is asynchronous on POSIX, and exitLikeChild() below can call
+  // process.exit() before a pending write flushes. That truncated the tail of
+  // large output non-deterministically by OS and Node version (confirmed as
+  // a real CI flake on macOS + Node 20.x, audit EGC-521). fs.writeSync is a
+  // genuine blocking syscall, so nothing is left pending when this exits.
   if (crushed) {
-    process.stdout.write(crushed.crushed + '\n');
+    writeSync(1, crushed.crushed + '\n');
     crusher.record({
       cmd: name,
       kind: crushed.kind,
@@ -120,7 +127,7 @@ function runShim(name, args) {
       tokensSaved: crushed.tokensSaved,
     });
   } else if (stdout) {
-    process.stdout.write(stdout);
+    writeSync(1, stdout);
   }
 
   exitLikeChild(result);
