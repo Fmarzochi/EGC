@@ -44,7 +44,13 @@ function writeShimLauncher(binDir, name) {
 // its manifest.
 function writeRealBinary(dir, name, stdout) {
   const binPath = path.join(dir, name);
-  fs.writeFileSync(binPath, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)});\n`);
+  // Exiting only from the write callback, not right after the write() call,
+  // matters here: stdout to a pipe is asynchronous on POSIX, and a bare
+  // process.exit() does not wait for pending writes to flush -- it can
+  // truncate the tail of large output non-deterministically by OS and Node
+  // version (macOS's smaller default pipe buffer makes this bite harder than
+  // on Linux; seen as a real CI flake on macOS + Node 20.x).
+  fs.writeFileSync(binPath, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)}, () => process.exit(0));\n`);
   fs.chmodSync(binPath, 0o755);
   return binPath;
 }

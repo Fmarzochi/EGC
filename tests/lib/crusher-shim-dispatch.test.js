@@ -34,14 +34,20 @@ function cleanup(dirPath) {
 // wrapper), matching how the real npm.cmd/npx.cmd wrappers work there.
 function implBody({ stdout, exitCode = 0, echoStdin = false, selfSignal }) {
   if (echoStdin) {
-    return "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(d);process.exit(0);});";
+    return "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(d,()=>process.exit(0));});";
   }
   if (selfSignal) {
     // Simulates a process killed by a signal (Ctrl+C/SIGINT, SIGTERM, ...):
     // spawnSync reports this as status=null, signal=<name> for the parent.
-    return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.kill(process.pid, ${JSON.stringify(selfSignal)});setTimeout(()=>{},1000);`;
+    return `process.stdout.write(${JSON.stringify(stdout ?? '')},()=>{process.kill(process.pid, ${JSON.stringify(selfSignal)});});setTimeout(()=>{},1000);`;
   }
-  return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.exit(${exitCode});`;
+  // The write callback, not a bare statement after write(), is what makes this
+  // reliable: stdout to a pipe is asynchronous on POSIX (smaller default pipe
+  // buffers on macOS make this bite harder than on Linux), and process.exit()
+  // does not wait for pending writes to flush -- calling it before the write
+  // callback fires can truncate the tail of large output non-deterministically
+  // by OS and Node version (seen as a real CI flake on macOS + Node 20.x).
+  return `process.stdout.write(${JSON.stringify(stdout ?? '')},()=>process.exit(${exitCode}));`;
 }
 
 function writeFakeBinary(dir, name, spec) {
