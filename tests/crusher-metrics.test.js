@@ -125,7 +125,7 @@ run('records attribution and exposes the scoped gain panel without breaking lega
 
     const ledger = path.join(home, '.egc', 'metrics', 'crusher.jsonl');
     const first = JSON.parse(fs.readFileSync(ledger, 'utf8').trim());
-    assert.strictEqual(first.project, path.resolve(project));
+    assert.strictEqual(fs.realpathSync(first.project), fs.realpathSync(project));
     assert.strictEqual(first.session, 'ses_cli');
 
     fs.appendFileSync(ledger, `${JSON.stringify({
