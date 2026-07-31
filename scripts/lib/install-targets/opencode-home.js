@@ -12,26 +12,50 @@ const {
   createCrusherScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
-// OpenCode plugins run IN-PROCESS (Bun runtime), unlike every other target's
-// externally-spawned hooks.json subprocess -- opencode-egc-plugin.js
-// `require()`s pre-bash-guardian-validate.js's and
-// pre-bash-crusher-rewrite.js's own run() functions directly, so there is no
-// stdin/stdout translation adapter to wire, only a plugin file to drop into
-// OpenCode's auto-discovered plugins/ directory (docs:
-// https://opencode.ai/docs/plugins) alongside the same Guardian/Crusher
-// script trees every other target copies via the shared builders below.
-// EGC-498: OpenCode is the only one of the newly-researched hosts (Windsurf,
-// Cursor, OpenCode, Kiro) whose hook contract can mutate the tool call
-// (`output.args.command = ...`) before it runs, which the Token Crusher's
-// rewrite-based design requires -- so it is the only one of the four wired
-// for both the Guardian and the Crusher, not the Guardian alone.
+// OpenCode plugins run in-process, unlike hosts that spawn hooks.json
+// commands. Guardian and Crusher can run directly, while session restoration
+// crosses a fail-open Node child-process boundary through the OpenCode adapter
+// below. The adapter and Claude hook both consume the same host-neutral core.
 const PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/opencode-egc-plugin.js';
+const SESSION_CONTEXT_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/opencode-session-start.js';
+const OPENCODE_SESSION_CONTEXT_MODULE_ID = 'opencode-session-context-hook';
+
+// Keep this dependency set aligned with claude-home.js's SessionStart hook.
+// The shared loader treats every helper as optional, but normal installations
+// should preserve branch-aware, encrypted, global, propagated, and stack-aware
+// restoration on both hosts.
+const SESSION_CONTEXT_LIB_SOURCES = [
+  'scripts/lib/session-start-adapter.js',
+  'scripts/lib/session-context-loader.js',
+  'scripts/lib/branch-state.js',
+  'scripts/lib/global-state.js',
+  'scripts/lib/project-detect.js',
+  'scripts/lib/propagate-state.js',
+  'scripts/lib/state-crypto.js',
+];
 
 function resolvePluginScriptDestination(targetRoot) {
   return path.join(targetRoot, 'plugins', 'opencode-egc-plugin.js');
 }
 
-function createOpenCodeGuardianCrusherOperations(adapter, targetRoot) {
+function createOpenCodeSessionContextOperations(remap, targetRoot) {
+  return [
+    remap(
+      OPENCODE_SESSION_CONTEXT_MODULE_ID,
+      SESSION_CONTEXT_SCRIPT_SOURCE_RELATIVE_PATH,
+      path.join(targetRoot, 'scripts', 'hooks', 'opencode-session-start.js'),
+      { strategy: 'preserve-relative-path' }
+    ),
+    ...SESSION_CONTEXT_LIB_SOURCES.map(sourceRelativePath => remap(
+      OPENCODE_SESSION_CONTEXT_MODULE_ID,
+      sourceRelativePath,
+      path.join(targetRoot, ...sourceRelativePath.split('/')),
+      { strategy: 'preserve-relative-path' }
+    )),
+  ];
+}
+
+function createOpenCodePluginOperations(adapter, targetRoot) {
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
@@ -47,6 +71,7 @@ function createOpenCodeGuardianCrusherOperations(adapter, targetRoot) {
   return [
     ...createBashGuardianScriptCopyOperations(remap, targetRoot),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
+    ...createOpenCodeSessionContextOperations(remap, targetRoot),
     pluginCopyOperation,
   ];
 }
@@ -102,7 +127,7 @@ module.exports = createInstallTargetAdapter({
 
     return [
       ...moduleOperations,
-      ...createOpenCodeGuardianCrusherOperations(adapter, targetRoot),
+      ...createOpenCodePluginOperations(adapter, targetRoot),
     ];
   },
 });
