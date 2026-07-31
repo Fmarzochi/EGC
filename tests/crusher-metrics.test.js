@@ -13,13 +13,12 @@ const {
   UNKNOWN_SCOPE,
   normalizeEntry,
   resolveMetricContext,
-  record,
-  readAll,
   aggregateBreakdown,
 } = require('../scripts/lib/crusher/metrics');
 
 const ROOT = path.join(__dirname, '..');
 const GAIN = path.join(ROOT, 'scripts', 'gain.js');
+const METRICS = path.join(ROOT, 'scripts', 'lib', 'crusher', 'metrics.js');
 
 let passed = 0;
 let failed = 0;
@@ -35,27 +34,13 @@ function run(name, fn) {
   }
 }
 
-function withProcessContext({ home, cwd, session }, fn) {
-  const previous = {
-    HOME: process.env.HOME,
-    USERPROFILE: process.env.USERPROFILE,
-    EGC_SESSION_ID: process.env.EGC_SESSION_ID,
-    cwd: process.cwd(),
-  };
-  process.env.HOME = home;
-  process.env.USERPROFILE = home;
-  if (session === undefined) delete process.env.EGC_SESSION_ID;
-  else process.env.EGC_SESSION_ID = session;
-  process.chdir(cwd);
-  try {
-    return fn();
-  } finally {
-    process.chdir(previous.cwd);
-    for (const key of ['HOME', 'USERPROFILE', 'EGC_SESSION_ID']) {
-      if (previous[key] === undefined) delete process.env[key];
-      else process.env[key] = previous[key];
-    }
-  }
+function runNode(script, options = {}) {
+  const result = spawnSync(process.execPath, ['-e', script], {
+    encoding: 'utf8',
+    ...options,
+  });
+  assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  return result;
 }
 
 console.log('\n=== Testing Token Crusher scoped metrics ===\n');
@@ -106,86 +91,90 @@ run('computes project, session, rolling-window, average, and biggest totals', ()
 });
 
 run('uses the local calendar boundary instead of the UTC date boundary', () => {
-  const previousTZ = process.env.TZ;
-  process.env.TZ = 'America/Los_Angeles';
-  try {
-    const report = aggregateBreakdown([
-      { ts: '2026-07-31T07:30:00Z', tokensSaved: 100 },
-      { ts: '2026-07-31T06:30:00Z', tokensSaved: 200 },
-    ], {
-      now: '2026-07-31T08:30:00Z',
-      project: UNKNOWN_SCOPE,
-      session: UNKNOWN_SCOPE,
-    });
-    assert.strictEqual(report.today.runs, 1);
-    assert.strictEqual(report.today.tokensSaved, 100);
-  } finally {
-    if (previousTZ === undefined) delete process.env.TZ;
-    else process.env.TZ = previousTZ;
-  }
+  const now = new Date(2026, 6, 31, 1, 30);
+  const today = new Date(2026, 6, 31, 0, 30);
+  const previousDay = new Date(2026, 6, 30, 23, 30);
+  const report = aggregateBreakdown([
+    { ts: today.toISOString(), tokensSaved: 100 },
+    { ts: previousDay.toISOString(), tokensSaved: 200 },
+  ], {
+    now,
+    project: UNKNOWN_SCOPE,
+    session: UNKNOWN_SCOPE,
+  });
+  assert.strictEqual(report.today.runs, 1);
+  assert.strictEqual(report.today.tokensSaved, 100);
 });
 
 run('records attribution and exposes the scoped gain panel without breaking legacy JSON', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-scoped-gain-home-'));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-scoped-gain-project-'));
-
-  withProcessContext({ home, cwd: project, session: 'ses_cli' }, () => {
-    record({ cmd: 'git', kind: 'git-log', bytesIn: 1000, bytesOut: 100, tokensSaved: 225 });
-    const first = readAll()[0];
-    assert.strictEqual(first.project, path.resolve(project));
-    assert.strictEqual(first.session, 'ses_cli');
-  });
-
-  const ledger = path.join(home, '.egc', 'metrics', 'crusher.jsonl');
-  fs.appendFileSync(ledger, `${JSON.stringify({
-    ts: new Date().toISOString(),
-    cmd: 'legacy',
-    kind: 'generic',
-    bytesIn: 500,
-    bytesOut: 100,
-    tokensSaved: 75,
-  })}\n`);
-
   const env = {
     ...process.env,
     HOME: home,
     USERPROFILE: home,
     EGC_SESSION_ID: 'ses_cli',
+    EGC_TEST_METRICS_MODULE: METRICS,
   };
-  const jsonResult = spawnSync(process.execPath, [GAIN, '--json'], {
-    cwd: project,
-    env,
-    encoding: 'utf8',
-  });
-  assert.strictEqual(jsonResult.status, 0, jsonResult.stderr);
-  const report = JSON.parse(jsonResult.stdout);
-  assert.strictEqual(report.tokensSaved, 300, 'legacy top-level lifetime total remains available');
-  assert.strictEqual(report.currentProject.tokensSaved, 225);
-  assert.strictEqual(report.currentSession.tokensSaved, 225);
-  assert.strictEqual(report.sinceInstall.tokensSaved, 300);
 
-  const historyResult = spawnSync(process.execPath, [GAIN, '--history', '--json'], {
-    cwd: project,
-    env,
-    encoding: 'utf8',
-  });
-  assert.strictEqual(historyResult.status, 0, historyResult.stderr);
-  const history = JSON.parse(historyResult.stdout);
-  assert.strictEqual(history[1].project, UNKNOWN_SCOPE);
-  assert.strictEqual(history[1].session, UNKNOWN_SCOPE);
+  try {
+    runNode(
+      "const { record } = require(process.env.EGC_TEST_METRICS_MODULE); record({ cmd: 'git', kind: 'git-log', bytesIn: 1000, bytesOut: 100, tokensSaved: 225 });",
+      { cwd: project, env }
+    );
 
-  const panel = spawnSync(process.execPath, [GAIN], {
-    cwd: project,
-    env,
-    encoding: 'utf8',
-  });
-  assert.strictEqual(panel.status, 0, panel.stderr);
-  assert.match(panel.stdout, /Today/);
-  assert.match(panel.stdout, /Current session/);
-  assert.match(panel.stdout, /Current project/);
-  assert.match(panel.stdout, /Last 7 days/);
-  assert.match(panel.stdout, /Last 30 days/);
-  assert.match(panel.stdout, /Biggest crush:.*git/);
+    const ledger = path.join(home, '.egc', 'metrics', 'crusher.jsonl');
+    const first = JSON.parse(fs.readFileSync(ledger, 'utf8').trim());
+    assert.strictEqual(first.project, path.resolve(project));
+    assert.strictEqual(first.session, 'ses_cli');
+
+    fs.appendFileSync(ledger, `${JSON.stringify({
+      ts: new Date().toISOString(),
+      cmd: 'legacy',
+      kind: 'generic',
+      bytesIn: 500,
+      bytesOut: 100,
+      tokensSaved: 75,
+    })}\n`);
+
+    const jsonResult = spawnSync(process.execPath, [GAIN, '--json'], {
+      cwd: project,
+      env,
+      encoding: 'utf8',
+    });
+    assert.strictEqual(jsonResult.status, 0, jsonResult.stderr);
+    const report = JSON.parse(jsonResult.stdout);
+    assert.strictEqual(report.tokensSaved, 300, 'legacy top-level lifetime total remains available');
+    assert.strictEqual(report.currentProject.tokensSaved, 225);
+    assert.strictEqual(report.currentSession.tokensSaved, 225);
+    assert.strictEqual(report.sinceInstall.tokensSaved, 300);
+
+    const historyResult = spawnSync(process.execPath, [GAIN, '--history', '--json'], {
+      cwd: project,
+      env,
+      encoding: 'utf8',
+    });
+    assert.strictEqual(historyResult.status, 0, historyResult.stderr);
+    const history = JSON.parse(historyResult.stdout);
+    assert.strictEqual(history[1].project, UNKNOWN_SCOPE);
+    assert.strictEqual(history[1].session, UNKNOWN_SCOPE);
+
+    const panel = spawnSync(process.execPath, [GAIN], {
+      cwd: project,
+      env,
+      encoding: 'utf8',
+    });
+    assert.strictEqual(panel.status, 0, panel.stderr);
+    assert.match(panel.stdout, /Today/);
+    assert.match(panel.stdout, /Current session/);
+    assert.match(panel.stdout, /Current project/);
+    assert.match(panel.stdout, /Last 7 days/);
+    assert.match(panel.stdout, /Last 30 days/);
+    assert.match(panel.stdout, /Biggest crush:.*git/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(project, { recursive: true, force: true });
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
