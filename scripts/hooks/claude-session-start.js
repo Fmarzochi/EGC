@@ -1,78 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
-// Thin Claude Code SessionStart adapter. Shared state discovery and formatting
-// live in session-context-loader.js; this file only translates Claude's stdin
-// contract into that core, writes context to stdout, and reports Claude
-// telemetry to the Dashboard.
+// Claude's thin SessionStart wrapper: the shared adapter reads state and emits
+// telemetry; Claude receives the restored context through stdout.
 
-const fs = require('node:fs');
-const http = require('node:http');
-
-const HOST = 'claude';
-const rawPort = process.env.EGC_PORT;
-const parsedPort = rawPort && /^\d+$/.test(rawPort) ? Number(rawPort) : NaN;
-const DASHBOARD_PORT = !Number.isNaN(parsedPort) && parsedPort >= 1 && parsedPort <= 65535
-  ? parsedPort
-  : 7890;
-
-function readStdinJson() {
-  try {
-    const raw = fs.readFileSync(0, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch (_error) { // NOSONAR
-    // No stdin payload or invalid JSON: fall back to environment values.
-  }
-  return {};
+let restored = { host: 'claude', context: '' };
+try {
+  const { runSessionStartAdapter } = require('../lib/session-start-adapter');
+  restored = runSessionStartAdapter({ host: 'claude', projectEnv: 'CLAUDE_PROJECT_DIR' });
+} catch (_) { // NOSONAR: never block Claude session startup
+  // Keep the empty fallback above.
 }
 
-function resolveProjectPath(input) {
-  if (typeof input.cwd === 'string' && input.cwd.length > 0) {
-    return input.cwd;
-  }
-  return process.env.CLAUDE_PROJECT_DIR || process.env.PWD || process.cwd();
+if (typeof restored.context === 'string' && restored.context) {
+  process.stdout.write(restored.context);
 }
-
-function restoreContext(projectPath) {
-  try {
-    const { loadSessionContext } = require('../lib/session-context-loader');
-    return loadSessionContext({ projectPath, host: HOST });
-  } catch (_) { // NOSONAR: missing or broken loader must not block the session
-    return { host: HOST, context: '' };
-  }
-}
-
-function postSessionStart(host, sessionId) {
-  const body = JSON.stringify({ ide: host, event: 'session_start', session_id: sessionId });
-  const request = http.request(
-    {
-      hostname: '127.0.0.1',
-      port: DASHBOARD_PORT,
-      path: '/event',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
-      timeout: 200,
-    },
-    response => response.resume()
-  );
-  request.on('error', () => {});
-  request.on('timeout', () => request.destroy());
-  request.end(body);
-}
-
-function main() {
-  const input = readStdinJson();
-  const restored = restoreContext(resolveProjectPath(input));
-  if (typeof restored.context === 'string' && restored.context) {
-    process.stdout.write(restored.context);
-  }
-  postSessionStart(restored.host || HOST, input.session_id || null);
-}
-
-main();

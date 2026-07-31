@@ -10,6 +10,7 @@ const REPO_ROOT = path.join(__dirname, '..', '..');
 const FAKE_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const SESSION_FILES = [
   'scripts/hooks/opencode-session-start.js',
+  'scripts/lib/session-start-adapter.js',
   'scripts/lib/session-context-loader.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/global-state.js',
@@ -44,6 +45,17 @@ function replaceTemporarily(file, content) {
   const original = fs.readFileSync(file, 'utf8');
   fs.writeFileSync(file, content);
   return () => fs.writeFileSync(file, original);
+}
+
+async function withEnvironment(name, value, fn) {
+  const previous = process.env[name];
+  process.env[name] = value;
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  }
 }
 
 function sessionEvent(id, directory) {
@@ -97,7 +109,15 @@ async function runTests() {
   let passed = 0;
   let failed = 0;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-plugin-'));
-  const savedEnv = Object.fromEntries(['EGC_GUARDIAN_CLI', 'EGC_ASSUME_EGC_CLI', 'HOME', 'USERPROFILE', 'EGC_PORT']
+  const savedEnv = Object.fromEntries([
+    'EGC_GUARDIAN_CLI',
+    'EGC_ASSUME_EGC_CLI',
+    'HOME',
+    'USERPROFILE',
+    'EGC_PORT',
+    'EGC_SESSION_CONTEXT_TIMEOUT_MS',
+    'EGC_SESSION_CONTEXT_MAX_BYTES',
+  ]
     .map(key => [key, process.env[key]]));
 
   process.env.EGC_GUARDIAN_CLI = FAKE_CLI;
@@ -169,23 +189,29 @@ async function runTests() {
     if (await test('fails open when the bridge exceeds its timeout', async () => {
       const restore = replaceTemporarily(bridgePath, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000);\n");
       try {
-        const calls = [];
-        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
-        const started = Date.now();
-        await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_timeout', tempDir) }));
-        assert.ok(Date.now() - started < 5000);
-        assert.strictEqual(calls.length, 0);
+        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '150', async () => {
+          const calls = [];
+          const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
+          const started = Date.now();
+          await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_timeout', tempDir) }));
+          const elapsed = Date.now() - started;
+          assert.ok(elapsed >= 75, `expected timeout path, completed in ${elapsed}ms`);
+          assert.ok(elapsed < 2000, `timeout path took ${elapsed}ms`);
+          assert.strictEqual(calls.length, 0);
+        });
       } finally { restore(); }
     })) passed++; else failed++;
 
     if (await test('fails open when the bridge exceeds the output limit', async () => {
-      const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'x'.repeat(1024*1024+1)}));\n";
+      const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'x'.repeat(4096)}));\n";
       const restore = replaceTemporarily(bridgePath, stub);
       try {
-        const calls = [];
-        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
-        await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_oversize', tempDir) }));
-        assert.strictEqual(calls.length, 0);
+        await withEnvironment('EGC_SESSION_CONTEXT_MAX_BYTES', '1024', async () => {
+          const calls = [];
+          const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
+          await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_oversize', tempDir) }));
+          assert.strictEqual(calls.length, 0);
+        });
       } finally { restore(); }
     })) passed++; else failed++;
 

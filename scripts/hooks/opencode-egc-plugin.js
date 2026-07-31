@@ -17,8 +17,15 @@ const SESSION_CONTEXT_SCRIPT = path.join(
   'hooks',
   'opencode-session-start.js'
 );
-const SESSION_CONTEXT_TIMEOUT_MS = 3000;
-const MAX_SESSION_CONTEXT_BYTES = 1024 * 1024;
+const DEFAULT_SESSION_CONTEXT_TIMEOUT_MS = 3000;
+const DEFAULT_MAX_SESSION_CONTEXT_BYTES = 1024 * 1024;
+
+function positiveIntegerEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw || !/^\d+$/.test(raw)) return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
 
 function sessionInfoFromEvent(event) {
   const info = event?.properties?.info;
@@ -38,6 +45,14 @@ function parseSessionContextOutput(stdout) {
 
 function loadSessionContext(projectDirectory, sessionId) {
   return new Promise(resolve => {
+    const timeoutMs = positiveIntegerEnv(
+      'EGC_SESSION_CONTEXT_TIMEOUT_MS',
+      DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+    );
+    const maxOutputBytes = positiveIntegerEnv(
+      'EGC_SESSION_CONTEXT_MAX_BYTES',
+      DEFAULT_MAX_SESSION_CONTEXT_BYTES
+    );
     let settled = false;
     let timer;
     let stdout = '';
@@ -66,12 +81,12 @@ function loadSessionContext(projectDirectory, sessionId) {
     timer = setTimeout(() => {
       child.kill();
       finish('');
-    }, SESSION_CONTEXT_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => {
       stdoutBytes += Buffer.byteLength(chunk);
-      if (stdoutBytes > MAX_SESSION_CONTEXT_BYTES) {
+      if (stdoutBytes > maxOutputBytes) {
         child.kill();
         finish('');
         return;

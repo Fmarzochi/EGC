@@ -40,6 +40,7 @@ const {
 } = require('../claude-settings-hooks');
 
 const HOOK_LIB_SOURCES = [
+  'scripts/lib/session-start-adapter.js',
   'scripts/lib/session-context-loader.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/global-state.js',
