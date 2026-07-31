@@ -43,6 +43,32 @@ function parseSessionContextOutput(stdout) {
   }
 }
 
+function withTimeout(operation, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('OpenCode session operation timed out.'));
+    }, timeoutMs);
+
+    Promise.resolve(operation).then(
+      value => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      error => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 function loadSessionContext(projectDirectory, sessionId) {
   return new Promise(resolve => {
     const timeoutMs = positiveIntegerEnv(
@@ -129,13 +155,20 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
       const context = await loadSessionContext(projectDirectory, info.id);
       if (!context) return;
 
-      await prompt.call(client.session, {
-        path: { id: info.id },
-        body: {
-          noReply: true,
-          parts: [{ type: 'text', text: context }],
-        },
-      });
+      const timeoutMs = positiveIntegerEnv(
+        'EGC_SESSION_CONTEXT_TIMEOUT_MS',
+        DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+      );
+      await withTimeout(
+        prompt.call(client.session, {
+          path: { id: info.id },
+          body: {
+            noReply: true,
+            parts: [{ type: 'text', text: context }],
+          },
+        }),
+        timeoutMs
+      );
       injectedSessionIds.add(info.id);
     } catch {
       // Context restoration is best-effort and must never block a session.
