@@ -113,6 +113,7 @@ sh scripts/install.sh
 > **Note:** Gemini CLI free tier was discontinued on June 18, 2026 for individual users. The `~/.gemini/GEMINI.md` target still works for paid Google accounts. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative: EGC supports it via `egc install --target antigravity`.
 4. Registers both MCP servers in every detected tool's config file
 5. Asks interactively whether to install the prompt library (63 agents, 230 skills, 77 commands): skipped automatically in CI
+6. Installs the Token Crusher binary shim (`~/.egc/bin`): a best-effort, non-fatal step, see [Token Crusher](#token-crusher) below
 
 ### Example output
 
@@ -130,7 +131,11 @@ EGC install
   ✓ registered in Cursor
   ✓ registered in Gemini CLI  ← paid accounts only; see note above
 
-Install prompt library? (63 agents, 229 skills, 76 commands) [y/N]:
+Install prompt library? (63 agents, 230 skills, 77 commands) [y/N]:
+
+Installing Token Crusher binary shim...
+Shim directory: ~/.egc/bin
+Installed: git, npm, gh, ...
 
 Installation complete.
 Run 'egc doctor' to verify.
@@ -252,6 +257,16 @@ egc discover           # scan recent session transcripts for crushable output th
 ```
 
 On hook-capable harnesses the bash dispatcher routes eligible simple commands through `egc run` automatically. The rewrite is strictly fail-open: pipelines, chaining, redirection, already-wrapped commands, or a missing `egc` CLI all pass through untouched. Opt out anytime with `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`.
+
+**Known limitation:** on Claude Code, that hook rewrite does not fire for commands the AI assistant itself runs through the Bash tool -- only for a human typing directly into the terminal. This is a confirmed, permanent gap in how Claude Code's `PreToolUse` hook applies to assistant-issued commands, not an EGC bug.
+
+To cover that gap, `egc install` and `egc auto-update` also install a PATH-level binary shim under `~/.egc/bin`, covering `git`, `npm`, `pnpm`, `yarn`, `bun`, `pip`, `pip3`, `poetry`, `pipenv`, `uv`, `composer`, `bundle`, and `gh`: small launcher files that sit ahead of the real binaries on `PATH` and route through the same compression engine. Because it works via normal shell `PATH` resolution, it compresses output for any caller -- a human, this AI, or another tool entirely -- regardless of hook support. It requires a new shell session after install to pick up the `PATH` change. Manage it directly with:
+
+```bash
+egc crusher-shim install    # add the shim to ~/.egc/bin and your shell's PATH
+egc crusher-shim status     # check whether it's installed and active in this shell
+egc crusher-shim uninstall  # remove it
+```
 
 ---
 

@@ -179,7 +179,7 @@ echo "  ✓ egc-memory build verified"
 # (MCP registration, ecosystem install, the Token Crusher shim below) on any
 # warning, however minor. This is a status report, not a gate: never let it
 # be fatal to the install.
-node scripts/egc.js doctor || true
+node scripts/egc.js doctor --repo-root "$ROOT_DIR" || true
 
 # Interactive ecosystem install (skipped in CI/headless environments)
 if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
