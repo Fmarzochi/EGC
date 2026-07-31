@@ -18,6 +18,29 @@ const { spawnSync } = require('node:child_process');
 const CRUSH_RUN = path.join(__dirname, '..', 'scripts', 'crush-run.js');
 const DISPATCH_MODULE = path.join(__dirname, '..', 'scripts', 'lib', 'crusher', 'shim-dispatch.js');
 
+// Built with String.fromCharCode/RegExp instead of typing the raw U+2028 and
+// U+2029 characters, so this file never carries invisible codepoints of its
+// own while implementing a fix for exactly that class of problem.
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
+const UNSAFE_CODE_CHARS = {
+  '<': '\\u003C',
+  '>': '\\u003E',
+  [LINE_SEPARATOR]: '\\u2028',
+  [PARAGRAPH_SEPARATOR]: '\\u2029',
+};
+const UNSAFE_CODE_CHARS_RE = new RegExp(`[<>${LINE_SEPARATOR}${PARAGRAPH_SEPARATOR}]`, 'g');
+
+// JSON.stringify alone is not a safe way to embed a value inside generated
+// source code: it leaves characters like < > and the U+2028/U+2029 line
+// separators untouched, which can still break out of the surrounding syntax
+// depending on context (flagged by CodeQL as js/bad-code-sanitization). These
+// fake binaries only ever receive fixed test fixtures, never external input,
+// but the construction itself should not rely on that.
+function jsStringLiteral(value) {
+  return JSON.stringify(value).replace(UNSAFE_CODE_CHARS_RE, (c) => UNSAFE_CODE_CHARS[c]);
+}
+
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -32,7 +55,7 @@ function writeShimLauncher(binDir, name) {
   const launcherPath = path.join(binDir, name);
   const source = [
     '#!/usr/bin/env node',
-    `require(${JSON.stringify(DISPATCH_MODULE)}).runShim(${JSON.stringify(name)}, process.argv.slice(2));`,
+    `require(${jsStringLiteral(DISPATCH_MODULE)}).runShim(${jsStringLiteral(name)}, process.argv.slice(2));`,
     '',
   ].join('\n');
   fs.writeFileSync(launcherPath, source);
@@ -53,7 +76,7 @@ function writeRealBinary(dir, name, stdout) {
   // macOS + Node 20.x even after waiting for that callback. fs.writeSync is a
   // genuine blocking syscall (loops internally until every byte is written),
   // so there is nothing left pending by the time this process exits.
-  fs.writeFileSync(binPath, `#!/usr/bin/env node\nrequire('fs').writeSync(1, ${JSON.stringify(stdout)});\nprocess.exit(0);\n`);
+  fs.writeFileSync(binPath, `#!/usr/bin/env node\nrequire('fs').writeSync(1, ${jsStringLiteral(stdout)});\nprocess.exit(0);\n`);
   fs.chmodSync(binPath, 0o755);
   return binPath;
 }
