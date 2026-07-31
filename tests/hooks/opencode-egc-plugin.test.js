@@ -146,9 +146,10 @@ async function runTests() {
       const calls = [];
       const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
       const event = sessionEvent('ses_context', project);
+      const genericDispatch = hooks.event({ event });
+      const specificDispatch = hooks['session.created'](event);
+      await Promise.all([genericDispatch, specificDispatch]);
       await hooks.event({ event });
-      await hooks.event({ event });
-      await hooks['session.created'](event);
       assert.strictEqual(calls.length, 1);
       assert.deepStrictEqual(calls[0].path, { id: 'ses_context' });
       assert.strictEqual(calls[0].body.noReply, true);
@@ -160,12 +161,13 @@ async function runTests() {
       fs.mkdirSync(project, { recursive: true });
       writeState(tempDir, project, 'telemetry-marker');
       const capture = await captureDashboard();
-      process.env.EGC_PORT = String(capture.port);
       try {
-        const hooks = await EgcGuardianCrusher({ client: clientWith([]), directory: project });
-        await hooks.event({ event: sessionEvent('ses_telemetry', project) });
-        const payload = await capture.request;
-        assert.deepStrictEqual(payload, { ide: 'opencode', event: 'session_start', session_id: 'ses_telemetry' });
+        await withEnvironment('EGC_PORT', String(capture.port), async () => {
+          const hooks = await EgcGuardianCrusher({ client: clientWith([]), directory: project });
+          await hooks.event({ event: sessionEvent('ses_telemetry', project) });
+          const payload = await capture.request;
+          assert.deepStrictEqual(payload, { ide: 'opencode', event: 'session_start', session_id: 'ses_telemetry' });
+        });
       } finally {
         await capture.close();
       }
@@ -184,6 +186,27 @@ async function runTests() {
       writeState(tempDir, failing, 'failure-marker');
       hooks = await EgcGuardianCrusher({ client: clientWith([], new Error('rejected')), directory: failing });
       await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_failure', failing) }));
+    })) passed++; else failed++;
+
+    if (await test('fails open when the OpenCode prompt exceeds its timeout', async () => {
+      const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'prompt-timeout-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        let attempts = 0;
+        const client = { session: { prompt: () => {
+          attempts += 1;
+          return new Promise(() => {});
+        } } };
+        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '150', async () => {
+          const hooks = await EgcGuardianCrusher({ client, directory: tempDir });
+          const started = Date.now();
+          await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_prompt_timeout', tempDir) }));
+          const elapsed = Date.now() - started;
+          assert.ok(elapsed >= 75, `expected prompt timeout path, completed in ${elapsed}ms`);
+          assert.ok(elapsed < 2000, `prompt timeout path took ${elapsed}ms`);
+          assert.strictEqual(attempts, 1);
+        });
+      } finally { restore(); }
     })) passed++; else failed++;
 
     if (await test('fails open when the bridge exceeds its timeout', async () => {
