@@ -44,7 +44,7 @@ function implBody({ stdout, exitCode = 0, echoStdin = false, selfSignal }) {
   // The write callback, not a bare statement after write(), is what makes this
   // reliable: stdout to a pipe is asynchronous on POSIX (smaller default pipe
   // buffers on macOS make this bite harder than on Linux), and process.exit()
-  // does not wait for pending writes to flush -- calling it before the write
+  // does not wait for pending writes to flush. Calling it before the write
   // callback fires can truncate the tail of large output non-deterministically
   // by OS and Node version (seen as a real CI flake on macOS + Node 20.x).
   return `process.stdout.write(${JSON.stringify(stdout ?? '')},()=>process.exit(${exitCode}));`;
@@ -221,8 +221,8 @@ function runTests() {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
       // The manifest points at a path that does not exist, and a fresh PATH
-      // lookup for this nonsense name also fails -- must degrade to "command
-      // not found", not an uncaught throw or a hung process.
+      // lookup for this nonsense name also fails, so it must degrade to
+      // "command not found", not an uncaught throw or a hung process.
       seedManifest(dir, { 'totally-fake-binary-xyz-123': path.join(dir, 'does-not-exist') });
       const result = runShim(dir, 'totally-fake-binary-xyz-123', []);
       assert.strictEqual(result.status, 127);

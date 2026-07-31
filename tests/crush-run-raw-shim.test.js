@@ -44,13 +44,16 @@ function writeShimLauncher(binDir, name) {
 // its manifest.
 function writeRealBinary(dir, name, stdout) {
   const binPath = path.join(dir, name);
-  // Exiting only from the write callback, not right after the write() call,
-  // matters here: stdout to a pipe is asynchronous on POSIX, and a bare
-  // process.exit() does not wait for pending writes to flush -- it can
-  // truncate the tail of large output non-deterministically by OS and Node
-  // version (macOS's smaller default pipe buffer makes this bite harder than
-  // on Linux; seen as a real CI flake on macOS + Node 20.x).
-  fs.writeFileSync(binPath, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)}, () => process.exit(0));\n`);
+  // fs.writeSync(1, ...), not process.stdout.write(), matters here: this
+  // binary's stdout fd is inherited across two process hops (crush-run.js's
+  // own pipe, re-inherited by the shim launcher into this process), and
+  // process.stdout.write()'s callback firing does not reliably mean the data
+  // reached the OS pipe buffer across that many hops on every platform. This
+  // was seen as a real CI flake truncating the tail of large output on
+  // macOS + Node 20.x even after waiting for that callback. fs.writeSync is a
+  // genuine blocking syscall (loops internally until every byte is written),
+  // so there is nothing left pending by the time this process exits.
+  fs.writeFileSync(binPath, `#!/usr/bin/env node\nrequire('fs').writeSync(1, ${JSON.stringify(stdout)});\nprocess.exit(0);\n`);
   fs.chmodSync(binPath, 0o755);
   return binPath;
 }
