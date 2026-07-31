@@ -1,32 +1,145 @@
 'use strict';
 
-// EGC Guardian + Token Crusher plugin for OpenCode (docs:
-// https://opencode.ai/docs/plugins). Unlike Claude Code/Cursor/Windsurf --
-// an external hook script spawned as a subprocess per invocation, with an
-// event-specific wire contract on stdin/stdout -- OpenCode loads a plugin
-// file like this one IN-PROCESS: `tool.execute.before(input, output)` runs
-// directly inside OpenCode's own Bun runtime, `output` is a mutable object,
-// and throwing blocks the tool call. That lets this plugin call straight
-// into the same run() functions the other hosts' adapters spawn as
-// subprocesses -- no translation adapter needed, just the two requires
-// below.
-//
-// EGC-498: OpenCode is the only one of the four newly-researched hosts
-// (Windsurf, Cursor, OpenCode, Kiro) whose hook contract supports mutating
-// the tool call before it runs (`output.args.command = ...`), which the
-// Token Crusher's rewrite-based design requires. Windsurf/Cursor/Kiro are
-// block-only, so they only get the Guardian, not the Crusher, until a
-// non-rewrite mechanism exists for them.
-//
-// pre-bash-guardian-validate.js's run() and pre-bash-crusher-rewrite.js's
-// run() are copied alongside this file (same targetRoot, preserve-relative-
-// path), so these requires resolve at install time.
+// EGC SessionStart + Guardian + Token Crusher plugin for OpenCode. OpenCode
+// loads this file in-process; Guardian and Crusher run directly, while session
+// restoration is delegated to a fail-open Node adapter around the shared,
+// host-neutral session-context-loader core.
 
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 const { run: runGuardian } = require('../scripts/hooks/pre-bash-guardian-validate');
 const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-rewrite');
 
-const EgcGuardianCrusher = async ({ directory } = {}) => {
+const SESSION_CONTEXT_SCRIPT = path.join(
+  __dirname,
+  '..',
+  'scripts',
+  'hooks',
+  'opencode-session-start.js'
+);
+const SESSION_CONTEXT_TIMEOUT_MS = 3000;
+const MAX_SESSION_CONTEXT_BYTES = 1024 * 1024;
+
+function sessionInfoFromEvent(event) {
+  const info = event?.properties?.info;
+  return info && typeof info.id === 'string' && info.id ? info : null;
+}
+
+function parseSessionContextOutput(stdout) {
+  try {
+    const parsed = JSON.parse(stdout);
+    return typeof parsed?.context === 'string' && parsed.context.trim()
+      ? parsed.context
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+function loadSessionContext(projectDirectory, sessionId) {
+  return new Promise(resolve => {
+    let settled = false;
+    let timer;
+    let stdout = '';
+    let stdoutBytes = 0;
+
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+
+    let child;
+    try {
+      child = spawn(process.execPath, [SESSION_CONTEXT_SCRIPT], {
+        cwd: projectDirectory,
+        env: { ...process.env, OPENCODE_PROJECT_DIR: projectDirectory },
+        stdio: ['pipe', 'pipe', 'ignore'],
+        windowsHide: true,
+      });
+    } catch {
+      finish('');
+      return;
+    }
+
+    timer = setTimeout(() => {
+      child.kill();
+      finish('');
+    }, SESSION_CONTEXT_TIMEOUT_MS);
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', chunk => {
+      stdoutBytes += Buffer.byteLength(chunk);
+      if (stdoutBytes > MAX_SESSION_CONTEXT_BYTES) {
+        child.kill();
+        finish('');
+        return;
+      }
+      stdout += chunk;
+    });
+    child.stdout.on('error', () => finish(''));
+    child.on('error', () => finish(''));
+    child.on('close', code => {
+      finish(code === 0 ? parseSessionContextOutput(stdout) : '');
+    });
+    child.stdin.on('error', () => {});
+
+    try {
+      child.stdin.end(JSON.stringify({ cwd: projectDirectory, session_id: sessionId }));
+    } catch {
+      child.kill();
+      finish('');
+    }
+  });
+}
+
+const EgcGuardianCrusher = async ({ client, directory } = {}) => {
+  const injectedSessionIds = new Set();
+  const pendingSessionIds = new Set();
+
+  const handleSessionCreated = async event => {
+    const info = sessionInfoFromEvent(event);
+    const prompt = client?.session?.prompt;
+    if (!info || typeof prompt !== 'function') return;
+    if (injectedSessionIds.has(info.id) || pendingSessionIds.has(info.id)) return;
+
+    const projectDirectory = typeof info.directory === 'string' && info.directory
+      ? info.directory
+      : directory;
+    if (typeof projectDirectory !== 'string' || !projectDirectory) return;
+
+    pendingSessionIds.add(info.id);
+    try {
+      const context = await loadSessionContext(projectDirectory, info.id);
+      if (!context) return;
+
+      await prompt.call(client.session, {
+        path: { id: info.id },
+        body: {
+          noReply: true,
+          parts: [{ type: 'text', text: context }],
+        },
+      });
+      injectedSessionIds.add(info.id);
+    } catch {
+      // Context restoration is best-effort and must never block a session.
+    } finally {
+      pendingSessionIds.delete(info.id);
+    }
+  };
+
   return {
+    // Current OpenCode dispatches bus events through this generic hook.
+    event: async ({ event } = {}) => {
+      if (event?.type !== 'session.created') return;
+      await handleSessionCreated(event);
+    },
+
+    // Keep the event-specific form for compatibility with older OpenCode
+    // plugin dispatchers and the repository's existing dogfooding contract.
+    'session.created': handleSessionCreated,
+
     'tool.execute.before': async (input, output) => {
       if (!input || input.tool !== 'bash' || typeof output?.args?.command !== 'string') {
         return;
@@ -34,17 +147,15 @@ const EgcGuardianCrusher = async ({ directory } = {}) => {
 
       const command = output.args.command;
 
-      // Guardian first: a blocked command must never reach the Crusher
-      // rewrite below -- rewriting a command that is about to be denied
-      // anyway is pointless work on the hot path.
-      const guardianResult = runGuardian({ tool_name: 'Bash', tool_input: { command }, cwd: directory });
+      const guardianResult = runGuardian({
+        tool_name: 'Bash',
+        tool_input: { command },
+        cwd: directory,
+      });
       if (guardianResult.exitCode === 2) {
         throw new Error(guardianResult.stderr || 'Blocked by the EGC Guardian.');
       }
 
-      // Crusher: run() is fail-open by design (returns the input JSON
-      // unchanged on any error, missing engine, or non-crushable command --
-      // see pre-bash-crusher-rewrite.js), so no try/catch is needed here.
       const rewritten = JSON.parse(runCrusherRewrite({ tool_input: { command } }));
       if (typeof rewritten?.tool_input?.command === 'string') {
         output.args.command = rewritten.tool_input.command;

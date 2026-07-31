@@ -1,41 +1,88 @@
-/**
- * Tests for scripts/hooks/opencode-egc-plugin.js
- *
- * Unlike every other host's hooks.json subprocess adapter, this plugin's
- * require() calls are DESTINATION-relative (`../scripts/hooks/...`), not
- * sibling-relative -- they only resolve once installed at
- * <targetRoot>/plugins/opencode-egc-plugin.js alongside a real
- * <targetRoot>/scripts/hooks and <targetRoot>/scripts/lib tree (see the
- * plugin's own header comment). So these tests drive the real
- * opencode-home.js install plan to materialize that exact shape in a temp
- * dir, then require() the plugin from ITS INSTALLED location -- this
- * exercises the real require-path contract, not a stand-in.
- */
-
+/** Installed-layout tests for scripts/hooks/opencode-egc-plugin.js. */
 const assert = require('assert');
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
-
 const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const FAKE_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
+const SESSION_FILES = [
+  'scripts/hooks/opencode-session-start.js',
+  'scripts/lib/session-context-loader.js',
+  'scripts/lib/branch-state.js',
+  'scripts/lib/global-state.js',
+  'scripts/lib/project-detect.js',
+  'scripts/lib/propagate-state.js',
+  'scripts/lib/state-crypto.js',
+];
 
-function installOpenCodePlugin(homeDir) {
+function install(homeDir) {
   const plan = planInstallTargetScaffold({ target: 'opencode', repoRoot: REPO_ROOT, homeDir, modules: [] });
   for (const operation of plan.operations) {
-    const sourcePath = path.join(REPO_ROOT, operation.sourceRelativePath);
-    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) continue;
+    const source = path.join(REPO_ROOT, operation.sourceRelativePath);
+    if (!fs.existsSync(source) || !fs.statSync(source).isFile()) continue;
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
-    fs.copyFileSync(sourcePath, operation.destinationPath);
+    fs.copyFileSync(source, operation.destinationPath);
   }
-  return path.join(homeDir, '.config', 'opencode', 'plugins', 'opencode-egc-plugin.js');
+  return path.join(homeDir, '.config', 'opencode');
 }
 
-function test(name, fn) {
+function slug(projectDir) {
+  return projectDir.replaceAll('\\', '/').split('/').filter(Boolean)
+    .slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
+}
+
+function writeState(homeDir, projectDir, marker) {
+  const stateDir = path.join(homeDir, '.egc', 'state');
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(path.join(stateDir, `${slug(projectDir)}.md`), `# State\n- ${marker}\n`);
+}
+
+function replaceTemporarily(file, content) {
+  const original = fs.readFileSync(file, 'utf8');
+  fs.writeFileSync(file, content);
+  return () => fs.writeFileSync(file, original);
+}
+
+function sessionEvent(id, directory) {
+  return { type: 'session.created', properties: { info: { id, directory } } };
+}
+
+function clientWith(calls, error) {
+  return { session: { prompt: async input => {
+    if (error) throw error;
+    calls.push(input);
+  } } };
+}
+
+function captureDashboard() {
+  return new Promise((resolve, reject) => {
+    let accept;
+    let fail;
+    const request = new Promise((res, rej) => { accept = res; fail = rej; });
+    const server = http.createServer((incoming, response) => {
+      let body = '';
+      incoming.setEncoding('utf8');
+      incoming.on('data', chunk => { body += chunk; });
+      incoming.on('end', () => {
+        response.writeHead(204).end();
+        try { accept(JSON.parse(body)); } catch (error) { fail(error); }
+      });
+    });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve({
+      port: server.address().port,
+      request,
+      close: () => new Promise(done => server.close(done)),
+    }));
+  });
+}
+
+async function test(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
@@ -45,82 +92,147 @@ function test(name, fn) {
   }
 }
 
-function runTests() {
+async function runTests() {
   console.log('\n=== Testing opencode-egc-plugin ===\n');
-
   let passed = 0;
   let failed = 0;
-
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-plugin-'));
-  const originalGuardianCli = process.env.EGC_GUARDIAN_CLI;
-  const originalAssumeEgcCli = process.env.EGC_ASSUME_EGC_CLI;
+  const savedEnv = Object.fromEntries(['EGC_GUARDIAN_CLI', 'EGC_ASSUME_EGC_CLI', 'HOME', 'USERPROFILE', 'EGC_PORT']
+    .map(key => [key, process.env[key]]));
+
   process.env.EGC_GUARDIAN_CLI = FAKE_CLI;
   process.env.EGC_ASSUME_EGC_CLI = '0';
+  process.env.HOME = tempDir;
+  process.env.USERPROFILE = tempDir;
 
-  let EgcGuardianCrusher;
   try {
-    const installedPluginPath = installOpenCodePlugin(tempDir);
+    const root = install(tempDir);
+    const pluginPath = path.join(root, 'plugins', 'opencode-egc-plugin.js');
+    const bridgePath = path.join(root, 'scripts', 'hooks', 'opencode-session-start.js');
+    let EgcGuardianCrusher;
 
-    if (test('installs the plugin and its Guardian/Crusher dependency tree so require() resolves', () => {
-      assert.ok(fs.existsSync(installedPluginPath), 'plugin file should be copied to plugins/');
-      // Throws if any destination-relative require() target is missing.
-      delete require.cache[require.resolve(installedPluginPath)];
-      ({ EgcGuardianCrusher } = require(installedPluginPath));
+    if (await test('installs the plugin and host-neutral session dependency tree', () => {
+      assert.ok(fs.existsSync(pluginPath));
+      for (const relative of SESSION_FILES) assert.ok(fs.existsSync(path.join(root, relative)), relative);
+      delete require.cache[require.resolve(pluginPath)];
+      ({ EgcGuardianCrusher } = require(pluginPath));
       assert.strictEqual(typeof EgcGuardianCrusher, 'function');
     })) passed++; else failed++;
 
-    if (test('ignores non-bash tools (no-op, does not throw)', async () => {
-      const hooks = await EgcGuardianCrusher({ directory: tempDir });
-      const output = { args: { filePath: '/tmp/x' } };
-      await hooks['tool.execute.before']({ tool: 'read' }, output);
-      assert.deepStrictEqual(output.args, { filePath: '/tmp/x' });
+    if (await test('restores context once across generic and event-specific dispatch', async () => {
+      const project = path.join(tempDir, 'workspaces', 'context');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'opencode-context-marker');
+      const calls = [];
+      const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+      const event = sessionEvent('ses_context', project);
+      await hooks.event({ event });
+      await hooks.event({ event });
+      await hooks['session.created'](event);
+      assert.strictEqual(calls.length, 1);
+      assert.deepStrictEqual(calls[0].path, { id: 'ses_context' });
+      assert.strictEqual(calls[0].body.noReply, true);
+      assert.match(calls[0].body.parts[0].text, /opencode-context-marker/);
     })) passed++; else failed++;
 
-    if (test('ignores a bash input with no command arg (no-op, does not throw)', async () => {
-      const hooks = await EgcGuardianCrusher({ directory: tempDir });
-      const output = { args: {} };
-      await hooks['tool.execute.before']({ tool: 'bash' }, output);
-      assert.deepStrictEqual(output.args, {});
-    })) passed++; else failed++;
-
-    if (test('blocks a destructive command by throwing (Guardian runs before the Crusher rewrite)', async () => {
-      const hooks = await EgcGuardianCrusher({ directory: tempDir });
-      const output = { args: { command: 'rm -rf /' } };
-      await assert.rejects(
-        () => hooks['tool.execute.before']({ tool: 'bash' }, output),
-        /EGC Guardian BLOCKED/
-      );
-      assert.strictEqual(output.args.command, 'rm -rf /', 'must not rewrite a command that gets blocked');
-    })) passed++; else failed++;
-
-    if (test('allows a safe command through unmodified when the Crusher has no CLI to route through', async () => {
-      const hooks = await EgcGuardianCrusher({ directory: tempDir });
-      const output = { args: { command: 'git status' } };
-      await hooks['tool.execute.before']({ tool: 'bash' }, output);
-      assert.strictEqual(output.args.command, 'git status');
-    })) passed++; else failed++;
-
-    if (test('rewrites a crushable safe command through `egc run` when the Crusher CLI is available', async () => {
-      process.env.EGC_ASSUME_EGC_CLI = '1';
+    if (await test('reports OpenCode rather than Claude to the Dashboard', async () => {
+      const project = path.join(tempDir, 'workspaces', 'telemetry');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'telemetry-marker');
+      const capture = await captureDashboard();
+      process.env.EGC_PORT = String(capture.port);
       try {
-        const hooks = await EgcGuardianCrusher({ directory: tempDir });
-        const output = { args: { command: 'npm test' } };
-        await hooks['tool.execute.before']({ tool: 'bash' }, output);
-        assert.strictEqual(output.args.command, 'egc run npm test');
+        const hooks = await EgcGuardianCrusher({ client: clientWith([]), directory: project });
+        await hooks.event({ event: sessionEvent('ses_telemetry', project) });
+        const payload = await capture.request;
+        assert.deepStrictEqual(payload, { ide: 'opencode', event: 'session_start', session_id: 'ses_telemetry' });
       } finally {
-        process.env.EGC_ASSUME_EGC_CLI = '0';
+        await capture.close();
       }
     })) passed++; else failed++;
+
+    if (await test('skips empty context and fails open on prompt rejection', async () => {
+      const empty = path.join(tempDir, 'workspaces', 'empty');
+      fs.mkdirSync(empty, { recursive: true });
+      const calls = [];
+      let hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: empty });
+      await hooks.event({ event: sessionEvent('ses_empty', empty) });
+      assert.strictEqual(calls.length, 0);
+
+      const failing = path.join(tempDir, 'workspaces', 'failing');
+      fs.mkdirSync(failing, { recursive: true });
+      writeState(tempDir, failing, 'failure-marker');
+      hooks = await EgcGuardianCrusher({ client: clientWith([], new Error('rejected')), directory: failing });
+      await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_failure', failing) }));
+    })) passed++; else failed++;
+
+    if (await test('fails open when the bridge exceeds its timeout', async () => {
+      const restore = replaceTemporarily(bridgePath, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000);\n");
+      try {
+        const calls = [];
+        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
+        const started = Date.now();
+        await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_timeout', tempDir) }));
+        assert.ok(Date.now() - started < 5000);
+        assert.strictEqual(calls.length, 0);
+      } finally { restore(); }
+    })) passed++; else failed++;
+
+    if (await test('fails open when the bridge exceeds the output limit', async () => {
+      const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'x'.repeat(1024*1024+1)}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        const calls = [];
+        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
+        await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_oversize', tempDir) }));
+        assert.strictEqual(calls.length, 0);
+      } finally { restore(); }
+    })) passed++; else failed++;
+
+    if (await test('ignores unrelated or malformed events and missing clients', async () => {
+      const withoutClient = await EgcGuardianCrusher({ directory: tempDir });
+      await assert.doesNotReject(() => withoutClient.event({ event: sessionEvent('ses_no_client', tempDir) }));
+      const calls = [];
+      const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: tempDir });
+      await hooks.event();
+      await hooks.event({ event: { type: 'session.idle', properties: {} } });
+      await hooks.event({ event: { type: 'session.created', properties: { info: { directory: tempDir } } } });
+      assert.strictEqual(calls.length, 0);
+    })) passed++; else failed++;
+
+    if (await test('preserves Guardian and Crusher behavior', async () => {
+      let hooks = await EgcGuardianCrusher({ directory: tempDir });
+      const readOutput = { args: { filePath: '/tmp/x' } };
+      await hooks['tool.execute.before']({ tool: 'read' }, readOutput);
+      assert.deepStrictEqual(readOutput.args, { filePath: '/tmp/x' });
+      const missingCommand = { args: {} };
+      await hooks['tool.execute.before']({ tool: 'bash' }, missingCommand);
+      await assert.rejects(
+        () => hooks['tool.execute.before']({ tool: 'bash' }, { args: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      const safe = { args: { command: 'git status' } };
+      await hooks['tool.execute.before']({ tool: 'bash' }, safe);
+      assert.strictEqual(safe.args.command, 'git status');
+      process.env.EGC_ASSUME_EGC_CLI = '1';
+      hooks = await EgcGuardianCrusher({ directory: tempDir });
+      const crushable = { args: { command: 'npm test' } };
+      await hooks['tool.execute.before']({ tool: 'bash' }, crushable);
+      assert.strictEqual(crushable.args.command, 'egc run npm test');
+      process.env.EGC_ASSUME_EGC_CLI = '0';
+    })) passed++; else failed++;
   } finally {
-    if (originalGuardianCli === undefined) delete process.env.EGC_GUARDIAN_CLI;
-    else process.env.EGC_GUARDIAN_CLI = originalGuardianCli;
-    if (originalAssumeEgcCli === undefined) delete process.env.EGC_ASSUME_EGC_CLI;
-    else process.env.EGC_ASSUME_EGC_CLI = originalAssumeEgcCli;
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
-runTests();
+runTests().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

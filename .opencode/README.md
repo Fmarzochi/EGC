@@ -9,17 +9,31 @@ Extended Global Context (EGC) plugin for OpenCode - agents, commands, hooks, and
 
 ## Installation Overview
 
-There are two ways to use Extended Global Context (EGC):
+There are three ways to use Extended Global Context (EGC):
 
-1. **npm package (recommended for most users)**
-   Install via npm/bun/yarn and use the `egc-install` CLI to set up rules and agents.
+1. **EGC OpenCode target (recommended for full EGC installs)**
+   Run `egc install --target opencode` to install the global OpenCode plugin, selected skills, Guardian, Token Crusher, and automatic persistent-context restoration.
 
-2. **Direct clone / plugin mode**
+2. **npm plugin package**
+   Install the OpenCode-specific npm plugin and configure it in `opencode.json`.
+
+3. **Direct clone / plugin mode**
    Clone the repository and run OpenCode directly inside it.
 
 Choose the method that matches your workflow below.
 
-### Option 1: npm Package
+### Option 1: EGC OpenCode Target
+
+Install the EGC CLI and its OpenCode target:
+
+```bash
+npm install -g @egchq/egc
+egc install --target opencode
+```
+
+The installer places the managed plugin under `~/.config/opencode/plugins/` and installs its runtime dependencies under `~/.config/opencode/scripts/`. New OpenCode sessions then restore matching EGC project memory automatically through the `session.created` event. No manual copy from this repository's `.opencode/plugins/` directory is required for context loading.
+
+### Option 2: npm Package
 
 ```bash
 npm install egc-universal
@@ -38,6 +52,7 @@ This loads the EGC OpenCode plugin module from npm:
 - bundled custom tools exported by the plugin
 
 It does **not** auto-register the full EGC command/agent/instruction catalog in your project config. For the full OpenCode setup, either:
+- use `egc install --target opencode`, or
 - run OpenCode inside this repository, or
 - copy the relevant `.opencode/commands/`, `.opencode/prompts/`, `.opencode/instructions/`, and the `instructions`, `agent`, and `command` config entries into your own project
 
@@ -47,7 +62,7 @@ After installation, the `egc-install` CLI is also available:
 npx egc-install typescript
 ```
 
-### Option 2: Direct Use
+### Option 3: Direct Use
 
 Clone and run OpenCode in the repository:
 
@@ -116,6 +131,7 @@ opencode
 
 | Hook | Event | Purpose |
 |------|-------|---------|
+| SessionStart | `event` (`session.created`) | Restore matching EGC project memory |
 | Prettier | `file.edited` | Auto-format JS/TS |
 | TypeScript | `tool.execute.after` | Check for type errors |
 | console.log | `file.edited` | Warn about debug statements |

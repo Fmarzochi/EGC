@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 'use strict';
 
-// Thin Claude Code SessionStart adapter. Shared state discovery and formatting
-// live in session-context-loader.js; this file only translates Claude's stdin
-// contract into that core, writes context to stdout, and reports Claude
-// telemetry to the Dashboard.
+// Thin Node bridge for OpenCode's in-process plugin. It isolates the shared
+// loader behind a fail-open child process, serializes the restored context as
+// data, and reports OpenCode telemetry. The plugin remains responsible for
+// injecting the returned context into the live session.
 
 const fs = require('node:fs');
 const http = require('node:http');
 
-const HOST = 'claude';
+const HOST = 'opencode';
 const rawPort = process.env.EGC_PORT;
 const parsedPort = rawPort && /^\d+$/.test(rawPort) ? Number(rawPort) : NaN;
 const DASHBOARD_PORT = !Number.isNaN(parsedPort) && parsedPort >= 1 && parsedPort <= 65535
@@ -24,7 +24,7 @@ function readStdinJson() {
       return parsed;
     }
   } catch (_error) { // NOSONAR
-    // No stdin payload or invalid JSON: fall back to environment values.
+    // Invalid input is handled as an empty event.
   }
   return {};
 }
@@ -33,14 +33,14 @@ function resolveProjectPath(input) {
   if (typeof input.cwd === 'string' && input.cwd.length > 0) {
     return input.cwd;
   }
-  return process.env.CLAUDE_PROJECT_DIR || process.env.PWD || process.cwd();
+  return process.env.OPENCODE_PROJECT_DIR || process.env.PWD || process.cwd();
 }
 
 function restoreContext(projectPath) {
   try {
     const { loadSessionContext } = require('../lib/session-context-loader');
     return loadSessionContext({ projectPath, host: HOST });
-  } catch (_) { // NOSONAR: missing or broken loader must not block the session
+  } catch (_) { // NOSONAR: missing or broken loader must stay fail-open
     return { host: HOST, context: '' };
   }
 }
@@ -69,9 +69,7 @@ function postSessionStart(host, sessionId) {
 function main() {
   const input = readStdinJson();
   const restored = restoreContext(resolveProjectPath(input));
-  if (typeof restored.context === 'string' && restored.context) {
-    process.stdout.write(restored.context);
-  }
+  process.stdout.write(JSON.stringify(restored));
   postSessionStart(restored.host || HOST, input.session_id || null);
 }
 
