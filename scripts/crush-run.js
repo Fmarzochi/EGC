@@ -9,6 +9,7 @@
 // their exact semantics while their output still gets crushed.
 
 const { spawnSync } = require('node:child_process');
+const { writeSync } = require('node:fs');
 const { crushOutput } = require('./lib/crusher/engine');
 const { record } = require('./lib/crusher/metrics');
 
@@ -57,8 +58,14 @@ function main() {
   const commandLine = commandArgs.join(' ');
   const crushed = raw ? null : crushOutput(commandLine, stdout);
 
+  // fs.writeSync(1, ...), not process.stdout.write(), matters here: stdout to
+  // a pipe is asynchronous on POSIX, and the process.exit() a few lines below
+  // does not wait for a pending write to flush. That truncated the tail of
+  // large output non-deterministically by OS and Node version (confirmed as
+  // a real CI flake on macOS + Node 20.x, audit EGC-521). fs.writeSync is a
+  // genuine blocking syscall, so nothing is left pending when this exits.
   if (crushed) {
-    process.stdout.write(crushed.crushed + '\n');
+    writeSync(1, crushed.crushed + '\n');
     record({
       cmd: commandLine.trim().split(/\s+/)[0],
       kind: crushed.kind,
@@ -67,7 +74,7 @@ function main() {
       tokensSaved: crushed.tokensSaved,
     });
   } else if (stdout) {
-    process.stdout.write(stdout);
+    writeSync(1, stdout);
   }
 
   process.exit(typeof result.status === 'number' ? result.status : 1);

@@ -9,6 +9,29 @@ const { spawnSync } = require('child_process');
 const DISPATCH_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'lib', 'crusher', 'shim-dispatch.js');
 const { needsShellOnWindows } = require('../../scripts/lib/crusher/shim-dispatch');
 
+// Built with String.fromCharCode/RegExp instead of typing the raw U+2028 and
+// U+2029 characters, so this file never carries invisible codepoints of its
+// own while implementing a fix for exactly that class of problem.
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
+const UNSAFE_CODE_CHARS = {
+  '<': '\\u003C',
+  '>': '\\u003E',
+  [LINE_SEPARATOR]: '\\u2028',
+  [PARAGRAPH_SEPARATOR]: '\\u2029',
+};
+const UNSAFE_CODE_CHARS_RE = new RegExp(`[<>${LINE_SEPARATOR}${PARAGRAPH_SEPARATOR}]`, 'g');
+
+// JSON.stringify alone is not a safe way to embed a value inside generated
+// source code: it leaves characters like < > and the U+2028/U+2029 line
+// separators untouched, which can still break out of the surrounding syntax
+// depending on context (flagged by CodeQL as js/bad-code-sanitization). These
+// fake binaries only ever receive fixed test fixtures, never external input,
+// but the construction itself should not rely on that.
+function jsStringLiteral(value) {
+  return JSON.stringify(value).replace(UNSAFE_CODE_CHARS_RE, (c) => UNSAFE_CODE_CHARS[c]);
+}
+
 function withPlatform(value, fn) {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', { value, configurable: true });
@@ -34,14 +57,20 @@ function cleanup(dirPath) {
 // wrapper), matching how the real npm.cmd/npx.cmd wrappers work there.
 function implBody({ stdout, exitCode = 0, echoStdin = false, selfSignal }) {
   if (echoStdin) {
-    return "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(d);process.exit(0);});";
+    return "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(d,()=>process.exit(0));});";
   }
   if (selfSignal) {
     // Simulates a process killed by a signal (Ctrl+C/SIGINT, SIGTERM, ...):
     // spawnSync reports this as status=null, signal=<name> for the parent.
-    return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.kill(process.pid, ${JSON.stringify(selfSignal)});setTimeout(()=>{},1000);`;
+    return `process.stdout.write(${jsStringLiteral(stdout ?? '')},()=>{process.kill(process.pid, ${jsStringLiteral(selfSignal)});});setTimeout(()=>{},1000);`;
   }
-  return `process.stdout.write(${JSON.stringify(stdout ?? '')});process.exit(${exitCode});`;
+  // The write callback, not a bare statement after write(), is what makes this
+  // reliable: stdout to a pipe is asynchronous on POSIX (smaller default pipe
+  // buffers on macOS make this bite harder than on Linux), and process.exit()
+  // does not wait for pending writes to flush. Calling it before the write
+  // callback fires can truncate the tail of large output non-deterministically
+  // by OS and Node version (seen as a real CI flake on macOS + Node 20.x).
+  return `process.stdout.write(${jsStringLiteral(stdout ?? '')},()=>process.exit(${exitCode}));`;
 }
 
 function writeFakeBinary(dir, name, spec) {
@@ -55,7 +84,7 @@ function writeFakeBinary(dir, name, spec) {
   }
 
   const binPath = path.join(dir, name);
-  fs.writeFileSync(binPath, `#!/usr/bin/env node\nrequire(${JSON.stringify(implPath)});\n`);
+  fs.writeFileSync(binPath, `#!/usr/bin/env node\nrequire(${jsStringLiteral(implPath)});\n`);
   fs.chmodSync(binPath, 0o755);
   return binPath;
 }
@@ -215,8 +244,8 @@ function runTests() {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
       // The manifest points at a path that does not exist, and a fresh PATH
-      // lookup for this nonsense name also fails -- must degrade to "command
-      // not found", not an uncaught throw or a hung process.
+      // lookup for this nonsense name also fails, so it must degrade to
+      // "command not found", not an uncaught throw or a hung process.
       seedManifest(dir, { 'totally-fake-binary-xyz-123': path.join(dir, 'does-not-exist') });
       const result = runShim(dir, 'totally-fake-binary-xyz-123', []);
       assert.strictEqual(result.status, 127);
