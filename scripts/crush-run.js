@@ -18,15 +18,21 @@ const SPAWN_OPTIONS = {
   maxBuffer: 64 * 1024 * 1024,
 };
 
-function runCommand(commandArgs, shell) {
+function runCommand(commandArgs, shell, raw) {
+  // A command covered by the PATH-level binary shim (git, npm, ...) resolves
+  // to the shim, not the real binary, regardless of this flag: the shim runs
+  // as an independent child process and would compress the output itself
+  // before crush-run.js ever sees it. EGC_CRUSHER_RAW tells the shim to
+  // passthrough instead, so --raw actually reaches stdout raw end-to-end.
+  const options = raw ? { ...SPAWN_OPTIONS, env: { ...process.env, EGC_CRUSHER_RAW: '1' } } : SPAWN_OPTIONS;
   if (shell) {
     // The rewrite hook passes the full command line as a single argument, so the
     // platform shell (/bin/sh on POSIX, cmd.exe on Windows) re-parses it exactly
     // as the caller's shell would have. shell: true keeps this portable instead
     // of hardcoding a bash path that does not exist on every OS.
-    return spawnSync(commandArgs.join(' '), { ...SPAWN_OPTIONS, shell: true });
+    return spawnSync(commandArgs.join(' '), { ...options, shell: true });
   }
-  return spawnSync(commandArgs[0], commandArgs.slice(1), { ...SPAWN_OPTIONS, shell: false });
+  return spawnSync(commandArgs[0], commandArgs.slice(1), { ...options, shell: false });
 }
 
 function main() {
@@ -40,7 +46,7 @@ function main() {
     process.exit(commandArgs.length === 0 ? 1 : 0);
   }
 
-  const result = runCommand(commandArgs, shell);
+  const result = runCommand(commandArgs, shell, raw);
 
   if (result.error) {
     console.error(`egc run: ${result.error.message}`);

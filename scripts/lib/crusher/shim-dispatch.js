@@ -75,7 +75,11 @@ function runShim(name, args) {
     process.exit(127);
   }
 
-  if (process.stdout.isTTY) {
+  // Set by crush-run.js when the caller asked for `egc run --raw`: the outer
+  // process already decided to skip compression, but the shim would resolve
+  // and compress on its own otherwise, since it runs as an independent child
+  // with no other visibility into that intent.
+  if (process.env.EGC_CRUSHER_RAW === '1' || process.stdout.isTTY) {
     return passthrough(realBinary, args);
   }
 

@@ -109,6 +109,24 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('EGC_CRUSHER_RAW=1 bypasses compression for a large non-generic command (egc run --raw escape hatch, audit EGC-521)', () => {
+    const dir = createTempDir('egc-shim-dispatch-');
+    try {
+      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
+      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
+      seedManifest(dir, { git: fakeGit });
+
+      const result = runShim(dir, 'git', ['log', '--stat'], {
+        env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' },
+      });
+      assert.strictEqual(result.status, 0);
+      assert.strictEqual(result.stdout, bigBody, 'expected the exact raw output, not the compressed form');
+      assert.ok(!result.stdout.includes('[egc-crusher]'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('a generic command (git status) never gets captured or compressed, even with large output', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {

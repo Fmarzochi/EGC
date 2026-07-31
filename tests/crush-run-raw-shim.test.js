@@ -1,0 +1,126 @@
+'use strict';
+/**
+ * End-to-end regression test for EGC-521: `egc run --raw <cmd>` must return
+ * the real raw output even when <cmd> resolves through the Token Crusher
+ * PATH shim (git, npm, ...) instead of the real binary. Before this fix, the
+ * shim ran as an independent child process with no visibility into --raw and
+ * compressed the output anyway, so crush-run.js's own "skip compression"
+ * path just forwarded output that was already crushed.
+ *
+ * Run with: node tests/crush-run-raw-shim.test.js
+ */
+const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const CRUSH_RUN = path.join(__dirname, '..', 'scripts', 'crush-run.js');
+const DISPATCH_MODULE = path.join(__dirname, '..', 'scripts', 'lib', 'crusher', 'shim-dispatch.js');
+
+function createTempDir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function cleanup(...dirs) {
+  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Mirrors shim-install.js's posixLauncherSource(): the exact launcher shape
+// `egc crusher-shim install` writes to ~/.egc/bin/<name>.
+function writeShimLauncher(binDir, name) {
+  const launcherPath = path.join(binDir, name);
+  const source = [
+    '#!/usr/bin/env node',
+    `require(${JSON.stringify(DISPATCH_MODULE)}).runShim(${JSON.stringify(name)}, process.argv.slice(2));`,
+    '',
+  ].join('\n');
+  fs.writeFileSync(launcherPath, source);
+  fs.chmodSync(launcherPath, 0o755);
+  return launcherPath;
+}
+
+// Stands in for the real /usr/bin/git that the shim launcher resolves to via
+// its manifest.
+function writeRealBinary(dir, name, stdout) {
+  const binPath = path.join(dir, name);
+  fs.writeFileSync(binPath, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)});\n`);
+  fs.chmodSync(binPath, 0o755);
+  return binPath;
+}
+
+function setUpShimmedGit(home, bigBody) {
+  const shimBin = path.join(home, '.egc', 'bin');
+  fs.mkdirSync(shimBin, { recursive: true });
+  const realBinDir = createTempDir('egc-crush-run-raw-real-');
+  const realGit = writeRealBinary(realBinDir, 'git', bigBody);
+  writeShimLauncher(shimBin, 'git');
+  fs.writeFileSync(path.join(shimBin, 'manifest.json'), JSON.stringify({ git: realGit }));
+  return { shimBin, realBinDir };
+}
+
+function test(name, fn) {
+  try {
+    fn();
+    console.log(`  PASS ${name}`);
+    return true;
+  } catch (err) {
+    console.log(`  FAIL ${name}`);
+    console.log(`    ${err.stack || err.message}`);
+    return false;
+  }
+}
+
+let passed = 0;
+let failed = 0;
+const runCase = (name, fn) => { if (test(name, fn)) passed++; else failed++; };
+
+console.log('\n=== Testing egc run --raw against the PATH-level Token Crusher shim (EGC-521) ===\n');
+
+// The shim ships as a POSIX shebang launcher; Windows uses a separate .cmd
+// mechanism not exercised here (see needsShellOnWindows coverage instead).
+if (process.platform !== 'win32') {
+  const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
+
+  runCase('egc run --raw returns the true raw output, not the shim\'s compressed form', () => {
+    const home = createTempDir('egc-crush-run-raw-');
+    const { shimBin, realBinDir } = setUpShimmedGit(home, bigBody);
+    try {
+      const env = {
+        ...process.env,
+        HOME: home,
+        USERPROFILE: home,
+        PATH: `${shimBin}${path.delimiter}${process.env.PATH}`,
+      };
+
+      const result = spawnSync(process.execPath, [CRUSH_RUN, '--raw', 'git', 'log', '--stat'], { encoding: 'utf8', env });
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.stdout, bigBody, 'expected the exact raw output through egc run --raw, even though "git" on PATH resolves to the shim');
+      assert.ok(!result.stdout.includes('[egc-crusher]'), '--raw must never show the compression marker');
+    } finally {
+      cleanup(home, realBinDir);
+    }
+  });
+
+  runCase('without --raw, the same setup still compresses through the shim (sanity check)', () => {
+    const home = createTempDir('egc-crush-run-raw-');
+    const { shimBin, realBinDir } = setUpShimmedGit(home, bigBody);
+    try {
+      const env = {
+        ...process.env,
+        HOME: home,
+        USERPROFILE: home,
+        PATH: `${shimBin}${path.delimiter}${process.env.PATH}`,
+      };
+
+      const result = spawnSync(process.execPath, [CRUSH_RUN, 'git', 'log', '--stat'], { encoding: 'utf8', env });
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes('[egc-crusher] saved'), 'expected the crusher marker when --raw is not passed');
+    } finally {
+      cleanup(home, realBinDir);
+    }
+  });
+}
+
+console.log(`\n${passed} passed, ${failed} failed\n`);
+process.exit(failed > 0 ? 1 : 0);
