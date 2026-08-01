@@ -3,6 +3,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// Ensures populated memory can never reach a commit for this project, before
+// the first byte of real content is written to any propagation file. See the
+// identical guard in mcp/servers/egc-memory/src/propagate.ts for why this
+// can't just be a one-time `egc init` step: a project that only ever ran
+// `egc install` (the README's own documented command) never got this
+// protection otherwise. Best-effort and silent -- never blocks the actual
+// memory write the caller is waiting on.
+function ensureCommitPrivacy(projectPath) {
+  try {
+    const { configureMemoryFilters } = require('./memory-filters');
+    const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'check-state-leak.js');
+    configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
+  } catch {
+    // best-effort: never let commit-privacy setup break memory propagation
+  }
+}
+
 const EGC_START = '<!-- egc:start -->';
 const EGC_END = '<!-- egc:end -->';
 const MAX_ITEMS = 5;
@@ -326,6 +343,7 @@ function writeLlmsTxt(projectPath, parsed) {
 }
 
 function propagateStateContent(projectPath, stateContent) {
+  ensureCommitPrivacy(projectPath);
   const parsed = parseStateContent(stateContent);
   const block = buildSummaryBlock(parsed);
 

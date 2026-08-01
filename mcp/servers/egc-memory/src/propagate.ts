@@ -1,6 +1,42 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// scripts/lib/memory-filters.js lives outside this package's src/ tree (tsconfig
+// rootDir is "src"), so a static import would break the build -- required at
+// runtime instead, mirroring the tryRequire pattern already used by
+// scripts/hooks/pre-bash-crusher-rewrite.js for the same kind of cross-package
+// reach. The npm package's "files" list ships scripts/ and
+// mcp/servers/egc-memory/build/ at the same relative depth as this repo, so the
+// path below resolves identically in a real `npm install -g` layout.
+function tryRequireMemoryFilters(): typeof import('../../../../scripts/lib/memory-filters') | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../../../../scripts/lib/memory-filters');
+  } catch {
+    return null;
+  }
+}
+
+// Ensures populated memory can never reach a commit for this project, before
+// the first byte of real content is written to any propagation file.
+// Previously this only happened via the separate, manual `egc init` command
+// (scripts/init.js) -- a project that only ever ran `egc install` (the exact
+// command the README documents) never got this protection unless the user
+// also ran `egc init` by hand. Best-effort and silent: this is a privacy
+// convenience, not a correctness gate, so any failure here (no git binary, a
+// read-only filesystem, projectPath not a repo) must never block the actual
+// memory write that the caller is waiting on.
+function ensureCommitPrivacy(projectPath: string): void {
+  try {
+    const memoryFilters = tryRequireMemoryFilters();
+    if (!memoryFilters) return;
+    const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
+    memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
+  } catch {
+    // best-effort: never let commit-privacy setup break memory propagation
+  }
+}
+
 export interface PropagateArgs {
   projectPath: string;
   context?: string;
@@ -333,6 +369,7 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 }
 
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
+  ensureCommitPrivacy(args.projectPath);
   const block = buildSummaryBlock(args);
   return {
     cursor: writeCursorContext(args.projectPath, block),

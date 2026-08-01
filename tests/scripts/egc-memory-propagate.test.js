@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const SERVER_ROOT = path.join(__dirname, '../../mcp/servers/egc-memory');
 const PROPAGATE_PATH = path.join(SERVER_ROOT, 'build', 'propagate.js');
@@ -445,6 +446,35 @@ async function runTests() {
       assert.ok(result.cursor, 'cursor path should be returned');
       const mdc = fs.readFileSync(result.cursor, 'utf-8');
       assert.ok(mdc.includes('EGC Project Memory'), 'header present');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateToTools({ projectPath: dir, ...args });
+      const attributesPath = path.join(dir, '.git', 'info', 'attributes');
+      const attributes = fs.readFileSync(attributesPath, 'utf-8');
+      assert.ok(attributes.includes('AGENTS.md filter=egc-memory'), 'AGENTS.md is bound to the filter');
+      assert.ok(attributes.includes('CLAUDE.md filter=egc-memory'), 'CLAUDE.md is bound to the filter');
+      const filterConfig = execFileSync('git', ['config', '--get', 'filter.egc-memory.clean'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.ok(filterConfig.includes('check-state-leak.js'), 'clean filter command is configured');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('does not throw when projectPath is not a git repository (audit EGC-547)', () => {
+    const dir = mktemp();
+    try {
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.cursor, null, 'propagation still runs normally outside a git repo');
     } finally {
       cleanup(dir);
     }

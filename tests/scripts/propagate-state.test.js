@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const { propagateStateContent } = require('../../scripts/lib/propagate-state');
 
@@ -539,6 +540,35 @@ function runFreshnessGuardTests() {
         content.includes('<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->'),
         'stamp advanced to the newer timestamp'
       );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateContent(dir, SAMPLE_STATE);
+      const attributesPath = path.join(dir, '.git', 'info', 'attributes');
+      const attributes = fs.readFileSync(attributesPath, 'utf-8');
+      assert.ok(attributes.includes('AGENTS.md filter=egc-memory'), 'AGENTS.md is bound to the filter');
+      const filterConfig = execFileSync('git', ['config', '--get', 'filter.egc-memory.clean'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.ok(filterConfig.includes('check-state-leak.js'), 'clean filter command is configured');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not throw when projectPath is not a git repository', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.agents, 'propagation still runs normally outside a git repo');
     } finally {
       cleanup(dir);
     }
