@@ -93,6 +93,11 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
         alreadyConfigured = false;
       }
       if (alreadyConfigured) {
+        // A driver configured before the smudge fix existed may have only
+        // `clean` set. Hardening straight to required=true here without also
+        // ensuring `smudge=cat` would turn every checkout/worktree/clone on
+        // this repo into a hard "smudge filter egc-memory failed" failure.
+        execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], { cwd: projectDir, encoding: 'utf8' });
         execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], { cwd: projectDir, encoding: 'utf8' });
       }
     }

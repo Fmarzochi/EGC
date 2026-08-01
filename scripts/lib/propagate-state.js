@@ -110,6 +110,11 @@ function ensureCommitPrivacy(projectPath) {
         alreadyConfigured = false;
       }
       if (alreadyConfigured) {
+        // A driver configured before the smudge fix existed may have only
+        // `clean` set. Hardening straight to required=true here without also
+        // ensuring `smudge=cat` would turn every checkout/worktree/clone on
+        // this repo into a hard "smudge filter egc-memory failed" failure.
+        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat'], { cwd: projectPath, encoding: 'utf8' });
         execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], { cwd: projectPath, encoding: 'utf8' });
       }
       throw new Error(`commit-privacy clean-filter script not found at ${scriptPath}`);

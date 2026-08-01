@@ -172,6 +172,21 @@ run('hardens an already-configured filter to required=true even when the script 
   assert.strictEqual(required, 'true', 'an already-configured driver must be hardened even when the script goes missing later');
 });
 
+run('hardening a pre-smudge-fix install adds smudge=cat, not just required=true (audit EGC-547, checkout regression)', () => {
+  const { dir, git } = makeRepo();
+  // Simulate an install from before the smudge fix existed: clean is
+  // configured, but smudge and required were never set.
+  git('config', `filter.${FILTER_NAME}.clean`, `node ${LEAK_SCRIPT} --filter-clean`);
+
+  const missingScript = path.join(dir, 'this-script-does-not-exist.js');
+  configureMemoryFilters({ projectDir: dir, scriptPath: missingScript, dryRun: false });
+
+  const required = git('config', `filter.${FILTER_NAME}.required`).trim();
+  assert.strictEqual(required, 'true');
+  const smudge = git('config', `filter.${FILTER_NAME}.smudge`).trim();
+  assert.strictEqual(smudge, 'cat', 'hardening to required=true must not skip smudge, or checkout breaks on this repo');
+});
+
 run('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
   const { dir } = makeRepo();
   const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
