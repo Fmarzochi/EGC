@@ -102,20 +102,39 @@ function isStackFrame(line) {
 // is npm's own "> pkg@version script-name" banner line that `npm run
 // <script>`/`npm test` always prints first -- both start with `>`/`E` at
 // the same indentation, so an indentation requirement would just trade
-// one false positive for a false negative on real pytest output. Exclude
-// the npm banner shape explicitly instead.
+// one false positive for a false negative on real pytest output. The npm
+// banner is excluded by position instead (see npmScriptBannerLineCount
+// below), not by shape, since its second line ("> resolved-command") has
+// no shape of its own to exclude.
 const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
-const NPM_SCRIPT_BANNER_RE = /^>\s+\S+@\S+\s/;
 const ASSERT_DETAIL_GO_RE = /^\s+(expected|actual|got|want)\s*:/i;
 const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
 const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
 
 function isAssertionDetail(line) {
-  if (NPM_SCRIPT_BANNER_RE.test(line)) return false;
   return ASSERT_DETAIL_PYTEST_RE.test(line)
     || ASSERT_DETAIL_GO_RE.test(line)
     || ASSERT_DETAIL_RUST_RE.test(line)
     || ASSERT_DETAIL_CARET_RE.test(line);
+}
+
+// npm's own two-line banner -- "> pkg@version script-name" followed by
+// "> resolved-command" -- is always printed together at the very start of
+// `npm run <script>`/`npm test`, before any of the script's own output.
+// Both lines share the same column-0 "> " shape as a real pytest detail
+// line, so isAssertionDetail() can't tell them apart by shape alone: the
+// first line has a recognizable pkg@version marker, but the second is just
+// whatever command package.json resolved to, with no shape of its own.
+// Recognized by position instead -- this banner can only ever be the first
+// two lines of the whole output.
+const NPM_SCRIPT_BANNER_RE = /^>\s+\S+@\S+\s/;
+const NPM_BANNER_CONTINUATION_RE = /^>\s+\S/;
+
+function npmScriptBannerLineCount(lines) {
+  if (NPM_SCRIPT_BANNER_RE.test(lines[0] || '') && NPM_BANNER_CONTINUATION_RE.test(lines[1] || '')) {
+    return 2;
+  }
+  return 0;
 }
 
 // System-level failure signals that never contain the word "error": a
@@ -273,7 +292,9 @@ function crushGitDiff(output) {
 
 function crushTestRunner(output) {
   const lines = output.split('\n');
-  const kept = lines.filter(raw => {
+  const bannerLineCount = npmScriptBannerLineCount(lines);
+  const kept = lines.filter((raw, i) => {
+    if (i < bannerLineCount) return false;
     const l = stripAnsi(raw);
     return shouldKeepLine(l)
       || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i.test(l.trim())

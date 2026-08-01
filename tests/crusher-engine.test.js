@@ -230,7 +230,8 @@ run('crusher does not mistake the npm run-script banner for pytest assertion det
   lines.push('done');
   const result = crushOutput('npm test', lines.join('\n'));
   assert.ok(result);
-  assert.ok(!result.crushed.includes('> my-app@1.0.0 test'), 'npm script banner line is not kept as assertion detail');
+  assert.ok(!result.crushed.includes('> my-app@1.0.0 test'), 'npm script banner line 1 is not kept as assertion detail');
+  assert.ok(!result.crushed.includes('> jest --ci'), 'npm script banner line 2 (resolved command) is not kept as assertion detail either');
 });
 
 run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (audit EGC-490)', () => {
