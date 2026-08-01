@@ -138,6 +138,67 @@ run('crushed output preserves localized failures that start with an accented let
   assert.ok(result.crushed.includes('Pânico: estado inválido'), 'Portuguese panic line starting with an accented letter survives');
 });
 
+run('crushed output preserves PascalCase exception class names with no separate keep-word (audit EGC-547)', () => {
+  // KEEP_WORD_EN_RE required a non-word character on both sides of "error"/
+  // "exception", so the same keyword used as a compound-identifier suffix
+  // (TypeError, AssertionError, NullPointerException) was rejected: the
+  // letter right before it ("...e" in "TypeError") is a word character, not
+  // a boundary.
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('    throw new TypeError("not a function")');
+  lines.push('    raise AssertionError("expected 1 got 2")');
+  lines.push('    throws java.lang.NullPointerException');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('TypeError'), 'TypeError survives with no separate "error" word');
+  assert.ok(result.crushed.includes('AssertionError'), 'AssertionError survives with no separate "error" word');
+  assert.ok(result.crushed.includes('NullPointerException'), 'NullPointerException survives with no separate "exception" word');
+});
+
+run('crushed output preserves multi-line assertion detail from pytest, Go, Rust, and compiler caret lines (audit EGC-547)', () => {
+  // The summary line ("assertion failed", "AssertionError") already
+  // contains a keep-word, but the expected/actual values a debugger needs
+  // are printed on separate lines that never repeat that word.
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('FAILED test_math.py::test_add - assert 1 == 2');
+  lines.push('>       assert 1 == 2');
+  lines.push('E       assert 1 == 2');
+  lines.push('--- FAIL: TestAdd (0.00s)');
+  lines.push('    expected: 1');
+  lines.push('    actual: 2');
+  lines.push('assertion `left == right` failed');
+  lines.push('  left: 1');
+  lines.push(' right: 2');
+  lines.push('      x + 1');
+  lines.push('      ^~~~~');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('>       assert 1 == 2'), 'pytest ">" detail line survives');
+  assert.ok(result.crushed.includes('E       assert 1 == 2'), 'pytest "E" detail line survives');
+  assert.ok(result.crushed.includes('expected: 1'), 'Go "expected:" detail line survives');
+  assert.ok(result.crushed.includes('actual: 2'), 'Go "actual:" detail line survives');
+  assert.ok(result.crushed.includes('left: 1'), 'Rust "left:" detail line survives');
+  assert.ok(result.crushed.includes('right: 2'), 'Rust "right:" detail line survives');
+  assert.ok(result.crushed.includes('^~~~~'), 'compiler caret line survives');
+});
+
+run('crushed output preserves the Spanish past-tense verb "falló" (audit EGC-547)', () => {
+  // "fallo" (noun/1st person) and "falló" (3rd person past tense) are
+  // different words -- "falló" is not a substring of "fallo", so it was
+  // simply never in the keyword list at all, not a boundary bug.
+  const lines = [];
+  for (let i = 0; i < 300; i++) lines.push(`  ok caso de prueba ${i} paso normalmente`);
+  lines.push('La conexión falló después de 3 intentos');
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('La conexión falló después de 3 intentos'), 'Spanish past-tense failure line survives');
+});
+
 run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (cubic review, audit EGC-490)', () => {
   assert.strictEqual(commandKind('mvn clean\necho "just a test message, unrelated to mvn goals"'), 'generic');
   assert.strictEqual(commandKind('mvn clean test'), 'test-runner');

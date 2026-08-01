@@ -42,14 +42,26 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 // built from them correctly treats accented letters as word characters.
 const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_PT_RE = /(?<![\p{L}\p{N}_])(erro|falha|aviso|negado|recusado|exceção|pânico)(?![\p{L}\p{N}_])/iu;
-const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|falló|falla|fallé|fallando|fallado|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_FR_DE_IT_RE = /(?<![\p{L}\p{N}_])(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)(?![\p{L}\p{N}_])/iu;
+
+// The boundary regexes above require a NON-word character on both sides,
+// which is correct for a standalone word ("error: x") but wrongly rejects
+// the same keyword used as a PascalCase compound-identifier suffix
+// (TypeError, AssertionError, NullPointerException): the letter immediately
+// before the capitalized keyword ("...e" in "TypeError") fails the negative
+// lookbehind, so the exception class name was silently dropped from every
+// language's test/traceback output. Case-sensitive on purpose -- this only
+// needs to catch the capitalized suffix form; the lowercase standalone form
+// is already covered by KEEP_WORD_EN_RE above.
+const KEEP_WORD_PASCAL_SUFFIX_RE = /(?<=[\p{L}\p{N}_])(Error|Exception|Fatal|Warning|Failure|Panic)(?![\p{L}\p{N}_])/u;
 
 function matchesKeepWord(line) {
   return KEEP_WORD_EN_RE.test(line)
     || KEEP_WORD_PT_RE.test(line)
     || KEEP_WORD_ES_RE.test(line)
-    || KEEP_WORD_FR_DE_IT_RE.test(line);
+    || KEEP_WORD_FR_DE_IT_RE.test(line)
+    || KEEP_WORD_PASCAL_SUFFIX_RE.test(line);
 }
 
 // Stack-trace frame lines carry no keep-word of their own (a Python
@@ -71,6 +83,24 @@ function isStackFrame(line) {
     || STACK_FRAME_CAUSE_RE.test(line);
 }
 
+// Assertion-detail continuation lines: the summary line ("assertion failed",
+// "AssertionError") already contains a keep-word, but the actual expected/
+// actual values a debugger needs are printed on separate lines that never
+// repeat that word, so they were silently stripped even though they are the
+// entire point of keeping the failure. One pattern per shape (rather than one
+// alternation) to keep cyclomatic complexity within SonarCloud's limit.
+const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
+const ASSERT_DETAIL_GO_RE = /^\s*(expected|actual|got|want)\s*:/i;
+const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
+const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
+
+function isAssertionDetail(line) {
+  return ASSERT_DETAIL_PYTEST_RE.test(line)
+    || ASSERT_DETAIL_GO_RE.test(line)
+    || ASSERT_DETAIL_RUST_RE.test(line)
+    || ASSERT_DETAIL_CARET_RE.test(line);
+}
+
 // System-level failure signals that never contain the word "error": a
 // killed or crashed process, or an HTTP status line/code carrying a
 // standard reason phrase. The HTTP pattern requires a known reason phrase
@@ -82,6 +112,7 @@ const HTTP_ERROR_RE = /\b(?:HTTP\/[\d.]+\s+)?[45]\d{2}\s+(Bad Request|Unauthoriz
 function shouldKeepLine(line) {
   return matchesKeepWord(line)
     || isStackFrame(line)
+    || isAssertionDetail(line)
     || SYSTEM_FAILURE_RE.test(line)
     || HTTP_ERROR_RE.test(line);
 }
