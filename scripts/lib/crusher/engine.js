@@ -42,7 +42,7 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 // built from them correctly treats accented letters as word characters.
 const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_PT_RE = /(?<![\p{L}\p{N}_])(erro|falha|aviso|negado|recusado|exceção|pânico)(?![\p{L}\p{N}_])/iu;
-const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|falló|falla|fallé|fallando|fallado|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|falló|falla|fallé|fallando|fallado|fallaron|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_FR_DE_IT_RE = /(?<![\p{L}\p{N}_])(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)(?![\p{L}\p{N}_])/iu;
 
 // The boundary regexes above require a NON-word character on both sides,
@@ -95,13 +95,23 @@ function isStackFrame(line) {
 // indentation measurably narrows (without a whole-output failure-context
 // state machine, out of scope here) the odds of matching an unrelated
 // line of normal column-0 output that happens to start with the same
-// word (cubic review, audit EGC-547).
+// word, audit EGC-547.
+//
+// The pytest pattern can't require indentation the same way: a real
+// pytest detail line ("E       assert 1 == 2") is itself column-0, and so
+// is npm's own "> pkg@version script-name" banner line that `npm run
+// <script>`/`npm test` always prints first -- both start with `>`/`E` at
+// the same indentation, so an indentation requirement would just trade
+// one false positive for a false negative on real pytest output. Exclude
+// the npm banner shape explicitly instead.
 const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
+const NPM_SCRIPT_BANNER_RE = /^>\s+\S+@\S+\s/;
 const ASSERT_DETAIL_GO_RE = /^\s+(expected|actual|got|want)\s*:/i;
 const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
 const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
 
 function isAssertionDetail(line) {
+  if (NPM_SCRIPT_BANNER_RE.test(line)) return false;
   return ASSERT_DETAIL_PYTEST_RE.test(line)
     || ASSERT_DETAIL_GO_RE.test(line)
     || ASSERT_DETAIL_RUST_RE.test(line)
