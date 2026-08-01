@@ -47,7 +47,7 @@ function normalizeEntry(entry) {
 
 /** Resolve the attribution available to a Crusher child process. */
 function resolveMetricContext({ cwd = process.cwd(), env = process.env } = {}) {
-  const project = env.EGC_PROJECT_DIR || env.PROJECT_ROOT || cwd;
+  const project = env.EGC_PROJECT_ROOT || env.EGC_PROJECT_DIR || env.PROJECT_ROOT || cwd;
   const session = env.EGC_SESSION_ID || env.ECC_SESSION_ID;
   return {
     project: normalizeProject(project),
