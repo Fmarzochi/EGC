@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const { propagateStateContent } = require('../../scripts/lib/propagate-state');
 
@@ -539,6 +540,154 @@ function runFreshnessGuardTests() {
         content.includes('<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->'),
         'stamp advanced to the newer timestamp'
       );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateContent(dir, SAMPLE_STATE);
+      const attributesPath = path.join(dir, '.git', 'info', 'attributes');
+      const attributes = fs.readFileSync(attributesPath, 'utf-8');
+      assert.ok(attributes.includes('AGENTS.md filter=egc-memory'), 'AGENTS.md is bound to the filter');
+      const filterConfig = execFileSync('git', ['config', '--get', 'filter.egc-memory.clean'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.ok(filterConfig.includes('check-state-leak.js'), 'clean filter command is configured');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not throw when projectPath is not a git repository', () => {
+    const dir = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.agents, 'propagation still runs normally outside a git repo');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('sets filter.required=true so git refuses to stage through a broken filter (audit EGC-547, P0)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateContent(dir, SAMPLE_STATE);
+      const required = execFileSync('git', ['config', '--get', 'filter.egc-memory.required'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.strictEqual(required, 'true');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('protects a linked worktree by binding the common git dir, not the per-worktree one (audit EGC-547, worktree regression)', () => {
+    const dir = mktemp();
+    let worktreeDir;
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'placeholder.txt'), 'x');
+      execFileSync('git', ['add', 'placeholder.txt'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: dir });
+      worktreeDir = mktemp();
+      execFileSync('git', ['worktree', 'add', worktreeDir, '-b', 'egc-worktree-branch'], { cwd: dir });
+      propagateStateContent(worktreeDir, SAMPLE_STATE);
+      // git always reads info/attributes from the main worktree's .git,
+      // never from .git/worktrees/<name> -- the binding must land there
+      // regardless of which worktree propagateStateContent was run from.
+      const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
+      assert.ok(attrs.includes('AGENTS.md filter=egc-memory'), 'binding lands in the common git dir, not the per-worktree one');
+    } finally {
+      cleanup(dir);
+      if (worktreeDir) cleanup(worktreeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateContent(dir, SAMPLE_STATE);
+      const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
+      assert.ok(attrs.includes('.roorules filter=egc-memory'), '.roorules must be bound, not just .roo/rules/egc-context.md');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      const smudge = execFileSync('git', ['config', '--get', 'filter.egc-memory.smudge'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.strictEqual(smudge, 'cat');
+
+      // End-to-end: with required=true and clean configured but no smudge,
+      // git treats the undefined smudge side as a failed filter and aborts
+      // checkout ("smudge filter egc-memory failed") instead of the
+      // passthru it defaults to when a filter driver is missing entirely.
+      // Prove the real checkout path survives once smudge is set.
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'add AGENTS.md'], { cwd: dir });
+      assert.doesNotThrow(
+        () => execFileSync('git', ['checkout', '--', 'AGENTS.md'], { cwd: dir }),
+        'checkout must not fail through the configured filter'
+      );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      fs.mkdirSync(path.join(dir, '.git', 'info'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, '.git', 'info', 'attributes'),
+        '# AGENTS.md filter=egc-memory\nAGENTS.md filter=egc-memory-something-else\n'
+      );
+      propagateStateContent(dir, SAMPLE_STATE);
+      const attributes = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
+      const realBindingCount = attributes.split('\n').filter(l => l.trim() === 'AGENTS.md filter=egc-memory').length;
+      assert.strictEqual(realBindingCount, 1, 'the real exact binding must be added despite the lookalike lines');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('actually strips populated memory when a bound propagation file is staged (audit EGC-547, end-to-end)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+
+      const populated = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      assert.ok(populated.includes('EGC v1.1.1 stable'), 'sanity: file is actually populated before staging');
+
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      const staged = execFileSync('git', ['show', ':0:AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.ok(!staged.includes('EGC v1.1.1 stable'), 'clean filter must have run and stripped the populated memory before staging');
     } finally {
       cleanup(dir);
     }

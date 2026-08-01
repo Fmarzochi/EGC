@@ -120,5 +120,127 @@ run('non-git directory is skipped with a reason', () => {
   assert.ok(plan.reason.includes('not a git repository'));
 });
 
+run('fails closed (does not configure) when the clean-filter script is missing (audit EGC-547, P0)', () => {
+  const { dir, git } = makeRepo();
+  const missingScript = path.join(dir, 'this-script-does-not-exist.js');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: missingScript, dryRun: false });
+  assert.strictEqual(plan.configured, false, 'must not report success');
+  assert.ok(plan.reason.includes('not found'), 'reason explains why');
+  let cleanConfigured = true;
+  try {
+    git('config', `filter.${FILTER_NAME}.clean`);
+  } catch {
+    cleanConfigured = false;
+  }
+  assert.strictEqual(cleanConfigured, false, 'filter must never be configured to point at a script that is not on disk');
+});
+
+run('sets filter.required=true so git refuses to stage through a broken filter (audit EGC-547, P0)', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  const required = git('config', `filter.${FILTER_NAME}.required`).trim();
+  assert.strictEqual(required, 'true');
+});
+
+run('protects a linked worktree by binding the common git dir, not the per-worktree one (audit EGC-547, worktree regression)', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'placeholder.txt'), 'x');
+  git('add', 'placeholder.txt');
+  git('commit', '-q', '-m', 'init');
+  const worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-worktree-'));
+  git('worktree', 'add', worktreeDir, '-b', 'egc-worktree-branch');
+  configureMemoryFilters({ projectDir: worktreeDir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  // git always reads info/attributes from the main worktree's .git, never
+  // from .git/worktrees/<name> -- the binding must land there regardless of
+  // which worktree configureMemoryFilters was run from.
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  assert.ok(attrs.includes(`AGENTS.md filter=${FILTER_NAME}`), 'binding lands in the common git dir, not the per-worktree one');
+});
+
+run('hardens an already-configured filter to required=true even when the script later goes missing (audit EGC-547, fail-open regression)', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  // Simulate a pre-required=true install: strip the hardening this same
+  // call just applied, as if the repo had been configured by an older
+  // version of this code.
+  git('config', `filter.${FILTER_NAME}.required`, 'false');
+
+  const missingScript = path.join(dir, 'this-script-does-not-exist.js');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: missingScript, dryRun: false });
+  assert.strictEqual(plan.configured, false, 'still must not report success without a real clean script');
+  const required = git('config', `filter.${FILTER_NAME}.required`).trim();
+  assert.strictEqual(required, 'true', 'an already-configured driver must be hardened even when the script goes missing later');
+});
+
+run('hardening a pre-smudge-fix install adds smudge=cat, not just required=true (audit EGC-547, checkout regression)', () => {
+  const { dir, git } = makeRepo();
+  // Simulate an install from before the smudge fix existed: clean is
+  // configured, but smudge and required were never set.
+  git('config', `filter.${FILTER_NAME}.clean`, `node ${LEAK_SCRIPT} --filter-clean`);
+
+  const missingScript = path.join(dir, 'this-script-does-not-exist.js');
+  configureMemoryFilters({ projectDir: dir, scriptPath: missingScript, dryRun: false });
+
+  const required = git('config', `filter.${FILTER_NAME}.required`).trim();
+  assert.strictEqual(required, 'true');
+  const smudge = git('config', `filter.${FILTER_NAME}.smudge`).trim();
+  assert.strictEqual(smudge, 'cat', 'hardening to required=true must not skip smudge, or checkout breaks on this repo');
+});
+
+run('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
+  const { dir } = makeRepo();
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(plan.configured, true);
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  assert.ok(attrs.includes(`.roorules filter=${FILTER_NAME}`), '.roorules must be bound, not just .roo/rules/egc-context.md');
+});
+
+run('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  const smudge = git('config', `filter.${FILTER_NAME}.smudge`).trim();
+  assert.strictEqual(smudge, 'cat');
+
+  // End-to-end: with required=true and clean configured but no smudge, git
+  // treats the undefined smudge side as a failed filter and aborts checkout
+  // ("smudge filter egc-memory failed") instead of the passthru it defaults
+  // to when a filter driver is missing entirely. Prove the real checkout
+  // path (not just the config value) survives once smudge is set.
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'add AGENTS.md');
+  assert.doesNotThrow(() => git('checkout', '--', 'AGENTS.md'), 'checkout must not fail through the configured filter');
+});
+
+run('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
+  const { dir } = makeRepo();
+  fs.mkdirSync(path.join(dir, '.git', 'info'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.git', 'info', 'attributes'),
+    `# AGENTS.md filter=${FILTER_NAME}\nAGENTS.md filter=${FILTER_NAME}-something-else\n`
+  );
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(plan.configured, true);
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  const realBindingCount = attrs.split('\n').filter(l => l.trim() === `AGENTS.md filter=${FILTER_NAME}`).length;
+  assert.strictEqual(realBindingCount, 1, 'the real exact binding must be added despite the lookalike lines');
+});
+
+run('configures and cleans correctly when the script path itself contains a space and a single quote (audit EGC-547, P2)', () => {
+  const { dir, git } = makeRepo();
+  const oddDir = path.join(dir, "a path with spaces and a ' quote");
+  fs.mkdirSync(oddDir, { recursive: true });
+  const oddScriptPath = path.join(oddDir, 'check-state-leak.js');
+  fs.copyFileSync(LEAK_SCRIPT, oddScriptPath);
+
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: oddScriptPath, dryRun: false });
+  assert.strictEqual(plan.configured, true);
+
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md');
+  const staged = git('show', ':0:AGENTS.md');
+  assert.ok(!staged.includes('secret local context'), 'filter actually ran despite the odd path and stripped the content');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

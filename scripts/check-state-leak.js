@@ -41,6 +41,7 @@ const NON_MARKDOWN_TARGETS = [
   '.rules',
   '.clinerules',
   '.cursorrules',
+  '.roorules',
   'CONVENTIONS.md',
   'llms.txt',
 ];

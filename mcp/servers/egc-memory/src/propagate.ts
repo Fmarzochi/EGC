@@ -1,6 +1,62 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// scripts/lib/memory-filters.js lives outside this package's src/ tree (tsconfig
+// rootDir is "src"), so a static import would break the build -- required at
+// runtime instead, mirroring the tryRequire pattern already used by
+// scripts/hooks/pre-bash-crusher-rewrite.js for the same kind of cross-package
+// reach. The npm package's "files" list ships scripts/ and
+// mcp/servers/egc-memory/build/ at the same relative depth as this repo, so the
+// path below resolves identically in a real `npm install -g` layout.
+function tryRequireMemoryFilters(): typeof import('../../../../scripts/lib/memory-filters') | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../../../../scripts/lib/memory-filters');
+  } catch {
+    return null;
+  }
+}
+
+// Ensures populated memory can never reach a commit for this project, before
+// the first byte of real content is written to any propagation file.
+// Previously this only happened via the separate, manual `egc init` command
+// (scripts/init.js) -- a project that only ever ran `egc install` (the exact
+// command the README documents) never got this protection unless the user
+// also ran `egc init` by hand. Best-effort and silent: this is a privacy
+// convenience, not a correctness gate, so any failure here (no git binary, a
+// read-only filesystem, projectPath not a repo) must never block the actual
+// memory write that the caller is waiting on.
+function ensureCommitPrivacy(projectPath: string): void {
+  try {
+    const memoryFilters = tryRequireMemoryFilters();
+    if (!memoryFilters) {
+      // Every other configured:false path below reports why via stderr;
+      // silently returning here would be the one way this function can
+      // leave memory unprotected with zero signal that anything went wrong.
+      process.stderr.write(`[egc-memory] commit-privacy filter module unavailable for ${projectPath}\n`);
+      return;
+    }
+    const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
+    const result = memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
+    // "not a git repository" is the normal, silent case (most MCP calls
+    // aren't rooted in a repo at all); any other configured:false reason
+    // (e.g. the fail-closed script-missing check) means privacy protection
+    // did NOT get set up and the user should know.
+    if (!result.configured && result.reason !== 'not a git repository') {
+      process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: ${result.reason}\n`);
+    }
+  } catch (err) {
+    // Best-effort: never let commit-privacy setup block the memory write the
+    // caller is waiting on. But silent failure here means a real git-config
+    // error (permission denied, git binary crashed) leaves the user with no
+    // signal that populated memory can still reach a commit -- a single
+    // stderr line costs nothing (MCP servers speak MCP over stdout, stderr
+    // is free for diagnostics) and this is the one place that can ever know.
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${message}\n`);
+  }
+}
+
 export interface PropagateArgs {
   projectPath: string;
   context?: string;
@@ -333,6 +389,7 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 }
 
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
+  ensureCommitPrivacy(args.projectPath);
   const block = buildSummaryBlock(args);
   return {
     cursor: writeCursorContext(args.projectPath, block),
