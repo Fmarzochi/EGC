@@ -31,15 +31,21 @@ function ensureCommitPrivacy(projectPath: string): void {
     const memoryFilters = tryRequireMemoryFilters();
     if (!memoryFilters) return;
     const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
-    memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
+    const result = memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
+    // "not a git repository" is the normal, silent case (most MCP calls
+    // aren't rooted in a repo at all); any other configured:false reason
+    // (e.g. the fail-closed script-missing check) means privacy protection
+    // did NOT get set up and the user should know.
+    if (!result.configured && result.reason !== 'not a git repository') {
+      process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: ${result.reason}\n`);
+    }
   } catch (err) {
     // Best-effort: never let commit-privacy setup block the memory write the
     // caller is waiting on. But silent failure here means a real git-config
     // error (permission denied, git binary crashed) leaves the user with no
     // signal that populated memory can still reach a commit -- a single
     // stderr line costs nothing (MCP servers speak MCP over stdout, stderr
-    // is free for diagnostics) and this is the one place that can ever know
-    // (cubic review, audit EGC-547).
+    // is free for diagnostics) and this is the one place that can ever know.
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${message}\n`);
   }

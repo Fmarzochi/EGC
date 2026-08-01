@@ -16,8 +16,18 @@ const path = require('node:path');
 const GIT_BIN = [
   '/usr/bin/git',
   '/usr/local/bin/git',
-  'C:\\Program Files\\Git\\cmd\\git.exe',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
 ].find(p => fs.existsSync(p)) || 'git';
+
+// POSIX single-quote escaping: git always resolves filter.<x>.clean through
+// its own bundled POSIX-like shell (sh on Linux/macOS, Git for Windows'
+// MSYS2 sh.exe on Windows -- never native cmd.exe), so single-quoting is
+// correct cross-platform here. Without this, a scriptPath containing a
+// space, quote, `$`, or backtick could break the command or be interpreted
+// by the shell.
+function shSingleQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 const FILTER_NAME = 'egc-memory';
 const PROPAGATION_FILES = [
@@ -56,14 +66,27 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
     return { configured: false, reason: 'not a git repository', actions: [] };
   }
 
+  // If the script this filter depends on isn't even on disk, configuring the
+  // filter anyway would silently commit unfiltered memory the moment git
+  // tries (and fails) to run it -- fail closed instead: never configure.
+  if (!fs.existsSync(scriptPath)) {
+    return { configured: false, reason: `clean-filter script not found at ${scriptPath}`, actions: [] };
+  }
+
   const absoluteGitDir = path.isAbsolute(resolvedGitDir)
     ? resolvedGitDir
     : path.join(projectDir, resolvedGitDir);
   const attributesFile = path.join(absoluteGitDir, 'info', 'attributes');
-  const cleanCommand = `node "${scriptPath}" --filter-clean`;
+  const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
 
   const actions = [
     `git config filter.${FILTER_NAME}.clean '${cleanCommand}' (local repo config)`,
+    // required=true makes git refuse to stage a file through this filter if
+    // the clean command itself fails, instead of silently falling back to
+    // the original (unfiltered, still populated) content -- fail-closed
+    // matches the README's unconditional "never gets committed to git"
+    // promise.
+    `git config filter.${FILTER_NAME}.required true (local repo config)`,
   ];
 
   let existing = '';
@@ -71,8 +94,12 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
     existing = fs.readFileSync(attributesFile, 'utf8');
   } catch { /* first configuration: attributes file does not exist yet */ }
 
+  // Exact-line matching (not a raw substring test): a commented-out entry or
+  // a line with extra trailing content would still satisfy .includes(),
+  // silently skipping the real binding this project needs.
+  const existingLines = new Set(existing.split('\n').map(l => l.trim()));
   const missingBindings = PROPAGATION_FILES.filter(
-    file => !existing.includes(`${file} filter=${FILTER_NAME}`)
+    file => !existingLines.has(`${file} filter=${FILTER_NAME}`)
   );
   for (const file of missingBindings) {
     actions.push(`bind ${file} to filter=${FILTER_NAME} (.git/info/attributes)`);
@@ -80,6 +107,10 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
 
   if (!dryRun) {
     execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
+      cwd: projectDir,
+      encoding: 'utf8',
+    });
+    execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], {
       cwd: projectDir,
       encoding: 'utf8',
     });

@@ -120,5 +120,57 @@ run('non-git directory is skipped with a reason', () => {
   assert.ok(plan.reason.includes('not a git repository'));
 });
 
+run('fails closed (does not configure) when the clean-filter script is missing (audit EGC-547, P0)', () => {
+  const { dir, git } = makeRepo();
+  const missingScript = path.join(dir, 'this-script-does-not-exist.js');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: missingScript, dryRun: false });
+  assert.strictEqual(plan.configured, false, 'must not report success');
+  assert.ok(plan.reason.includes('not found'), 'reason explains why');
+  let cleanConfigured = true;
+  try {
+    git('config', `filter.${FILTER_NAME}.clean`);
+  } catch {
+    cleanConfigured = false;
+  }
+  assert.strictEqual(cleanConfigured, false, 'filter must never be configured to point at a script that is not on disk');
+});
+
+run('sets filter.required=true so git refuses to stage through a broken filter (audit EGC-547, P0)', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  const required = git('config', `filter.${FILTER_NAME}.required`).trim();
+  assert.strictEqual(required, 'true');
+});
+
+run('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
+  const { dir } = makeRepo();
+  fs.mkdirSync(path.join(dir, '.git', 'info'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.git', 'info', 'attributes'),
+    `# AGENTS.md filter=${FILTER_NAME}\nAGENTS.md filter=${FILTER_NAME}-something-else\n`
+  );
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(plan.configured, true);
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  const realBindingCount = attrs.split('\n').filter(l => l.trim() === `AGENTS.md filter=${FILTER_NAME}`).length;
+  assert.strictEqual(realBindingCount, 1, 'the real exact binding must be added despite the lookalike lines');
+});
+
+run('configures and cleans correctly when the script path itself contains a space and a single quote (audit EGC-547, P2)', () => {
+  const { dir, git } = makeRepo();
+  const oddDir = path.join(dir, "a path with spaces and a ' quote");
+  fs.mkdirSync(oddDir, { recursive: true });
+  const oddScriptPath = path.join(oddDir, 'check-state-leak.js');
+  fs.copyFileSync(LEAK_SCRIPT, oddScriptPath);
+
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: oddScriptPath, dryRun: false });
+  assert.strictEqual(plan.configured, true);
+
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md');
+  const staged = git('show', ':0:AGENTS.md');
+  assert.ok(!staged.includes('secret local context'), 'filter actually ran despite the odd path and stripped the content');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -574,6 +574,59 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  if (test('sets filter.required=true so git refuses to stage through a broken filter (audit EGC-547, P0)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateContent(dir, SAMPLE_STATE);
+      const required = execFileSync('git', ['config', '--get', 'filter.egc-memory.required'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.strictEqual(required, 'true');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      fs.mkdirSync(path.join(dir, '.git', 'info'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, '.git', 'info', 'attributes'),
+        '# AGENTS.md filter=egc-memory\nAGENTS.md filter=egc-memory-something-else\n'
+      );
+      propagateStateContent(dir, SAMPLE_STATE);
+      const attributes = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
+      const realBindingCount = attributes.split('\n').filter(l => l.trim() === 'AGENTS.md filter=egc-memory').length;
+      assert.strictEqual(realBindingCount, 1, 'the real exact binding must be added despite the lookalike lines');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('actually strips populated memory when a bound propagation file is staged (audit EGC-547, end-to-end)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+
+      const populated = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8');
+      assert.ok(populated.includes('EGC v1.1.1 stable'), 'sanity: file is actually populated before staging');
+
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      const staged = execFileSync('git', ['show', ':0:AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.ok(!staged.includes('EGC v1.1.1 stable'), 'clean filter must have run and stripped the populated memory before staging');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   return { passed, failed };
 }
 

@@ -9,7 +9,7 @@ const path = require('node:path');
 const GIT_BIN = [
   '/usr/bin/git',
   '/usr/local/bin/git',
-  'C:\\Program Files\\Git\\cmd\\git.exe',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
 ].find(p => fs.existsSync(p)) || 'git';
 
 const COMMIT_PRIVACY_FILTER_NAME = 'egc-memory';
@@ -42,12 +42,24 @@ const COMMIT_PRIVACY_FILES = [
 // per-host install layouts (see scripts/lib/install-targets/claude-home.js
 // and opencode-home.js), and a sibling file that isn't also listed in that
 // same copy manifest is silently absent at the installed runtime -- exactly
-// the class of bug the commit-privacy fix itself was closing (cubic review,
-// audit EGC-547). Duplicated (not shared) with memory-filters.js/init.js on
-// purpose so this function has zero cross-file dependencies of its own.
+// the class of bug the commit-privacy fix itself was closing. Duplicated
+// (not shared) with memory-filters.js/init.js on purpose so this function
+// has zero cross-file dependencies of its own.
 //
 // Best-effort and silent -- never blocks the actual memory write the caller
 // is waiting on.
+// POSIX single-quote escaping: git always resolves filter.<x>.clean through
+// its own bundled POSIX-like shell (sh on Linux/macOS, Git for Windows'
+// MSYS2 sh.exe on Windows -- never native cmd.exe), so single-quoting is
+// correct cross-platform here, unlike the OS-native-shell case the Token
+// Crusher's --shell path has to special-case for Windows. Without this, a
+// scriptPath containing a space, quote, `$`, or backtick (e.g. a Windows
+// username with an apostrophe, or a project cloned under a path a user
+// chose) could break the command or be interpreted by the shell.
+function shSingleQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function ensureCommitPrivacy(projectPath) {
   try {
     let gitDir;
@@ -72,9 +84,26 @@ function ensureCommitPrivacy(projectPath) {
     const scriptPath = fs.existsSync(flattenedScriptPath)
       ? flattenedScriptPath
       : path.join(__dirname, '..', 'check-state-leak.js');
-    const cleanCommand = `node "${scriptPath}" --filter-clean`;
+    // If the script this filter depends on isn't even on disk, configuring
+    // the filter anyway would silently commit unfiltered memory the moment
+    // git tries (and fails) to run it -- fail closed here instead: skip
+    // configuration entirely and leave the loud stderr diagnostic to explain
+    // why.
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`commit-privacy clean-filter script not found at ${scriptPath}`);
+    }
+    const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
 
     execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand], {
+      cwd: projectPath,
+      encoding: 'utf8',
+    });
+    // required=true makes git refuse to stage a file through this filter if
+    // the clean command itself fails or is missing, instead of the git
+    // default of silently falling back to the original (unfiltered, still
+    // populated) content -- fail-closed matches the README's unconditional
+    // "never gets committed to git" promise.
+    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], {
       cwd: projectPath,
       encoding: 'utf8',
     });
@@ -84,8 +113,13 @@ function ensureCommitPrivacy(projectPath) {
       existing = fs.readFileSync(attributesFile, 'utf8');
     } catch { /* first configuration: attributes file does not exist yet */ }
 
+    // Exact-line matching (not a raw substring test): a commented-out entry
+    // ("# AGENTS.md filter=egc-memory") or a line with extra trailing
+    // content would still satisfy .includes(), silently skipping the real
+    // binding this project needs.
+    const existingLines = new Set(existing.split('\n').map(l => l.trim()));
     const missingBindings = COMMIT_PRIVACY_FILES.filter(
-      file => !existing.includes(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
+      file => !existingLines.has(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
     );
     if (missingBindings.length > 0) {
       fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
@@ -98,7 +132,7 @@ function ensureCommitPrivacy(projectPath) {
     // caller is waiting on. But silent failure here means a real git-config
     // error (permission denied, git binary crashed) leaves the user with no
     // signal that populated memory can still reach a commit -- a single
-    // stderr line costs nothing here either (cubic review, audit EGC-547).
+    // stderr line costs nothing here either.
     process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${err.message}\n`);
   }
 }
