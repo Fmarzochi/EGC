@@ -589,6 +589,36 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      const smudge = execFileSync('git', ['config', '--get', 'filter.egc-memory.smudge'], {
+        cwd: dir,
+        encoding: 'utf-8',
+      }).trim();
+      assert.strictEqual(smudge, 'cat');
+
+      // End-to-end: with required=true and clean configured but no smudge,
+      // git treats the undefined smudge side as a failed filter and aborts
+      // checkout ("smudge filter egc-memory failed") instead of the
+      // passthru it defaults to when a filter driver is missing entirely.
+      // Prove the real checkout path survives once smudge is set.
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'add AGENTS.md'], { cwd: dir });
+      assert.doesNotThrow(
+        () => execFileSync('git', ['checkout', '--', 'AGENTS.md'], { cwd: dir }),
+        'checkout must not fail through the configured filter'
+      );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
     const dir = mktemp();
     try {

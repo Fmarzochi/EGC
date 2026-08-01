@@ -98,6 +98,17 @@ function ensureCommitPrivacy(projectPath) {
       cwd: projectPath,
       encoding: 'utf8',
     });
+    // required=true (below) also turns an *unconfigured* smudge side into a
+    // hard checkout failure instead of the passthru git defaults to when a
+    // filter driver is missing entirely (gitattributes(5)): once clean is
+    // set, checkout/worktree/clone on this repo starts failing with "smudge
+    // filter egc-memory failed" without an explicit smudge command. cat is
+    // configured as an identity smudge: the working tree keeps whatever
+    // content is checked out, only the staged blob gets cleaned.
+    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat'], {
+      cwd: projectPath,
+      encoding: 'utf8',
+    });
     // required=true makes git refuse to stage a file through this filter if
     // the clean command itself fails or is missing, instead of the git
     // default of silently falling back to the original (unfiltered, still

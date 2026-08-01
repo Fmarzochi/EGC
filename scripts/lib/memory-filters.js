@@ -85,7 +85,14 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
     // the clean command itself fails, instead of silently falling back to
     // the original (unfiltered, still populated) content -- fail-closed
     // matches the README's unconditional "never gets committed to git"
-    // promise.
+    // promise. But required=true also turns an *unconfigured* smudge side
+    // into a hard failure instead of the passthru git defaults to when a
+    // filter driver is missing entirely (gitattributes(5)): once clean is
+    // set, checkout/worktree/clone on this repo starts failing with "smudge
+    // filter egc-memory failed" without an explicit smudge command. cat is
+    // configured as an identity smudge: the working tree keeps whatever
+    // content is checked out, only the staged blob gets cleaned.
+    `git config filter.${FILTER_NAME}.smudge cat (local repo config)`,
     `git config filter.${FILTER_NAME}.required true (local repo config)`,
   ];
 
@@ -107,6 +114,10 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
 
   if (!dryRun) {
     execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
+      cwd: projectDir,
+      encoding: 'utf8',
+    });
+    execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], {
       cwd: projectDir,
       encoding: 'utf8',
     });

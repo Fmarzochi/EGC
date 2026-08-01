@@ -142,6 +142,23 @@ run('sets filter.required=true so git refuses to stage through a broken filter (
   assert.strictEqual(required, 'true');
 });
 
+run('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  const smudge = git('config', `filter.${FILTER_NAME}.smudge`).trim();
+  assert.strictEqual(smudge, 'cat');
+
+  // End-to-end: with required=true and clean configured but no smudge, git
+  // treats the undefined smudge side as a failed filter and aborts checkout
+  // ("smudge filter egc-memory failed") instead of the passthru it defaults
+  // to when a filter driver is missing entirely. Prove the real checkout
+  // path (not just the config value) survives once smudge is set.
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'add AGENTS.md');
+  assert.doesNotThrow(() => git('checkout', '--', 'AGENTS.md'), 'checkout must not fail through the configured filter');
+});
+
 run('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
   const { dir } = makeRepo();
   fs.mkdirSync(path.join(dir, '.git', 'info'), { recursive: true });
