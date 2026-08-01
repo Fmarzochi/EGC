@@ -57,7 +57,8 @@ const COMMIT_PRIVACY_FILES = [
 // username with an apostrophe, or a project cloned under a path a user
 // chose) could break the command or be interpreted by the shell.
 function shSingleQuote(value) {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  const escaped = value.replaceAll("'", String.raw`'\''`);
+  return `'${escaped}'`;
 }
 
 function ensureCommitPrivacy(projectPath) {

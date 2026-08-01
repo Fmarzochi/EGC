@@ -26,7 +26,8 @@ const GIT_BIN = [
 // space, quote, `$`, or backtick could break the command or be interpreted
 // by the shell.
 function shSingleQuote(value) {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  const escaped = value.replaceAll("'", String.raw`'\''`);
+  return `'${escaped}'`;
 }
 
 const FILTER_NAME = 'egc-memory';
