@@ -45,16 +45,36 @@ function runNode(script, options = {}) {
 
 console.log('\n=== Testing Token Crusher scoped metrics ===\n');
 
-run('resolves project and existing EGC session conventions', () => {
+run('resolves canonical project and session conventions with legacy fallbacks', () => {
   const cwd = path.join(os.tmpdir(), 'egc-project-context');
+  const canonicalRoot = path.join(os.tmpdir(), 'egc-project-root');
+  const compatibleRoot = path.join(os.tmpdir(), 'egc-project-dir');
+  const legacyRoot = path.join(os.tmpdir(), 'project-root');
   const context = resolveMetricContext({
     cwd,
-    env: { EGC_SESSION_ID: 'ses_test' },
+    env: {
+      EGC_PROJECT_ROOT: canonicalRoot,
+      EGC_PROJECT_DIR: compatibleRoot,
+      PROJECT_ROOT: legacyRoot,
+      EGC_SESSION_ID: 'ses_test',
+      ECC_SESSION_ID: 'ses_legacy',
+    },
   });
-  assert.strictEqual(context.project, path.resolve(cwd));
+  assert.strictEqual(context.project, path.resolve(canonicalRoot));
   assert.strictEqual(context.session, 'ses_test');
 
+  const compatible = resolveMetricContext({
+    cwd,
+    env: { EGC_PROJECT_DIR: compatibleRoot, PROJECT_ROOT: legacyRoot, ECC_SESSION_ID: 'ses_legacy' },
+  });
+  assert.strictEqual(compatible.project, path.resolve(compatibleRoot));
+  assert.strictEqual(compatible.session, 'ses_legacy');
+
+  const legacy = resolveMetricContext({ cwd, env: { PROJECT_ROOT: legacyRoot } });
+  assert.strictEqual(legacy.project, path.resolve(legacyRoot));
+
   const fallback = resolveMetricContext({ cwd, env: {} });
+  assert.strictEqual(fallback.project, path.resolve(cwd));
   assert.strictEqual(fallback.session, UNKNOWN_SCOPE);
 });
 
@@ -109,10 +129,13 @@ run('uses the local calendar boundary instead of the UTC date boundary', () => {
 run('records attribution and exposes the scoped gain panel without breaking legacy JSON', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-scoped-gain-home-'));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-scoped-gain-project-'));
+  const nestedCwd = path.join(project, 'nested');
+  fs.mkdirSync(nestedCwd);
   const env = {
     ...process.env,
     HOME: home,
     USERPROFILE: home,
+    EGC_PROJECT_ROOT: project,
     EGC_SESSION_ID: 'ses_cli',
     EGC_TEST_METRICS_MODULE: METRICS,
   };
@@ -120,7 +143,7 @@ run('records attribution and exposes the scoped gain panel without breaking lega
   try {
     runNode(
       "const { record } = require(process.env.EGC_TEST_METRICS_MODULE); record({ cmd: 'git', kind: 'git-log', bytesIn: 1000, bytesOut: 100, tokensSaved: 225 });",
-      { cwd: project, env }
+      { cwd: nestedCwd, env }
     );
 
     const ledger = path.join(home, '.egc', 'metrics', 'crusher.jsonl');
@@ -138,7 +161,7 @@ run('records attribution and exposes the scoped gain panel without breaking lega
     })}\n`);
 
     const jsonResult = spawnSync(process.execPath, [GAIN, '--json'], {
-      cwd: project,
+      cwd: nestedCwd,
       env,
       encoding: 'utf8',
     });
@@ -150,7 +173,7 @@ run('records attribution and exposes the scoped gain panel without breaking lega
     assert.strictEqual(report.sinceInstall.tokensSaved, 300);
 
     const historyResult = spawnSync(process.execPath, [GAIN, '--history', '--json'], {
-      cwd: project,
+      cwd: nestedCwd,
       env,
       encoding: 'utf8',
     });
@@ -160,7 +183,7 @@ run('records attribution and exposes the scoped gain panel without breaking lega
     assert.strictEqual(history[1].session, UNKNOWN_SCOPE);
 
     const panel = spawnSync(process.execPath, [GAIN], {
-      cwd: project,
+      cwd: nestedCwd,
       env,
       encoding: 'utf8',
     });
