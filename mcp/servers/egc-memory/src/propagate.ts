@@ -32,8 +32,16 @@ function ensureCommitPrivacy(projectPath: string): void {
     if (!memoryFilters) return;
     const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
     memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
-  } catch {
-    // best-effort: never let commit-privacy setup break memory propagation
+  } catch (err) {
+    // Best-effort: never let commit-privacy setup block the memory write the
+    // caller is waiting on. But silent failure here means a real git-config
+    // error (permission denied, git binary crashed) leaves the user with no
+    // signal that populated memory can still reach a commit -- a single
+    // stderr line costs nothing (MCP servers speak MCP over stdout, stderr
+    // is free for diagnostics) and this is the one place that can ever know
+    // (cubic review, audit EGC-547).
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${message}\n`);
   }
 }
 

@@ -1,22 +1,105 @@
 'use strict';
 
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+
+// S4036: prefer fixed git locations over a PATH lookup; the bare name is the
+// last resort for layouts like nix or Windows portable installs.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  'C:\\Program Files\\Git\\cmd\\git.exe',
+].find(p => fs.existsSync(p)) || 'git';
+
+const COMMIT_PRIVACY_FILTER_NAME = 'egc-memory';
+const COMMIT_PRIVACY_FILES = [
+  'AGENTS.md',
+  'GEMINI.md',
+  '.cursor/rules/egc-context.mdc',
+  '.trae/rules/egc-context.md',
+  '.github/copilot-instructions.md',
+  '.windsurf/rules/egc-context.md',
+  '.rules',
+  '.clinerules',
+  '.cursorrules',
+  'CONVENTIONS.md',
+  'llms.txt',
+  'CLAUDE.md',
+  '.roo/rules/egc-context.md',
+  '.continue/rules/egc-context.md',
+];
 
 // Ensures populated memory can never reach a commit for this project, before
 // the first byte of real content is written to any propagation file. See the
 // identical guard in mcp/servers/egc-memory/src/propagate.ts for why this
 // can't just be a one-time `egc init` step: a project that only ever ran
 // `egc install` (the README's own documented command) never got this
-// protection otherwise. Best-effort and silent -- never blocks the actual
-// memory write the caller is waiting on.
+// protection otherwise.
+//
+// Deliberately NOT a require('./memory-filters') call: this file is copied
+// individually (not as part of the whole scripts/lib/ tree) into several
+// per-host install layouts (see scripts/lib/install-targets/claude-home.js
+// and opencode-home.js), and a sibling file that isn't also listed in that
+// same copy manifest is silently absent at the installed runtime -- exactly
+// the class of bug the commit-privacy fix itself was closing (cubic review,
+// audit EGC-547). Duplicated (not shared) with memory-filters.js/init.js on
+// purpose so this function has zero cross-file dependencies of its own.
+//
+// Best-effort and silent -- never blocks the actual memory write the caller
+// is waiting on.
 function ensureCommitPrivacy(projectPath) {
   try {
-    const { configureMemoryFilters } = require('./memory-filters');
-    const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'check-state-leak.js');
-    configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
-  } catch {
-    // best-effort: never let commit-privacy setup break memory propagation
+    let gitDir;
+    try {
+      gitDir = execFileSync(GIT_BIN, ['rev-parse', '--git-dir'], {
+        cwd: projectPath,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      return; // not a git repository
+    }
+
+    const absoluteGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(projectPath, gitDir);
+    const attributesFile = path.join(absoluteGitDir, 'info', 'attributes');
+    // Installed layout flattens scripts/check-state-leak.js down into the
+    // same directory as this file (see HOOK_LIB_SOURCES in
+    // install-targets/claude-home.js and opencode-home.js); dev-repo layout
+    // keeps it one level up, in scripts/ proper. Check the flattened
+    // (installed) location first since that's the more common runtime.
+    const flattenedScriptPath = path.join(__dirname, 'check-state-leak.js');
+    const scriptPath = fs.existsSync(flattenedScriptPath)
+      ? flattenedScriptPath
+      : path.join(__dirname, '..', 'check-state-leak.js');
+    const cleanCommand = `node "${scriptPath}" --filter-clean`;
+
+    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand], {
+      cwd: projectPath,
+      encoding: 'utf8',
+    });
+
+    let existing = '';
+    try {
+      existing = fs.readFileSync(attributesFile, 'utf8');
+    } catch { /* first configuration: attributes file does not exist yet */ }
+
+    const missingBindings = COMMIT_PRIVACY_FILES.filter(
+      file => !existing.includes(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
+    );
+    if (missingBindings.length > 0) {
+      fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
+      const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+      const lines = missingBindings.map(f => `${f} filter=${COMMIT_PRIVACY_FILTER_NAME}\n`).join('');
+      fs.appendFileSync(attributesFile, header + lines);
+    }
+  } catch (err) {
+    // Best-effort: never let commit-privacy setup block the memory write the
+    // caller is waiting on. But silent failure here means a real git-config
+    // error (permission denied, git binary crashed) leaves the user with no
+    // signal that populated memory can still reach a commit -- a single
+    // stderr line costs nothing here either (cubic review, audit EGC-547).
+    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${err.message}\n`);
   }
 }
 

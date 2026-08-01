@@ -47,6 +47,11 @@ const HOOK_LIB_SOURCES = [
   'scripts/lib/project-detect.js',
   'scripts/lib/propagate-state.js',
   'scripts/lib/state-crypto.js',
+  // propagate-state.js's commit-privacy guard shells out to this script as
+  // the git clean-filter command -- it must land next to propagate-state.js
+  // (both flatten to the same libDestDir below), or the filter config points
+  // at a path that never existed on this machine (cubic review, audit EGC-547).
+  'scripts/check-state-leak.js',
 ];
 
 function createSessionStateHookOperations(adapter, targetRoot) {
