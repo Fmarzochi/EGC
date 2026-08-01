@@ -45,16 +45,24 @@ const PROPAGATION_FILES = [
   'llms.txt',
   'CLAUDE.md',
   '.roo/rules/egc-context.md',
+  '.roorules',
   '.continue/rules/egc-context.md',
 ];
 
-function gitDir(projectDir) {
+// --git-path (not --git-dir + a manual join) resolves correctly for linked
+// worktrees too: git always reads info/attributes from the *common* git
+// directory, never the per-worktree one that --git-dir alone returns
+// (.git/worktrees/<name>) when run inside a linked worktree. Building the
+// path by hand from --git-dir would silently write bindings to a file git
+// never consults there, leaving worktree-based projects unprotected.
+function resolveAttributesFile(projectDir) {
   try {
-    return execFileSync(GIT_BIN, ['rev-parse', '--git-dir'], {
+    const raw = execFileSync(GIT_BIN, ['rev-parse', '--git-path', 'info/attributes'], {
       cwd: projectDir,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
+    return path.isAbsolute(raw) ? raw : path.join(projectDir, raw);
   } catch {
     return null;
   }
@@ -62,8 +70,8 @@ function gitDir(projectDir) {
 
 // Returns the action plan without touching anything when dryRun is true.
 function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
-  const resolvedGitDir = gitDir(projectDir);
-  if (!resolvedGitDir) {
+  const attributesFile = resolveAttributesFile(projectDir);
+  if (!attributesFile) {
     return { configured: false, reason: 'not a git repository', actions: [] };
   }
 
@@ -71,13 +79,26 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   // filter anyway would silently commit unfiltered memory the moment git
   // tries (and fails) to run it -- fail closed instead: never configure.
   if (!fs.existsSync(scriptPath)) {
+    // A repo whose filter was set up before required=true existed would
+    // otherwise stay silently fail-open forever once the script goes
+    // missing, with no path back to fail-closed. Harden an already-present
+    // driver in place -- without touching its clean command or adding new
+    // bindings -- so a broken script at least blocks staging instead of
+    // silently falling back to unfiltered content.
+    if (!dryRun) {
+      let alreadyConfigured = true;
+      try {
+        execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`], { cwd: projectDir, encoding: 'utf8' });
+      } catch {
+        alreadyConfigured = false;
+      }
+      if (alreadyConfigured) {
+        execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], { cwd: projectDir, encoding: 'utf8' });
+      }
+    }
     return { configured: false, reason: `clean-filter script not found at ${scriptPath}`, actions: [] };
   }
 
-  const absoluteGitDir = path.isAbsolute(resolvedGitDir)
-    ? resolvedGitDir
-    : path.join(projectDir, resolvedGitDir);
-  const attributesFile = path.join(absoluteGitDir, 'info', 'attributes');
   const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
 
   const actions = [

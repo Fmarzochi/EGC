@@ -142,6 +142,44 @@ run('sets filter.required=true so git refuses to stage through a broken filter (
   assert.strictEqual(required, 'true');
 });
 
+run('protects a linked worktree by binding the common git dir, not the per-worktree one (audit EGC-547, worktree regression)', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'placeholder.txt'), 'x');
+  git('add', 'placeholder.txt');
+  git('commit', '-q', '-m', 'init');
+  const worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-worktree-'));
+  git('worktree', 'add', worktreeDir, '-b', 'egc-worktree-branch');
+  configureMemoryFilters({ projectDir: worktreeDir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  // git always reads info/attributes from the main worktree's .git, never
+  // from .git/worktrees/<name> -- the binding must land there regardless of
+  // which worktree configureMemoryFilters was run from.
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  assert.ok(attrs.includes(`AGENTS.md filter=${FILTER_NAME}`), 'binding lands in the common git dir, not the per-worktree one');
+});
+
+run('hardens an already-configured filter to required=true even when the script later goes missing (audit EGC-547, fail-open regression)', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  // Simulate a pre-required=true install: strip the hardening this same
+  // call just applied, as if the repo had been configured by an older
+  // version of this code.
+  git('config', `filter.${FILTER_NAME}.required`, 'false');
+
+  const missingScript = path.join(dir, 'this-script-does-not-exist.js');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: missingScript, dryRun: false });
+  assert.strictEqual(plan.configured, false, 'still must not report success without a real clean script');
+  const required = git('config', `filter.${FILTER_NAME}.required`).trim();
+  assert.strictEqual(required, 'true', 'an already-configured driver must be hardened even when the script goes missing later');
+});
+
+run('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
+  const { dir } = makeRepo();
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(plan.configured, true);
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  assert.ok(attrs.includes(`.roorules filter=${FILTER_NAME}`), '.roorules must be bound, not just .roo/rules/egc-context.md');
+});
+
 run('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
   const { dir, git } = makeRepo();
   configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });

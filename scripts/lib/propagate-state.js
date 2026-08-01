@@ -27,6 +27,7 @@ const COMMIT_PRIVACY_FILES = [
   'llms.txt',
   'CLAUDE.md',
   '.roo/rules/egc-context.md',
+  '.roorules',
   '.continue/rules/egc-context.md',
 ];
 
@@ -63,19 +64,24 @@ function shSingleQuote(value) {
 
 function ensureCommitPrivacy(projectPath) {
   try {
-    let gitDir;
+    // --git-path (not --git-dir + a manual join) resolves correctly for
+    // linked worktrees too: git always reads info/attributes from the
+    // *common* git directory, never the per-worktree one that --git-dir
+    // alone returns (.git/worktrees/<name>) when run inside a linked
+    // worktree. Building the path by hand from --git-dir would silently
+    // write bindings to a file git never consults there, leaving
+    // worktree-based projects unprotected.
+    let attributesFile;
     try {
-      gitDir = execFileSync(GIT_BIN, ['rev-parse', '--git-dir'], {
+      const raw = execFileSync(GIT_BIN, ['rev-parse', '--git-path', 'info/attributes'], {
         cwd: projectPath,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
       }).trim();
+      attributesFile = path.isAbsolute(raw) ? raw : path.join(projectPath, raw);
     } catch {
       return; // not a git repository
     }
-
-    const absoluteGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(projectPath, gitDir);
-    const attributesFile = path.join(absoluteGitDir, 'info', 'attributes');
     // Installed layout flattens scripts/check-state-leak.js down into the
     // same directory as this file (see HOOK_LIB_SOURCES in
     // install-targets/claude-home.js and opencode-home.js); dev-repo layout
@@ -91,6 +97,21 @@ function ensureCommitPrivacy(projectPath) {
     // configuration entirely and leave the loud stderr diagnostic to explain
     // why.
     if (!fs.existsSync(scriptPath)) {
+      // A repo whose filter was set up before required=true existed would
+      // otherwise stay silently fail-open forever once the script goes
+      // missing, with no path back to fail-closed. Harden an already-present
+      // driver in place -- without touching its clean command or adding new
+      // bindings -- so a broken script at least blocks staging instead of
+      // silently falling back to unfiltered content.
+      let alreadyConfigured = true;
+      try {
+        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], { cwd: projectPath, encoding: 'utf8' });
+      } catch {
+        alreadyConfigured = false;
+      }
+      if (alreadyConfigured) {
+        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], { cwd: projectPath, encoding: 'utf8' });
+      }
       throw new Error(`commit-privacy clean-filter script not found at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;

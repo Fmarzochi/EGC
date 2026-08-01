@@ -589,6 +589,42 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  if (test('protects a linked worktree by binding the common git dir, not the per-worktree one (audit EGC-547, worktree regression)', () => {
+    const dir = mktemp();
+    let worktreeDir;
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'placeholder.txt'), 'x');
+      execFileSync('git', ['add', 'placeholder.txt'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: dir });
+      worktreeDir = mktemp();
+      execFileSync('git', ['worktree', 'add', worktreeDir, '-b', 'egc-worktree-branch'], { cwd: dir });
+      propagateStateContent(worktreeDir, SAMPLE_STATE);
+      // git always reads info/attributes from the main worktree's .git,
+      // never from .git/worktrees/<name> -- the binding must land there
+      // regardless of which worktree propagateStateContent was run from.
+      const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
+      assert.ok(attrs.includes('AGENTS.md filter=egc-memory'), 'binding lands in the common git dir, not the per-worktree one');
+    } finally {
+      cleanup(dir);
+      if (worktreeDir) cleanup(worktreeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      propagateStateContent(dir, SAMPLE_STATE);
+      const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
+      assert.ok(attrs.includes('.roorules filter=egc-memory'), '.roorules must be bound, not just .roo/rules/egc-context.md');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
     const dir = mktemp();
     try {

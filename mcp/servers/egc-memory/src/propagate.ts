@@ -29,7 +29,13 @@ function tryRequireMemoryFilters(): typeof import('../../../../scripts/lib/memor
 function ensureCommitPrivacy(projectPath: string): void {
   try {
     const memoryFilters = tryRequireMemoryFilters();
-    if (!memoryFilters) return;
+    if (!memoryFilters) {
+      // Every other configured:false path below reports why via stderr;
+      // silently returning here would be the one way this function can
+      // leave memory unprotected with zero signal that anything went wrong.
+      process.stderr.write(`[egc-memory] commit-privacy filter module unavailable for ${projectPath}\n`);
+      return;
+    }
     const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
     const result = memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
     // "not a git repository" is the normal, silent case (most MCP calls
