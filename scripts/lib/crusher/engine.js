@@ -42,14 +42,26 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 // built from them correctly treats accented letters as word characters.
 const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_PT_RE = /(?<![\p{L}\p{N}_])(erro|falha|aviso|negado|recusado|exceção|pânico)(?![\p{L}\p{N}_])/iu;
-const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|falló|falla|fallé|fallando|fallado|fallaron|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_FR_DE_IT_RE = /(?<![\p{L}\p{N}_])(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)(?![\p{L}\p{N}_])/iu;
+
+// The boundary regexes above require a NON-word character on both sides,
+// which is correct for a standalone word ("error: x") but wrongly rejects
+// the same keyword used as a PascalCase compound-identifier suffix
+// (TypeError, AssertionError, NullPointerException): the letter immediately
+// before the capitalized keyword ("...e" in "TypeError") fails the negative
+// lookbehind, so the exception class name was silently dropped from every
+// language's test/traceback output. Case-sensitive on purpose -- this only
+// needs to catch the capitalized suffix form; the lowercase standalone form
+// is already covered by KEEP_WORD_EN_RE above.
+const KEEP_WORD_PASCAL_SUFFIX_RE = /(?<=[\p{L}\p{N}_])(Error|Exception|Fatal|Warning|Failure|Panic)(?![\p{L}\p{N}_])/u;
 
 function matchesKeepWord(line) {
   return KEEP_WORD_EN_RE.test(line)
     || KEEP_WORD_PT_RE.test(line)
     || KEEP_WORD_ES_RE.test(line)
-    || KEEP_WORD_FR_DE_IT_RE.test(line);
+    || KEEP_WORD_FR_DE_IT_RE.test(line)
+    || KEEP_WORD_PASCAL_SUFFIX_RE.test(line);
 }
 
 // Stack-trace frame lines carry no keep-word of their own (a Python
@@ -71,6 +83,60 @@ function isStackFrame(line) {
     || STACK_FRAME_CAUSE_RE.test(line);
 }
 
+// Assertion-detail continuation lines: the summary line ("assertion failed",
+// "AssertionError") already contains a keep-word, but the actual expected/
+// actual values a debugger needs are printed on separate lines that never
+// repeat that word, so they were silently stripped even though they are the
+// entire point of keeping the failure. One pattern per shape (rather than one
+// alternation) to keep cyclomatic complexity within SonarCloud's limit.
+// Both Go and Rust patterns require at least one leading space: real
+// assertion-detail lines are always indented under a failure header
+// (--- FAIL:, assertion `left == right` failed), while requiring
+// indentation measurably narrows (without a whole-output failure-context
+// state machine, out of scope here) the odds of matching an unrelated
+// line of normal column-0 output that happens to start with the same
+// word, audit EGC-547.
+//
+// The pytest pattern can't require indentation the same way: a real
+// pytest detail line ("E       assert 1 == 2") is itself column-0, and so
+// is npm's own "> pkg@version script-name" banner line that `npm run
+// <script>`/`npm test` always prints first -- both start with `>`/`E` at
+// the same indentation, so an indentation requirement would just trade
+// one false positive for a false negative on real pytest output. The npm
+// banner is excluded by position instead (see npmScriptBannerLineCount
+// below), not by shape, since its second line ("> resolved-command") has
+// no shape of its own to exclude.
+const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
+const ASSERT_DETAIL_GO_RE = /^\s+(expected|actual|got|want)\s*:/i;
+const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
+const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
+
+function isAssertionDetail(line) {
+  return ASSERT_DETAIL_PYTEST_RE.test(line)
+    || ASSERT_DETAIL_GO_RE.test(line)
+    || ASSERT_DETAIL_RUST_RE.test(line)
+    || ASSERT_DETAIL_CARET_RE.test(line);
+}
+
+// npm's own two-line banner -- "> pkg@version script-name" followed by
+// "> resolved-command" -- is always printed together at the very start of
+// `npm run <script>`/`npm test`, before any of the script's own output.
+// Both lines share the same column-0 "> " shape as a real pytest detail
+// line, so isAssertionDetail() can't tell them apart by shape alone: the
+// first line has a recognizable pkg@version marker, but the second is just
+// whatever command package.json resolved to, with no shape of its own.
+// Recognized by position instead -- this banner can only ever be the first
+// two lines of the whole output.
+const NPM_SCRIPT_BANNER_RE = /^>\s+\S+@\S+\s/;
+const NPM_BANNER_CONTINUATION_RE = /^>\s+\S/;
+
+function npmScriptBannerLineCount(lines) {
+  if (NPM_SCRIPT_BANNER_RE.test(lines[0] || '') && NPM_BANNER_CONTINUATION_RE.test(lines[1] || '')) {
+    return 2;
+  }
+  return 0;
+}
+
 // System-level failure signals that never contain the word "error": a
 // killed or crashed process, or an HTTP status line/code carrying a
 // standard reason phrase. The HTTP pattern requires a known reason phrase
@@ -82,6 +148,7 @@ const HTTP_ERROR_RE = /\b(?:HTTP\/[\d.]+\s+)?[45]\d{2}\s+(Bad Request|Unauthoriz
 function shouldKeepLine(line) {
   return matchesKeepWord(line)
     || isStackFrame(line)
+    || isAssertionDetail(line)
     || SYSTEM_FAILURE_RE.test(line)
     || HTTP_ERROR_RE.test(line);
 }
@@ -225,7 +292,9 @@ function crushGitDiff(output) {
 
 function crushTestRunner(output) {
   const lines = output.split('\n');
-  const kept = lines.filter(raw => {
+  const bannerLineCount = npmScriptBannerLineCount(lines);
+  const kept = lines.filter((raw, i) => {
+    if (i < bannerLineCount) return false;
     const l = stripAnsi(raw);
     return shouldKeepLine(l)
       || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i.test(l.trim())

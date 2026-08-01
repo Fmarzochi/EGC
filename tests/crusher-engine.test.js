@@ -119,7 +119,7 @@ run('crushed output preserves localized (non-English) error/warning terms (audit
   assert.ok(result.crushed.includes('Erreur système'), 'French error line survives');
 });
 
-run('crushed output preserves localized failures that start with an accented letter (cubic review, audit EGC-490)', () => {
+run('crushed output preserves localized failures that start with an accented letter (audit EGC-490)', () => {
   // \b in JS regex is ASCII-only, so a standalone word beginning with an
   // accented letter (no preceding word-character to form a real boundary)
   // could sit between two "non-word" positions and never match \b at all.
@@ -138,13 +138,109 @@ run('crushed output preserves localized failures that start with an accented let
   assert.ok(result.crushed.includes('Pânico: estado inválido'), 'Portuguese panic line starting with an accented letter survives');
 });
 
-run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (cubic review, audit EGC-490)', () => {
+run('crushed output preserves PascalCase exception class names with no separate keep-word (audit EGC-547)', () => {
+  // KEEP_WORD_EN_RE required a non-word character on both sides of "error"/
+  // "exception", so the same keyword used as a compound-identifier suffix
+  // (TypeError, AssertionError, NullPointerException) was rejected: the
+  // letter right before it ("...e" in "TypeError") is a word character, not
+  // a boundary. The exception lines sit 150 filler lines from both ends of
+  // the output, so they survive only via KEEP_WORD_PASCAL_SUFFIX_RE, not
+  // because they happen to land inside the always-kept 5-line summary tail.
+  const lines = [];
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('    throw new TypeError("not a function")');
+  lines.push('    raise AssertionError("expected 1 got 2")');
+  lines.push('    throws java.lang.NullPointerException');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('TypeError'), 'TypeError survives with no separate "error" word');
+  assert.ok(result.crushed.includes('AssertionError'), 'AssertionError survives with no separate "error" word');
+  assert.ok(result.crushed.includes('NullPointerException'), 'NullPointerException survives with no separate "exception" word');
+});
+
+run('crushed output preserves multi-line assertion detail from pytest, Go, Rust, and compiler caret lines (audit EGC-547)', () => {
+  // The summary line ("assertion failed", "AssertionError") already
+  // contains a keep-word, but the expected/actual values a debugger needs
+  // are printed on separate lines that never repeat that word. The detail
+  // block sits far from both ends of the output (150 filler lines on each
+  // side) so it survives only via isAssertionDetail(), not because it
+  // happens to land inside the always-kept 5-line summary tail.
+  const lines = [];
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('FAILED test_math.py::test_add - assert 1 == 2');
+  lines.push('>       assert 1 == 2');
+  lines.push('E       assert 1 == 2');
+  lines.push('--- FAIL: TestAdd (0.00s)');
+  lines.push('    expected: 1');
+  lines.push('    actual: 2');
+  lines.push('assertion `left == right` failed');
+  lines.push('  left: 1');
+  lines.push(' right: 2');
+  lines.push('      x + 1');
+  lines.push('      ^~~~~');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('>       assert 1 == 2'), 'pytest ">" detail line survives');
+  assert.ok(result.crushed.includes('E       assert 1 == 2'), 'pytest "E" detail line survives');
+  assert.ok(result.crushed.includes('expected: 1'), 'Go "expected:" detail line survives');
+  assert.ok(result.crushed.includes('actual: 2'), 'Go "actual:" detail line survives');
+  assert.ok(result.crushed.includes('left: 1'), 'Rust "left:" detail line survives');
+  assert.ok(result.crushed.includes('right: 2'), 'Rust "right:" detail line survives');
+  assert.ok(result.crushed.includes('^~~~~'), 'compiler caret line survives');
+});
+
+run('crushed output preserves the Spanish past-tense verbs "falló" and "fallaron"', () => {
+  // "fallo" (noun/1st person), "falló" (3rd person singular past), and
+  // "fallaron" (3rd person plural past) are all distinct words -- none is
+  // reachable from another by substring, so each had to be listed
+  // explicitly, not a boundary bug. Both lines sit 150 filler lines from
+  // both ends of the output, so they survive only via KEEP_WORD_ES_RE, not
+  // because they happen to land inside the always-kept 5-line summary tail.
+  const lines = [];
+  for (let i = 0; i < 150; i++) lines.push(`  ok caso de prueba ${i} paso normalmente`);
+  lines.push('La conexión falló después de 3 intentos');
+  lines.push('3 pruebas fallaron en el último intento');
+  for (let i = 150; i < 300; i++) lines.push(`  ok caso de prueba ${i} paso normalmente`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('La conexión falló después de 3 intentos'), 'Spanish past-tense singular failure line survives');
+  assert.ok(result.crushed.includes('3 pruebas fallaron en el último intento'), 'Spanish past-tense plural failure line survives');
+});
+
+run('crusher does not mistake the npm run-script banner for pytest assertion detail', () => {
+  // `npm run <script>`/`npm test` always prints "> pkg@version script-name"
+  // (and a second "> resolved-command" line) before the script's own
+  // output. Both start with "> " at column 0, the same shape as a real
+  // pytest detail line ("E       assert ..."), so without an explicit
+  // exclusion the banner would be misclassified as assertion detail.
+  const lines = [];
+  lines.push('> my-app@1.0.0 test');
+  lines.push('> jest --ci');
+  lines.push('');
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('FAIL src/foo.test.js');
+  lines.push('  ● the thing fails');
+  lines.push('    expect(received).toBe(expected)');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(!result.crushed.includes('> my-app@1.0.0 test'), 'npm script banner line 1 is not kept as assertion detail');
+  assert.ok(!result.crushed.includes('> jest --ci'), 'npm script banner line 2 (resolved command) is not kept as assertion detail either');
+});
+
+run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (audit EGC-490)', () => {
   assert.strictEqual(commandKind('mvn clean\necho "just a test message, unrelated to mvn goals"'), 'generic');
   assert.strictEqual(commandKind('mvn clean test'), 'test-runner');
   assert.strictEqual(commandKind('./gradlew clean test'), 'test-runner');
 });
 
-run('mvn/gradle test detection joins shell line-continuations into one logical line (cubic review, audit EGC-490)', () => {
+run('mvn/gradle test detection joins shell line-continuations into one logical line (audit EGC-490)', () => {
   // A backslash right before the newline is a shell line continuation --
   // `mvn clean \` + newline + `test` is one logical command, not two.
   assert.strictEqual(commandKind('mvn clean \\\ntest'), 'test-runner');
