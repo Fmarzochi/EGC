@@ -89,8 +89,15 @@ function isStackFrame(line) {
 // repeat that word, so they were silently stripped even though they are the
 // entire point of keeping the failure. One pattern per shape (rather than one
 // alternation) to keep cyclomatic complexity within SonarCloud's limit.
+// Both Go and Rust patterns require at least one leading space: real
+// assertion-detail lines are always indented under a failure header
+// (--- FAIL:, assertion `left == right` failed), while requiring
+// indentation measurably narrows (without a whole-output failure-context
+// state machine, out of scope here) the odds of matching an unrelated
+// line of normal column-0 output that happens to start with the same
+// word (cubic review, audit EGC-547).
 const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
-const ASSERT_DETAIL_GO_RE = /^\s*(expected|actual|got|want)\s*:/i;
+const ASSERT_DETAIL_GO_RE = /^\s+(expected|actual|got|want)\s*:/i;
 const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
 const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
 

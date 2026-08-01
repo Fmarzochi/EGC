@@ -160,9 +160,13 @@ run('crushed output preserves PascalCase exception class names with no separate 
 run('crushed output preserves multi-line assertion detail from pytest, Go, Rust, and compiler caret lines (audit EGC-547)', () => {
   // The summary line ("assertion failed", "AssertionError") already
   // contains a keep-word, but the expected/actual values a debugger needs
-  // are printed on separate lines that never repeat that word.
+  // are printed on separate lines that never repeat that word. The detail
+  // block sits far from both ends of the output (150 filler lines on each
+  // side) so it survives only via isAssertionDetail(), not because it
+  // happens to land inside the always-kept 5-line summary tail (cubic
+  // review, audit EGC-547).
   const lines = [];
-  for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
   lines.push('FAILED test_math.py::test_add - assert 1 == 2');
   lines.push('>       assert 1 == 2');
   lines.push('E       assert 1 == 2');
@@ -174,6 +178,7 @@ run('crushed output preserves multi-line assertion detail from pytest, Go, Rust,
   lines.push(' right: 2');
   lines.push('      x + 1');
   lines.push('      ^~~~~');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
   lines.push('done');
   const result = crushOutput('npm test', lines.join('\n'));
   assert.ok(result);
