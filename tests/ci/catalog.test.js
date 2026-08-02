@@ -246,6 +246,35 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('counts rules/ nested under per-language subdirectories, not just flat top-level files', () => {
+    // Production shape: 110 of the repo's 111 rules live at rules/<lang>/<name>.md,
+    // only rules/README.md sits flat at the top level. A fixture that only
+    // exercises the flat path would miss a regression in the recursion branch
+    // that actually produces the locked production count.
+    const testDir = createTestDir();
+    try {
+      const rulesDir = path.join(testDir, 'rules');
+      fs.mkdirSync(path.join(rulesDir, 'python'), { recursive: true });
+      fs.mkdirSync(path.join(rulesDir, 'typescript'), { recursive: true });
+      fs.writeFileSync(path.join(rulesDir, 'README.md'), '# Rules');
+      fs.writeFileSync(path.join(rulesDir, 'python', 'coding-style.md'), '# Python style');
+      fs.writeFileSync(path.join(rulesDir, 'python', 'testing.md'), '# Python testing');
+      fs.writeFileSync(path.join(rulesDir, 'typescript', 'coding-style.md'), '# TS style');
+      // Non-.md and doubly-nested entries must not be counted.
+      fs.writeFileSync(path.join(rulesDir, 'python', 'notes.txt'), 'not counted');
+      fs.mkdirSync(path.join(rulesDir, 'typescript', 'nested-too-deep'), { recursive: true });
+      fs.writeFileSync(path.join(rulesDir, 'typescript', 'nested-too-deep', 'ignored.md'), '# should not count');
+
+      const catalog = buildCatalog(testDir);
+      assert.strictEqual(catalog.rules.count, 4, 'README.md + 2 python + 1 typescript, excluding .txt and the too-deep nested file');
+      assert.ok(catalog.rules.files.includes('rules/python/coding-style.md'));
+      assert.ok(catalog.rules.files.includes('rules/typescript/coding-style.md'));
+      assert.ok(!catalog.rules.files.some(f => f.includes('nested-too-deep')));
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
   if (test('locks the rules/ count against the README quick-start summary', () => {
     const testDir = createTestDir();
     try {
