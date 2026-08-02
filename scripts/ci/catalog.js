@@ -92,15 +92,44 @@ function getChildrenDirs(entryPath) {
   }
 }
 
+function listRulesRecursive(root, relativeDir) {
+  const rulesRoot = path.join(root, relativeDir);
+  if (!fs.existsSync(rulesRoot)) {
+    return [];
+  }
+
+  const found = [];
+  const topLevel = fs.readdirSync(rulesRoot, { withFileTypes: true });
+
+  for (const entry of topLevel) {
+    if (entry.isFile() && entry.name.endsWith('.md')) {
+      found.push(normalizePathSegments(path.join(relativeDir, entry.name)));
+      continue;
+    }
+    if (entry.isDirectory()) {
+      const nested = listMatchingFiles(
+        root,
+        path.join(relativeDir, entry.name),
+        child => child.isFile() && child.name.endsWith('.md')
+      );
+      found.push(...nested);
+    }
+  }
+
+  return found.sort((a, b) => a.localeCompare(b));
+}
+
 function buildCatalog(root = ROOT) {
   const agents = listMatchingFiles(root, 'agents', entry => entry.isFile() && entry.name.endsWith('.md'));
   const commands = listMatchingFiles(root, 'commands', entry => entry.isFile() && entry.name.endsWith('.md'));
   const skills = listSkillsRecursive(path.join(root, 'skills'));
+  const rules = listRulesRecursive(root, 'rules');
 
   return {
     agents: { count: agents.length, files: agents, glob: 'agents/*.md' },
     commands: { count: commands.length, files: commands, glob: 'commands/*.md' },
-    skills: { count: skills.length, files: skills, glob: 'skills/**/SKILL.md' }
+    skills: { count: skills.length, files: skills, glob: 'skills/**/SKILL.md' },
+    rules: { count: rules.length, files: rules, glob: 'rules/*.md, rules/*/*.md' }
   };
 }
 
@@ -132,7 +161,7 @@ function parseReadmeExpectations(readmeContent) {
   const expectations = [];
 
   const quickStartMatch = readmeContent.match(
-    /access to\s+(\d+)\s+agents,\s+(\d+)\s+skills,\s+and\s+(\d+)\s+(?:commands|legacy command shims?)/i
+    /access to\s+(\d+)\s+agents,\s+(\d+)\s+skills,\s+and\s+(\d+)\s+(?:commands|legacy command shims?),\s+plus\s+(\d+)\s+rules/i
   );
   if (!quickStartMatch) {
     throw new Error('README.md is missing the quick-start catalog summary');
@@ -141,7 +170,8 @@ function parseReadmeExpectations(readmeContent) {
   expectations.push(
     { category: 'agents', mode: 'exact', expected: Number(quickStartMatch[1]), source: 'README.md quick-start summary' },
     { category: 'skills', mode: 'exact', expected: Number(quickStartMatch[2]), source: 'README.md quick-start summary' },
-    { category: 'commands', mode: 'exact', expected: Number(quickStartMatch[3]), source: 'README.md quick-start summary' }
+    { category: 'commands', mode: 'exact', expected: Number(quickStartMatch[3]), source: 'README.md quick-start summary' },
+    { category: 'rules', mode: 'exact', expected: Number(quickStartMatch[4]), source: 'README.md quick-start summary' }
   );
 
   return expectations;
@@ -332,9 +362,9 @@ function syncEnglishReadme(content, catalog) {
 
   nextContent = replaceOrThrow(
     nextContent,
-    /(access to\s+)(\d+)(\s+agents,\s+)(\d+)(\s+skills,\s+and\s+)(\d+)(\s+(?:commands|legacy command shims?))/i,
-    (_, prefix, __, agentsSuffix, ___, skillsSuffix) =>
-      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count} legacy command shims`,
+    /(access to\s+)(\d+)(\s+agents,\s+)(\d+)(\s+skills,\s+and\s+)(\d+)(\s+(?:commands|legacy command shims?),\s+plus\s+)(\d+)(\s+rules)/i,
+    (_, prefix, __, agentsSuffix, ___, skillsSuffix, ____, _____, ______, rulesSuffix) =>
+      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count} legacy command shims, plus ${catalog.rules.count}${rulesSuffix}`,
     'README.md quick-start summary'
   );
   nextContent = replaceOrThrow(
@@ -526,6 +556,7 @@ function renderText(result) {
   console.log(`- agents: ${result.catalog.agents.count}`);
   console.log(`- commands: ${result.catalog.commands.count}`);
   console.log(`- skills: ${result.catalog.skills.count}`);
+  console.log(`- rules: ${result.catalog.rules.count}`);
   console.log('');
 
   const mismatches = result.checks.filter(check => !check.ok);
@@ -548,6 +579,7 @@ function renderMarkdown(result) {
   console.log(`| Agents | ${result.catalog.agents.count} | \`${result.catalog.agents.glob}\` |`);
   console.log(`| Commands | ${result.catalog.commands.count} | \`${result.catalog.commands.glob}\` |`);
   console.log(`| Skills | ${result.catalog.skills.count} | \`${result.catalog.skills.glob}\` |`);
+  console.log(`| Rules | ${result.catalog.rules.count} | \`${result.catalog.rules.glob}\` |`);
   console.log('');
 
   if (mismatches.length === 0) {
@@ -629,6 +661,7 @@ module.exports = {
   createDocumentSpecsForRoot,
   evaluateExpectations,
   formatExpectation,
+  listRulesRecursive,
   main,
   parseAgentsDocExpectations,
   parseReadmeExpectations,
