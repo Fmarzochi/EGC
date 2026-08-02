@@ -13,11 +13,24 @@ const GUARDIAN_CLI = path.join(__dirname, '..', '..', 'mcp', 'servers', 'egc-gua
  * this mirrors the defensive multi-field extraction already used by
  * mcp-health-check.js's failureSummary() rather than assuming one shape.
  */
+function textFromContentBlocks(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .map(block => (block && typeof block.text === 'string' ? block.text : ''))
+    .filter(Boolean)
+    .join('\n');
+}
+
 function extractFetchedContent(input) {
   const output = input.tool_output;
   const pieces = [
     typeof output === 'string' ? output : '',
     typeof output?.output === 'string' ? output.output : '',
+    // Standard MCP SDK tool responses shape content as an array of blocks
+    // ({ content: [{ type: 'text', text: '...' }] }), not a plain string --
+    // the string-only check below silently skipped every one of these
+    // (audit EGC-533, Finding 3).
+    textFromContentBlocks(output?.content),
     typeof output?.content === 'string' ? output.content : '',
     typeof output?.text === 'string' ? output.text : '',
     typeof output?.result === 'string' ? output.result : '',
