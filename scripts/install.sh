@@ -44,6 +44,18 @@ for _arg in "$@"; do
   [ "$_arg" = "--dry-run" ] && DRY_RUN=true && break
 done
 
+# Detect whether we'll delegate to the Node installer below (install-apply.js
+# configures the commit-privacy filter itself, so this script must skip its
+# own copy of that step when delegating -- otherwise it runs twice).
+_has_install_args=false
+for _arg in "$@"; do
+  case "$_arg" in
+    --target|--profile|--modules|--config|--with|--without|--dry-run|--json) _has_install_args=true; break ;;
+  esac
+  # positional arg = language/component
+  case "$_arg" in -*) ;; *) _has_install_args=true; break ;; esac
+done
+
 # Node.js version check. Keep this floor in lockstep with package.json "engines"
 # and scripts/preinstall.js, which both require Node 20; a lower gate here would
 # let 18/19 reach the better-sqlite3 build and the TypeScript build steps below.
@@ -130,7 +142,11 @@ if [ "$DRY_RUN" = false ]; then
   # but only `egc init` configured the filter that keeps that promise --
   # this quick-start script (the README's own documented command) never
   # did (2026-08-01 audit finding). Best-effort: must not fail the install.
-  node - "$ROOT_DIR" <<'NODEEOF' || echo "  note: commit-privacy filter setup failed (non-fatal)"
+  # Skipped when delegating to install-apply.js below (--target/--profile/etc.
+  # present): that path runs this same setup itself, so running it here too
+  # would configure the filter twice (cubic review, PR #1122).
+  if [ "$_has_install_args" != true ]; then
+    node - "$ROOT_DIR" <<'NODEEOF' || echo "  note: commit-privacy filter setup failed (non-fatal)"
 const [, , rootDir] = process.argv;
 const { applyCommitPrivacyFilterCli } = require(rootDir + '/scripts/lib/memory-filters');
 applyCommitPrivacyFilterCli({
@@ -139,18 +155,11 @@ applyCommitPrivacyFilterCli({
   log: m => console.log('  ' + m),
 });
 NODEEOF
+  fi
 fi
 
 # Delegate to Node installer only when install-relevant args are present
 cd "$ROOT_DIR"
-_has_install_args=false
-for _arg in "$@"; do
-  case "$_arg" in
-    --target|--profile|--modules|--config|--with|--without|--dry-run|--json) _has_install_args=true; break ;;
-  esac
-  # positional arg = language/component
-  case "$_arg" in -*) ;; *) _has_install_args=true; break ;; esac
-done
 if [ "$_has_install_args" = true ]; then
   node scripts/install-apply.js "$@"
 fi
