@@ -248,7 +248,7 @@ async function acquireMigrationLock(lockFile: string): Promise<void> {
     try {
       fs.writeFileSync(lockFile, process.pid.toString(), { flag: 'wx' });
       locked = true;
-    } catch (e) { // NOSONAR: lock contention is handled by the retry loop below
+    } catch { // NOSONAR: lock contention is handled by the retry loop below
       retries--;
       await new Promise(r => setTimeout(r, 100));
     }
@@ -806,10 +806,6 @@ const TeamInitSchema = z.object({
   remote: z.string().min(1),
   branch: z.string().min(1).default('main')
 });
-
-const TeamSyncSchema = z.object({});
-
-const TeamStatusSchema = z.object({});
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {

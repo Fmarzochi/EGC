@@ -102,7 +102,7 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
       if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
         return readExistingKey();
       }
-      throw new Error(`[EGC encryption] Failed to persist encryption key to ${keyPath}: ${String(e)}. Remove the file or fix permissions and restart.`);
+      throw new Error(`[EGC encryption] Failed to persist encryption key to ${keyPath}: ${String(e)}. Remove the file or fix permissions and restart.`, { cause: e });
     }
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* best-effort cleanup */ }
