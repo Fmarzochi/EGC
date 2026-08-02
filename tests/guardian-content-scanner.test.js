@@ -99,14 +99,32 @@ run('curl pipe shell payload is flagged', () => {
   assert.ok(findings.some(f => f.category === 'exfiltration'));
 });
 
-run('plain exec( call is flagged, not just execSync(', () => {
+run('require("child_process").exec( is flagged', () => {
   const findings = scanForInjection('require("child_process").exec(`rm -rf /`)');
+  assert.ok(findings.some(f => f.category === 'exfiltration'));
+});
+
+run('import { exec } from "child_process" is flagged', () => {
+  const findings = scanForInjection("import { exec } from 'child_process';\nexec('rm -rf /');");
+  assert.ok(findings.some(f => f.category === 'exfiltration' && f.reason.includes('child_process')));
+});
+
+run('child_process.exec( is flagged', () => {
+  const findings = scanForInjection('child_process.exec(`rm -rf /`)');
   assert.ok(findings.some(f => f.category === 'exfiltration' && f.reason.includes('exec')));
 });
 
 run('execSync( call is still flagged', () => {
   const findings = scanForInjection('execSync(`rm -rf /`)');
   assert.ok(findings.some(f => f.category === 'exfiltration' && f.reason.includes('exec')));
+});
+
+run('bare RegExp.exec( is not a false positive', () => {
+  // The whole reason exec(?:Sync)? was narrowed (cubic review, PR #1123):
+  // plain .exec( is an extremely common RegExp method call, not a
+  // child_process signal on its own.
+  const findings = scanForInjection("const match = /foo/.exec('some input string');");
+  assert.ok(!findings.some(f => f.category === 'exfiltration'));
 });
 
 run('chat-template control token is flagged', () => {
