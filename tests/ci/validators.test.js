@@ -185,6 +185,7 @@ function runCatalogValidator(overrides = {}) {
 function writeCatalogFixture(testDir, options = {}) {
   const {
     readmeCounts = { agents: 1, skills: 1, commands: 1 },
+    readmeRulesCount = 1,
     readmeTableCounts = readmeCounts,
     readmeUnrelatedSkillsCount = 16,
     summaryCounts = { agents: 1, skills: 1, commands: 1 },
@@ -214,13 +215,15 @@ function writeCatalogFixture(testDir, options = {}) {
   fs.mkdirSync(path.join(testDir, 'agents'), { recursive: true });
   fs.mkdirSync(path.join(testDir, 'commands'), { recursive: true });
   fs.mkdirSync(path.join(testDir, 'skills', 'demo-skill'), { recursive: true });
+  fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
   fs.mkdirSync(path.join(testDir, 'docs', 'zh-CN'), { recursive: true });
 
   fs.writeFileSync(path.join(testDir, 'agents', 'planner.md'), '---\nmodel: sonnet\ntools: Read\n---\n# Planner');
   fs.writeFileSync(path.join(testDir, 'commands', 'plan.md'), '---\ndescription: Plan\n---\n# Plan');
   fs.writeFileSync(path.join(testDir, 'skills', 'demo-skill', 'SKILL.md'), '---\nname: demo-skill\ndescription: Demo skill\norigin: EGC\n---\n# Demo Skill');
+  fs.writeFileSync(path.join(testDir, 'rules', 'common.md'), '# Common rule');
 
-  fs.writeFileSync(readmePath, `Access to ${readmeCounts.agents} agents, ${readmeCounts.skills} skills, and ${readmeCounts.commands} commands.\n| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |\n|---------|------------|------------|-----------|----------|\n| Agents | PASS: ${readmeTableCounts.agents} agents | Shared | Shared | 1 |\n| Commands | PASS: ${readmeTableCounts.commands} commands | Shared | Shared | 1 |\n| Skills | PASS: ${readmeTableCounts.skills} skills | Shared | Shared | 1 |\n\n| Feature | Count | Format |\n|-----------|-------|---------|\n| Skills | ${readmeUnrelatedSkillsCount} | .agents/skills/ |\n`);
+  fs.writeFileSync(readmePath, `Access to ${readmeCounts.agents} agents, ${readmeCounts.skills} skills, and ${readmeCounts.commands} commands, plus ${readmeRulesCount} rules.\n| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |\n|---------|------------|------------|-----------|----------|\n| Agents | PASS: ${readmeTableCounts.agents} agents | Shared | Shared | 1 |\n| Commands | PASS: ${readmeTableCounts.commands} commands | Shared | Shared | 1 |\n| Skills | PASS: ${readmeTableCounts.skills} skills | Shared | Shared | 1 |\n\n| Feature | Count | Format |\n|-----------|-------|---------|\n| Skills | ${readmeUnrelatedSkillsCount} | .agents/skills/ |\n`);
   fs.writeFileSync(agentsPath, `This is a **production-ready AI coding plugin** providing ${summaryCounts.agents} specialized agents, ${summaryCounts.skills} skills, ${summaryCounts.commands} commands, and automated hook workflows for software development.\n\n\`\`\`\n${structureLines.join('\n')}\n\`\`\`\n`);
   fs.writeFileSync(zhRootReadmePath, `**完成！** 你现在可以使用 ${zhRootReadmeCounts.agents} 个代理、${zhRootReadmeCounts.skills} 个技能和 ${zhRootReadmeCounts.commands} 个命令。\n`);
   fs.writeFileSync(zhDocsReadmePath, `**搞定！** 你现在可以使用 ${zhDocsReadmeCounts.agents} 个智能体、${zhDocsReadmeCounts.skills} 项技能和 ${zhDocsReadmeCounts.commands} 个命令了。\n| 功能特性 | Gemini Code | OpenCode | 状态 |\n|---------|-------------|----------|--------|\n| 智能体 | \u2705 ${zhDocsTableCounts.agents} 个 | \u2705 12 个 | **Gemini Code 领先** |\n| 命令 | \u2705 ${zhDocsTableCounts.commands} 个 | \u2705 31 个 | **Gemini Code 领先** |\n| 技能 | \u2705 ${zhDocsTableCounts.skills} 项 | \u2705 37 项 | **Gemini Code 领先** |\n\n| 功能特性 | 数量 | 格式 |\n|-----------|-------|---------|\n| 技能 | ${zhDocsUnrelatedSkillsCount} | .agents/skills/ |

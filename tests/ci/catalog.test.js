@@ -43,7 +43,7 @@ function writeEnglishReadme(root, counts, options = {}) {
   const parityCounts = options.parityCounts || counts;
   const unrelatedSkillsCount = options.unrelatedSkillsCount || 16;
 
-  fs.writeFileSync(path.join(root, 'README.md'), `Access to ${counts.agents} agents, ${counts.skills} skills, and ${counts.commands} commands.
+  fs.writeFileSync(path.join(root, 'README.md'), `Access to ${counts.agents} agents, ${counts.skills} skills, and ${counts.commands} commands, plus ${counts.rules} rules.
 | Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |
 | --- | --- | --- | --- | --- |
 | Agents | PASS: ${tableCounts.agents} agents |
@@ -125,7 +125,7 @@ commands/ - ${counts.commands} 个斜杠命令
 }
 
 function writeCatalogFixture(root, options = {}) {
-  const actualCounts = options.actualCounts || { agents: 1, skills: 1, commands: 1 };
+  const actualCounts = options.actualCounts || { agents: 1, skills: 1, commands: 1, rules: 1 };
   const documentedCounts = options.documentedCounts || actualCounts;
   const skillsMinimum = Boolean(options.skillsMinimum);
   const unrelatedSkillsCount = options.unrelatedSkillsCount || 16;
@@ -133,6 +133,7 @@ function writeCatalogFixture(root, options = {}) {
   writeCountedFiles(root, 'agents', actualCounts.agents);
   writeCountedFiles(root, 'commands', actualCounts.commands);
   writeCountedFiles(root, 'skills', actualCounts.skills);
+  writeCountedFiles(root, 'rules', actualCounts.rules);
 
   fs.writeFileSync(path.join(root, 'agents', 'notes.txt'), 'not counted\n');
   fs.writeFileSync(path.join(root, 'commands', 'notes.txt'), 'not counted\n');
@@ -167,8 +168,8 @@ function runTests() {
     const testDir = createTestDir();
     try {
       writeCatalogFixture(testDir, {
-        actualCounts: { agents: 2, skills: 1, commands: 3 },
-        documentedCounts: { agents: 2, skills: 1, commands: 3 },
+        actualCounts: { agents: 2, skills: 1, commands: 3, rules: 4 },
+        documentedCounts: { agents: 2, skills: 1, commands: 3, rules: 4 },
       });
 
       const catalog = buildCatalog(testDir);
@@ -178,11 +179,13 @@ function runTests() {
           agents: catalog.agents.count,
           skills: catalog.skills.count,
           commands: catalog.commands.count,
+          rules: catalog.rules.count,
         },
-        { agents: 2, skills: 1, commands: 3 }
+        { agents: 2, skills: 1, commands: 3, rules: 4 }
       );
       assert.ok(catalog.agents.files.every(file => file.endsWith('.md')));
       assert.ok(catalog.skills.files.every(file => file.endsWith('/SKILL.md')));
+      assert.ok(catalog.rules.files.every(file => file.endsWith('.md')));
     } finally {
       cleanupTestDir(testDir);
     }
@@ -192,8 +195,8 @@ function runTests() {
     const testDir = createTestDir();
     try {
       writeCatalogFixture(testDir, {
-        actualCounts: { agents: 1, skills: 1, commands: 1 },
-        documentedCounts: { agents: 9, skills: 9, commands: 9 },
+        actualCounts: { agents: 1, skills: 1, commands: 1, rules: 1 },
+        documentedCounts: { agents: 9, skills: 9, commands: 9, rules: 9 },
       });
 
       const result = runCatalogCheck({ root: testDir });
@@ -206,6 +209,7 @@ function runTests() {
       assert.ok(formatted.includes('AGENTS.md summary'));
       assert.ok(formatted.includes('README.zh-CN.md quick-start summary'));
       assert.ok(formatted.includes('docs/zh-CN/AGENTS.md project structure'));
+      assert.ok(formatted.includes('rules documented = 9, actual 1'));
     } finally {
       cleanupTestDir(testDir);
     }
@@ -215,8 +219,8 @@ function runTests() {
     const testDir = createTestDir();
     try {
       writeCatalogFixture(testDir, {
-        actualCounts: { agents: 1, skills: 1, commands: 1 },
-        documentedCounts: { agents: 7, skills: 7, commands: 7 },
+        actualCounts: { agents: 1, skills: 1, commands: 1, rules: 1 },
+        documentedCounts: { agents: 7, skills: 7, commands: 7, rules: 7 },
         skillsMinimum: true,
         unrelatedSkillsCount: 42,
       });
@@ -230,13 +234,70 @@ function runTests() {
       const zhReadme = fs.readFileSync(path.join(testDir, 'docs', 'zh-CN', 'README.md'), 'utf8');
       const zhAgentsDoc = fs.readFileSync(path.join(testDir, 'docs', 'zh-CN', 'AGENTS.md'), 'utf8');
 
-      assert.ok(readme.includes('Access to 1 agents, 1 skills, and 1 legacy command shims'));
+      assert.ok(readme.includes('Access to 1 agents, 1 skills, and 1 legacy command shims, plus 1 rules'));
       assert.ok(readme.includes('| Skills | 42 | .agents/skills/ |'));
       assert.ok(agentsDoc.includes('providing 1 specialized agents, 1+ skills, 1 commands'));
       assert.ok(agentsDoc.includes('skills/ - 1+ workflow skills and domain knowledge'));
       assert.ok(zhReadme.includes('| 技能 | 42 | .agents/skills/ |'));
       assert.ok(zhAgentsDoc.includes('提供 1 个专业代理、1+ 项技能、1 条命令'));
       assert.ok(zhAgentsDoc.includes('skills/ - 1+ 个工作流技能和领域知识'));
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('counts rules/ nested under per-language subdirectories, not just flat top-level files', () => {
+    // Production shape: 110 of the repo's 111 rules live at rules/<lang>/<name>.md,
+    // only rules/README.md sits flat at the top level. A fixture that only
+    // exercises the flat path would miss a regression in the recursion branch
+    // that actually produces the locked production count.
+    const testDir = createTestDir();
+    try {
+      const rulesDir = path.join(testDir, 'rules');
+      fs.mkdirSync(path.join(rulesDir, 'python'), { recursive: true });
+      fs.mkdirSync(path.join(rulesDir, 'typescript'), { recursive: true });
+      fs.writeFileSync(path.join(rulesDir, 'README.md'), '# Rules');
+      fs.writeFileSync(path.join(rulesDir, 'python', 'coding-style.md'), '# Python style');
+      fs.writeFileSync(path.join(rulesDir, 'python', 'testing.md'), '# Python testing');
+      fs.writeFileSync(path.join(rulesDir, 'typescript', 'coding-style.md'), '# TS style');
+      // Non-.md and doubly-nested entries must not be counted.
+      fs.writeFileSync(path.join(rulesDir, 'python', 'notes.txt'), 'not counted');
+      fs.mkdirSync(path.join(rulesDir, 'typescript', 'nested-too-deep'), { recursive: true });
+      fs.writeFileSync(path.join(rulesDir, 'typescript', 'nested-too-deep', 'ignored.md'), '# should not count');
+
+      const catalog = buildCatalog(testDir);
+      assert.strictEqual(catalog.rules.count, 4, 'README.md + 2 python + 1 typescript, excluding .txt and the too-deep nested file');
+      assert.ok(catalog.rules.files.includes('rules/python/coding-style.md'));
+      assert.ok(catalog.rules.files.includes('rules/typescript/coding-style.md'));
+      assert.ok(!catalog.rules.files.some(f => f.includes('nested-too-deep')));
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('locks the rules/ count against the README quick-start summary', () => {
+    const testDir = createTestDir();
+    try {
+      writeCatalogFixture(testDir, {
+        actualCounts: { agents: 1, skills: 1, commands: 1, rules: 5 },
+        documentedCounts: { agents: 1, skills: 1, commands: 1, rules: 5 },
+      });
+
+      const catalog = buildCatalog(testDir);
+      assert.strictEqual(catalog.rules.count, 5);
+
+      const clean = runCatalogCheck({ root: testDir });
+      assert.strictEqual(clean.checks.filter(check => !check.ok).length, 0);
+
+      fs.writeFileSync(
+        path.join(testDir, 'README.md'),
+        'Access to 1 agents, 1 skills, and 1 commands.\n'
+      );
+
+      assert.throws(
+        () => runCatalogCheck({ root: testDir }),
+        /README\.md is missing the quick-start catalog summary/
+      );
     } finally {
       cleanupTestDir(testDir);
     }
