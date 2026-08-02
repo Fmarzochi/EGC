@@ -715,6 +715,13 @@ export const DENIED_PATHS: string[] = buildDeniedPaths();
 // process's own cwd, which is not guaranteed to match the shell the command
 // actually runs in.
 export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
+  // Trim first: a trailing newline (routine for anything piped through
+  // `echo`) or stray whitespace survives path.resolve() into the final
+  // string, and every pattern in PROTECTED_FILE_PATTERNS is anchored with
+  // `$`, so an untrimmed ".env\n" silently failed to match ".env" and was
+  // allowed through (audit EGC-533).
+  p = p.trim();
+
   // Expand ~ at the start
   const expanded = p.startsWith('~')
     ? path.join(os.homedir(), p.slice(1))
@@ -784,6 +791,10 @@ const DANGEROUS_GIT_CONFIG_KEYS = new Set([
 const GIT_CONFIG_MERGE_DRIVER_KEY_RE = /^merge\..+\.driver$/;
 const GIT_CONFIG_FILTER_KEY_RE = /^filter\..+\.(clean|smudge|process)$/;
 const GIT_CONFIG_DIFF_COMMAND_KEY_RE = /^diff\..+\.command$/;
+// includeIf.<condition>.path loads another config file wholesale, exactly
+// like include.path above -- git's conditional-include syntax, not covered
+// by the exact-match DANGEROUS_GIT_CONFIG_KEYS set (audit EGC-533).
+const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
 // An alias is only a shell-escape risk when its value starts with '!' (git's
 // own syntax for "run this as a shell command" instead of a git subcommand);
 // alias.co = checkout is ordinary and harmless.
@@ -845,6 +856,7 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
     || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(key)
     || GIT_CONFIG_FILTER_KEY_RE.test(key)
     || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(key)
+    || GIT_CONFIG_INCLUDEIF_KEY_RE.test(key)
     || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && value.startsWith('!'));
 
   if (!isDangerous) return null;

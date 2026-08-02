@@ -199,5 +199,20 @@ run('.egc/guardian-cli-path.json write is blocked (guardian-bin.js now trusts th
   assert.strictEqual(v.allowed, false, 'expected .egc/guardian-cli-path.json write to be blocked');
 });
 
+// Multica audit EGC-533 findings (2026-08-02): trailing-whitespace path
+// bypass and git includeIf bypass.
+run('.env write with a trailing newline is still blocked (audit EGC-533, Finding 1)', () => {
+  const v = validateWrite('.env\n');
+  assert.strictEqual(v.allowed, false, 'a trailing newline must not defeat the $-anchored protected-path patterns');
+});
+run('.bashrc write with trailing whitespace is still blocked (audit EGC-533, Finding 1)', () => {
+  const v = validateWrite('.bashrc   ');
+  assert.strictEqual(v.allowed, false, 'trailing whitespace must not defeat the $-anchored protected-path patterns');
+});
+run('git config includeIf.<condition>.path write is blocked (audit EGC-533, Finding 2)', () => {
+  const v = validateCommand('git config includeIf.gitdir:~/work/.path /tmp/evil');
+  assert.strictEqual(v.allowed, false, 'includeIf.*.path loads another config file wholesale, same as include.path');
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
