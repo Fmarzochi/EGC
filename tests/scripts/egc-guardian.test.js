@@ -19,7 +19,7 @@ const VALIDATOR_PATH = path.join(
   '../../mcp/servers/egc-guardian/build/validator.js'
 );
 
-let validateCommand, validateWrite, isProtectedPath, buildDeniedPaths, resolveRealOrLexical;
+let validateCommand, validateWrite, isProtectedPath, buildDeniedPaths, resolveRealOrLexical, DENIED_PATHS;
 
 try {
   // ESM build: we use dynamic import wrapped in an async IIFE then run tests
@@ -46,6 +46,7 @@ async function runTests() {
   isProtectedPath = mod.isProtectedPath;
   buildDeniedPaths = mod.buildDeniedPaths;
   resolveRealOrLexical = mod.resolveRealOrLexical;
+  DENIED_PATHS = mod.DENIED_PATHS;
 
   const home = os.homedir();
 
@@ -266,6 +267,38 @@ async function runTests() {
         'a symlink retargeted after the first check must resolve fresh, not use a stale cached target'
       );
     } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+  run(`isProtectedPath blocks a write under a symlinked DENIED_PATHS entry end-to-end (macOS /etc regression, EGC-538)`, () => {
+    // cubic review on PR #1130: the resolveRealOrLexical() unit test above
+    // proves the helper resolves symlinks correctly, but does not exercise
+    // isProtectedPath()'s own DENIED_PATHS loop, so a regression there (e.g.
+    // reverting to load-time resolution) would still pass every other test.
+    // DENIED_PATHS is a mutable array bound to a const reference (not
+    // reassigned), so temporarily appending a symlinked entry here drives the
+    // exact real-world shape -- a denied directory that is itself a symlink --
+    // through the real isProtectedPath() comparison, then removes it.
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-guardian-e2e-symlink-'));
+    const realTarget = path.join(tmpBase, 'real-denied-target');
+    const linkPath = path.join(tmpBase, 'denied-link');
+    fs.mkdirSync(realTarget, { recursive: true });
+    fs.symlinkSync(realTarget, linkPath, 'dir');
+
+    DENIED_PATHS.push(linkPath);
+    try {
+      assert.strictEqual(
+        isProtectedPath(path.join(realTarget, 'secret.txt')),
+        true,
+        'a write under the real target of a symlinked DENIED_PATHS entry must be blocked'
+      );
+      assert.strictEqual(
+        isProtectedPath(path.join(linkPath, 'secret.txt')),
+        true,
+        'a write under the symlink path itself must also be blocked'
+      );
+    } finally {
+      DENIED_PATHS.pop();
       fs.rmSync(tmpBase, { recursive: true, force: true });
     }
   });
