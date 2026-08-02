@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
 import { writeAuditEntry } from './audit-log.js';
 import { scanVolatile } from './egc-volatile-scanner.js';
+import { scanForInjection } from './prompt-injection-scanner.js';
 import { classifyChunk } from './egc-chunk-router.js';
 import { reduceJsonArray } from './egc-array-crusher.js';
 import { autoLearn } from './learn-writer.js';
@@ -113,13 +114,13 @@ const sysLogger = new PersistentLogger('egc-guardian-router');
 
 // Security audit log writes are handled by audit-log.ts (writeAuditEntry).
 
-function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: Record<string, unknown> = {}) {
+function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'FLAGGED'|'MUTATED'|'ONLINE'|'SHUTDOWN'|'FATAL', details: Record<string, unknown> = {}) {
   let level: 'ERROR' | 'INFO' | 'AUDIT';
   if (status === 'FATAL' || status === 'DENIED') level = 'ERROR';
   else if (status === 'ONLINE' || status === 'SHUTDOWN') level = 'INFO';
   else level = 'AUDIT';
   sysLogger.log(level, action, status, details);
-  if (status === 'DENIED') writeAuditEntry(action, status, details);
+  if (status === 'DENIED' || status === 'FLAGGED') writeAuditEntry(action, status, details);
 }
 
 const server = new Server({ name: "egc-guardian-router", version: "3.0.0" }, { capabilities: { tools: {} } });
@@ -132,6 +133,11 @@ const ValidateCommandSchema = z.object({
 
 const ValidateWriteSchema = z.object({
   filepath: z.string().min(1)
+});
+
+const ValidateContentSchema = z.object({
+  content: z.string().min(1).max(2_000_000),
+  source: z.string().max(512).optional()
 });
 
 const ReduceContextSchema = z.object({
@@ -150,7 +156,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       { name: "validate_command", description: "Validate command execution safety.", inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } },
       { name: "validate_write", description: "Validate write path safety.", inputSchema: { type: "object", properties: { filepath: { type: "string" } }, required: ["filepath"] } },
-      { 
+      {
+        name: "validate_content",
+        description: "Heuristically scan untrusted content (fetched web pages, third-party files, API responses, fork PR diffs) for prompt-injection patterns before trusting it. Advisory only: returns [FLAGGED] or [CLEAN], never blocks -- the caller decides how to treat flagged content.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            content: { type: "string", maxLength: 2_000_000, description: "The untrusted text to scan." },
+            source: { type: "string", maxLength: 512, description: "Optional label for what this content is, e.g. 'file:path' or 'web:url', used for audit logging." }
+          },
+          required: ["content"]
+        }
+      },
+      {
         name: "reduce_context", 
         description: "Adaptive Context Routing: Loads files and mutates payloads to save IDE token budget.", 
         inputSchema: { 
@@ -230,6 +248,23 @@ function handleValidateWrite(toolArgs: unknown) {
   }
   auditLog('FILE_WRITE', 'ALLOWED', { filepath: path.resolve(filepath) });
   return { content: [{ type: "text", text: "[ALLOWED]" }] };
+}
+
+function handleValidateContent(toolArgs: unknown) {
+  const { content, source } = ValidateContentSchema.parse(toolArgs);
+  const findings = scanForInjection(content);
+  if (findings.length > 0) {
+    const categories = [...new Set(findings.map(f => f.category))];
+    // Categories/reasons only, never the raw findings array: it carries
+    // matched snippets straight out of untrusted content, which can include
+    // secrets or private data sitting next to the pattern that tripped the
+    // scan (cubic review, PR #1123). The audit log's redaction only covers
+    // known key names and secret-shaped values, not arbitrary substrings.
+    auditLog('CONTENT_SCAN', 'FLAGGED', { source, categories, reasons: findings.map(f => f.reason) });
+    return { content: [{ type: "text", text: `[FLAGGED] ${findings.length} pattern(s): ${categories.join(', ')}` }] };
+  }
+  auditLog('CONTENT_SCAN', 'ALLOWED', { source });
+  return { content: [{ type: "text", text: "[CLEAN]" }] };
 }
 
 async function loadContextFileChunks(filepath: string, totalBytesLoaded: number): Promise<{ chunks: string[]; bytes: number } | null> {
@@ -474,6 +509,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (request.params.name) {
       case "validate_command": return handleValidateCommand(request.params.arguments);
       case "validate_write": return handleValidateWrite(request.params.arguments);
+      case "validate_content": return handleValidateContent(request.params.arguments);
       case "reduce_context": return await handleReduceContext(request.params.arguments);
       case "orchestrate_task": return await handleOrchestrateTask(request.params.arguments);
       case "auto_learn": return await handleAutoLearn(request.params.arguments);
