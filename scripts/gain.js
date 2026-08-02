@@ -5,7 +5,7 @@
 // ledger only and prints to the terminal, so the report itself costs zero
 // tokens. `egc saved` stays as the short summary; gain is the detailed view.
 
-const { readAll, aggregate, metricsFilePath } = require('./lib/crusher/metrics');
+const { readAll, aggregateBreakdown, metricsFilePath } = require('./lib/crusher/metrics');
 
 const BAR_WIDTH = 24;
 
@@ -38,19 +38,25 @@ function printHistory(entries) {
   if (entries.length > recent.length) {
     console.log(`  ... ${entries.length - recent.length} earlier run(s) omitted`);
   }
-  for (const e of recent) {
-    const when = (e.ts || '').replace('T', ' ').slice(0, 16);
+  for (const entry of recent) {
+    const when = (entry.ts || '').replace('T', ' ').slice(0, 16);
     console.log(
-      `  ${when}  ${String(e.kind || '?').padEnd(12)} ` +
-      `~${formatTokens(e.tokensSaved || 0).padStart(7)} saved  ${e.cmd || ''}`
+      `  ${when}  ${String(entry.kind || '?').padEnd(12)} ` +
+      `~${formatTokens(entry.tokensSaved || 0).padStart(7)} saved  ${entry.cmd || ''}`
     );
   }
+}
+
+function printScopedTokens(label, totals, unavailableMessage) {
+  const value = totals?.available === false
+    ? unavailableMessage
+    : `~${formatTokens(totals?.tokensSaved || 0)} tokens`;
+  console.log(`  ${label.padEnd(20)} ${value}`);
 }
 
 function main() {
   const json = process.argv.includes('--json');
   const entries = readAll();
-  const totals = aggregate(entries);
 
   if (process.argv.includes('--history')) {
     if (json) {
@@ -61,8 +67,13 @@ function main() {
     return;
   }
 
+  const report = aggregateBreakdown(entries);
+  const totals = report.sinceInstall;
+
   if (json) {
-    console.log(JSON.stringify({ ...totals, entries: entries.length }, null, 2));
+    // Preserve the existing top-level lifetime fields while adding the scoped
+    // report, so scripts consuming runs/bytes/tokens/byKind keep working.
+    console.log(JSON.stringify({ ...totals, ...report, entries: entries.length }, null, 2));
     return;
   }
 
@@ -73,23 +84,24 @@ function main() {
   }
 
   const pct = totals.bytesIn > 0 ? (1 - totals.bytesOut / totals.bytesIn) : 0;
-  const avg = Math.round(totals.tokensSaved / totals.runs);
-  const biggest = entries.reduce(
-    (top, e) => ((e.tokensSaved || 0) > (top.tokensSaved || 0) ? e : top),
-    entries[0]
-  );
 
   console.log('EGC Token Gain (local ledger, zero token cost)');
   console.log('═'.repeat(52));
   console.log('');
-  console.log(`  Crushed runs:     ${totals.runs}`);
-  console.log(`  Output size:      ${formatBytes(totals.bytesIn)} -> ${formatBytes(totals.bytesOut)}`);
-  console.log(`  Tokens saved:     ~${formatTokens(totals.tokensSaved)}`);
-  console.log(`  Avg per run:      ~${formatTokens(avg)} tokens`);
-  if (biggest && biggest.cmd) {
-    console.log(`  Biggest crush:    ~${formatTokens(biggest.tokensSaved || 0)} tokens (${biggest.cmd})`);
+  printScopedTokens('Today', report.today);
+  printScopedTokens('Current session', report.currentSession, 'unavailable (no EGC_SESSION_ID)');
+  printScopedTokens('Current project', report.currentProject, 'unavailable');
+  printScopedTokens('Since install', report.sinceInstall);
+  printScopedTokens('Last 7 days', report.last7Days);
+  printScopedTokens('Last 30 days', report.last30Days);
+  console.log('');
+  console.log(`  Crushed runs:         ${report.runs}`);
+  console.log(`  Average per run:      ~${formatTokens(report.averagePerRun)} tokens`);
+  if (report.biggest?.cmd) {
+    console.log(`  Biggest crush:        ~${formatTokens(report.biggest.tokensSaved)} tokens (${report.biggest.cmd})`);
   }
-  console.log(`  Efficiency:       ${bar(pct)} ${(pct * 100).toFixed(1)}%`);
+  console.log(`  Output size:          ${formatBytes(totals.bytesIn)} -> ${formatBytes(totals.bytesOut)}`);
+  console.log(`  Efficiency:           ${bar(pct)} ${(pct * 100).toFixed(1)}%`);
   console.log('');
 
   const kinds = Object.entries(totals.byKind).sort((a, b) => b[1].tokensSaved - a[1].tokensSaved);
@@ -97,10 +109,10 @@ function main() {
     console.log('  By command kind');
     console.log('  ' + '─'.repeat(50));
     const top = kinds[0][1].tokensSaved || 1;
-    for (const [kind, k] of kinds) {
+    for (const [kind, kindTotals] of kinds) {
       console.log(
-        `  ${kind.padEnd(14)} ${String(k.runs).padStart(4)} runs  ` +
-        `~${formatTokens(k.tokensSaved).padStart(7)}  ${bar(k.tokensSaved / top, 10)}`
+        `  ${kind.padEnd(14)} ${String(kindTotals.runs).padStart(4)} runs  ` +
+        `~${formatTokens(kindTotals.tokensSaved).padStart(7)}  ${bar(kindTotals.tokensSaved / top, 10)}`
       );
     }
     console.log('');
