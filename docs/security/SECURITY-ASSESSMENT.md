@@ -61,7 +61,7 @@ This assessment covers the EGC runtime and its primary components:
 - EGC is a local-only tool; it has no server component, no authentication, and no network services.
 - The security posture depends on the security of the host machine and the AI tool integrations.
 - Prompt injection from external content (e.g., malicious files read by the AI) is an AI-tool-level concern, not addressable at the EGC layer.
-- Guardian validation depends on the harness actually invoking the registered hooks; a harness that does not support hook wiring (several Tier 1 discoverability-only adapters, e.g. Goose, OpenHands, Amazon Q, Roo Code, Qwen Code) gets memory and skills but not command-level enforcement.
+- Guardian validation depends on the harness actually invoking the registered hooks. Amazon Q, Goose, and OpenHands (#1092) and Qwen Code (#1080) all have real Guardian hook wiring. Roo Code is the one exception: it has no external hook API (confirmed against its own docs and an open upstream feature request), so it gets a native `roo-cline.deniedCommands` seed instead of a Guardian adapter, a real but partial mitigation covering only the unconditionally-dangerous base commands by prefix match, not context-aware command-level enforcement.
 
 ## Assessment Date
 

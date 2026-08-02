@@ -29,7 +29,7 @@ npm install -g @egchq/egc && egc install
 ```
 
 - **Reduce context waste by up to 90%, cut token costs, and keep every AI perfectly aligned across sessions.**
-- **Guardian: validate every command before execution, block dangerous writes, and detect prompt injection. Every shared brain comes with a built-in safety layer.**
+- **Guardian: validate every command before execution and block dangerous writes. Every shared brain comes with a built-in safety layer.**
 - **One command, zero config: memory stays local and encrypted on your machine, and never gets committed to git.**
 
 <div align="center">
@@ -58,7 +58,7 @@ EGC gives every AI agent a persistent, shared brain. It captures decisions, sess
 
 ### Guardian: Built-In Safety Guardrails
 
-A second half of the brain runs guardrails in the background. It validates commands before they execute, gates risky writes, compresses context before it overflows, orchestrates multi-step tasks across agents, and learns from every correction, all without you invoking a single tool. An invisible safety net that keeps context lean, actions safe, and workflows autonomous.
+A second half of the brain runs guardrails in the background. It validates commands before they execute, gates risky writes, compresses context before it overflows, orchestrates multi-step tasks across agents, and learns from every correction, all without you invoking a single tool. An invisible safety net that keeps context lean, actions safe, and workflows autonomous. (Coverage depends on each tool's own hook support; see the [Security Assessment](docs/security/SECURITY-ASSESSMENT.md#known-limitations) for the one documented exception.)
 
 ### Token Crusher: The Brain Filters Noise Before It Remembers
 
