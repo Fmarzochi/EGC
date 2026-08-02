@@ -43,15 +43,19 @@ function wrappedRe() {
 // EGC-512: it flagged e.g. `git commit -m "fix: a & b"` as needing the
 // --shell wrap purely because of the quoted `&`, when the harness's own
 // shell already parses that quoting correctly with no wrap needed.
+//
+// This scan is intentionally platform-uniform, not just POSIX: every host
+// that wires this hook (Claude Code, Cursor, Junie, OpenCode, Amp) invokes
+// its Bash-equivalent tool through a POSIX-compatible shell even on
+// Windows (Git Bash/WSL), never raw cmd.exe -- confirmed by the test suite
+// itself, which asserts identical quote-aware behavior on every platform
+// for this exact function and is POSIX-gated only for the parts that are
+// genuinely POSIX-only (pipelines, `--shell` wrapping). A platform branch
+// here that special-cased cmd.exe quoting broke those cross-platform
+// assertions on Windows CI and was reverted; if a host that actually
+// shells out via cmd.exe is ever wired to this hook, that needs its own
+// dedicated handling, not a blanket win32 check here.
 function hasComplexShellSyntax(cmd) {
-  // cmd.exe does not treat single quotes as quoting (confirmed by shSingleQuote's
-  // own POSIX-escaping caveat below), so the quote-aware scan below would treat a
-  // Windows metacharacter sitting inside single quotes as inert when cmd.exe would
-  // still see it as live. Windows stays on the old conservative character-class
-  // check instead, matching the platform's real quoting rules.
-  if (process.platform === 'win32') {
-    return /[|&;<>$`()\n]/.test(cmd);
-  }
   let quote = null;
   for (let i = 0; i < cmd.length; i++) {
     const ch = cmd[i];

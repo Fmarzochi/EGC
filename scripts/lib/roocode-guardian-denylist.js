@@ -86,7 +86,13 @@ function stripJsonComments(text) {
     if (ch === '/' && next === '*') { inBlockComment = true; i++; continue; }
     out += ch;
   }
-  return out.replace(/,(\s*[}\]])/g, '$1');
+  // String-aware: a string value containing a literal ",]" or ",}" (e.g. a
+  // user's note field quoting JSON syntax) must not be mistaken for an
+  // actual trailing comma. Alternates between skipping whole string
+  // literals untouched and collapsing a real trailing comma.
+  return out.replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (match, trailing) => (
+    trailing === undefined ? match : trailing
+  ));
 }
 
 function readSettingsFile(settingsPath) {
@@ -109,6 +115,14 @@ function readSettingsFile(settingsPath) {
   return parsed;
 }
 
+// Known, accepted trade-off (cubic review, PR #1122): re-serializing with
+// JSON.stringify drops comments and original formatting. This already held
+// for any plain (uncommented) settings.json before the JSONC-tolerant read
+// above existed. What changed is that a *commented* file now also gets
+// this same reformat on write instead of the whole operation throwing and
+// leaving the file untouched -- accepted rather than building a full
+// comment-preserving JSONC editor for this one narrow denylist-seeding
+// call site.
 function writeSettingsFile(settingsPath, settings) {
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
