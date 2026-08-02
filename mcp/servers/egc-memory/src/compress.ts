@@ -190,7 +190,7 @@ async function loadRawObservationsFromStateDb(
       .map((row: EventRow) => {
         const payload = JSON.parse(row.payload);
         return {
-          id: row.id,
+          id: String(row.id),
           tool: payload.tool,
           output: payload.output ?? payload.result ?? "",
           content: payload.input ?? payload.output ?? payload.result ?? "",
