@@ -109,6 +109,11 @@ run('import { exec } from "child_process" is flagged', () => {
   assert.ok(findings.some(f => f.category === 'exfiltration' && f.reason.includes('child_process')));
 });
 
+run('import { exec } from "node:child_process" is flagged', () => {
+  const findings = scanForInjection("import { exec } from 'node:child_process';\nexec('rm -rf /');");
+  assert.ok(findings.some(f => f.category === 'exfiltration' && f.reason.includes('child_process')));
+});
+
 run('child_process.exec( is flagged', () => {
   const findings = scanForInjection('child_process.exec(`rm -rf /`)');
   assert.ok(findings.some(f => f.category === 'exfiltration' && f.reason.includes('exec')));
