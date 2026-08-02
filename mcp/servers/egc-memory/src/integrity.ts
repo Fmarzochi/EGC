@@ -50,7 +50,8 @@ export function loadOrCreateKey(): Buffer {
       hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
     } catch (readErr: unknown) {
       throw new Error(
-        `HMAC key file at ${KEY_PATH} exists but could not be read: ${(readErr as Error).message}`
+        `HMAC key file at ${KEY_PATH} exists but could not be read: ${(readErr as Error).message}`,
+        { cause: readErr }
       );
     }
 

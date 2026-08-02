@@ -702,7 +702,22 @@ export function buildDeniedPaths(): string[] {
     );
   }
 
-  return paths.filter(Boolean);
+  // isProtectedPath() resolves the incoming path through fs.realpathSync()
+  // before comparing it against this list, so an entry that is itself a
+  // symlink must be resolved here too, or the comparison never matches.
+  // Concretely: on macOS /etc is a symlink to /private/etc, so a write to
+  // /etc/hosts or /etc/shadow resolves to /private/etc/hosts, which never
+  // starts with the literal '/etc' string below, silently defeating this
+  // protection on macOS only (audit EGC-538 sub-part 1, caught by CI).
+  const resolved = paths.map(p => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return p;
+    }
+  });
+
+  return [...new Set([...paths, ...resolved])].filter(Boolean);
 }
 
 export const DENIED_PATHS: string[] = buildDeniedPaths();

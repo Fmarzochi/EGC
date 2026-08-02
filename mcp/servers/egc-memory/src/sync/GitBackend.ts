@@ -110,7 +110,7 @@ export class GitBackend extends SyncBackend {
       try {
         await this.git.push(['--set-upstream', 'origin', this.config.branch]);
       } catch (error_) {
-        throw new Error(`Push failed after setting upstream: ${String(error_)}`);
+        throw new Error(`Push failed after setting upstream: ${String(error_)}`, { cause: error_ });
       }
     }
     return true;
@@ -139,7 +139,7 @@ export class GitBackend extends SyncBackend {
       // No commits yet.
     }
 
-    let hasUncommittedChanges = false;
+    let hasUncommittedChanges: boolean;
     try {
       const gitStatus = await this.git.status();
       hasUncommittedChanges = gitStatus.files.length > 0;
@@ -147,7 +147,7 @@ export class GitBackend extends SyncBackend {
       hasUncommittedChanges = false;
     }
 
-    let conflictCount = 0;
+    let conflictCount: number;
     try {
       const gitStatus = await this.git.status();
       conflictCount = gitStatus.conflicted.length;

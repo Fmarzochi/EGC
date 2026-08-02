@@ -13,6 +13,14 @@ import { open } from "sqlite";
 
 export type ObservationType = "tool_failure" | "tool_success" | "file_edit" | "generic";
 
+// Minimal shape of a row from the `events` table, matching the SELECT/UPDATE
+// queries in this file -- the `sqlite` package's own types are loose (any[]).
+interface EventRow {
+  id: number;
+  payload: string;
+  timestamp: string;
+}
+
 export interface RawObservation {
   id?: string;
   tool?: string;
@@ -168,10 +176,10 @@ async function loadRawObservationsFromStateDb(
       LIMIT ?
     `;
 
-    const rows = await db.all(query, [projectRoot, sinceFilter, sinceFilter, limit]);
+    const rows: EventRow[] = await db.all(query, [projectRoot, sinceFilter, sinceFilter, limit]);
 
     return rows
-      .filter((row: any) => {
+      .filter((row: EventRow) => {
         try {
           const p = JSON.parse(row.payload);
           return p !== null && typeof p === "object" && (p.tool || p.output || p.result || p.input);
@@ -179,10 +187,10 @@ async function loadRawObservationsFromStateDb(
           return false;
         }
       })
-      .map((row: any) => {
+      .map((row: EventRow) => {
         const payload = JSON.parse(row.payload);
         return {
-          id: row.id,
+          id: String(row.id),
           tool: payload.tool,
           output: payload.output ?? payload.result ?? "",
           content: payload.input ?? payload.output ?? payload.result ?? "",
@@ -289,7 +297,7 @@ export async function replaceObservation(projectPath: string, id: string, compre
         [compressed.compressed_at, id]
       );
 
-      if ((result as any)?.changes > 0) {
+      if (((result as { changes?: number } | undefined)?.changes ?? 0) > 0) {
         return;
       }
     } finally {

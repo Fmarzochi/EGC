@@ -121,7 +121,8 @@
     "@types/node": "^26.0.0",
     "eslint": "^10.0.0",
     "globals": "^17.6.0",
-    "markdownlint-cli": "^0.49.0"
+    "markdownlint-cli": "^0.49.0",
+    "typescript-eslint": "^8.65.0"
   },
   "overrides": {
     "js-yaml": "^4.2.0",

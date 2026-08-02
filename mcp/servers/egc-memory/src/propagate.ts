@@ -10,7 +10,7 @@ import path from 'node:path';
 // path below resolves identically in a real `npm install -g` layout.
 function tryRequireMemoryFilters(): typeof import('../../../../scripts/lib/memory-filters') | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('../../../../scripts/lib/memory-filters');
   } catch {
     return null;
@@ -192,14 +192,14 @@ function writeClaudeContext(projectPath: string, block: string): string | null {
 function writeRooCodeContext(projectPath: string, block: string): string | null {
   const rooDir = path.join(projectPath, '.roo');
   const rulesDir = path.join(rooDir, 'rules');
-  let rulesDirHasContent = false;
+  let rulesDirHasContent: boolean;
   try {
     rulesDirHasContent = fs.existsSync(rulesDir) && fs.statSync(rulesDir).isDirectory() && fs.readdirSync(rulesDir).length > 0;
   } catch {
     rulesDirHasContent = false;
   }
 
-  let rooRulesExists = false;
+  let rooRulesExists: boolean;
   const rooRulesPath = path.join(projectPath, '.roorules');
   try {
     rooRulesExists = fs.existsSync(rooRulesPath);

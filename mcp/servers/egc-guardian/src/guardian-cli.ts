@@ -45,7 +45,7 @@ async function route(payload: string): Promise<unknown> {
 }
 
 async function mine(payload: string): Promise<unknown> {
-  let jsonl = '';
+  let jsonl: string;
   try {
     jsonl = fs.readFileSync(payload, 'utf8'); // NOSONAR tssecurity:S8707
   } catch {
