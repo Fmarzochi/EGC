@@ -8,6 +8,7 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
@@ -18,7 +19,7 @@ const VALIDATOR_PATH = path.join(
   '../../mcp/servers/egc-guardian/build/validator.js'
 );
 
-let validateCommand, validateWrite, isProtectedPath;
+let validateCommand, validateWrite, isProtectedPath, buildDeniedPaths;
 
 try {
   // ESM build: we use dynamic import wrapped in an async IIFE then run tests
@@ -43,6 +44,7 @@ async function runTests() {
   validateCommand = mod.validateCommand;
   validateWrite = mod.validateWrite;
   isProtectedPath = mod.isProtectedPath;
+  buildDeniedPaths = mod.buildDeniedPaths;
 
   const home = os.homedir();
 
@@ -224,6 +226,34 @@ async function runTests() {
   run(`protected: ~/.aws/config`,   () => assert.strictEqual(isProtectedPath(`${home}/.aws/config`), true));
   run(`protected: ~/.gnupg/`,       () => assert.strictEqual(isProtectedPath(`${home}/.gnupg/trustdb.gpg`), true));
   run(`protected: /etc/shadow`,     () => assert.strictEqual(isProtectedPath('/etc/shadow'), true));
+  run(`buildDeniedPaths resolves a symlinked entry (macOS /etc regression, EGC-538)`, () => {
+    // isProtectedPath() resolves the incoming path via fs.realpathSync()
+    // before comparing it against DENIED_PATHS. On macOS, /etc is a symlink
+    // to /private/etc, so /etc/hosts resolves to /private/etc/hosts and
+    // silently bypassed protection until DENIED_PATHS itself was also
+    // resolved through realpath. This reproduces that shape with a real
+    // symlink instead of requiring macOS itself.
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-guardian-symlink-'));
+    const realTarget = path.join(tmpBase, 'real-ssh-target');
+    const symlinkHome = path.join(tmpBase, 'home');
+    fs.mkdirSync(realTarget, { recursive: true });
+    fs.mkdirSync(symlinkHome, { recursive: true });
+    fs.symlinkSync(realTarget, path.join(symlinkHome, '.ssh'), 'dir');
+
+    const originalHomedir = os.homedir;
+    os.homedir = () => symlinkHome;
+    try {
+      const denied = buildDeniedPaths();
+      const resolvedTarget = fs.realpathSync(realTarget);
+      assert.ok(
+        denied.includes(resolvedTarget),
+        'buildDeniedPaths must include the symlink-resolved real path, not just the lexical one'
+      );
+    } finally {
+      os.homedir = originalHomedir;
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
   run(`protected: .env`,            () => assert.strictEqual(isProtectedPath('.env'), true));
   run(`protected: secret.pem`,      () => assert.strictEqual(isProtectedPath('secret.pem'), true));
   run(`not protected: src/index.ts`,() => assert.strictEqual(isProtectedPath('src/index.ts'), false));
