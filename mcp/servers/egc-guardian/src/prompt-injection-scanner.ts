@@ -40,7 +40,7 @@ const PATTERNS: Array<{ category: string; pattern: RegExp; reason: string }> = [
   { category: 'hidden_comment_directive', pattern: /<!--\s*(ignore|system|instructions?)[\s\S]{0,200}-->/i, reason: 'directive hidden inside an HTML comment' },
 ];
 
-const ZERO_WIDTH_CHARS = '​‌‍﻿';
+const ZERO_WIDTH_CHARS = '\u200B\u200C\u200D\uFEFF';
 const ZERO_WIDTH_RE = new RegExp(`[${ZERO_WIDTH_CHARS}]`);
 const ZERO_WIDTH_NEAR_KEYWORD_RE = new RegExp(
   `[${ZERO_WIDTH_CHARS}][\\s\\S]{0,40}(?:ignore|system|instructions?)|(?:ignore|system|instructions?)[\\s\\S]{0,40}[${ZERO_WIDTH_CHARS}]`,
