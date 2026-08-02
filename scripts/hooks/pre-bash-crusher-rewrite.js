@@ -44,6 +44,14 @@ function wrappedRe() {
 // --shell wrap purely because of the quoted `&`, when the harness's own
 // shell already parses that quoting correctly with no wrap needed.
 function hasComplexShellSyntax(cmd) {
+  // cmd.exe does not treat single quotes as quoting (confirmed by shSingleQuote's
+  // own POSIX-escaping caveat below), so the quote-aware scan below would treat a
+  // Windows metacharacter sitting inside single quotes as inert when cmd.exe would
+  // still see it as live. Windows stays on the old conservative character-class
+  // check instead, matching the platform's real quoting rules.
+  if (process.platform === 'win32') {
+    return /[|&;<>$`()\n]/.test(cmd);
+  }
   let quote = null;
   for (let i = 0; i < cmd.length; i++) {
     const ch = cmd[i];

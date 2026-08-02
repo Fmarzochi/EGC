@@ -39,8 +39,54 @@ const DANGEROUS_COMMANDS = ['rm', 'mv', 'dd', 'shred', 'truncate'];
 const ROOCODE_DENYLIST_TAG = 'roocode-denied-commands';
 const DENIED_COMMANDS_KEY = 'roo-cline.deniedCommands';
 
+// deniedCommands is a plain string[] with no per-entry ownership marker, so
+// without this record uninstall cannot tell "EGC added rm" apart from "the
+// user already denied rm before EGC ever ran" -- and would delete the
+// user's own pre-existing entry on uninstall (real finding from cubic
+// review, PR #1122). Recorded under its own EGC-namespaced key in the same
+// settings.json, so no new install-state schema or separate state file is
+// needed; VS Code ignores settings keys it does not recognize.
+const SEEDED_BY_EGC_KEY = 'egc.roocodeGuardianDenylistSeeded';
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+// .vscode/settings.json is JSONC, not plain JSON: VS Code itself accepts
+// `//` and `/* */` comments and trailing commas there, and users routinely
+// have them in a hand-edited workspace settings file. Strict JSON.parse
+// would throw on any of that, taking down install/repair/uninstall for a
+// realistic file. Strip comments and trailing commas first (string-aware,
+// so `"a // not a comment"` survives intact), matching JSONC's actual
+// grammar without pulling in a parser dependency for this one call site.
+function stripJsonComments(text) {
+  let out = '';
+  let inString = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inLineComment) {
+      if (ch === '\n') { inLineComment = false; out += ch; }
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') { inBlockComment = false; i++; }
+      continue;
+    }
+    if (inString) {
+      out += ch;
+      if (ch === '\\') { out += next; i++; continue; }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; out += ch; continue; }
+    if (ch === '/' && next === '/') { inLineComment = true; i++; continue; }
+    if (ch === '/' && next === '*') { inBlockComment = true; i++; continue; }
+    out += ch;
+  }
+  return out.replace(/,(\s*[}\]])/g, '$1');
 }
 
 function readSettingsFile(settingsPath) {
@@ -53,7 +99,7 @@ function readSettingsFile(settingsPath) {
   }
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(stripJsonComments(raw));
   } catch (error) {
     throw new Error(`Failed to parse Roo Code settings at ${settingsPath}: ${error.message}`, { cause: error });
   }
@@ -75,24 +121,42 @@ function resolveVsCodeSettingsPath(projectRoot) {
 // Union, never replace: a user's own deniedCommands entries (if any) are
 // always preserved. Only the DANGEROUS_COMMANDS missing from the current
 // array are appended, in stable order, so repeat installs are idempotent.
+// Every command actually added this way (never one that was already
+// present) is recorded under SEEDED_BY_EGC_KEY so uninstall can undo
+// exactly what EGC put there, nothing the user already had.
 function addRoocodeDenylistEntries(settings) {
   const base = isPlainObject(settings) ? settings : {};
   const existing = Array.isArray(base[DENIED_COMMANDS_KEY]) ? base[DENIED_COMMANDS_KEY] : [];
   const missing = DANGEROUS_COMMANDS.filter(cmd => !existing.includes(cmd));
-  if (missing.length === 0) {
+  const alreadySeeded = Array.isArray(base[SEEDED_BY_EGC_KEY]) ? base[SEEDED_BY_EGC_KEY] : [];
+  const nextSeeded = [...new Set([...alreadySeeded, ...missing])];
+  if (missing.length === 0 && nextSeeded.length === alreadySeeded.length) {
     return { settings: base, changed: false };
   }
   return {
-    settings: { ...base, [DENIED_COMMANDS_KEY]: [...existing, ...missing] },
+    settings: {
+      ...base,
+      [DENIED_COMMANDS_KEY]: [...existing, ...missing],
+      [SEEDED_BY_EGC_KEY]: nextSeeded,
+    },
     changed: true,
   };
 }
 
+// Removes only the entries SEEDED_BY_EGC_KEY says EGC itself added, never a
+// command the user already denied before EGC touched this file (even if it
+// happens to also be in DANGEROUS_COMMANDS). A file with dangerous commands
+// present but no seeded record at all -- e.g. hand-written, or predating
+// this fix -- is left untouched: without provenance there is no safe way to
+// tell what EGC would have added, so the conservative default is to remove
+// nothing rather than guess.
 function removeRoocodeDenylistEntries(settings) {
   const base = isPlainObject(settings) ? settings : {};
   const existing = Array.isArray(base[DENIED_COMMANDS_KEY]) ? base[DENIED_COMMANDS_KEY] : [];
-  const next = existing.filter(cmd => !DANGEROUS_COMMANDS.includes(cmd));
-  if (next.length === existing.length) {
+  const seeded = Array.isArray(base[SEEDED_BY_EGC_KEY]) ? base[SEEDED_BY_EGC_KEY] : [];
+  const hadSeededKey = SEEDED_BY_EGC_KEY in base;
+  const next = existing.filter(cmd => !seeded.includes(cmd));
+  if (next.length === existing.length && !hadSeededKey) {
     return { settings: base, changed: false };
   }
   const updated = { ...base };
@@ -101,6 +165,7 @@ function removeRoocodeDenylistEntries(settings) {
   } else {
     updated[DENIED_COMMANDS_KEY] = next;
   }
+  delete updated[SEEDED_BY_EGC_KEY];
   return { settings: updated, changed: true };
 }
 
@@ -143,6 +208,7 @@ module.exports = {
   DANGEROUS_COMMANDS,
   DENIED_COMMANDS_KEY,
   ROOCODE_DENYLIST_TAG,
+  SEEDED_BY_EGC_KEY,
   addRoocodeDenylistEntries,
   applyRoocodeDenylistToFile,
   hasRoocodeDenylistEntries,

@@ -1,28 +1,6 @@
 const path = require('node:path');
-const { createInstallTargetAdapter, createRemappedOperation, isForeignPlatformPath } = require('./helpers');
+const { createDefaultScaffoldOperations, createInstallTargetAdapter, createRemappedOperation } = require('./helpers');
 const { createAmazonQGuardianOperations } = require('../amazonq-guardian-operations');
-
-// Same default-scaffold behavior createInstallTargetAdapter would otherwise
-// supply on its own (preserve category structure, no flat stripping) --
-// replicated here, not deleted, because defining a custom planOperations
-// below (needed to also emit the Guardian operations) replaces that
-// built-in default entirely.
-function createDefaultScaffoldOperations(input, adapter) {
-  if (Array.isArray(input.modules)) {
-    return input.modules.flatMap(module => {
-      const paths = Array.isArray(module.paths) ? module.paths : [];
-      return paths
-        .filter(p => !isForeignPlatformPath(p, adapter.target))
-        .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
-    });
-  }
-
-  const module = input.module || {};
-  const paths = Array.isArray(module.paths) ? module.paths : [];
-  return paths
-    .filter(p => !isForeignPlatformPath(p, adapter.target))
-    .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
-}
 
 // EGC-498 (corrected): Amazon Q Developer CLI's preToolUse hook is real
 // (confirmed against aws/amazon-q-developer-cli's own docs -- the earlier

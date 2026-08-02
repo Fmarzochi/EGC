@@ -17,6 +17,7 @@ const path = require('path');
 const {
   DANGEROUS_COMMANDS,
   DENIED_COMMANDS_KEY,
+  SEEDED_BY_EGC_KEY,
   addRoocodeDenylistEntries,
   applyRoocodeDenylistToFile,
   hasRoocodeDenylistEntries,
@@ -92,15 +93,16 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('removeRoocodeDenylistEntries strips only the EGC-managed entries, preserving the user\'s own', () => {
-    const base = { [DENIED_COMMANDS_KEY]: [...DANGEROUS_COMMANDS, 'sudo'] };
-    const { settings, changed } = removeRoocodeDenylistEntries(base);
+  if (test('removeRoocodeDenylistEntries strips only the EGC-seeded entries, preserving the user\'s own', () => {
+    const applied = addRoocodeDenylistEntries({ [DENIED_COMMANDS_KEY]: ['sudo'] });
+    const { settings, changed } = removeRoocodeDenylistEntries(applied.settings);
     assert.strictEqual(changed, true);
     assert.deepStrictEqual(settings[DENIED_COMMANDS_KEY], ['sudo']);
   })) passed++; else failed++;
 
   if (test('removeRoocodeDenylistEntries deletes the key entirely when nothing is left', () => {
-    const { settings, changed } = removeRoocodeDenylistEntries({ [DENIED_COMMANDS_KEY]: DANGEROUS_COMMANDS });
+    const applied = addRoocodeDenylistEntries({});
+    const { settings, changed } = removeRoocodeDenylistEntries(applied.settings);
     assert.strictEqual(changed, true);
     assert.ok(!(DENIED_COMMANDS_KEY in settings));
   })) passed++; else failed++;
@@ -108,6 +110,37 @@ function runTests() {
   if (test('removeRoocodeDenylistEntries reports no change when nothing EGC-managed is present', () => {
     const { changed } = removeRoocodeDenylistEntries({ [DENIED_COMMANDS_KEY]: ['sudo'] });
     assert.strictEqual(changed, false);
+  })) passed++; else failed++;
+
+  if (test('removeRoocodeDenylistEntries never removes a dangerous command the user denied before EGC ever ran', () => {
+    // No SEEDED_BY_EGC_KEY at all: simulates a file EGC never actually added
+    // anything to (every DANGEROUS_COMMANDS entry already present from a
+    // hand-written config, or a file that predates this provenance fix).
+    // Without a record of what EGC put there, removal must be a no-op --
+    // this is the exact bug cubic flagged on PR #1122: unconditionally
+    // stripping DANGEROUS_COMMANDS matches used to delete the user's own
+    // pre-existing 'rm' entry too.
+    const base = { [DENIED_COMMANDS_KEY]: [...DANGEROUS_COMMANDS, 'sudo'] };
+    const { settings, changed } = removeRoocodeDenylistEntries(base);
+    assert.strictEqual(changed, false);
+    assert.deepStrictEqual(settings[DENIED_COMMANDS_KEY], [...DANGEROUS_COMMANDS, 'sudo']);
+  })) passed++; else failed++;
+
+  if (test('addRoocodeDenylistEntries does not mark a pre-existing dangerous command as EGC-seeded', () => {
+    const { settings } = addRoocodeDenylistEntries({ [DENIED_COMMANDS_KEY]: ['rm'] });
+    assert.ok(!settings[SEEDED_BY_EGC_KEY].includes('rm'), 'rm pre-dated EGC and must not be recorded as seeded by it');
+    for (const cmd of DANGEROUS_COMMANDS.filter(c => c !== 'rm')) {
+      assert.ok(settings[SEEDED_BY_EGC_KEY].includes(cmd));
+    }
+  })) passed++; else failed++;
+
+  if (test('install then uninstall preserves a dangerous command the user denied before EGC ever ran', () => {
+    const installed = addRoocodeDenylistEntries({ [DENIED_COMMANDS_KEY]: ['rm'] });
+    const { settings } = removeRoocodeDenylistEntries(installed.settings);
+    assert.ok(settings[DENIED_COMMANDS_KEY].includes('rm'), 'user\'s own pre-existing rm entry must survive uninstall');
+    for (const cmd of DANGEROUS_COMMANDS.filter(c => c !== 'rm')) {
+      assert.ok(!settings[DENIED_COMMANDS_KEY].includes(cmd), `${cmd} was seeded by EGC and must be removed on uninstall`);
+    }
   })) passed++; else failed++;
 
   if (test('applyRoocodeDenylistToFile writes a fresh settings.json and is idempotent on disk', () => {
