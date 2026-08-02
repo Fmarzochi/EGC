@@ -30,8 +30,7 @@ def _emit_via_tracer(workspace_root: str, event_type: str, execution_id: str, pa
     except Exception:
         return False
     try:
-        TRACER(workspace_root).trace_event(execution_id, event_type, payload)
-        return True
+        return bool(TRACER(workspace_root).trace_event(execution_id, event_type, payload))
     except Exception:
         return False
 
