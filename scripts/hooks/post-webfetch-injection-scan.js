@@ -5,7 +5,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const MAX_STDIN = 1024 * 1024;
 const MAX_SCAN_LEN = 200_000;
 const GUARDIAN_CLI = path.join(__dirname, '..', '..', 'mcp', 'servers', 'egc-guardian', 'build', 'guardian-cli.js');
 
@@ -87,24 +86,10 @@ function run(rawInput) {
   return { stdout: passthrough, stderr: '', exitCode: 0 };
 }
 
-if (require.main === module) {
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
-    const result = run(raw);
-    if (result.stderr) {
-      process.stderr.write(`${result.stderr}\n`);
-    }
-    process.stdout.write(String(result.stdout || ''));
-    process.exit(Number.isInteger(result.exitCode) ? result.exitCode : 0);
-  });
-}
-
+// No standalone `require.main === module` entrypoint: this hook is only ever
+// invoked through run-with-flags.js, which require()s this module and calls
+// run() directly (see hooks/hooks.json's post:webfetch:injection-scan entry).
+// A duplicate stdin-reading bootstrap here would never run in production and
+// was flagged as both dead code (cubic) and new-code duplication (SonarCloud,
+// 14.2% vs the 3% gate) against the identical block in post-bash-pr-created.js.
 module.exports = { run };
