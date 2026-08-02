@@ -152,6 +152,24 @@ function main() {
       const path = require('node:path');
       const { spawnSync } = require('node:child_process');
       const rootDir = path.join(__dirname, '..');
+
+      // Must run here, before the spawnSync below: that call hands off to
+      // install.sh/install.ps1 with cwd forced to rootDir (the package's own
+      // install location, not the user's project), so their own copy of this
+      // same setup silently targets the wrong directory (cubic review, PR
+      // #1122). process.cwd() is still the real user directory at this
+      // point -- this script never chdirs on its own.
+      try {
+        const { applyCommitPrivacyFilterCli } = require('./lib/memory-filters');
+        applyCommitPrivacyFilterCli({
+          projectDir: process.cwd(),
+          scriptPath: path.join(__dirname, 'check-state-leak.js'),
+          log: msg => console.log(`  ${msg}`),
+        });
+      } catch (err) {
+        console.error(`Warning: commit-privacy filter setup failed: ${err.message}`);
+      }
+
       const wrapper = process.platform === 'win32'
         ? { cmd: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'scripts', 'install.ps1')] }
         : { cmd: 'bash', args: [path.join(rootDir, 'scripts', 'install.sh')] };
@@ -185,6 +203,24 @@ function main() {
     }
 
     const result = applyInstallPlan(plan);
+
+    // README promises memory "never gets committed to git" unconditionally.
+    // Before this call, only `egc init` configured the filter that keeps
+    // that promise -- `egc install --target X` (this path) and the bare
+    // `egc install` wrapper scripts never did, so a user following the
+    // README's own quick-start command got no protection (2026-08-01
+    // audit finding). Best-effort: a repo-detection failure here must not
+    // fail the whole install.
+    try {
+      const { applyCommitPrivacyFilterCli } = require('./lib/memory-filters');
+      applyCommitPrivacyFilterCli({
+        projectDir: process.cwd(),
+        scriptPath: require('node:path').join(__dirname, 'check-state-leak.js'),
+        log: options.json ? () => {} : msg => console.log(`  ${msg}`),
+      });
+    } catch (err) {
+      if (!options.json) console.error(`Warning: commit-privacy filter setup failed: ${err.message}`);
+    }
 
     // Regenerate the topology hot cache (runtime-map.json)
     try {

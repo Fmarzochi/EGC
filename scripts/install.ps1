@@ -126,6 +126,13 @@ if (-not $DryRun) {
     Write-Host "  bootstrapping cognitive protocol..."
     node (Join-Path $RootDir (Join-Path "scripts" "bootstrap-cognitive.js"))
 
+    # README promises memory "never gets committed to git" unconditionally,
+    # but only `egc init` configured the filter that keeps that promise --
+    # this quick-start script (the README's own documented command) never
+    # did (2026-08-01 audit finding). Best-effort: must not fail the install.
+    node -e 'const rootDir = process.argv[1]; const { applyCommitPrivacyFilterCli } = require(rootDir + "/scripts/lib/memory-filters"); applyCommitPrivacyFilterCli({ projectDir: process.cwd(), scriptPath: rootDir + "/scripts/check-state-leak.js", log: m => console.log("  " + m) });' $RootDir
+    if ($LASTEXITCODE -ne 0) { Write-Host "  note: commit-privacy filter setup failed (non-fatal)" }
+
     # Write harness config
     Set-Location -Path $RootDir
     $mcpConfig = @{

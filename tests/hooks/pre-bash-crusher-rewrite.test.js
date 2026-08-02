@@ -114,7 +114,7 @@ if (POSIX) {
   });
 
   runCase('escaping survives embedded single quotes, pipes and double quotes', () => {
-    const original = 'gh pr view 950 --json x --jq \'.x[] | select(.name=="a")\'';
+    const original = 'gh pr view 950 --json x --jq \'.x[] | select(.name=="a")\' | cat';
     const rewritten = invoke(original);
     assert.strictEqual(bashSees(rewritten), original);
   });
@@ -132,6 +132,50 @@ if (POSIX) {
   runCase('pipelines fail open on Windows (POSIX escaping only)', () => {
     assert.strictEqual(invoke('git log | head -5'), 'git log | head -5');
     assert.strictEqual(invoke('git log && git status'), 'git log && git status');
+  });
+}
+
+// --- EGC-512: shell metacharacters inside quotes must not force the --shell
+// wrap; only *active* (unquoted, unescaped) syntax should.
+
+runCase('a metacharacter inside single quotes stays a simple egc run', () => {
+  assert.strictEqual(
+    invoke("git log --grep='fix: a & b'"),
+    "egc run git log --grep='fix: a & b'",
+  );
+});
+
+runCase('pipe/semicolon/redirect inside double quotes stay a simple egc run', () => {
+  assert.strictEqual(
+    invoke('git log --grep="fix: a | b; c > d"'),
+    'egc run git log --grep="fix: a | b; c > d"',
+  );
+});
+
+runCase('a backslash-escaped metacharacter outside quotes stays a simple egc run', () => {
+  assert.strictEqual(invoke('git log --grep=foo\\&bar'), 'egc run git log --grep=foo\\&bar');
+});
+
+if (POSIX) {
+  runCase('an active $ inside double quotes still routes through --shell', () => {
+    const original = 'git log --grep="fix: $(true)"';
+    const rewritten = invoke(original);
+    assert.ok(rewritten.startsWith("egc run --shell '"), rewritten);
+    assert.strictEqual(bashSees(rewritten), original);
+  });
+
+  runCase('a backtick inside double quotes still routes through --shell', () => {
+    const original = 'git log --grep="fix: `date +%Y`"';
+    const rewritten = invoke(original);
+    assert.ok(rewritten.startsWith("egc run --shell '"), rewritten);
+    assert.strictEqual(bashSees(rewritten), original);
+  });
+
+  runCase('an unterminated quote falls back to the safer --shell path', () => {
+    const original = "git log --grep='unterminated";
+    const rewritten = invoke(original);
+    assert.ok(rewritten.startsWith("egc run --shell '"), rewritten);
+    assert.strictEqual(bashSees(rewritten), original);
   });
 }
 

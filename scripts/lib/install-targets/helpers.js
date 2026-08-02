@@ -352,6 +352,31 @@ function createFlatSkillPlanOperations(rawInput, adapter) {
   });
 }
 
+// Same default-scaffold behavior createInstallTargetAdapter would otherwise
+// supply on its own (preserve category structure, no flat stripping) --
+// factored out so every adapter that defines a custom planOperations (to
+// also emit its own extra operations alongside the default scaffold, e.g.
+// Amazon Q/Roo Code's Guardian wiring) can reuse it instead of each keeping
+// its own copy. Was duplicated verbatim across amazonq-project.js and
+// roocode-project.js before this (SonarCloud new-code duplication finding
+// on PR #1122); consolidated here as the single source of truth.
+function createDefaultScaffoldOperations(input, adapter) {
+  if (Array.isArray(input.modules)) {
+    return input.modules.flatMap(module => {
+      const paths = Array.isArray(module.paths) ? module.paths : [];
+      return paths
+        .filter(p => !isForeignPlatformPath(p, adapter.target))
+        .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
+    });
+  }
+
+  const module = input.module || {};
+  const paths = Array.isArray(module.paths) ? module.paths : [];
+  return paths
+    .filter(p => !isForeignPlatformPath(p, adapter.target))
+    .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
+}
+
 function createInstallTargetAdapter(config) {
   const adapter = {
     id: config.id,
@@ -452,6 +477,7 @@ function createInstallTargetAdapter(config) {
 
 module.exports = {
   buildValidationIssue,
+  createDefaultScaffoldOperations,
   createFlatFileOperations,
   createFlatRuleOperations,
   createFlatSkillPlanOperations,

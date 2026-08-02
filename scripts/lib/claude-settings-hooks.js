@@ -36,6 +36,10 @@ const {
   PRE_TOOL_USE_EVENT: OPENHANDS_PRE_TOOL_USE_EVENT,
   applyOpenHandsGuardianHookToFile,
 } = require('./openhands-guardian-hooks');
+const {
+  ROOCODE_DENYLIST_TAG,
+  applyRoocodeDenylistToFile,
+} = require('./roocode-guardian-denylist');
 
 const MANAGED_WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 
@@ -840,6 +844,30 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
   );
 }
 
+// Roo Code has no external hook API to shell out to (see
+// roocode-guardian-denylist.js's own header for the confirmed evidence), so
+// unlike every other host's merge operation this has no script to copy: it
+// only ever merges roo-cline.deniedCommands into the workspace's own
+// .vscode/settings.json. sourceRelativePath points at the module driving
+// this merge (not a file that gets copied anywhere) purely so install-state
+// tracking has a stable, real identifier for this operation, consistent
+// with every other managed operation in this system.
+const ROOCODE_DENYLIST_MODULE_ID = 'egc-roocode-guardian-denylist';
+const ROOCODE_DENYLIST_SOURCE_RELATIVE_PATH = 'scripts/lib/roocode-guardian-denylist.js';
+
+function createRoocodeDenylistMergeOperation(settingsPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: ROOCODE_DENYLIST_MODULE_ID,
+    sourceRelativePath: ROOCODE_DENYLIST_SOURCE_RELATIVE_PATH,
+    destinationPath: settingsPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: ROOCODE_DENYLIST_TAG,
+  };
+}
+
 // PreCompact -> egc-memory-save hook: closes EGC-495 (no mechanism re-injected
 // state after a context compaction). egc-memory-save.js writes a guaranteed
 // on-disk snapshot (writeSnapshotToDisk, no AI cooperation required) and
@@ -998,6 +1026,8 @@ function applyManagedHookOperation(operation) {
     applyAmazonQGuardianHookToFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
     applyOpenHandsGuardianHookToFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === ROOCODE_DENYLIST_TAG) {
+    applyRoocodeDenylistToFile(operation.destinationPath);
   } else {
     applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -1007,6 +1037,7 @@ module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   BASH_GUARDIAN_HOOK_MODULE_ID,
+  createRoocodeDenylistMergeOperation,
   BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
