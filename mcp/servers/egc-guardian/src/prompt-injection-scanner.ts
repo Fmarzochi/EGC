@@ -19,10 +19,10 @@ const PATTERNS: Array<{ category: string; pattern: RegExp; reason: string }> = [
   { category: 'disregard_directive', pattern: /forget\s+(everything|all)\s+(you\s+)?(were\s+told|know)/i, reason: 'attempt to reset prior context' },
   { category: 'fake_system_tag', pattern: /\[\s*SYSTEM\s*\]/i, reason: 'fake [SYSTEM] tag embedded in content' },
   { category: 'fake_system_tag', pattern: /<\s*system\s*>/i, reason: 'fake <system> tag embedded in content' },
-  { category: 'fake_system_tag', pattern: /^\s*SYSTEM\s*:/im, reason: 'fake SYSTEM: line embedded in content' },
+  { category: 'fake_system_tag', pattern: /^\s{0,20}SYSTEM\s*:/im, reason: 'fake SYSTEM: line embedded in content' },
   { category: 'persona_hijack', pattern: /you\s+are\s+now\s+(a\s+|an\s+)?(different|new|unrestricted|jailbroken|DAN)/i, reason: 'attempt to hijack assistant persona' },
   { category: 'new_instructions', pattern: /new\s+instructions?\s*:/i, reason: 'injected "new instructions" block' },
-  { category: 'new_instructions', pattern: /^\s*#{1,3}\s*(new|updated)\s+(task|instructions?)/im, reason: 'injected heading claiming new task/instructions' },
+  { category: 'new_instructions', pattern: /^\s{0,20}#{1,3}\s{0,20}(new|updated)\s+(task|instructions?)/im, reason: 'injected heading claiming new task/instructions' },
   { category: 'exfiltration', pattern: /send\s+(this|the\s+above|it)\s+to\s+https?:\/\//i, reason: 'directive to exfiltrate content to a URL' },
   { category: 'exfiltration', pattern: /\bexfiltrate\b/i, reason: 'explicit exfiltration wording' },
   { category: 'exfiltration', pattern: /curl\s+https?:\/\/[^\s]+\s*\|\s*(ba)?sh/i, reason: 'remote shell execution payload' },
@@ -45,7 +45,7 @@ const PATTERNS: Array<{ category: string; pattern: RegExp; reason: string }> = [
 const ZERO_WIDTH_CHARS = '\u200B\u200C\u200D\uFEFF';
 const ZERO_WIDTH_RE = new RegExp(`[${ZERO_WIDTH_CHARS}]`);
 const ZERO_WIDTH_NEAR_KEYWORD_RE = new RegExp(
-  `[${ZERO_WIDTH_CHARS}][\\s\\S]{0,40}(?:ignore|system|instructions?)|(?:ignore|system|instructions?)[\\s\\S]{0,40}[${ZERO_WIDTH_CHARS}]`,
+  String.raw`[${ZERO_WIDTH_CHARS}][\s\S]{0,40}(?:ignore|system|instructions?)|(?:ignore|system|instructions?)[\s\S]{0,40}[${ZERO_WIDTH_CHARS}]`,
   'i',
 );
 
@@ -56,7 +56,7 @@ export function scanForInjection(text: string): InjectionFinding[] {
 
   const findings: InjectionFinding[] = [];
   for (const { category, pattern, reason } of PATTERNS) {
-    const match = text.match(pattern);
+    const match = pattern.exec(text);
     if (match) {
       findings.push({ category, reason, snippet: match[0].slice(0, MAX_SNIPPET_LEN) });
     }
