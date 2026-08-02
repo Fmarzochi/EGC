@@ -29,10 +29,44 @@ function wrappedRe() {
   const prefixes = ['egc', ...extra].join('|');
   return new RegExp(`(?:^\\s*(?:${prefixes})\\s)|(?:--raw\\b)`);
 }
-// A command with none of these characters runs through `egc run <cmd>` with no
-// shell. One that has them keeps its exact semantics only when re-parsed by
-// bash, so it goes through `egc run --shell '<cmd>'` when safe (see run()).
-const COMPLEX_SHELL_RE = /[|&;<>$`()\n]/;
+// A command with none of these characters *active* runs through `egc run
+// <cmd>` with no shell. One that has active shell syntax keeps its exact
+// semantics only when re-parsed by bash, so it goes through
+// `egc run --shell '<cmd>'` when safe (see run()).
+//
+// "Active" means outside single quotes, and -- inside double quotes -- one
+// of the characters double quotes actually leave live. This mirrors POSIX
+// quoting: single quotes make every character literal with no escaping at
+// all; double quotes keep `$` and backtick able to expand but leave
+// |&;<>() as plain text; outside any quote, a backslash escapes the very
+// next character. Ignoring all of that (a plain character-class regex) was
+// EGC-512: it flagged e.g. `git commit -m "fix: a & b"` as needing the
+// --shell wrap purely because of the quoted `&`, when the harness's own
+// shell already parses that quoting correctly with no wrap needed.
+function hasComplexShellSyntax(cmd) {
+  let quote = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '\\') { i++; continue; }
+      if (ch === '"') { quote = null; continue; }
+      if (ch === '$' || ch === '`') return true;
+      continue;
+    }
+    if (ch === '\\') { i++; continue; }
+    if (ch === "'" || ch === '"') { quote = ch; continue; }
+    if (ch === '\n' || ch === '|' || ch === '&' || ch === ';' || ch === '<' || ch === '>' || ch === '$' || ch === '`' || ch === '(' || ch === ')') {
+      return true;
+    }
+  }
+  // An unterminated quote masks whatever follows it from this scan; treat
+  // that as complex rather than silently trusting the no-shell fast path.
+  return quote !== null;
+}
 
 // Backgrounding detaches the process, so spawnSync would not capture its output;
 // redirection sends stdout elsewhere, leaving nothing to crush. Neither is ever
@@ -78,7 +112,7 @@ function run(rawInput) {
     }
 
     let command;
-    if (!COMPLEX_SHELL_RE.test(cmd)) {
+    if (!hasComplexShellSyntax(cmd)) {
       command = `egc run ${cmd}`;
     } else if (process.platform !== 'win32' && !hasBackgrounding(cmd) && !hasRedirection(cmd)) {
       // shSingleQuote is POSIX escaping; cmd.exe does not treat single quotes as

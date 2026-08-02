@@ -62,6 +62,11 @@ const {
   inspectOpenHandsGuardianHookFile,
   removeOpenHandsGuardianHookFromFile,
 } = require('./openhands-guardian-hooks');
+const {
+  ROOCODE_DENYLIST_TAG,
+  inspectRoocodeDenylistFile,
+  removeRoocodeDenylistFromFile,
+} = require('./roocode-guardian-denylist');
 
 // Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
 // Claude's matcher/group settings.json schema -- an operation whose
@@ -590,6 +595,8 @@ function uninstallManagedHookOperation(operation) {
     removeAmazonQGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath);
   } else if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
     removeOpenHandsGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath);
+  } else if (operation.hookEvent === ROOCODE_DENYLIST_TAG) {
+    removeRoocodeDenylistFromFile(operation.destinationPath);
   } else {
     removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
   }
@@ -743,6 +750,9 @@ function inspectManagedOperation(repoRoot, operation) {
     }
     if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
       return inspectResult(inspectOpenHandsGuardianHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
+    }
+    if (operation.hookEvent === ROOCODE_DENYLIST_TAG) {
+      return inspectResult(inspectRoocodeDenylistFile(destinationPath), operation, destinationPath);
     }
     return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
   }
