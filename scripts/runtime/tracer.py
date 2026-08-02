@@ -41,7 +41,15 @@ class TRACER:
                 with open(self.log_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(event) + "\n")
                     f.flush()
-                    os.fsync(f.fileno())
+                    try:
+                        os.fsync(f.fileno())
+                    except OSError:
+                        # The record already reached the file (write + flush
+                        # succeeded); fsync only guarantees it survives a
+                        # crash before the OS's own flush. Do not report this
+                        # as a write failure -- callers with a fallback path
+                        # would re-append the same event, duplicating it.
+                        logger.warning("Trace event written but fsync failed (best-effort durability)")
             except Exception:
                 logger.exception("Failed to write trace event")
                 return False
