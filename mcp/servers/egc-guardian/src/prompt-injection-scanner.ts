@@ -28,7 +28,7 @@ const PATTERNS: Array<{ category: string; pattern: RegExp; reason: string }> = [
   { category: 'exfiltration', pattern: /curl\s+https?:\/\/[^\s]+\s*\|\s*(ba)?sh/i, reason: 'remote shell execution payload' },
   { category: 'exfiltration', pattern: /wget\s+https?:\/\/[^\s]+\s*[|>]/i, reason: 'remote download payload' },
   { category: 'exfiltration', pattern: /require\s*\(\s*['"]child_process['"]\s*\)/, reason: 'child_process injection' },
-  { category: 'exfiltration', pattern: /execSync?\s*\(\s*[`'"]/, reason: 'execSync injection' },
+  { category: 'exfiltration', pattern: /exec(?:Sync)?\s*\(\s*[`'"]/, reason: 'exec/execSync injection' },
   { category: 'exfiltration', pattern: /\beval\s*\(\s*[`'"]/, reason: 'eval injection' },
   { category: 'exfiltration', pattern: /authorized_keys/i, reason: 'SSH key manipulation payload' },
   { category: 'exfiltration', pattern: /\/etc\/passwd/i, reason: 'sensitive file access payload' },

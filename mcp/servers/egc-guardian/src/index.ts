@@ -137,7 +137,7 @@ const ValidateWriteSchema = z.object({
 
 const ValidateContentSchema = z.object({
   content: z.string().min(1).max(2_000_000),
-  source: z.string().optional()
+  source: z.string().max(512).optional()
 });
 
 const ReduceContextSchema = z.object({
@@ -162,8 +162,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            content: { type: "string", description: "The untrusted text to scan." },
-            source: { type: "string", description: "Optional label for what this content is, e.g. 'file:path' or 'web:url', used for audit logging." }
+            content: { type: "string", maxLength: 2_000_000, description: "The untrusted text to scan." },
+            source: { type: "string", maxLength: 512, description: "Optional label for what this content is, e.g. 'file:path' or 'web:url', used for audit logging." }
           },
           required: ["content"]
         }
@@ -255,7 +255,12 @@ function handleValidateContent(toolArgs: unknown) {
   const findings = scanForInjection(content);
   if (findings.length > 0) {
     const categories = [...new Set(findings.map(f => f.category))];
-    auditLog('CONTENT_SCAN', 'FLAGGED', { source, categories, findings });
+    // Categories/reasons only, never the raw findings array: it carries
+    // matched snippets straight out of untrusted content, which can include
+    // secrets or private data sitting next to the pattern that tripped the
+    // scan (cubic review, PR #1123). The audit log's redaction only covers
+    // known key names and secret-shaped values, not arbitrary substrings.
+    auditLog('CONTENT_SCAN', 'FLAGGED', { source, categories, reasons: findings.map(f => f.reason) });
     return { content: [{ type: "text", text: `[FLAGGED] ${findings.length} pattern(s): ${categories.join(', ')}` }] };
   }
   auditLog('CONTENT_SCAN', 'ALLOWED', { source });
