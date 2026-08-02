@@ -125,6 +125,20 @@ if [ "$DRY_RUN" = false ]; then
   node scripts/bootstrap-state-db.js
   echo "  bootstrapping cognitive protocol..."
   node "$ROOT_DIR/scripts/bootstrap-cognitive.js"
+
+  # README promises memory "never gets committed to git" unconditionally,
+  # but only `egc init` configured the filter that keeps that promise --
+  # this quick-start script (the README's own documented command) never
+  # did (2026-08-01 audit finding). Best-effort: must not fail the install.
+  node - "$ROOT_DIR" <<'NODEEOF' || echo "  note: commit-privacy filter setup failed (non-fatal)"
+const [, , rootDir] = process.argv;
+const { applyCommitPrivacyFilterCli } = require(rootDir + '/scripts/lib/memory-filters');
+applyCommitPrivacyFilterCli({
+  projectDir: process.cwd(),
+  scriptPath: rootDir + '/scripts/check-state-leak.js',
+  log: m => console.log('  ' + m),
+});
+NODEEOF
 fi
 
 # Delegate to Node installer only when install-relevant args are present

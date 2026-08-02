@@ -163,4 +163,23 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   return { configured: true, actions, attributesFile };
 }
 
-module.exports = { FILTER_NAME, PROPAGATION_FILES, configureMemoryFilters };
+// Shared CLI-facing wrapper: runs the dry-run plan first so every caller
+// (egc init, egc install, install.sh, install.ps1) prints the same
+// transparency log before touching anything, then applies it for real.
+// Extracted so the README's "never gets committed to git" promise is kept
+// by every path that can create the repo's first commit, not only `egc
+// init` -- the gap a 2026-08-01 audit found (install.sh/install.ps1/
+// install-apply.js never called this at all, only egc init did).
+function applyCommitPrivacyFilterCli({ projectDir, scriptPath, log }) {
+  const plan = configureMemoryFilters({ projectDir, scriptPath, dryRun: true });
+  if (!plan.configured) {
+    log(`skip commit-privacy filter: ${plan.reason}`);
+    return plan;
+  }
+  for (const action of plan.actions) log(`commit-privacy filter: ${action}`);
+  const result = configureMemoryFilters({ projectDir, scriptPath, dryRun: false });
+  log(`commit-privacy filter: populated memory is stripped from staged blobs (${result.actions.length} change(s), local repo only)`);
+  return result;
+}
+
+module.exports = { FILTER_NAME, PROPAGATION_FILES, applyCommitPrivacyFilterCli, configureMemoryFilters };

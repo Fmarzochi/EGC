@@ -167,7 +167,13 @@ function addRoocodeDenylistEntries(settings) {
 function removeRoocodeDenylistEntries(settings) {
   const base = isPlainObject(settings) ? settings : {};
   const existing = Array.isArray(base[DENIED_COMMANDS_KEY]) ? base[DENIED_COMMANDS_KEY] : [];
-  const seeded = Array.isArray(base[SEEDED_BY_EGC_KEY]) ? base[SEEDED_BY_EGC_KEY] : [];
+  // Filtered to DANGEROUS_COMMANDS even though addRoocodeDenylistEntries only
+  // ever writes that same subset: SEEDED_BY_EGC_KEY lives in a workspace
+  // settings.json a repo can commit and share, so a stale or hand-edited
+  // value must never be trusted to remove an entry outside the known
+  // dangerous-commands set (cubic review, PR #1122).
+  const seeded = (Array.isArray(base[SEEDED_BY_EGC_KEY]) ? base[SEEDED_BY_EGC_KEY] : [])
+    .filter(cmd => DANGEROUS_COMMANDS.includes(cmd));
   const hadSeededKey = SEEDED_BY_EGC_KEY in base;
   const next = existing.filter(cmd => !seeded.includes(cmd));
   if (next.length === existing.length && !hadSeededKey) {

@@ -186,6 +186,24 @@ function main() {
 
     const result = applyInstallPlan(plan);
 
+    // README promises memory "never gets committed to git" unconditionally.
+    // Before this call, only `egc init` configured the filter that keeps
+    // that promise -- `egc install --target X` (this path) and the bare
+    // `egc install` wrapper scripts never did, so a user following the
+    // README's own quick-start command got no protection (2026-08-01
+    // audit finding). Best-effort: a repo-detection failure here must not
+    // fail the whole install.
+    try {
+      const { applyCommitPrivacyFilterCli } = require('./lib/memory-filters');
+      applyCommitPrivacyFilterCli({
+        projectDir: process.cwd(),
+        scriptPath: require('node:path').join(__dirname, 'check-state-leak.js'),
+        log: options.json ? () => {} : msg => console.log(`  ${msg}`),
+      });
+    } catch (err) {
+      if (!options.json) console.error(`Warning: commit-privacy filter setup failed: ${err.message}`);
+    }
+
     // Regenerate the topology hot cache (runtime-map.json)
     try {
       const { discover } = require('./runtime/discovery');

@@ -112,6 +112,20 @@ function runTests() {
     assert.strictEqual(changed, false);
   })) passed++; else failed++;
 
+  if (test('removeRoocodeDenylistEntries ignores a tampered SEEDED_BY_EGC_KEY entry outside DANGEROUS_COMMANDS', () => {
+    // settings.json is a workspace file a repo can commit and share -- a
+    // stale or hand-edited SEEDED_BY_EGC_KEY must never be trusted to
+    // remove a user's own deny rule just because it is listed there
+    // (cubic review, PR #1122).
+    const base = {
+      [DENIED_COMMANDS_KEY]: ['rm', 'sudo'],
+      [SEEDED_BY_EGC_KEY]: ['rm', 'sudo'],
+    };
+    const { settings } = removeRoocodeDenylistEntries(base);
+    assert.ok(settings[DENIED_COMMANDS_KEY].includes('sudo'), 'sudo is not a DANGEROUS_COMMANDS entry and must survive even if falsely listed as seeded');
+    assert.ok(!settings[DENIED_COMMANDS_KEY].includes('rm'));
+  })) passed++; else failed++;
+
   if (test('removeRoocodeDenylistEntries never removes a dangerous command the user denied before EGC ever ran', () => {
     // No SEEDED_BY_EGC_KEY at all: simulates a file EGC never actually added
     // anything to (every DANGEROUS_COMMANDS entry already present from a
