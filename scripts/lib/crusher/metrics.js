@@ -150,7 +150,7 @@ function aggregateBreakdown(entries, options = {}) {
     ? []
     : normalizedEntries.filter(entry => entry.session === session);
   const biggestEntry = normalizedEntries.reduce((biggest, entry) => (
-    finiteNumber(entry.tokensSaved) > finiteNumber(biggest?.tokensSaved) ? entry : biggest
+    biggest === null || finiteNumber(entry.tokensSaved) > finiteNumber(biggest.tokensSaved) ? entry : biggest
   ), null);
   const firstTimestamp = timestampedEntries.reduce((earliest, item) => (
     earliest === null || item.timestamp < earliest ? item.timestamp : earliest
