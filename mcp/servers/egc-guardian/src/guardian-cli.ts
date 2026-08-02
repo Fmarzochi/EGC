@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import { validateCommand, validateWrite } from './validator.js';
+import { scanForInjection } from './prompt-injection-scanner.js';
 import { llmRoute, keywordRoute } from './llm-router.js';
 import { detectIntent, digestTranscript, mineTranscript } from './intuition.js';
 import { autoLearn } from './learn-writer.js';
@@ -66,6 +67,7 @@ const MODES: Record<string, (payload: string) => unknown> = {
   'command': payload => validateCommand(payload),
   'command-batch': commandBatch,
   'write': payload => validateWrite(payload),
+  'content': payload => scanForInjection(payload),
   'route': route,
   'intent': payload => detectIntent(payload),
   'mine': mine,
