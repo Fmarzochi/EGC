@@ -702,25 +702,31 @@ export function buildDeniedPaths(): string[] {
     );
   }
 
-  // isProtectedPath() resolves the incoming path through fs.realpathSync()
-  // before comparing it against this list, so an entry that is itself a
-  // symlink must be resolved here too, or the comparison never matches.
-  // Concretely: on macOS /etc is a symlink to /private/etc, so a write to
-  // /etc/hosts or /etc/shadow resolves to /private/etc/hosts, which never
-  // starts with the literal '/etc' string below, silently defeating this
-  // protection on macOS only (audit EGC-538 sub-part 1, caught by CI).
-  const resolved = paths.map(p => {
-    try {
-      return fs.realpathSync(p);
-    } catch {
-      return p;
-    }
-  });
-
-  return [...new Set([...paths, ...resolved])].filter(Boolean);
+  return paths.filter(Boolean);
 }
 
 export const DENIED_PATHS: string[] = buildDeniedPaths();
+
+// Shared by both the incoming path and each DENIED_PATHS entry in
+// isProtectedPath(): resolve through fs.realpathSync(), falling back to
+// resolving just the parent directory (then the lexical path unchanged) when
+// the target doesn't exist yet. A denied entry resolved once at DENIED_PATHS'
+// module-load time would go stale for a directory that becomes a symlink (or
+// whose symlink target starts existing) after the guardian process starts --
+// the same shape as the macOS /etc bug, just materializing later instead of
+// always being present (cubic review, PR #1129). Resolving both sides fresh
+// on every isProtectedPath() call removes that staleness window entirely.
+export function resolveRealOrLexical(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    try {
+      return path.join(fs.realpathSync(path.dirname(p)), path.basename(p));
+    } catch {
+      return p;
+    }
+  }
+}
 
 // baseDir defaults to process.cwd() (path.resolve's own implicit behavior
 // when given one argument) so existing callers are unaffected. Callers that
@@ -742,20 +748,14 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     ? path.join(os.homedir(), p.slice(1))
     : p;
 
-  let normalizedP = path.resolve(baseDir, expanded);
   // Resolve symlinks so a link inside an allowed directory cannot point past
   // this check into a denied path. Fall back to the lexical path (then the
   // parent) when the target does not exist yet, e.g. a write being created.
-  try {
-    normalizedP = fs.realpathSync(normalizedP);
-  } catch {
-    try {
-      normalizedP = path.join(fs.realpathSync(path.dirname(normalizedP)), path.basename(normalizedP));
-    } catch { /* keep the lexical resolution */ }
-  }
+  const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
 
   for (const denied of DENIED_PATHS) {
-    if (normalizedP === denied || normalizedP.startsWith(denied + path.sep)) {
+    const resolvedDenied = resolveRealOrLexical(denied);
+    if (normalizedP === resolvedDenied || normalizedP.startsWith(resolvedDenied + path.sep)) {
       return true;
     }
   }

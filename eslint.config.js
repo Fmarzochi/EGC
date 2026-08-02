@@ -10,7 +10,8 @@ module.exports = [
             '.claude/**',
             'dashboard/**',
             'node_modules/**',
-            'mcp/servers/*/build/**'
+            'mcp/servers/*/build/**',
+            'fuzz/validator.cjs'
         ]
     },
     js.configs.recommended,

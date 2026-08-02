@@ -19,7 +19,7 @@ const VALIDATOR_PATH = path.join(
   '../../mcp/servers/egc-guardian/build/validator.js'
 );
 
-let validateCommand, validateWrite, isProtectedPath, buildDeniedPaths;
+let validateCommand, validateWrite, isProtectedPath, buildDeniedPaths, resolveRealOrLexical;
 
 try {
   // ESM build: we use dynamic import wrapped in an async IIFE then run tests
@@ -45,6 +45,7 @@ async function runTests() {
   validateWrite = mod.validateWrite;
   isProtectedPath = mod.isProtectedPath;
   buildDeniedPaths = mod.buildDeniedPaths;
+  resolveRealOrLexical = mod.resolveRealOrLexical;
 
   const home = os.homedir();
 
@@ -226,33 +227,56 @@ async function runTests() {
   run(`protected: ~/.aws/config`,   () => assert.strictEqual(isProtectedPath(`${home}/.aws/config`), true));
   run(`protected: ~/.gnupg/`,       () => assert.strictEqual(isProtectedPath(`${home}/.gnupg/trustdb.gpg`), true));
   run(`protected: /etc/shadow`,     () => assert.strictEqual(isProtectedPath('/etc/shadow'), true));
-  run(`buildDeniedPaths resolves a symlinked entry (macOS /etc regression, EGC-538)`, () => {
-    // isProtectedPath() resolves the incoming path via fs.realpathSync()
-    // before comparing it against DENIED_PATHS. On macOS, /etc is a symlink
-    // to /private/etc, so /etc/hosts resolves to /private/etc/hosts and
-    // silently bypassed protection until DENIED_PATHS itself was also
-    // resolved through realpath. This reproduces that shape with a real
-    // symlink instead of requiring macOS itself.
+  run(`resolveRealOrLexical resolves a symlinked DENIED_PATHS-shaped entry (macOS /etc regression, EGC-538)`, () => {
+    // isProtectedPath() resolves both the incoming path and each DENIED_PATHS
+    // entry through resolveRealOrLexical() at comparison time (not once at
+    // module load). On macOS, /etc is a symlink to /private/etc, so /etc/hosts
+    // resolves to /private/etc/hosts and silently bypassed protection until
+    // the denied entry was also resolved through realpath (cubic review, PR
+    // #1129: a denied directory that becomes a symlink, or whose target
+    // starts existing, after the process already started would go stale
+    // under load-time resolution -- module-level DENIED_PATHS is itself
+    // fixed at import time, so this exercises the shared resolver directly
+    // rather than fighting that fact with an os.homedir() mock that can
+    // never reach an already-computed constant).
     const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-guardian-symlink-'));
     const realTarget = path.join(tmpBase, 'real-ssh-target');
-    const symlinkHome = path.join(tmpBase, 'home');
+    const linkPath = path.join(tmpBase, '.ssh');
     fs.mkdirSync(realTarget, { recursive: true });
-    fs.mkdirSync(symlinkHome, { recursive: true });
-    fs.symlinkSync(realTarget, path.join(symlinkHome, '.ssh'), 'dir');
+    fs.symlinkSync(realTarget, linkPath, 'dir');
 
-    const originalHomedir = os.homedir;
-    os.homedir = () => symlinkHome;
     try {
-      const denied = buildDeniedPaths();
-      const resolvedTarget = fs.realpathSync(realTarget);
-      assert.ok(
-        denied.includes(resolvedTarget),
-        'buildDeniedPaths must include the symlink-resolved real path, not just the lexical one'
+      assert.strictEqual(
+        resolveRealOrLexical(linkPath),
+        fs.realpathSync(realTarget),
+        'a symlinked denied entry must resolve to its real target'
+      );
+
+      // Retarget the same symlink after the first check above, proving
+      // resolution is not cached/stale between calls (the exact staleness
+      // cubic flagged): a second, different real directory must also
+      // resolve immediately, with no re-import or process restart needed.
+      const secondTarget = path.join(tmpBase, 'retargeted-ssh');
+      fs.mkdirSync(secondTarget, { recursive: true });
+      fs.rmSync(linkPath);
+      fs.symlinkSync(secondTarget, linkPath, 'dir');
+      assert.strictEqual(
+        resolveRealOrLexical(linkPath),
+        fs.realpathSync(secondTarget),
+        'a symlink retargeted after the first check must resolve fresh, not use a stale cached target'
       );
     } finally {
-      os.homedir = originalHomedir;
       fs.rmSync(tmpBase, { recursive: true, force: true });
     }
+  });
+  run(`isProtectedPath still catches a write under a real (non-symlinked) DENIED_PATHS entry`, () => {
+    // Sanity check that buildDeniedPaths()'s lexical entries still flow
+    // through isProtectedPath()'s comparison-time resolution for the common,
+    // non-symlinked case -- resolveRealOrLexical() must fall back to the
+    // lexical path unchanged when there is nothing to resolve.
+    const denied = buildDeniedPaths();
+    assert.ok(denied.includes(path.join(home, '.ssh')));
+    assert.strictEqual(isProtectedPath(path.join(home, '.ssh', 'id_rsa')), true);
   });
   run(`protected: .env`,            () => assert.strictEqual(isProtectedPath('.env'), true));
   run(`protected: secret.pem`,      () => assert.strictEqual(isProtectedPath('secret.pem'), true));
