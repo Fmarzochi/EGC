@@ -7,9 +7,13 @@
 // have no legitimate reason to ever appear in this public codebase.
 //
 // Modes:
-//   --staged        check staged blobs (pre-commit hook)
-//   --tree          check tracked files on disk (CI guard)
-//   --text <string> check an arbitrary string (CI guard for PR title/body)
+//   --staged            check staged blobs (pre-commit hook)
+//   --tree              check tracked files on disk (CI guard)
+//   --text <string>     check an arbitrary string (small inputs only --
+//                        a shell argv element is capped around 128KB on
+//                        Linux; prefer --text-file for anything PR-sized)
+//   --text-file <path>  check the contents of a file (CI guard for PR
+//                        title/body/commit messages, no argv size limit)
 
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -84,19 +88,25 @@ function report(leaks, context) {
   return 1;
 }
 
+function checkText(text) {
+  const hits = findHits(text);
+  if (hits.length === 0) {
+    console.log('internal-tool leak check: clean');
+    return 0;
+  }
+  console.error(`BLOCKED: internal/personal tool reference found in PR title/body: ${hits.join(', ')}`);
+  return 1;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const mode = args[0];
 
   if (mode === '--text') {
-    const text = args.slice(1).join(' ');
-    const hits = findHits(text);
-    if (hits.length === 0) {
-      console.log('internal-tool leak check: clean');
-      return;
-    }
-    console.error(`BLOCKED: internal/personal tool reference found in PR title/body: ${hits.join(', ')}`);
-    process.exit(1);
+    process.exit(checkText(args.slice(1).join(' ')));
+  }
+  if (mode === '--text-file') {
+    process.exit(checkText(fs.readFileSync(args[1], 'utf8')));
   }
 
   const leaks = mode === '--staged' ? checkStaged() : checkTree();
