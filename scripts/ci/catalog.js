@@ -102,7 +102,9 @@ function listRulesRecursive(root, relativeDir) {
   const topLevel = fs.readdirSync(rulesRoot, { withFileTypes: true });
 
   for (const entry of topLevel) {
-    if (entry.isFile() && entry.name.endsWith('.md')) {
+    // README.md is navigation, not rule content -- build-skill-index.js's
+    // runtime indexer already excludes it; this count must agree with that.
+    if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'README.md') {
       found.push(normalizePathSegments(path.join(relativeDir, entry.name)));
       continue;
     }
@@ -110,7 +112,7 @@ function listRulesRecursive(root, relativeDir) {
       const nested = listMatchingFiles(
         root,
         path.join(relativeDir, entry.name),
-        child => child.isFile() && child.name.endsWith('.md')
+        child => child.isFile() && child.name.endsWith('.md') && child.name !== 'README.md'
       );
       found.push(...nested);
     }

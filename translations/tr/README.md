@@ -68,7 +68,7 @@ Beyin yalnızca hatırlamaz; aynı zamanda filtreler. Herhangi bir shell çıkt�
 
 ## Prompt Kütüphanesi
 
-Bonus olarak EGC size 63 agent, 230 skill, 77 command ve ayrıca 111 rule'a erişim sağlar: Kodunuzu kendi başına inceleyen uzmanlar, her dil ve durum için best-practice rehberleri, sizin için tüm bir görev dizisini çalıştıran kısayollar ve kodunuzu tutarlı tutan stil kuralları. Hepsi teoriden değil, gerçek mühendislik oturumlarından yazıldı. Hiçbirini kullanmak istemiyor musunuz? Sorun değil: EGC'nin kalıcı belleği tamamen aynı şekilde çalışır.
+Bonus olarak EGC size 63 agent, 230 skill, 77 command ve ayrıca 109 rule'a erişim sağlar: Kodunuzu kendi başına inceleyen uzmanlar, her dil ve durum için best-practice rehberleri, sizin için tüm bir görev dizisini çalıştıran kısayollar ve kodunuzu tutarlı tutan stil kuralları. Hepsi teoriden değil, gerçek mühendislik oturumlarından yazıldı. Hiçbirini kullanmak istemiyor musunuz? Sorun değil: EGC'nin kalıcı belleği tamamen aynı şekilde çalışır.
 
 ---
 
