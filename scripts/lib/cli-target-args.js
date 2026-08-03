@@ -1,6 +1,39 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+function takeValue(args, index, errorMessage) {
+  const value = args[index + 1];
+  if (!value) throw new Error(errorMessage);
+  return value;
+}
+
+// Returns the loop index to resume from (advanced past a consumed value, if any).
+function consumeArg(args, index, parsed, supportsDryRun) {
+  const arg = args[index];
+
+  if (arg === '--target') {
+    parsed.targets.push(takeValue(args, index, '--target requires a value'));
+    return index + 1;
+  }
+  if (arg === '--repo-root') {
+    parsed.repoRoot = path.resolve(takeValue(args, index, '--repo-root requires a path argument'));
+    return index + 1;
+  }
+  if (supportsDryRun && arg === '--dry-run') {
+    parsed.dryRun = true;
+    return index;
+  }
+  if (arg === '--json') {
+    parsed.json = true;
+    return index;
+  }
+  if (arg === '--help' || arg === '-h') {
+    parsed.help = true;
+    return index;
+  }
+  throw new Error(`Unknown argument: ${arg}`);
+}
+
 function parseTargetArgs(argv, { supportsDryRun = false } = {}) {
   const args = argv.slice(2);
   const parsed = {
@@ -12,31 +45,7 @@ function parseTargetArgs(argv, { supportsDryRun = false } = {}) {
   };
 
   for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === '--target') {
-      const rawTarget = args[index + 1];
-      if (!rawTarget) {
-        throw new Error('--target requires a value');
-      }
-      parsed.targets.push(rawTarget);
-      index += 1;
-    } else if (arg === '--repo-root') {
-      const rawRepoRoot = args[index + 1];
-      if (!rawRepoRoot) {
-        throw new Error('--repo-root requires a path argument');
-      }
-      parsed.repoRoot = path.resolve(rawRepoRoot);
-      index += 1;
-    } else if (supportsDryRun && arg === '--dry-run') {
-      parsed.dryRun = true;
-    } else if (arg === '--json') {
-      parsed.json = true;
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
+    index = consumeArg(args, index, parsed, supportsDryRun);
   }
 
   if (parsed.repoRoot && !fs.existsSync(parsed.repoRoot)) {
