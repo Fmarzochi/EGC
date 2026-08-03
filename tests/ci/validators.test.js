@@ -12,6 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFileSync } = require('child_process');
+const { runSourceInChildProcess } = require('../lib/run-source-in-child-process');
 
 const validatorsDir = path.join(__dirname, '..', '..', 'scripts', 'ci');
 const repoRoot = path.join(__dirname, '..', '..');
@@ -68,26 +69,7 @@ function stripShebang(source) {
  * @returns {{code: number, stdout: string, stderr: string}}
  */
 function runSourceViaTempFile(source, env = {}) {
-  const tmpFile = path.join(repoRoot, `.tmp-validator-${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
-  try {
-    fs.writeFileSync(tmpFile, source, 'utf8');
-    const stdout = execFileSync('node', [tmpFile], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 10000,
-      cwd: repoRoot,
-      env: { ...process.env, ...env },
-    });
-    return { code: 0, stdout, stderr: '' };
-  } catch (err) {
-    return {
-      code: err.status || 1,
-      stdout: err.stdout || '',
-      stderr: err.stderr || '',
-    };
-  } finally {
-    try { fs.unlinkSync(tmpFile); } catch (_) { /* ignore cleanup errors */ }
-  }
+  return runSourceInChildProcess(source, { cwd: repoRoot, filePrefix: '.tmp-validator-', env });
 }
 
 /**

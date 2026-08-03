@@ -10,13 +10,12 @@
  */
 
 const assert = require('assert');
-const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const repoRoot = path.join(__dirname, '..', '..');
 const { skipIfMissing, finishValidation } = require('../../scripts/lib/validator-cli');
+const { runSourceInChildProcess } = require('./run-source-in-child-process');
 
 function test(name, fn) {
   try {
@@ -39,25 +38,7 @@ function test(name, fn) {
  */
 function runInChildProcess(body) {
   const source = `const { skipIfMissing, finishValidation } = require('#lib/validator-cli');\n${body}`;
-  const tmpFile = path.join(repoRoot, `.tmp-validator-cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
-  try {
-    fs.writeFileSync(tmpFile, source, 'utf8');
-    const stdout = execFileSync('node', [tmpFile], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 10000,
-      cwd: repoRoot,
-    });
-    return { code: 0, stdout, stderr: '' };
-  } catch (err) {
-    return {
-      code: err.status ?? 1,
-      stdout: err.stdout || '',
-      stderr: err.stderr || '',
-    };
-  } finally {
-    try { fs.unlinkSync(tmpFile); } catch (_) { /* ignore cleanup errors */ }
-  }
+  return runSourceInChildProcess(source, { cwd: repoRoot, filePrefix: '.tmp-validator-cli-test-' });
 }
 
 function runTests() {
@@ -84,6 +65,23 @@ function runTests() {
       threw = true;
     }
     assert.strictEqual(threw, false, 'skipIfMissing must not throw when all paths exist');
+  })) passed++; else failed++;
+
+  // Deterministic child-process counterpart to the two in-process cases
+  // above (cubic review, EGC-539 PR #1151): those only prove skipIfMissing
+  // doesn't throw when called directly, but if a regression ever made it
+  // call process.exit() on the exists-path too, it would silently kill this
+  // whole test runner mid-suite -- reporting success with zero tests run,
+  // since finishValidation exits 0 -- rather than failing loudly. Running
+  // the same call in a child process makes that failure mode visible: a
+  // stray exit shows up as UNREACHABLE never printing.
+  if (test('skipIfMissing (child process): does not exit when the given path exists', () => {
+    const result = runInChildProcess(
+      `skipIfMissing(${JSON.stringify(__filename)}, 'should not print');\nconsole.log('REACHED');`
+    );
+    assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}: ${result.stderr}`);
+    assert.ok(!result.stdout.includes('should not print'), 'skipIfMissing must not print when the path exists');
+    assert.ok(result.stdout.includes('REACHED'), 'code after skipIfMissing must still run when the path exists');
   })) passed++; else failed++;
 
   if (test('skipIfMissing prints the message and exits 0 when the path is missing', () => {
@@ -121,10 +119,19 @@ function runTests() {
     assert.ok(!result.stdout.includes('UNREACHABLE'), 'Code after finishValidation must not run');
   })) passed++; else failed++;
 
+  // Deterministic child-process counterpart to the in-process case above
+  // (cubic review, EGC-539 PR #1151): an in-process-only happy-path
+  // assertion can't tell the difference between "never exits" and "the test
+  // process happened to survive" -- if this branch ever regressed into
+  // calling process.exit(), it would silently kill the whole suite mid-run
+  // (finishValidation's own exit(0) makes that look like success with fewer
+  // tests, not a failure) instead of failing loudly. Asserting REACHED
+  // printed makes that failure mode visible.
   if (test('finishValidation exits 0 and prints the success message when hasErrors is false (child process)', () => {
-    const result = runInChildProcess(`finishValidation(false, 'validated N things');`);
+    const result = runInChildProcess(`finishValidation(false, 'validated N things');\nconsole.log('REACHED');`);
     assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stdout.includes('validated N things'));
+    assert.ok(result.stdout.includes('REACHED'), 'code after finishValidation must still run when hasErrors is false');
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
