@@ -55,25 +55,37 @@ function wrappedRe() {
 // assertions on Windows CI and was reverted; if a host that actually
 // shells out via cmd.exe is ever wired to this hook, that needs its own
 // dedicated handling, not a blanket win32 check here.
+const COMPLEX_SHELL_CHARS = new Set(['\n', '|', '&', ';', '<', '>', '$', '`', '(', ')']);
+
+// Scans one character of hasComplexShellSyntax's quote-tracking pass.
+// Returns `{ complex: true }` to short-circuit the whole scan, otherwise
+// `{ nextIndex, quote }` for the caller to resume from.
+function scanShellSyntaxChar(cmd, i, quote) {
+  const ch = cmd[i];
+
+  if (quote === "'") {
+    return { nextIndex: i + 1, quote: ch === "'" ? null : quote };
+  }
+  if (quote === '"') {
+    if (ch === '\\') return { nextIndex: i + 2, quote };
+    if (ch === '"') return { nextIndex: i + 1, quote: null };
+    if (ch === '$' || ch === '`') return { complex: true };
+    return { nextIndex: i + 1, quote };
+  }
+  if (ch === '\\') return { nextIndex: i + 2, quote };
+  if (ch === "'" || ch === '"') return { nextIndex: i + 1, quote: ch };
+  if (COMPLEX_SHELL_CHARS.has(ch)) return { complex: true };
+  return { nextIndex: i + 1, quote };
+}
+
 function hasComplexShellSyntax(cmd) {
   let quote = null;
-  for (let i = 0; i < cmd.length; i++) {
-    const ch = cmd[i];
-    if (quote === "'") {
-      if (ch === "'") quote = null;
-      continue;
-    }
-    if (quote === '"') {
-      if (ch === '\\') { i++; continue; }
-      if (ch === '"') { quote = null; continue; }
-      if (ch === '$' || ch === '`') return true;
-      continue;
-    }
-    if (ch === '\\') { i++; continue; }
-    if (ch === "'" || ch === '"') { quote = ch; continue; }
-    if (ch === '\n' || ch === '|' || ch === '&' || ch === ';' || ch === '<' || ch === '>' || ch === '$' || ch === '`' || ch === '(' || ch === ')') {
-      return true;
-    }
+  let i = 0;
+  while (i < cmd.length) {
+    const step = scanShellSyntaxChar(cmd, i, quote);
+    if (step.complex) return true;
+    i = step.nextIndex;
+    quote = step.quote;
   }
   // An unterminated quote masks whatever follows it from this scan; treat
   // that as complex rather than silently trusting the no-shell fast path.
