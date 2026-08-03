@@ -29,6 +29,23 @@ const {
   resolveCrusherAdapterScriptDestination,
 } = require('../cursor-crusher-hooks');
 
+// Shared by createCursorGuardianOperations and createCursorCrusherOperations
+// below: hooks-runtime already scaffolds the whole scripts/hooks and
+// scripts/lib trees (install-modules.json), which includes every file each
+// function's own copy operations would otherwise duplicate -- drop the
+// redundant per-file copies when that module is selected, keeping only the
+// merge operation (never redundant: it is the sole writer of hooks.json's
+// entry for that hook). EGC-539 audit (Finding 9): this closure used to be
+// defined identically in both functions below.
+function createAlreadyScaffoldedChecker(modules) {
+  const selectedPaths = new Set(modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])));
+  const alreadyScaffolded = sourceRelativePath => (
+    (selectedPaths.has('scripts/hooks') && sourceRelativePath.startsWith('scripts/hooks/'))
+    || (selectedPaths.has('scripts/lib') && sourceRelativePath.startsWith('scripts/lib/'))
+  );
+  return { selectedPaths, alreadyScaffolded };
+}
+
 // EGC-494/EGC-498: every Cursor install registers the Guardian Bash
 // validator on beforeShellExecution, even when no content modules are
 // selected -- the same "deterministic, unconditional" pattern
@@ -39,17 +56,7 @@ function createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot) 
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
 
-  // hooks-runtime already scaffolds the whole scripts/hooks and scripts/lib
-  // trees (install-modules.json), which includes every file the Guardian
-  // copy operations below would otherwise duplicate -- drop the redundant
-  // per-file copies when that module is selected, keeping only the merge
-  // operation (never redundant: it is the sole writer of hooks.json's
-  // Guardian entry).
-  const selectedPaths = new Set(modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])));
-  const alreadyScaffolded = sourceRelativePath => (
-    (selectedPaths.has('scripts/hooks') && sourceRelativePath.startsWith('scripts/hooks/'))
-    || (selectedPaths.has('scripts/lib') && sourceRelativePath.startsWith('scripts/lib/'))
-  );
+  const { selectedPaths, alreadyScaffolded } = createAlreadyScaffoldedChecker(modules);
 
   const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot)
     .filter(operation => !alreadyScaffolded(operation.sourceRelativePath));
@@ -110,11 +117,7 @@ function createCursorCrusherOperations(adapter, targetRoot, modules) {
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
 
-  const selectedPaths = new Set(modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])));
-  const alreadyScaffolded = sourceRelativePath => (
-    (selectedPaths.has('scripts/hooks') && sourceRelativePath.startsWith('scripts/hooks/'))
-    || (selectedPaths.has('scripts/lib') && sourceRelativePath.startsWith('scripts/lib/'))
-  );
+  const { alreadyScaffolded } = createAlreadyScaffoldedChecker(modules);
 
   const adapterModuleId = 'egc-cursor-crusher-hook';
   const adapterScriptDestination = resolveCrusherAdapterScriptDestination(targetRoot);
@@ -193,6 +196,81 @@ function createJsonMergeOperation({ moduleId, repoRoot, sourceRelativePath, dest
     scaffoldOnly: false,
     mergePayload: readJsonObject(sourcePath, sourceRelativePath),
   });
+}
+
+// Cursor treats nested AGENTS.md files as directory context; do not install
+// EGC's root project identity into a host project's .cursor/.
+function planAgentsMdOperations() {
+  return [];
+}
+
+function planRulesOperations({ module, repoRoot, sourceRelativePath, targetRoot, takeUniqueOperations }) {
+  return takeUniqueOperations(createFlatRuleOperations({
+    moduleId: module.id,
+    repoRoot,
+    sourceRelativePath,
+    destinationDir: path.join(targetRoot, 'rules'),
+    destinationNameTransform: toCursorRuleFileName,
+  }));
+}
+
+function planAgentsOperations({ module, repoRoot, sourceRelativePath, targetRoot, takeUniqueOperations }) {
+  return takeUniqueOperations(createFlatFileOperations({
+    moduleId: module.id,
+    repoRoot,
+    sourceRelativePath,
+    destinationDir: path.join(targetRoot, 'agents'),
+    destinationNameTransform: toCursorAgentFileName,
+  }));
+}
+
+function planCursorDirOperations({ module, repoRoot, targetRoot, cursorMcpOperation, takeUniqueOperations }) {
+  const cursorRoot = path.join(repoRoot, '.cursor');
+  if (!fs.existsSync(cursorRoot) || !fs.statSync(cursorRoot).isDirectory()) {
+    return [];
+  }
+
+  const childOperations = fs.readdirSync(cursorRoot, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .filter(entry => entry.name !== 'rules' && entry.name !== 'hooks.json')
+    .map(entry => createManagedOperation({
+      moduleId: module.id,
+      sourceRelativePath: path.join('.cursor', entry.name),
+      destinationPath: path.join(targetRoot, entry.name),
+      strategy: 'preserve-relative-path',
+    }));
+
+  const ruleOperations = createFlatRuleOperations({
+    moduleId: module.id,
+    repoRoot,
+    sourceRelativePath: '.cursor/rules',
+    destinationDir: path.join(targetRoot, 'rules'),
+    destinationNameTransform: toCursorRuleFileName,
+  });
+
+  return takeUniqueOperations([
+    ...childOperations,
+    ...(cursorMcpOperation ? [cursorMcpOperation] : []),
+    ...ruleOperations,
+  ]);
+}
+
+function planMcpConfigsOperations({
+  module, sourceRelativePath, planningInput, adapter, cursorMcpOperation, takeUniqueOperations,
+}) {
+  const operations = [
+    adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
+  ];
+  if (cursorMcpOperation) {
+    operations.push(cursorMcpOperation);
+  }
+  return takeUniqueOperations(operations);
+}
+
+function planDefaultOperations({ module, sourceRelativePath, planningInput, adapter, takeUniqueOperations }) {
+  return takeUniqueOperations([
+    adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
+  ]);
 }
 
 module.exports = createInstallTargetAdapter({
@@ -274,6 +352,10 @@ module.exports = createInstallTargetAdapter({
       });
     }
 
+    // EGC-539 audit (Finding 9): dispatches each module path to its own
+    // planXOperations helper above instead of inlining all six branches'
+    // logic here -- same operations, same order, same dedup as before, just
+    // no longer all flattened into one ~150-line closure.
     return [...entries.flatMap(({ module, sourceRelativePath }) => {
       const cursorMcpOperation = createJsonMergeOperation({
         moduleId: module.id,
@@ -283,75 +365,28 @@ module.exports = createInstallTargetAdapter({
       });
 
       if (sourceRelativePath === 'AGENTS.md') {
-        // Cursor treats nested AGENTS.md files as directory context; do not
-        // install EGC's root project identity into a host project's .cursor/.
-        return [];
+        return planAgentsMdOperations();
       }
 
       if (sourceRelativePath === 'rules') {
-        return takeUniqueOperations(createFlatRuleOperations({
-          moduleId: module.id,
-          repoRoot,
-          sourceRelativePath,
-          destinationDir: path.join(targetRoot, 'rules'),
-          destinationNameTransform: toCursorRuleFileName,
-        }));
+        return planRulesOperations({ module, repoRoot, sourceRelativePath, targetRoot, takeUniqueOperations });
       }
 
       if (sourceRelativePath === 'agents') {
-        return takeUniqueOperations(createFlatFileOperations({
-          moduleId: module.id,
-          repoRoot,
-          sourceRelativePath,
-          destinationDir: path.join(targetRoot, 'agents'),
-          destinationNameTransform: toCursorAgentFileName,
-        }));
+        return planAgentsOperations({ module, repoRoot, sourceRelativePath, targetRoot, takeUniqueOperations });
       }
 
       if (sourceRelativePath === '.cursor') {
-        const cursorRoot = path.join(repoRoot, '.cursor');
-        if (!fs.existsSync(cursorRoot) || !fs.statSync(cursorRoot).isDirectory()) {
-          return [];
-        }
-
-        const childOperations = fs.readdirSync(cursorRoot, { withFileTypes: true })
-          .sort((left, right) => left.name.localeCompare(right.name))
-          .filter(entry => entry.name !== 'rules' && entry.name !== 'hooks.json')
-          .map(entry => createManagedOperation({
-            moduleId: module.id,
-            sourceRelativePath: path.join('.cursor', entry.name),
-            destinationPath: path.join(targetRoot, entry.name),
-            strategy: 'preserve-relative-path',
-          }));
-
-        const ruleOperations = createFlatRuleOperations({
-          moduleId: module.id,
-          repoRoot,
-          sourceRelativePath: '.cursor/rules',
-          destinationDir: path.join(targetRoot, 'rules'),
-          destinationNameTransform: toCursorRuleFileName,
-        });
-
-        return takeUniqueOperations([
-          ...childOperations,
-          ...(cursorMcpOperation ? [cursorMcpOperation] : []),
-          ...ruleOperations,
-        ]);
+        return planCursorDirOperations({ module, repoRoot, targetRoot, cursorMcpOperation, takeUniqueOperations });
       }
 
       if (sourceRelativePath === 'mcp-configs') {
-        const operations = [
-          adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
-        ];
-        if (cursorMcpOperation) {
-          operations.push(cursorMcpOperation);
-        }
-        return takeUniqueOperations(operations);
+        return planMcpConfigsOperations({
+          module, sourceRelativePath, planningInput, adapter, cursorMcpOperation, takeUniqueOperations,
+        });
       }
 
-      return takeUniqueOperations([
-        adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
-      ]);
+      return planDefaultOperations({ module, sourceRelativePath, planningInput, adapter, takeUniqueOperations });
     }), ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot),
     ...createCursorCrusherOperations(adapter, targetRoot, modules)];
   },
