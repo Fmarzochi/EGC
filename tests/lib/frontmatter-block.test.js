@@ -46,7 +46,8 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('strips a leading UTF-8 BOM before detecting the opening delimiter', () => {
-    const result = extractFrontmatterBlock('﻿---\nname: x\n---\nbody');
+    const bom = String.fromCharCode(0xFEFF);
+    const result = extractFrontmatterBlock(`${bom}---\nname: x\n---\nbody`);
     assert.deepStrictEqual(result, { raw: 'name: x' });
   })) passed++; else failed++;
 
