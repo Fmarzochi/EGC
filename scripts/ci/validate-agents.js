@@ -5,6 +5,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
 
 const AGENTS_DIR = path.join(__dirname, '../../agents');
 const REQUIRED_FIELDS = ['model', 'tools'];
@@ -16,14 +17,11 @@ const VALID_MODELS = [
 ];
 
 function extractFrontmatter(content) {
-  // Strip BOM if present (UTF-8 BOM: \uFEFF)
-  const cleanContent = content.replace(/^\uFEFF/, '');
-  // Support both LF and CRLF line endings
-  const match = cleanContent.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return null;
+  const block = extractFrontmatterBlock(content);
+  if (block.error) return null;
 
   const frontmatter = {};
-  const lines = match[1].split(/\r?\n/);
+  const lines = block.raw.split(/\r?\n/);
   for (const line of lines) {
     const colonIdx = line.indexOf(':');
     if (colonIdx > 0) {

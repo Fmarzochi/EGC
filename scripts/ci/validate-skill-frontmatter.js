@@ -11,6 +11,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -63,24 +64,12 @@ function listSkillLeaves(root) {
   return leaves;
 }
 
-// Adapted from the frontmatter extractor in scripts/ci/validate-agents.js.
-// Distinguishes "no frontmatter block at all" from "frontmatter block opened
-// but never closed" so the error message points at the actual problem.
 function extractFrontmatter(content) {
-  const cleanContent = content.replace(/^\uFEFF/, '');
-  const opensFrontmatter = /^---\r?\n/.test(cleanContent);
-
-  if (!opensFrontmatter) {
-    return { error: 'missing' };
-  }
-
-  const match = cleanContent.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) {
-    return { error: 'unterminated' };
-  }
+  const block = extractFrontmatterBlock(content);
+  if (block.error) return { error: block.error };
 
   const frontmatter = {};
-  const lines = match[1].split(/\r?\n/);
+  const lines = block.raw.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // Indented lines belong to a block scalar consumed below.
