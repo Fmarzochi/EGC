@@ -23,9 +23,17 @@ function keyPath() {
 // state-crypto.js's loadOrCreateKeySync() is already a general 32-byte
 // hex-key-file load-or-create (atomic write-tmp-then-link) -- reused here
 // with the integrity key's own path instead of re-implementing the same
-// routine a second time.
+// routine a second time. Its persistence failures are intentionally fatal
+// for the encryption key (losing it makes existing ciphertext unreadable),
+// but the integrity key has no such stakes: falling back to an unpersisted
+// key just means writeHmac() below silently skips a sidecar refresh, which
+// is the documented best-effort contract for HMAC handling.
 function loadOrCreateIntegrityKey() {
-  return loadOrCreateKeySync(keyPath());
+  try {
+    return loadOrCreateKeySync(keyPath());
+  } catch {
+    return crypto.randomBytes(32);
+  }
 }
 
 function computeHmac(content, key) {
