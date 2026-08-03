@@ -59,6 +59,40 @@ const HEREDOC_WORD_STOP_RE = /[\s;&|()<>]/;
 // be concatenated (`EO"F"1` is the word `EOF1`). Returns null on an
 // unterminated quote (malformed input — the caller must not guess a
 // delimiter out of it) or if no word is present at all.
+// Parses a single quoted span (`'...'` or `"..."`) inside a heredoc
+// delimiter word, starting right after the opening quote at `start`.
+// Bash only strips the backslash inside "..." when it precedes one of
+// these five characters; before anything else the backslash is kept
+// literally in the string. Always stripping it (as this used to) computed
+// a too-short delimiter value for forms like <<"EO\NF" (backslash-N is not
+// special), so the real terminator line — which bash resolves to the
+// correct, longer value including the literal backslash — never matched,
+// and the heredoc body never closed. Returns `closed: false` if the
+// command ends before the closing quote is found.
+function parseHeredocQuotedSpan(command, quoteChar, start) {
+  let j = start;
+  let inner = '';
+  let closed = false;
+  while (j < command.length) {
+    const c = command[j];
+    if (quoteChar === '"' && c === '\\' && j + 1 < command.length) {
+      const escaped = command[j + 1];
+      if (escaped === '$' || escaped === '`' || escaped === '"' || escaped === '\\' || escaped === '\n') {
+        inner += escaped;
+        j += 2;
+      } else {
+        inner += c;
+        j += 1;
+      }
+      continue;
+    }
+    if (c === quoteChar) { closed = true; j += 1; break; }
+    inner += c;
+    j += 1;
+  }
+  return { inner, closed, nextIndex: j };
+}
+
 function parseHeredocDelimiterWord(command, start) {
   let i = start;
   let value = '';
@@ -84,39 +118,11 @@ function parseHeredocDelimiterWord(command, start) {
       // EOF-1 truncation bug above, just via escaping instead of a
       // narrow character class). Single quotes have no escape mechanism in
       // bash (the first `'` always closes), so only `"` needs this.
-      const quoteChar = ch;
-      let j = i + 1;
-      let inner = '';
-      let closed = false;
-      while (j < command.length) {
-        const c = command[j];
-        if (quoteChar === '"' && c === '\\' && j + 1 < command.length) {
-          const escaped = command[j + 1];
-          // Bash only strips the backslash inside "..." when it precedes
-          // one of these five characters; before anything else the
-          // backslash is kept literally in the string. Always stripping it
-          // (as this used to) computed a too-short delimiter value for
-          // forms like <<"EO\NF" (backslash-N is not special), so the real
-          // terminator line — which bash resolves to the correct, longer
-          // value including the literal backslash — never matched, and the
-          // heredoc body never closed.
-          if (escaped === '$' || escaped === '`' || escaped === '"' || escaped === '\\' || escaped === '\n') {
-            inner += escaped;
-            j += 2;
-          } else {
-            inner += c;
-            j += 1;
-          }
-          continue;
-        }
-        if (c === quoteChar) { closed = true; j += 1; break; }
-        inner += c;
-        j += 1;
-      }
-      if (!closed) return null;
-      value += inner;
+      const span = parseHeredocQuotedSpan(command, ch, i + 1);
+      if (!span.closed) return null;
+      value += span.inner;
       literal = true;
-      i = j;
+      i = span.nextIndex;
       consumedAny = true;
       continue;
     }
