@@ -2,7 +2,7 @@
 
 // EGC-498 (corrected): Amazon Q Developer CLI has a real preToolUse hook
 // (verified against aws/amazon-q-developer-cli's own docs, not the earlier
-// Multica report which incorrectly classified it as prompt-only). Shared
+// earlier internal report which incorrectly classified it as prompt-only). Shared
 // between amazonq-project.js and amazonq-home.js: both roots use this
 // identical operation shape, differing only in rootSegments/
 // installStatePathSegments.

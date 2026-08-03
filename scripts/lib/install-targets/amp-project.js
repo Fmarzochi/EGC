@@ -15,7 +15,7 @@ const {
 // pass (EGC-507).
 //
 // Guardian + Token Crusher via Amp's Plugin API (EGC-507, design reviewed
-// with the Multica squad before implementing): reconfirmed 2026-07-29 that
+// with an internal audit before implementing): reconfirmed 2026-07-29 that
 // the old hooks doc this file used to cite (ampcode.com/manual?internal#
 // hooks, Sourcegraph-internal only) now 404s -- Amp replaced it with a
 // PUBLIC Plugin API (ampcode.com/manual/plugin-api). Plugins run IN-PROCESS

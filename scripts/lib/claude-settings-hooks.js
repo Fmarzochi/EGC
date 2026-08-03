@@ -982,8 +982,8 @@ function createEgcMemorySaveScriptCopyOperations(createRemappedOperation, target
 // falls back to CLAUDE_PROJECT_DIR/PWD/cwd() when input.cwd is absent, so the
 // exact same tested, proven state-load-and-print logic that opens every
 // session also re-injects state right after a compaction finishes -- closes
-// EGC-495 without inventing new untested logic. Confirmed real by the
-// Multica squad (EGC-497) via Claude Code binary inspection: PostCompact is
+// EGC-495 without inventing new untested logic. Confirmed real by an
+// internal audit (EGC-497) via Claude Code binary inspection: PostCompact is
 // an actual hook event (executePostCompactHooks, markPostCompaction).
 function createPostCompactHookMergeOperation(targetRoot) {
   const hookScriptPath = resolveHookScriptDestination(targetRoot);

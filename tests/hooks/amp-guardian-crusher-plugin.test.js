@@ -4,7 +4,7 @@
  * Amp (Sourcegraph) loads this plugin IN-PROCESS from .amp/plugins/*.ts
  * (project) or ~/.config/amp/plugins/*.ts (home), executed by Amp's own
  * Bun runtime (confirmed against https://ampcode.com/manual/plugin-api,
- * design reviewed with the Multica squad -- EGC-507). Same in-process
+ * design reviewed with an internal audit -- EGC-507). Same in-process
  * pattern as OpenCode's plugin: no stdin/stdout translation adapter, this
  * file requires the shared run() functions directly.
  *

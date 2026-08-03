@@ -200,7 +200,7 @@ function resolvePackageRoot() {
 }
 
 // Home-scoped, tool-agnostic anchor for guardian-bin.js's
-// fromEgcHomeMarker() resolution strategy (2026-07-27 Multica design
+// fromEgcHomeMarker() resolution strategy (2026-07-27 internal design
 // review, EGC-465): a Copilot- or CodeBuddy-only install has no MCP config
 // file of its own to trust, so this records the real package root at the
 // one moment it is actually known -- install time -- for any standalone

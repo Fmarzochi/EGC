@@ -607,7 +607,7 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.gemini[\\/]config[\\/]mcp_config\.json$/,
   // Antigravity CLI's own MCP server registration file — a separate file
   // from Gemini CLI's above despite sharing the ~/.gemini home root
-  // (scripts/lib/mcp-register.js's "Antigravity CLI" target). Multica squad
+  // (scripts/lib/mcp-register.js's "Antigravity CLI" target). Internal
   // audit (EGC-460/461, 2026-07-27) found guardian-bin.js now also trusts
   // this file, for the same reasoning as the Gemini CLI entry above.
   /\.gemini[\\/]antigravity-cli[\\/]mcp_config\.json$/,
@@ -626,7 +626,7 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // validator treat it as authoritative.
   /\.codex[\\/]config\.toml$/,
   // Home-scoped install marker (scripts/lib/install/apply.js's
-  // writeGuardianCliMarker(), 2026-07-27 Multica design review EGC-465).
+  // writeGuardianCliMarker(), 2026-07-27 internal design review EGC-465).
   // guardian-bin.js's fromEgcHomeMarker() trusts this file's packageRoot
   // value to resolve the guardian CLI on installs with no MCP config of
   // their own (Copilot, CodeBuddy). Same reasoning as the other resolution
