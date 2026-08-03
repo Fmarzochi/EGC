@@ -12,7 +12,16 @@
 const MAX_STDIN = 1024 * 1024;
 
 function readAdapterStdinJson(onComplete) {
-  let raw = '';
+  // Buffered as raw bytes (no setEncoding) and only decoded to a UTF-8
+  // string once, in the 'end' handler. String.prototype.length counts
+  // UTF-16 code units, not bytes, so accumulating into a string and
+  // capping on .length let multibyte payloads exceed the stated 1 MiB byte
+  // cap without ever being marked truncated (EGC-539 / cubic review on
+  // PR #1135). truncated is only set when a chunk is actually cut short or
+  // more data arrives after the cap is already reached -- a payload that
+  // lands exactly at MAX_STDIN bytes with nothing discarded stays untruncated.
+  const chunks = [];
+  let totalBytes = 0;
   let truncated = false;
   let done = false;
   const complete = result => {
@@ -21,12 +30,18 @@ function readAdapterStdinJson(onComplete) {
     onComplete(result);
   };
 
-  process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
+    if (totalBytes >= MAX_STDIN) {
+      truncated = true;
+      return;
     }
-    if (raw.length >= MAX_STDIN) {
+    const remaining = MAX_STDIN - totalBytes;
+    if (chunk.length <= remaining) {
+      chunks.push(chunk);
+      totalBytes += chunk.length;
+    } else {
+      chunks.push(chunk.subarray(0, remaining));
+      totalBytes += remaining;
       truncated = true;
     }
   });
@@ -37,6 +52,7 @@ function readAdapterStdinJson(onComplete) {
   // other unreadable-input path this reader already has.
   process.stdin.on('error', () => complete({ ok: false, truncated }));
   process.stdin.on('end', () => {
+    const raw = Buffer.concat(chunks).toString('utf8');
     let value;
     try {
       value = JSON.parse(raw);
