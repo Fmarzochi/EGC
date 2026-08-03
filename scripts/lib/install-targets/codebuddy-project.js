@@ -8,6 +8,10 @@ const {
   planFlatSkillOperation,
 } = require('./helpers');
 const {
+  GATEGUARD_HOOK_MODULE_ID,
+  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+  resolveGateGuardHookScriptDestination,
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
   createCrusherScriptCopyOperations,
@@ -15,15 +19,78 @@ const {
   createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
+// Unlike antigravity-project.js (whose SUPPORTED_SOURCE_PREFIXES excludes
+// 'scripts/**' entirely), CodeBuddy's module path filter only excludes
+// foreign-platform paths, so a module selection that explicitly includes
+// 'hooks-runtime' (whose paths cover scripts/hooks and scripts/lib) already
+// scaffolds gateguard-fact-force.js and utils.js via moduleOperations below.
+// Cubic review (EGC-539, PR #1142) caught two real gaps in earlier versions
+// of this guard: (1) an `.some()`-based check treated covering EITHER
+// scripts/hooks or scripts/lib as proof BOTH GateGuard files were already
+// scaffolded, so a module selection covering only one of the two directories
+// would skip copying the other file entirely, leaving it missing; (2) even
+// after requiring both directories, the guard still worked at the whole-pair
+// level (createGateGuardScriptCopyOperations copies both files together),
+// so a selection covering only scripts/hooks (not scripts/lib) had no way to
+// copy just the missing file without also re-copying the one already
+// covered. Each of the two GateGuard files is therefore checked and copied
+// independently below: skip a given file's explicit copy only when the
+// selected modules cover its own exact path or its whole containing
+// directory (which scaffolds recursively); a module pinning some other,
+// unrelated file in that directory does not count as covering it.
+function isPathCovered(modules, directoryPath, exactFilePath) {
+  return modules.some(module => {
+    const paths = Array.isArray(module.paths) ? module.paths : [];
+    return paths.some(p => p === directoryPath || p === exactFilePath);
+  });
+}
+
+function createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modules) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+  const operations = [];
+
+  if (!isPathCovered(modules, 'scripts/hooks', GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH)) {
+    operations.push(remap(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveGateGuardHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ));
+  }
+
+  if (!isPathCovered(modules, 'scripts/lib', GATEGUARD_LIB_SOURCE_RELATIVE_PATH)) {
+    operations.push(remap(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+      path.join(targetRoot, 'scripts', 'lib', 'utils.js'),
+      { strategy: 'preserve-relative-path' }
+    ));
+  }
+
+  return operations;
+}
+
 // CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
 // using the same {"hooks": {"PreToolUse": [{"matcher", "hooks"}]}} shape
 // Claude Code uses (https://www.codebuddy.ai/docs/cli/hooks), and this
-// adapter's own targetRoot already resolves to <project>/.codebuddy -- the
-// same root the hooks-runtime module scaffolds scripts/hooks/
-// gateguard-fact-force.js and scripts/lib/utils.js into. So the generic
-// Claude merge helper is reusable here without modification.
-function createHookOperations(adapter, targetRoot) {
+// adapter's own targetRoot already resolves to <project>/.codebuddy. The
+// generic Claude merge helper is reusable here without modification, but
+// 'hooks-runtime' is not a default legacy module for the codebuddy target
+// (see LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET in install-manifests.js), so
+// a module selection that omits it never scaffolds gateguard-fact-force.js
+// or utils.js on its own. EGC-539 found the merge operations below were
+// registered unconditionally while the script copy was not, so an install
+// whose selected modules did not include scripts/hooks/scripts/lib wrote a
+// PreToolUse hook pointing at a file that was never copied, breaking every
+// Edit/Write/MultiEdit/Bash call with ENOENT. Copy the script and its
+// utils.js dependency explicitly here, mirroring the same fix already
+// applied to antigravity-project.js and copilot-home.js, but skip the copy
+// when the selected modules already scaffold those same two files.
+function createHookOperations(adapter, targetRoot, modules) {
   return [
+    ...createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modules),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
@@ -107,7 +174,7 @@ module.exports = createInstallTargetAdapter({
     // mirroring Claude Code's always-on hook registration.
     return [
       ...moduleOperations,
-      ...createHookOperations(adapter, targetRoot),
+      ...createHookOperations(adapter, targetRoot, modules),
     ];
   },
 });
