@@ -105,6 +105,53 @@ let failed = 0;
 console.log('\nPre-Bash Commit Quality Hook Tests');
 console.log('==================================\n');
 
+if (test('detectConsoleLog flags console.log but ignores comments', () => {
+  assert.deepStrictEqual(hook.detectConsoleLog('console.log("debug")', 3), {
+    type: 'console.log',
+    message: 'console.log found at line 3',
+    line: 3,
+    severity: 'warning'
+  });
+  assert.strictEqual(hook.detectConsoleLog('// console.log("commented out")', 4), null);
+  assert.strictEqual(hook.detectConsoleLog('* console.log("doc comment")', 5), null);
+  assert.strictEqual(hook.detectConsoleLog('const ok = true;', 6), null);
+})) passed++; else failed++;
+
+if (test('detectDebugger flags debugger statements but ignores comments', () => {
+  assert.deepStrictEqual(hook.detectDebugger('debugger;', 2), {
+    type: 'debugger',
+    message: 'debugger statement at line 2',
+    line: 2,
+    severity: 'error'
+  });
+  assert.strictEqual(hook.detectDebugger('// debugger;', 3), null);
+  assert.strictEqual(hook.detectDebugger('const debuggerTool = 1;', 4), null);
+})) passed++; else failed++;
+
+if (test('detectTodoFixme flags markers without an issue reference', () => {
+  assert.deepStrictEqual(hook.detectTodoFixme('// TODO: clean this up', 7), {
+    type: 'todo',
+    message: 'TODO/FIXME without issue reference at line 7: "clean this up"',
+    line: 7,
+    severity: 'info'
+  });
+  assert.strictEqual(hook.detectTodoFixme('// TODO: tracked in issue #123', 8), null);
+  assert.strictEqual(hook.detectTodoFixme('// FIXME: see #456', 9), null);
+  assert.strictEqual(hook.detectTodoFixme('const ok = true;', 10), null);
+})) passed++; else failed++;
+
+if (test('detectSecrets flags known secret patterns and can match more than one per line', () => {
+  assert.deepStrictEqual(hook.detectSecrets("const k = 'sk-abcdefghijklmnopqrstuvwxyz';", 1), [
+    { type: 'secret', message: 'Potential OpenAI API key exposed at line 1', line: 1, severity: 'error' }
+  ]);
+  assert.deepStrictEqual(hook.detectSecrets('const ok = true;', 2), []);
+
+  const multi = hook.detectSecrets("api_key = 'sk-abcdefghijklmnopqrstuvwxyz'", 5);
+  assert.strictEqual(multi.length, 2, `expected two overlapping secret matches, got: ${JSON.stringify(multi)}`);
+  assert.ok(multi.some(issue => issue.message.includes('OpenAI API key')));
+  assert.ok(multi.some(issue => issue.message.includes('Potential API key')));
+})) passed++; else failed++;
+
 if (test('evaluate blocks commits when staged snapshot contains debugger', () => {
   inTempRepo(repoDir => {
     const filePath = path.join(repoDir, 'index.js');
