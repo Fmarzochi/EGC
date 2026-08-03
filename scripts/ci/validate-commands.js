@@ -6,6 +6,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
 
 const ROOT_DIR = path.join(__dirname, '../..');
 const COMMANDS_DIR = path.join(ROOT_DIR, 'commands');
@@ -13,19 +14,17 @@ const AGENTS_DIR = path.join(ROOT_DIR, 'agents');
 const SKILLS_DIR = path.join(ROOT_DIR, 'skills');
 
 function validateFrontmatter(file, content) {
-  if (!content.startsWith('---\n')) {
+  const block = extractFrontmatterBlock(content);
+  if (block.error === 'missing') {
     return [];
   }
-
-  const endIndex = content.indexOf('\n---\n', 4);
-  if (endIndex === -1) {
+  if (block.error === 'unterminated') {
     return [`${file} - frontmatter block is missing a closing --- delimiter`];
   }
 
-  const block = content.slice(4, endIndex);
   const errors = [];
 
-  for (const rawLine of block.split('\n')) {
+  for (const rawLine of block.raw.split('\n')) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) {
       continue;

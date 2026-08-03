@@ -23,6 +23,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "imports": {
+    "#lib/*": "./scripts/lib/*.js"
+  },
   "main": "scripts/egc.js",
   "bin": {
     "egc": "scripts/egc.js",
