@@ -264,6 +264,45 @@ test('# inside a heredoc body is literal body text, not a comment (no change fro
   assert.deepStrictEqual(segs, ['cat <<EOF\n# not a comment && rm -rf /\nEOF', 'echo done']);
 });
 
+// Cubic review (EGC-539, PR #1147): the first comment-detection fix above
+// introduced its own two false-comment regressions -- a live && hidden
+// behind a # that only LOOKS like a comment start. Both are real bash
+// tokenization behavior, verified against a real bash shell.
+test('a backslash-newline continuation glues the next line onto the current word, so a following # is mid-word, not a comment start', () => {
+  // Bash removes the unescaped backslash+newline pair entirely before
+  // tokenizing, so 'echo hi\<newline>#c && rm -rf /' is really the single
+  // token line 'echo hi#c && rm -rf /' -- '#c' is glued onto 'hi' (not a
+  // comment), and the && after it is a live, real separator. The segment
+  // text itself is preserved verbatim (backslash and newline included, same
+  // as every other test in this file) -- only the split *decision* changes.
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi\\\n#c && rm -rf /'),
+    ['echo hi\\\n#c', 'rm -rf /'],
+  );
+});
+test('a space before the backslash-newline continuation keeps # as a real comment start on the next line', () => {
+  // Contrast with the case above: a space before the escaped newline means
+  // bash sees 'hi ' (trailing space preserved) followed by '#c ...', so #
+  // genuinely starts a word here and is a real comment that absorbs the
+  // trailing && into the same (single) segment, verbatim text preserved.
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi \\\n#c && rm -rf /'),
+    ['echo hi \\\n#c && rm -rf /'],
+  );
+});
+test('# immediately after a closing paren from $(...) is mid-word, not a comment start (bash concatenates the following text onto the same word)', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo $(date)#c && echo AFTER'),
+    ['echo $(date)#c', 'echo AFTER'],
+  );
+});
+test('# immediately after a redirection target character is part of the filename, not a comment start', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi >#x && rm -rf /'),
+    ['echo hi >#x', 'rm -rf /'],
+  );
+});
+
 // extractSubstitutionBodies (cubic-dev-ai P0: $(...)/`...`/<(...)/>(...) content
 // must be recoverable so a hidden command can be validated, not just skipped)
 console.log('\nextractSubstitutionBodies:');

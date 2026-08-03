@@ -223,14 +223,55 @@ function matchHeredocTerminator(command, i, hd) {
   return { matched: true, rawLine };
 }
 
+// Word-start characters for comment detection specifically -- deliberately
+// narrower than HEREDOC_WORD_STOP_RE. `)`, `<`, and `>` are NOT reliable
+// word-start cues here: bash concatenates $(...)/`<(...)`/`>(...)` with
+// whatever literal text immediately follows into a single word (`$(date)#c`
+// is the one word `$(date)#c`, not a command substitution followed by a
+// comment), and `>`/`<` are redirection operators where a following `#` is
+// part of a filename (`echo hi >#x` redirects into a file literally named
+// `#x`). Cubic review (EGC-539, PR #1147) caught that reusing
+// HEREDOC_WORD_STOP_RE here made splitShellSegments silently fold a live
+// `&&`/`;`/`|` separator into what it mistook for a comment, hiding a
+// destructive command from Guardian's per-segment validation -- exactly
+// the class of divergence this file exists to prevent.
+const COMMENT_WORD_START_RE = /[\s;&|(]/;
+
+// Bash removes an unescaped-backslash-then-newline pair entirely before
+// tokenizing (a line continuation), so 'foo\<newline>#bar' is the single
+// word 'foo#bar', not 'foo' followed by a comment starting at '#'. Walking
+// back from `i` (the position of a candidate word-start character, usually
+// a newline) over any such continuations finds the character bash would
+// actually treat as preceding the current position. A run of N consecutive
+// backslashes immediately before the newline continues the line only when
+// N is odd (each adjacent pair of backslashes is itself an escaped literal
+// backslash and cancels out; the escaping power passes to the newline only
+// off the single unpaired backslash left when the count is odd).
+function skipLineContinuations(command, i) {
+  while (i >= 0) {
+    const isBareLf = command[i] === '\n';
+    const isCrLf = command[i] === '\r' && command[i + 1] === '\n';
+    if (!isBareLf && !isCrLf) break;
+    const nlStart = isCrLf ? i : i; // the newline run itself starts at i either way
+    let backslashes = 0;
+    let j = nlStart - 1;
+    while (j >= 0 && command[j] === '\\') { backslashes += 1; j -= 1; }
+    if (backslashes % 2 === 0) break; // even (incl. zero): a real, unescaped newline
+    i = j; // odd: backslash-newline continuation, keep walking back from before it
+  }
+  return i;
+}
+
 // A `#` starts a comment (running to the end of the line, never split on or
 // scanned for substitutions) only when it is not inside a quote or an
 // already-open heredoc body, and only when it begins a new word — `foo#bar`
 // is one identifier, not a comment, matching bash's own rule that `#` is
 // only special in a word-start position.
 function isCommentStart(command, i, quote, heredocState) {
-  return heredocState !== 'in-body' && !quote && command[i] === '#'
-    && (i === 0 || HEREDOC_WORD_STOP_RE.test(command[i - 1]));
+  if (heredocState === 'in-body' || quote || command[i] !== '#') return false;
+  if (i === 0) return true;
+  const precedingIndex = skipLineContinuations(command, i - 1);
+  return precedingIndex < 0 || COMMENT_WORD_START_RE.test(command[precedingIndex]);
 }
 
 /**
