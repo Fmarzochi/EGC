@@ -221,6 +221,49 @@ test('multiple heredocs on one line are consumed in order, not mixed with ordina
   ]);
 });
 
+// Comments (EGC-539 audit, security fix: splitShellSegments previously had no
+// # comment awareness at all, unlike extractSubstitutionBodies below -- a
+// real parsing divergence in a module that feeds the Guardian bash validator.
+// echo hi # note: rm -rf / && something used to split into ["echo hi # note:
+// rm -rf /", "something"], treating the && inside the comment as a live
+// separator and manufacturing a segment ("something") that was never live
+// shell syntax.)
+console.log('\nComments (EGC-539):');
+test('a # comment absorbs a trailing && instead of producing a spurious extra segment', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi # note: rm -rf / && something'),
+    ['echo hi # note: rm -rf / && something'],
+  );
+});
+test('a # comment absorbs trailing ; and | operators too, not just &&', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi # rm -rf /; also | this', { splitOnPipe: true }),
+    ['echo hi # rm -rf /; also | this'],
+  );
+});
+test('# appearing mid-word does not start a comment (foo#bar is one identifier)', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo foo#bar && something'),
+    ['echo foo#bar', 'something'],
+  );
+});
+test('a comment only runs to end of line: operators on the next line still split normally', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi # comment\necho bye && echo baz'),
+    ['echo hi # comment', 'echo bye', 'echo baz'],
+  );
+});
+test('a quoted # does not start a comment', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo "a # b" && echo c'),
+    ['echo "a # b"', 'echo c'],
+  );
+});
+test('# inside a heredoc body is literal body text, not a comment (no change from prior behavior)', () => {
+  const segs = splitShellSegments('cat <<EOF\n# not a comment && rm -rf /\nEOF\necho done');
+  assert.deepStrictEqual(segs, ['cat <<EOF\n# not a comment && rm -rf /\nEOF', 'echo done']);
+});
+
 // extractSubstitutionBodies (cubic-dev-ai P0: $(...)/`...`/<(...)/>(...) content
 // must be recoverable so a hidden command can be validated, not just skipped)
 console.log('\nextractSubstitutionBodies:');
