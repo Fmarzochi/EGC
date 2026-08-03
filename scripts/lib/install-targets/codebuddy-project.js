@@ -8,6 +8,7 @@ const {
   planFlatSkillOperation,
 } = require('./helpers');
 const {
+  createGateGuardScriptCopyOperations,
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
   createCrusherScriptCopyOperations,
@@ -18,12 +19,26 @@ const {
 // CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
 // using the same {"hooks": {"PreToolUse": [{"matcher", "hooks"}]}} shape
 // Claude Code uses (https://www.codebuddy.ai/docs/cli/hooks), and this
-// adapter's own targetRoot already resolves to <project>/.codebuddy -- the
-// same root the hooks-runtime module scaffolds scripts/hooks/
-// gateguard-fact-force.js and scripts/lib/utils.js into. So the generic
-// Claude merge helper is reusable here without modification.
+// adapter's own targetRoot already resolves to <project>/.codebuddy. The
+// generic Claude merge helper is reusable here without modification, but
+// 'hooks-runtime' is not a default legacy module for the codebuddy target
+// (see LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET in install-manifests.js), so
+// a module selection that omits it never scaffolds gateguard-fact-force.js
+// or utils.js on its own. EGC-539 found the merge operations below were
+// registered unconditionally while the script copy was not, so an install
+// whose selected modules did not include scripts/hooks/scripts/lib wrote a
+// PreToolUse hook pointing at a file that was never copied, breaking every
+// Edit/Write/MultiEdit/Bash call with ENOENT. Copy the script and its
+// utils.js dependency explicitly and unconditionally here, mirroring the
+// same fix already applied to antigravity-project.js and copilot-home.js.
 function createHookOperations(adapter, targetRoot) {
   return [
+    ...createGateGuardScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),

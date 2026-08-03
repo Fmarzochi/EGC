@@ -2165,6 +2165,38 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  // EGC-539: the GateGuard PreToolUse merge operations above were registered
+  // unconditionally (test above), but the script the hooks point at was
+  // never actually copied -- so a codebuddy install whose selected modules
+  // did not include scripts/hooks/scripts/lib wrote a hooks.json entry
+  // pointing at a file that never existed on disk. Same pattern the sibling
+  // Crusher/Guardian tests below already guard for their own scripts.
+  if (test('codebuddy adapter also scaffolds the GateGuard script and its utils.js dependency, unconditional of module selection', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [],
+    });
+
+    const scriptOp = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+      && operation.destinationPath === path.join(
+        projectRoot, '.codebuddy', 'scripts', 'hooks', 'gateguard-fact-force.js'
+      )
+    ));
+    assert.ok(scriptOp, 'Should scaffold gateguard-fact-force.js into .codebuddy even with no modules selected');
+
+    const utilsOp = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+      && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'scripts', 'lib', 'utils.js')
+    ));
+    assert.ok(utilsOp, 'Should scaffold gateguard-fact-force.js\'s utils.js dependency alongside it');
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter also registers the Token Crusher on Bash at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
