@@ -3,6 +3,7 @@
  */
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -17,6 +18,7 @@ const {
   classifyEntry,
   coreFact,
 } = require('../../scripts/lib/state-consolidate');
+const { encryptStateBuffer, decryptStateBuffer, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -319,6 +321,40 @@ function runTests() {
     const followedByFlag = run(['--project', '--dry-run']);
     assert.strictEqual(followedByFlag.code, 1);
     assert.ok(followedByFlag.stderr.includes('Missing value for --project'));
+  })) passed++; else failed++;
+
+  if (test('consolidates an encrypted state file and re-encrypts the result', () => {
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      const key = crypto.randomBytes(32);
+      fs.mkdirSync(path.join(homeDir, '.egc'), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(path.join(homeDir, '.egc', 'encryption.key'), key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+
+      const filePath = stateFilePath(homeDir, projectDir);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      const plaintext = sampleState(projectDir);
+      fs.writeFileSync(filePath, encryptStateBuffer(plaintext, path.join(homeDir, '.egc', 'encryption.key')));
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('CONSOLIDATED'));
+
+      const rawAfter = fs.readFileSync(filePath);
+      assert.strictEqual(isEncryptedBuffer(rawAfter), true, 'output must remain encrypted');
+      const after = decryptStateBuffer(rawAfter, path.join(homeDir, '.egc', 'encryption.key'));
+      assert.notStrictEqual(after, null, 'output must decrypt with the original key');
+      assert.ok(after.includes('## Active Decisions'));
+
+      const backups = fs.readdirSync(archiveDir(homeDir));
+      assert.strictEqual(backups.length, 1);
+      const rawBackup = fs.readFileSync(path.join(archiveDir(homeDir), backups[0]));
+      assert.ok(isEncryptedBuffer(rawBackup), 'backup must be a raw byte copy, still encrypted');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
   })) passed++; else failed++;
 
   if (test('strips bracketed dates with surrounding spaces', () => {

@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { readStateFileDecrypted } = require('../../scripts/lib/state-crypto');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
 const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
@@ -36,6 +37,12 @@ function stateFileIn(homeDir) {
     }
   }
   return null;
+}
+
+// The hook always writes state encrypted now; tests read it back the same
+// way real consumers do, via the shared decrypt helper.
+function readStateContent(home, filePath) {
+  return readStateFileDecrypted(filePath, path.join(home, '.egc', 'encryption.key'));
 }
 
 function runHook(input, env = {}) {
@@ -78,7 +85,7 @@ function runTests() {
       assert.strictEqual(result.code, 0);
       const stateFile = stateFileIn(home);
       assert.ok(stateFile, 'Expected a state file');
-      const content = fs.readFileSync(stateFile, 'utf8');
+      const content = readStateContent(home, stateFile);
       assert.ok(content.includes('Use fixture-driven tests -- CI has no guardian build'), 'Expected decision with why');
       assert.ok(content.includes('Piping CI watchers to tail'), 'Expected avoid entry');
       assert.ok(content.includes('Conventional commits'), 'Expected preference');
@@ -95,7 +102,7 @@ function runTests() {
     try {
       runHook({ transcript_path: transcript, cwd: home }, { HOME: home, PWD: home });
       runHook({ transcript_path: transcript, cwd: home }, { HOME: home, PWD: home });
-      const content = fs.readFileSync(stateFileIn(home), 'utf8');
+      const content = readStateContent(home, stateFileIn(home));
       const occurrences = content.split('Ship the memory miner').length - 1;
       assert.strictEqual(occurrences, 1, `Expected single entry, found ${occurrences}`);
     } finally {

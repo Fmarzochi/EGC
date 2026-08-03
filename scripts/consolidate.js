@@ -11,6 +11,7 @@ const {
   consolidateState,
   backupStateFile,
 } = require('./lib/state-consolidate');
+const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./lib/state-crypto');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -147,15 +148,23 @@ function main() {
       backup: null,
     };
 
-    let content;
+    let raw;
     try {
-      content = fs.readFileSync(stateFile, 'utf8');
+      raw = fs.readFileSync(stateFile);
     } catch (err) {
       if (err.code === 'ENOENT') {
         handleMissingState(report, options);
         return;
       }
       throw err;
+    }
+
+    const encrypted = isEncryptedBuffer(raw);
+    const content = encrypted ? decryptStateBuffer(raw) : raw.toString('utf8');
+    if (content === null) {
+      report.status = 'undecryptable';
+      console.error(`Error: cannot decrypt ${stateFile} -- leaving it untouched.`);
+      process.exit(1);
     }
     const result = consolidateState(content, { threshold });
 
@@ -168,7 +177,7 @@ function main() {
       return;
     }
 
-    performConsolidation(report, result, stateFile, homeDir, options);
+    performConsolidation(report, result, stateFile, homeDir, options, encrypted);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
@@ -192,14 +201,15 @@ function handleNotNeeded(report, options) {
   }
 }
 
-function performConsolidation(report, result, stateFile, homeDir, options) {
+function performConsolidation(report, result, stateFile, homeDir, options, encrypted) {
   report.status = options.dryRun ? 'dry-run' : 'consolidated';
 
   if (options.dryRun) {
     report.output = result.output;
   } else {
     report.backup = backupStateFile(homeDir, stateFile);
-    fs.writeFileSync(stateFile, result.output, 'utf8');
+    const payload = encrypted ? encryptStateBuffer(result.output) : result.output;
+    fs.writeFileSync(stateFile, payload, encrypted ? undefined : 'utf8');
   }
 
   if (options.json) {

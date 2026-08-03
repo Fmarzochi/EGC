@@ -1,10 +1,19 @@
 'use strict';
 
-// Read-side decryption for egc-memory state files. The memory server encrypts
-// every state write as: "EGC1:" magic + 12-byte IV + 16-byte GCM auth tag +
-// AES-256-GCM ciphertext, keyed by ~/.egc/encryption.key (32 bytes as hex).
-// Hooks and watchers only read state, so this module never creates or rotates
-// the key; the write side lives in mcp/servers/egc-memory/src/encryption.ts.
+// Encryption for egc-memory state files, mirroring
+// mcp/servers/egc-memory/src/encryption.ts (JS mirror pattern also used by
+// global-state.js in this directory -- keep both in sync). Every state write
+// is: "EGC1:" magic + 12-byte IV + 16-byte GCM auth tag + AES-256-GCM
+// ciphertext, keyed by ~/.egc/encryption.key (32 bytes as hex).
+//
+// Originally this module was read-only ("hooks only read state"), but the
+// PreCompact snapshot hook (state-snapshot.js) needs a guaranteed direct
+// write even when the AI is unavailable to call the MCP server's own
+// update_state. Reading an encrypted file as plain UTF-8 and writing the
+// result back as plain UTF-8 -- the bug this module's write side fixes --
+// silently corrupts the ciphertext (lossy replacement-character mangling on
+// the read, then a mismatched re-encode on the write), which then fails
+// decryption later with what looks like a wrong-key error but never was one.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -31,6 +40,48 @@ function loadKey(keyPath) {
   const hex = fs.readFileSync(keyPath || defaultKeyPath(), 'utf-8').trim();
   const key = Buffer.from(hex, 'hex');
   return key.length === 32 ? key : null;
+}
+
+// Mirrors loadOrCreateEncKey() in encryption.ts: same atomic
+// write-tmp-then-link publish so a concurrent creator (the MCP server, or
+// another hook invocation) can never observe a truncated key, and the same
+// "never silently regenerate an existing key" safety rule. Only the create
+// path is new here -- reads still go through loadKey() elsewhere in this file.
+function loadOrCreateKeySync(keyPath) {
+  const resolvedPath = keyPath || defaultKeyPath();
+  const dir = path.dirname(resolvedPath);
+  try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* may already exist */ }
+
+  if (fs.existsSync(resolvedPath)) {
+    return loadKey(resolvedPath);
+  }
+
+  const key = crypto.randomBytes(32);
+  const tmpPath = `${resolvedPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  try {
+    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    try {
+      fs.linkSync(tmpPath, resolvedPath);
+      try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort */ }
+      return key;
+    } catch (e) {
+      if (e && e.code === 'EEXIST') return loadKey(resolvedPath);
+      throw e;
+    }
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
+  }
+}
+
+// Returns MAGIC + IV + authTag + ciphertext, the exact wire format
+// decryptStateBuffer() (and encryption.ts's decryptState()) expect.
+function encryptStateBuffer(plaintext, keyPath) {
+  const key = loadOrCreateKeySync(keyPath);
+  const iv = crypto.randomBytes(IV_BYTES);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([Buffer.from(MAGIC, 'utf-8'), iv, authTag, encrypted]);
 }
 
 // Returns plaintext, or null when the payload cannot be authenticated and
@@ -69,4 +120,6 @@ module.exports = {
   isEncryptedBuffer,
   decryptStateBuffer,
   readStateFileDecrypted,
+  loadOrCreateKeySync,
+  encryptStateBuffer,
 };

@@ -1,8 +1,45 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('./branch-state');
+const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./state-crypto');
+
+// Cross-process lock, same file-name convention as withStateMergeLock() in
+// mcp/servers/egc-memory/src/index.ts, so this hook's direct write and the
+// MCP server's own update_state can never race on the same state file.
+function acquireLockSync(lockFile, retries = 50) {
+  while (retries > 0) {
+    try {
+      fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
+      return true;
+    } catch (e) {
+      if (e && e.code !== 'EEXIST') throw e;
+      try {
+        const storedPid = Number(fs.readFileSync(lockFile, 'utf-8').trim());
+        if (Number.isInteger(storedPid)) {
+          try { process.kill(storedPid, 0); } catch { fs.unlinkSync(lockFile); continue; }
+        }
+      } catch { /* lock file unreadable or gone between check and read: retry */ }
+      retries -= 1;
+      const until = Date.now() + 100;
+      while (Date.now() < until) { /* busy-wait: this hook runs synchronously, no event loop to yield to */ }
+    }
+  }
+  return false;
+}
+
+function withStateFileLockSync(stateFile, fn) {
+  const lockFile = `${stateFile}.merge.lock`;
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  const locked = acquireLockSync(lockFile);
+  try {
+    return fn();
+  } finally {
+    if (locked) { try { fs.unlinkSync(lockFile); } catch { /* already cleared */ } }
+  }
+}
 
 const MARKER_RE = /^- \[session-snapshot [^\]]+\]\n?/gm;
 
@@ -35,6 +72,12 @@ function buildSkeleton(projectPath, branch, ts) {
   ].join('\n');
 }
 
+// Reads and decrypts if the file is encrypted (the common case: the MCP
+// server always encrypts). undecryptable=true means the file exists, is
+// marked encrypted, but couldn't be authenticated/decrypted -- callers must
+// not treat that as "empty" and overwrite it; skipping the write is the
+// only safe response, matching update_state's own "abort to prevent data
+// loss" rule for the same failure.
 function loadState(projectPath) {
   const branch = detectBranch(projectPath);
   const stateDir = getStateDir(process.env.HOME);
@@ -42,25 +85,49 @@ function loadState(projectPath) {
   const filePath = resolveStateWrite(stateDir, projectPath, branch);
   const ts = new Date().toISOString();
 
-  const content = (resolved.source !== 'none' && fs.existsSync(resolved.filePath))
-    ? fs.readFileSync(resolved.filePath, 'utf-8')
-    : buildSkeleton(projectPath, branch, ts);
+  if (resolved.source === 'none' || !fs.existsSync(resolved.filePath)) {
+    return { content: buildSkeleton(projectPath, branch, ts), filePath, ts, undecryptable: false };
+  }
 
-  return { content, filePath, ts };
+  const raw = fs.readFileSync(resolved.filePath);
+  if (!isEncryptedBuffer(raw)) {
+    return { content: raw.toString('utf-8'), filePath, ts, undecryptable: false };
+  }
+  const decrypted = decryptStateBuffer(raw);
+  if (decrypted === null) {
+    return { content: '', filePath, ts, undecryptable: true };
+  }
+  return { content: decrypted, filePath, ts, undecryptable: false };
 }
 
+// Always encrypts (matching writeStateFile() in encryption.ts) and writes
+// atomically via temp-file-then-rename so a reader never observes a
+// partially-written file.
 function saveState(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf-8');
-  try { fs.chmodSync(filePath, 0o600); } catch { /* chmod not supported on Windows */ }
+  const encrypted = encryptStateBuffer(content);
+  const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  try {
+    fs.writeFileSync(tmpPath, encrypted);
+    try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
+    fs.renameSync(tmpPath, filePath);
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
+  }
 }
 
 function writeSnapshotToDisk(projectPath = process.env.PWD || process.cwd()) {
-  const state = loadState(projectPath);
-  let content = updateTimestamp(state.content, state.ts);
-  content = injectSessionMarker(content, state.ts);
-  saveState(state.filePath, content);
-  return state.filePath;
+  const branch = detectBranch(projectPath);
+  const stateDir = getStateDir(process.env.HOME);
+  const filePath = resolveStateWrite(stateDir, projectPath, branch);
+  return withStateFileLockSync(filePath, () => {
+    const state = loadState(projectPath);
+    if (state.undecryptable) return state.filePath;
+    let content = updateTimestamp(state.content, state.ts);
+    content = injectSessionMarker(content, state.ts);
+    saveState(state.filePath, content);
+    return state.filePath;
+  });
 }
 
 function escapeRegExp(text) {
@@ -110,20 +177,28 @@ function minedToLines(items) {
 }
 
 function applyMinedMemory(projectPath, mined) {
-  const state = loadState(projectPath);
-  let content = updateTimestamp(state.content, state.ts);
-  let added = 0;
+  const branch = detectBranch(projectPath);
+  const stateDir = getStateDir(process.env.HOME);
+  const filePath = resolveStateWrite(stateDir, projectPath, branch);
 
-  for (const [key, heading] of MINED_SECTION_MAP) {
-    const lines = minedToLines(mined?.[key]);
-    if (lines.length === 0) continue;
-    const result = appendToSection(content, heading, lines);
-    content = result.content;
-    added += result.added;
-  }
+  return withStateFileLockSync(filePath, () => {
+    const state = loadState(projectPath);
+    if (state.undecryptable) return { filePath: state.filePath, added: 0 };
 
-  if (added > 0) saveState(state.filePath, content);
-  return { filePath: state.filePath, added };
+    let content = updateTimestamp(state.content, state.ts);
+    let added = 0;
+
+    for (const [key, heading] of MINED_SECTION_MAP) {
+      const lines = minedToLines(mined?.[key]);
+      if (lines.length === 0) continue;
+      const result = appendToSection(content, heading, lines);
+      content = result.content;
+      added += result.added;
+    }
+
+    if (added > 0) saveState(state.filePath, content);
+    return { filePath: state.filePath, added };
+  });
 }
 
 module.exports = {
@@ -133,6 +208,7 @@ module.exports = {
   loadState,
   saveState,
   writeSnapshotToDisk,
+  withStateFileLockSync,
   extractSection,
   appendToSection,
   updateTimestamp,
