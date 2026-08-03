@@ -25,14 +25,20 @@ function keyPath() {
 // with the integrity key's own path instead of re-implementing the same
 // routine a second time. Its persistence failures are intentionally fatal
 // for the encryption key (losing it makes existing ciphertext unreadable),
-// but the integrity key has no such stakes: falling back to an unpersisted
-// key just means writeHmac() below silently skips a sidecar refresh, which
-// is the documented best-effort contract for HMAC handling.
+// but the integrity key has no such stakes: on failure, loadOrCreateKey()
+// in integrity.ts falls back to an unpersisted key held "for this process
+// lifetime" -- every sidecar in that run still gets signed consistently,
+// just with a key that won't survive the process. Cache the same way here:
+// a fresh crypto.randomBytes() on every call would make consecutive
+// writeHmac() calls in one run disagree with each other, not just with a
+// future process.
+let fallbackKey = null;
 function loadOrCreateIntegrityKey() {
   try {
     return loadOrCreateKeySync(keyPath());
   } catch {
-    return crypto.randomBytes(32);
+    if (!fallbackKey) fallbackKey = crypto.randomBytes(32);
+    return fallbackKey;
   }
 }
 
