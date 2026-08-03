@@ -189,6 +189,24 @@ function runTests() {
     assert.strictEqual(result.code, 0);
   })) passed++; else failed++;
 
+  if (test('CLI: a truncated oversized payload fails CLOSED (exit 2), matching every other adapter on this same threat model', () => {
+    // EGC-539 audit: this adapter used to hand-roll its own stdin reader
+    // with no truncation tracking at all, so an oversized-but-still-
+    // parseable payload silently allowed through (exit 0) -- reproduced
+    // live before this fix. It now shares readAdapterStdinJson with
+    // windsurf-guardian-adapter.js and the Cursor/Junie/Cline adapters,
+    // which all correctly fail closed on this exact input shape.
+    const oversizedPadding = 'A'.repeat(2 * 1024 * 1024);
+    const result = runAdapterCli(JSON.stringify({
+      agent_action_name: 'pre_run_command',
+      trajectory_id: `traj-cli-truncated-${Date.now()}`,
+      tool_info: { command_line: 'ls', cwd: '/tmp' },
+      padding: oversizedPadding,
+    }));
+    assert.strictEqual(result.code, 2, `Expected fail-closed on truncated oversized input, got exit ${result.code}`);
+    assert.ok(result.stderr.includes('exceeded the size'), `Expected the truncation reason on stderr, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
 }
