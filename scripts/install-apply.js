@@ -111,6 +111,86 @@ function printHumanPlan(plan, dryRun) {
   }
 }
 
+function resolveInstallConfig(options, { findDefaultInstallConfigPath, loadInstallConfig }) {
+  const defaultConfigPath = options.configPath || options.languages.length > 0
+    ? null
+    : findDefaultInstallConfigPath({ cwd: process.cwd() });
+  if (options.configPath) return loadInstallConfig(options.configPath, { cwd: process.cwd() });
+  if (defaultConfigPath) return loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
+  return null;
+}
+
+function hasInstallSelection(options, config) {
+  return Boolean(
+    config ||
+    options.profileId ||
+    options.moduleIds.length > 0 ||
+    options.includeComponentIds.length > 0 ||
+    options.excludeComponentIds.length > 0 ||
+    options.languages.length > 0
+  );
+}
+
+// Best-effort: a repo-detection failure here must not fail the whole
+// install. Shared by both call sites (the bare-`egc install` delegation
+// branch and the normal apply path below) so the commit-privacy promise is
+// kept the same way from either one.
+function configureCommitPrivacyFilterBestEffort(log, onError) {
+  try {
+    const { applyCommitPrivacyFilterCli } = require('./lib/memory-filters');
+    applyCommitPrivacyFilterCli({
+      projectDir: process.cwd(),
+      scriptPath: require('node:path').join(__dirname, 'check-state-leak.js'),
+      log,
+    });
+  } catch (err) {
+    onError(err);
+  }
+}
+
+// A bare "egc install" is the README Quick Start path. The no-argument
+// flow is already defined by the shipped onboarding installers, so run
+// them instead of failing; the env guard stops the wrappers from
+// recursing back into this script.
+function delegateToLegacyInstaller() {
+  const path = require('node:path');
+  const { spawnSync } = require('node:child_process');
+  const rootDir = path.join(__dirname, '..');
+
+  // Must run here, before the spawnSync below: that call hands off to
+  // install.sh/install.ps1 with cwd forced to rootDir (the package's own
+  // install location, not the user's project), so their own copy of this
+  // same setup silently targets the wrong directory (cubic review, PR
+  // #1122). process.cwd() is still the real user directory at this
+  // point -- this script never chdirs on its own.
+  configureCommitPrivacyFilterBestEffort(
+    msg => console.log(`  ${msg}`),
+    err => console.error(`Warning: commit-privacy filter setup failed: ${err.message}`)
+  );
+
+  const wrapper = process.platform === 'win32'
+    ? { cmd: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'scripts', 'install.ps1')] }
+    : { cmd: 'bash', args: [path.join(rootDir, 'scripts', 'install.sh')] };
+  const spawned = spawnSync(wrapper.cmd, wrapper.args, {
+    cwd: rootDir,
+    stdio: 'inherit',
+    env: { ...process.env, EGC_INSTALL_DELEGATED: '1' },
+  });
+  if (spawned.error) {
+    process.stderr.write(`Error: failed to launch ${wrapper.cmd}: ${spawned.error.message}\n`);
+  }
+  process.exit(spawned.status === null ? 1 : spawned.status);
+}
+
+function regenerateTopologyCache() {
+  try {
+    const { discover } = require('./runtime/discovery');
+    discover();
+  } catch (err) {
+    console.error(`Warning: Failed to regenerate topology cache: ${err.message}`);
+  }
+}
+
 function main() {
   try {
     const options = parseInstallArgs(process.argv);
@@ -125,63 +205,11 @@ function main() {
     } = require('./lib/install/config');
     const { applyInstallPlan } = require('./lib/install-executor');
     const { createInstallPlanFromRequest } = require('./lib/install/runtime');
-    const defaultConfigPath = options.configPath || options.languages.length > 0
-      ? null
-      : findDefaultInstallConfigPath({ cwd: process.cwd() });
-    let config;
-    if (options.configPath) {
-      config = loadInstallConfig(options.configPath, { cwd: process.cwd() });
-    } else if (defaultConfigPath) {
-      config = loadInstallConfig(defaultConfigPath, { cwd: process.cwd() });
-    } else {
-      config = null;
-    }
-    const hasSelection = Boolean(
-      config ||
-      options.profileId ||
-      options.moduleIds.length > 0 ||
-      options.includeComponentIds.length > 0 ||
-      options.excludeComponentIds.length > 0 ||
-      options.languages.length > 0
-    );
+
+    const config = resolveInstallConfig(options, { findDefaultInstallConfigPath, loadInstallConfig });
+    const hasSelection = hasInstallSelection(options, config);
     if (!hasSelection && !options.dryRun && !options.json && !process.env.EGC_INSTALL_DELEGATED) {
-      // A bare "egc install" is the README Quick Start path. The no-argument
-      // flow is already defined by the shipped onboarding installers, so run
-      // them instead of failing; the env guard stops the wrappers from
-      // recursing back into this script.
-      const path = require('node:path');
-      const { spawnSync } = require('node:child_process');
-      const rootDir = path.join(__dirname, '..');
-
-      // Must run here, before the spawnSync below: that call hands off to
-      // install.sh/install.ps1 with cwd forced to rootDir (the package's own
-      // install location, not the user's project), so their own copy of this
-      // same setup silently targets the wrong directory (cubic review, PR
-      // #1122). process.cwd() is still the real user directory at this
-      // point -- this script never chdirs on its own.
-      try {
-        const { applyCommitPrivacyFilterCli } = require('./lib/memory-filters');
-        applyCommitPrivacyFilterCli({
-          projectDir: process.cwd(),
-          scriptPath: path.join(__dirname, 'check-state-leak.js'),
-          log: msg => console.log(`  ${msg}`),
-        });
-      } catch (err) {
-        console.error(`Warning: commit-privacy filter setup failed: ${err.message}`);
-      }
-
-      const wrapper = process.platform === 'win32'
-        ? { cmd: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'scripts', 'install.ps1')] }
-        : { cmd: 'bash', args: [path.join(rootDir, 'scripts', 'install.sh')] };
-      const spawned = spawnSync(wrapper.cmd, wrapper.args, {
-        cwd: rootDir,
-        stdio: 'inherit',
-        env: { ...process.env, EGC_INSTALL_DELEGATED: '1' },
-      });
-      if (spawned.error) {
-        process.stderr.write(`Error: failed to launch ${wrapper.cmd}: ${spawned.error.message}\n`);
-      }
-      process.exit(spawned.status === null ? 1 : spawned.status);
+      delegateToLegacyInstaller();
     }
     const request = normalizeInstallRequest({
       ...options,
@@ -209,26 +237,13 @@ function main() {
     // that promise -- `egc install --target X` (this path) and the bare
     // `egc install` wrapper scripts never did, so a user following the
     // README's own quick-start command got no protection (2026-08-01
-    // audit finding). Best-effort: a repo-detection failure here must not
-    // fail the whole install.
-    try {
-      const { applyCommitPrivacyFilterCli } = require('./lib/memory-filters');
-      applyCommitPrivacyFilterCli({
-        projectDir: process.cwd(),
-        scriptPath: require('node:path').join(__dirname, 'check-state-leak.js'),
-        log: options.json ? () => {} : msg => console.log(`  ${msg}`),
-      });
-    } catch (err) {
-      if (!options.json) console.error(`Warning: commit-privacy filter setup failed: ${err.message}`);
-    }
+    // audit finding).
+    configureCommitPrivacyFilterBestEffort(
+      options.json ? () => {} : msg => console.log(`  ${msg}`),
+      err => { if (!options.json) console.error(`Warning: commit-privacy filter setup failed: ${err.message}`); }
+    );
 
-    // Regenerate the topology hot cache (runtime-map.json)
-    try {
-      const { discover } = require('./runtime/discovery');
-      discover();
-    } catch (err) {
-      console.error(`Warning: Failed to regenerate topology cache: ${err.message}`);
-    }
+    regenerateTopologyCache();
 
     if (options.json) {
       console.log(JSON.stringify({ dryRun: false, result }, null, 2)); // NOSONAR jssecurity:S8689
