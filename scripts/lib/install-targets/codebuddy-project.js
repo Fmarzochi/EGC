@@ -8,7 +8,10 @@ const {
   planFlatSkillOperation,
 } = require('./helpers');
 const {
-  createGateGuardScriptCopyOperations,
+  GATEGUARD_HOOK_MODULE_ID,
+  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+  resolveGateGuardHookScriptDestination,
   createPreToolUseGateGuardHookMergeOperation,
   createPreToolUseCrusherHookMergeOperation,
   createCrusherScriptCopyOperations,
@@ -21,16 +24,52 @@ const {
 // foreign-platform paths, so a module selection that explicitly includes
 // 'hooks-runtime' (whose paths cover scripts/hooks and scripts/lib) already
 // scaffolds gateguard-fact-force.js and utils.js via moduleOperations below.
-// Cubic review (EGC-539, PR #1142) caught that the unconditional copy here
-// would double-copy those same two files in that case. Only add the
-// explicit copy when no selected module's paths already cover scripts/hooks
-// or scripts/lib.
-function selectedModulesCoverGateGuardScripts(modules) {
+// Cubic review (EGC-539, PR #1142) caught two real gaps in earlier versions
+// of this guard: (1) an `.some()`-based check treated covering EITHER
+// scripts/hooks or scripts/lib as proof BOTH GateGuard files were already
+// scaffolded, so a module selection covering only one of the two directories
+// would skip copying the other file entirely, leaving it missing; (2) even
+// after requiring both directories, the guard still worked at the whole-pair
+// level (createGateGuardScriptCopyOperations copies both files together),
+// so a selection covering only scripts/hooks (not scripts/lib) had no way to
+// copy just the missing file without also re-copying the one already
+// covered. Each of the two GateGuard files is therefore checked and copied
+// independently below: skip a given file's explicit copy only when the
+// selected modules cover its own exact path or its whole containing
+// directory (which scaffolds recursively); a module pinning some other,
+// unrelated file in that directory does not count as covering it.
+function isPathCovered(modules, directoryPath, exactFilePath) {
   return modules.some(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];
-    return paths.some(p => p === 'scripts/hooks' || p === 'scripts/lib'
-      || p.startsWith('scripts/hooks/') || p.startsWith('scripts/lib/'));
+    return paths.some(p => p === directoryPath || p === exactFilePath);
   });
+}
+
+function createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modules) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+  const operations = [];
+
+  if (!isPathCovered(modules, 'scripts/hooks', GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH)) {
+    operations.push(remap(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveGateGuardHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ));
+  }
+
+  if (!isPathCovered(modules, 'scripts/lib', GATEGUARD_LIB_SOURCE_RELATIVE_PATH)) {
+    operations.push(remap(
+      GATEGUARD_HOOK_MODULE_ID,
+      GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+      path.join(targetRoot, 'scripts', 'lib', 'utils.js'),
+      { strategy: 'preserve-relative-path' }
+    ));
+  }
+
+  return operations;
 }
 
 // CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
@@ -51,12 +90,7 @@ function selectedModulesCoverGateGuardScripts(modules) {
 // when the selected modules already scaffold those same two files.
 function createHookOperations(adapter, targetRoot, modules) {
   return [
-    ...(selectedModulesCoverGateGuardScripts(modules) ? [] : createGateGuardScriptCopyOperations(
-      (moduleId, sourceRelativePath, destinationPath, options) => (
-        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-      ),
-      targetRoot
-    )),
+    ...createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modules),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
