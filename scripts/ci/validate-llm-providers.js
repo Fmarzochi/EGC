@@ -12,6 +12,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { finishValidation } = require('#lib/validator-cli');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const README_PATH = path.join(REPO_ROOT, 'README.md');
@@ -67,11 +68,10 @@ function validate() {
   // separately as the fallback aggregator) are not checked here — only
   // the providers this script explicitly maps are in scope.
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated ${Object.keys(NATIVE_PROVIDER_FILES).length} native LLM providers named in README.md against src/llm/providers/`);
+  finishValidation(
+    hasErrors,
+    `Validated ${Object.keys(NATIVE_PROVIDER_FILES).length} native LLM providers named in README.md against src/llm/providers/`
+  );
 }
 
 validate();

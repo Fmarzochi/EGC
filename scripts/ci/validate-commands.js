@@ -7,6 +7,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const ROOT_DIR = path.join(__dirname, '../..');
 const COMMANDS_DIR = path.join(ROOT_DIR, 'commands');
@@ -173,10 +174,7 @@ function validateCommandFile(file, validCommands, validAgents, validSkills) {
 }
 
 function validateCommands() {
-  if (!fs.existsSync(COMMANDS_DIR)) {
-    console.log('No commands directory found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(COMMANDS_DIR, 'No commands directory found, skipping validation');
 
   const files = fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith('.md'));
   const validCommands = new Set(files.map(f => f.replace(/\.md$/, '')));
@@ -192,15 +190,11 @@ function validateCommands() {
     warnCount += result.warnCount;
   }
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
   let msg = `Validated ${files.length} command files`;
   if (warnCount > 0) {
     msg += ` (${warnCount} warnings)`;
   }
-  console.log(msg);
+  finishValidation(hasErrors, msg);
 }
 
 validateCommands();

@@ -12,6 +12,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const ROOT = path.join(__dirname, '../..');
 const README_PATH = path.join(ROOT, 'README.md');
@@ -139,10 +140,7 @@ function validateTranslationStructure() {
     process.exit(1);
   }
 
-  if (!fs.existsSync(TRANSLATIONS_DIR)) {
-    console.log('No translations directory found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(TRANSLATIONS_DIR, 'No translations directory found, skipping validation');
 
   const sourceContent = fs.readFileSync(README_PATH, 'utf-8');
   const sourceHeadings = extractHeadings(sourceContent);
@@ -164,11 +162,10 @@ function validateTranslationStructure() {
     }
   }
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated heading structure for ${validCount} translation files against README.md (${sourceHeadings.length} headings)`);
+  finishValidation(
+    hasErrors,
+    `Validated heading structure for ${validCount} translation files against README.md (${sourceHeadings.length} headings)`
+  );
 }
 
 if (require.main === module) {

@@ -8,6 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const Ajv = require('ajv');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const MODULES_MANIFEST_PATH = path.join(REPO_ROOT, 'manifests/install-modules.json');
@@ -227,10 +228,10 @@ function validateComponents(components, moduleIds) {
 }
 
 function validateInstallManifests() {
-  if (!fs.existsSync(MODULES_MANIFEST_PATH) || !fs.existsSync(PROFILES_MANIFEST_PATH)) {
-    console.log('Install manifests not found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(
+    [MODULES_MANIFEST_PATH, PROFILES_MANIFEST_PATH],
+    'Install manifests not found, skipping validation'
+  );
 
   let hasErrors = false;
   let modulesData;
@@ -269,11 +270,8 @@ function validateInstallManifests() {
   const components = Array.isArray(componentsData.components) ? componentsData.components : [];
   if (validateComponents(components, moduleIds)) hasErrors = true;
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(
+  finishValidation(
+    hasErrors,
     `Validated ${modules.length} install modules, ${components.length} install components, and ${Object.keys(profiles).length} profiles`
   );
 }

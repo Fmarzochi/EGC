@@ -5,6 +5,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const RULES_DIR = path.join(__dirname, '../../rules');
 
@@ -43,10 +44,7 @@ function collectRuleFiles(dir) {
 }
 
 function validateRules() {
-  if (!fs.existsSync(RULES_DIR)) {
-    console.log('No rules directory found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(RULES_DIR, 'No rules directory found, skipping validation');
 
   const files = collectRuleFiles(RULES_DIR);
   let hasErrors = false;
@@ -71,11 +69,7 @@ function validateRules() {
     }
   }
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated ${validatedCount} rule files`);
+  finishValidation(hasErrors, `Validated ${validatedCount} rule files`);
 }
 
 validateRules();
