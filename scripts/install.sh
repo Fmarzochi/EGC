@@ -51,6 +51,7 @@ _has_install_args=false
 for _arg in "$@"; do
   case "$_arg" in
     --target|--profile|--modules|--config|--with|--without|--dry-run|--json) _has_install_args=true; break ;;
+    *) ;;
   esac
   # positional arg = language/component
   case "$_arg" in -*) ;; *) _has_install_args=true; break ;; esac
