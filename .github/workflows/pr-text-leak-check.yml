@@ -36,4 +36,4 @@ jobs:
             ' > /tmp/pr-text.txt
 
       - name: Check for internal-tool leaks
-        run: node scripts/check-internal-tool-leak.js --text "$(cat /tmp/pr-text.txt)"
+        run: node scripts/check-internal-tool-leak.js --text-file /tmp/pr-text.txt

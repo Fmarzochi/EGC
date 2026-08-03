@@ -99,5 +99,21 @@ run('--text mode passes clean text', () => {
   assert.strictEqual(res.status, 0, res.stderr);
 });
 
+run('--text-file mode blocks a leaking file (no argv size limit)', () => {
+  const { dir } = makeRepo();
+  const file = path.join(dir, 'pr-text.txt');
+  fs.writeFileSync(file, 'fix: bypasses found by Multica security audit');
+  const res = runScript(dir, '--text-file', file);
+  assert.strictEqual(res.status, 1);
+});
+
+run('--text-file mode passes a clean file', () => {
+  const { dir } = makeRepo();
+  const file = path.join(dir, 'pr-text.txt');
+  fs.writeFileSync(file, 'fix: bypasses found by an internal security audit');
+  const res = runScript(dir, '--text-file', file);
+  assert.strictEqual(res.status, 0, res.stderr);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
