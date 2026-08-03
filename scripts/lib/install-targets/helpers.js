@@ -182,49 +182,6 @@ function createRemappedOperation(adapter, moduleId, sourceRelativePath, destinat
   });
 }
 
-function createNamespacedFlatRuleOperations(adapter, moduleId, sourceRelativePath, input = {}) {
-  const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
-  const sourceRoot = path.join(input.repoRoot || '', normalizedSourcePath);
-
-  if (!input.repoRoot || !fs.existsSync(sourceRoot) || !fs.statSync(sourceRoot).isDirectory()) {
-    return [];
-  }
-
-  const targetRulesDir = path.join(adapter.resolveRoot(input), 'rules');
-  const operations = [];
-  const entries = fs.readdirSync(sourceRoot, { withFileTypes: true }).sort((left, right) => (
-    left.name.localeCompare(right.name)
-  ));
-
-  for (const entry of entries) {
-    const namespace = entry.name;
-    const entryPath = path.join(sourceRoot, entry.name);
-
-    if (entry.isDirectory()) {
-      const relativeFiles = listRelativeFiles(entryPath);
-      for (const relativeFile of relativeFiles) {
-        const flattenedFileName = `${namespace}-${normalizeRelativePath(relativeFile).replaceAll('/', '-')}`;
-        const sourceRelativeFile = path.join(normalizedSourcePath, namespace, relativeFile);
-        operations.push(createManagedOperation({
-          moduleId,
-          sourceRelativePath: sourceRelativeFile,
-          destinationPath: path.join(targetRulesDir, flattenedFileName),
-          strategy: 'flatten-copy',
-        }));
-      }
-    } else if (entry.isFile()) {
-      operations.push(createManagedOperation({
-        moduleId,
-        sourceRelativePath: path.join(normalizedSourcePath, entry.name),
-        destinationPath: path.join(targetRulesDir, entry.name),
-        strategy: 'flatten-copy',
-      }));
-    }
-  }
-
-  return operations;
-}
-
 function createFlatFileOperations({ // NOSONAR: directory walk building install operations kept inline; branches mirror the layout rules
   moduleId,
   repoRoot,
@@ -491,7 +448,6 @@ module.exports = {
       strategy,
     })
   ),
-  createNamespacedFlatRuleOperations,
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeRelativePath,
