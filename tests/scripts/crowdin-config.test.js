@@ -84,9 +84,17 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('crowdin-sync.yml keeps the post-download zh -> zh-CN normalization step', () => {
+    // Exact substrings, not just "translations/zh" -- that's a prefix of
+    // "translations/zh-CN" and would match even if the actual rename logic
+    // below were deleted, since "translations/zh-CN" appears unconditionally
+    // elsewhere in the file (e.g. mkdir -p translations/zh-CN).
     assert.ok(
-      syncWorkflow.includes('translations/zh') && syncWorkflow.includes('translations/zh-CN'),
-      'the manual zh -> zh-CN rename step must stay until the Crowdin download step supports language mapping directly'
+      syncWorkflow.includes('if [ -d translations/zh ]'),
+      'the directory check for the un-renamed zh/ download must stay'
+    );
+    assert.ok(
+      syncWorkflow.includes('rm -rf translations/zh'),
+      'the cleanup of the un-renamed zh/ directory must stay'
     );
   })) passed++; else failed++;
 
