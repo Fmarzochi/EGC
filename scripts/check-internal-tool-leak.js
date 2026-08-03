@@ -26,7 +26,7 @@ const SELF_PATHS = new Set([
 const GIT_BIN = [
   '/usr/bin/git',
   '/usr/local/bin/git',
-  'C:\\Program Files\\Git\\cmd\\git.exe',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
 ].find(p => fs.existsSync(p)) || 'git';
 
 function git(args, options) {
@@ -39,8 +39,8 @@ function findHits(content) {
 }
 
 function checkStaged() {
-  const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACM'])
-    .split('\n').filter(Boolean).filter(f => !SELF_PATHS.has(f));
+  const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACMT', '-z'])
+    .split('\0').filter(Boolean).filter(f => !SELF_PATHS.has(f));
   const leaks = [];
   for (const file of staged) {
     let content;
@@ -56,7 +56,7 @@ function checkStaged() {
 }
 
 function checkTree() {
-  const tracked = git(['ls-files']).split('\n').filter(Boolean).filter(f => !SELF_PATHS.has(f));
+  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(f => !SELF_PATHS.has(f));
   const leaks = [];
   for (const file of tracked) {
     let content;
