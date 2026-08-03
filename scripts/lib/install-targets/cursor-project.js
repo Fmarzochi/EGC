@@ -9,6 +9,7 @@ const {
   createManagedOperation,
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
 } = require('./helpers');
 const {
   HOOK_OPERATION_KIND,
@@ -281,14 +282,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.cursor',
   planOperations(input, adapter) {
-    let modules;
-    if (Array.isArray(input.modules)) {
-      modules = input.modules;
-    } else if (input.module) {
-      modules = [input.module];
-    } else {
-      modules = [];
-    }
+    const modules = normalizeModulesInput(input);
     const seenDestinationPaths = new Set();
     const {
       repoRoot,

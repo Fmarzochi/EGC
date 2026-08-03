@@ -62,6 +62,13 @@ function readSkillDescription(sourcePath) {
 }
 
 function createWarpPlanOperations(input, adapter) {
+  // Deliberately NOT using helpers.js's normalizeModulesInput() here (EGC-539
+  // audit): same reasoning as aider-project.js's createAiderPlanOperations --
+  // that shared helper also falls back to a singular `input.module`, which
+  // this adapter has never supported and has no test coverage exercising
+  // (unlike trae-project.js's direct-call fallback test). Left as the
+  // array-only variant on purpose rather than silently widening this
+  // adapter's observable contract.
   const modules = Array.isArray(input.modules) ? input.modules : [];
   const planningInput = {
     repoRoot: input.repoRoot,

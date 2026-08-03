@@ -5,6 +5,7 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
   planFlatSkillOperation,
 } = require('./helpers');
 const {
@@ -128,14 +129,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.codebuddy',
   planOperations(input, adapter) {
-    let modules;
-    if (Array.isArray(input.modules)) {
-      modules = input.modules;
-    } else if (input.module) {
-      modules = [input.module];
-    } else {
-      modules = [];
-    }
+    const modules = normalizeModulesInput(input);
     const {
       repoRoot,
       projectRoot,

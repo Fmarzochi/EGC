@@ -46,6 +46,50 @@ function resolveBaseRoot(scope, input = {}) {
   throw new Error(`Unsupported install target scope: ${scope}`);
 }
 
+// Every adapter's planOperations(input, adapter) accepts either a `modules`
+// array (the shape registry.js's planInstallTargetScaffold always normalizes
+// to before calling in) or a single `module` object (the shape a caller that
+// invokes adapter.planOperations() directly, bypassing the registry, may
+// still pass -- see the "singular input.module" test coverage in
+// install-targets.test.js). This normalization was duplicated verbatim
+// across nine adapter files plus twice more inside this file itself
+// (createFlatSkillPlanOperations and createDefaultScaffoldOperations) before
+// being consolidated here (EGC-539 audit).
+function normalizeModulesInput(input = {}) {
+  if (Array.isArray(input.modules)) {
+    return input.modules;
+  }
+
+  if (input.module) {
+    return [input.module];
+  }
+
+  return [];
+}
+
+// The normalizeModulesInput() call plus the repoRoot/projectRoot/homeDir
+// planningInput shape plus the adapter.resolveRoot(planningInput) call were
+// identical across claude-home.js, codex-home.js, gemini-home.js, and
+// opencode-home.js's planOperations -- each rebuilding the same 3-value
+// lookup before diverging into its own module-to-operation mapping.
+// Collapsing normalizeModulesInput() alone (above) into a 1-line call
+// elsewhere in this same audit round made this remaining prefix contiguous
+// enough to cross SonarCloud's cross-file duplication threshold (EGC-539
+// audit, PR #1150). Only these three values are pulled out -- adapters that
+// need extra planningInput fields (e.g. cursor-project.js's
+// seenDestinationPaths) or a different root-resolution path keep their own
+// inline version rather than being forced through this.
+function resolveModulesPlan(input, adapter) {
+  const modules = normalizeModulesInput(input);
+  const planningInput = {
+    repoRoot: input.repoRoot,
+    projectRoot: input.projectRoot,
+    homeDir: input.homeDir,
+  };
+  const targetRoot = adapter.resolveRoot(planningInput);
+  return { modules, planningInput, targetRoot };
+}
+
 function buildValidationIssue(severity, code, message, extra = {}) {
   return {
     severity,
@@ -286,20 +330,7 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
  */
 function createFlatSkillPlanOperations(rawInput, adapter) {
   const input = rawInput ?? {};
-  let modules;
-  if (Array.isArray(input.modules)) {
-    modules = input.modules;
-  } else if (input.module) {
-    modules = [input.module];
-  } else {
-    modules = [];
-  }
-  const planningInput = {
-    repoRoot: input.repoRoot,
-    projectRoot: input.projectRoot,
-    homeDir: input.homeDir,
-  };
-  const targetRoot = adapter.resolveRoot(planningInput);
+  const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
 
   return modules.flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];
@@ -318,20 +349,12 @@ function createFlatSkillPlanOperations(rawInput, adapter) {
 // roocode-project.js before this (SonarCloud new-code duplication finding
 // on PR #1122); consolidated here as the single source of truth.
 function createDefaultScaffoldOperations(input, adapter) {
-  if (Array.isArray(input.modules)) {
-    return input.modules.flatMap(module => {
-      const paths = Array.isArray(module.paths) ? module.paths : [];
-      return paths
-        .filter(p => !isForeignPlatformPath(p, adapter.target))
-        .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
-    });
-  }
-
-  const module = input.module || {};
-  const paths = Array.isArray(module.paths) ? module.paths : [];
-  return paths
-    .filter(p => !isForeignPlatformPath(p, adapter.target))
-    .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
+  return normalizeModulesInput(input).flatMap(module => {
+    const paths = Array.isArray(module.paths) ? module.paths : [];
+    return paths
+      .filter(p => !isForeignPlatformPath(p, adapter.target))
+      .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
+  });
 }
 
 function createInstallTargetAdapter(config) {
@@ -390,28 +413,11 @@ function createInstallTargetAdapter(config) {
         return config.planOperations(input, adapter);
       }
 
-      if (Array.isArray(input.modules)) {
-        return input.modules.flatMap(module => {
-          const paths = Array.isArray(module.paths) ? module.paths : [];
-          return paths
-            .filter(p => !isForeignPlatformPath(p, config.target))
-            .map(sourceRelativePath => adapter.createScaffoldOperation(
-              module.id,
-              sourceRelativePath,
-              input
-            ));
-        });
-      }
-
-      const module = input.module || {};
-      const paths = Array.isArray(module.paths) ? module.paths : [];
-      return paths
-        .filter(p => !isForeignPlatformPath(p, config.target))
-        .map(sourceRelativePath => adapter.createScaffoldOperation(
-          module.id,
-          sourceRelativePath,
-          input
-        ));
+      // Same body createDefaultScaffoldOperations exposes for adapters that
+      // define a custom planOperations of their own -- this default branch
+      // used to keep an unreduced copy of the exact same logic (EGC-539
+      // audit) instead of calling that already-extracted helper.
+      return createDefaultScaffoldOperations(input, adapter);
     },
     supportsModule(module, input = {}) {
       if (typeof config.supportsModule === 'function') {
@@ -450,6 +456,8 @@ module.exports = {
   ),
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
+  resolveModulesPlan,
 };

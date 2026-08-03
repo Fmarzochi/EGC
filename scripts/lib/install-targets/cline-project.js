@@ -5,6 +5,7 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
 } = require('./helpers');
 const {
   createAdapterStdinJsonCopyOperation,
@@ -111,14 +112,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.clinerules',
   planOperations(input, adapter) {
-    let modules;
-    if (Array.isArray(input.modules)) {
-      modules = input.modules;
-    } else if (input.module) {
-      modules = [input.module];
-    } else {
-      modules = [];
-    }
+    const modules = normalizeModulesInput(input);
 
     const {
       repoRoot,

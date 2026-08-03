@@ -5,6 +5,7 @@ const {
   createInstallTargetAdapter,
   createManagedScaffoldOperation,
   createRemappedOperation,
+  normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
 } = require('./helpers');
@@ -98,14 +99,7 @@ module.exports = createInstallTargetAdapter({
     return paths.length > 0;
   },
   planOperations(input, adapter) {
-    let modules;
-    if (Array.isArray(input.modules)) {
-      modules = input.modules;
-    } else if (input.module) {
-      modules = [input.module];
-    } else {
-      modules = [];
-    }
+    const modules = normalizeModulesInput(input);
     const {
       repoRoot,
       projectRoot,
