@@ -230,28 +230,33 @@ function isChecked(key) {
   return found;
 }
 
-// Prune stale session files older than 1 hour
-(function pruneStaleFiles() {
-  try {
-    const files = fs.readdirSync(STATE_DIR);
-    const now = Date.now();
-    for (const f of files) {
-      const isStateFile = f.startsWith('state-') && (f.endsWith('.json') || f.includes('.json.tmp.'));
-      if (!isStateFile) continue;
-      const fp = path.join(STATE_DIR, f);
-      try {
-        const stat = fs.statSync(fp);
-        if (now - stat.mtimeMs > SESSION_TIMEOUT_MS * 2) {
-          fs.unlinkSync(fp);
+// Prune stale session files older than 1 hour. Every other piece of work in
+// this module checks isGateGuardDisabled() first; this module-load-time scan
+// used to run unconditionally, so a disabled GateGuard still paid the
+// synchronous readdir/stat/unlink cost on every process start (EGC-539 audit).
+if (!isGateGuardDisabled()) {
+  (function pruneStaleFiles() {
+    try {
+      const files = fs.readdirSync(STATE_DIR);
+      const now = Date.now();
+      for (const f of files) {
+        const isStateFile = f.startsWith('state-') && (f.endsWith('.json') || f.includes('.json.tmp.'));
+        if (!isStateFile) continue;
+        const fp = path.join(STATE_DIR, f);
+        try {
+          const stat = fs.statSync(fp);
+          if (now - stat.mtimeMs > SESSION_TIMEOUT_MS * 2) {
+            fs.unlinkSync(fp);
+          }
+        } catch (_) { // NOSONAR
+          // Ignore files that disappear between readdir/stat/unlink.
         }
-      } catch (_) { // NOSONAR
-        // Ignore files that disappear between readdir/stat/unlink.
       }
+    } catch (_) { // NOSONAR
+      /* ignore */
     }
-  } catch (_) { // NOSONAR
-    /* ignore */
-  }
-})();
+  })();
+}
 
 // --- Sanitize file path against injection ---
 
