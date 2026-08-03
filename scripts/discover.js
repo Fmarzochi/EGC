@@ -64,6 +64,34 @@ function textOfResult(content) {
   return '';
 }
 
+function recordMissedOpportunity(cmd, output, opportunities) {
+  const alreadyCrushed = /(?:^|\s)egc\s+run\s/.test(cmd);
+  if (alreadyCrushed) return;
+  const kind = commandKind(cmd);
+  if (kind === 'generic') return;
+  const bytes = Buffer.byteLength(output, 'utf8');
+  if (bytes < MIN_BYTES_TO_CRUSH) return;
+  const tokens = estimateTokens(output);
+  const missed = Math.round(tokens * (CRUSH_RATIO[kind] || 0.7));
+  const agg = opportunities.get(kind) || { runs: 0, tokens: 0, missed: 0 };
+  agg.runs += 1;
+  agg.tokens += tokens;
+  agg.missed += missed;
+  opportunities.set(kind, agg);
+}
+
+function processBlock(block, pending, opportunities) {
+  if (block.type === 'tool_use' && block.name === 'Bash' && block.input && block.input.command) {
+    pending.set(block.id, block.input.command);
+    return;
+  }
+  if (block.type === 'tool_result' && pending.has(block.tool_use_id)) {
+    const cmd = pending.get(block.tool_use_id);
+    pending.delete(block.tool_use_id);
+    recordMissedOpportunity(cmd, textOfResult(block.content), opportunities);
+  }
+}
+
 function analyzeFile(file, opportunities) {
   let lines;
   try {
@@ -83,26 +111,7 @@ function analyzeFile(file, opportunities) {
     const content = obj && obj.message && obj.message.content;
     if (!Array.isArray(content)) continue;
     for (const block of content) {
-      if (block.type === 'tool_use' && block.name === 'Bash' && block.input && block.input.command) {
-        pending.set(block.id, block.input.command);
-      } else if (block.type === 'tool_result' && pending.has(block.tool_use_id)) {
-        const cmd = pending.get(block.tool_use_id);
-        pending.delete(block.tool_use_id);
-        const alreadyCrushed = /(?:^|\s)egc\s+run\s/.test(cmd);
-        if (alreadyCrushed) continue;
-        const kind = commandKind(cmd);
-        if (kind === 'generic') continue;
-        const output = textOfResult(block.content);
-        const bytes = Buffer.byteLength(output, 'utf8');
-        if (bytes < MIN_BYTES_TO_CRUSH) continue;
-        const tokens = estimateTokens(output);
-        const missed = Math.round(tokens * (CRUSH_RATIO[kind] || 0.7));
-        const agg = opportunities.get(kind) || { runs: 0, tokens: 0, missed: 0 };
-        agg.runs += 1;
-        agg.tokens += tokens;
-        agg.missed += missed;
-        opportunities.set(kind, agg);
-      }
+      processBlock(block, pending, opportunities);
     }
   }
 }
