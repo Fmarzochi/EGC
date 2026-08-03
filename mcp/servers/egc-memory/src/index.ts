@@ -1238,6 +1238,26 @@ function readGlobalAppendix(projectContent: string): string | null {
   }
 }
 
+// Shared by both update_state paths (global and project-scoped): read the
+// existing doc, or -- only with force:true, and only when the file actually
+// exists -- quarantine an undecryptable one and continue from an empty doc.
+// Without force, an undecryptable file must abort the write rather than be
+// silently treated as empty, or a stale/rotated key would blank out memory
+// that is still there, just unreadable with the current key.
+function readExistingStateOrRecover(filePath: string, force: boolean | undefined, label: 'global' | 'project'): Record<string, string[]|string> {
+  try {
+    return readStateDoc(filePath);
+  } catch (err) {
+    if (force && fs.existsSync(filePath)) {
+      const backupPath = quarantineUndecryptableStateFile(filePath);
+      log('WARN', `update_state: force=true, undecryptable ${label} state backed up and replaced`, { file: filePath, backup: backupPath, error: String(err) });
+      return {};
+    }
+    log('ERROR', `[EGC encryption] Cannot read existing ${label} state, aborting update to prevent data loss`, { file: filePath, error: String(err) });
+    throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing ${label === 'global' ? 'global ' : ''}state file. The encryption key may have changed. Path: ${filePath}. Retry with force: true to back up the unreadable file and start fresh -- only do this after confirming the failure is persistent, not a transient lock from another process.`);
+  }
+}
+
 async function handleUpdateState(db: Database, toolArgs: unknown) {
   const args = UpdateStateSchema.parse(toolArgs || {});
   if (args.context) {
@@ -1270,18 +1290,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   if (args.scope === 'global') {
     const globalFile = getGlobalStateFile();
     return withStateMergeLock(globalFile, async () => {
-      let existingGlobal: Record<string, string[]|string> = {};
-      try {
-        existingGlobal = readStateDoc(globalFile);
-      } catch (err) {
-        if (args.force && fs.existsSync(globalFile)) {
-          const backupPath = quarantineUndecryptableStateFile(globalFile);
-          log('WARN', 'update_state: force=true, undecryptable global state backed up and replaced', { file: globalFile, backup: backupPath, error: String(err) });
-        } else {
-          log('ERROR', '[EGC encryption] Cannot read existing global state, aborting update to prevent data loss', { file: globalFile, error: String(err) });
-          throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing global state file. The encryption key may have changed. Path: ${globalFile}. Retry with force: true to back up the unreadable file and start fresh.`);
-        }
-      }
+      const existingGlobal = readExistingStateOrRecover(globalFile, args.force, 'global');
       writeStateDoc(globalFile, 'global', args, existingGlobal, null);
       const writtenGlobal = readStateFile(globalFile, getEncKey());
       writeHmac(globalFile, writtenGlobal, getIntegrityKey());
@@ -1298,19 +1307,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   // reintroduce the lost-update race between concurrent sessions.
   await withStateMergeLock(filePath, async () => {
     const resolved = resolveStateRead(getStateDir(), projPath, branch);
-    let existing: Record<string, string[]|string>;
-    try {
-      existing = readStateDoc(resolved.filePath);
-    } catch (err) {
-      if (args.force && fs.existsSync(resolved.filePath)) {
-        const backupPath = quarantineUndecryptableStateFile(resolved.filePath);
-        log('WARN', 'update_state: force=true, undecryptable state file backed up and replaced', { file: resolved.filePath, backup: backupPath, error: String(err) });
-        existing = {};
-      } else {
-        log('ERROR', '[EGC encryption] Cannot read existing state — aborting update to prevent data loss', { file: resolved.filePath, error: String(err) });
-        throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing state file. The encryption key may have changed. Path: ${resolved.filePath}. Retry with force: true to back up the unreadable file and start fresh — only do this after confirming the failure is persistent, not a transient lock from another process.`);
-      }
-    }
+    const existing = readExistingStateOrRecover(resolved.filePath, args.force, 'project');
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     writeStateDoc(filePath, projPath, args, existing, branch);
