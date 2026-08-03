@@ -79,7 +79,17 @@ function evaluate(rawInput) {
   let evaluation;
   try {
     evaluation = evaluateReceipt(process.cwd());
-  } catch {
+  } catch (err) {
+    if (mode === 'block') {
+      return {
+        output: rawInput,
+        stderr: [
+          `[Hook] BLOCKED by verification gate: could not evaluate the verification receipt (${err instanceof Error ? err.message : String(err)}).`,
+          `Set ${GATE_MODE_ENV}=off to disable this gate or ${GATE_MODE_ENV}=warn to allow through evaluation errors.`,
+        ].join('\n'),
+        exitCode: 2,
+      };
+    }
     return { output: rawInput, exitCode: 0 };
   }
 

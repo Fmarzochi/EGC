@@ -25,7 +25,20 @@ function commandBatch(payload: string): unknown {
       commands = parsed.commands.filter((c: unknown): c is string => typeof c === 'string');
       if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
     }
-  } catch { /* malformed batch payload: validate nothing, return empty */ }
+  } catch {
+    return [{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }];
+  }
+  if (commands.length === 0) {
+    // Fail closed: an empty verdict array reads to the caller as "nothing to
+    // check", which allows the batch through instead of blocking it. The
+    // only caller (pre-bash-guardian-validate.js) already short-circuits
+    // before ever sending an empty batch on purpose, so this is never a
+    // false positive -- it only fires for malformed JSON (caught above) or
+    // valid JSON in an unrecognized shape ({}, {"commands": "not an array"},
+    // a bare string/number, etc.), both of which used to fall through here
+    // silently.
+    return [{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }];
+  }
   return commands.map(c => validateCommand(c, cwd));
 }
 
