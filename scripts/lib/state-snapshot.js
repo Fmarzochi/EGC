@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('./branch-state');
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./state-crypto');
+const { loadOrCreateIntegrityKey, writeHmac } = require('./state-integrity');
 
 // Cross-process lock, same file-name convention as withStateMergeLock() in
 // mcp/servers/egc-memory/src/index.ts, so this hook's direct write and the
@@ -120,6 +121,10 @@ function saveState(filePath, content) {
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
   }
+  // Same sidecar contract as writeHmac() in index.ts: without this, a hook
+  // write here (PreCompact snapshot, mined-memory apply) leaves the old HMAC
+  // in place and the next get_state reports a false tamper mismatch.
+  writeHmac(filePath, content, loadOrCreateIntegrityKey());
 }
 
 function writeSnapshotToDisk(projectPath = process.env.PWD || process.cwd()) {

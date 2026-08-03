@@ -14,6 +14,7 @@ const {
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./lib/state-crypto');
 const { withStateFileLockSync } = require('./lib/state-snapshot');
 const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('./lib/branch-state');
+const { loadOrCreateIntegrityKey, writeHmac } = require('./lib/state-integrity');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -238,6 +239,10 @@ function performConsolidation(report, result, readPath, stateFile, homeDir, opti
     } finally {
       try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
     }
+    // The sidecar HMAC covers the plaintext (matching writeHmac()'s use in
+    // index.ts), computed over result.output regardless of `encrypted` --
+    // leaving it stale here is exactly the mismatch this rewrite fixes.
+    writeHmac(stateFile, result.output, loadOrCreateIntegrityKey());
   }
 
   if (options.json) {
