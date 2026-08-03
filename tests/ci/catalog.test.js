@@ -247,10 +247,12 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('counts rules/ nested under per-language subdirectories, not just flat top-level files', () => {
-    // Production shape: 110 of the repo's 111 rules live at rules/<lang>/<name>.md,
-    // only rules/README.md sits flat at the top level. A fixture that only
-    // exercises the flat path would miss a regression in the recursion branch
-    // that actually produces the locked production count.
+    // Production shape: all 109 of the repo's rules live at rules/<lang>/<name>.md;
+    // rules/README.md and rules/<lang>/README.md are navigation, not rule
+    // content, and must be excluded the same way build-skill-index.js's
+    // runtime indexer already excludes them. A fixture that only exercises
+    // the flat path would miss a regression in the recursion branch that
+    // actually produces the locked production count.
     const testDir = createTestDir();
     try {
       const rulesDir = path.join(testDir, 'rules');
@@ -259,6 +261,7 @@ function runTests() {
       fs.writeFileSync(path.join(rulesDir, 'README.md'), '# Rules');
       fs.writeFileSync(path.join(rulesDir, 'python', 'coding-style.md'), '# Python style');
       fs.writeFileSync(path.join(rulesDir, 'python', 'testing.md'), '# Python testing');
+      fs.writeFileSync(path.join(rulesDir, 'python', 'README.md'), '# Python rules');
       fs.writeFileSync(path.join(rulesDir, 'typescript', 'coding-style.md'), '# TS style');
       // Non-.md and doubly-nested entries must not be counted.
       fs.writeFileSync(path.join(rulesDir, 'python', 'notes.txt'), 'not counted');
@@ -266,9 +269,11 @@ function runTests() {
       fs.writeFileSync(path.join(rulesDir, 'typescript', 'nested-too-deep', 'ignored.md'), '# should not count');
 
       const catalog = buildCatalog(testDir);
-      assert.strictEqual(catalog.rules.count, 4, 'README.md + 2 python + 1 typescript, excluding .txt and the too-deep nested file');
+      assert.strictEqual(catalog.rules.count, 3, '2 python + 1 typescript, excluding both README.md files, the .txt, and the too-deep nested file');
       assert.ok(catalog.rules.files.includes('rules/python/coding-style.md'));
       assert.ok(catalog.rules.files.includes('rules/typescript/coding-style.md'));
+      assert.ok(!catalog.rules.files.includes('rules/README.md'));
+      assert.ok(!catalog.rules.files.includes('rules/python/README.md'));
       assert.ok(!catalog.rules.files.some(f => f.includes('nested-too-deep')));
     } finally {
       cleanupTestDir(testDir);
