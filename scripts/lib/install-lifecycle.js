@@ -14,66 +14,9 @@ const {
 } = require('./install-targets/registry');
 const {
   HOOK_OPERATION_KIND,
-  PRE_TOOL_USE_EVENT,
-  PRE_COMPACT_EVENT,
-  POST_COMPACT_EVENT,
-  STOP_EVENT,
-  USER_PROMPT_SUBMIT_EVENT,
   applyManagedHookOperation,
-  inspectHookEntryFile,
-  inspectIntuitionHookFile,
-  inspectPreCompactHookFile,
-  inspectSessionStartHookFile,
-  inspectStopHookFile,
-  removeHookEntryFromFile,
-  removeIntuitionHookFromFile,
-  removePreCompactHookFromFile,
-  removeSessionStartHookFromFile,
-  removeStopHookFromFile,
+  resolveHookOperationHandlers,
 } = require('./claude-settings-hooks');
-const {
-  PRE_RUN_COMMAND_EVENT: WINDSURF_PRE_RUN_COMMAND_EVENT,
-  PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
-  inspectWindsurfGateGuardHookFile,
-  removeWindsurfGateGuardHookFromFile,
-} = require('./windsurf-gateguard-hooks');
-const {
-  BEFORE_SHELL_EXECUTION_EVENT: CURSOR_BEFORE_SHELL_EXECUTION_EVENT,
-  inspectCursorGuardianHookFile,
-  removeCursorGuardianHookFromFile,
-} = require('./cursor-guardian-hooks');
-const {
-  CRUSHER_HOOK_DISPATCH_EVENT: CURSOR_CRUSHER_HOOK_DISPATCH_EVENT,
-  inspectCursorCrusherHookFile,
-  removeCursorCrusherHookFromFile,
-} = require('./cursor-crusher-hooks');
-const {
-  PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
-  inspectKiroGuardianHookFile,
-  removeKiroGuardianHookFromFile,
-} = require('./kiro-guardian-hooks');
-const {
-  OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
-  inspectAmazonQGuardianHookFile,
-  removeAmazonQGuardianHookFromFile,
-} = require('./amazonq-guardian-hooks');
-const {
-  PRE_TOOL_USE_EVENT: OPENHANDS_PRE_TOOL_USE_EVENT,
-  inspectOpenHandsGuardianHookFile,
-  removeOpenHandsGuardianHookFromFile,
-} = require('./openhands-guardian-hooks');
-const {
-  ROOCODE_DENYLIST_TAG,
-  inspectRoocodeDenylistFile,
-  removeRoocodeDenylistFromFile,
-} = require('./roocode-guardian-denylist');
-
-// Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
-// Claude's matcher/group settings.json schema -- an operation whose
-// hookEvent is one of these two needs the Windsurf-specific
-// apply/inspect/remove helpers above, not the Claude ones the rest of this
-// file's HOOK_OPERATION_KIND branches fall back to.
-const WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 const {
   MERGE_YAML_READ_LIST_KIND,
   REMOVE_SENTINEL: AIDER_REMOVE_SENTINEL,
@@ -572,34 +515,12 @@ function uninstallWarpAgentsIndexEntry(operation) {
 
 function uninstallManagedHookOperation(operation) {
   // Strips only the EGC-managed hook entry. The settings file itself is never
-  // deleted because Claude Code and the user own its other keys.
-  if (operation.hookEvent === STOP_EVENT) {
-    removeStopHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-    removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    removeHookEntryFromFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath);
-  } else if (operation.hookEvent === PRE_COMPACT_EVENT) {
-    removePreCompactHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === POST_COMPACT_EVENT) {
-    removeHookEntryFromFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
-  } else if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-    removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
-    removeCursorGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else if (operation.hookEvent === CURSOR_CRUSHER_HOOK_DISPATCH_EVENT) {
-    removeCursorCrusherHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
-    removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else if (operation.hookEvent === AMAZONQ_OPERATION_DISPATCH_TAG) {
-    removeAmazonQGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
-    removeOpenHandsGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === ROOCODE_DENYLIST_TAG) {
-    removeRoocodeDenylistFromFile(operation.destinationPath);
-  } else {
-    removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath);
-  }
+  // deleted because Claude Code and the user own its other keys. Which
+  // remove function handles a given hookEvent is looked up from the same
+  // apply/remove/inspect table claude-settings-hooks.js's
+  // applyManagedHookOperation uses, instead of re-enumerating the same
+  // ~11 events here (EGC-539 audit finding).
+  resolveHookOperationHandlers(operation.hookEvent).remove(operation);
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -718,43 +639,13 @@ function inspectManagedOperation(repoRoot, operation) {
   }
 
   if (operation.kind === HOOK_OPERATION_KIND) {
-    if (operation.hookEvent === STOP_EVENT) {
-      return inspectResult(inspectStopHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-      return inspectResult(inspectIntuitionHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-      return inspectResult(inspectHookEntryFile(destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, operation.hookMatcher), operation, destinationPath);
-    }
-    if (operation.hookEvent === PRE_COMPACT_EVENT) {
-      return inspectResult(inspectPreCompactHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === POST_COMPACT_EVENT) {
-      return inspectResult(inspectHookEntryFile(destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-      return inspectResult(inspectWindsurfGateGuardHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
-      return inspectResult(inspectCursorGuardianHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === CURSOR_CRUSHER_HOOK_DISPATCH_EVENT) {
-      return inspectResult(inspectCursorCrusherHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
-      return inspectResult(inspectKiroGuardianHookFile(destinationPath, operation.hookEvent, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === AMAZONQ_OPERATION_DISPATCH_TAG) {
-      return inspectResult(inspectAmazonQGuardianHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
-      return inspectResult(inspectOpenHandsGuardianHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
-    }
-    if (operation.hookEvent === ROOCODE_DENYLIST_TAG) {
-      return inspectResult(inspectRoocodeDenylistFile(destinationPath), operation, destinationPath);
-    }
-    return inspectResult(inspectSessionStartHookFile(destinationPath, operation.hookScriptPath), operation, destinationPath);
+    // Same lookup table uninstallManagedHookOperation and
+    // applyManagedHookOperation use: which inspect function handles a given
+    // hookEvent is resolved once, centrally, in claude-settings-hooks.js
+    // (EGC-539 audit finding -- this file no longer re-enumerates all ~11
+    // events on its own).
+    const status = resolveHookOperationHandlers(operation.hookEvent).inspect(operation);
+    return inspectResult(status, operation, destinationPath);
   }
 
   if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
