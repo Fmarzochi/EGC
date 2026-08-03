@@ -24,7 +24,16 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
-const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
+const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
+
+function buildGuardianInput(event) {
+  const toolName = event && typeof event === 'object' ? event.preToolUse?.toolName : undefined;
+  const command = toolName === 'execute_command' ? event.preToolUse?.parameters?.command : undefined;
+  if (!command || typeof command !== 'string') {
+    return null;
+  }
+  return { tool_name: 'Bash', tool_input: { command } };
+}
 
 function respond(cancel, errorMessage) {
   // process.exitCode (not process.exit()) so Node drains stdout naturally:
@@ -37,41 +46,11 @@ function respond(cancel, errorMessage) {
 }
 
 function main() {
-  readAdapterStdinJson(({ ok, truncated, value }) => {
-    // Same fail-closed-on-truncation guard as every other EGC translation
-    // adapter: a capped-length prefix can still happen to be syntactically
-    // valid JSON, so truncation is checked unconditionally, before `ok`.
-    if (truncated) {
-      respond(true, 'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
-        'this validator can safely read, so it could not be parsed or validated. ' +
-        'Simplify the command.');
-      return;
-    }
-    if (!ok) {
-      respond(false);
-      return;
-    }
-
-    const event = value;
-    const toolName = event && typeof event === 'object' ? event.preToolUse?.toolName : undefined;
-    const command = toolName === 'execute_command' ? event.preToolUse?.parameters?.command : undefined;
-    if (!command || typeof command !== 'string') {
-      respond(false);
-      return;
-    }
-
-    const result = run({ tool_name: 'Bash', tool_input: { command } });
-    if (result.exitCode === 2) {
-      respond(true, result.stderr || 'Blocked by the EGC Guardian.');
-      return;
-    }
-
-    respond(false);
-  });
+  runJsonEnvelopeGuardianAdapter(buildGuardianInput, run, respond);
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = {};
+module.exports = { buildGuardianInput };

@@ -119,6 +119,46 @@ function bootstrapPlainExitCodeAdapter({ isMain, buildGuardianInput, runGuardian
   return { buildGuardianInput };
 }
 
+// Shared main() body for host adapters that need a JSON envelope on stdout
+// (not a plain exit code) -- Cline ({cancel, errorMessage}), Junie
+// ({decision, reason}), Cursor ({permission, user_message, agent_message}).
+// Each host's own translation differs only in buildGuardianInput (event ->
+// Guardian input) and respond (blocked: boolean, message?: string) -> writes
+// its own envelope shape. The truncation/ok/blocked control flow itself was
+// duplicated three times before this (EGC-539 audit, Finding 3).
+function runJsonEnvelopeGuardianAdapter(buildGuardianInput, runGuardian, respond) {
+  readAdapterStdinJson(({ ok, truncated, value }) => {
+    // Checked before `ok`, unconditionally: a capped-length prefix can still
+    // happen to be syntactically valid JSON, so a truncated payload always
+    // fails closed regardless of whether JSON.parse happened to succeed on
+    // what remained.
+    if (truncated) {
+      respond(true, 'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+        'this validator can safely read, so it could not be parsed or validated. ' +
+        'Simplify the command.');
+      return;
+    }
+    if (!ok) {
+      respond(false);
+      return;
+    }
+
+    const guardianInput = buildGuardianInput(value);
+    if (!guardianInput) {
+      respond(false);
+      return;
+    }
+
+    const result = runGuardian(guardianInput);
+    if (result.exitCode === 2) {
+      respond(true, result.stderr || 'Blocked by the EGC Guardian.');
+      return;
+    }
+
+    respond(false);
+  });
+}
+
 // Amazon Q, Goose, and OpenHands all deliver {tool_name, tool_input:
 // {command}, <cwdKey>} on stdin for their shell tool, differing only in
 // the shell tool's name and which top-level field carries the working
@@ -151,5 +191,6 @@ module.exports = {
   bootstrapPlainExitCodeAdapter,
   createBashToolGuardianInputMapper,
   readAdapterStdinJson,
+  runJsonEnvelopeGuardianAdapter,
   runPlainExitCodeGuardianAdapter,
 };

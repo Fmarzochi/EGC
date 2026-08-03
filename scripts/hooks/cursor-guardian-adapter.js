@@ -19,7 +19,7 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
-const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
+const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
 function buildGuardianInput(cursorEvent) {
   if (!cursorEvent || typeof cursorEvent !== 'object') {
@@ -41,47 +41,21 @@ function buildGuardianInput(cursorEvent) {
   return input;
 }
 
-function respond(permission, message) {
+function respond(blocked, message) {
+  // process.exitCode (not process.exit()) so Node drains stdout naturally:
+  // on POSIX a forced exit can race the pipe write and truncate the
+  // response before Cursor reads it (same cubic-dev-ai finding already
+  // applied to the Cline/Junie translation adapters, PR #1081 -- this one
+  // was still on the older, race-prone process.exit() pattern until the
+  // EGC-539 audit's Finding 3 consolidation).
+  const permission = blocked ? 'deny' : 'allow';
   const payload = message ? { permission, user_message: message, agent_message: message } : { permission };
+  process.exitCode = blocked ? 2 : 0;
   process.stdout.write(JSON.stringify(payload));
-  process.exit(permission === 'deny' ? 2 : 0);
 }
 
 function main() {
-  readAdapterStdinJson(({ ok, truncated, value }) => {
-    // Checked before `ok`, unconditionally: a capped-length prefix can
-    // still happen to be syntactically valid JSON (e.g. the cut lands
-    // exactly at the end of a complete value, or JSON.parse's tolerance
-    // for trailing whitespace after a value), which previously reached the
-    // `ok: true` branch below with truncated data treated as trusted. Any
-    // truncated payload is unanalyzable -- some of what the caller sent
-    // was discarded -- so it always fails closed, regardless of whether
-    // JSON.parse happened to succeed on what remained.
-    if (truncated) {
-      respond('deny', 'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
-        'this validator can safely read, so it could not be parsed or validated. ' +
-        'Simplify the command.');
-      return;
-    }
-    if (!ok) {
-      respond('allow');
-      return;
-    }
-
-    const guardianInput = buildGuardianInput(value);
-    if (!guardianInput) {
-      respond('allow');
-      return;
-    }
-
-    const result = run(guardianInput);
-    if (result.exitCode === 2) {
-      respond('deny', result.stderr || 'Blocked by the EGC Guardian.');
-      return;
-    }
-
-    respond('allow');
-  });
+  runJsonEnvelopeGuardianAdapter(buildGuardianInput, run, respond);
 }
 
 if (require.main === module) {
