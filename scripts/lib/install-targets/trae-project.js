@@ -4,6 +4,7 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
 } = require('./helpers');
 const {
   createBashGuardianHookMergeOperationForDestination,
@@ -88,14 +89,7 @@ module.exports = createInstallTargetAdapter({
     // when planOperations is omitted (this file's previous behavior) --
     // preserved verbatim here only because a custom planOperations is now
     // needed to also append the Guardian/Crusher operations below.
-    let modules;
-    if (Array.isArray(input.modules)) {
-      modules = input.modules;
-    } else if (input.module) {
-      modules = [input.module];
-    } else {
-      modules = [];
-    }
+    const modules = normalizeModulesInput(input);
 
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];

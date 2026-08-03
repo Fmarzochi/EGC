@@ -19,6 +19,17 @@ const { MERGE_YAML_READ_LIST_KIND } = require('../aider-config-merge');
 // user's own existing keys (model settings, lint commands, etc).
 
 function createAiderPlanOperations(input, adapter) {
+  // Deliberately NOT using helpers.js's normalizeModulesInput() here (EGC-539
+  // audit): that shared helper also falls back to a singular `input.module`,
+  // which this adapter has never supported -- registry.js's
+  // planInstallTargetScaffold always normalizes to a `modules` array before
+  // calling in, but adapter.planOperations() can also be invoked directly
+  // with a singular `module` (see the equivalent trae-project.js test
+  // coverage in install-targets.test.js), and no such direct caller or test
+  // exists for this adapter today. Adopting the shared helper here would
+  // silently add fallback support for a shape this adapter's own tests never
+  // exercise, changing its observable contract rather than only its
+  // implementation. Left as the array-only variant on purpose.
   const modules = Array.isArray(input.modules) ? input.modules : [];
   const planningInput = {
     repoRoot: input.repoRoot,

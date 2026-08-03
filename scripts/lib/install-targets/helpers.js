@@ -46,6 +46,27 @@ function resolveBaseRoot(scope, input = {}) {
   throw new Error(`Unsupported install target scope: ${scope}`);
 }
 
+// Every adapter's planOperations(input, adapter) accepts either a `modules`
+// array (the shape registry.js's planInstallTargetScaffold always normalizes
+// to before calling in) or a single `module` object (the shape a caller that
+// invokes adapter.planOperations() directly, bypassing the registry, may
+// still pass -- see the "singular input.module" test coverage in
+// install-targets.test.js). This normalization was duplicated verbatim
+// across nine adapter files plus twice more inside this file itself
+// (createFlatSkillPlanOperations and createDefaultScaffoldOperations) before
+// being consolidated here (EGC-539 audit).
+function normalizeModulesInput(input = {}) {
+  if (Array.isArray(input.modules)) {
+    return input.modules;
+  }
+
+  if (input.module) {
+    return [input.module];
+  }
+
+  return [];
+}
+
 function buildValidationIssue(severity, code, message, extra = {}) {
   return {
     severity,
@@ -286,14 +307,7 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
  */
 function createFlatSkillPlanOperations(rawInput, adapter) {
   const input = rawInput ?? {};
-  let modules;
-  if (Array.isArray(input.modules)) {
-    modules = input.modules;
-  } else if (input.module) {
-    modules = [input.module];
-  } else {
-    modules = [];
-  }
+  const modules = normalizeModulesInput(input);
   const planningInput = {
     repoRoot: input.repoRoot,
     projectRoot: input.projectRoot,
@@ -318,20 +332,12 @@ function createFlatSkillPlanOperations(rawInput, adapter) {
 // roocode-project.js before this (SonarCloud new-code duplication finding
 // on PR #1122); consolidated here as the single source of truth.
 function createDefaultScaffoldOperations(input, adapter) {
-  if (Array.isArray(input.modules)) {
-    return input.modules.flatMap(module => {
-      const paths = Array.isArray(module.paths) ? module.paths : [];
-      return paths
-        .filter(p => !isForeignPlatformPath(p, adapter.target))
-        .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
-    });
-  }
-
-  const module = input.module || {};
-  const paths = Array.isArray(module.paths) ? module.paths : [];
-  return paths
-    .filter(p => !isForeignPlatformPath(p, adapter.target))
-    .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
+  return normalizeModulesInput(input).flatMap(module => {
+    const paths = Array.isArray(module.paths) ? module.paths : [];
+    return paths
+      .filter(p => !isForeignPlatformPath(p, adapter.target))
+      .map(sourceRelativePath => adapter.createScaffoldOperation(module.id, sourceRelativePath, input));
+  });
 }
 
 function createInstallTargetAdapter(config) {
@@ -390,28 +396,11 @@ function createInstallTargetAdapter(config) {
         return config.planOperations(input, adapter);
       }
 
-      if (Array.isArray(input.modules)) {
-        return input.modules.flatMap(module => {
-          const paths = Array.isArray(module.paths) ? module.paths : [];
-          return paths
-            .filter(p => !isForeignPlatformPath(p, config.target))
-            .map(sourceRelativePath => adapter.createScaffoldOperation(
-              module.id,
-              sourceRelativePath,
-              input
-            ));
-        });
-      }
-
-      const module = input.module || {};
-      const paths = Array.isArray(module.paths) ? module.paths : [];
-      return paths
-        .filter(p => !isForeignPlatformPath(p, config.target))
-        .map(sourceRelativePath => adapter.createScaffoldOperation(
-          module.id,
-          sourceRelativePath,
-          input
-        ));
+      // Same body createDefaultScaffoldOperations exposes for adapters that
+      // define a custom planOperations of their own -- this default branch
+      // used to keep an unreduced copy of the exact same logic (EGC-539
+      // audit) instead of calling that already-extracted helper.
+      return createDefaultScaffoldOperations(input, adapter);
     },
     supportsModule(module, input = {}) {
       if (typeof config.supportsModule === 'function') {
@@ -450,6 +439,7 @@ module.exports = {
   ),
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
 };

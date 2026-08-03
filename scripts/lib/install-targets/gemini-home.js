@@ -5,6 +5,7 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
+  normalizeModulesInput,
   normalizeRelativePath,
 } = require('./helpers');
 const {
@@ -176,14 +177,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.gemini-plugin',
   planOperations(input, adapter) {
-    let modules;
-    if (Array.isArray(input.modules)) {
-      modules = input.modules;
-    } else if (input.module) {
-      modules = [input.module];
-    } else {
-      modules = [];
-    }
+    const modules = normalizeModulesInput(input);
     const planningInput = {
       repoRoot: input.repoRoot,
       projectRoot: input.projectRoot,
