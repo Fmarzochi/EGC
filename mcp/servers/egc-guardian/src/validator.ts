@@ -95,47 +95,57 @@ function positionalsOf(tokens: string[]): string[] {
 // slot later read as the base command. Quote/backslash characters are kept
 // in the returned tokens (not stripped) — bareToken() strips them at the
 // point of use, same as every other check in this file.
-function tokenizeWords(command: string): string[] {
-  const words: string[] = [];
-  let current = '';
-  let quote: string | null = null;
-  let hasToken = false;
+interface TokenizerState {
+  words: string[];
+  current: string;
+  quote: string | null;
+  hasToken: boolean;
+}
 
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
+// Consumes one character (or an escaped pair, or a run through a quote span)
+// starting at `command[i]`, mutating `state` in place, and returns the index
+// to resume from.
+function consumeTokenChar(command: string, i: number, state: TokenizerState): number {
+  const ch = command[i];
 
-    if (quote) {
-      current += ch;
-      hasToken = true;
-      if (ch === quote) quote = null;
-      continue;
-    }
-
-    if (ch === '\\' && i + 1 < command.length) {
-      current += ch + command[i + 1];
-      hasToken = true;
-      i += 1;
-      continue;
-    }
-
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      hasToken = true;
-      continue;
-    }
-
-    if (/\s/.test(ch)) {
-      if (hasToken) { words.push(current); current = ''; hasToken = false; }
-      continue;
-    }
-
-    current += ch;
-    hasToken = true;
+  if (state.quote) {
+    state.current += ch;
+    state.hasToken = true;
+    if (ch === state.quote) state.quote = null;
+    return i + 1;
   }
 
-  if (hasToken) words.push(current);
-  return words;
+  if (ch === '\\' && i + 1 < command.length) {
+    state.current += ch + command[i + 1];
+    state.hasToken = true;
+    return i + 2;
+  }
+
+  if (ch === '"' || ch === "'") {
+    state.quote = ch;
+    state.current += ch;
+    state.hasToken = true;
+    return i + 1;
+  }
+
+  if (/\s/.test(ch)) {
+    if (state.hasToken) { state.words.push(state.current); state.current = ''; state.hasToken = false; }
+    return i + 1;
+  }
+
+  state.current += ch;
+  state.hasToken = true;
+  return i + 1;
+}
+
+function tokenizeWords(command: string): string[] {
+  const state: TokenizerState = { words: [], current: '', quote: null, hasToken: false };
+  let i = 0;
+  while (i < command.length) {
+    i = consumeTokenChar(command, i, state);
+  }
+  if (state.hasToken) state.words.push(state.current);
+  return state.words;
 }
 
 // Wrappers that re-execute a following command: each entry lists the flags
@@ -211,108 +221,123 @@ interface ValidationResultLike {
   trust_level?: 'SAFE_READONLY' | 'SAFE_DEV' | 'DANGEROUS' | 'BLOCKED';
 }
 
+// One attempt at peeling a single leading construct off `current`. Returns
+// null when this check doesn't apply (caller tries the next one); otherwise
+// either `blocked` (hard-deny, unwrapping stops) or `remaining` (the new
+// front of the token list to keep unwrapping from).
+interface UnwrapStep {
+  blocked?: ValidationResultLike;
+  remaining?: string[];
+}
+
+// A bare `VAR=value` prefix persists in the shell's environment for every
+// command that follows, so a dangerous git-persistence variable here is a
+// hard block rather than a silent strip: stripping it would judge the
+// command by a name that never actually ran with that override in effect.
+function tryUnwrapEnvAssignment(current: string[]): UnwrapStep | null {
+  const envMatch = ENV_ASSIGNMENT_RE.exec(current[0]);
+  if (!envMatch) return null;
+  if (isDangerousEnvVarName(envMatch[1])) {
+    return {
+      blocked: {
+        allowed: false,
+        reason: `setting '${envMatch[1]}' persists a git execution/config override and is forbidden`,
+        trust_level: 'DANGEROUS',
+      },
+    };
+  }
+  return { remaining: current.slice(1) };
+}
+
+// `export VAR=value` persists the same way a bare `VAR=value` prefix does
+// (the shell keeps it in the environment for every command that follows in
+// this session/segment chain, not just the current one), so it gets the
+// identical dangerous-name check rather than being treated as an unknown,
+// advisory-only 'export' command. `export` accepts its own options (-f, -n,
+// -p) and a `--` end-of-options marker before the assignment, same as any
+// other bash builtin — skipping straight to current[1] missed
+// `export -- GIT_SSH_COMMAND=...`, which real bash still treats as an
+// assignment despite the leading `--`.
+function tryUnwrapExport(current: string[]): UnwrapStep | null {
+  if (bareToken(current[0]) !== 'export' || current.length <= 1) return null;
+
+  let idx = 1;
+  while (idx < current.length) {
+    const flagToken = stripQuotes(current[idx]);
+    if (flagToken === '--') { idx += 1; break; }
+    if (!flagToken.startsWith('-')) break;
+    idx += 1;
+  }
+  const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
+  if (!exportMatch) return null;
+
+  if (isDangerousEnvVarName(exportMatch[1])) {
+    return {
+      blocked: {
+        allowed: false,
+        reason: `exporting '${exportMatch[1]}' persists a git execution/config override and is forbidden`,
+        trust_level: 'DANGEROUS',
+      },
+    };
+  }
+  return { remaining: current.slice(idx + 1) };
+}
+
+// Unwraps a known wrapper command (sudo, timeout, xargs, ...), skipping its
+// flags and any mandatory leading positionals to reach the wrapped command.
+function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
+  const head = bareToken(current[0]);
+  const spec = WRAPPER_SPECS[head];
+  if (!spec) return null;
+
+  // env -S/--split-string re-splits its value into a new argv and execs the
+  // first word of that split — the same "string becomes code" shape as
+  // eval, just via env(1) instead of a shell builtin. The value isn't a
+  // simple opaque flag argument to skip past; it can itself be a full
+  // destructive command, so this is a hard deny rather than an unwrap.
+  if (head === 'env') {
+    const hasSplitString = current.slice(1).some(t => {
+      const bare = stripQuotes(t);
+      return bare === '-S' || bare === '--split-string' || bare.startsWith('--split-string=');
+    });
+    if (hasSplitString) {
+      return {
+        blocked: {
+          allowed: false,
+          reason: `'env -S/--split-string' re-splits and executes its value and is forbidden`,
+          trust_level: 'DANGEROUS',
+        },
+      };
+    }
+  }
+
+  let i = 1;
+  while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
+    const flag = stripQuotes(current[i]);
+    const eq = flag.indexOf('=');
+    const flagName = eq > 0 ? flag.slice(0, eq) : flag;
+    if (eq < 0 && spec.valueFlags.has(flagName)) i += 2;
+    else i += 1;
+  }
+  let skip = spec.leadingPositionals ?? 0;
+  while (skip > 0 && i < current.length) { i += 1; skip -= 1; }
+  return { remaining: current.slice(i) };
+}
+
 // Peels leading environment-variable assignments and known wrapper commands
 // off the front of a token list until the real command is reached, looping
 // so stacked wrappers (`sudo timeout 5 xargs rm -rf`) all get unwrapped
-// rather than just the outermost one. A dangerous env assignment (one of
-// the git-persistence variables above) short-circuits with a hard block
-// instead of being silently stripped, since stripping it would judge the
-// command by a name that never actually ran with that override in effect.
+// rather than just the outermost one.
 function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
   let current = tokens;
   let changed = true;
   while (changed && current.length > 0) {
     changed = false;
-    const first = current[0];
 
-    const envMatch = ENV_ASSIGNMENT_RE.exec(first);
-    if (envMatch) {
-      if (isDangerousEnvVarName(envMatch[1])) {
-        return {
-          tokens: [],
-          blocked: {
-            allowed: false,
-            reason: `setting '${envMatch[1]}' persists a git execution/config override and is forbidden`,
-            trust_level: 'DANGEROUS',
-          },
-        };
-      }
-      current = current.slice(1);
-      changed = true;
-      continue;
-    }
-
-    const head = bareToken(first);
-
-    // `export VAR=value` persists the same way a bare `VAR=value` prefix
-    // does (the shell keeps it in the environment for every command that
-    // follows in this session/segment chain, not just the current one), so
-    // it gets the identical dangerous-name check rather than being treated
-    // as an unknown, advisory-only 'export' command. `export` accepts its
-    // own options (-f, -n, -p) and a `--` end-of-options marker before the
-    // assignment, same as any other bash builtin — skipping straight to
-    // current[1] missed `export -- GIT_SSH_COMMAND=...`, which real bash
-    // still treats as an assignment despite the leading `--`.
-    if (head === 'export' && current.length > 1) {
-      let idx = 1;
-      while (idx < current.length) {
-        const flagToken = stripQuotes(current[idx]);
-        if (flagToken === '--') { idx += 1; break; }
-        if (!flagToken.startsWith('-')) break;
-        idx += 1;
-      }
-      const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
-      if (exportMatch) {
-        if (isDangerousEnvVarName(exportMatch[1])) {
-          return {
-            tokens: [],
-            blocked: {
-              allowed: false,
-              reason: `exporting '${exportMatch[1]}' persists a git execution/config override and is forbidden`,
-              trust_level: 'DANGEROUS',
-            },
-          };
-        }
-        current = current.slice(idx + 1);
-        changed = true;
-        continue;
-      }
-    }
-
-    const spec = WRAPPER_SPECS[head];
-    if (spec) {
-      // env -S/--split-string re-splits its value into a new argv and execs
-      // the first word of that split — the same "string becomes code" shape
-      // as eval, just via env(1) instead of a shell builtin. The value isn't
-      // a simple opaque flag argument to skip past; it can itself be a full
-      // destructive command, so this is a hard deny rather than an unwrap.
-      if (head === 'env') {
-        const hasSplitString = current.slice(1).some(t => {
-          const bare = stripQuotes(t);
-          return bare === '-S' || bare === '--split-string' || bare.startsWith('--split-string=');
-        });
-        if (hasSplitString) {
-          return {
-            tokens: [],
-            blocked: {
-              allowed: false,
-              reason: `'env -S/--split-string' re-splits and executes its value and is forbidden`,
-              trust_level: 'DANGEROUS',
-            },
-          };
-        }
-      }
-      let i = 1;
-      while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
-        const flag = stripQuotes(current[i]);
-        const eq = flag.indexOf('=');
-        const flagName = eq > 0 ? flag.slice(0, eq) : flag;
-        if (eq < 0 && spec.valueFlags.has(flagName)) i += 2;
-        else i += 1;
-      }
-      let skip = spec.leadingPositionals ?? 0;
-      while (skip > 0 && i < current.length) { i += 1; skip -= 1; }
-      current = current.slice(i);
+    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current);
+    if (step) {
+      if (step.blocked) return { tokens: [], blocked: step.blocked };
+      current = step.remaining as string[];
       changed = true;
     }
   }
