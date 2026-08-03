@@ -2197,6 +2197,60 @@ function runTests() {
     assert.ok(utilsOp, 'Should scaffold gateguard-fact-force.js\'s utils.js dependency alongside it');
   })) passed++; else failed++;
 
+  // Cubic review (EGC-539, PR #1142): a codebuddy install that explicitly
+  // selects a module whose paths already cover scripts/hooks/scripts/lib
+  // (e.g. 'hooks-runtime') must not double-copy gateguard-fact-force.js and
+  // utils.js -- once via moduleOperations, once via the unconditional copy
+  // the test above exercises.
+  if (test('codebuddy adapter does not double-copy the GateGuard script when a selected module already covers scripts/hooks and scripts/lib', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'codebuddy',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'hooks-runtime', paths: ['scripts/hooks', 'scripts/lib'] }],
+    });
+
+    // A module path of 'scripts/hooks' (a directory, not a single file)
+    // scaffolds via moduleOperations as one directory-level copy operation
+    // whose recursive copy already includes gateguard-fact-force.js -- it
+    // does not appear as a per-file operation. The explicit file-level copy
+    // this test guards against would come only from createHookOperations's
+    // own createGateGuardScriptCopyOperations call, which should have been
+    // skipped here since the module already covers it.
+    const moduleLevelHooksOp = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks'
+      && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'scripts', 'hooks')
+    ));
+    assert.ok(moduleLevelHooksOp, 'Expected the selected hooks-runtime module to scaffold scripts/hooks as a directory-level operation');
+
+    const moduleLevelLibOp = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib'
+      && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'scripts', 'lib')
+    ));
+    assert.ok(moduleLevelLibOp, 'Expected the selected hooks-runtime module to scaffold scripts/lib as a directory-level operation');
+
+    // Merge operations (createPreToolUseGateGuardHookMergeOperation, one
+    // each for Edit/Write/MultiEdit/Bash) legitimately carry
+    // sourceRelativePath: 'scripts/hooks/gateguard-fact-force.js' too --
+    // they reference the script path to build the hook command, they don't
+    // copy it. Only 'copy-path' operations represent an actual file copy,
+    // so the double-copy check must scope to that operation type.
+    const explicitFileLevelScriptOp = plan.operations.find(operation => (
+      operation.type === 'copy-path'
+      && normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
+    ));
+    assert.strictEqual(explicitFileLevelScriptOp, undefined, 'createGateGuardScriptCopyOperations\' explicit file-level copy should be skipped when the module already covers scripts/hooks');
+
+    const explicitFileLevelUtilsOp = plan.operations.find(operation => (
+      operation.type === 'copy-path'
+      && normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
+    ));
+    assert.strictEqual(explicitFileLevelUtilsOp, undefined, 'createGateGuardScriptCopyOperations\' explicit file-level copy of utils.js should be skipped when the module already covers scripts/lib');
+  })) passed++; else failed++;
+
   if (test('codebuddy adapter also registers the Token Crusher on Bash at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';

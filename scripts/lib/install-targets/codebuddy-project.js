@@ -16,6 +16,23 @@ const {
   createBashGuardianScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
+// Unlike antigravity-project.js (whose SUPPORTED_SOURCE_PREFIXES excludes
+// 'scripts/**' entirely), CodeBuddy's module path filter only excludes
+// foreign-platform paths, so a module selection that explicitly includes
+// 'hooks-runtime' (whose paths cover scripts/hooks and scripts/lib) already
+// scaffolds gateguard-fact-force.js and utils.js via moduleOperations below.
+// Cubic review (EGC-539, PR #1142) caught that the unconditional copy here
+// would double-copy those same two files in that case. Only add the
+// explicit copy when no selected module's paths already cover scripts/hooks
+// or scripts/lib.
+function selectedModulesCoverGateGuardScripts(modules) {
+  return modules.some(module => {
+    const paths = Array.isArray(module.paths) ? module.paths : [];
+    return paths.some(p => p === 'scripts/hooks' || p === 'scripts/lib'
+      || p.startsWith('scripts/hooks/') || p.startsWith('scripts/lib/'));
+  });
+}
+
 // CodeBuddy's PreToolUse hooks read from <project>/.codebuddy/settings.json
 // using the same {"hooks": {"PreToolUse": [{"matcher", "hooks"}]}} shape
 // Claude Code uses (https://www.codebuddy.ai/docs/cli/hooks), and this
@@ -29,16 +46,17 @@ const {
 // whose selected modules did not include scripts/hooks/scripts/lib wrote a
 // PreToolUse hook pointing at a file that was never copied, breaking every
 // Edit/Write/MultiEdit/Bash call with ENOENT. Copy the script and its
-// utils.js dependency explicitly and unconditionally here, mirroring the
-// same fix already applied to antigravity-project.js and copilot-home.js.
-function createHookOperations(adapter, targetRoot) {
+// utils.js dependency explicitly here, mirroring the same fix already
+// applied to antigravity-project.js and copilot-home.js, but skip the copy
+// when the selected modules already scaffold those same two files.
+function createHookOperations(adapter, targetRoot, modules) {
   return [
-    ...createGateGuardScriptCopyOperations(
+    ...(selectedModulesCoverGateGuardScripts(modules) ? [] : createGateGuardScriptCopyOperations(
       (moduleId, sourceRelativePath, destinationPath, options) => (
         createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
       ),
       targetRoot
-    ),
+    )),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
@@ -122,7 +140,7 @@ module.exports = createInstallTargetAdapter({
     // mirroring Claude Code's always-on hook registration.
     return [
       ...moduleOperations,
-      ...createHookOperations(adapter, targetRoot),
+      ...createHookOperations(adapter, targetRoot, modules),
     ];
   },
 });
