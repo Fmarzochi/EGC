@@ -20,6 +20,7 @@
 
 const fs = require('node:fs');
 const { run } = require('./gateguard-fact-force');
+const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
 function buildGateGuardInput(windsurfEvent) {
   const actionName = windsurfEvent.agent_action_name || '';
@@ -78,24 +79,26 @@ function extractDenyReason(result) {
 }
 
 function main() {
-  const MAX_STDIN = 1024 * 1024;
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
+  readAdapterStdinJson(({ ok, truncated, value }) => {
+    // Checked before ok, unconditionally: a capped-length prefix can still
+    // happen to be syntactically valid JSON, which would otherwise reach
+    // the ok:true branch below with truncated data treated as trusted. The
+    // hand-rolled reader this replaced had no truncation tracking at all
+    // and silently allowed on any payload past the 1MB cap (EGC-539 audit).
+    if (truncated) {
+      process.stderr.write(
+        'EGC Guardian BLOCKED this command: the event payload exceeded the size ' +
+        'this validator can safely read, so it could not be parsed or validated. ' +
+        'Simplify the command.\n'
+      );
+      process.exit(2);
     }
-  });
-  process.stdin.on('end', () => {
-    let windsurfEvent;
-    try {
-      windsurfEvent = JSON.parse(raw);
-    } catch {
+    if (!ok) {
       // Allow on parse error: same fail-open policy as gateguard-fact-force.js.
       process.exit(0);
     }
 
-    const gateguardInput = buildGateGuardInput(windsurfEvent);
+    const gateguardInput = buildGateGuardInput(value);
     if (!gateguardInput) {
       process.exit(0);
     }
