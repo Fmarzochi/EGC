@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { hasSkillMd, isCategoryRoot, listSkillLeaves } = require('../lib/skill-tree-walker');
+const { hasSkillMd, isCategoryRoot, listSkillLeaves } = require('#lib/skill-tree-walker');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 
