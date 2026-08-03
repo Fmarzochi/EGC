@@ -68,6 +68,67 @@ function resolveAttributesFile(projectDir) {
   }
 }
 
+// A repo whose filter was set up before required=true existed would
+// otherwise stay silently fail-open forever once the script goes missing,
+// with no path back to fail-closed. Harden an already-present driver in
+// place -- without touching its clean command or adding new bindings -- so
+// a broken script at least blocks staging instead of silently falling back
+// to unfiltered content. A driver that was never configured at all needs no
+// change.
+function hardenMissingScriptFilter(projectDir, scriptPath, dryRun) {
+  if (!dryRun) {
+    let alreadyConfigured = true;
+    try {
+      execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`], { cwd: projectDir, encoding: 'utf8' });
+    } catch {
+      alreadyConfigured = false;
+    }
+    if (alreadyConfigured) {
+      // A driver configured before the smudge fix existed may have only
+      // `clean` set. Hardening straight to required=true here without also
+      // ensuring `smudge=cat` would turn every checkout/worktree/clone on
+      // this repo into a hard "smudge filter egc-memory failed" failure.
+      execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], { cwd: projectDir, encoding: 'utf8' });
+      execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], { cwd: projectDir, encoding: 'utf8' });
+    }
+  }
+  return { configured: false, reason: `clean-filter script not found at ${scriptPath}`, actions: [] };
+}
+
+// Exact-line matching (not a raw substring test): a commented-out entry or
+// a line with extra trailing content would still satisfy .includes(),
+// silently skipping the real binding this project needs.
+function computeMissingBindings(attributesFile) {
+  let existing = '';
+  try {
+    existing = fs.readFileSync(attributesFile, 'utf8');
+  } catch { /* first configuration: attributes file does not exist yet */ }
+  const existingLines = new Set(existing.split('\n').map(l => l.trim()));
+  const missing = PROPAGATION_FILES.filter(file => !existingLines.has(`${file} filter=${FILTER_NAME}`));
+  return { existing, missing };
+}
+
+function applyFilterConfig(projectDir, cleanCommand, attributesFile, existing, missingBindings) {
+  execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
+    cwd: projectDir,
+    encoding: 'utf8',
+  });
+  execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], {
+    cwd: projectDir,
+    encoding: 'utf8',
+  });
+  execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], {
+    cwd: projectDir,
+    encoding: 'utf8',
+  });
+  if (missingBindings.length > 0) {
+    fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
+    const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+    const lines = missingBindings.map(f => `${f} filter=${FILTER_NAME}\n`).join('');
+    fs.appendFileSync(attributesFile, header + lines);
+  }
+}
+
 // Returns the action plan without touching anything when dryRun is true.
 function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   const attributesFile = resolveAttributesFile(projectDir);
@@ -79,29 +140,7 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   // filter anyway would silently commit unfiltered memory the moment git
   // tries (and fails) to run it -- fail closed instead: never configure.
   if (!fs.existsSync(scriptPath)) {
-    // A repo whose filter was set up before required=true existed would
-    // otherwise stay silently fail-open forever once the script goes
-    // missing, with no path back to fail-closed. Harden an already-present
-    // driver in place -- without touching its clean command or adding new
-    // bindings -- so a broken script at least blocks staging instead of
-    // silently falling back to unfiltered content.
-    if (!dryRun) {
-      let alreadyConfigured = true;
-      try {
-        execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`], { cwd: projectDir, encoding: 'utf8' });
-      } catch {
-        alreadyConfigured = false;
-      }
-      if (alreadyConfigured) {
-        // A driver configured before the smudge fix existed may have only
-        // `clean` set. Hardening straight to required=true here without also
-        // ensuring `smudge=cat` would turn every checkout/worktree/clone on
-        // this repo into a hard "smudge filter egc-memory failed" failure.
-        execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], { cwd: projectDir, encoding: 'utf8' });
-        execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], { cwd: projectDir, encoding: 'utf8' });
-      }
-    }
-    return { configured: false, reason: `clean-filter script not found at ${scriptPath}`, actions: [] };
+    return hardenMissingScriptFilter(projectDir, scriptPath, dryRun);
   }
 
   const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
@@ -123,41 +162,13 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
     `git config filter.${FILTER_NAME}.required true (local repo config)`,
   ];
 
-  let existing = '';
-  try {
-    existing = fs.readFileSync(attributesFile, 'utf8');
-  } catch { /* first configuration: attributes file does not exist yet */ }
-
-  // Exact-line matching (not a raw substring test): a commented-out entry or
-  // a line with extra trailing content would still satisfy .includes(),
-  // silently skipping the real binding this project needs.
-  const existingLines = new Set(existing.split('\n').map(l => l.trim()));
-  const missingBindings = PROPAGATION_FILES.filter(
-    file => !existingLines.has(`${file} filter=${FILTER_NAME}`)
-  );
+  const { existing, missing: missingBindings } = computeMissingBindings(attributesFile);
   for (const file of missingBindings) {
     actions.push(`bind ${file} to filter=${FILTER_NAME} (.git/info/attributes)`);
   }
 
   if (!dryRun) {
-    execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
-      cwd: projectDir,
-      encoding: 'utf8',
-    });
-    execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], {
-      cwd: projectDir,
-      encoding: 'utf8',
-    });
-    execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], {
-      cwd: projectDir,
-      encoding: 'utf8',
-    });
-    if (missingBindings.length > 0) {
-      fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
-      const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-      const lines = missingBindings.map(f => `${f} filter=${FILTER_NAME}\n`).join('');
-      fs.appendFileSync(attributesFile, header + lines);
-    }
+    applyFilterConfig(projectDir, cleanCommand, attributesFile, existing, missingBindings);
   }
 
   return { configured: true, actions, attributesFile };
