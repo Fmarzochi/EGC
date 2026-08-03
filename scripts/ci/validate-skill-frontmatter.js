@@ -11,58 +11,11 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { listSkillLeaves } = require('#lib/skill-tree-walker');
 const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-function hasSkillMd(dir) {
-  return fs.existsSync(path.join(dir, 'SKILL.md'));
-}
-
-function isCategoryRoot(dir) {
-  if (hasSkillMd(dir)) return false;
-  try {
-    const children = fs.readdirSync(dir, { withFileTypes: true });
-    return children.some(c => c.isDirectory() && hasSkillMd(path.join(dir, c.name)));
-  } catch (_) { /* ignore: unreadable directory safely means it is not a category root */ // NOSONAR
-    return false;
-  }
-}
-
-// Mirrors scripts/ci/validate-skills.js: skills live either directly under
-// skills/<name>/SKILL.md or nested one level under a category directory
-// (skills/<category>/<name>/SKILL.md).
-function listSkillLeaves(root) {
-  const leaves = [];
-  const entries = fs.readdirSync(root, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const entryPath = path.join(root, entry.name);
-
-    if (hasSkillMd(entryPath)) {
-      leaves.push({ relPath: entry.name, dirName: entry.name, fullPath: entryPath });
-      continue;
-    }
-
-    if (isCategoryRoot(entryPath)) {
-      const skillEntries = fs.readdirSync(entryPath, { withFileTypes: true });
-      for (const skill of skillEntries) {
-        if (!skill.isDirectory()) continue;
-        const skillPath = path.join(entryPath, skill.name);
-        leaves.push({
-          relPath: path.join(entry.name, skill.name),
-          dirName: skill.name,
-          fullPath: skillPath,
-          missing: !hasSkillMd(skillPath),
-        });
-      }
-    }
-  }
-
-  return leaves;
-}
 
 function extractFrontmatter(content) {
   const block = extractFrontmatterBlock(content);
