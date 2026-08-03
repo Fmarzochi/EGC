@@ -290,6 +290,19 @@ test('a space before the backslash-newline continuation keeps # as a real commen
     ['echo hi \\\n#c && rm -rf /'],
   );
 });
+test('a backslash-CRLF continuation glues the next line onto the current word too, not just backslash-LF', () => {
+  // Cubic review, second pass (EGC-539, PR #1147): the caller always passes
+  // the index of the newline run's LAST character (the '\n', never a
+  // leading '\r'), so a '\r\n' continuation needs its backslash count to
+  // start two characters back, not one. A prior fix here tested
+  // command[i] === '\r' inside skipLineContinuations, which could never be
+  // true given how it's actually invoked, so the CRLF branch silently never
+  // fired and this exact case was miscounted as a real, unescaped newline.
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi\\\r\n#c && rm -rf /'),
+    ['echo hi\\\r\n#c', 'rm -rf /'],
+  );
+});
 test('# immediately after a closing paren from $(...) is mid-word, not a comment start (bash concatenates the following text onto the same word)', () => {
   assert.deepStrictEqual(
     splitShellSegments('echo $(date)#c && echo AFTER'),

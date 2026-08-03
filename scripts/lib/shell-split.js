@@ -13,6 +13,15 @@ function handleInsideQuotes(ch, i, command, quote) {
 
 function handleEscape(ch, i, command) {
   if (ch === '\\' && i + 1 < command.length) {
+    // A backslash escaping a CRLF line-continuation ('\' followed by '\r\n')
+    // must swallow all three characters as one unit, not just the '\r' --
+    // otherwise the lone '\n' left behind falls through to the newline
+    // handling further down the main loop and spuriously ends the current
+    // segment, even though bash removes the whole three-character sequence
+    // as a single continuation (cubic review, EGC-539 PR #1147).
+    if (command[i + 1] === '\r' && command[i + 2] === '\n') {
+      return { chars: ch + command[i + 1] + command[i + 2], advance: 2, handled: true };
+    }
     return { chars: ch + command[i + 1], advance: 1, handled: true };
   }
   return { handled: false };
@@ -248,15 +257,18 @@ const COMMENT_WORD_START_RE = /[\s;&|(]/;
 // backslash and cancels out; the escaping power passes to the newline only
 // off the single unpaired backslash left when the count is odd).
 function skipLineContinuations(command, i) {
-  while (i >= 0) {
-    const isBareLf = command[i] === '\n';
-    const isCrLf = command[i] === '\r' && command[i + 1] === '\n';
-    if (!isBareLf && !isCrLf) break;
-    // Either way (bare '\n' or the '\r' that starts a '\r\n' pair), i is
-    // already the index the newline run starts at -- the backslash count
-    // is checked immediately before that index in both cases.
+  while (i >= 0 && command[i] === '\n') {
+    // Cubic review (EGC-539, PR #1147): the caller always passes the index
+    // of the LAST character of the newline run (i.e. the '\n', never the
+    // '\r' that may precede it in a '\r\n' pair), so a '\r\n' continuation
+    // must have its backslash count start two characters back -- one
+    // earlier version of this check tested command[i] === '\r' here, which
+    // can never be true given how the caller invokes this function, so the
+    // CRLF branch silently never fired and a backslash-CRLF continuation
+    // was miscounted as a real, unescaped newline.
+    const j0 = command[i - 1] === '\r' ? i - 2 : i - 1;
     let backslashes = 0;
-    let j = i - 1;
+    let j = j0;
     while (j >= 0 && command[j] === '\\') { backslashes += 1; j -= 1; }
     if (backslashes % 2 === 0) break; // even (incl. zero): a real, unescaped newline
     i = j; // odd: backslash-newline continuation, keep walking back from before it
