@@ -15,33 +15,45 @@ const {
   PRE_RUN_COMMAND_EVENT: WINDSURF_PRE_RUN_COMMAND_EVENT,
   PRE_WRITE_CODE_EVENT: WINDSURF_PRE_WRITE_CODE_EVENT,
   applyWindsurfGateGuardHookToFile,
+  inspectWindsurfGateGuardHookFile,
+  removeWindsurfGateGuardHookFromFile,
 } = require('./windsurf-gateguard-hooks');
 const {
   BEFORE_SHELL_EXECUTION_EVENT: CURSOR_BEFORE_SHELL_EXECUTION_EVENT,
   applyCursorGuardianHookToFile,
+  inspectCursorGuardianHookFile,
+  removeCursorGuardianHookFromFile,
 } = require('./cursor-guardian-hooks');
 const {
   CRUSHER_HOOK_DISPATCH_EVENT: CURSOR_CRUSHER_HOOK_DISPATCH_EVENT,
   applyCursorCrusherHookToFile,
+  inspectCursorCrusherHookFile,
+  removeCursorCrusherHookFromFile,
 } = require('./cursor-crusher-hooks');
 const {
   PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
   applyKiroGuardianHookToFile,
+  inspectKiroGuardianHookFile,
+  removeKiroGuardianHookFromFile,
 } = require('./kiro-guardian-hooks');
 const {
   OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
   applyAmazonQGuardianHookToFile,
+  inspectAmazonQGuardianHookFile,
+  removeAmazonQGuardianHookFromFile,
 } = require('./amazonq-guardian-hooks');
 const {
   PRE_TOOL_USE_EVENT: OPENHANDS_PRE_TOOL_USE_EVENT,
   applyOpenHandsGuardianHookToFile,
+  inspectOpenHandsGuardianHookFile,
+  removeOpenHandsGuardianHookFromFile,
 } = require('./openhands-guardian-hooks');
 const {
   ROOCODE_DENYLIST_TAG,
   applyRoocodeDenylistToFile,
+  inspectRoocodeDenylistFile,
+  removeRoocodeDenylistFromFile,
 } = require('./roocode-guardian-denylist');
-
-const MANAGED_WINDSURF_HOOK_EVENTS = new Set([WINDSURF_PRE_WRITE_CODE_EVENT, WINDSURF_PRE_RUN_COMMAND_EVENT]);
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -989,16 +1001,108 @@ function createPostCompactHookMergeOperation(targetRoot) {
   };
 }
 
-function applyCompactHookOperation(operation) {
-  if (operation.hookEvent === PRE_COMPACT_EVENT) {
-    applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath);
-    return true;
-  }
-  if (operation.hookEvent === POST_COMPACT_EVENT) {
-    applyHookEntryToFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath);
-    return true;
-  }
-  return false;
+// Windsurf's two managed events (pre_write_code, pre_run_command) both go
+// through the same flat-hooks.json helpers, just forwarding whichever of the
+// two the operation actually carries -- one handler trio, two table keys,
+// equivalent to the old `MANAGED_WINDSURF_HOOK_EVENTS.has(...)` Set check.
+const WINDSURF_HOOK_OPERATION_HANDLERS = {
+  apply: operation => applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+  remove: operation => removeWindsurfGateGuardHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+  inspect: operation => inspectWindsurfGateGuardHookFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+};
+
+// Single source of truth for "given this operation's hookEvent, which
+// apply/remove/inspect functions handle it". Shared by applyManagedHookOperation
+// below, and by install-lifecycle.js's uninstallManagedHookOperation and
+// inspectManagedOperation (via resolveHookOperationHandlers) -- previously
+// each of those three call sites re-enumerated this same ~11-event chain
+// independently, so adding a new host meant remembering to update 2-3 places
+// by hand (EGC-539 audit finding). SessionStart is deliberately absent: it is
+// the fallback for any hookEvent not listed here, matching every original
+// chain's trailing `else` branch (see resolveHookOperationHandlers).
+const HOOK_EVENT_OPERATION_HANDLERS = {
+  [STOP_EVENT]: {
+    apply: operation => applyStopHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeStopHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectStopHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [USER_PROMPT_SUBMIT_EVENT]: {
+    apply: operation => applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeIntuitionHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectIntuitionHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [PRE_TOOL_USE_EVENT]: {
+    // Apply/inspect scope to the operation's matcher, since several distinct
+    // PreToolUse hooks (Bash dispatcher, write validator, GateGuard, Crusher)
+    // share this event under different matchers. Remove does not: a given
+    // EGC hook script path is only ever registered once per event regardless
+    // of matcher, and removeHookEntry() already strips it from every group.
+    apply: operation => applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher }),
+    remove: operation => removeHookEntryFromFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath),
+    inspect: operation => inspectHookEntryFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, operation.hookMatcher),
+  },
+  [PRE_COMPACT_EVENT]: {
+    apply: operation => applyPreCompactHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removePreCompactHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectPreCompactHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [POST_COMPACT_EVENT]: {
+    // PostCompact reuses claude-session-start.js (see
+    // createPostCompactHookMergeOperation above) but is still merged/removed/
+    // inspected under its own event key via the generic entry helpers, not
+    // the SessionStart-specific ones.
+    apply: operation => applyHookEntryToFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath),
+    remove: operation => removeHookEntryFromFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath),
+    inspect: operation => inspectHookEntryFile(operation.destinationPath, POST_COMPACT_EVENT, operation.hookScriptPath),
+  },
+  [WINDSURF_PRE_WRITE_CODE_EVENT]: WINDSURF_HOOK_OPERATION_HANDLERS,
+  [WINDSURF_PRE_RUN_COMMAND_EVENT]: WINDSURF_HOOK_OPERATION_HANDLERS,
+  [CURSOR_BEFORE_SHELL_EXECUTION_EVENT]: {
+    // Only apply threads seedPath through: it seeds a freshly scaffolded
+    // hooks.json on first install and has no meaning for remove/inspect,
+    // which only ever read or strip an already-existing entry.
+    apply: operation => applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath, { seedPath: operation.seedPath }),
+    remove: operation => removeCursorGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+    inspect: operation => inspectCursorGuardianHookFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+  },
+  [CURSOR_CRUSHER_HOOK_DISPATCH_EVENT]: {
+    apply: operation => applyCursorCrusherHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeCursorCrusherHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectCursorCrusherHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [KIRO_PRE_TOOL_USE_EVENT]: {
+    apply: operation => applyKiroGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+    remove: operation => removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+    inspect: operation => inspectKiroGuardianHookFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
+  },
+  [AMAZONQ_OPERATION_DISPATCH_TAG]: {
+    apply: operation => applyAmazonQGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeAmazonQGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectAmazonQGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [OPENHANDS_PRE_TOOL_USE_EVENT]: {
+    apply: operation => applyOpenHandsGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeOpenHandsGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectOpenHandsGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [ROOCODE_DENYLIST_TAG]: {
+    apply: operation => applyRoocodeDenylistToFile(operation.destinationPath),
+    remove: operation => removeRoocodeDenylistFromFile(operation.destinationPath),
+    inspect: operation => inspectRoocodeDenylistFile(operation.destinationPath),
+  },
+};
+
+const SESSION_START_HOOK_OPERATION_HANDLERS = {
+  apply: operation => applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath),
+  remove: operation => removeSessionStartHookFromFile(operation.destinationPath, operation.hookScriptPath),
+  inspect: operation => inspectSessionStartHookFile(operation.destinationPath, operation.hookScriptPath),
+};
+
+// Any hookEvent not present in HOOK_EVENT_OPERATION_HANDLERS (currently just
+// SessionStart itself) falls back to the SessionStart handler trio -- this is
+// the trailing `else` branch every original dispatch chain ended with.
+function resolveHookOperationHandlers(hookEvent) {
+  return HOOK_EVENT_OPERATION_HANDLERS[hookEvent] || SESSION_START_HOOK_OPERATION_HANDLERS;
 }
 
 // Shared by install/apply.js and install-lifecycle.js's repair path: both
@@ -1006,31 +1110,7 @@ function applyCompactHookOperation(operation) {
 // fallback for any event not explicitly handled above it), so it lives here
 // once instead of being duplicated per caller.
 function applyManagedHookOperation(operation) {
-  if (operation.hookEvent === STOP_EVENT) {
-    applyStopHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === USER_PROMPT_SUBMIT_EVENT) {
-    applyIntuitionHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === PRE_TOOL_USE_EVENT) {
-    applyHookEntryToFile(operation.destinationPath, PRE_TOOL_USE_EVENT, operation.hookScriptPath, { matcher: operation.hookMatcher });
-  } else if (applyCompactHookOperation(operation)) {
-    // handled above
-  } else if (MANAGED_WINDSURF_HOOK_EVENTS.has(operation.hookEvent)) {
-    applyWindsurfGateGuardHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else if (operation.hookEvent === CURSOR_BEFORE_SHELL_EXECUTION_EVENT) {
-    applyCursorGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath, { seedPath: operation.seedPath });
-  } else if (operation.hookEvent === CURSOR_CRUSHER_HOOK_DISPATCH_EVENT) {
-    applyCursorCrusherHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === KIRO_PRE_TOOL_USE_EVENT) {
-    applyKiroGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath);
-  } else if (operation.hookEvent === AMAZONQ_OPERATION_DISPATCH_TAG) {
-    applyAmazonQGuardianHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === OPENHANDS_PRE_TOOL_USE_EVENT) {
-    applyOpenHandsGuardianHookToFile(operation.destinationPath, operation.hookScriptPath);
-  } else if (operation.hookEvent === ROOCODE_DENYLIST_TAG) {
-    applyRoocodeDenylistToFile(operation.destinationPath);
-  } else {
-    applySessionStartHookToFile(operation.destinationPath, operation.hookScriptPath);
-  }
+  resolveHookOperationHandlers(operation.hookEvent).apply(operation);
 }
 
 module.exports = {
@@ -1146,6 +1226,7 @@ module.exports = {
   removeWriteValidatorHookFromFile,
   resolveBashDispatcherHookScriptDestination,
   resolveGateGuardHookScriptDestination,
+  resolveHookOperationHandlers,
   resolveHookScriptDestination,
   resolveIntuitionHookScriptDestination,
   resolveRouterHookScriptDestination,
