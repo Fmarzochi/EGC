@@ -252,9 +252,11 @@ function skipLineContinuations(command, i) {
     const isBareLf = command[i] === '\n';
     const isCrLf = command[i] === '\r' && command[i + 1] === '\n';
     if (!isBareLf && !isCrLf) break;
-    const nlStart = isCrLf ? i : i; // the newline run itself starts at i either way
+    // Either way (bare '\n' or the '\r' that starts a '\r\n' pair), i is
+    // already the index the newline run starts at -- the backslash count
+    // is checked immediately before that index in both cases.
     let backslashes = 0;
-    let j = nlStart - 1;
+    let j = i - 1;
     while (j >= 0 && command[j] === '\\') { backslashes += 1; j -= 1; }
     if (backslashes % 2 === 0) break; // even (incl. zero): a real, unescaped newline
     i = j; // odd: backslash-newline continuation, keep walking back from before it
