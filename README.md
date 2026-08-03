@@ -68,7 +68,7 @@ The brain doesn't just remember: it filters. Before any shell output reaches the
 
 ## Prompt Library
 
-As a bonus, EGC gives you access to 63 agents, 230 skills, and 77 commands, plus 109 rules: specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks for you, and style rules that keep your code consistent. All written from real engineering sessions, not theory. Don't want to use any of it? Fine: EGC's persistent memory works exactly the same.
+As a bonus, EGC gives you access to 61 agents, 230 skills, and 77 commands, plus 109 rules: specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks for you, and style rules that keep your code consistent. All written from real engineering sessions, not theory. Don't want to use any of it? Fine: EGC's persistent memory works exactly the same.
 
 ---
 

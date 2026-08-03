@@ -68,7 +68,7 @@ El cerebro no solo recuerda: filtra. Antes de que cualquier salida de shell lleg
 
 ## Biblioteca de Prompts
 
-Como bono, EGC te da acceso a 63 agentes, 230 skills y 77 comandos, más 109 reglas: especialistas que revisan tu código por su cuenta, guías de buenas prácticas para cada lenguaje y situación, atajos que ejecutan secuencias enteras de tareas y reglas de estilo que mantienen tu código consistente. Todo escrito a partir de sesiones reales de ingeniería, no de teoría. ¿No quieres usar nada de esto? Bien: la memoria persistente de EGC funciona exactamente igual.
+Como bono, EGC te da acceso a 61 agentes, 230 skills y 77 comandos, más 109 reglas: especialistas que revisan tu código por su cuenta, guías de buenas prácticas para cada lenguaje y situación, atajos que ejecutan secuencias enteras de tareas y reglas de estilo que mantienen tu código consistente. Todo escrito a partir de sesiones reales de ingeniería, no de teoría. ¿No quieres usar nada de esto? Bien: la memoria persistente de EGC funciona exactamente igual.
 
 ---
 

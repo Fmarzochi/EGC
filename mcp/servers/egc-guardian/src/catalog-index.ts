@@ -1407,16 +1407,6 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "agent",
-    "name": "reproduce-me",
-    "description": "Reproduce me please."
-  },
-  {
-    "kind": "agent",
-    "name": "researcher-test",
-    "description": "A simple test agent for native delegation experiments."
-  },
-  {
-    "kind": "agent",
     "name": "rust-build-resolver",
     "description": "Rust build, compilation, and dependency error resolution specialist. Fixes cargo build errors, borrow checker issues, and Cargo.toml problems with minimal changes. Use when Rust builds fail."
   },
