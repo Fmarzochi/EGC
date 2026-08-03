@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { hasSkillMd, isCategoryRoot, listSkillLeaves } = require('#lib/skill-tree-walker');
+const { listSkillLeaves } = require('#lib/skill-tree-walker');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 
@@ -52,4 +52,4 @@ if (require.main === module) {
   validateSkills();
 }
 
-module.exports = { listSkillLeaves, hasSkillMd, isCategoryRoot };
+module.exports = { listSkillLeaves };
