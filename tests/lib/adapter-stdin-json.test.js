@@ -56,10 +56,19 @@ function readViaSubprocess(input) {
 // never calls it: if it ever does, the override itself reports that fact
 // on stderr before forcing a real exit, and the assertion below fails
 // every single run rather than only when timing happens to expose it.
+//
+// The marker write itself must be synchronous (cubic review, second pass,
+// P2): process.stderr.write() on a pipe is async, and process.reallyExit()
+// does not drain pending pipe writes, so a plain .write() call here would
+// have the exact same truncation race this test exists to make
+// deterministic -- a regression could lose the marker and this guard would
+// pass regardless. fs.writeSync(2, ...) (fd 2 is stderr) is a real
+// synchronous syscall with no such race.
 const blockedExitDriverPath = path.join(os.tmpdir(), `egc-adapter-stdin-json-blocked-exit-driver-${process.pid}.js`);
 fs.writeFileSync(blockedExitDriverPath, `
+  const fs = require('fs');
   process.exit = (code) => {
-    process.stderr.write('__PROCESS_EXIT_CALLED__:' + code);
+    fs.writeSync(2, '__PROCESS_EXIT_CALLED__:' + code);
     process.reallyExit(code === undefined ? 1 : code);
   };
   const { runPlainExitCodeGuardianAdapter } = require(${JSON.stringify(MODULE_PATH)});
