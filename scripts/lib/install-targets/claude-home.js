@@ -4,9 +4,9 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
-  normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
+  resolveModulesPlan,
 } = require('./helpers');
 
 const CLAUDE_EXCLUDED_SOURCE_PREFIXES = [
@@ -125,13 +125,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.claude',
   planOperations(input, adapter) {
-    const modules = normalizeModulesInput(input);
-    const planningInput = {
-      repoRoot: input.repoRoot,
-      projectRoot: input.projectRoot,
-      homeDir: input.homeDir,
-    };
-    const targetRoot = adapter.resolveRoot(planningInput);
+    const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
 
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];

@@ -5,8 +5,8 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
-  normalizeModulesInput,
   planFlatSkillOperation,
+  resolveModulesPlan,
 } = require('./helpers');
 const {
   GATEGUARD_HOOK_MODULE_ID,
@@ -155,13 +155,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc', 'codex-install-state.json'],
   nativeRootRelativePath: '.agents',
   planOperations(input, adapter) {
-    const modules = normalizeModulesInput(input);
-    const planningInput = {
-      repoRoot: input.repoRoot,
-      projectRoot: input.projectRoot,
-      homeDir: input.homeDir,
-    };
-    const targetRoot = adapter.resolveRoot(planningInput);
+    const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
 
     const moduleOperations = modules.flatMap(module => {
       const paths = (Array.isArray(module.paths) ? module.paths : [])

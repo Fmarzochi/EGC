@@ -5,8 +5,8 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
-  normalizeModulesInput,
   normalizeRelativePath,
+  resolveModulesPlan,
 } = require('./helpers');
 const {
   createGlobalGateGuardHookMergeOperation,
@@ -177,13 +177,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.gemini-plugin',
   planOperations(input, adapter) {
-    const modules = normalizeModulesInput(input);
-    const planningInput = {
-      repoRoot: input.repoRoot,
-      projectRoot: input.projectRoot,
-      homeDir: input.homeDir,
-    };
-    const targetRoot = adapter.resolveRoot(planningInput);
+    const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
     const homeDir = input.homeDir || os.homedir();
 
     const moduleOperations = modules.flatMap(module => {

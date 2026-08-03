@@ -67,6 +67,29 @@ function normalizeModulesInput(input = {}) {
   return [];
 }
 
+// The normalizeModulesInput() call plus the repoRoot/projectRoot/homeDir
+// planningInput shape plus the adapter.resolveRoot(planningInput) call were
+// identical across claude-home.js, codex-home.js, gemini-home.js, and
+// opencode-home.js's planOperations -- each rebuilding the same 3-value
+// lookup before diverging into its own module-to-operation mapping.
+// Collapsing normalizeModulesInput() alone (above) into a 1-line call
+// elsewhere in this same audit round made this remaining prefix contiguous
+// enough to cross SonarCloud's cross-file duplication threshold (EGC-539
+// audit, PR #1150). Only these three values are pulled out -- adapters that
+// need extra planningInput fields (e.g. cursor-project.js's
+// seenDestinationPaths) or a different root-resolution path keep their own
+// inline version rather than being forced through this.
+function resolveModulesPlan(input, adapter) {
+  const modules = normalizeModulesInput(input);
+  const planningInput = {
+    repoRoot: input.repoRoot,
+    projectRoot: input.projectRoot,
+    homeDir: input.homeDir,
+  };
+  const targetRoot = adapter.resolveRoot(planningInput);
+  return { modules, planningInput, targetRoot };
+}
+
 function buildValidationIssue(severity, code, message, extra = {}) {
   return {
     severity,
@@ -307,13 +330,7 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
  */
 function createFlatSkillPlanOperations(rawInput, adapter) {
   const input = rawInput ?? {};
-  const modules = normalizeModulesInput(input);
-  const planningInput = {
-    repoRoot: input.repoRoot,
-    projectRoot: input.projectRoot,
-    homeDir: input.homeDir,
-  };
-  const targetRoot = adapter.resolveRoot(planningInput);
+  const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
 
   return modules.flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];
@@ -442,4 +459,5 @@ module.exports = {
   normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
+  resolveModulesPlan,
 };

@@ -4,8 +4,8 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
-  normalizeModulesInput,
   normalizeRelativePath,
+  resolveModulesPlan,
 } = require('./helpers');
 const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
@@ -92,13 +92,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.opencode',
   planOperations(input, adapter) {
-    const modules = normalizeModulesInput(input);
-    const planningInput = {
-      repoRoot: input.repoRoot,
-      projectRoot: input.projectRoot,
-      homeDir: input.homeDir,
-    };
-    const targetRoot = adapter.resolveRoot(planningInput);
+    const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
 
     const moduleOperations = modules.flatMap(module => {
       const paths = (Array.isArray(module.paths) ? module.paths : [])
