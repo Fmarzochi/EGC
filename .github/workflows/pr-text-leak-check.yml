@@ -24,13 +24,16 @@ jobs:
         with:
           node-version: 20
 
-      - name: Fetch PR title and body
+      - name: Fetch PR title, body, and every commit message
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh pr view ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
-            --json title,body --jq '.title + "\n" + .body' > /tmp/pr-text.txt
+            --json title,body,commits --jq '
+              .title + "\n" + .body + "\n"
+              + ([.commits[] | .messageHeadline + "\n" + .messageBody] | join("\n"))
+            ' > /tmp/pr-text.txt
 
       - name: Check for internal-tool leaks
         run: node scripts/check-internal-tool-leak.js --text "$(cat /tmp/pr-text.txt)"
