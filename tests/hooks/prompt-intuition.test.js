@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { readStateFileDecrypted } = require('../../scripts/lib/state-crypto');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
 const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
@@ -40,6 +41,12 @@ function stateFileIn(homeDir) {
     }
   }
   return null;
+}
+
+// The hook always writes state encrypted now; tests read it back the same
+// way real consumers do, via the shared decrypt helper.
+function readStateContent(homeDir, stateFile) {
+  return readStateFileDecrypted(stateFile, path.join(homeDir, '.egc', 'encryption.key'));
 }
 
 function runHook(input, env = {}) {
@@ -88,7 +95,7 @@ function runTests() {
       assert.ok(result.stdout.includes('already saved'), `Expected saved confirmation, got: ${result.stdout}`);
       const stateFile = stateFileIn(home);
       assert.ok(stateFile, 'Expected a state file to be written');
-      assert.ok(fs.readFileSync(stateFile, 'utf8').includes('## Next Session'), 'Expected snapshot skeleton');
+      assert.ok(readStateContent(home, stateFile).includes('## Next Session'), 'Expected snapshot skeleton');
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
@@ -106,7 +113,7 @@ function runTests() {
       assert.strictEqual(result.code, 0);
       const stateFile = stateFileIn(home);
       assert.ok(stateFile, 'Expected a state file');
-      const content = fs.readFileSync(stateFile, 'utf8');
+      const content = readStateContent(home, stateFile);
       assert.ok(content.includes('Use fixture-driven tests'), `Expected mined decision, got: ${content}`);
       assert.ok(content.includes('Ship the memory miner'), `Expected mined next step, got: ${content}`);
     } finally {
@@ -125,7 +132,7 @@ function runTests() {
       assert.ok(result.stdout.includes('=== EGC Memory ==='), `Expected memory block, got: ${result.stdout}`);
       const stateFile = stateFileIn(home);
       assert.ok(stateFile, 'Expected a state file');
-      const content = fs.readFileSync(stateFile, 'utf8');
+      const content = readStateContent(home, stateFile);
       assert.ok(content.includes('keep the API split into two endpoints'), `Expected verbatim decision, got: ${content}`);
     } finally {
       fs.rmSync(home, { recursive: true, force: true });

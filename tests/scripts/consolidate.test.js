@@ -3,6 +3,7 @@
  */
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -17,6 +18,8 @@ const {
   classifyEntry,
   coreFact,
 } = require('../../scripts/lib/state-consolidate');
+const { encryptStateBuffer, decryptStateBuffer, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
+const { getStateDir, branchStateFile } = require('../../scripts/lib/branch-state');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -279,6 +282,55 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('consolidates the git branch-scoped state file for a git project, not the flat legacy path', () => {
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      execFileSync('git', ['init', '-q', '-b', 'feature-x', projectDir]);
+
+      const branchFilePath = branchStateFile(getStateDir(homeDir), projectDir, 'feature-x');
+      fs.mkdirSync(path.dirname(branchFilePath), { recursive: true });
+      fs.writeFileSync(branchFilePath, sampleState(projectDir), 'utf8');
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('CONSOLIDATED'));
+      assert.ok(result.stdout.includes(branchFilePath), 'report must point at the branch-scoped file');
+
+      const flatFilePath = stateFilePath(homeDir, projectDir);
+      assert.ok(!fs.existsSync(flatFilePath), 'must not create/touch the flat legacy path for a git project');
+      assert.ok(fs.readFileSync(branchFilePath, 'utf8').includes('## Active Decisions'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('migrates a flat legacy state file into the branch-scoped location on first run in a git project', () => {
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      execFileSync('git', ['init', '-q', '-b', 'feature-y', projectDir]);
+
+      const flatFilePath = writeState(homeDir, projectDir, sampleState(projectDir));
+      const before = fs.readFileSync(flatFilePath, 'utf8');
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('CONSOLIDATED'));
+
+      const branchFilePath = branchStateFile(getStateDir(homeDir), projectDir, 'feature-y');
+      assert.ok(fs.existsSync(branchFilePath), 'consolidated output must land in the branch-scoped file');
+      assert.ok(fs.readFileSync(branchFilePath, 'utf8').includes('## Active Decisions'));
+      assert.strictEqual(fs.readFileSync(flatFilePath, 'utf8'), before, 'the old flat file is left as-is, not rewritten');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('honors the EGC_CONSOLIDATE_THRESHOLD environment variable', () => {
     const homeDir = createTempDir('consolidate-home-');
     const projectDir = createTempDir('consolidate-project-');
@@ -319,6 +371,40 @@ function runTests() {
     const followedByFlag = run(['--project', '--dry-run']);
     assert.strictEqual(followedByFlag.code, 1);
     assert.ok(followedByFlag.stderr.includes('Missing value for --project'));
+  })) passed++; else failed++;
+
+  if (test('consolidates an encrypted state file and re-encrypts the result', () => {
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      const key = crypto.randomBytes(32);
+      fs.mkdirSync(path.join(homeDir, '.egc'), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(path.join(homeDir, '.egc', 'encryption.key'), key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+
+      const filePath = stateFilePath(homeDir, projectDir);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      const plaintext = sampleState(projectDir);
+      fs.writeFileSync(filePath, encryptStateBuffer(plaintext, path.join(homeDir, '.egc', 'encryption.key')));
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('CONSOLIDATED'));
+
+      const rawAfter = fs.readFileSync(filePath);
+      assert.strictEqual(isEncryptedBuffer(rawAfter), true, 'output must remain encrypted');
+      const after = decryptStateBuffer(rawAfter, path.join(homeDir, '.egc', 'encryption.key'));
+      assert.notStrictEqual(after, null, 'output must decrypt with the original key');
+      assert.ok(after.includes('## Active Decisions'));
+
+      const backups = fs.readdirSync(archiveDir(homeDir));
+      assert.strictEqual(backups.length, 1);
+      const rawBackup = fs.readFileSync(path.join(archiveDir(homeDir), backups[0]));
+      assert.ok(isEncryptedBuffer(rawBackup), 'backup must be a raw byte copy, still encrypted');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
   })) passed++; else failed++;
 
   if (test('strips bracketed dates with surrounding spaces', () => {

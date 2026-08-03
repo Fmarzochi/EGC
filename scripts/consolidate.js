@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -7,10 +8,13 @@ const {
   DEFAULT_THRESHOLD,
   WORKING_WINDOW_DAYS,
   EPISODIC_WINDOW_DAYS,
-  stateFilePath,
   consolidateState,
   backupStateFile,
 } = require('./lib/state-consolidate');
+const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./lib/state-crypto');
+const { withStateFileLockSync } = require('./lib/state-snapshot');
+const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('./lib/branch-state');
+const { loadOrCreateIntegrityKey, writeHmac } = require('./lib/state-integrity');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -135,7 +139,14 @@ function main() {
 
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const project = path.resolve(options.project || process.cwd());
-    const stateFile = stateFilePath(homeDir, project);
+    const stateDir = getStateDir(homeDir);
+    const branch = detectBranch(project);
+    const readPath = resolveStateRead(stateDir, project, branch).filePath;
+    // Same resolveStateWrite() call the MCP server's update_state and the
+    // hook-side writers in state-snapshot.js use, so this locks and rewrites
+    // the exact file a concurrent update_state would -- not the flat legacy
+    // path, which for a git project it never touches.
+    const stateFile = resolveStateWrite(stateDir, project, branch);
     const threshold = resolveThreshold(options);
 
     const report = {
@@ -147,32 +158,49 @@ function main() {
       backup: null,
     };
 
-    let content;
-    try {
-      content = fs.readFileSync(stateFile, 'utf8');
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        handleMissingState(report, options);
-        return;
-      }
-      throw err;
-    }
-    const result = consolidateState(content, { threshold });
-
-    report.linesBefore = result.linesBefore;
-    report.linesAfter = result.linesAfter;
-    report.stats = result.stats;
-
-    if (!result.needed && !options.force) {
-      handleNotNeeded(report, options);
-      return;
-    }
-
-    performConsolidation(report, result, stateFile, homeDir, options);
+    // Locked so the read-decide-write cycle can never race the MCP server's
+    // own update_state read-merge-write on the same file (a concurrent write
+    // could otherwise be silently overwritten by this consolidation).
+    withStateFileLockSync(stateFile, () => runConsolidation(report, options, readPath, stateFile, homeDir, threshold));
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
   }
+}
+
+function runConsolidation(report, options, readPath, stateFile, homeDir, threshold) {
+  let raw;
+  try {
+    raw = fs.readFileSync(readPath);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      handleMissingState(report, options);
+      return;
+    }
+    throw err;
+  }
+
+  const encrypted = isEncryptedBuffer(raw);
+  const content = encrypted ? decryptStateBuffer(raw) : raw.toString('utf8');
+  if (content === null) {
+    // Thrown (not process.exit here): this runs inside withStateFileLockSync's
+    // callback, so exiting directly would skip its `finally` and leave a
+    // stale lock file. Throwing lets the lock release, then propagates to
+    // main()'s catch, which logs and exits 1 the same way.
+    throw new Error(`cannot decrypt ${readPath} -- leaving it untouched.`);
+  }
+  const result = consolidateState(content, { threshold });
+
+  report.linesBefore = result.linesBefore;
+  report.linesAfter = result.linesAfter;
+  report.stats = result.stats;
+
+  if (!result.needed && !options.force) {
+    handleNotNeeded(report, options);
+    return;
+  }
+
+  performConsolidation(report, result, readPath, stateFile, homeDir, options, encrypted);
 }
 
 function handleMissingState(report, options) {
@@ -192,14 +220,29 @@ function handleNotNeeded(report, options) {
   }
 }
 
-function performConsolidation(report, result, stateFile, homeDir, options) {
+function performConsolidation(report, result, readPath, stateFile, homeDir, options, encrypted) {
   report.status = options.dryRun ? 'dry-run' : 'consolidated';
 
   if (options.dryRun) {
     report.output = result.output;
   } else {
-    report.backup = backupStateFile(homeDir, stateFile);
-    fs.writeFileSync(stateFile, result.output, 'utf8');
+    // Back up the file we actually read from -- for a first-time migration
+    // (git project with only a flat legacy file so far) that's not the same
+    // path as stateFile, which may not exist yet.
+    report.backup = backupStateFile(homeDir, readPath);
+    const payload = encrypted ? encryptStateBuffer(result.output) : result.output;
+    const tmpPath = `${stateFile}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+      fs.writeFileSync(tmpPath, payload, encrypted ? undefined : 'utf8');
+      try { fs.chmodSync(tmpPath, 0o600); } catch { /* not supported on Windows */ }
+      fs.renameSync(tmpPath, stateFile);
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
+    }
+    // The sidecar HMAC covers the plaintext (matching writeHmac()'s use in
+    // index.ts), computed over result.output regardless of `encrypted` --
+    // leaving it stale here is exactly the mismatch this rewrite fixes.
+    writeHmac(stateFile, result.output, loadOrCreateIntegrityKey());
   }
 
   if (options.json) {

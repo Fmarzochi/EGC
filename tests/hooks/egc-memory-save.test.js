@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { readStateFileDecrypted } = require('../../scripts/lib/state-crypto');
 
 const script = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'egc-memory-save.js');
 
@@ -43,6 +44,12 @@ function stateFileFor(stateDir, projectPath) {
   const parts = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
   const slug = parts.slice(-2).join('--').replace(/[^a-zA-Z0-9-_]/g, '_') || 'default';
   return path.join(stateDir, `${slug}.md`);
+}
+
+// The hook always writes state encrypted now; tests read it back the same
+// way real consumers do, via the shared decrypt helper.
+function readStateContent(home, filePath) {
+  return readStateFileDecrypted(filePath, path.join(home, '.egc', 'encryption.key'));
 }
 
 function runTests() {
@@ -102,7 +109,7 @@ function runTests() {
       try {
         runScript({}, { PWD: projectPath, HOME: home });
         const filePath = stateFileFor(path.join(home, '.egc', 'state'), projectPath);
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readStateContent(home, filePath);
         assert.ok(content.includes(`project: ${projectPath}`));
       } finally {
         fs.rmSync(home, { recursive: true, force: true });
@@ -117,7 +124,7 @@ function runTests() {
         const before = Date.now();
         runScript({}, { PWD: projectPath, HOME: home });
         const filePath = stateFileFor(path.join(home, '.egc', 'state'), projectPath);
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readStateContent(home, filePath);
         const match = content.match(/^updated: (.+)$/m);
         assert.ok(match, 'updated line must exist');
         assert.ok(new Date(match[1]).getTime() >= before);
@@ -133,7 +140,7 @@ function runTests() {
       try {
         runScript({}, { PWD: projectPath, HOME: home });
         const filePath = stateFileFor(path.join(home, '.egc', 'state'), projectPath);
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readStateContent(home, filePath);
         const nextIdx = content.indexOf('## Next Session');
         assert.ok(nextIdx >= 0, '## Next Session section must exist');
         const afterNext = content.slice(nextIdx);
@@ -167,7 +174,7 @@ function runTests() {
         ].join('\n'));
 
         runScript({}, { PWD: projectPath, HOME: home });
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readStateContent(home, filePath);
         assert.ok(!content.includes(oldTs), 'old timestamp must be replaced');
         assert.ok(/^updated: \d{4}-/m.test(content), 'new timestamp must exist');
       } finally {
@@ -199,7 +206,7 @@ function runTests() {
         ].join('\n'));
 
         runScript({}, { PWD: projectPath, HOME: home });
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readStateContent(home, filePath);
         assert.ok(content.includes('This is the project context.'));
         assert.ok(content.includes('- use squash merges'));
       } finally {
@@ -227,7 +234,7 @@ function runTests() {
         ].join('\n'));
 
         runScript({}, { PWD: projectPath, HOME: home });
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readStateContent(home, filePath);
         const markers = (content.match(/\[session-snapshot /g) || []).length;
         assert.strictEqual(markers, 1, 'exactly one fresh marker must remain');
       } finally {
