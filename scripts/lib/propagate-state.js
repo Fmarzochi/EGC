@@ -337,8 +337,14 @@ function writeCursorContext(projectPath, block, stateUpdated) {
   return filePath;
 }
 
-function writeCopilotContext(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, '.github', 'copilot-instructions.md');
+// Shared by every writer whose target is a single flat file that this
+// function neither creates nor makes a directory for: the file (and its
+// parent dir, e.g. .github/) must already exist, or propagation is skipped
+// entirely. This is the common shape behind Copilot, Gemini, Zed, Cline,
+// Aider, legacy Cursor, and AGENTS.md -- they differ only in which relative
+// path they point at.
+function writeSimpleContext(projectPath, relativePathParts, block, stateUpdated) {
+  const filePath = path.join(projectPath, ...relativePathParts);
   try {
     if (!fs.existsSync(filePath)) return null;
   } catch {
@@ -351,124 +357,62 @@ function writeCopilotContext(projectPath, block, stateUpdated) {
   return filePath;
 }
 
+function writeCopilotContext(projectPath, block, stateUpdated) {
+  return writeSimpleContext(projectPath, ['.github', 'copilot-instructions.md'], block, stateUpdated);
+}
+
 function writeGeminiContext(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, 'GEMINI.md');
+  return writeSimpleContext(projectPath, ['GEMINI.md'], block, stateUpdated);
+}
+
+// Shared by Windsurf and Trae: unlike writeSimpleContext, the gate is on the
+// tool's top-level dir (e.g. .windsurf/) rather than the target file itself,
+// and a rules/ subfolder is created under it on demand before the shared
+// egc-context.md is written there.
+function writeToolRulesContext(projectPath, toolDirName, block, stateUpdated) {
+  const toolDir = path.join(projectPath, toolDirName);
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(toolDir) || !fs.statSync(toolDir).isDirectory()) return null;
   } catch {
     return null;
   }
 
-  const existing = fs.readFileSync(filePath, 'utf-8');
+  const rulesDir = path.join(toolDir, 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true });
+
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
 function writeWindsurfContext(projectPath, block, stateUpdated) {
-  const windsurfDir = path.join(projectPath, '.windsurf');
-  try {
-    if (!fs.existsSync(windsurfDir) || !fs.statSync(windsurfDir).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-
-  const rulesDir = path.join(windsurfDir, 'rules');
-  fs.mkdirSync(rulesDir, { recursive: true });
-
-  const filePath = path.join(rulesDir, 'egc-context.md');
-  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeToolRulesContext(projectPath, '.windsurf', block, stateUpdated);
 }
 
 function writeTraeContext(projectPath, block, stateUpdated) {
-  const traeDir = path.join(projectPath, '.trae');
-  try {
-    if (!fs.existsSync(traeDir) || !fs.statSync(traeDir).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-
-  const rulesDir = path.join(traeDir, 'rules');
-  fs.mkdirSync(rulesDir, { recursive: true });
-
-  const filePath = path.join(rulesDir, 'egc-context.md');
-  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeToolRulesContext(projectPath, '.trae', block, stateUpdated);
 }
 
 function writeZedContext(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, '.rules');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-  } catch {
-    return null;
-  }
-
-  const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeSimpleContext(projectPath, ['.rules'], block, stateUpdated);
 }
 
 function writeClineContext(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, '.clinerules');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-  } catch {
-    return null;
-  }
-
-  const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeSimpleContext(projectPath, ['.clinerules'], block, stateUpdated);
 }
 
 function writeAiderContext(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, 'CONVENTIONS.md');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-  } catch {
-    return null;
-  }
-
-  const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeSimpleContext(projectPath, ['CONVENTIONS.md'], block, stateUpdated);
 }
 
 function writeLegacyCursorRules(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, '.cursorrules');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-  } catch {
-    return null;
-  }
-
-  const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeSimpleContext(projectPath, ['.cursorrules'], block, stateUpdated);
 }
 
 function writeAgentsContext(projectPath, block, stateUpdated) {
-  const filePath = path.join(projectPath, 'AGENTS.md');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-  } catch {
-    return null;
-  }
-
-  const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
-  return filePath;
+  return writeSimpleContext(projectPath, ['AGENTS.md'], block, stateUpdated);
 }
 
 function writeLlmsTxt(projectPath, parsed) {
