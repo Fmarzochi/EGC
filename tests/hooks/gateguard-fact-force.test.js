@@ -17,6 +17,7 @@ const stateDir = fs.mkdtempSync(path.join(baseStateDir, 'gateguard-test-'));
 const TEST_SESSION_ID = 'gateguard-test-session';
 const stateFile = path.join(stateDir, `state-${TEST_SESSION_ID}.json`);
 const READ_HEARTBEAT_MS = 60 * 1000;
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // must match gateguard-fact-force.js
 
 function test(name, fn) {
   try {
@@ -1140,6 +1141,40 @@ function runTests() {
     const result = runDirectHook(input);
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(JSON.parse(result.stdout), input);
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('EGC-539: stale-file pruning is skipped when GateGuard is disabled (module-load-time scan)', () => {
+    // Module-load-time pruneStaleFiles() used to run unconditionally,
+    // regardless of isGateGuardDisabled() -- so a disabled GateGuard still
+    // paid the sync readdir/stat/unlink cost, and the fix must not remove
+    // the pruning behavior itself, only gate it. A separate stale file (not
+    // the session's own stateFile, to avoid racing runDirectHook's own
+    // writes to it) is used so pruning is unambiguously the only thing that
+    // could remove it.
+    const staleFile = path.join(stateDir, 'state-stale-disabled-test.json');
+    fs.writeFileSync(staleFile, JSON.stringify({ checked: [], last_active: 0 }), 'utf8');
+    const oldTime = (Date.now() - (SESSION_TIMEOUT_MS * 3)) / 1000;
+    fs.utimesSync(staleFile, oldTime, oldTime);
+
+    runDirectHook(
+      { tool_name: 'Edit', tool_input: { file_path: '/src/gateguard-disabled-scan.js', old_string: 'a', new_string: 'b' } },
+      { EGC_GATEGUARD: 'off' }
+    );
+
+    assert.ok(fs.existsSync(staleFile), 'a disabled GateGuard must not run the module-load-time pruning scan at all');
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('EGC-539: stale-file pruning still runs normally when GateGuard is enabled', () => {
+    const staleFile = path.join(stateDir, 'state-stale-enabled-test.json');
+    fs.writeFileSync(staleFile, JSON.stringify({ checked: [], last_active: 0 }), 'utf8');
+    const oldTime = (Date.now() - (SESSION_TIMEOUT_MS * 3)) / 1000;
+    fs.utimesSync(staleFile, oldTime, oldTime);
+
+    runDirectHook({ tool_name: 'Edit', tool_input: { file_path: '/src/gateguard-enabled-scan.js', old_string: 'a', new_string: 'b' } });
+
+    assert.ok(!fs.existsSync(staleFile), 'an enabled GateGuard must still prune files older than 2x SESSION_TIMEOUT_MS');
   })) passed++; else failed++;
 
   // Cleanup only the temp directory created by this test file.
