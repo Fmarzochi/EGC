@@ -26,8 +26,14 @@ const IV_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 const ALGORITHM = 'aes-256-gcm';
 
+// getStateDir() (branch-state.js) and the hooks that call it already accept
+// an explicit HOME override so tests can isolate state under a temp dir.
+// This must resolve the same HOME on every platform -- os.homedir() alone
+// prefers USERPROFILE over HOME on Windows, so a HOME-overridden test still
+// hit the real user profile here, encrypted with the wrong key, and failed
+// to decrypt (Windows-only CI failures on PR #1168).
 function defaultKeyPath() {
-  return path.join(os.homedir(), '.egc', 'encryption.key');
+  return path.join(process.env.HOME || os.homedir(), '.egc', 'encryption.key');
 }
 
 function isEncryptedBuffer(data) {
