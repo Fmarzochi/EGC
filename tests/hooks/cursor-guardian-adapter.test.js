@@ -48,6 +48,19 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
+  if (test('CLI: full stdout is present at exit (no truncation from exitCode-based exit)', () => {
+    // Regression guard for the cubic-dev-ai finding (PR #1081), applied to
+    // this adapter as part of the EGC-539 Finding 3 consolidation: this
+    // adapter used to call process.exit() right after stdout.write(),
+    // which can race the pipe flush on POSIX and truncate the response
+    // before the caller reads it. Now uses process.exitCode like the
+    // Cline/Junie adapters it shares runJsonEnvelopeGuardianAdapter with.
+    for (let i = 0; i < 20; i += 1) {
+      const result = runAdapterCli({ command: 'git status', cwd: '/tmp' });
+      assert.doesNotThrow(() => JSON.parse(result.stdout), `Run ${i}: stdout was not valid JSON: ${JSON.stringify(result.stdout)}`);
+    }
+  })) passed++; else failed++;
+
   if (test('maps a Cursor beforeShellExecution event to a Guardian Bash input', () => {
     const mapped = buildGuardianInput({ command: 'echo hi', cwd: '/Users/example/project' });
     assert.deepStrictEqual(mapped, { tool_name: 'Bash', tool_input: { command: 'echo hi' }, cwd: '/Users/example/project' });
