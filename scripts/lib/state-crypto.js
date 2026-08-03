@@ -59,7 +59,9 @@ function loadOrCreateKeySync(keyPath) {
   try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* may already exist */ }
 
   if (fs.existsSync(resolvedPath)) {
-    return loadKey(resolvedPath);
+    const key = loadKey(resolvedPath);
+    try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort, not supported on Windows */ }
+    return key;
   }
 
   const key = crypto.randomBytes(32);

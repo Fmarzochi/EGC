@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -12,6 +13,7 @@ const {
   backupStateFile,
 } = require('./lib/state-consolidate');
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./lib/state-crypto');
+const { withStateFileLockSync } = require('./lib/state-snapshot');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -148,40 +150,47 @@ function main() {
       backup: null,
     };
 
-    let raw;
-    try {
-      raw = fs.readFileSync(stateFile);
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        handleMissingState(report, options);
-        return;
-      }
-      throw err;
-    }
-
-    const encrypted = isEncryptedBuffer(raw);
-    const content = encrypted ? decryptStateBuffer(raw) : raw.toString('utf8');
-    if (content === null) {
-      report.status = 'undecryptable';
-      console.error(`Error: cannot decrypt ${stateFile} -- leaving it untouched.`);
-      process.exit(1);
-    }
-    const result = consolidateState(content, { threshold });
-
-    report.linesBefore = result.linesBefore;
-    report.linesAfter = result.linesAfter;
-    report.stats = result.stats;
-
-    if (!result.needed && !options.force) {
-      handleNotNeeded(report, options);
-      return;
-    }
-
-    performConsolidation(report, result, stateFile, homeDir, options, encrypted);
+    // Locked so the read-decide-write cycle can never race the MCP server's
+    // own update_state read-merge-write on the same file (a concurrent write
+    // could otherwise be silently overwritten by this consolidation).
+    withStateFileLockSync(stateFile, () => runConsolidation(report, options, stateFile, homeDir, threshold));
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
   }
+}
+
+function runConsolidation(report, options, stateFile, homeDir, threshold) {
+  let raw;
+  try {
+    raw = fs.readFileSync(stateFile);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      handleMissingState(report, options);
+      return;
+    }
+    throw err;
+  }
+
+  const encrypted = isEncryptedBuffer(raw);
+  const content = encrypted ? decryptStateBuffer(raw) : raw.toString('utf8');
+  if (content === null) {
+    report.status = 'undecryptable';
+    console.error(`Error: cannot decrypt ${stateFile} -- leaving it untouched.`);
+    process.exit(1);
+  }
+  const result = consolidateState(content, { threshold });
+
+  report.linesBefore = result.linesBefore;
+  report.linesAfter = result.linesAfter;
+  report.stats = result.stats;
+
+  if (!result.needed && !options.force) {
+    handleNotNeeded(report, options);
+    return;
+  }
+
+  performConsolidation(report, result, stateFile, homeDir, options, encrypted);
 }
 
 function handleMissingState(report, options) {
@@ -209,7 +218,14 @@ function performConsolidation(report, result, stateFile, homeDir, options, encry
   } else {
     report.backup = backupStateFile(homeDir, stateFile);
     const payload = encrypted ? encryptStateBuffer(result.output) : result.output;
-    fs.writeFileSync(stateFile, payload, encrypted ? undefined : 'utf8');
+    const tmpPath = `${stateFile}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+      fs.writeFileSync(tmpPath, payload, encrypted ? undefined : 'utf8');
+      try { fs.chmodSync(tmpPath, 0o600); } catch { /* not supported on Windows */ }
+      fs.renameSync(tmpPath, stateFile);
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
+    }
   }
 
   if (options.json) {

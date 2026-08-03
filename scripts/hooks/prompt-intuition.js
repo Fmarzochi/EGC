@@ -78,13 +78,22 @@ function handleRemember(projectPath, prompt) {
   const stateDir = getStateDir(process.env.HOME);
   const filePath = resolveStateWrite(stateDir, projectPath, branch);
 
-  withStateFileLockSync(filePath, () => {
+  const saved = withStateFileLockSync(filePath, () => {
     const state = loadState(projectPath);
-    if (state.undecryptable) return;
+    if (state.undecryptable) return false;
     const entry = `- ${state.ts.slice(0, 10)}: ${clip(prompt.trim().replace(/\s+/g, ' '), MAX_REMEMBER_CHARS)}`;
     const result = appendToSection(state.content, '## Active Decisions', [entry]);
     if (result.added > 0) saveState(state.filePath, result.content);
+    return true;
   });
+
+  if (!saved) {
+    return [
+      '=== EGC Memory ===',
+      'Could not save: the project state file exists but could not be decrypted, so nothing was written.',
+      'Tell the user their memory was NOT updated and the state file needs manual attention.',
+    ].join('\n');
+  }
 
   return [
     '=== EGC Memory ===',

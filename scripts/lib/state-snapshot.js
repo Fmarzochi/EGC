@@ -33,11 +33,17 @@ function acquireLockSync(lockFile, retries = 50) {
 function withStateFileLockSync(stateFile, fn) {
   const lockFile = `${stateFile}.merge.lock`;
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
-  const locked = acquireLockSync(lockFile);
+  // Matches withStateMergeLock()'s fail-closed behavior in index.ts: proceeding
+  // unlocked here would let a hook's read-modify-write race the MCP server's
+  // own update_state on the same file, risking a lost merge or a partially
+  // overwritten ciphertext -- exactly what this lock exists to prevent.
+  if (!acquireLockSync(lockFile)) {
+    throw new Error(`Timeout acquiring state file lock: ${lockFile}`);
+  }
   try {
     return fn();
   } finally {
-    if (locked) { try { fs.unlinkSync(lockFile); } catch { /* already cleared */ } }
+    try { fs.unlinkSync(lockFile); } catch { /* already cleared */ }
   }
 }
 
