@@ -15,7 +15,7 @@ const {
 // concern, out of scope for this pass (EGC-507).
 //
 // Guardian + Token Crusher via Amp's Plugin API (EGC-507, design reviewed
-// with the Multica squad before implementing, 2026-07-29): the hooks doc
+// with an internal audit before implementing, 2026-07-29): the hooks doc
 // this file used to cite (ampcode.com/manual?internal#hooks,
 // Sourcegraph-internal only, "Preview" since May 2025) now 404s. In its
 // place, Amp ships a PUBLIC Plugin API (ampcode.com/manual/plugin-api, no

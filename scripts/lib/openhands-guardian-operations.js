@@ -1,7 +1,7 @@
 'use strict';
 
 // EGC-498 (corrected): OpenHands has a real pre_tool_use hook (verified
-// against OpenHands/docs' own hooks.mdx, not the earlier Multica report
+// against OpenHands/docs' own hooks.mdx, not an earlier internal report
 // which incorrectly classified it as prompt-only). Project-only --
 // confirmed no global/home hooks.json path exists.
 

@@ -175,7 +175,7 @@ run('.gemini/GEMINI.md write stays allowed (functional file, not a credential/tr
   assert.strictEqual(v.allowed, true, `expected .gemini/GEMINI.md to stay allowed, got: ${v.reason}`);
 });
 
-console.log('\nAntigravity/OpenCode cross-CLI fail-open fix (Multica audit EGC-460/461, 2026-07-27):');
+console.log('\nAntigravity/OpenCode cross-CLI fail-open fix (internal audit EGC-460/461, 2026-07-27):');
 run('.gemini/antigravity-cli/mcp_config.json write is blocked (guardian-bin.js now trusts this file too)', () => {
   const v = validateWrite('.gemini/antigravity-cli/mcp_config.json');
   assert.strictEqual(v.allowed, false, 'expected .gemini/antigravity-cli/mcp_config.json write to be blocked');
@@ -199,7 +199,7 @@ run('.egc/guardian-cli-path.json write is blocked (guardian-bin.js now trusts th
   assert.strictEqual(v.allowed, false, 'expected .egc/guardian-cli-path.json write to be blocked');
 });
 
-// Multica audit EGC-533 findings (2026-08-02): trailing-whitespace path
+// Internal audit EGC-533 findings (2026-08-02): trailing-whitespace path
 // bypass and git includeIf bypass.
 run('.env write with a trailing newline is still blocked (audit EGC-533, Finding 1)', () => {
   const v = validateWrite('.env\n');

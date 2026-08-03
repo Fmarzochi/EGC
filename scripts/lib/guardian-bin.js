@@ -45,8 +45,8 @@ function fromMcpConfigs() {
     path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json'),
     // Antigravity CLI's own MCP registration file — a SEPARATE file from
     // Gemini CLI's above despite sharing the ~/.gemini home root (see
-    // scripts/lib/mcp-register.js's "Antigravity CLI" target). Multica
-    // squad audit (EGC-460/461, 2026-07-27) confirmed a pure-Antigravity
+    // scripts/lib/mcp-register.js's "Antigravity CLI" target). Internal
+    // audit (EGC-460/461, 2026-07-27) confirmed a pure-Antigravity
     // install (no Claude Code, no Gemini CLI alongside it) had no working
     // fallback here either, for the same fail-open reason as Gemini CLI
     // above.
@@ -270,7 +270,7 @@ function fromCodexToml() {
 // apply.js's writeGuardianCliMarker() records the real package root here on
 // every install/repair, so any standalone copy can read it back.
 //
-// 2026-07-27 Multica design review (EGC-465): deliberately does NOT require
+// 2026-07-27 internal design review (EGC-465): deliberately does NOT require
 // the resolved candidate to live under the user's home directory, unlike
 // fromMcpConfigs()/fromCodexToml() above. Those two guard against a
 // synced/tampered CONFIG FILE pointing resolution somewhere attacker-

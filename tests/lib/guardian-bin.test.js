@@ -257,7 +257,7 @@ function main() {
   });
 
   run('resolves via ~/.gemini/antigravity-cli/mcp_config.json on an Antigravity-only install', () => {
-    // Multica squad audit (EGC-460/461, 2026-07-27): this is a SEPARATE file
+    // Internal audit (EGC-460/461, 2026-07-27): this is a SEPARATE file
     // from ~/.gemini/config/mcp_config.json above despite sharing the
     // ~/.gemini home root -- a pure-Antigravity install (no Claude Code, no
     // Gemini CLI alongside it) had no working config-based fallback here

@@ -4,7 +4,7 @@ const { createAmazonQGuardianOperations } = require('../amazonq-guardian-operati
 
 // EGC-498 (corrected): Amazon Q Developer CLI's preToolUse hook is real
 // (confirmed against aws/amazon-q-developer-cli's own docs -- the earlier
-// Multica report classifying it as prompt-only was wrong). The custom-agent
+// earlier internal report classifying it as prompt-only was wrong). The custom-agent
 // config lives at .amazonq/cli-agents/*.json, a sibling of the rules/ root
 // this adapter already scaffolds, not nested inside it -- so the Guardian
 // operations resolve their own root from the .amazonq parent directory
