@@ -29,7 +29,7 @@ sh install.sh
 2. Inicializa o banco de dados SQLite local
 3. Executa o bootstrap cognitivo: escreve o protocolo de memoria em `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md` e arquivos equivalentes para cada ferramenta detectada
 4. Registra ambos os servidores MCP no arquivo de configuracao de cada ferramenta detectada
-5. Pergunta interativamente se deve instalar a biblioteca de prompts (63 agentes, 229 skills, 76 comandos): pulado automaticamente no CI
+5. Pergunta interativamente se deve instalar a biblioteca de prompts (61 agentes, 230 skills, 77 comandos): pulado automaticamente no CI
 
 ### Exemplo de saida
 
@@ -47,7 +47,7 @@ EGC install
   ✓ registered in Claude Code (global)
   ✓ registered in Cursor
 
-Install prompt library? (63 agents, 229 skills, 76 commands) [y/N]:
+Install prompt library? (61 agents, 230 skills, 77 commands) [y/N]:
 
 Installation complete.
 Run 'egc doctor' to verify.

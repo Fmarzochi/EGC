@@ -68,7 +68,7 @@ Le cerveau ne fait pas que mémoriser : il filtre. Avant que la sortie d'un term
 
 ## Bibliothèque de prompts
 
-En bonus, EGC vous donne accès à 63 agents, 230 skills et 77 commandes, ainsi que 109 règles : des spécialistes qui révisent votre code de manière autonome, des guides de bonnes pratiques pour chaque langage et situation, des raccourcis qui exécutent des séquences entières de tâches pour vous, et des règles de style qui maintiennent la cohérence de votre code. Tout a été rédigé à partir de véritables sessions d'ingénierie, et non de la théorie. Vous ne souhaitez rien utiliser de tout cela ? Aucun problème : la mémoire persistante d'EGC fonctionne exactement de la même manière.
+En bonus, EGC vous donne accès à 61 agents, 230 skills et 77 commandes, ainsi que 109 règles : des spécialistes qui révisent votre code de manière autonome, des guides de bonnes pratiques pour chaque langage et situation, des raccourcis qui exécutent des séquences entières de tâches pour vous, et des règles de style qui maintiennent la cohérence de votre code. Tout a été rédigé à partir de véritables sessions d'ingénierie, et non de la théorie. Vous ne souhaitez rien utiliser de tout cela ? Aucun problème : la mémoire persistante d'EGC fonctionne exactement de la même manière.
 
 ---
 

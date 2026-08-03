@@ -68,7 +68,7 @@ Das Gehirn erinnert sich nicht nur: Es filtert. Bevor eine Shell-Ausgabe das Mod
 
 ## Prompt-Bibliothek
 
-Als Bonus gewährt EGC dir Zugriff auf 63 Agenten, 230 Skills und 77 Befehle sowie 109 Regeln: Spezialisten, die deinen Code eigenständig überprüfen, Best-Practice-Leitfäden für jede Sprache und Situation, Shortcuts, die eine ganze Reihe von Aufgaben für dich ausführen, und Stilregeln, die deinen Code konsistent halten. Alles geschrieben aus realen Engineering-Sessions, nicht aus der Theorie. Du möchtest nichts davon nutzen? Kein Problem: Der permanente Speicher von EGC funktioniert genauso.
+Als Bonus gewährt EGC dir Zugriff auf 61 Agenten, 230 Skills und 77 Befehle sowie 109 Regeln: Spezialisten, die deinen Code eigenständig überprüfen, Best-Practice-Leitfäden für jede Sprache und Situation, Shortcuts, die eine ganze Reihe von Aufgaben für dich ausführen, und Stilregeln, die deinen Code konsistent halten. Alles geschrieben aus realen Engineering-Sessions, nicht aus der Theorie. Du möchtest nichts davon nutzen? Kein Problem: Der permanente Speicher von EGC funktioniert genauso.
 
 ---
 
