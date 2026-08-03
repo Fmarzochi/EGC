@@ -75,20 +75,27 @@ function withFakePlatform(platform, fn) {
 }
 
 function withFakeWSL(fn) {
-  const originalReadFileSync = fs.readFileSync;
-  fs.readFileSync = function patchedReadFileSync(filePath, ...rest) {
-    if (filePath === '/proc/version') {
-      return 'Linux version 5.15.0-microsoft-standard-WSL2 (Microsoft@Microsoft.com)';
-    }
-    return originalReadFileSync.call(fs, filePath, ...rest);
-  };
-  resetModuleCaches();
-  try {
-    return fn();
-  } finally {
-    fs.readFileSync = originalReadFileSync;
+  // desktop-notify.js only reads /proc/version at all when
+  // process.platform === 'linux' (it skips the read entirely on darwin/
+  // win32 CI runners), so faking the file content alone is not enough --
+  // this must also force the platform, or the WSL branch is never reached
+  // on macOS/Windows CI hosts.
+  return withFakePlatform('linux', () => {
+    const originalReadFileSync = fs.readFileSync;
+    fs.readFileSync = function patchedReadFileSync(filePath, ...rest) {
+      if (filePath === '/proc/version') {
+        return 'Linux version 5.15.0-microsoft-standard-WSL2 (Microsoft@Microsoft.com)';
+      }
+      return originalReadFileSync.call(fs, filePath, ...rest);
+    };
     resetModuleCaches();
-  }
+    try {
+      return fn();
+    } finally {
+      fs.readFileSync = originalReadFileSync;
+      resetModuleCaches();
+    }
+  });
 }
 
 function withFakeSpawnSync(handler, fn) {
@@ -187,17 +194,19 @@ function runTests() {
   console.log('\nHappy path - plain Linux (non-WSL, non-macOS):');
 
   if (test('on a plain Linux host, run() never calls spawnSync and returns raw unchanged', () => {
-    // No platform/fs faking: this repo's CI runs on plain Linux (see
-    // tests/hooks/detect-project-worktree.test.js's win32 skip guard for
-    // the same host assumption elsewhere in this suite), so isMacOS and
-    // isWSL are both naturally false here already.
-    resetModuleCaches();
-    withFakeSpawnSync(() => ({ status: 0 }), (calls) => {
-      const { run } = require(desktopNotifyPath);
-      const raw = JSON.stringify({ last_assistant_message: 'Nothing to notify' });
-      const out = run(raw);
-      assert.strictEqual(out, raw);
-      assert.strictEqual(calls.length, 0, `Expected no subprocess spawned on plain Linux, got: ${JSON.stringify(calls)}`);
+    // Force platform to 'linux' explicitly (this suite's CI matrix also
+    // runs on macos-latest/windows-latest, where isMacOS would be true or
+    // the /proc/version read would be skipped entirely -- see the
+    // withFakeWSL comment above for why the platform must be pinned
+    // rather than relying on the real CI host).
+    withFakePlatform('linux', () => {
+      withFakeSpawnSync(() => ({ status: 0 }), (calls) => {
+        const { run } = require(desktopNotifyPath);
+        const raw = JSON.stringify({ last_assistant_message: 'Nothing to notify' });
+        const out = run(raw);
+        assert.strictEqual(out, raw);
+        assert.strictEqual(calls.length, 0, `Expected no subprocess spawned on plain Linux, got: ${JSON.stringify(calls)}`);
+      });
     });
   })) passed++; else failed++;
 
