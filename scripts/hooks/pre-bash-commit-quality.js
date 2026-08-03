@@ -58,74 +58,121 @@ function shouldCheckFile(filePath) {
 }
 
 /**
+ * Detect an inline console.log statement on a single line.
+ * @param {string} line
+ * @param {number} lineNum
+ * @returns {object|null} Issue if found, otherwise null
+ */
+function detectConsoleLog(line, lineNum) {
+  if (line.includes('console.log') && !line.trim().startsWith('//') && !line.trim().startsWith('*')) {
+    return {
+      type: 'console.log',
+      message: `console.log found at line ${lineNum}`,
+      line: lineNum,
+      severity: 'warning'
+    };
+  }
+  return null;
+}
+
+/**
+ * Detect a `debugger` statement on a single line.
+ * @param {string} line
+ * @param {number} lineNum
+ * @returns {object|null} Issue if found, otherwise null
+ */
+function detectDebugger(line, lineNum) {
+  if (/\bdebugger\b/.test(line) && !line.trim().startsWith('//')) {
+    return {
+      type: 'debugger',
+      message: `debugger statement at line ${lineNum}`,
+      line: lineNum,
+      severity: 'error'
+    };
+  }
+  return null;
+}
+
+/**
+ * Detect a TODO/FIXME task marker that lacks an issue reference.
+ * @param {string} line
+ * @param {number} lineNum
+ * @returns {object|null} Issue if found, otherwise null
+ */
+function detectTodoFixme(line, lineNum) {
+  const todoMatch = line.match(/\/\/\s*(TODO|FIXME):?\s*(.+)/);
+  if (todoMatch && !todoMatch[2].match(/#\d+|issue/i)) {
+    return {
+      type: 'todo',
+      message: `TODO/FIXME without issue reference at line ${lineNum}: "${todoMatch[2].trim()}"`,
+      line: lineNum,
+      severity: 'info'
+    };
+  }
+  return null;
+}
+
+const SECRET_PATTERNS = [
+  { pattern: /sk-[a-zA-Z0-9]{20,}/, name: 'OpenAI API key' },
+  { pattern: /ghp_[a-zA-Z0-9]{36}/, name: 'GitHub PAT' },
+  { pattern: /AKIA[A-Z0-9]{16}/, name: 'AWS Access Key' },
+  { pattern: /api[_-]?key\s*[=:]\s*['"][^'"]+['"]/i, name: 'API key' }
+];
+
+/**
+ * Detect potential exposed secrets on a single line.
+ * @param {string} line
+ * @param {number} lineNum
+ * @returns {object[]} Issues found (may be more than one per line)
+ */
+function detectSecrets(line, lineNum) {
+  const found = [];
+  for (const { pattern, name } of SECRET_PATTERNS) {
+    if (pattern.test(line)) {
+      found.push({
+        type: 'secret',
+        message: `Potential ${name} exposed at line ${lineNum}`,
+        line: lineNum,
+        severity: 'error'
+      });
+    }
+  }
+  return found;
+}
+
+/**
  * Find issues in file content
- * @param {string} filePath 
+ * @param {string} filePath
  * @returns {object[]} Array of issues found
  */
 function findFileIssues(filePath) {
   const issues = [];
-  
+
   try {
     const content = getStagedFileContent(filePath);
     if (content === null || content === undefined) {
       return issues;
     }
     const lines = content.split('\n');
-    
+
     lines.forEach((line, index) => {
       const lineNum = index + 1;
-      
-      if (line.includes('console.log') && !line.trim().startsWith('//') && !line.trim().startsWith('*')) {
-        issues.push({
-          type: 'console.log',
-          message: `console.log found at line ${lineNum}`,
-          line: lineNum,
-          severity: 'warning'
-        });
-      }
-      
-      if (/\bdebugger\b/.test(line) && !line.trim().startsWith('//')) {
-        issues.push({
-          type: 'debugger',
-          message: `debugger statement at line ${lineNum}`,
-          line: lineNum,
-          severity: 'error'
-        });
-      }
-      
-      // Flag task markers (matched by the pattern below) that lack an issue reference
-      const todoMatch = line.match(/\/\/\s*(TODO|FIXME):?\s*(.+)/);
-      if (todoMatch && !todoMatch[2].match(/#\d+|issue/i)) {
-        issues.push({
-          type: 'todo',
-          message: `TODO/FIXME without issue reference at line ${lineNum}: "${todoMatch[2].trim()}"`,
-          line: lineNum,
-          severity: 'info'
-        });
-      }
-      
-      const secretPatterns = [
-        { pattern: /sk-[a-zA-Z0-9]{20,}/, name: 'OpenAI API key' },
-        { pattern: /ghp_[a-zA-Z0-9]{36}/, name: 'GitHub PAT' },
-        { pattern: /AKIA[A-Z0-9]{16}/, name: 'AWS Access Key' },
-        { pattern: /api[_-]?key\s*[=:]\s*['"][^'"]+['"]/i, name: 'API key' }
-      ];
-      
-      for (const { pattern, name } of secretPatterns) {
-        if (pattern.test(line)) {
-          issues.push({
-            type: 'secret',
-            message: `Potential ${name} exposed at line ${lineNum}`,
-            line: lineNum,
-            severity: 'error'
-          });
-        }
-      }
+
+      const consoleLogIssue = detectConsoleLog(line, lineNum);
+      if (consoleLogIssue) issues.push(consoleLogIssue);
+
+      const debuggerIssue = detectDebugger(line, lineNum);
+      if (debuggerIssue) issues.push(debuggerIssue);
+
+      const todoIssue = detectTodoFixme(line, lineNum);
+      if (todoIssue) issues.push(todoIssue);
+
+      issues.push(...detectSecrets(line, lineNum));
     });
   } catch {
     // File not readable, skip
   }
-  
+
   return issues;
 }
 
@@ -454,4 +501,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { run, evaluate };
+module.exports = { run, evaluate, detectConsoleLog, detectDebugger, detectTodoFixme, detectSecrets };
