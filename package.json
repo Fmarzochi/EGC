@@ -131,7 +131,8 @@
     "js-yaml": "^4.2.0",
     "markdown-it": "^14.2.0",
     "undici": "^6.27.0",
-    "@hono/node-server": "^2.0.5"
+    "@hono/node-server": "^2.0.5",
+    "hono": "4.12.34"
   },
   "pnpm": {
     "overrides": {
@@ -139,7 +140,8 @@
       "markdownlint-cli>js-yaml": "^4.2.0",
       "markdown-it": "^14.2.0",
       "undici": "^6.27.0",
-      "@hono/node-server": "^2.0.5"
+      "@hono/node-server": "^2.0.5",
+      "hono": "4.12.34"
     }
   }
 }
