@@ -12,46 +12,20 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { loadOrCreateKeySync } = require('./state-crypto');
 
 const HMAC_ALGORITHM = 'sha256';
 
-function keyDir() {
-  return path.join(os.homedir(), '.egc');
-}
-
 function keyPath() {
-  return path.join(keyDir(), 'integrity.key');
+  return path.join(os.homedir(), '.egc', 'integrity.key');
 }
 
-// Mirrors loadOrCreateKey() in integrity.ts, including its "never silently
-// regenerate an existing key" rule.
+// state-crypto.js's loadOrCreateKeySync() is already a general 32-byte
+// hex-key-file load-or-create (atomic write-tmp-then-link) -- reused here
+// with the integrity key's own path instead of re-implementing the same
+// routine a second time.
 function loadOrCreateIntegrityKey() {
-  const KEY_DIR = keyDir();
-  const KEY_PATH = keyPath();
-  try {
-    fs.mkdirSync(KEY_DIR, { recursive: true, mode: 0o700 });
-  } catch { /* directory may already exist */ }
-
-  if (fs.existsSync(KEY_PATH)) {
-    const hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
-    if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-      throw new Error(
-        `HMAC key file at ${KEY_PATH} is malformed (expected 64 hex characters). ` +
-        `Remove it to regenerate: rm "${KEY_PATH}"`
-      );
-    }
-    const key = Buffer.from(hex, 'hex');
-    try { fs.chmodSync(KEY_PATH, 0o600); } catch { /* best-effort */ }
-    try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
-    return key;
-  }
-
-  const key = crypto.randomBytes(32);
-  try {
-    fs.writeFileSync(KEY_PATH, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(KEY_PATH, 0o600);
-  } catch { /* best-effort: integrity sidecar failure must never block state writes */ }
-  return key;
+  return loadOrCreateKeySync(keyPath());
 }
 
 function computeHmac(content, key) {
