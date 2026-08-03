@@ -17,7 +17,7 @@ Esta pagina classifica os subsistemas de nivel superior e subarvores notaveis do
 
 | Caminho | Classe | Notas |
 |---|---|---|
-| `agents/` | ACTIVE | 63 definicoes de agentes, fonte da verdade |
+| `agents/` | ACTIVE | 61 definicoes de agentes, fonte da verdade |
 | `commands/` | ACTIVE | 77 comandos de barra |
 | `skills/` | ACTIVE | 230 skills em 14 namespaces |
 | `rules/` | ACTIVE | Regras de codificacao para varias linguagens |

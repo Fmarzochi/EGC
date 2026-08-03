@@ -20,7 +20,7 @@ dormant.
 
 | Path | Class | Notes |
 |---|---|---|
-| `agents/` | ACTIVE | 63 agent definitions, source of truth |
+| `agents/` | ACTIVE | 61 agent definitions, source of truth |
 | `commands/` | ACTIVE | 77 slash commands |
 | `skills/` | ACTIVE | 230 skills across 14 namespaces |
 | `rules/` | ACTIVE | Cross-language coding rules |
