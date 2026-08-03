@@ -6,7 +6,7 @@ origin: EGC
 
 # Continuous Agent Loop
 
-This is the v1.8+ canonical loop skill name. It supersedes `autonomous-loops` while keeping compatibility for one release.
+This is the canonical loop skill name. It supersedes `autonomous-loops`, which is kept as a legacy alias for compatibility.
 
 ## Loop Selection Flow
 
