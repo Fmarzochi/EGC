@@ -7,36 +7,45 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const outFile = path.join(root, 'mcp', 'servers', 'egc-guardian', 'src', 'catalog-index.ts');
 
+// YAML block scalar (key: > / >- / | / |-): the value is the indented block
+// that follows, not the indicator. Folds it into one spaced line, returning
+// the index of the first line after the block.
+function foldBlockScalar(lines, startIndex) {
+  const block = [];
+  let j = startIndex;
+  while (j < lines.length && (/^\s+\S/.test(lines[j]) || lines[j].trim() === '')) {
+    block.push(lines[j].trim());
+    j++;
+  }
+  return { value: block.join(' ').replace(/\s+/g, ' ').trim(), nextIndex: j };
+}
+
 function parseFrontmatter(content) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return null;
   const lines = match[1].split(/\r?\n/);
   const fm = {};
-  for (let i = 0; i < lines.length; i++) {
+  let i = 0;
+  while (i < lines.length) {
     const line = lines[i];
     // Indented lines belong to a block scalar already consumed below.
-    if (/^\s/.test(line)) continue;
+    if (/^\s/.test(line)) { i += 1; continue; }
     const colon = line.indexOf(':');
-    if (colon <= 0) continue;
+    if (colon <= 0) { i += 1; continue; }
     const key = line.slice(0, colon).trim();
-    let val = line.slice(colon + 1).trim();
-    // YAML block scalar (key: > / >- / | / |-): the value is the indented
-    // block that follows, not the indicator. Fold it into one spaced line.
+    const rawVal = line.slice(colon + 1).trim();
+    let val;
     // A plain split-on-colon parser stored just ">-", corrupting these; a
     // real YAML loader instead chokes on the many descriptions that carry an
     // unquoted inline ":" ("... for Android and KMP: structured ..."), so we
     // keep splitting on the first colon and only special-case block scalars.
-    if (/^[>|][+-]?$/.test(val)) {
-      const block = [];
-      let j = i + 1;
-      while (j < lines.length && (/^\s+\S/.test(lines[j]) || lines[j].trim() === '')) {
-        block.push(lines[j].trim());
-        j++;
-      }
-      val = block.join(' ').replace(/\s+/g, ' ').trim();
-      i = j - 1;
+    if (/^[>|][+-]?$/.test(rawVal)) {
+      const folded = foldBlockScalar(lines, i + 1);
+      val = folded.value;
+      i = folded.nextIndex;
     } else {
-      val = val.replace(/^["']|["']$/g, '');
+      val = rawVal.replace(/^["']|["']$/g, '');
+      i += 1;
     }
     if (key && val) fm[key] = val;
   }
@@ -47,32 +56,41 @@ function parseFrontmatter(content) {
 // skills/<name>/SKILL.md). Only SKILL.md defines a skill; other .md files
 // living under a skill (reference docs, sub-agents) must not be indexed as
 // top-level skills, which is what inflated the catalog past the real count.
-function listSkillMd(skillsRoot) {
+// A category directory (e.g. skills/dev/) holds one level of nested skill
+// dirs, each optionally containing its own SKILL.md.
+function listNestedSkillMd(categoryDir) {
+  let children;
+  try {
+    children = fs.readdirSync(categoryDir, { withFileTypes: true });
+  } catch (_) { // NOSONAR
+    return [];
+  }
   const results = [];
+  for (const child of children) {
+    if (!child.isDirectory()) continue;
+    const skillMd = path.join(categoryDir, child.name, 'SKILL.md');
+    if (fs.existsSync(skillMd)) results.push(skillMd);
+  }
+  return results;
+}
+
+function listSkillMd(skillsRoot) {
   let top;
   try {
     top = fs.readdirSync(skillsRoot, { withFileTypes: true });
   } catch (_) { // NOSONAR
-    return results;
+    return [];
   }
+  const results = [];
   for (const entry of top) {
     if (!entry.isDirectory()) continue;
     const dir = path.join(skillsRoot, entry.name);
-    if (fs.existsSync(path.join(dir, 'SKILL.md'))) {
-      results.push(path.join(dir, 'SKILL.md'));
+    const flatSkillMd = path.join(dir, 'SKILL.md');
+    if (fs.existsSync(flatSkillMd)) {
+      results.push(flatSkillMd);
       continue;
     }
-    let children;
-    try {
-      children = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (_) { // NOSONAR
-      continue;
-    }
-    for (const child of children) {
-      if (!child.isDirectory()) continue;
-      const skillMd = path.join(dir, child.name, 'SKILL.md');
-      if (fs.existsSync(skillMd)) results.push(skillMd);
-    }
+    results.push(...listNestedSkillMd(dir));
   }
   return results;
 }
