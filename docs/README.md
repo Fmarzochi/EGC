@@ -13,8 +13,9 @@ for the formal classification of every subsystem.
 | `architecture/` | Long-form architecture, current and target | `architecture/README.md` |
 | `governance/` | Subsystem classification, skill/agent policies | `governance/README.md` |
 | `guides/` | Operational and contributor walk-throughs | `guides/README.md` |
-| `installation/` | Setup playbooks for downstream stacks | direct files |
-| `runtime/` | Runtime contracts (command/agent map, session adapter) | direct files |
+| `security/` | Threat model, SCA policy, release verification | `security/THREAT-MODEL.md` |
+| `spec/` | Formal specs (integration tiers, agent memory interchange) | `spec/README.md` |
+| `installation.md` | Setup playbook for downstream stacks | direct file |
 
 ## Cross-references
 
