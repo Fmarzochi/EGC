@@ -13,15 +13,11 @@ function handleInsideQuotes(ch, i, command, quote) {
 
 function handleEscape(ch, i, command) {
   if (ch === '\\' && i + 1 < command.length) {
-    // A backslash escaping a CRLF line-continuation ('\' followed by '\r\n')
-    // must swallow all three characters as one unit, not just the '\r' --
-    // otherwise the lone '\n' left behind falls through to the newline
-    // handling further down the main loop and spuriously ends the current
-    // segment, even though bash removes the whole three-character sequence
-    // as a single continuation (cubic review, EGC-539 PR #1147).
-    if (command[i + 1] === '\r' && command[i + 2] === '\n') {
-      return { chars: ch + command[i + 1] + command[i + 2], advance: 2, handled: true };
-    }
+    // A backslash before '\r\n' escapes only the '\r' (bash has no special
+    // treatment of CR), leaving the '\n' unescaped to end the line normally
+    // and a following '#' to start a real comment -- confirmed against a
+    // real bash shell (cubic review, EGC-539 PR #1147, correcting an earlier
+    // change that wrongly swallowed all three characters as one unit).
     return { chars: ch + command[i + 1], advance: 1, handled: true };
   }
   return { handled: false };
@@ -256,19 +252,17 @@ const COMMENT_WORD_START_RE = /[\s;&|(]/;
 // N is odd (each adjacent pair of backslashes is itself an escaped literal
 // backslash and cancels out; the escaping power passes to the newline only
 // off the single unpaired backslash left when the count is odd).
+//
+// A backslash before '\r\n' does NOT continue the line -- it escapes only
+// the '\r' (bash has no special handling of a lone CR), so the '\n' right
+// after it still ends the line for real, and this function must not walk
+// past it. Confirmed against a real bash shell (cubic review, EGC-539 PR
+// #1147, correcting an earlier change that treated '\'+'\r'+'\n' as one
+// continuation unit).
 function skipLineContinuations(command, i) {
   while (i >= 0 && command[i] === '\n') {
-    // Cubic review (EGC-539, PR #1147): the caller always passes the index
-    // of the LAST character of the newline run (i.e. the '\n', never the
-    // '\r' that may precede it in a '\r\n' pair), so a '\r\n' continuation
-    // must have its backslash count start two characters back -- one
-    // earlier version of this check tested command[i] === '\r' here, which
-    // can never be true given how the caller invokes this function, so the
-    // CRLF branch silently never fired and a backslash-CRLF continuation
-    // was miscounted as a real, unescaped newline.
-    const j0 = command[i - 1] === '\r' ? i - 2 : i - 1;
     let backslashes = 0;
-    let j = j0;
+    let j = i - 1;
     while (j >= 0 && command[j] === '\\') { backslashes += 1; j -= 1; }
     if (backslashes % 2 === 0) break; // even (incl. zero): a real, unescaped newline
     i = j; // odd: backslash-newline continuation, keep walking back from before it

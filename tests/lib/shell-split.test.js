@@ -290,17 +290,23 @@ test('a space before the backslash-newline continuation keeps # as a real commen
     ['echo hi \\\n#c && rm -rf /'],
   );
 });
-test('a backslash-CRLF continuation glues the next line onto the current word too, not just backslash-LF', () => {
-  // Cubic review, second pass (EGC-539, PR #1147): the caller always passes
-  // the index of the newline run's LAST character (the '\n', never a
-  // leading '\r'), so a '\r\n' continuation needs its backslash count to
-  // start two characters back, not one. A prior fix here tested
-  // command[i] === '\r' inside skipLineContinuations, which could never be
-  // true given how it's actually invoked, so the CRLF branch silently never
-  // fired and this exact case was miscounted as a real, unescaped newline.
+test('a backslash before CRLF escapes only the CR, not the whole line ending, so the following # is still a real comment', () => {
+  // Cubic review, third pass (EGC-539, PR #1147): confirmed against a real
+  // bash shell that '\' + '\r' + '\n' is NOT a line continuation. Bash has
+  // no special handling of a lone CR, so the backslash escapes only the
+  // '\r' (kept literally in the word), and the unescaped '\n' right after
+  // it still ends the line for real. A prior fix here wrongly swallowed all
+  // three characters as one continuation unit, which caused the '#' on the
+  // next line to be read as mid-word instead of a real comment start -- that
+  // silently pulled '&& rm -rf /' inside what bash treats as inert comment
+  // text out as its own live segment, defeating the whole point of this PR.
+  // The two segments below match real bash: the first ends at the escaped
+  // CR (trimmed, same as the plain-newline-splitting tests above), and the
+  // '#' on the next line starts a real comment that absorbs the rest of the
+  // line, including '&& rm -rf /', as inert text -- never its own segment.
   assert.deepStrictEqual(
     splitShellSegments('echo hi\\\r\n#c && rm -rf /'),
-    ['echo hi\\\r\n#c', 'rm -rf /'],
+    ['echo hi\\', '#c && rm -rf /'],
   );
 });
 test('# immediately after a closing paren from $(...) is mid-word, not a comment start (bash concatenates the following text onto the same word)', () => {
