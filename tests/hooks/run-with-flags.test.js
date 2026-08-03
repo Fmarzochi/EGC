@@ -39,14 +39,26 @@ function test(name, fn) {
  * script path, feeding `input` on stdin. profilesCsv defaults to
  * 'minimal,standard,strict' so the hook always passes the isHookEnabled()
  * gate regardless of the ambient EGC_HOOK_PROFILE.
+ *
+ * EGC_HOOK_PROFILE and EGC_DISABLED_HOOKS are pinned to fixed, known-safe
+ * values here rather than left to inherit from the developer's shell
+ * (cubic review, EGC-539 PR #1143): isHookEnabled() reads both from
+ * process.env, so an ambient EGC_HOOK_PROFILE=strict would make the
+ * profile-gating test below spuriously enable should-not-run.js, and an
+ * ambient EGC_DISABLED_HOOKS containing 'test-hook'/'evil-hook'/
+ * 'symlink-hook' would silently skip the path-safety assertions these
+ * tests exist to exercise. Callers may still override either via `env`.
  */
-function runDispatcher({ pluginRoot, hookId = 'test-hook', relScriptPath, profilesCsv = 'minimal,standard,strict', input = 'raw-input' }) {
+function runDispatcher({ pluginRoot, hookId = 'test-hook', relScriptPath, profilesCsv = 'minimal,standard,strict', input = 'raw-input', env = {} }) {
   const result = spawnSync('node', [runner, hookId, relScriptPath, profilesCsv], {
     input,
     encoding: 'utf8',
     env: {
       ...process.env,
+      EGC_HOOK_PROFILE: 'standard',
+      EGC_DISABLED_HOOKS: '',
       EGC_PLUGIN_ROOT: pluginRoot,
+      ...env,
     },
     timeout: 15000,
     stdio: ['pipe', 'pipe', 'pipe'],
