@@ -282,6 +282,28 @@ function runTests() {
     assert.ok(result.stderr.includes('protected file'), `Expected the protected-file reason on stderr, got: ${result.stderr}`);
   })) passed++; else failed++;
 
+  if (!fs.existsSync(realGuardianCliPath)) {
+    console.log('  - skipped EGC-537 command-batch malformed-payload test; build not found. Run npm run build in mcp/servers/egc-guardian first.');
+  } else if (test('EGC-537 guardian-cli command-batch fails closed on a malformed payload instead of returning an empty verdict list', () => {
+    // A malformed batch payload used to be swallowed into an empty commands
+    // array, so .map() produced []. Any caller treating an empty verdict
+    // list as "nothing to check" (pre-bash-guardian-validate.js's own loop
+    // does exactly that) would allow the batch through with no verdict at
+    // all. This drives the real built CLI directly, bypassing the hook,
+    // since the hook always JSON.stringifies its own well-formed payload --
+    // this is defense in depth for any other/future caller of command-batch.
+    const result = spawnSync('node', [realGuardianCliPath, 'command-batch'], {
+      input: '{not valid json',
+      encoding: 'utf8',
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    assert.strictEqual(result.status, 0, 'guardian-cli always exits 0; the caller reads the verdict from stdout');
+    const verdicts = JSON.parse(result.stdout);
+    assert.ok(Array.isArray(verdicts) && verdicts.length > 0, `Expected a non-empty verdict array, got: ${result.stdout}`);
+    assert.strictEqual(verdicts[0].allowed, false, `Expected a blocking verdict, got: ${result.stdout}`);
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

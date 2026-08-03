@@ -25,7 +25,11 @@ function commandBatch(payload: string): unknown {
       commands = parsed.commands.filter((c: unknown): c is string => typeof c === 'string');
       if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
     }
-  } catch { /* malformed batch payload: validate nothing, return empty */ }
+  } catch {
+    // Fail closed: an empty verdict array reads to the caller as "nothing to
+    // check", which allows the batch through instead of blocking it.
+    return [{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }];
+  }
   return commands.map(c => validateCommand(c, cwd));
 }
 
