@@ -223,6 +223,10 @@ jobs:
         run: node scripts/check-state-leak.js --tree
         continue-on-error: false
 
+      - name: Check for internal-tool leaks
+        run: node scripts/check-internal-tool-leak.js --tree
+        continue-on-error: false
+
   security:
     name: Security Scan
     uses: ./.github/workflows/reusable-security-audit.yml

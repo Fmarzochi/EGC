@@ -1,0 +1,36 @@
+name: PR Text Leak Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-pr-text:
+    name: Check PR title/body for internal-tool leaks
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch PR title and body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --json title,body --jq '.title + "\n" + .body' > /tmp/pr-text.txt
+
+      - name: Check for internal-tool leaks
+        run: node scripts/check-internal-tool-leak.js --text "$(cat /tmp/pr-text.txt)"
