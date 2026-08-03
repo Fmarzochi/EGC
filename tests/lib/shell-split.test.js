@@ -221,6 +221,107 @@ test('multiple heredocs on one line are consumed in order, not mixed with ordina
   ]);
 });
 
+// Comments (EGC-539 audit, security fix: splitShellSegments previously had no
+// # comment awareness at all, unlike extractSubstitutionBodies below -- a
+// real parsing divergence in a module that feeds the Guardian bash validator.
+// echo hi # note: rm -rf / && something used to split into ["echo hi # note:
+// rm -rf /", "something"], treating the && inside the comment as a live
+// separator and manufacturing a segment ("something") that was never live
+// shell syntax.)
+console.log('\nComments (EGC-539):');
+test('a # comment absorbs a trailing && instead of producing a spurious extra segment', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi # note: rm -rf / && something'),
+    ['echo hi # note: rm -rf / && something'],
+  );
+});
+test('a # comment absorbs trailing ; and | operators too, not just &&', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi # rm -rf /; also | this', { splitOnPipe: true }),
+    ['echo hi # rm -rf /; also | this'],
+  );
+});
+test('# appearing mid-word does not start a comment (foo#bar is one identifier)', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo foo#bar && something'),
+    ['echo foo#bar', 'something'],
+  );
+});
+test('a comment only runs to end of line: operators on the next line still split normally', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi # comment\necho bye && echo baz'),
+    ['echo hi # comment', 'echo bye', 'echo baz'],
+  );
+});
+test('a quoted # does not start a comment', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo "a # b" && echo c'),
+    ['echo "a # b"', 'echo c'],
+  );
+});
+test('# inside a heredoc body is literal body text, not a comment (no change from prior behavior)', () => {
+  const segs = splitShellSegments('cat <<EOF\n# not a comment && rm -rf /\nEOF\necho done');
+  assert.deepStrictEqual(segs, ['cat <<EOF\n# not a comment && rm -rf /\nEOF', 'echo done']);
+});
+
+// Cubic review (EGC-539, PR #1147): the first comment-detection fix above
+// introduced its own two false-comment regressions -- a live && hidden
+// behind a # that only LOOKS like a comment start. Both are real bash
+// tokenization behavior, verified against a real bash shell.
+test('a backslash-newline continuation glues the next line onto the current word, so a following # is mid-word, not a comment start', () => {
+  // Bash removes the unescaped backslash+newline pair entirely before
+  // tokenizing, so 'echo hi\<newline>#c && rm -rf /' is really the single
+  // token line 'echo hi#c && rm -rf /' -- '#c' is glued onto 'hi' (not a
+  // comment), and the && after it is a live, real separator. The segment
+  // text itself is preserved verbatim (backslash and newline included, same
+  // as every other test in this file) -- only the split *decision* changes.
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi\\\n#c && rm -rf /'),
+    ['echo hi\\\n#c', 'rm -rf /'],
+  );
+});
+test('a space before the backslash-newline continuation keeps # as a real comment start on the next line', () => {
+  // Contrast with the case above: a space before the escaped newline means
+  // bash sees 'hi ' (trailing space preserved) followed by '#c ...', so #
+  // genuinely starts a word here and is a real comment that absorbs the
+  // trailing && into the same (single) segment, verbatim text preserved.
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi \\\n#c && rm -rf /'),
+    ['echo hi \\\n#c && rm -rf /'],
+  );
+});
+test('a backslash before CRLF escapes only the CR, not the whole line ending, so the following # is still a real comment', () => {
+  // Cubic review, third pass (EGC-539, PR #1147): confirmed against a real
+  // bash shell that '\' + '\r' + '\n' is NOT a line continuation. Bash has
+  // no special handling of a lone CR, so the backslash escapes only the
+  // '\r' (kept literally in the word), and the unescaped '\n' right after
+  // it still ends the line for real. A prior fix here wrongly swallowed all
+  // three characters as one continuation unit, which caused the '#' on the
+  // next line to be read as mid-word instead of a real comment start -- that
+  // silently pulled '&& rm -rf /' inside what bash treats as inert comment
+  // text out as its own live segment, defeating the whole point of this PR.
+  // The two segments below match real bash: the first ends at the escaped
+  // CR (trimmed, same as the plain-newline-splitting tests above), and the
+  // '#' on the next line starts a real comment that absorbs the rest of the
+  // line, including '&& rm -rf /', as inert text -- never its own segment.
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi\\\r\n#c && rm -rf /'),
+    ['echo hi\\', '#c && rm -rf /'],
+  );
+});
+test('# immediately after a closing paren from $(...) is mid-word, not a comment start (bash concatenates the following text onto the same word)', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo $(date)#c && echo AFTER'),
+    ['echo $(date)#c', 'echo AFTER'],
+  );
+});
+test('# immediately after a redirection target character is part of the filename, not a comment start', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi >#x && rm -rf /'),
+    ['echo hi >#x', 'rm -rf /'],
+  );
+});
+
 // extractSubstitutionBodies (cubic-dev-ai P0: $(...)/`...`/<(...)/>(...) content
 // must be recoverable so a hidden command can be validated, not just skipped)
 console.log('\nextractSubstitutionBodies:');

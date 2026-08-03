@@ -13,6 +13,11 @@ function handleInsideQuotes(ch, i, command, quote) {
 
 function handleEscape(ch, i, command) {
   if (ch === '\\' && i + 1 < command.length) {
+    // A backslash before '\r\n' escapes only the '\r' (bash has no special
+    // treatment of CR), leaving the '\n' unescaped to end the line normally
+    // and a following '#' to start a real comment -- confirmed against a
+    // real bash shell (cubic review, EGC-539 PR #1147, correcting an earlier
+    // change that wrongly swallowed all three characters as one unit).
     return { chars: ch + command[i + 1], advance: 1, handled: true };
   }
   return { handled: false };
@@ -155,6 +160,128 @@ function parseHeredocOperator(command, i) {
   };
 }
 
+// Shared heredoc tracking used by both splitShellSegments and
+// extractSubstitutionBodies. A heredoc redirect (<<EOF, <<-EOF, <<'EOF', ...)
+// suspends normal scanning until a line consisting of exactly the delimiter
+// is found; everything up to that line is body text, not further shell
+// syntax to split on or scan for substitutions/comments in. Keeping this
+// state machine in one place means a fix to it (like the EOF-1/v1.0
+// delimiter-parsing fixes documented above parseHeredocDelimiterWord)
+// automatically applies to both consumers instead of needing to be
+// hand-ported to each — which is exactly how splitShellSegments ended up
+// without # comment support in the first place: extractSubstitutionBodies
+// gained it in a later audit round and the sibling parser was never updated
+// to match, so a `#`-prefixed remark like `echo hi # note: rm -rf / &&
+// something` had its trailing `&&` read as a real separator and produced a
+// spurious extra segment ("something") that was never live shell syntax.
+function createHeredocState() {
+  return {
+    state: null, // null | 'awaiting-body' | 'in-body'
+    delimiter: null,
+    stripLeadingTabs: false,
+    literal: false,
+    queue: [],
+    atLineStart: false,
+  };
+}
+
+// Applies a heredoc operator just parsed by parseHeredocOperator: starts
+// waiting for the first heredoc's body, or queues a later one on the same
+// command line (`cmd <<A <<B`) to be consumed once the first one's body
+// closes.
+function applyHeredocOperator(hd, op) {
+  if (hd.state === null) {
+    hd.delimiter = op.delimiter;
+    hd.stripLeadingTabs = op.stripLeadingTabs;
+    hd.literal = op.literal;
+    hd.state = 'awaiting-body';
+  } else {
+    hd.queue.push({ delimiter: op.delimiter, stripLeadingTabs: op.stripLeadingTabs, literal: op.literal });
+  }
+}
+
+// Checks whether the line starting at command[i] (only called when hd.state
+// is 'in-body' and hd.atLineStart is true) is the heredoc's terminator line.
+// If it is, advances to the next queued heredoc (or clears hd back to no
+// active heredoc) and returns the raw terminator line so the caller can fold
+// it into whatever it is building; otherwise clears atLineStart and reports
+// no match so the caller keeps scanning this line as ordinary body text.
+function matchHeredocTerminator(command, i, hd) {
+  const lineEnd = command.indexOf('\n', i);
+  const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
+  const line = rawLine.replace(/\r$/, '');
+  const candidate = hd.stripLeadingTabs ? line.replace(/^\t+/, '') : line;
+  if (candidate !== hd.delimiter) {
+    hd.atLineStart = false;
+    return { matched: false };
+  }
+  const next = hd.queue.shift();
+  if (next) {
+    hd.delimiter = next.delimiter;
+    hd.stripLeadingTabs = next.stripLeadingTabs;
+    hd.literal = next.literal;
+  } else {
+    hd.state = null;
+    hd.delimiter = null;
+    hd.atLineStart = false;
+  }
+  return { matched: true, rawLine };
+}
+
+// Word-start characters for comment detection specifically -- deliberately
+// narrower than HEREDOC_WORD_STOP_RE. `)`, `<`, and `>` are NOT reliable
+// word-start cues here: bash concatenates $(...)/`<(...)`/`>(...)` with
+// whatever literal text immediately follows into a single word (`$(date)#c`
+// is the one word `$(date)#c`, not a command substitution followed by a
+// comment), and `>`/`<` are redirection operators where a following `#` is
+// part of a filename (`echo hi >#x` redirects into a file literally named
+// `#x`). Cubic review (EGC-539, PR #1147) caught that reusing
+// HEREDOC_WORD_STOP_RE here made splitShellSegments silently fold a live
+// `&&`/`;`/`|` separator into what it mistook for a comment, hiding a
+// destructive command from Guardian's per-segment validation -- exactly
+// the class of divergence this file exists to prevent.
+const COMMENT_WORD_START_RE = /[\s;&|(]/;
+
+// Bash removes an unescaped-backslash-then-newline pair entirely before
+// tokenizing (a line continuation), so 'foo\<newline>#bar' is the single
+// word 'foo#bar', not 'foo' followed by a comment starting at '#'. Walking
+// back from `i` (the position of a candidate word-start character, usually
+// a newline) over any such continuations finds the character bash would
+// actually treat as preceding the current position. A run of N consecutive
+// backslashes immediately before the newline continues the line only when
+// N is odd (each adjacent pair of backslashes is itself an escaped literal
+// backslash and cancels out; the escaping power passes to the newline only
+// off the single unpaired backslash left when the count is odd).
+//
+// A backslash before '\r\n' does NOT continue the line -- it escapes only
+// the '\r' (bash has no special handling of a lone CR), so the '\n' right
+// after it still ends the line for real, and this function must not walk
+// past it. Confirmed against a real bash shell (cubic review, EGC-539 PR
+// #1147, correcting an earlier change that treated '\'+'\r'+'\n' as one
+// continuation unit).
+function skipLineContinuations(command, i) {
+  while (i >= 0 && command[i] === '\n') {
+    let backslashes = 0;
+    let j = i - 1;
+    while (j >= 0 && command[j] === '\\') { backslashes += 1; j -= 1; }
+    if (backslashes % 2 === 0) break; // even (incl. zero): a real, unescaped newline
+    i = j; // odd: backslash-newline continuation, keep walking back from before it
+  }
+  return i;
+}
+
+// A `#` starts a comment (running to the end of the line, never split on or
+// scanned for substitutions) only when it is not inside a quote or an
+// already-open heredoc body, and only when it begins a new word — `foo#bar`
+// is one identifier, not a comment, matching bash's own rule that `#` is
+// only special in a word-start position.
+function isCommentStart(command, i, quote, heredocState) {
+  if (heredocState === 'in-body' || quote || command[i] !== '#') return false;
+  if (i === 0) return true;
+  const precedingIndex = skipLineContinuations(command, i - 1);
+  return precedingIndex < 0 || COMMENT_WORD_START_RE.test(command[precedingIndex]);
+}
+
 /**
  * Split a shell command into segments by operators (&&, ||, ;, &)
  * while respecting quoting (single/double) and escaped characters.
@@ -177,6 +304,15 @@ function parseHeredocOperator(command, i) {
  * segment; the guardian command validator opts in, since a pipeline stage
  * can itself be a wrapper/destructive command (`echo x | xargs rm -rf`)
  * that needs to be judged as its own segment.
+ *
+ * A `# comment` runs to the end of its line and is folded into the current
+ * segment as inert text, not scanned for operators — `echo hi # note: rm -rf
+ * / && something` is one segment, the same way a real shell never treats the
+ * `&&` after a `#` as a live separator. (Security fix, EGC-539: this parser
+ * previously had no comment awareness at all, so that `&&` was read as a
+ * real separator and produced a spurious extra segment, "something", that
+ * was never live shell syntax — a parsing divergence from
+ * extractSubstitutionBodies below, which already handled comments.)
  */
 function splitShellSegments(command, options = {}) { // NOSONAR: shell segment parser state machine kept inline for auditability
   const splitOnPipe = Boolean(options.splitOnPipe);
@@ -190,50 +326,30 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   // flag plus a separate "seen delimiter" flag) is deliberate: two
   // independently-updated flags previously went out of sync exactly at this
   // transition, causing the terminator's own trailing newline to be
-  // swallowed into the body instead of ending the segment.
-  let heredocState = null;
-  let heredocDelimiter = null;
-  let heredocStripLeadingTabs = false;
-  // Heredocs queued on the same operator line after the first (e.g. the `B`
-  // in `cmd <<A <<B`), consumed in order as each preceding body closes.
-  const heredocQueue = [];
-  // True only for the first character of a body line -- the terminator can
-  // only ever be a whole line, so the expensive indexOf('\n')+slice+compare
-  // below only needs to run there. Re-running it at every character of a
-  // long single-line body was O(line length) work per character, i.e.
-  // O(n^2) for one long line, before Guardian even validated anything.
-  let heredocAtLineStart = false;
+  // swallowed into the body instead of ending the segment. See
+  // createHeredocState()'s doc comment for why this tracking is shared with
+  // extractSubstitutionBodies below.
+  const hd = createHeredocState();
+  // True from an unquoted, word-starting `#` until (not including) the next
+  // newline -- reset unconditionally on every newline below, same as
+  // extractSubstitutionBodies's inComment tracking.
+  let inComment = false;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
 
-    if (heredocState === 'in-body') {
-      if (heredocAtLineStart) {
-        const lineEnd = command.indexOf('\n', i);
-        const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
-        const line = rawLine.replace(/\r$/, '');
-        const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
-        if (candidate === heredocDelimiter) {
-          current += rawLine;
-          i += rawLine.length - 1;
-          const next = heredocQueue.shift();
-          if (next) {
-            heredocDelimiter = next.delimiter;
-            heredocStripLeadingTabs = next.stripLeadingTabs;
-            // Stay in 'in-body' and at a (new) line start: the newline
-            // right after this terminator line is also the first character
-            // of the next queued heredoc's body, not a fresh
-            // 'awaiting-body' gap.
-          } else {
-            heredocState = null;
-            heredocDelimiter = null;
-            heredocAtLineStart = false;
-          }
+    if (ch === '\n') inComment = false;
+
+    if (hd.state === 'in-body') {
+      if (hd.atLineStart) {
+        const term = matchHeredocTerminator(command, i, hd);
+        if (term.matched) {
+          current += term.rawLine;
+          i += term.rawLine.length - 1;
           continue;
         }
-        heredocAtLineStart = false;
       }
-      if (ch === '\n') heredocAtLineStart = true;
+      if (ch === '\n') hd.atLineStart = true;
       current += ch;
       continue;
     }
@@ -259,26 +375,28 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (heredocState === 'awaiting-body' && ch === '\n') {
+    if (!inComment && isCommentStart(command, i, quote, hd.state)) {
+      inComment = true;
       current += ch;
-      heredocState = 'in-body';
-      heredocAtLineStart = true;
       continue;
     }
 
-    if (heredocState !== 'in-body' && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+    if (inComment) {
+      current += ch;
+      continue;
+    }
+
+    if (hd.state === 'awaiting-body' && ch === '\n') {
+      current += ch;
+      hd.state = 'in-body';
+      hd.atLineStart = true;
+      continue;
+    }
+
+    if (hd.state !== 'in-body' && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
       const op = parseHeredocOperator(command, i);
       if (op) {
-        if (heredocState === null) {
-          heredocDelimiter = op.delimiter;
-          heredocStripLeadingTabs = op.stripLeadingTabs;
-          heredocState = 'awaiting-body';
-        } else {
-          // Already awaiting the first heredoc's body on this same command
-          // line — this is a second (or later) chained heredoc; its body
-          // comes after the first one's, so only queue it for now.
-          heredocQueue.push({ delimiter: op.delimiter, stripLeadingTabs: op.stripLeadingTabs });
-        }
+        applyHeredocOperator(hd, op);
         current += command.slice(i, i + op.length);
         i += op.length - 1;
         continue;
@@ -449,101 +567,72 @@ function pushSubstitutionAt(command, i, bodies) {
 function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state machine kept inline for auditability
   const bodies = [];
   let quote = null;
-  let heredocState = null;
-  let heredocDelimiter = null;
-  let heredocStripLeadingTabs = false;
-  let heredocLiteral = false;
-  const heredocQueue = [];
+  // See createHeredocState()'s doc comment: this tracking is shared with
+  // splitShellSegments above.
+  const hd = createHeredocState();
   let inComment = false;
-  // True only for the first character of a body line -- see the identical
-  // field in splitShellSegments for why re-checking the terminator at every
-  // character (not just line starts) was an O(n^2) cost on one long body
-  // line.
-  let heredocAtLineStart = false;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
 
     if (ch === '\n') inComment = false;
 
-    if (heredocState === 'in-body') {
-      if (heredocAtLineStart) {
-        const lineEnd = command.indexOf('\n', i);
-        const rawLine = lineEnd === -1 ? command.slice(i) : command.slice(i, lineEnd);
-        const line = rawLine.replace(/\r$/, '');
-        const candidate = heredocStripLeadingTabs ? line.replace(/^\t+/, '') : line;
-        if (candidate === heredocDelimiter) {
-          i += rawLine.length - 1;
-          const next = heredocQueue.shift();
-          if (next) {
-            heredocDelimiter = next.delimiter;
-            heredocStripLeadingTabs = next.stripLeadingTabs;
-            heredocLiteral = next.literal;
-          } else {
-            heredocState = null;
-            heredocDelimiter = null;
-            heredocAtLineStart = false;
-          }
+    if (hd.state === 'in-body') {
+      if (hd.atLineStart) {
+        const term = matchHeredocTerminator(command, i, hd);
+        if (term.matched) {
+          i += term.rawLine.length - 1;
           continue;
         }
-        heredocAtLineStart = false;
       }
-      if (ch === '\n') heredocAtLineStart = true;
-      if (heredocLiteral) continue;
+      if (ch === '\n') hd.atLineStart = true;
+      if (hd.literal) continue;
       // Bare/unquoted-delimiter heredoc body: falls through to the normal
       // scan below, since bash still expands $(...) here.
     }
 
-    if (heredocState !== 'in-body' && quote === "'") {
+    if (hd.state !== 'in-body' && quote === "'") {
       if (ch === quote) quote = null;
       continue;
     }
 
-    if (heredocState !== 'in-body' && quote === '"' && ch === '\\' && i + 1 < command.length) {
+    if (hd.state !== 'in-body' && quote === '"' && ch === '\\' && i + 1 < command.length) {
       i += 1;
       continue;
     }
 
-    if (heredocState !== 'in-body' && quote === '"' && ch === quote) {
+    if (hd.state !== 'in-body' && quote === '"' && ch === quote) {
       quote = null;
       continue;
     }
 
-    if (heredocState !== 'in-body' && !quote && ch === '\\' && i + 1 < command.length) {
+    if (hd.state !== 'in-body' && !quote && ch === '\\' && i + 1 < command.length) {
       i += 1;
       continue;
     }
 
-    if (heredocState !== 'in-body' && !quote && (ch === '"' || ch === "'")) {
+    if (hd.state !== 'in-body' && !quote && (ch === '"' || ch === "'")) {
       quote = ch;
       continue;
     }
 
-    if (heredocState !== 'in-body' && !quote && !inComment && ch === '#'
-        && (i === 0 || HEREDOC_WORD_STOP_RE.test(command[i - 1]))) {
+    if (!inComment && isCommentStart(command, i, quote, hd.state)) {
       inComment = true;
       continue;
     }
 
     if (inComment) continue;
 
-    if (heredocState === 'awaiting-body' && ch === '\n') {
-      heredocState = 'in-body';
-      heredocAtLineStart = true;
+    if (hd.state === 'awaiting-body' && ch === '\n') {
+      hd.state = 'in-body';
+      hd.atLineStart = true;
       continue;
     }
 
-    if (heredocState !== 'in-body' && !quote && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+    if (hd.state !== 'in-body' && !quote && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
       const op = parseHeredocOperator(command, i);
       if (op) {
-        if (heredocState === null) {
-          heredocDelimiter = op.delimiter;
-          heredocStripLeadingTabs = op.stripLeadingTabs;
-          heredocLiteral = op.literal;
-          heredocState = 'awaiting-body';
-        } else {
-          heredocQueue.push({ delimiter: op.delimiter, stripLeadingTabs: op.stripLeadingTabs, literal: op.literal });
-        }
+        applyHeredocOperator(hd, op);
         i += op.length - 1;
         continue;
       }
