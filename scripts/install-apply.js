@@ -112,7 +112,7 @@ function printHumanPlan(plan, dryRun) {
 }
 
 function resolveInstallConfig(options, { findDefaultInstallConfigPath, loadInstallConfig }) {
-  const defaultConfigPath = options.configPath || options.languages.length > 0
+  const defaultConfigPath = (options.configPath || options.languages.length > 0)
     ? null
     : findDefaultInstallConfigPath({ cwd: process.cwd() });
   if (options.configPath) return loadInstallConfig(options.configPath, { cwd: process.cwd() });
