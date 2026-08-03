@@ -27,7 +27,7 @@
 'use strict';
 
 const { run } = require('./pre-bash-guardian-validate');
-const { runPlainExitCodeGuardianAdapter } = require('../lib/adapter-stdin-json');
+const { bootstrapPlainExitCodeAdapter } = require('../lib/adapter-stdin-json');
 
 const BASH_TOOL_NAMES = new Set(['execute_bash', 'shell', 'execute_cmd']);
 
@@ -49,12 +49,8 @@ function buildGuardianInput(kiroEvent) {
   return input;
 }
 
-function main() {
-  runPlainExitCodeGuardianAdapter(buildGuardianInput, run);
-}
-
-if (require.main === module) {
-  main();
-}
-
-module.exports = { buildGuardianInput };
+module.exports = bootstrapPlainExitCodeAdapter({
+  isMain: require.main === module,
+  buildGuardianInput,
+  runGuardian: run,
+});
