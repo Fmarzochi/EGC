@@ -25,12 +25,13 @@ function parseFrontmatter(content) {
   if (!match) return null;
   const lines = match[1].split(/\r?\n/);
   const fm = {};
-  for (let i = 0; i < lines.length; i++) {
+  let i = 0;
+  while (i < lines.length) {
     const line = lines[i];
     // Indented lines belong to a block scalar already consumed below.
-    if (/^\s/.test(line)) continue;
+    if (/^\s/.test(line)) { i += 1; continue; }
     const colon = line.indexOf(':');
-    if (colon <= 0) continue;
+    if (colon <= 0) { i += 1; continue; }
     const key = line.slice(0, colon).trim();
     const rawVal = line.slice(colon + 1).trim();
     let val;
@@ -41,9 +42,10 @@ function parseFrontmatter(content) {
     if (/^[>|][+-]?$/.test(rawVal)) {
       const folded = foldBlockScalar(lines, i + 1);
       val = folded.value;
-      i = folded.nextIndex - 1;
+      i = folded.nextIndex;
     } else {
       val = rawVal.replace(/^["']|["']$/g, '');
+      i += 1;
     }
     if (key && val) fm[key] = val;
   }
