@@ -24,6 +24,49 @@ from llm.core.types import (
 )
 
 
+def _build_chat_payload(input: LLMInput, model: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [msg.to_dict() for msg in input.messages],
+        "stream": False,
+    }
+    if input.temperature is not None and abs(input.temperature - 1.0) > 1e-9:
+        payload["options"] = {"temperature": input.temperature}
+    return payload
+
+
+def _parse_tool_calls(message: dict[str, Any]) -> list[ToolCall] | None:
+    if not message.get("tool_calls"):
+        return None
+    return [
+        ToolCall(
+            id=tc.get("id", ""),
+            name=tc.get("function", {}).get("name", ""),
+            arguments=tc.get("function", {}).get("arguments", {}),
+        )
+        for tc in message["tool_calls"]
+    ]
+
+
+def _raise_classified_error(exc: Exception) -> None:
+    msg = redact_secrets(str(exc))
+    if "401" in msg:
+        raise AuthenticationError(
+            f"Ollama authentication failed: {msg}", provider=ProviderType.OLLAMA
+        ) from exc
+    if "connection" in msg.lower():
+        raise LLMError(
+            f"Ollama connection failed: {msg}",
+            provider=ProviderType.OLLAMA,
+            code="connection_error",
+        ) from exc
+    if "429" in msg or "rate_limit" in msg.lower():
+        raise RateLimitError(msg, provider=ProviderType.OLLAMA) from exc
+    if "context" in msg.lower() and "length" in msg.lower():
+        raise ContextLengthError(msg, provider=ProviderType.OLLAMA) from exc
+    raise
+
+
 class OllamaProvider(LLMProvider):
     provider_type = ProviderType.OLLAMA
 
@@ -75,14 +118,7 @@ class OllamaProvider(LLMProvider):
         try:
             url = f"{self.base_url}/api/chat"
             model = input.model or self.default_model
-
-            payload: dict[str, Any] = {
-                "model": model,
-                "messages": [msg.to_dict() for msg in input.messages],
-                "stream": False,
-            }
-            if input.temperature is not None and abs(input.temperature - 1.0) > 1e-9:
-                payload["options"] = {"temperature": input.temperature}
+            payload = _build_chat_payload(input, model)
 
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(
@@ -93,25 +129,12 @@ class OllamaProvider(LLMProvider):
                 result = json.loads(response.read().decode("utf-8"))
 
             message = result.get("message") or {}
-            content = message.get("content", "")
-
-            tool_calls = None
-            if message.get("tool_calls"):
-                tool_calls = [
-                    ToolCall(
-                        id=tc.get("id", ""),
-                        name=tc.get("function", {}).get("name", ""),
-                        arguments=tc.get("function", {}).get("arguments", {}),
-                    )
-                    for tc in message["tool_calls"]
-                ]
-
             prompt_tokens = result.get("prompt_eval_count", 0)
             completion_tokens = result.get("eval_count", 0)
 
             return LLMOutput(
-                content=content,
-                tool_calls=tool_calls,
+                content=message.get("content", ""),
+                tool_calls=_parse_tool_calls(message),
                 model=model,
                 stop_reason=result.get("done_reason"),
                 usage={
@@ -121,22 +144,7 @@ class OllamaProvider(LLMProvider):
                 },
             )
         except Exception as e:
-            msg = redact_secrets(str(e))
-            if "401" in msg:
-                raise AuthenticationError(
-                    f"Ollama authentication failed: {msg}", provider=ProviderType.OLLAMA
-                ) from e
-            if "connection" in msg.lower():
-                raise LLMError(
-                    f"Ollama connection failed: {msg}",
-                    provider=ProviderType.OLLAMA,
-                    code="connection_error",
-                ) from e
-            if "429" in msg or "rate_limit" in msg.lower():
-                raise RateLimitError(msg, provider=ProviderType.OLLAMA) from e
-            if "context" in msg.lower() and "length" in msg.lower():
-                raise ContextLengthError(msg, provider=ProviderType.OLLAMA) from e
-            raise
+            _raise_classified_error(e)
 
     def list_models(self) -> list[ModelInfo]:
         return self._models.copy()
