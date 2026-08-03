@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const Ajv = require('ajv');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const HOOKS_FILE = path.join(__dirname, '../../hooks/hooks.json');
 const HOOKS_SCHEMA_PATH = path.join(__dirname, '../../schemas/hooks.schema.json');
@@ -254,10 +255,7 @@ function validateArrayFormat(hooks) {
 }
 
 function validateHooks() {
-  if (!fs.existsSync(HOOKS_FILE)) {
-    console.log('No hooks.json found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(HOOKS_FILE, 'No hooks.json found, skipping validation');
 
   let data;
   try {
@@ -292,11 +290,7 @@ function validateHooks() {
     process.exit(1);
   }
 
-  if (result.hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated ${result.totalMatchers} hook matchers`);
+  finishValidation(result.hasErrors, `Validated ${result.totalMatchers} hook matchers`);
 }
 
 validateHooks();

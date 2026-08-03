@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { listSkillLeaves } = require('#lib/skill-tree-walker');
 const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -109,10 +110,7 @@ function validateLeafFrontmatter(leaf) {
 }
 
 function validateSkillFrontmatter() {
-  if (!fs.existsSync(SKILLS_DIR)) {
-    console.log('No skills directory found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(SKILLS_DIR, 'No skills directory found, skipping validation');
 
   const leaves = listSkillLeaves(SKILLS_DIR);
   let hasErrors = false;
@@ -133,11 +131,7 @@ function validateSkillFrontmatter() {
     validCount++;
   }
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated frontmatter for ${validCount} skill files`);
+  finishValidation(hasErrors, `Validated frontmatter for ${validCount} skill files`);
 }
 
 if (require.main === module) {

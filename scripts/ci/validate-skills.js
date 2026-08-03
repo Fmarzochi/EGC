@@ -3,14 +3,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { listSkillLeaves } = require('#lib/skill-tree-walker');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const SKILLS_DIR = path.join(__dirname, '../../skills');
 
 function validateSkills() {
-  if (!fs.existsSync(SKILLS_DIR)) {
-    console.log('No curated skills directory (skills/), skipping');
-    process.exit(0);
-  }
+  skipIfMissing(SKILLS_DIR, 'No curated skills directory (skills/), skipping');
 
   const leaves = listSkillLeaves(SKILLS_DIR);
   let hasErrors = false;
@@ -41,11 +39,7 @@ function validateSkills() {
     validCount++;
   }
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated ${validCount} skill directories`);
+  finishValidation(hasErrors, `Validated ${validCount} skill directories`);
 }
 
 if (require.main === module) {

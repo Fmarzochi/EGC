@@ -6,6 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
+const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
 
 const AGENTS_DIR = path.join(__dirname, '../../agents');
 const REQUIRED_FIELDS = ['model', 'tools'];
@@ -58,10 +59,7 @@ function validateAgentFrontmatter(file, frontmatter) {
 }
 
 function validateAgents() {
-  if (!fs.existsSync(AGENTS_DIR)) {
-    console.log('No agents directory found, skipping validation');
-    process.exit(0);
-  }
+  skipIfMissing(AGENTS_DIR, 'No agents directory found, skipping validation');
 
   const files = fs.readdirSync(AGENTS_DIR).filter(f => f.endsWith('.md'));
   let hasErrors = false;
@@ -80,11 +78,7 @@ function validateAgents() {
     if (validateAgentFrontmatter(file, frontmatter)) hasErrors = true;
   }
 
-  if (hasErrors) {
-    process.exit(1);
-  }
-
-  console.log(`Validated ${files.length} agent files`);
+  finishValidation(hasErrors, `Validated ${files.length} agent files`);
 }
 
 validateAgents();
