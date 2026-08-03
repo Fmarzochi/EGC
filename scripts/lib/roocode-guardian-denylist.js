@@ -59,38 +59,45 @@ function isPlainObject(value) {
 // realistic file. Strip comments and trailing commas first (string-aware,
 // so `"a // not a comment"` survives intact), matching JSONC's actual
 // grammar without pulling in a parser dependency for this one call site.
+// Consumes one character starting at `text[i]` of the comment-stripping scan,
+// mutating `state` in place, and returns the index to resume from.
+function consumeCommentStrippingChar(text, i, state) {
+  const ch = text[i];
+  const next = text[i + 1];
+
+  if (state.inLineComment) {
+    if (ch === '\n') { state.inLineComment = false; state.out += ch; }
+    return i + 1;
+  }
+  if (state.inBlockComment) {
+    if (ch === '*' && next === '/') { state.inBlockComment = false; return i + 2; }
+    return i + 1;
+  }
+  if (state.inString) {
+    state.out += ch;
+    if (ch === '\\') { state.out += next; return i + 2; }
+    if (ch === '"') state.inString = false;
+    return i + 1;
+  }
+  if (ch === '"') { state.inString = true; state.out += ch; return i + 1; }
+  if (ch === '/' && next === '/') { state.inLineComment = true; return i + 2; }
+  if (ch === '/' && next === '*') { state.inBlockComment = true; return i + 2; }
+
+  state.out += ch;
+  return i + 1;
+}
+
 function stripJsonComments(text) {
-  let out = '';
-  let inString = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (inLineComment) {
-      if (ch === '\n') { inLineComment = false; out += ch; }
-      continue;
-    }
-    if (inBlockComment) {
-      if (ch === '*' && next === '/') { inBlockComment = false; i++; }
-      continue;
-    }
-    if (inString) {
-      out += ch;
-      if (ch === '\\') { out += next; i++; continue; }
-      if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') { inString = true; out += ch; continue; }
-    if (ch === '/' && next === '/') { inLineComment = true; i++; continue; }
-    if (ch === '/' && next === '*') { inBlockComment = true; i++; continue; }
-    out += ch;
+  const state = { out: '', inString: false, inLineComment: false, inBlockComment: false };
+  let i = 0;
+  while (i < text.length) {
+    i = consumeCommentStrippingChar(text, i, state);
   }
   // String-aware: a string value containing a literal ",]" or ",}" (e.g. a
   // user's note field quoting JSON syntax) must not be mistaken for an
   // actual trailing comma. Alternates between skipping whole string
   // literals untouched and collapsing a real trailing comma.
-  return out.replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (match, trailing) => (
+  return state.out.replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (match, trailing) => (
     trailing === undefined ? match : trailing
   ));
 }

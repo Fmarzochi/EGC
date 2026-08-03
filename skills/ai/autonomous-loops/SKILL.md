@@ -6,8 +6,8 @@ origin: EGC
 
 # Autonomous Loops Skill
 
-> Compatibility note (v1.8.0): `autonomous-loops` is retained for one release.
-> The canonical skill name is now `continuous-agent-loop`. New loop guidance
+> Compatibility note: `autonomous-loops` is kept as a legacy alias. The
+> canonical skill name is `continuous-agent-loop`. New loop guidance
 > should be authored there, while this skill remains available to avoid
 > breaking existing workflows.
 
