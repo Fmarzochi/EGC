@@ -7,7 +7,8 @@ function takeValue(args, index, errorMessage) {
   return value;
 }
 
-// Returns the loop index to resume from (advanced past a consumed value, if any).
+// Returns the index of the last arg this call consumed (itself, or the value
+// after it for flags that take one) -- the caller resumes from +1 past that.
 function consumeArg(args, index, parsed, supportsDryRun) {
   const arg = args[index];
 
@@ -44,8 +45,9 @@ function parseTargetArgs(argv, { supportsDryRun = false } = {}) {
     help: false,
   };
 
-  for (let index = 0; index < args.length; index += 1) {
-    index = consumeArg(args, index, parsed, supportsDryRun);
+  let index = 0;
+  while (index < args.length) {
+    index = consumeArg(args, index, parsed, supportsDryRun) + 1;
   }
 
   if (parsed.repoRoot && !fs.existsSync(parsed.repoRoot)) {
