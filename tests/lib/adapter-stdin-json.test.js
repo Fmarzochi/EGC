@@ -46,6 +46,48 @@ function readViaSubprocess(input) {
   return JSON.parse(result.stdout.toString('utf8'));
 }
 
+// Deterministic counterpart to the repeated-spawn timing race test in
+// kiro-/windsurf-guardian-adapter.test.js (cubic review, EGC-539 PR #1148,
+// P3): that test's 20 real-node-spawn loop can only ever catch a
+// process.exit()-vs-process.exitCode regression probabilistically, since
+// the truncation it guards against depends on OS pipe-flush timing. This
+// driver instead overrides process.exit to prove -- unconditionally, not
+// just "usually" -- that runPlainExitCodeGuardianAdapter's blocked path
+// never calls it: if it ever does, the override itself reports that fact
+// on stderr before forcing a real exit, and the assertion below fails
+// every single run rather than only when timing happens to expose it.
+//
+// The marker write itself must be synchronous (cubic review, second pass,
+// P2): process.stderr.write() on a pipe is async, and process.reallyExit()
+// does not drain pending pipe writes, so a plain .write() call here would
+// have the exact same truncation race this test exists to make
+// deterministic -- a regression could lose the marker and this guard would
+// pass regardless. fs.writeSync(2, ...) (fd 2 is stderr) is a real
+// synchronous syscall with no such race.
+const blockedExitDriverPath = path.join(os.tmpdir(), `egc-adapter-stdin-json-blocked-exit-driver-${process.pid}.js`);
+fs.writeFileSync(blockedExitDriverPath, `
+  const fs = require('fs');
+  process.exit = (code) => {
+    fs.writeSync(2, '__PROCESS_EXIT_CALLED__:' + code);
+    process.reallyExit(code === undefined ? 1 : code);
+  };
+  const { runPlainExitCodeGuardianAdapter } = require(${JSON.stringify(MODULE_PATH)});
+  runPlainExitCodeGuardianAdapter(
+    () => ({ command: 'ignored' }),
+    () => ({ exitCode: 2, stderr: 'blocked reason\\n' }),
+  );
+`);
+process.on('exit', () => { try { fs.rmSync(blockedExitDriverPath, { force: true }); } catch { /* best-effort cleanup */ } });
+
+function readBlockedExitViaSubprocess() {
+  const result = spawnSync(process.execPath, [blockedExitDriverPath], {
+    input: JSON.stringify({ some: 'event' }),
+    timeout: 15000,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return { code: result.status, stderr: result.stderr.toString('utf8') };
+}
+
 function runTests() {
   console.log('\n=== Testing scripts/lib/adapter-stdin-json.js ===\n');
 
@@ -100,6 +142,16 @@ function runTests() {
     const result = readViaSubprocess('{not valid json');
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.truncated, false);
+  })) passed++; else failed++;
+
+  if (test('runPlainExitCodeGuardianAdapter never calls process.exit() on a blocked result -- uses process.exitCode instead', () => {
+    const result = readBlockedExitViaSubprocess();
+    assert.ok(
+      !result.stderr.includes('__PROCESS_EXIT_CALLED__'),
+      `process.exit() must never be called (it can race and truncate the stderr diagnostic on POSIX); ` +
+      `runPlainExitCodeGuardianAdapter must set process.exitCode instead. stderr was: ${result.stderr}`,
+    );
+    assert.strictEqual(result.code, 2, 'the process must still exit with code 2 via process.exitCode');
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

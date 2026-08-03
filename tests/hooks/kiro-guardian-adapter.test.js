@@ -156,6 +156,24 @@ function runTests() {
     assert.strictEqual(result.code, 2, `Expected fail-closed on a truncated-but-parseable payload, got exit ${result.code}`);
   })) passed++; else failed++;
 
+  if (test('CLI: full stderr reason is present at exit (no truncation from exitCode-based exit)', () => {
+    // Regression guard for the race fixed in runPlainExitCodeGuardianAdapter
+    // (EGC-539 audit, Finding A): the shared helper used to call
+    // process.exit(2) right after stderr.write(), which can race the pipe
+    // flush on POSIX and truncate the diagnostic message before the host
+    // reads it. Now uses process.exitCode, the same fix already applied to
+    // the JSON-envelope contract's Cline/Junie/Cursor adapters.
+    for (let i = 0; i < 20; i += 1) {
+      const result = runAdapterCli({
+        hook_event_name: 'preToolUse',
+        tool_name: 'execute_bash',
+        tool_input: { command: 'rm -rf /' },
+      });
+      assert.strictEqual(result.code, 2, `Run ${i}: expected exit 2`);
+      assert.ok(result.stderr.length > 0, `Run ${i}: expected non-empty stderr`);
+    }
+  })) passed++; else failed++;
+
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
 }

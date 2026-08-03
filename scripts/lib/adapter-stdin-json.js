@@ -85,33 +85,47 @@ function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
         'this validator can safely read, so it could not be parsed or validated. ' +
         'Simplify the command.\n'
       );
-      process.exit(2);
+      // process.exitCode (not process.exit()) so Node drains stderr
+      // naturally: on POSIX a forced exit can race the pipe write and
+      // truncate the diagnostic message before the host reads it -- the
+      // same cubic-dev-ai finding already applied to the JSON-envelope
+      // contract (see cursor-guardian-adapter.js's respond()), now applied
+      // here for the plain-exit-code contract's 5 hosts (EGC-539 audit).
+      // The exit code (the actual security decision) was never at risk --
+      // Node still delivers it synchronously either way -- only the
+      // stderr diagnostic could race and truncate under process.exit().
+      process.exitCode = 2;
+      return;
     }
     if (!ok) {
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
 
     const guardianInput = buildGuardianInput(value);
     if (!guardianInput) {
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
 
     const result = runGuardian(guardianInput);
     if (result.exitCode === 2) {
       const reason = result.stderr || 'Blocked by the EGC Guardian.';
       process.stderr.write(reason.endsWith('\n') ? reason : `${reason}\n`);
-      process.exit(2);
+      process.exitCode = 2;
+      return;
     }
 
-    process.exit(0);
+    process.exitCode = 0;
   });
 }
 
 // Shared entrypoint for the plain-exit-code adapters (Amazon Q, Goose,
-// OpenHands -- Kiro predates this helper and keeps its own inline copy):
-// collapses each adapter's identical "run when invoked directly, always
-// export buildGuardianInput for tests" boilerplate into one call, so those
-// three near-identical translation scripts stop duplicating it verbatim.
+// OpenHands, Kiro, Windsurf): collapses each adapter's identical "run when
+// invoked directly, always export buildGuardianInput for tests" boilerplate
+// into one call, so those near-identical translation scripts stop
+// duplicating it verbatim. Each host keeps its own buildGuardianInput (their
+// wire contracts differ), only the wiring around it is shared.
 function bootstrapPlainExitCodeAdapter({ isMain, buildGuardianInput, runGuardian }) {
   if (isMain) {
     runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian);
