@@ -81,8 +81,8 @@ function cleanContent(content) {
 }
 
 function checkStaged() {
-  const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACM'])
-    .split('\n').filter(Boolean).filter(isGuardedPath);
+  const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACMT', '-z'])
+    .split('\0').filter(Boolean).filter(isGuardedPath);
   const leaks = [];
   for (const file of staged) {
     let content;
@@ -97,7 +97,7 @@ function checkStaged() {
 }
 
 function checkTree() {
-  const tracked = git(['ls-files']).split('\n').filter(Boolean).filter(isGuardedPath);
+  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(isGuardedPath);
   const leaks = [];
   for (const file of tracked) {
     let content;
