@@ -19,6 +19,7 @@ const {
   coreFact,
 } = require('../../scripts/lib/state-consolidate');
 const { encryptStateBuffer, decryptStateBuffer, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
+const { getStateDir, branchStateFile } = require('../../scripts/lib/branch-state');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -275,6 +276,55 @@ function runTests() {
       const result = run(['--project', projectDir], { homeDir, cwd: projectDir });
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('MISSING'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('consolidates the git branch-scoped state file for a git project, not the flat legacy path', () => {
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      execFileSync('git', ['init', '-q', '-b', 'feature-x', projectDir]);
+
+      const branchFilePath = branchStateFile(getStateDir(homeDir), projectDir, 'feature-x');
+      fs.mkdirSync(path.dirname(branchFilePath), { recursive: true });
+      fs.writeFileSync(branchFilePath, sampleState(projectDir), 'utf8');
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('CONSOLIDATED'));
+      assert.ok(result.stdout.includes(branchFilePath), 'report must point at the branch-scoped file');
+
+      const flatFilePath = stateFilePath(homeDir, projectDir);
+      assert.ok(!fs.existsSync(flatFilePath), 'must not create/touch the flat legacy path for a git project');
+      assert.ok(fs.readFileSync(branchFilePath, 'utf8').includes('## Active Decisions'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('migrates a flat legacy state file into the branch-scoped location on first run in a git project', () => {
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      execFileSync('git', ['init', '-q', '-b', 'feature-y', projectDir]);
+
+      const flatFilePath = writeState(homeDir, projectDir, sampleState(projectDir));
+      const before = fs.readFileSync(flatFilePath, 'utf8');
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('CONSOLIDATED'));
+
+      const branchFilePath = branchStateFile(getStateDir(homeDir), projectDir, 'feature-y');
+      assert.ok(fs.existsSync(branchFilePath), 'consolidated output must land in the branch-scoped file');
+      assert.ok(fs.readFileSync(branchFilePath, 'utf8').includes('## Active Decisions'));
+      assert.strictEqual(fs.readFileSync(flatFilePath, 'utf8'), before, 'the old flat file is left as-is, not rewritten');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
