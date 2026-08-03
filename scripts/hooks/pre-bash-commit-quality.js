@@ -94,14 +94,15 @@ function detectDebugger(line, lineNum) {
 }
 
 /**
- * Detect a TODO/FIXME task marker that lacks an issue reference.
+ * Detect an in-code pending-work annotation comment (the two conventional
+ * task-marker keywords) that lacks an issue reference.
  * @param {string} line
  * @param {number} lineNum
  * @returns {object|null} Issue if found, otherwise null
  */
 function detectTodoFixme(line, lineNum) {
-  const todoMatch = line.match(/\/\/\s*(TODO|FIXME):?\s*(.+)/);
-  if (todoMatch && !todoMatch[2].match(/#\d+|issue/i)) {
+  const todoMatch = /\/\/\s*(TODO|FIXME):?\s*(.+)/.exec(line);
+  if (todoMatch && !/#\d+|issue/i.exec(todoMatch[2])) {
     return {
       type: 'todo',
       message: `TODO/FIXME without issue reference at line ${lineNum}: "${todoMatch[2].trim()}"`,
