@@ -2,7 +2,7 @@
 name: gan-evaluator
 description: "GAN Harness: Evaluator agent. Tests the live running application via Playwright, scores against rubric, and provides actionable feedback to the Generator."
 tools: ["Read", "Write", "Bash", "Grep", "Glob"]
-model: gemini-2.5-pro
+model: gemini-3.6-pro
 color: red
 stack: ["*"]
 ---

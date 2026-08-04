@@ -1,7 +1,7 @@
 ---
 name: a11y-architect
 description: Accessibility Architect specializing in WCAG 2.2 compliance for Web and Native platforms. Use PROACTIVELY when designing UI components, establishing design systems, or auditing code for inclusive user experiences.
-model: gemini-2.5-pro
+model: gemini-3.6-pro
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 stack: ["*"]
 ---

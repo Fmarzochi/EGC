@@ -2,7 +2,7 @@
 name: harness-optimizer
 description: Analyze and improve the local agent harness configuration for reliability, cost, and throughput.
 tools: ["Read", "Grep", "Glob", "Bash", "Edit"]
-model: gemini-2.5-pro
+model: gemini-3.6-pro
 color: teal
 stack: ["*"]
 ---

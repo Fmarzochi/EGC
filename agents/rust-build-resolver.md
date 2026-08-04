@@ -2,7 +2,7 @@
 name: rust-build-resolver
 description: Rust build, compilation, and dependency error resolution specialist. Fixes cargo build errors, borrow checker issues, and Cargo.toml problems with minimal changes. Use when Rust builds fail.
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-model: gemini-2.5-pro
+model: gemini-3.6-pro
 stack: ["rust"]
 ---
 

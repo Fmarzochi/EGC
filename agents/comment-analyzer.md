@@ -1,7 +1,7 @@
 ---
 name: comment-analyzer
 description: Analyze code comments for accuracy, completeness, maintainability, and comment rot risk.
-model: gemini-2.5-pro
+model: gemini-3.6-pro
 tools: [Read, Grep, Glob, Bash]
 stack: ["*"]
 ---
