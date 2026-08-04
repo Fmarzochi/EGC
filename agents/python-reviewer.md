@@ -2,7 +2,7 @@
 name: python-reviewer
 description: Expert Python code reviewer specializing in PEP 8 compliance, Pythonic idioms, type hints, security, and performance. Use for all Python code changes. MUST BE USED for Python projects.
 tools: ["Read", "Grep", "Glob", "Bash"]
-model: gemini-3.6-pro
+model: gemini-3.1-pro
 stack: ["python"]
 ---
 

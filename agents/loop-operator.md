@@ -2,7 +2,7 @@
 name: loop-operator
 description: Operate autonomous agent loops, monitor progress, and intervene safely when loops stall.
 tools: ["Read", "Grep", "Glob", "Bash", "Edit"]
-model: gemini-3.6-pro
+model: gemini-3.1-pro
 color: orange
 stack: ["*"]
 ---

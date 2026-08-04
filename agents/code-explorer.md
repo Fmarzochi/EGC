@@ -1,7 +1,7 @@
 ---
 name: code-explorer
 description: Deeply analyzes existing codebase features by tracing execution paths, mapping architecture layers, and documenting dependencies to inform new development.
-model: gemini-3.6-pro
+model: gemini-3.1-pro
 tools: [Read, Grep, Glob, Bash]
 stack: ["*"]
 ---

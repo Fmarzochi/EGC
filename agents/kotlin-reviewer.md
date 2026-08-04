@@ -2,7 +2,7 @@
 name: kotlin-reviewer
 description: Kotlin and Android/KMP code reviewer. Reviews Kotlin code for idiomatic patterns, coroutine safety, Compose best practices, clean architecture violations, and common Android pitfalls.
 tools: ["Read", "Grep", "Glob", "Bash"]
-model: gemini-3.6-pro
+model: gemini-3.1-pro
 stack: ["kotlin"]
 ---
 
