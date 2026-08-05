@@ -185,14 +185,14 @@ function runTests() {
     try {
       const installedShimDir = path.join(installHome, '.egc', 'bin');
       fs.mkdirSync(installedShimDir, { recursive: true });
-      const launcher = writeFakeCommand(installedShimDir, 'npm');
+      writeFakeCommand(installedShimDir, 'npm');
       const realNpm = writeFakeCommand(realBinDir, 'npm');
 
       withHome(overrideHome, () => {
         const savedPath = process.env.PATH;
         process.env.PATH = `${installedShimDir}${path.delimiter}${realBinDir}${path.delimiter}${savedPath}`;
         try {
-          const found = resolveRealBinary('npm', launcher);
+          const found = resolveRealBinary('npm', installedShimDir);
           assert.ok(found, 'expected npm to resolve somewhere');
           assert.strictEqual(path.resolve(found), path.resolve(realNpm), 'must skip the launcher directory and find the real npm');
         } finally {
@@ -212,12 +212,12 @@ function runTests() {
     try {
       const installedShimDir = path.join(installHome, '.egc', 'bin');
       fs.mkdirSync(installedShimDir, { recursive: true });
-      const launcher = writeFakeCommand(installedShimDir, 'npm');
+      writeFakeCommand(installedShimDir, 'npm');
       const realNpm = writeFakeCommand(installHome, 'real-npm');
       fs.writeFileSync(path.join(installedShimDir, 'manifest.json'), JSON.stringify({ npm: realNpm }));
 
       withHome(overrideHome, () => {
-        assert.strictEqual(resolveRealBinary('npm', launcher), realNpm);
+        assert.strictEqual(resolveRealBinary('npm', installedShimDir), realNpm);
       });
     } finally {
       cleanup(installHome);
@@ -239,7 +239,7 @@ function runTests() {
         const savedPath = process.env.PATH;
         process.env.PATH = `${dir}${path.delimiter}${realBinDir}${path.delimiter}${savedPath}`;
         try {
-          const found = resolveRealBinary('npm', launcher);
+          const found = resolveRealBinary('npm', dir);
           assert.ok(found, 'expected npm to resolve somewhere');
           assert.strictEqual(path.resolve(found), path.resolve(realNpm), 'a poisoned manifest must fall through to a real PATH lookup');
         } finally {

@@ -56,14 +56,17 @@ function exitLikeChild(result) {
   process.exit(typeof result.status === 'number' ? result.status : 1);
 }
 
-// process.argv[1] is the launcher file itself when a POSIX launcher
-// require()s this module, and shim-dispatch.js when the Windows .cmd spawns
-// `node shim-dispatch.js <name>`. Either way it is a physical location tied
-// to this exact invocation, immune to HOME/USERPROFILE overrides -- which is
-// what makes it a trustworthy "never resolve back into here" anchor, unlike
-// anything derived from os.homedir() (see resolveRealBinary in shim-paths).
-function launcherPath() {
-  return process.argv[1] ? path.resolve(process.argv[1]) : null;
+// The physical directory of the launcher for this exact invocation, immune
+// to HOME/USERPROFILE overrides -- which is what makes it a trustworthy
+// "never resolve back into here" anchor, unlike anything derived from
+// os.homedir() (see resolveRealBinary in shim-paths). On POSIX the shebang
+// launcher require()s this module, so process.argv[1] is the launcher file.
+// The Windows .cmd spawns `node shim-dispatch.js <name>` instead (argv[1]
+// is this module, not the launcher), so the .cmd bakes its own directory
+// into EGC_SHIM_LAUNCHER_DIR via %~dp0 -- that wins when present.
+function launcherDir() {
+  if (process.env.EGC_SHIM_LAUNCHER_DIR) return path.resolve(process.env.EGC_SHIM_LAUNCHER_DIR);
+  return process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : null;
 }
 
 // Last line of defense against the shim spawning itself: if resolution
@@ -106,7 +109,7 @@ function loadCrusher() {
 function runShim(name, args) {
   refuseDirectRecursion(name);
 
-  const realBinary = resolveRealBinary(name, launcherPath());
+  const realBinary = resolveRealBinary(name, launcherDir());
   if (!realBinary) {
     process.stderr.write(`${name}: command not found\n`);
     process.exit(127);

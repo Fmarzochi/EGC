@@ -96,27 +96,51 @@ function resolveWithoutShim(name, extraExcludeDirs = []) {
 
   // `where` already lists every match; `which` needs -a for the same, so a
   // first hit that turns out to live in a shim directory is not the end of
-  // the search.
-  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', process.platform === 'win32' ? [name] : ['-a', name], { // NOSONAR jssecurity:S8705 -- name is always a hardcoded SHIM_BINARY_NAMES entry or the launcher's own baked-in name, never untrusted input; array-form with no shell also rules out injection
+  // the search. Minimal `which` implementations (busybox/Alpine) reject -a
+  // entirely, so a failed -a probe retries plain `which` -- one candidate is
+  // still better than failing closed with "command not found".
+  const probeEnv = { ...process.env, [key]: filtered.join(path.delimiter) };
+  let probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', process.platform === 'win32' ? [name] : ['-a', name], { // NOSONAR jssecurity:S8705 -- name is always a hardcoded SHIM_BINARY_NAMES entry or the launcher's own baked-in name, never untrusted input; array-form with no shell also rules out injection
     encoding: 'utf8',
-    env: { ...process.env, [key]: filtered.join(path.delimiter) },
+    env: probeEnv,
   });
+  if (process.platform !== 'win32' && (probe.status !== 0 || !probe.stdout)) {
+    probe = spawnSync('which', [name], { encoding: 'utf8', env: probeEnv }); // NOSONAR jssecurity:S8705 -- same fixed-name, no-shell invocation as above
+  }
   if (probe.status !== 0 || !probe.stdout) return null;
   const candidates = probe.stdout.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  return candidates.find(c => !isShimCandidate(c, excluded)) || null;
+  return candidates.find(c => !isShimCandidate(c, excluded) && isSpawnable(c)) || null;
 }
 
-// launcherPath is the physical launcher file of the invocation in progress
-// (process.argv[1] at dispatch time). It anchors two things a HOME override
-// would otherwise break: where the manifest actually lives (next to the
-// launcher, not under the overridden home), and which directory must never
-// be resolved back into.
-function resolveRealBinary(name, launcherPath = null) {
-  const launcherDir = launcherPath ? path.dirname(realpathOrResolve(launcherPath)) : null;
-  const excludeDirs = launcherDir ? [launcherDir] : [];
+// `where` lists an extension-less sibling first when one exists (common in
+// Node installs, where `npm` is an MSYS shell wrapper next to npm.cmd), and
+// CreateProcess cannot execute it -- resolution must skip candidates the
+// platform cannot actually spawn.
+function isSpawnable(candidate) {
+  if (process.platform !== 'win32') return true;
+  const exts = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
+  const lower = candidate.toLowerCase();
+  return exts.some(ext => lower.endsWith(ext.toLowerCase()));
+}
+
+// launcherDir is the physical directory of the launcher for the invocation
+// in progress (derived from process.argv[1] on POSIX, or baked into the
+// .cmd via EGC_SHIM_LAUNCHER_DIR on Windows). It anchors two things a
+// HOME/USERPROFILE override would otherwise break: where the manifest
+// actually lives (next to the launcher, not under the overridden home), and
+// which directory must never be resolved back into.
+function resolveRealBinary(name, launcherDir = null) {
+  const anchoredDir = launcherDir ? realpathOrResolve(launcherDir) : null;
+  const excludeDirs = anchoredDir ? [anchoredDir] : [];
   const excluded = excludedDirSet(excludeDirs);
 
-  const manifestDirs = [...new Set([launcherDir, shimDir()].filter(Boolean))];
+  const seenDirs = new Set();
+  const manifestDirs = [anchoredDir, shimDir()].filter(Boolean).filter(dir => {
+    const dirKey = normalizePathForCompare(realpathOrResolve(dir));
+    if (seenDirs.has(dirKey)) return false;
+    seenDirs.add(dirKey);
+    return true;
+  });
   for (const dir of manifestDirs) {
     const target = readManifest(dir)[name];
     if (target && fs.existsSync(target) && !isShimCandidate(target, excluded)) return target;

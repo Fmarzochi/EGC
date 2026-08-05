@@ -57,12 +57,18 @@ function windowsLauncherSource(name) {
   // exception handling, so the existence check happens up front instead of
   // catching node's own error after the fact (see posixLauncherSource for
   // why this check exists at all).
+  // %~dp0 is the directory this .cmd physically lives in. The dispatcher
+  // cannot learn that from process.argv[1] on Windows (it sees
+  // shim-dispatch.js, not the launcher), and deriving it from USERPROFILE
+  // breaks under profile overrides -- the exact recursion hole the POSIX
+  // side closes via its shebang launcher path.
   return [
     '@echo off',
     `if not exist "${DISPATCH_MODULE}" (`,
     `  echo ${launcherNotFoundMessage(name)}`,
     '  exit /b 127',
     ')',
+    'set "EGC_SHIM_LAUNCHER_DIR=%~dp0"',
     `node "${DISPATCH_MODULE}" ${name} %*`,
     '',
   ].join('\r\n');
