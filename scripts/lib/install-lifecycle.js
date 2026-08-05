@@ -1052,6 +1052,25 @@ function resolveRepairStatus(repairedCount, unrepairableCount) {
   return repairedCount > 0 ? 'repaired' : 'ok';
 }
 
+// Two different problems land in the same list and must stay
+// distinguishable: a source the reference repo no longer has, and an
+// operation that failed while running (unwritable destination, permissions).
+// The first keeps its original wording so the message stays familiar for the
+// common case; the second reports what actually went wrong.
+function describeUnrepairable(unrepairable) {
+  if (unrepairable.length === 0) return null;
+
+  const parts = [];
+  const missingSources = unrepairable.filter(entry => entry.cause === 'missing-source');
+  if (missingSources.length > 0) {
+    parts.push(`Missing source file(s): ${missingSources.map(entry => entry.path).join(', ')}`);
+  }
+  for (const failure of unrepairable.filter(entry => entry.cause === 'failed')) {
+    parts.push(`Unrepairable: ${failure.path} (${failure.reason})`);
+  }
+  return parts.join('; ');
+}
+
 function repairInstalledStates(options = {}) {
   const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
   const manifests = loadInstallManifests({ repoRoot });
@@ -1090,8 +1109,14 @@ function repairInstalledStates(options = {}) {
       // broken because of one orphan. The orphans are reported and the rest
       // is repaired, which is what someone running `egc repair` on a damaged
       // install actually needs.
-      const unrepairable = operationHealth.missingSource.map(entry => entry.sourcePath);
-      const failureReasons = [];
+      // The recorded relative path, not the resolved absolute one: it is
+      // what the install-state holds, so both the JSON output and the
+      // printed lines stay identical across machines.
+      const unrepairable = operationHealth.missingSource.map(entry => ({
+        path: entry.operation?.sourceRelativePath || entry.sourcePath,
+        cause: 'missing-source',
+        reason: 'source file is no longer in the reference repo',
+      }));
 
       const repairOperations = [
         ...operationHealth.missing.map(entry => ({ ...entry.operation })),
@@ -1100,15 +1125,22 @@ function repairInstalledStates(options = {}) {
       const plannedRepairs = repairOperations.map(operation => operation.destinationPath);
 
       if (options.dryRun) {
+        // An orphan is worth reporting whether or not anything is being
+        // written: a dry run that says 'planned' or 'ok' while a file can
+        // never be repaired is exactly the silence this change removes.
+        let dryRunStatus = plannedRepairs.length > 0 ? 'planned' : 'ok';
+        if (unrepairable.length > 0) {
+          dryRunStatus = plannedRepairs.length > 0 ? 'partial' : 'error';
+        }
         return {
           adapter: record.adapter,
-          status: plannedRepairs.length > 0 ? 'planned' : 'ok',
+          status: dryRunStatus,
           installStatePath: record.installStatePath,
           repairedPaths: [],
           plannedRepairs,
           unrepairable,
           stateRefreshed: plannedRepairs.length === 0,
-          error: unrepairable.length > 0 ? `Source file(s) no longer in the reference repo: ${unrepairable.join(', ')}` : null,
+          error: describeUnrepairable(unrepairable),
         };
       }
 
@@ -1122,8 +1154,11 @@ function repairInstalledStates(options = {}) {
           executeRepairOperation(context.repoRoot, operation);
           repairedPaths.push(operation.destinationPath);
         } catch (operationError) {
-          unrepairable.push(operation.sourceRelativePath || operation.destinationPath);
-          failureReasons.push(operationError.message);
+          unrepairable.push({
+            path: operation.sourceRelativePath || operation.destinationPath,
+            cause: 'failed',
+            reason: operationError.message,
+          });
         }
       }
 
@@ -1144,9 +1179,7 @@ function repairInstalledStates(options = {}) {
         plannedRepairs: [],
         unrepairable,
         stateRefreshed: true,
-        error: unrepairable.length > 0
-          ? `Unrepairable: ${unrepairable.join(', ')}${failureReasons.length > 0 ? ` (${failureReasons[0]})` : ''}`
-          : null,
+        error: describeUnrepairable(unrepairable),
       };
     } catch (error) {
       return {

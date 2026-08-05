@@ -148,6 +148,10 @@ function runTests() {
       fs.writeFileSync(managedPath, '// drifted\n');
       const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
       const orphanDestination = path.join(normalizedProjectRoot, '.cursor', 'hooks', 'renamed-away.js');
+      // The destination has to exist for this to be the missing-SOURCE path:
+      // inspectManagedOperation checks the destination first, so an absent
+      // destination would be classified as plain 'missing' instead.
+      fs.writeFileSync(orphanDestination, '// installed from a source that is gone\n');
       state.operations.push({
         ...state.operations.find(operation => operation.destinationPath === managedPath),
         sourceRelativePath: '.cursor/hooks/this-file-was-renamed-away.js',
@@ -164,9 +168,13 @@ function runTests() {
       const entry = parsed.results[0];
       assert.strictEqual(entry.status, 'partial', 'work was done, but something is still unfixable');
       assert.ok(entry.repairedPaths.includes(managedPath), 'the repairable file must be rebuilt');
-      assert.deepStrictEqual(entry.unrepairable, ['.cursor/hooks/this-file-was-renamed-away.js']);
+      assert.deepStrictEqual(
+        entry.unrepairable.map(item => ({ path: item.path, cause: item.cause })),
+        [{ path: '.cursor/hooks/this-file-was-renamed-away.js', cause: 'missing-source' }],
+        'the orphan must be reported by its recorded relative path, and by cause'
+      );
+      assert.ok(entry.error.includes('Missing source file(s)'), 'the message must name the cause');
       assert.notStrictEqual(fs.readFileSync(managedPath, 'utf8'), '// drifted\n', 'the drifted file must be restored');
-      assert.ok(!fs.existsSync(orphanDestination), 'nothing can be written for a source that does not exist');
       assert.strictEqual(repairResult.code, 1, 'an orphan still has to be reported as needing attention');
       assert.strictEqual(parsed.summary.unrepairableCount, 1);
     } finally {

@@ -49,10 +49,13 @@ function printHuman(result) {
     const paths = result.dryRun ? entry.plannedRepairs : entry.repairedPaths;
     console.log(`  ${result.dryRun ? 'Planned repairs' : 'Repaired paths'}: ${paths.length}`);
 
+    // Each item carries its own reason, because the two causes need
+    // different actions: a renamed-away source means the install-state is
+    // stale, while an execution failure usually means permissions.
     if (entry.unrepairable?.length > 0) {
-      console.log(`  Unrepairable (source no longer in the reference repo): ${entry.unrepairable.length}`);
-      for (const sourcePath of entry.unrepairable) {
-        console.log(`    - ${sourcePath}`);
+      console.log(`  Unrepairable: ${entry.unrepairable.length}`);
+      for (const item of entry.unrepairable) {
+        console.log(`    - ${item.path}: ${item.reason}`);
       }
     }
   }
