@@ -402,8 +402,14 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
     Write-Host ""
     Write-Host "Installation complete."
     if (-not $hasInstallArgs) {
-        Write-Host "Dashboard was not started automatically."
-        Write-Host "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+        # Same rule as install.sh and shouldAutoLaunch(): a person at an
+        # interactive terminal gets the dashboard the README promises; CI
+        # and redirected runs stay headless with an honest message.
+        if (-not [Console]::IsOutputRedirected -and -not $env:CI) {
+            & node (Join-Path $RootDir "scripts/lib/dashboard-launch-cli.js") $RootDir
+        } else {
+            Write-Host "Dashboard not started (headless environment). Run 'egc dashboard' to start it."
+        }
     }
     Write-Host "Run 'egc doctor' to verify."
 }

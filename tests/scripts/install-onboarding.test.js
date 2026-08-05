@@ -20,10 +20,14 @@ const UV_MESSAGES = [
   'Required only for Jira and omega-memory MCP servers.',
   'Core EGC installation is unaffected.',
 ];
+// The README promises a live dashboard right after installation, so the
+// bare-install contract is now: interactive terminals launch it through
+// scripts/lib/dashboard-launch-cli.js, and headless runs (CI, pipes) print
+// this honest line instead of pretending nothing was supposed to happen.
 const DASHBOARD_MESSAGES = [
-  'Dashboard was not started automatically.',
-  "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup.",
+  "Dashboard not started (headless environment). Run 'egc dashboard' to start it.",
 ];
+const DASHBOARD_LAUNCHER_REF = 'scripts/lib/dashboard-launch-cli.js';
 
 function test(name, fn) {
   try {
@@ -161,6 +165,8 @@ function runTests() {
       assert.ok(sources.bash.includes(message), `install.sh missing: ${message}`);
       assert.ok(sources.powerShell.includes(message), `install.ps1 missing: ${message}`);
     }
+    assert.ok(sources.bash.includes(DASHBOARD_LAUNCHER_REF), 'install.sh must launch the dashboard through the shared CLI wrapper');
+    assert.ok(sources.powerShell.includes('scripts/lib/dashboard-launch-cli.js'), 'install.ps1 must launch the dashboard through the shared CLI wrapper');
     assert.ok(sources.bash.includes('if [ "$_has_install_args" = false ]; then'));
     assert.ok(sources.powerShell.includes('if (-not $hasInstallArgs)'));
   })) passed++; else failed++;

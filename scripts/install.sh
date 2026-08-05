@@ -519,22 +519,17 @@ fi
 echo ""
 echo "Installation complete."
 if [ "$_has_install_args" = false ]; then
-  if [ "$DRY_RUN" = false ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "Dashboard launch skipped (--dry-run)."
+  elif [ -t 1 ] && [ -z "${CI:-}" ]; then
     # The README promises a live dashboard right after installation; the
-    # shared launcher keeps that true for a person at a terminal while
-    # shouldAutoLaunch() keeps CI and scripted installs headless.
-    node - "$ROOT_DIR" <<'NODEEOF'
-const path = require("path");
-const { launchDashboard, shouldAutoLaunch } = require(path.join(process.argv[2], "scripts", "lib", "dashboard-launch"));
-if (shouldAutoLaunch()) {
-  launchDashboard({ rootDir: process.argv[2], log: (line) => console.log(line) });
-} else {
-  console.log("Dashboard not started (headless environment). Run 'egc dashboard' to start it.");
-}
-NODEEOF
+    # shared launcher keeps that true for a person at a terminal. The
+    # gate is duplicated here (TTY + not CI, same rule as
+    # shouldAutoLaunch) so headless installs never even need node for
+    # this step.
+    node "$ROOT_DIR/scripts/lib/dashboard-launch-cli.js" "$ROOT_DIR" || true
   else
-    echo "Dashboard was not started automatically."
-    echo "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+    echo "Dashboard not started (headless environment). Run 'egc dashboard' to start it."
   fi
 fi
 echo "Run 'egc doctor' to verify."
