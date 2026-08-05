@@ -20,6 +20,7 @@ const {
   registerToml,
   registerContinueYaml,
   registerZedContextServers,
+  registerClaudeCli,
   registerMcpServers,
 } = require('../../scripts/lib/mcp-register');
 
@@ -85,12 +86,165 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     const names = targets.map(t => t.name);
     for (const expected of [
-      'Antigravity CLI', 'Gemini CLI', 'Claude Code (global)', 'Cursor',
+      'Antigravity CLI', 'Gemini CLI', 'Claude Code (user scope)', 'Cursor',
       'Kiro', 'Codex CLI', 'OpenCode',
     ]) {
       assert.ok(names.includes(expected), `${expected} should still be a target`);
     }
   }) ? passed++ : failed++);
+
+  // ── registerClaudeCli (Claude Code user scope via the CLI) ────────
+
+  (test('quoteForCmdShell quotes cmd-sensitive arguments and leaves plain ones untouched', () => {
+    const { quoteForCmdShell } = require('../../scripts/lib/mcp-register');
+    assert.strictEqual(quoteForCmdShell('plain-arg'), 'plain-arg');
+    assert.strictEqual(
+      quoteForCmdShell(String.raw`C:\Users\First Last\egc\build\index.js`),
+      String.raw`"C:\Users\First Last\egc\build\index.js"`,
+      'a path with a space must be quoted or cmd.exe splits it into two arguments'
+    );
+    assert.strictEqual(quoteForCmdShell('has"quote'), '"has""quote"', 'embedded quotes double, the cmd convention');
+    assert.strictEqual(quoteForCmdShell('C:\\Program Files\\nodejs\\npm.cmd'), '"C:\\Program Files\\nodejs\\npm.cmd"');
+    assert.strictEqual(
+      quoteForCmdShell('C:\\pct%path%\\index.js'),
+      'C:\\pct%path%\\index.js',
+      'percent is not a quoting trigger: cmd expands %var% even inside quotes, so quoting would only fake safety'
+    );
+  }) ? passed++ : failed++);
+
+  (test('no target points at claude_desktop_config.json (dead-file regression)', () => {
+    const targets = buildMcpRegistrationTargets('/home/person');
+    for (const target of targets) {
+      assert.ok(
+        !String(target.path).includes('claude_desktop_config.json'),
+        `${target.name} must not point at claude_desktop_config.json - Claude Code never reads it`
+      );
+    }
+  }) ? passed++ : failed++);
+
+  if (process.platform !== 'win32') {
+    // A fake `claude` CLI on PATH: logs every invocation, and `mcp get`
+    // exits with FAKE_GET_STATUS (1 = not registered) so each scenario can
+    // steer the handler without a real Claude Code install.
+    const makeFakeClaude = (binDir) => {
+      const logPath = path.join(binDir, 'calls.log');
+      const fake = path.join(binDir, 'claude');
+      fs.writeFileSync(fake, [
+        '#!/usr/bin/env node',
+        "const fs = require('node:fs');",
+        String.raw`fs.appendFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify(process.argv.slice(2)) + '\n');`,
+        "if (process.argv[2] === 'mcp' && process.argv[3] === 'get') process.exit(Number(process.env.FAKE_GET_STATUS || 1));",
+        "if (process.argv[2] === 'mcp' && process.argv[3] === 'add') { if (Number(process.env.FAKE_ADD_STATUS || 0) !== 0) { process.stderr.write('add refused by fake CLI\\n'); } process.exit(Number(process.env.FAKE_ADD_STATUS || 0)); }",
+        'process.exit(0);',
+        '',
+      ].join('\n'));
+      fs.chmodSync(fake, 0o755);
+      return logPath;
+    };
+
+    const withFakeClaude = (getStatus, fn) => {
+      const binDir = makeTempDir();
+      const logPath = makeFakeClaude(binDir);
+      const savedPath = process.env.PATH;
+      const savedLog = process.env.FAKE_CLAUDE_LOG;
+      const savedStatus = process.env.FAKE_GET_STATUS;
+      process.env.PATH = `${binDir}${path.delimiter}${savedPath}`;
+      process.env.FAKE_CLAUDE_LOG = logPath;
+      process.env.FAKE_GET_STATUS = getStatus;
+      try {
+        fn(logPath);
+      } finally {
+        process.env.PATH = savedPath;
+        if (savedLog === undefined) delete process.env.FAKE_CLAUDE_LOG; else process.env.FAKE_CLAUDE_LOG = savedLog;
+        if (savedStatus === undefined) delete process.env.FAKE_GET_STATUS; else process.env.FAKE_GET_STATUS = savedStatus;
+        fs.rmSync(binDir, { recursive: true, force: true });
+      }
+    };
+
+    (test('registerClaudeCli adds both servers in user scope when none are registered', () => {
+      withFakeClaude('1', (logPath) => {
+        const changed = registerClaudeCli('/ignored', bins);
+        assert.strictEqual(changed, true);
+        const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+        const adds = calls.filter(call => call[1] === 'add');
+        assert.deepStrictEqual(adds, [
+          ['mcp', 'add', '-s', 'user', 'egc-guardian', '--', 'node', bins.guardianBin],
+          ['mcp', 'add', '-s', 'user', 'egc-memory', '--', 'node', bins.memoryBin],
+        ]);
+      });
+    }) ? passed++ : failed++);
+
+    (test('registerClaudeCli is a silent no-op when both servers are already registered', () => {
+      withFakeClaude('0', (logPath) => {
+        const changed = registerClaudeCli('/ignored', bins);
+        assert.strictEqual(changed, false);
+        const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+        assert.strictEqual(calls.filter(call => call[1] === 'add').length, 0, 'must not re-add registered servers');
+      });
+    }) ? passed++ : failed++);
+
+    (test('the shell branch delivers intact argv end to end (quoting exercised through a real shell)', () => {
+      withFakeClaude('1', (logPath) => {
+        // Forcing the shell branch on POSIX runs the exact quoting path the
+        // Windows .cmd flow uses; /bin/sh applies the same double-quote
+        // grouping rules this code relies on for whitespace, so a path with
+        // spaces must still arrive as ONE argv element in the fake CLI.
+        const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
+        const originalNeedsShell = dispatch.needsShellOnWindows;
+        dispatch.needsShellOnWindows = () => true;
+        const spacedBins = {
+          guardianBin: '/fake dir with space/egc-guardian/build/index.js',
+          memoryBin: '/fake dir with space/egc-memory/build/index.js',
+        };
+        try {
+          const changed = registerClaudeCli('/ignored', spacedBins);
+          assert.strictEqual(changed, true);
+          const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+          const adds = calls.filter(call => call[1] === 'add');
+          assert.deepStrictEqual(adds, [
+            ['mcp', 'add', '-s', 'user', 'egc-guardian', '--', 'node', spacedBins.guardianBin],
+            ['mcp', 'add', '-s', 'user', 'egc-memory', '--', 'node', spacedBins.memoryBin],
+          ], 'every argument must survive the shell hop unsplit and unquoted');
+        } finally {
+          dispatch.needsShellOnWindows = originalNeedsShell;
+        }
+      });
+    }) ? passed++ : failed++);
+
+    (test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
+      withFakeClaude('1', () => {
+        const savedAdd = process.env.FAKE_ADD_STATUS;
+        process.env.FAKE_ADD_STATUS = '2';
+        try {
+          assert.throws(
+            () => registerClaudeCli('/ignored', bins),
+            /claude mcp add egc-guardian failed: add refused by fake CLI/
+          );
+        } finally {
+          if (savedAdd === undefined) delete process.env.FAKE_ADD_STATUS; else process.env.FAKE_ADD_STATUS = savedAdd;
+        }
+      });
+    }) ? passed++ : failed++);
+
+    (test('Claude Code gate follows the claude CLI presence on PATH', () => {
+      withFakeClaude('1', () => {
+        const targets = buildMcpRegistrationTargets('/home/person');
+        const target = targets.find(t => t.name === 'Claude Code (user scope)');
+        assert.strictEqual(target.gate(), true, 'gate must open when the CLI is on PATH');
+      });
+      const savedPath = process.env.PATH;
+      const emptyDir = makeTempDir();
+      process.env.PATH = emptyDir;
+      try {
+        const targets = buildMcpRegistrationTargets('/home/person');
+        const target = targets.find(t => t.name === 'Claude Code (user scope)');
+        assert.strictEqual(target.gate(), false, 'gate must close when no CLI exists');
+      } finally {
+        process.env.PATH = savedPath;
+        fs.rmSync(emptyDir, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+  }
 
   // ── registerJson (generic - used by Cursor, Claude, Gemini, Kiro, etc.) ──
 
