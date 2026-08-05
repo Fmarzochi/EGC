@@ -117,6 +117,7 @@ function runTests() {
         "const fs = require('node:fs');",
         String.raw`fs.appendFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify(process.argv.slice(2)) + '\n');`,
         "if (process.argv[2] === 'mcp' && process.argv[3] === 'get') process.exit(Number(process.env.FAKE_GET_STATUS || 1));",
+        "if (process.argv[2] === 'mcp' && process.argv[3] === 'add') { if (Number(process.env.FAKE_ADD_STATUS || 0) !== 0) { process.stderr.write('add refused by fake CLI\\n'); } process.exit(Number(process.env.FAKE_ADD_STATUS || 0)); }",
         'process.exit(0);',
         '',
       ].join('\n'));
@@ -162,6 +163,21 @@ function runTests() {
         assert.strictEqual(changed, false);
         const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
         assert.strictEqual(calls.filter(call => call[1] === 'add').length, 0, 'must not re-add registered servers');
+      });
+    }) ? passed++ : failed++);
+
+    (test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
+      withFakeClaude('1', () => {
+        const savedAdd = process.env.FAKE_ADD_STATUS;
+        process.env.FAKE_ADD_STATUS = '2';
+        try {
+          assert.throws(
+            () => registerClaudeCli('/ignored', bins),
+            /claude mcp add egc-guardian failed: add refused by fake CLI/
+          );
+        } finally {
+          if (savedAdd === undefined) delete process.env.FAKE_ADD_STATUS; else process.env.FAKE_ADD_STATUS = savedAdd;
+        }
       });
     }) ? passed++ : failed++);
 
