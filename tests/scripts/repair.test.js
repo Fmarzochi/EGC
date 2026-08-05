@@ -8,6 +8,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+const { FULL_INSTALL_TIMEOUT_MS: SUBPROCESS_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
 const INSTALL_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const DOCTOR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
 const REPAIR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'repair.js');
@@ -51,7 +53,7 @@ function runNode(scriptPath, args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      timeout: SUBPROCESS_TIMEOUT_MS,
     });
 
     return { code: 0, stdout, stderr: '' };
