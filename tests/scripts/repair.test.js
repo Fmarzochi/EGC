@@ -177,6 +177,52 @@ function runTests() {
       assert.notStrictEqual(fs.readFileSync(managedPath, 'utf8'), '// drifted\n', 'the drifted file must be restored');
       assert.strictEqual(repairResult.code, 1, 'an orphan still has to be reported as needing attention');
       assert.strictEqual(parsed.summary.unrepairableCount, 1);
+      assert.strictEqual(parsed.summary.repairedCount, 1, 'a real run counts the target it repaired');
+      assert.strictEqual(parsed.summary.plannedRepairCount, 0, 'nothing was merely planned in a real run');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('a dry-run with both drift and an orphan counts planned work, never repairs', () => {
+    const homeDir = createTempDir('repair-home-');
+    const projectRoot = createTempDir('repair-project-');
+
+    try {
+      const installResult = runNode(INSTALL_SCRIPT, ['--target', 'cursor', 'typescript'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+      assert.strictEqual(installResult.code, 0, installResult.stderr);
+
+      const normalizedProjectRoot = fs.realpathSync(projectRoot);
+      const managedPath = path.join(normalizedProjectRoot, '.cursor', 'hooks', 'session-start.js');
+      const statePath = path.join(normalizedProjectRoot, '.cursor', 'egc-install-state.json');
+      const orphanDestination = path.join(normalizedProjectRoot, '.cursor', 'hooks', 'renamed-away.js');
+
+      fs.writeFileSync(managedPath, '// drifted\n');
+      fs.writeFileSync(orphanDestination, '// installed from a source that is gone\n');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      state.operations.push({
+        ...state.operations.find(operation => operation.destinationPath === managedPath),
+        sourceRelativePath: '.cursor/hooks/this-file-was-renamed-away.js',
+        destinationPath: orphanDestination,
+      });
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor', '--dry-run', '--json'], {
+        cwd: projectRoot,
+        homeDir,
+      });
+
+      const parsed = JSON.parse(repairResult.stdout);
+      assert.strictEqual(parsed.results[0].status, 'partial');
+      assert.strictEqual(parsed.summary.plannedRepairCount, 1, 'a dry run plans, it does not repair');
+      assert.strictEqual(parsed.summary.repairedCount, 0, 'a dry run must never report writes it did not make');
+      assert.strictEqual(parsed.summary.errorCount, 1, 'the orphan still counts as needing attention');
+      assert.strictEqual(fs.readFileSync(managedPath, 'utf8'), '// drifted\n', 'a dry run must not touch the file');
+      assert.strictEqual(repairResult.code, 1);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

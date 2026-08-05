@@ -1154,8 +1154,11 @@ function repairInstalledStates(options = {}) {
           executeRepairOperation(context.repoRoot, operation);
           repairedPaths.push(operation.destinationPath);
         } catch (operationError) {
+          // The destination, not the source: an execution failure is about
+          // the file being written (permissions, a directory in the way),
+          // and naming the source would point at a perfectly healthy file.
           unrepairable.push({
-            path: operation.sourceRelativePath || operation.destinationPath,
+            path: operation.destinationPath,
             cause: 'failed',
             reason: operationError.message,
           });
@@ -1193,13 +1196,17 @@ function repairInstalledStates(options = {}) {
     }
   });
 
+  // 'partial' means work plus something unfixable, so it counts in both the
+  // work column and the error column. Which work column depends on the mode:
+  // a dry run planned repairs and wrote nothing, so counting it as repaired
+  // would report writes that never happened.
+  const dryRun = Boolean(options.dryRun);
   const summary = results.reduce((accumulator, result) => ({
     checkedCount: accumulator.checkedCount + 1,
-    // 'partial' counts as repaired: files really were rebuilt. It also
-    // counts as an error, so the exit code keeps reporting that something
-    // still needs attention.
-    repairedCount: accumulator.repairedCount + (result.status === 'repaired' || result.status === 'partial' ? 1 : 0),
-    plannedRepairCount: accumulator.plannedRepairCount + (result.status === 'planned' ? 1 : 0),
+    repairedCount: accumulator.repairedCount
+      + (!dryRun && (result.status === 'repaired' || result.status === 'partial') ? 1 : 0),
+    plannedRepairCount: accumulator.plannedRepairCount
+      + (result.status === 'planned' || (dryRun && result.status === 'partial') ? 1 : 0),
     errorCount: accumulator.errorCount + (result.status === 'error' || result.status === 'partial' ? 1 : 0),
     unrepairableCount: accumulator.unrepairableCount + (result.unrepairable?.length || 0),
   }), {
