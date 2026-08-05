@@ -115,7 +115,10 @@ if (!pythonAvailable()) {
       assert.strictEqual(r.status, 0, r.stderr);
       const events = readJsonLines(path.join(tmp, '.sessions', 'execution_log.jsonl'));
       const match = events.find(e => e.execution_id === sid && e.type === 'session.sessionstart');
-      assert.ok(match, `expected session.sessionstart for ${sid}, got ${JSON.stringify(events)}`);
+      // The hook exits 0 even when the bridge fails, by design, so its
+      // stderr is the only place the reason shows up. Without it a failure
+      // here reads as "no events" and says nothing about why.
+      assert.ok(match, `expected session.sessionstart for ${sid}, got ${JSON.stringify(events)}; hook stderr: ${r.stderr || '(empty)'}`);
       assert.strictEqual(match.data.source, 'node-hook');
     } finally {
       cleanup(tmp);
@@ -133,7 +136,7 @@ if (!pythonAvailable()) {
       assert.strictEqual(r.status, 0, r.stderr);
       const events = readJsonLines(path.join(tmp, '.sessions', 'execution_log.jsonl'));
       const match = events.find(e => e.execution_id === sid && e.type === 'session.sessionend');
-      assert.ok(match, `expected session.sessionend for ${sid}, got ${JSON.stringify(events)}`);
+      assert.ok(match, `expected session.sessionend for ${sid}, got ${JSON.stringify(events)}; hook stderr: ${r.stderr || '(empty)'}`);
     } finally {
       cleanup(tmp);
     }
