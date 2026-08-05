@@ -229,6 +229,44 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('shouldAutoLaunch says yes exactly for an interactive, non-CI terminal', () => {
+    // The interactive branch cannot be driven end to end without a pty (and
+    // spawning a real dashboard plus a browser mid-test would be a side
+    // effect no suite should have), so the decision itself is exercised
+    // directly - this is the predicate install.sh and install.ps1 now
+    // delegate to entirely.
+    const { shouldAutoLaunch } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch'));
+    const savedTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    const savedCI = process.env.CI;
+    const withStdout = (isTTY, ci, assertion) => {
+      Object.defineProperty(process.stdout, 'isTTY', { value: isTTY, configurable: true });
+      if (ci === undefined) delete process.env.CI; else process.env.CI = ci;
+      assertion();
+    };
+    try {
+      withStdout(true, undefined, () => assert.strictEqual(shouldAutoLaunch(), true, 'a person at a terminal must get the dashboard'));
+      withStdout(true, '1', () => assert.strictEqual(shouldAutoLaunch(), false, 'CI must stay headless even on a TTY'));
+      withStdout(false, undefined, () => assert.strictEqual(shouldAutoLaunch(), false, 'piped output must stay headless'));
+    } finally {
+      if (savedTTY) Object.defineProperty(process.stdout, 'isTTY', savedTTY);
+      if (savedCI === undefined) delete process.env.CI; else process.env.CI = savedCI;
+    }
+  })) passed++; else failed++;
+
+  if (test('launchDashboard declines without spawning anything when the dashboard script is absent', () => {
+    const { launchDashboard } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch'));
+    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-root-'));
+    const logged = [];
+    try {
+      return launchDashboard({ rootDir: emptyRoot, log: (line) => logged.push(line) }).then(launched => {
+        assert.strictEqual(launched, false, 'a missing dashboard script must not be treated as a launch');
+        assert.deepStrictEqual(logged, [], 'nothing to say when there is nothing to launch');
+      });
+    } finally {
+      fs.rmSync(emptyRoot, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('the dashboard wrapper itself declines and explains in a headless environment', () => {
     // Runs the real wrapper (not a fixture stand-in) with stdout piped and
     // CI set: the branch every headless install takes, end to end.
