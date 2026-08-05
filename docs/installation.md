@@ -68,7 +68,7 @@ egc install
 
 This prepares the core runtime, initializes the shared state store, and registers the MCP servers in detected tools. A bare install does **not** create managed target install-state files, so `egc doctor` may report that none exist. That is expected, not an error.
 
-The dashboard also does not start automatically after a bare install. Start it manually with `egc dashboard`, or continue with project setup.
+The dashboard starts right after this stage when you are at an interactive terminal. A headless run (CI, or output redirected to a file) skips it and prints `Dashboard not started (headless environment). Run 'egc dashboard' to start it.` instead.
 
 ### 2. Project setup
 
@@ -152,7 +152,7 @@ shorter or longer than this one. Claude Code is registered through its own
 CLI (`claude mcp add -s user`), which is why those two lines name the
 servers individually. In a headless environment (CI, or output piped to a
 file) the dashboard line is replaced by `Dashboard not started (headless
-environment)`.
+environment). Run 'egc dashboard' to start it.`
 
 ---
 
