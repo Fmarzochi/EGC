@@ -125,7 +125,10 @@ function runTests() {
     const tmpHome = makeTempDir();
     const binDir = makeTempDir();
     const savedPath = process.env.PATH;
-    fs.writeFileSync(path.join(binDir, 'cursor'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    // Windows only recognizes a PATHEXT extension as executable, so an
+    // extension-less stand-in would make this assert nothing there.
+    const binName = process.platform === 'win32' ? 'cursor.cmd' : 'cursor';
+    fs.writeFileSync(path.join(binDir, binName), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
     process.env.PATH = `${binDir}${path.delimiter}${savedPath}`;
     try {
       const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Cursor');

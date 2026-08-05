@@ -152,7 +152,12 @@ function buildMcpRegistrationTargets(homeDir) {
     {
       name: 'OpenCode',
       path: path.join(homeDir, '.config', 'opencode', 'config.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json')) || commandExists('opencode'),
+      // The PATH signal deliberately does not open this target on Windows:
+      // OpenCode reads %APPDATA% there, so writing the XDG-style file for a
+      // freshly installed copy would produce a config the editor never sees.
+      // The AppData target below handles that case instead.
+      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json'))
+        || (process.platform !== 'win32' && commandExists('opencode')),
       format: 'json',
     },
     {
@@ -169,7 +174,8 @@ function buildMcpRegistrationTargets(homeDir) {
     {
       name: 'OpenCode (Windows AppData)',
       path: openCodeAppData,
-      gate: () => process.platform === 'win32' && fs.existsSync(openCodeAppData),
+      gate: () => process.platform === 'win32'
+        && (fs.existsSync(openCodeAppData) || commandExists('opencode')),
       format: 'json',
     },
   ];

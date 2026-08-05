@@ -519,9 +519,15 @@ function existsOnPath(cmd) {
     // current directory; Windows does not, so the empty entry is dropped
     // there instead of silently searching somewhere it never would.
     .map(entry => (entry === '' ? (isWindows ? null : '.') : entry))
-    .filter(entry => entry !== null);
+    .filter(entry => entry !== null)
+    // Windows PATH entries are sometimes quoted; the quotes are shell
+    // syntax, not part of the directory name, and would make every lookup
+    // inside that entry fail.
+    .map(entry => (isWindows ? entry.replace(/^"(.*)"$/, '$1') : entry));
+  // An explicit extension is honored as written: appending PATHEXT to a
+  // name that already carries one would only ever look for node.exe.EXE.
   const extensions = isWindows
-    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+    ? [...(path.extname(cmd) ? [''] : []), ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
     : [''];
 
   for (const directory of directories) {
