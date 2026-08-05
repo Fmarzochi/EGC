@@ -802,14 +802,12 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
 // write denial stays exactly as it was.
 //
 // Derived from the write protection by subtraction, never restated: a read
-// is denied wherever a write is denied, EXCEPT for the few locations listed
+// is denied wherever a write is denied, EXCEPT for the locations listed
 // here. Stating the readable set positively (rather than re-listing what to
 // deny) means a credential store added to the write protection tomorrow is
 // read-protected automatically, instead of silently becoming readable
 // because a parallel list was not updated.
 //
-// Every entry below is functional configuration, not a credential: knowing
-// its contents tells you how an install is wired, nothing more.
 // Deliberately narrow: specific directories whose entire contents are
 // operational, never a whole tree with secrets carved back out. Opening
 // /etc or ~/.egc wholesale and then listing the secrets inside them is a
