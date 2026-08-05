@@ -116,6 +116,19 @@ if (test('picks the largest list when an object holds several', () => {
   assert.strictEqual(reparsed.few.length, 6, 'the smaller list must be left alone');
 })) passed++; else failed++;
 
+if (test('leaves a mixed list alone rather than dropping its non-record elements', () => {
+  // The row logic can only speak about records. Filtering scalars and nulls
+  // out to reduce what remains would delete real elements from a payload the
+  // reader still believes is complete.
+  const mixed = [{ id: 1 }, { id: 2 }, 'plain string', null, { id: 3 }, [1, 2], { id: 4 }];
+  assert.strictEqual(reduceJsonArray(JSON.stringify(mixed)), null, 'a mixed top-level list must pass through');
+  assert.strictEqual(
+    reduceJsonArray(JSON.stringify({ items: mixed, totalCount: 7 })),
+    null,
+    'a mixed nested list must pass through too'
+  );
+})) passed++; else failed++;
+
 if (test('leaves an object with no list of its own alone', () => {
   const result = reduceJsonArray(JSON.stringify({ status: 'ok', count: 3, nested: { a: 1 } }));
   assert.strictEqual(result, null, 'nothing to reduce means no rewrite');

@@ -18,12 +18,22 @@ const DIFF_SIGNALS = [
   /^[+-]{3} [ab]\//m,
 ];
 
+function isRecordList(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null;
+}
+
+// A payload counts as a reducible list whether the list is the whole value
+// or sits one key down inside an object, which is how nearly every REST and
+// CLI response is shaped ({"items": [...], "totalCount": 812}). Requiring a
+// leading '[' meant the crusher never even saw those.
 function isJsonArray(text: string): boolean {
   const trimmed = text.trim();
-  if (!trimmed.startsWith('[')) return false;
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return false;
   try {
     const parsed = JSON.parse(trimmed);
-    return Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null;
+    if (isRecordList(parsed)) return true;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    return Object.values(parsed as Record<string, unknown>).some(isRecordList);
   } catch {
     return false;
   }

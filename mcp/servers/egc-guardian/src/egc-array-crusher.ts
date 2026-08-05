@@ -53,10 +53,15 @@ function reduceRows(rows: Record<string, unknown>[]): Record<string, unknown>[] 
   return final.length >= rows.length ? null : final;
 }
 
+// Only a list where every element is a record is reducible. A mixed list
+// (records beside scalars, nulls or nested arrays) is left alone: the row
+// logic can only speak about records, so filtering the rest out would
+// silently drop real elements from a payload the reader still believes is
+// complete.
 function objectRows(value: unknown): Record<string, unknown>[] | null {
-  if (!Array.isArray(value)) return null;
-  const rows = value.filter(r => r !== null && typeof r === 'object' && !Array.isArray(r)) as Record<string, unknown>[];
-  return rows.length >= MIN_ROWS_TO_ANALYZE ? rows : null;
+  if (!Array.isArray(value) || value.length < MIN_ROWS_TO_ANALYZE) return null;
+  const allRecords = value.every(r => r !== null && typeof r === 'object' && !Array.isArray(r));
+  return allRecords ? (value as Record<string, unknown>[]) : null;
 }
 
 // The bulk of a REST or CLI payload is almost never the top-level value: it
