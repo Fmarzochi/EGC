@@ -23,6 +23,47 @@ function Install-Deps {
     }
 }
 
+# Two paths can name the same directory in several ways: different separators
+# (C:/repo vs C:\repo, routine when the installer is launched from Git Bash),
+# a trailing slash, or a symlink/junction anywhere along the path, including a
+# parent component. Comparing anything less than the fully resolved physical
+# path risks treating the package's own directory as somebody's project and
+# rewriting its bundled .mcp.json. .NET's ResolveLinkTarget is unavailable in
+# Windows PowerShell 5.1, so each component is resolved in turn (with a small
+# depth cap for chained links), which works on every supported version.
+function Resolve-PhysicalDirectory {
+    param([string]$Path)
+
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path)
+    } catch {
+        return $Path.TrimEnd('\', '/')
+    }
+
+    $current = [System.IO.Path]::GetPathRoot($full)
+    $remainder = $full.Substring($current.Length).Trim('\', '/')
+    if ($remainder) {
+        foreach ($segment in ($remainder -split '[\\/]+')) {
+            $current = Join-Path $current $segment
+            for ($hop = 0; $hop -lt 10; $hop++) {
+                try {
+                    $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+                } catch {
+                    break
+                }
+                if (-not $item.PSObject.Properties['Target'] -or -not $item.Target) { break }
+                $target = @($item.Target)[0]
+                if (-not [System.IO.Path]::IsPathRooted($target)) {
+                    $target = Join-Path (Split-Path -Parent $item.FullName) $target
+                }
+                $current = [System.IO.Path]::GetFullPath($target)
+            }
+        }
+    }
+
+    return [System.IO.Path]::GetFullPath($current).TrimEnd('\', '/')
+}
+
 # Forward --help directly to the Node installer
 if ($args -contains '--help') {
     node $EgcInstall @args
@@ -293,30 +334,8 @@ if (-not $DryRun) {
     # bundled .mcp.json is not a user project, and creating a file in an
     # arbitrary cwd would litter. (Get-Location is useless here - the
     # script Set-Location'd to the package root long ago.)
-    # Two directories can name the same place three ways: different
-    # separators (C:/repo vs C:\repo, routine when the installer is launched
-    # from Git Bash), a trailing slash, or a symlink/junction pointing at the
-    # package root. All three must compare equal, or the installer would
-    # treat its own bundled .mcp.json as somebody's project file.
-    $normalize = {
-        param($p)
-        try {
-            $item = Get-Item -LiteralPath $p -Force -ErrorAction Stop
-            $resolved = $item.FullName
-            if ($item.PSObject.Properties['Target'] -and $item.Target) {
-                $target = @($item.Target)[0]
-                if (-not [System.IO.Path]::IsPathRooted($target)) {
-                    $target = Join-Path (Split-Path -Parent $item.FullName) $target
-                }
-                $resolved = $target
-            }
-            return [System.IO.Path]::GetFullPath($resolved).TrimEnd('\', '/')
-        } catch {
-            return [System.IO.Path]::GetFullPath($p).TrimEnd('\', '/')
-        }
-    }
     $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
-    if ((Test-Path $projectMcp) -and ((& $normalize $InvokedFromDir) -ne (& $normalize $RootDir))) {
+    if ((Test-Path $projectMcp) -and ((Resolve-PhysicalDirectory $InvokedFromDir) -ne (Resolve-PhysicalDirectory $RootDir))) {
         Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
     }
 
