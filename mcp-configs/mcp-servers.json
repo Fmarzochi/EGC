@@ -133,19 +133,6 @@
       },
       "description": "AI browser agent for web tasks"
     },
-    "obsidian": {
-      "type": "http",
-      "url": "https://127.0.0.1:27124/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${OBSIDIAN_TOKEN}"
-      },
-      "description": "Obsidian vault via Local REST API plugin. Requires: Obsidian open with obsidian-local-rest-api plugin active. Set OBSIDIAN_TOKEN env var before starting the harness."
-    },
-    "devfleet": {
-      "type": "http",
-      "url": "http://localhost:18801/mcp",
-      "description": "Multi-agent orchestration: dispatch parallel Gemini Code agents in isolated worktrees. Plan projects, auto-chain missions, read structured reports. Repo: https://github.com/LEC-AI/egc-devfleet. Requires: devfleet process running on localhost:18801."
-    },
     "token-optimizer": {
       "command": "npx",
       "args": ["-y", "token-optimizer-mcp"],

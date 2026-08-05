@@ -148,10 +148,17 @@ function runTests() {
     );
 
     // A pre-existing config that is not valid JSON must be skipped with an
-    // honest note, never reported as a successful registration.
+    // honest note, never reported as a successful registration. The check
+    // itself now lives with the writer (registerJson in
+    // scripts/lib/mcp-register.js, covered by tests/lib/mcp-register.test.js);
+    // what install.sh owes is surfacing that refusal instead of swallowing it.
+    const registrationCli = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register-cli.js'),
+      'utf8'
+    );
     assert.ok(
-      /is not valid JSON/.test(script),
-      'install.sh must print an honest skip note when an existing config cannot be parsed'
+      /onWarn:[\s\S]*note: skipped/.test(registrationCli),
+      'the registration CLI install.sh delegates to must report a skipped target honestly'
     );
   })) passed++; else failed++;
 
