@@ -1,7 +1,15 @@
 #!/bin/bash
 set -e
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Both of these resolve symlinks (pwd -P). Mixing logical and physical
+# paths would break the comparison further down on macOS, where /tmp is a
+# symlink to /private/tmp: a repo cloned under /tmp would look like an
+# unrelated user project to the installer.
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
+# The directory the person ran the installer FROM. Captured here, before the
+# first cd (line ~94 already moves to the package root), because the project
+# .mcp.json merge near the end must target their project, not the package.
+INVOKED_FROM_DIR="$(pwd -P)"
 
 # On Windows via Git Bash/MSYS, $ROOT_DIR is a POSIX-style mount path (e.g.
 # /c/Users/x/EGC) that bash and node-run-from-bash understand, but any path
@@ -288,6 +296,26 @@ NODEEOF
   fi
 }
 
+# Claude Code's user-scope MCP list lives in ~/.claude.json, owned by the
+# CLI itself; `claude mcp add -s user` is the stable interface (the same
+# approach scripts/lib/mcp-register.js uses for `egc init`). `claude mcp
+# get` exiting 0 means the server is already registered.
+register_mcp_claude_cli() {
+  local name bin
+  for name in egc-guardian egc-memory; do
+    bin="$GUARDIAN_BIN"
+    if [[ "$name" = "egc-memory" ]]; then bin="$MEMORY_BIN"; fi
+    if claude mcp get "$name" >/dev/null 2>&1; then
+      continue
+    fi
+    if claude mcp add -s user "$name" -- node "$bin" >/dev/null 2>&1; then
+      echo "  ✓ registered $name in Claude Code (user scope)"
+    else
+      echo "  note: could not register $name in Claude Code. Run manually: claude mcp add -s user $name -- node \"$bin\""
+    fi
+  done
+}
+
 register_mcp_toml_codex() {
   local target="$1"
   node - "$target" "$GUARDIAN_BIN" "$MEMORY_BIN" <<'NODEEOF'
@@ -346,11 +374,20 @@ if [ -d "$HOME/.gemini/config" ] && ! [ -d "$HOME/.gemini/antigravity-cli" ]; th
 fi
 
 # Claude Code: global config
-if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
-  register_mcp_json "$HOME/.claude/claude_desktop_config.json" "Claude Code (global)"
-  if [ -f "$ROOT_DIR/.mcp.json" ]; then
-    register_mcp_json "$ROOT_DIR/.mcp.json" "Claude Code (project .mcp.json)"
-  fi
+# Claude Code: registration goes through the CLI's own user scope. The old
+# path here wrote ~/.claude/claude_desktop_config.json, a file Claude Code
+# never reads (that filename belongs to Claude Desktop, which keeps its
+# config elsewhere entirely), so install reported a registration that did
+# nothing. No CLI on PATH means no Claude Code to register into.
+if command -v claude >/dev/null 2>&1; then
+  register_mcp_claude_cli
+fi
+# Merge into an existing project .mcp.json in the directory the installer
+# was invoked from only: the package's own bundled .mcp.json is not a user
+# project, and creating a file in an arbitrary cwd would litter. ($PWD is
+# useless here - the script cd'd to the package root long ago.)
+if [[ -f "$INVOKED_FROM_DIR/.mcp.json" ]] && [[ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]]; then
+  register_mcp_json "$INVOKED_FROM_DIR/.mcp.json" "Claude Code (project .mcp.json)"
 fi
 
 # Cursor
@@ -491,7 +528,11 @@ fi
 echo ""
 echo "Installation complete."
 if [ "$_has_install_args" = false ]; then
-  echo "Dashboard was not started automatically."
-  echo "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+  # The README promises a live dashboard right after installation. The
+  # launch/skip decision lives in exactly one place, shouldAutoLaunch()
+  # inside the wrapper, so the shell never second-guesses it; the wrapper
+  # prints the headless message itself when it declines. (No --dry-run
+  # branch here: a dry run exits long before this point.)
+  node "$ROOT_DIR/scripts/lib/dashboard-launch-cli.js" "$ROOT_DIR" || true
 fi
 echo "Run 'egc doctor' to verify."

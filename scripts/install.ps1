@@ -1,5 +1,10 @@
 $ErrorActionPreference = "Stop"
 
+# The directory the person ran the installer FROM. Captured here, before any
+# Set-Location moves to the package root, because the project .mcp.json merge
+# near the end must target their project, not the package.
+$InvokedFromDir = (Get-Location).Path
+
 $RootDir       = Split-Path -Parent $PSScriptRoot
 $BootstrapDb   = Join-Path (Join-Path $RootDir "scripts") "bootstrap-state-db.js"
 $EgcInstall    = Join-Path (Join-Path $RootDir "scripts") "install-apply.js"
@@ -16,6 +21,89 @@ function Install-Deps {
     if (Test-Path "package-lock.json") {
         npm ci --silent
     }
+}
+
+# Two paths can name the same directory in several ways: different separators
+# (C:/repo vs C:\repo, routine when the installer is launched from Git Bash),
+# a trailing slash, or a symlink/junction anywhere along the path, including a
+# parent component. Comparing anything less than the fully resolved physical
+# path risks treating the package's own directory as somebody's project and
+# rewriting its bundled .mcp.json. .NET's ResolveLinkTarget is unavailable in
+# Windows PowerShell 5.1, so each component is resolved in turn (with a small
+# depth cap for chained links), which works on every supported version.
+function Resolve-PhysicalDirectory {
+    param([string]$Path)
+
+    # Returns $null when the path cannot be fully resolved. Callers must
+    # treat that as "unknown", never as "different": a partial answer here
+    # is what would let the installer mistake its own directory for a user
+    # project and rewrite the bundled .mcp.json.
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path)
+    } catch {
+        return $null
+    }
+
+    # Components are consumed from a queue rather than a fixed list: when one
+    # of them turns out to be a link, the target's own components are pushed
+    # back onto the front of the queue, so links nested inside a link target
+    # get resolved on the same pass. The step budget only bounds pathological
+    # cycles; it is never reached by a real directory tree.
+    $pending = New-Object 'System.Collections.Generic.Queue[string]'
+    $resolved = [System.IO.Path]::GetPathRoot($full)
+    foreach ($segment in ($full.Substring($resolved.Length).Trim('\', '/') -split '[\\/]+')) {
+        if ($segment) { $pending.Enqueue($segment) }
+    }
+
+    $steps = 0
+    while ($pending.Count -gt 0) {
+        $steps++
+        # Only a cyclic link chain gets here; a real tree never does. The
+        # path stays unresolved rather than half-resolved.
+        if ($steps -gt 512) { return $null }
+
+        $segment = $pending.Dequeue()
+        if ($segment -eq '.') { continue }
+        if ($segment -eq '..') {
+            $resolved = [System.IO.Path]::GetFullPath((Join-Path $resolved '..'))
+            continue
+        }
+
+        $candidate = Join-Path $resolved $segment
+        $item = $null
+        try {
+            $item = Get-Item -LiteralPath $candidate -Force -ErrorAction Stop
+        } catch {
+            $item = $null
+        }
+
+        $target = $null
+        if ($item -and $item.PSObject.Properties['Target'] -and $item.Target) {
+            $target = @($item.Target)[0]
+        }
+        if (-not $target) {
+            $resolved = $candidate
+            continue
+        }
+
+        $remaining = @($pending.ToArray())
+        $pending.Clear()
+        if ([System.IO.Path]::IsPathRooted($target)) {
+            $targetRoot = [System.IO.Path]::GetPathRoot($target)
+            $targetTail = $target.Substring($targetRoot.Length)
+            $resolved = $targetRoot
+        } else {
+            # A relative target is relative to the link's own directory, which
+            # is exactly where $resolved already points.
+            $targetTail = $target
+        }
+        foreach ($piece in ($targetTail.Trim('\', '/') -split '[\\/]+')) {
+            if ($piece) { $pending.Enqueue($piece) }
+        }
+        foreach ($piece in $remaining) { $pending.Enqueue($piece) }
+    }
+
+    return [System.IO.Path]::GetFullPath($resolved).TrimEnd('\', '/')
 }
 
 # Forward --help directly to the Node installer
@@ -246,16 +334,59 @@ if (-not $DryRun) {
         }
     }
 
-    # Claude Code (Windows path)
-    $claudeConfig = Join-Path (Join-Path $env:APPDATA "Claude") "claude_desktop_config.json"
-    if ((Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path (Split-Path $claudeConfig -Parent))) {
-        Register-McpJson -Target $claudeConfig -Label "Claude Code"
+    # Claude Code: registration goes through the CLI's own user scope. The
+    # old path here wrote Claude Desktop's config file while labeling it
+    # Claude Code - a different application entirely. No CLI on PATH means
+    # no Claude Code to register into.
+    if (Get-Command claude -ErrorAction SilentlyContinue) {
+        # A non-zero exit from `claude mcp get` is the expected "not
+        # registered yet" answer, but PowerShell 7.4+ turns native exit
+        # codes into terminating errors while $ErrorActionPreference is
+        # Stop, which would abort the whole installer before the check
+        # below could read $LASTEXITCODE.
+        $previousNativePref = $null
+        if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $previousNativePref = $PSNativeCommandUseErrorActionPreference
+            $PSNativeCommandUseErrorActionPreference = $false
+        }
+        try {
+            foreach ($server in @(
+                @{ Name = "egc-guardian"; Bin = $GuardianBin },
+                @{ Name = "egc-memory"; Bin = $MemoryBin }
+            )) {
+                claude mcp get $server.Name *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    claude mcp add -s user $server.Name -- node $server.Bin *> $null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "  v registered $($server.Name) in Claude Code (user scope)"
+                    } else {
+                        Write-Host "  note: could not register $($server.Name) in Claude Code. Run manually: claude mcp add -s user $($server.Name) -- node `"$($server.Bin)`""
+                    }
+                }
+            }
+        } finally {
+            if ($null -ne $previousNativePref) {
+                $PSNativeCommandUseErrorActionPreference = $previousNativePref
+            }
+        }
     }
 
-    # Claude Code - project .mcp.json (if present)
-    $projectMcp = Join-Path $RootDir ".mcp.json"
+    # Claude Code - project .mcp.json: merge into an existing file in the
+    # directory the installer was invoked from only. The package's own
+    # bundled .mcp.json is not a user project, and creating a file in an
+    # arbitrary cwd would litter. (Get-Location is useless here - the
+    # script Set-Location'd to the package root long ago.)
+    $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
     if (Test-Path $projectMcp) {
-        Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
+        $invokedPhysical = Resolve-PhysicalDirectory $InvokedFromDir
+        $rootPhysical = Resolve-PhysicalDirectory $RootDir
+        if (-not $invokedPhysical -or -not $rootPhysical) {
+            # Unresolvable means unknown, and an unknown directory is never
+            # worth the risk of writing into the package's own config.
+            Write-Host "  note: skipped project .mcp.json (could not resolve $InvokedFromDir to a physical path)"
+        } elseif ($invokedPhysical -ne $rootPhysical) {
+            Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
+        }
     }
 
     # Cursor (Windows path)
@@ -321,7 +452,11 @@ fs.writeFileSync(t,c);
     }
 
     # Obsidian propagation (delegated to Node)
-    $obsidianSources = @($agyConfig, $geminiConfig, $claudeConfig, $cursorConfig)
+    # $claudeConfig (Claude Desktop's file) is gone from both lists: Claude
+    # Code never read it, so it was a dead source and a dead target alike.
+    # Propagating obsidian into Claude Code's real user scope needs the CLI
+    # (claude mcp add-json) and is tracked as a follow-up.
+    $obsidianSources = @($agyConfig, $geminiConfig, $cursorConfig)
     $findObsTmp = Join-Path $env:TEMP ("egc_obs_find_" + [System.Guid]::NewGuid().ToString("N") + ".js")
     Set-Content -Path $findObsTmp -Encoding UTF8 -Value @'
 const fs=require("fs");
@@ -352,7 +487,6 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
         $propagateTargets = @(
             @{ P = $agyConfig;     L = "Antigravity CLI" }
             @{ P = $geminiConfig;  L = "Gemini CLI" }
-            @{ P = $claudeConfig;  L = "Claude Code" }
             @{ P = $cursorConfig;  L = "Cursor" }
             @{ P = $kiroConfig;    L = "Kiro" }
             @{ P = $opencodeConfig; L = "OpenCode" }
@@ -384,8 +518,10 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
     Write-Host ""
     Write-Host "Installation complete."
     if (-not $hasInstallArgs) {
-        Write-Host "Dashboard was not started automatically."
-        Write-Host "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+        # Same single decision point as install.sh: shouldAutoLaunch()
+        # inside the wrapper decides whether to launch, and prints the
+        # headless message itself when it declines.
+        & node (Join-Path $RootDir "scripts/lib/dashboard-launch-cli.js") $RootDir
     }
     Write-Host "Run 'egc doctor' to verify."
 }

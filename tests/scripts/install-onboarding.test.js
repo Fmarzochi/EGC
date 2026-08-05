@@ -20,14 +20,34 @@ const UV_MESSAGES = [
   'Required only for Jira and omega-memory MCP servers.',
   'Core EGC installation is unaffected.',
 ];
+// The README promises a live dashboard right after installation, so the
+// bare-install contract is now: interactive terminals launch it through
+// scripts/lib/dashboard-launch-cli.js, and headless runs (CI, pipes) print
+// this honest line instead of pretending nothing was supposed to happen.
 const DASHBOARD_MESSAGES = [
-  'Dashboard was not started automatically.',
-  "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup.",
+  "Dashboard not started (headless environment). Run 'egc dashboard' to start it.",
 ];
+const DASHBOARD_LAUNCHER_REF = 'scripts/lib/dashboard-launch-cli.js';
+const DASHBOARD_LAUNCHER = path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch-cli.js');
 
 function test(name, fn) {
   try {
-    fn();
+    const returned = fn();
+    // A promise returned into this synchronous harness would be reported as
+    // a pass before its assertions ran; async cases must use testAsync.
+    assert.ok(!(returned && typeof returned.then === 'function'), 'async test body must be run through testAsync');
+    console.log(`  \u2713 ${name}`);
+    return true;
+  } catch (error) {
+    console.log(`  \u2717 ${name}`);
+    console.log(`    Error: ${error.message}`);
+    return false;
+  }
+}
+
+async function testAsync(name, fn) {
+  try {
+    await fn();
     console.log(`  \u2713 ${name}`);
     return true;
   } catch (error) {
@@ -80,10 +100,15 @@ function createInstallerFixture() {
     fs.symlinkSync(executable, path.join(binDir, command));
   }
 
+  // The fake node also stands in for the dashboard wrapper: the installer
+  // now delegates the whole launch decision to it, so the fixture emulates
+  // what the real wrapper prints in a headless environment (the CI=1 the
+  // runner sets is exactly the case shouldAutoLaunch() declines).
   writeExecutable(path.join(binDir, 'node'), `#!/bin/sh
 case "$1" in
   -e) printf '20' ;;
   --version) printf 'v20.0.0\\n' ;;
+  *dashboard-launch-cli.js) printf "Dashboard not started (headless environment). Run 'egc dashboard' to start it.\\n" ;;
 esac
 exit 0
 `);
@@ -94,6 +119,11 @@ fi
 exit 0
 `);
   writeExecutable(path.join(binDir, 'npx'), '#!/bin/sh\nexit 0\n');
+  // Without this stand-in, a machine that really has Claude Code on PATH
+  // would have the suite register MCP servers into its own user scope.
+  // Exit 0 means "already registered", so the installer performs no
+  // mutation at all.
+  writeExecutable(path.join(binDir, 'claude'), '#!/bin/sh\nexit 0\n');
 
   const bash = findExecutable('bash');
   assert.ok(bash, 'bash is required for install.sh execution coverage');
@@ -128,7 +158,7 @@ function assertSuccessfulRun(result) {
   assert.ok(result.stdout.includes('Installation complete.'), 'installer did not reach completion');
 }
 
-function runTests() {
+async function runTests() {
   console.log('\n=== Testing install onboarding guidance ===\n');
 
   let passed = 0;
@@ -140,6 +170,7 @@ function runTests() {
       installApply: fs.readFileSync(INSTALL_APPLY, 'utf8'),
       bash: fs.readFileSync(INSTALL_SH, 'utf8'),
       powerShell: fs.readFileSync(INSTALL_PS1, 'utf8'),
+      dashboardWrapper: fs.readFileSync(DASHBOARD_LAUNCHER, 'utf8'),
       guide: fs.readFileSync(INSTALLATION_GUIDE, 'utf8'),
     };
   })) passed++; else failed++;
@@ -156,11 +187,17 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('bash and PowerShell explain dashboard startup after bare installs only', () => {
+  if (test('bash and PowerShell delegate dashboard startup to the shared wrapper, after bare installs only', () => {
+    // The launch/skip decision and its wording live in exactly one place;
+    // the shells must not re-implement either.
     for (const message of DASHBOARD_MESSAGES) {
-      assert.ok(sources.bash.includes(message), `install.sh missing: ${message}`);
-      assert.ok(sources.powerShell.includes(message), `install.ps1 missing: ${message}`);
+      assert.ok(sources.dashboardWrapper.includes(message), `dashboard-launch-cli.js missing: ${message}`);
+      assert.ok(!sources.bash.includes(message), 'install.sh must not duplicate the wrapper wording');
+      assert.ok(!sources.powerShell.includes(message), 'install.ps1 must not duplicate the wrapper wording');
     }
+    assert.ok(sources.bash.includes(DASHBOARD_LAUNCHER_REF), 'install.sh must launch the dashboard through the shared CLI wrapper');
+    assert.ok(sources.powerShell.includes(DASHBOARD_LAUNCHER_REF), 'install.ps1 must launch the dashboard through the shared CLI wrapper');
+    assert.ok(sources.dashboardWrapper.includes('shouldAutoLaunch'), 'the wrapper owns the launch decision');
     assert.ok(sources.bash.includes('if [ "$_has_install_args" = false ]; then'));
     assert.ok(sources.powerShell.includes('if (-not $hasInstallArgs)'));
   })) passed++; else failed++;
@@ -177,6 +214,93 @@ function runTests() {
     } finally {
       cleanup();
     }
+  })) passed++; else failed++;
+
+  if (test('bare Bash install merges an existing project .mcp.json from the invoking directory', () => {
+    if (process.platform === 'win32') return;
+
+    // The installer cd's to the package root early, so this only works when
+    // the invoking directory is captured before that cd - the exact
+    // regression this test pins.
+    const fixture = createInstallerFixture();
+    const projectDir = path.join(fixture.root, 'my-project');
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(path.join(projectDir, '.mcp.json'), JSON.stringify({ mcpServers: {} }, null, 2));
+    const result = spawnSync(fixture.bash, [fixture.installScript], {
+      cwd: projectDir,
+      env: {
+        ...process.env,
+        CI: '1',
+        HOME: fixture.homeDir,
+        USERPROFILE: fixture.homeDir,
+        PATH: fixture.binDir,
+      },
+      encoding: 'utf8',
+      timeout: INSTALL_TIMEOUT_MS,
+    });
+    try {
+      assertSuccessfulRun(result);
+      assert.ok(
+        result.stdout.includes('registered in Claude Code (project .mcp.json)'),
+        `invoking-directory .mcp.json must be merged, got:\n${result.stdout}`
+      );
+    } finally {
+      fs.rmSync(fixture.root, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('shouldAutoLaunch says yes exactly for an interactive, non-CI terminal', () => {
+    // The interactive branch cannot be driven end to end without a pty (and
+    // spawning a real dashboard plus a browser mid-test would be a side
+    // effect no suite should have), so the decision itself is exercised
+    // directly - this is the predicate install.sh and install.ps1 now
+    // delegate to entirely.
+    const { shouldAutoLaunch } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch'));
+    const savedTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    const savedCI = process.env.CI;
+    const withStdout = (isTTY, ci, assertion) => {
+      Object.defineProperty(process.stdout, 'isTTY', { value: isTTY, configurable: true });
+      if (ci === undefined) delete process.env.CI; else process.env.CI = ci;
+      assertion();
+    };
+    try {
+      withStdout(true, undefined, () => assert.strictEqual(shouldAutoLaunch(), true, 'a person at a terminal must get the dashboard'));
+      withStdout(true, '1', () => assert.strictEqual(shouldAutoLaunch(), false, 'CI must stay headless even on a TTY'));
+      withStdout(false, undefined, () => assert.strictEqual(shouldAutoLaunch(), false, 'piped output must stay headless'));
+    } finally {
+      if (savedTTY) Object.defineProperty(process.stdout, 'isTTY', savedTTY);
+      if (savedCI === undefined) delete process.env.CI; else process.env.CI = savedCI;
+    }
+  })) passed++; else failed++;
+
+  if (await testAsync('launchDashboard declines without spawning anything when the dashboard script is absent', async () => {
+    const { launchDashboard } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch'));
+    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-root-'));
+    const logged = [];
+    try {
+      const launched = await launchDashboard({ rootDir: emptyRoot, log: (line) => logged.push(line) });
+      assert.strictEqual(launched, false, 'a missing dashboard script must not be treated as a launch');
+      assert.deepStrictEqual(logged, [], 'nothing to say when there is nothing to launch');
+    } finally {
+      fs.rmSync(emptyRoot, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('the dashboard wrapper itself declines and explains in a headless environment', () => {
+    // Runs the real wrapper (not a fixture stand-in) with stdout piped and
+    // CI set: the branch every headless install takes, end to end.
+    const wrapper = path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch-cli.js');
+    const result = spawnSync(process.execPath, [wrapper, REPO_ROOT], {
+      encoding: 'utf8',
+      env: { ...process.env, CI: '1' },
+      timeout: INSTALL_TIMEOUT_MS,
+    });
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(
+      result.stdout.trim(),
+      "Dashboard not started (headless environment). Run 'egc dashboard' to start it.",
+      'the wrapper owns the launch decision and must explain itself when it declines'
+    );
   })) passed++; else failed++;
 
   if (test('Bash install arguments suppress the bare-install dashboard notice', () => {
@@ -211,4 +335,7 @@ function runTests() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-runTests();
+runTests().catch((error) => {
+  console.log(`  ✗ harness failure\n    ${error.stack || error.message}`);
+  process.exit(1);
+});
