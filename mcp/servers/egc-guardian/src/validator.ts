@@ -794,6 +794,77 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
   return false;
 }
 
+// Reading and writing carry different risk, and treating them alike is what
+// made the guardian deny `cat ~/.egc/bin/manifest.json`, `ls ~/.egc/bin` or
+// `cat /etc/systemd/oomd.conf` -- none of which expose a secret, all of
+// which someone diagnosing their own install genuinely needs. Writing into
+// those directories can hijack execution or plant persistence, so every
+// write denial stays exactly as it was.
+//
+// A read is denied only when the file's *content* is the secret: private
+// keys, credential stores, token files, the shadow password database. The
+// directories below are denied wholesale because everything inside them is
+// of that kind.
+function buildReadDeniedPaths(): string[] {
+  const home = os.homedir();
+  const paths = [
+    path.join(home, '.ssh'),
+    path.join(home, '.aws'),
+    path.join(home, '.gnupg'),
+    // The key that decrypts EGC's own state files.
+    path.join(home, '.egc', 'encryption.key'),
+    '/etc/shadow',
+    '/etc/gshadow',
+    '/etc/sudoers',
+    '/etc/sudoers.d',
+    '/etc/ssh',
+  ];
+
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || '';
+    if (appData) paths.push(path.join(appData, 'gnupg'));
+  }
+
+  return paths;
+}
+
+export const READ_DENIED_PATHS: string[] = buildReadDeniedPaths();
+
+// File patterns whose content is the secret, wherever they live. This is the
+// subset of PROTECTED_FILE_PATTERNS that a read must still refuse; the rest
+// of that list covers files that are merely dangerous to *modify*.
+export const READ_DENIED_FILE_PATTERNS: RegExp[] = [
+  /\.env$/,
+  /\.env\.(?!example$|sample$|template$)/,
+  /\.pem$/,
+  /\.key$/,
+  /\.p12$/,
+  /\.npmrc$/,
+  /\.pypirc$/,
+  /credentials?\.json$/i,
+  /oauth[^\\/]*\.json$/i,
+  /[^\\/]*token[^\\/]*\.json$/i,
+  /(^|[\\/])\.claude\.json$/,
+  /(^|[\\/])id_(rsa|dsa|ecdsa|ed25519)$/,
+];
+
+export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): boolean {
+  const trimmed = p.trim();
+  const expanded = trimmed.startsWith('~')
+    ? path.join(os.homedir(), trimmed.slice(1))
+    : trimmed;
+  const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
+
+  for (const denied of READ_DENIED_PATHS) {
+    const resolvedDenied = resolveRealOrLexical(denied);
+    if (normalizedP === resolvedDenied || normalizedP.startsWith(resolvedDenied + path.sep)) {
+      return true;
+    }
+  }
+
+  return READ_DENIED_FILE_PATTERNS.some(pattern => pattern.test(normalizedP));
+}
+
 export interface ValidationResult {
   allowed: boolean;
   reason?: string;
@@ -986,7 +1057,7 @@ a => a === '-r' || a === '-R' || a === '--recursive' ||
     }
   }
   for (const p of fileFlagValues) {
-    if (isProtectedPath(p, cwd)) {
+    if (isReadDeniedPath(p, cwd)) {
       return {
         allowed: false,
         reason: `grep pattern file '${p}' is a protected path`,
@@ -1007,7 +1078,7 @@ a => a === '-r' || a === '-R' || a === '--recursive' ||
 
   if (isRecursive) {
 for (const p of pathArgs) {
-  if (p === '/' || p === home || isProtectedPath(p, cwd)) {
+  if (p === '/' || p === home || isReadDeniedPath(p, cwd)) {
     return {
       allowed: false,
       reason: `grep recursive over protected path '${p}' is forbidden`,
@@ -1017,7 +1088,7 @@ for (const p of pathArgs) {
 }
 // If no explicit path args, grep defaults to '.', which is fine.
 // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
+if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isReadDeniedPath(positionalArgs[0], cwd))) {
   return {
     allowed: false,
     reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
@@ -1028,7 +1099,7 @@ if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath
 
   // Even without -r, block explicit protected paths
   for (const p of pathArgs) {
-if (isProtectedPath(p, cwd)) {
+if (isReadDeniedPath(p, cwd)) {
   return {
     allowed: false,
     reason: `grep over protected path '${p}' is forbidden`,
@@ -1043,7 +1114,7 @@ if (isProtectedPath(p, cwd)) {
 function validateCatArgs(args: string[], cwd?: string): ValidationResult {
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isProtectedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `cat of protected path '${arg}' is forbidden`,
@@ -1073,7 +1144,7 @@ return {
     .map(a => (a.startsWith('-') ? embeddedPathCandidate(a) : a))
     .filter((a): a is string => a !== null);
   for (const p of pathArgs) {
-if (isProtectedPath(p, cwd)) {
+if (isReadDeniedPath(p, cwd)) {
   return {
     allowed: false,
     reason: `find over protected path '${p}' is forbidden`,
@@ -1088,7 +1159,7 @@ function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: str
   // These are read-only but we still block protected paths
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isProtectedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,

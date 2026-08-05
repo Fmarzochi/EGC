@@ -214,5 +214,43 @@ run('git config includeIf.<condition>.path write is blocked (audit EGC-533, Find
   assert.strictEqual(v.allowed, false, 'includeIf.*.path loads another config file wholesale, same as include.path');
 });
 
+// Reading and writing carry different risk. Writing into these directories
+// can hijack execution or plant persistence; reading a manifest or a service
+// config only tells you how your own install is set up, and denying that was
+// blocking legitimate diagnosis.
+run('reading a functional file under a write-protected directory is allowed', () => {
+  const home = require('node:os').homedir();
+  for (const cmd of [
+    `cat ${path.join(home, '.egc', 'bin', 'manifest.json')}`,
+    `ls ${path.join(home, '.egc', 'bin')}`,
+    'cat /etc/systemd/oomd.conf',
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, true, `${cmd} exposes no secret and must be readable`);
+  }
+});
+
+run('reading an actual secret is still refused', () => {
+  const home = require('node:os').homedir();
+  for (const cmd of [
+    `cat ${path.join(home, '.ssh', 'id_rsa')}`,
+    `cat ${path.join(home, '.egc', 'encryption.key')}`,
+    `cat ${path.join(home, '.npmrc')}`,
+    'cat /etc/shadow',
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} exposes a credential and must stay denied`);
+  }
+});
+
+run('write protection is untouched by the read split', () => {
+  const home = require('node:os').homedir();
+  for (const target of [
+    path.join(home, '.egc', 'bin', 'git'),
+    path.join(home, '.ssh', 'authorized_keys'),
+    '/etc/passwd',
+  ]) {
+    assert.strictEqual(validateWrite(target).allowed, false, `${target} must remain write-protected`);
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
