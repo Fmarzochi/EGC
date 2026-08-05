@@ -16,7 +16,10 @@ if (shouldAutoLaunch()) {
   // and take the installer's exit code with it: a dashboard that did not
   // start is never a reason to fail an otherwise complete installation.
   launchDashboard({ rootDir, log: (line) => console.log(line) })
-    .catch((err) => console.log(`Dashboard startup skipped: ${err.message}`));
+    // A rejection value is not guaranteed to be an Error; reading .message
+    // off null here would throw inside the handler and reintroduce the very
+    // unhandled rejection this catch exists to prevent.
+    .catch((err) => console.log(`Dashboard startup skipped: ${err instanceof Error ? err.message : String(err)}`));
 } else {
   console.log("Dashboard not started (headless environment). Run 'egc dashboard' to start it.");
 }

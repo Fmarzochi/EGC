@@ -293,10 +293,28 @@ if (-not $DryRun) {
     # bundled .mcp.json is not a user project, and creating a file in an
     # arbitrary cwd would litter. (Get-Location is useless here - the
     # script Set-Location'd to the package root long ago.)
-    # Raw string comparison would call C:/repo and C:\repo different
-    # directories, which is exactly what happens when the installer is
-    # launched from Git Bash on Windows.
-    $normalize = { param($p) [System.IO.Path]::GetFullPath($p).TrimEnd('\', '/') }
+    # Two directories can name the same place three ways: different
+    # separators (C:/repo vs C:\repo, routine when the installer is launched
+    # from Git Bash), a trailing slash, or a symlink/junction pointing at the
+    # package root. All three must compare equal, or the installer would
+    # treat its own bundled .mcp.json as somebody's project file.
+    $normalize = {
+        param($p)
+        try {
+            $item = Get-Item -LiteralPath $p -Force -ErrorAction Stop
+            $resolved = $item.FullName
+            if ($item.PSObject.Properties['Target'] -and $item.Target) {
+                $target = @($item.Target)[0]
+                if (-not [System.IO.Path]::IsPathRooted($target)) {
+                    $target = Join-Path (Split-Path -Parent $item.FullName) $target
+                }
+                $resolved = $target
+            }
+            return [System.IO.Path]::GetFullPath($resolved).TrimEnd('\', '/')
+        } catch {
+            return [System.IO.Path]::GetFullPath($p).TrimEnd('\', '/')
+        }
+    }
     $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
     if ((Test-Path $projectMcp) -and ((& $normalize $InvokedFromDir) -ne (& $normalize $RootDir))) {
         Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"

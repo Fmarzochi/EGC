@@ -32,7 +32,22 @@ const DASHBOARD_LAUNCHER = path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-lau
 
 function test(name, fn) {
   try {
-    fn();
+    const returned = fn();
+    // A promise returned into this synchronous harness would be reported as
+    // a pass before its assertions ran; async cases must use testAsync.
+    assert.ok(!(returned && typeof returned.then === 'function'), 'async test body must be run through testAsync');
+    console.log(`  \u2713 ${name}`);
+    return true;
+  } catch (error) {
+    console.log(`  \u2717 ${name}`);
+    console.log(`    Error: ${error.message}`);
+    return false;
+  }
+}
+
+async function testAsync(name, fn) {
+  try {
+    await fn();
     console.log(`  \u2713 ${name}`);
     return true;
   } catch (error) {
@@ -143,7 +158,7 @@ function assertSuccessfulRun(result) {
   assert.ok(result.stdout.includes('Installation complete.'), 'installer did not reach completion');
 }
 
-function runTests() {
+async function runTests() {
   console.log('\n=== Testing install onboarding guidance ===\n');
 
   let passed = 0;
@@ -258,15 +273,14 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('launchDashboard declines without spawning anything when the dashboard script is absent', () => {
+  if (await testAsync('launchDashboard declines without spawning anything when the dashboard script is absent', async () => {
     const { launchDashboard } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch'));
     const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-root-'));
     const logged = [];
     try {
-      return launchDashboard({ rootDir: emptyRoot, log: (line) => logged.push(line) }).then(launched => {
-        assert.strictEqual(launched, false, 'a missing dashboard script must not be treated as a launch');
-        assert.deepStrictEqual(logged, [], 'nothing to say when there is nothing to launch');
-      });
+      const launched = await launchDashboard({ rootDir: emptyRoot, log: (line) => logged.push(line) });
+      assert.strictEqual(launched, false, 'a missing dashboard script must not be treated as a launch');
+      assert.deepStrictEqual(logged, [], 'nothing to say when there is nothing to launch');
     } finally {
       fs.rmSync(emptyRoot, { recursive: true, force: true });
     }
@@ -321,4 +335,7 @@ function runTests() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-runTests();
+runTests().catch((error) => {
+  console.log(`  ✗ harness failure\n    ${error.stack || error.message}`);
+  process.exit(1);
+});
