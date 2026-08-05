@@ -760,6 +760,15 @@ export function resolveRealOrLexical(p: string): string {
 // pass it explicitly -- otherwise a relative path is judged against this
 // process's own cwd, which is not guaranteed to match the shell the command
 // actually runs in.
+// macOS and Windows resolve paths case-insensitively; Linux does not. Every
+// path comparison in this file folds through here so a case variant cannot
+// name a protected file while dodging the check written for it.
+const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform === 'win32';
+
+function foldCase(p: string): string {
+  return CASE_INSENSITIVE_FS ? p.toLowerCase() : p;
+}
+
 export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
   // Trim first: a trailing newline (routine for anything piped through
   // `echo`) or stray whitespace survives path.resolve() into the final
@@ -777,16 +786,22 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
   // this check into a denied path. Fall back to the lexical path (then the
   // parent) when the target does not exist yet, e.g. a write being created.
   const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
+  // macOS and Windows open `.ENV`, `/etc/SHADOW` and `~/.SSH/id_rsa` as the
+  // very same files their lower-case spellings name, so a comparison that is
+  // not folded there protects only one spelling of each secret. Folding is
+  // applied to both sides, and only where the filesystem actually behaves
+  // that way -- on Linux those are genuinely different files.
+  const candidate = foldCase(normalizedP);
 
   for (const denied of DENIED_PATHS) {
-    const resolvedDenied = resolveRealOrLexical(denied);
-    if (normalizedP === resolvedDenied || normalizedP.startsWith(resolvedDenied + path.sep)) {
+    const resolvedDenied = foldCase(resolveRealOrLexical(denied));
+    if (candidate === resolvedDenied || candidate.startsWith(resolvedDenied + path.sep)) {
       return true;
     }
   }
 
   for (const pattern of PROTECTED_FILE_PATTERNS) {
-    if (pattern.test(normalizedP)) {
+    if (pattern.test(candidate)) {
       return true;
     }
   }
@@ -844,15 +859,6 @@ const READ_SAFE_FILE_PATTERNS: RegExp[] = [
   /(^|[\\/])\.git[\\/](config|hooks)$/,
   /(^|[\\/])\.git[\\/]hooks[\\/]/,
 ];
-
-// macOS and Windows resolve paths case-insensitively, so a comparison that
-// is not folded there would let `cat /etc/SHADOW` or `~/.egc/ENCRYPTION.KEY`
-// slip past a check written in lower case.
-const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform === 'win32';
-
-function foldCase(p: string): string {
-  return CASE_INSENSITIVE_FS ? p.toLowerCase() : p;
-}
 
 function isUnder(candidate: string, parent: string): boolean {
   const resolvedParent = foldCase(resolveRealOrLexical(parent));

@@ -241,15 +241,40 @@ run('reading an actual secret is still refused', () => {
   }
 });
 
-run('a recursive walk cannot reach a secret through a readable parent', () => {
+run('recursive walks stay out of protected trees, readable subdirectory or not', () => {
   const home = require('node:os').homedir();
-  // Reading one functional file inside ~/.egc is fine; walking the tree is
-  // not, because the walk would reach the encryption key.
+  // Direct denied roots, and -- the case that actually matters here -- a
+  // directory whose *contents* are readable one file at a time. `cat
+  // ~/.egc/bin/manifest.json` is allowed; walking ~/.egc/bin is not, because
+  // tree-walking commands keep the full write-protection check rather than
+  // the narrower read one.
   for (const cmd of [
     `grep -r secret ${path.join(home, '.egc')}`,
     `find ${path.join(home, '.config', 'github-copilot')} -name "*.json"`,
+    `grep -r token ${path.join(home, '.egc', 'bin')}`,
+    `find ${path.join(home, '.egc', 'metrics')} -name "*.jsonl"`,
   ]) {
-    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} traverses into protected content`);
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} walks a protected tree`);
+  }
+
+  // The single-file reads inside those same directories stay allowed, which
+  // is the whole point of the split.
+  assert.strictEqual(
+    validateCommand(`cat ${path.join(home, '.egc', 'bin', 'manifest.json')}`).allowed,
+    true,
+    'reading one operational file must still work'
+  );
+});
+
+run('a case variant cannot name a secret past the guard', () => {
+  // macOS and Windows open .ENV and /etc/SHADOW as the same files their
+  // lower-case spellings name. The check folds case there, so the variant is
+  // refused; on Linux these are genuinely different paths and the assertion
+  // only applies where the filesystem behaves that way.
+  if (process.platform !== 'darwin' && process.platform !== 'win32') return;
+  const home = require('node:os').homedir();
+  for (const cmd of ['cat /etc/SHADOW', 'cat .ENV', `cat ${path.join(home, '.egc', 'ENCRYPTION.KEY')}`]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} names a protected file`);
   }
 });
 
