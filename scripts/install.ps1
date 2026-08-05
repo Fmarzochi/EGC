@@ -246,15 +246,33 @@ if (-not $DryRun) {
         }
     }
 
-    # Claude Code (Windows path)
-    $claudeConfig = Join-Path (Join-Path $env:APPDATA "Claude") "claude_desktop_config.json"
-    if ((Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path (Split-Path $claudeConfig -Parent))) {
-        Register-McpJson -Target $claudeConfig -Label "Claude Code"
+    # Claude Code: registration goes through the CLI's own user scope. The
+    # old path here wrote Claude Desktop's config file while labeling it
+    # Claude Code - a different application entirely. No CLI on PATH means
+    # no Claude Code to register into.
+    if (Get-Command claude -ErrorAction SilentlyContinue) {
+        foreach ($server in @(
+            @{ Name = "egc-guardian"; Bin = $GuardianBin },
+            @{ Name = "egc-memory"; Bin = $MemoryBin }
+        )) {
+            claude mcp get $server.Name *> $null
+            if ($LASTEXITCODE -ne 0) {
+                claude mcp add -s user $server.Name -- node $server.Bin *> $null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "  v registered $($server.Name) in Claude Code (user scope)"
+                } else {
+                    Write-Host "  note: could not register $($server.Name) in Claude Code. Run manually: claude mcp add -s user $($server.Name) -- node `"$($server.Bin)`""
+                }
+            }
+        }
     }
 
-    # Claude Code - project .mcp.json (if present)
-    $projectMcp = Join-Path $RootDir ".mcp.json"
-    if (Test-Path $projectMcp) {
+    # Claude Code - project .mcp.json: merge into an existing file in the
+    # invoking directory only. The package's own bundled .mcp.json is not a
+    # user project, and creating a file in an arbitrary cwd would litter.
+    $invokingDir = (Get-Location).Path
+    $projectMcp = Join-Path $invokingDir ".mcp.json"
+    if ((Test-Path $projectMcp) -and ($invokingDir -ne $RootDir)) {
         Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
     }
 

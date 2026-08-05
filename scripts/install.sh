@@ -288,6 +288,26 @@ NODEEOF
   fi
 }
 
+# Claude Code's user-scope MCP list lives in ~/.claude.json, owned by the
+# CLI itself; `claude mcp add -s user` is the stable interface (the same
+# approach scripts/lib/mcp-register.js uses for `egc init`). `claude mcp
+# get` exiting 0 means the server is already registered.
+register_mcp_claude_cli() {
+  local name bin
+  for name in egc-guardian egc-memory; do
+    bin="$GUARDIAN_BIN"
+    if [ "$name" = "egc-memory" ]; then bin="$MEMORY_BIN"; fi
+    if claude mcp get "$name" >/dev/null 2>&1; then
+      continue
+    fi
+    if claude mcp add -s user "$name" -- node "$bin" >/dev/null 2>&1; then
+      echo "  ✓ registered $name in Claude Code (user scope)"
+    else
+      echo "  note: could not register $name in Claude Code. Run manually: claude mcp add -s user $name -- node \"$bin\""
+    fi
+  done
+}
+
 register_mcp_toml_codex() {
   local target="$1"
   node - "$target" "$GUARDIAN_BIN" "$MEMORY_BIN" <<'NODEEOF'
@@ -346,11 +366,19 @@ if [ -d "$HOME/.gemini/config" ] && ! [ -d "$HOME/.gemini/antigravity-cli" ]; th
 fi
 
 # Claude Code: global config
-if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
-  register_mcp_json "$HOME/.claude/claude_desktop_config.json" "Claude Code (global)"
-  if [ -f "$ROOT_DIR/.mcp.json" ]; then
-    register_mcp_json "$ROOT_DIR/.mcp.json" "Claude Code (project .mcp.json)"
-  fi
+# Claude Code: registration goes through the CLI's own user scope. The old
+# path here wrote ~/.claude/claude_desktop_config.json, a file Claude Code
+# never reads (that filename belongs to Claude Desktop, which keeps its
+# config elsewhere entirely), so install reported a registration that did
+# nothing. No CLI on PATH means no Claude Code to register into.
+if command -v claude >/dev/null 2>&1; then
+  register_mcp_claude_cli
+fi
+# Merge into an existing project .mcp.json in the invoking directory only:
+# the package's own bundled .mcp.json is not a user project, and creating a
+# file in an arbitrary cwd would litter.
+if [ -f "$PWD/.mcp.json" ] && [ "$PWD" != "$ROOT_DIR" ]; then
+  register_mcp_json "$PWD/.mcp.json" "Claude Code (project .mcp.json)"
 fi
 
 # Cursor
@@ -491,7 +519,22 @@ fi
 echo ""
 echo "Installation complete."
 if [ "$_has_install_args" = false ]; then
-  echo "Dashboard was not started automatically."
-  echo "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+  if [ "$DRY_RUN" = false ]; then
+    # The README promises a live dashboard right after installation; the
+    # shared launcher keeps that true for a person at a terminal while
+    # shouldAutoLaunch() keeps CI and scripted installs headless.
+    node - "$ROOT_DIR" <<'NODEEOF'
+const path = require("path");
+const { launchDashboard, shouldAutoLaunch } = require(path.join(process.argv[2], "scripts", "lib", "dashboard-launch"));
+if (shouldAutoLaunch()) {
+  launchDashboard({ rootDir: process.argv[2], log: (line) => console.log(line) });
+} else {
+  console.log("Dashboard not started (headless environment). Run 'egc dashboard' to start it.");
+}
+NODEEOF
+  else
+    echo "Dashboard was not started automatically."
+    echo "Run 'egc dashboard' to start it, or run 'egc init' inside a project for project setup."
+  fi
 fi
 echo "Run 'egc doctor' to verify."
