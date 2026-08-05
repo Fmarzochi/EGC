@@ -12,6 +12,11 @@ const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'insaits-security-monitor.py');
 const MONITOR_TIMEOUT_MS = 30000;
+// Probing `python --version` pays the same cold interpreter start the monitor
+// itself does, which on Windows regularly costs more than a few seconds. A
+// budget too small here reports "no Python on this machine" and the suite
+// fails with spawnSync ETIMEDOUT instead of skipping or running.
+const PYTHON_PROBE_TIMEOUT_MS = process.platform === 'win32' ? 20000 : 5000;
 
 function createTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'insaits-monitor-'));
@@ -32,7 +37,7 @@ function findPython() {
   for (const candidate of candidates) {
     const result = spawnSync(candidate.command, [...candidate.args, '--version'], {
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: PYTHON_PROBE_TIMEOUT_MS,
     });
     if (result.status === 0) {
       return candidate;
