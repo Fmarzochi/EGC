@@ -16,6 +16,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 let TOML = null;
 try {
@@ -80,10 +81,17 @@ function buildMcpRegistrationTargets(homeDir) {
       format: 'json',
     },
     {
-      name: 'Claude Code (global)',
-      path: path.join(homeDir, '.claude', 'claude_desktop_config.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.claude')),
-      format: 'json',
+      // Registration goes through the Claude Code CLI itself (`claude mcp
+      // add -s user`), which owns ~/.claude.json. The old target here wrote
+      // ~/.claude/claude_desktop_config.json, a file Claude Code never
+      // reads (that filename belongs to Claude Desktop, which keeps its
+      // config elsewhere entirely), so init reported a registration that
+      // did nothing. The path field is the effective destination the CLI
+      // maintains, shown in dry-run output.
+      name: 'Claude Code (user scope)',
+      path: path.join(homeDir, '.claude.json'),
+      gate: () => claudeCliAvailable(),
+      format: 'claude-cli',
     },
     {
       name: 'Cursor',
@@ -323,11 +331,51 @@ function registerZedContextServers(targetPath, bins) {
   return true;
 }
 
+// Claude Code's user-scope MCP list lives inside ~/.claude.json, a large
+// live state file the CLI rewrites while running - merging into it directly
+// risks clobbering whatever the app writes next. The CLI's own `mcp` verbs
+// are the stable interface, so registration is only attempted when the CLI
+// is actually on PATH (that is also the honest gate: no CLI, no Claude Code
+// to register into).
+function claudeCliAvailable() {
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['claude'], { encoding: 'utf8' });
+  return probe.status === 0 && Boolean((probe.stdout || '').trim());
+}
+
+/**
+ * Registers egc-guardian / egc-memory in Claude Code's user scope via
+ * `claude mcp add -s user`. `claude mcp get <name>` exiting 0 means the
+ * server is already registered (idempotent no-op for that entry). Returns
+ * true if any server was newly added, false if both were already present.
+ * Throws when the CLI refuses an add, so registerTarget surfaces it as a
+ * warning instead of a false success.
+ */
+function registerClaudeCli(_targetPath, bins) {
+  const { guardianBin, memoryBin } = bins;
+  const servers = [
+    ['egc-guardian', guardianBin],
+    ['egc-memory', memoryBin],
+  ];
+  let changed = false;
+  for (const [name, bin] of servers) {
+    const existing = spawnSync('claude', ['mcp', 'get', name], { encoding: 'utf8' });
+    if (existing.status === 0) continue;
+    const added = spawnSync('claude', ['mcp', 'add', '-s', 'user', name, '--', 'node', bin], { encoding: 'utf8' });
+    if (added.error) throw added.error;
+    if (added.status !== 0) {
+      throw new Error(`claude mcp add ${name} failed: ${(added.stderr || added.stdout || '').trim()}`);
+    }
+    changed = true;
+  }
+  return changed;
+}
+
 const FORMAT_HANDLERS = {
   'json': registerJson,
   'toml': registerToml,
   'continue-yaml': registerContinueYaml,
   'zed-context-servers': registerZedContextServers,
+  'claude-cli': registerClaudeCli,
 };
 
 function registerTarget(target, bins, onRegister, onWarn) {
@@ -369,5 +417,6 @@ module.exports = {
   registerToml,
   registerContinueYaml,
   registerZedContextServers,
+  registerClaudeCli,
   registerMcpServers,
 };
