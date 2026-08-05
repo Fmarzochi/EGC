@@ -801,10 +801,6 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
 // those directories can hijack execution or plant persistence, so every
 // write denial stays exactly as it was.
 //
-// A read is denied only when the file's *content* is the secret: private
-// keys, credential stores, token files, the shadow password database. The
-// directories below are denied wholesale because everything inside them is
-// of that kind.
 // Derived from the write protection by subtraction, never restated: a read
 // is denied wherever a write is denied, EXCEPT for the few locations listed
 // here. Stating the readable set positively (rather than re-listing what to
