@@ -810,50 +810,62 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
 //
 // Every entry below is functional configuration, not a credential: knowing
 // its contents tells you how an install is wired, nothing more.
+// Deliberately narrow: specific directories whose entire contents are
+// operational, never a whole tree with secrets carved back out. Opening
+// /etc or ~/.egc wholesale and then listing the secrets inside them is a
+// denylist wearing an allowlist's clothes, and it leaks by omission -- an
+// audit of exactly that shape turned up /etc/ssl/private, /etc/wireguard,
+// /etc/krb5.keytab, the shadow backup files (/etc/shadow-), and
+// ~/.egc/encryption.key.bak, none of which had been listed. Anything not
+// named here stays denied, so a secret nobody thought of stays protected.
 function buildReadSafePaths(): string[] {
   const home = os.homedir();
   return [
-    // EGC's own install surface: shim manifest, metrics ledger, logs.
-    path.join(home, '.egc'),
-    // System and service configuration.
-    '/etc',
-    // Binary directory: listing what is on PATH is diagnosis, not exposure.
-    path.join(home, '.local', 'bin'),
-    // User service units: what runs at login.
+    // EGC's own install surface: shim manifest and the binaries it wraps.
+    path.join(home, '.egc', 'bin'),
+    // Token Crusher ledger, which `egc gain` reports from.
+    path.join(home, '.egc', 'metrics'),
+    path.join(home, '.egc', 'logs'),
+    // Service definitions: what runs, and how.
+    '/etc/systemd',
     path.join(home, '.config', 'systemd', 'user'),
+    // Listing what sits ahead of /usr/bin on PATH is diagnosis, not exposure.
+    path.join(home, '.local', 'bin'),
   ];
 }
 
 export const READ_SAFE_PATHS: string[] = buildReadSafePaths();
 
-// Carved back out of the read-safe areas above, because their content IS
-// the secret even though they sit inside an otherwise diagnosable tree.
-function buildReadSecretPaths(): string[] {
-  const home = os.homedir();
-  return [
-    path.join(home, '.egc', 'encryption.key'),
-    path.join(home, '.egc', 'state'),
-    '/etc/shadow',
-    '/etc/gshadow',
-    '/etc/sudoers',
-    '/etc/sudoers.d',
-    '/etc/ssh',
-  ];
-}
-
-export const READ_SECRET_PATHS: string[] = buildReadSecretPaths();
-
 // Files that are dangerous to modify but harmless to read: shell startup
 // files and git config are persistence mechanisms, not credential stores.
+// Anchored, and only ever consulted for a path that is NOT inside a denied
+// directory -- otherwise a file named ~/.ssh/.gitconfig would read as safe.
 const READ_SAFE_FILE_PATTERNS: RegExp[] = [
   /(^|[\\/])\.(bashrc|zshrc|bash_profile|zprofile|profile)$/,
   /(^|[\\/])\.gitconfig$/,
-  /(^|[\\/])\.git[\\/](config|hooks([\\/]|$))/,
+  /(^|[\\/])\.git[\\/](config|hooks)$/,
+  /(^|[\\/])\.git[\\/]hooks[\\/]/,
 ];
 
+// macOS and Windows resolve paths case-insensitively, so a comparison that
+// is not folded there would let `cat /etc/SHADOW` or `~/.egc/ENCRYPTION.KEY`
+// slip past a check written in lower case.
+const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform === 'win32';
+
+function foldCase(p: string): string {
+  return CASE_INSENSITIVE_FS ? p.toLowerCase() : p;
+}
+
 function isUnder(candidate: string, parent: string): boolean {
-  const resolvedParent = resolveRealOrLexical(parent);
-  return candidate === resolvedParent || candidate.startsWith(resolvedParent + path.sep);
+  const resolvedParent = foldCase(resolveRealOrLexical(parent));
+  const folded = foldCase(candidate);
+  return folded === resolvedParent || folded.startsWith(resolvedParent + path.sep);
+}
+
+// Whether the protection comes from the path living inside a denied
+// directory (a credential store) rather than from the filename alone.
+function isUnderDeniedDirectory(normalizedP: string): boolean {
+  return DENIED_PATHS.some(denied => isUnder(normalizedP, denied));
 }
 
 export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): boolean {
@@ -866,12 +878,15 @@ export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): bo
     : trimmed;
   const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
 
-  // A secret carved out of a readable tree wins over that tree.
-  if (READ_SECRET_PATHS.some(secret => isUnder(normalizedP, secret))) return true;
+  // An explicitly operational location is readable.
+  if (READ_SAFE_PATHS.some(safe => isUnder(normalizedP, safe))) return false;
 
-  if (READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(normalizedP))) return false;
+  // Inside a credential store, the filename means nothing: deny.
+  if (isUnderDeniedDirectory(normalizedP)) return true;
 
-  return !READ_SAFE_PATHS.some(safe => isUnder(normalizedP, safe));
+  // Protection came from the filename alone. Allow the persistence-only
+  // ones; everything else (.env, .pem, tokens, auth files) stays denied.
+  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(normalizedP));
 }
 
 export interface ValidationResult {

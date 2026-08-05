@@ -266,6 +266,43 @@ run('credential stores outside the readable areas stay denied', () => {
   }
 });
 
+run('a persistence-file name cannot unlock a credential directory', () => {
+  const home = require('node:os').homedir();
+  // .bashrc and .gitconfig are readable where they normally live, but the
+  // filename must not make them readable inside a credential store, and the
+  // .git/config pattern must not stretch to .git/config_keys.
+  for (const cmd of [
+    `cat ${path.join(home, '.ssh', '.gitconfig')}`,
+    `cat ${path.join(home, '.aws', '.bashrc')}`,
+    `cat ${path.join(home, '.ssh', '.git', 'config')}`,
+    `cat ${path.join(home, '.ssh', '.git', 'config_keys')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} sits inside a credential store`);
+  }
+});
+
+run('system secrets are denied without having to be enumerated', () => {
+  // The readable set is narrow on purpose (specific directories, not whole
+  // trees), so none of these had to be listed anywhere to stay protected --
+  // which is the point, since an audit found every one of them missing from
+  // an earlier attempt that opened /etc and ~/.egc wholesale.
+  const home = require('node:os').homedir();
+  for (const cmd of [
+    'cat /etc/shadow-',
+    'cat /etc/gshadow-',
+    'cat /etc/sudoers.tmp',
+    'cat /etc/ssl/private/server.key',
+    'cat /etc/wireguard/wg0.conf',
+    'cat /etc/krb5.keytab',
+    'cat /etc/master.passwd',
+    `cat ${path.join(home, '.egc', 'encryption.key.bak')}`,
+    `cat ${path.join(home, '.egc', 'state.bak')}`,
+    `cat ${path.join(home, '.egc', 'state', 'project.md')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} must stay denied`);
+  }
+});
+
 run('write protection is untouched by the read split', () => {
   const home = require('node:os').homedir();
   for (const target of [
