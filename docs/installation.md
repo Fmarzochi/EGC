@@ -120,16 +120,21 @@ sh scripts/install.sh
 ```
 EGC install
   node v22.0.0
+  npm 10.0.0
+  Optional dependency not found: uv
+    Required only for Jira and omega-memory MCP servers.
+    Core EGC installation is unaffected. Install: https://docs.astral.sh/uv/
+  installing root dependencies...
   building egc-guardian...
   building egc-memory...
   initializing database...
   bootstrapping cognitive protocol...
-  ✓ ~/.claude/CLAUDE.md updated
-  ✓ ~/.gemini/GEMINI.md updated
+  [cognitive] Claude Code: memory protocol installed (~/.claude/CLAUDE.md)
+  [cognitive] Cursor: memory protocol installed (~/.cursor/rules)
   registering MCP servers...
-  ✓ registered in Claude Code (global)
-  ✓ registered in Cursor
-  ✓ registered in Gemini CLI  ← paid accounts only; see note above
+  ✓ registered egc-guardian in Claude Code (user scope)
+  ✓ registered egc-memory in Claude Code (user scope)
+  ✓ registered in Cursor (~/.cursor/mcp.json)
 
 Install prompt library? (61 agents, 230 skills, 77 commands) [y/N]:
 
@@ -138,8 +143,16 @@ Shim directory: ~/.egc/bin
 Installed: git, npm, gh, ...
 
 Installation complete.
+EGC Dashboard starting at http://localhost:7890
 Run 'egc doctor' to verify.
 ```
+
+Only the tools you actually have are touched, so your own output will be
+shorter or longer than this one. Claude Code is registered through its own
+CLI (`claude mcp add -s user`), which is why those two lines name the
+servers individually. In a headless environment (CI, or output piped to a
+file) the dashboard line is replaced by `Dashboard not started (headless
+environment)`.
 
 ---
 
@@ -169,7 +182,7 @@ cd EGC
 egc doctor
 ```
 
-This checks that both MCP servers are built, registered, and reachable in every detected tool.
+This compares every managed file EGC installed against the source it came from, reporting drift, missing files, and version mismatch per target. It also checks the state store: where it lives, whether the memory store exists yet, and whether older versions left stray copies behind.
 
 ---
 
@@ -197,7 +210,7 @@ egc telemetry status
 
 ## Dashboard
 
-The dashboard starts automatically when you run `egc init`. A bare `egc install` configures the runtime but does not start the dashboard.
+The dashboard starts automatically after `egc install` and `egc init`, whenever you are at an interactive terminal. Headless environments (CI, or output redirected to a file) skip it and say so.
 
 You can control it manually:
 
