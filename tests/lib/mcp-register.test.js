@@ -95,6 +95,18 @@ function runTests() {
 
   // ── registerClaudeCli (Claude Code user scope via the CLI) ────────
 
+  (test('quoteForCmdShell quotes cmd-sensitive arguments and leaves plain ones untouched', () => {
+    const { quoteForCmdShell } = require('../../scripts/lib/mcp-register');
+    assert.strictEqual(quoteForCmdShell('plain-arg'), 'plain-arg');
+    assert.strictEqual(
+      quoteForCmdShell(String.raw`C:\Users\First Last\egc\build\index.js`),
+      String.raw`"C:\Users\First Last\egc\build\index.js"`,
+      'a path with a space must be quoted or cmd.exe splits it into two arguments'
+    );
+    assert.strictEqual(quoteForCmdShell('has"quote'), '"has""quote"', 'embedded quotes double, the cmd convention');
+    assert.strictEqual(quoteForCmdShell('C:\\Program Files\\nodejs\\npm.cmd'), '"C:\\Program Files\\nodejs\\npm.cmd"');
+  }) ? passed++ : failed++);
+
   (test('no target points at claude_desktop_config.json (dead-file regression)', () => {
     const targets = buildMcpRegistrationTargets('/home/person');
     for (const target of targets) {

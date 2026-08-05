@@ -356,13 +356,29 @@ function resolveClaudeCli() {
  * Throws when the CLI cannot run or refuses an add, so registerTarget
  * surfaces it as a warning instead of a false success.
  */
+// When spawnSync runs through the Windows shell, the args array is joined
+// onto the command line verbatim (windowsVerbatimArguments): no quoting at
+// all, so an install path with a space (C:\Users\First Last\..., Program
+// Files) splits into two arguments and the add silently registers garbage.
+// Quote anything cmd.exe would misparse, doubling embedded quotes, the cmd
+// convention. POSIX callers never hit this path (shell stays false there).
+function quoteForCmdShell(arg) {
+  if (!/[\s"^&|<>()%!]/.test(arg)) return arg;
+  return '"' + arg.replaceAll('"', '""') + '"';
+}
+
 function registerClaudeCli(_targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   const cli = resolveClaudeCli();
   if (!cli) throw new Error('claude CLI not found on PATH');
   // Same Windows rule as the crusher shim: .cmd/.bat need a shell.
   const { needsShellOnWindows } = require('./crusher/shim-dispatch');
-  const runCli = (args) => spawnSync(cli, args, { encoding: 'utf8', shell: needsShellOnWindows(cli) }); // NOSONAR javascript:S4036 -- cli was resolved above from the user's own PATH on purpose; fixed argv
+  const useShell = needsShellOnWindows(cli);
+  const runCli = (args) => spawnSync(
+    useShell ? quoteForCmdShell(cli) : cli,
+    useShell ? args.map(quoteForCmdShell) : args,
+    { encoding: 'utf8', shell: useShell }
+  ); // NOSONAR javascript:S4036 -- cli was resolved above from the user's own PATH on purpose; fixed argv
 
   const servers = [
     ['egc-guardian', guardianBin],
@@ -433,5 +449,6 @@ module.exports = {
   registerContinueYaml,
   registerZedContextServers,
   registerClaudeCli,
+  quoteForCmdShell,
   registerMcpServers,
 };
