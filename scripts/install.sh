@@ -300,7 +300,7 @@ register_mcp_claude_cli() {
   local name bin
   for name in egc-guardian egc-memory; do
     bin="$GUARDIAN_BIN"
-    if [ "$name" = "egc-memory" ]; then bin="$MEMORY_BIN"; fi
+    if [[ "$name" = "egc-memory" ]]; then bin="$MEMORY_BIN"; fi
     if claude mcp get "$name" >/dev/null 2>&1; then
       continue
     fi
@@ -382,7 +382,7 @@ fi
 # was invoked from only: the package's own bundled .mcp.json is not a user
 # project, and creating a file in an arbitrary cwd would litter. ($PWD is
 # useless here - the script cd'd to the package root long ago.)
-if [ -f "$INVOKED_FROM_DIR/.mcp.json" ] && [ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]; then
+if [[ -f "$INVOKED_FROM_DIR/.mcp.json" ]] && [[ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]]; then
   register_mcp_json "$INVOKED_FROM_DIR/.mcp.json" "Claude Code (project .mcp.json)"
 fi
 
@@ -524,7 +524,7 @@ fi
 echo ""
 echo "Installation complete."
 if [ "$_has_install_args" = false ]; then
-  if [ "$DRY_RUN" = true ]; then
+  if [[ "$DRY_RUN" = true ]]; then
     echo "Dashboard launch skipped (--dry-run)."
   else
     # The README promises a live dashboard right after installation. The
