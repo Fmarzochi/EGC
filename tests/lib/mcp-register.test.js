@@ -118,6 +118,40 @@ function runTests() {
     }
   }) ? passed++ : failed++);
 
+  (test('a fresh Windows OpenCode is routed to AppData, never to the XDG path', () => {
+    // Installed but never launched: neither config file exists, so only the
+    // PATH signal is available. Writing the XDG file on Windows would
+    // produce a config the editor never reads.
+    const tmpHome = makeTempDir();
+    const binDir = makeTempDir();
+    const savedPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const savedPath = process.env.PATH;
+    const savedAppData = process.env.APPDATA;
+    fs.writeFileSync(path.join(binDir, 'opencode.cmd'), '@echo off\r\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(binDir, 'opencode'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    process.env.PATH = `${binDir}${path.delimiter}${savedPath}`;
+    process.env.APPDATA = path.join(tmpHome, 'AppData', 'Roaming');
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const appData = targets.find(t => t.name === 'OpenCode (Windows AppData)');
+      const xdg = targets.find(t => t.name === 'OpenCode');
+      assert.strictEqual(appData.gate(), true, 'the AppData target must open for a PATH-visible OpenCode on Windows');
+      assert.strictEqual(xdg.gate(), false, 'the XDG target must stay closed on Windows');
+
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      const posixTargets = buildMcpRegistrationTargets(tmpHome);
+      assert.strictEqual(posixTargets.find(t => t.name === 'OpenCode').gate(), true, 'elsewhere the XDG target is the right one');
+      assert.strictEqual(posixTargets.find(t => t.name === 'OpenCode (Windows AppData)').gate(), false);
+    } finally {
+      if (savedPlatform) Object.defineProperty(process, 'platform', savedPlatform);
+      process.env.PATH = savedPath;
+      if (savedAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = savedAppData;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
   (test('a tool present on PATH but not yet configured is still registered', () => {
     // Someone who installed Cursor and has not launched it owns no ~/.cursor
     // yet; an existence-only gate would skip them, which is exactly what the
