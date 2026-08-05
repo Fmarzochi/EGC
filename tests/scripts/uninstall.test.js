@@ -8,6 +8,13 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+// Both subprocesses here perform a full install or uninstall against a real
+// temp tree: dozens of file writes, plus whatever the runner's antivirus
+// does to each one. 30s was enough until it was not (spawnSync node
+// ETIMEDOUT on windows-latest), and a budget that only fits on a quiet
+// machine reads as a flake rather than as the slow-runner signal it is.
+const SUBPROCESS_TIMEOUT_MS = process.platform === 'win32' ? 90000 : 10000;
+
 const INSTALL_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'uninstall.js');
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -48,7 +55,7 @@ function run(args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      timeout: SUBPROCESS_TIMEOUT_MS,
     });
 
     return { code: 0, stdout, stderr: '' };
@@ -92,7 +99,7 @@ function runTests() {
         },
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: process.platform === 'win32' ? 30000 : 10000,
+        timeout: SUBPROCESS_TIMEOUT_MS,
       });
       assert.ok(installStdout.includes('Done. Install-state written'));
 

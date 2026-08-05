@@ -8,6 +8,11 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+// Same reasoning as tests/scripts/uninstall.test.js: these cases run a full
+// install against a real temp tree before they can repair anything, and 30s
+// is not a reliable budget for that on a Windows runner.
+const SUBPROCESS_TIMEOUT_MS = process.platform === 'win32' ? 90000 : 10000;
+
 const INSTALL_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const DOCTOR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
 const REPAIR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'repair.js');
@@ -51,7 +56,7 @@ function runNode(scriptPath, args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      timeout: SUBPROCESS_TIMEOUT_MS,
     });
 
     return { code: 0, stdout, stderr: '' };
