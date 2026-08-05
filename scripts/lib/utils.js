@@ -523,12 +523,13 @@ function existsOnPath(cmd) {
   // what actually separates the entries of the PATH being read.
   const onWindows = process.platform === 'win32';
 
+  // POSIX shells read a leading, trailing or doubled separator as the
+  // current directory; Windows does not, so the empty entry is dropped
+  // there instead of silently searching somewhere it never would.
+  const emptyEntryMeans = onWindows ? null : '.';
   const directories = rawPath
     .split(path.delimiter)
-    // POSIX shells read a leading, trailing or doubled separator as the
-    // current directory; Windows does not, so the empty entry is dropped
-    // there instead of silently searching somewhere it never would.
-    .map(entry => (entry === '' ? (onWindows ? null : '.') : entry))
+    .map(entry => (entry === '' ? emptyEntryMeans : entry))
     .filter(entry => entry !== null)
     // Windows PATH entries are sometimes quoted; the quotes are shell
     // syntax, not part of the directory name, and would make every lookup

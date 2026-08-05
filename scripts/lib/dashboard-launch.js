@@ -44,11 +44,15 @@ function launchDashboard({ rootDir, log = () => {} }) {
       openBrowser();
       return true;
     }
+    // No shell, on any platform. process.execPath is the absolute path to
+    // the running node binary and dashboardScript is built from rootDir, so
+    // there is nothing for a shell to resolve -- but with `shell: true`
+    // Windows would hand both to cmd.exe for re-parsing, where a directory
+    // containing a space or a metacharacter changes what actually runs.
     const child = spawn(process.execPath, [dashboardScript], {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, EGC_PORT: String(PORT) },
-      ...(process.platform === 'win32' && { shell: true }),
     });
     child.unref();
     log(`EGC Dashboard starting at ${DASHBOARD_URL}`);
