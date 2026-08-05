@@ -85,5 +85,41 @@ if (test('savings_pct is between 0 and 100', () => {
   assert.ok(result.savings_pct >= 0 && result.savings_pct <= 100);
 })) passed++; else failed++;
 
+if (test('crushes a list nested inside an object and keeps the surrounding fields', () => {
+  // The shape of nearly every REST and CLI payload: the volume is one key
+  // down, next to small scalars. Requiring an array at the top level let all
+  // of those through at full size (a single `gh project item-list --format
+  // json` read 637 KB before this).
+  const items = JSON.parse(makeRows(40, i => ({ id: i % 4, status: 'open', label: `item-${i % 3}` })));
+  const payload = JSON.stringify({ items, totalCount: 812, pageInfo: { hasNextPage: true } });
+
+  const result = reduceJsonArray(payload);
+  assert.ok(result !== null, 'a nested list must be crushed, not passed through');
+  assert.strictEqual(result.rows_before, 40);
+  assert.ok(result.rows_after < 40, 'rows must actually be reduced');
+
+  const reparsed = JSON.parse(result.crushed);
+  assert.strictEqual(reparsed.totalCount, 812, 'counts around the list must survive verbatim');
+  assert.deepStrictEqual(reparsed.pageInfo, { hasNextPage: true }, 'pagination must survive verbatim');
+  assert.strictEqual(reparsed.items.length, result.rows_after);
+  assert.ok(result.crushed.length < payload.length, 'the crushed payload must be smaller');
+})) passed++; else failed++;
+
+if (test('picks the largest list when an object holds several', () => {
+  const few = JSON.parse(makeRows(6, i => ({ id: i, kind: 'small' })));
+  const many = JSON.parse(makeRows(30, i => ({ id: i % 3, kind: 'big' })));
+  const result = reduceJsonArray(JSON.stringify({ few, many }));
+
+  assert.ok(result !== null, 'should crush');
+  assert.strictEqual(result.rows_before, 30, 'the largest list is the one worth reducing');
+  const reparsed = JSON.parse(result.crushed);
+  assert.strictEqual(reparsed.few.length, 6, 'the smaller list must be left alone');
+})) passed++; else failed++;
+
+if (test('leaves an object with no list of its own alone', () => {
+  const result = reduceJsonArray(JSON.stringify({ status: 'ok', count: 3, nested: { a: 1 } }));
+  assert.strictEqual(result, null, 'nothing to reduce means no rewrite');
+})) passed++; else failed++;
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
