@@ -1,5 +1,10 @@
 $ErrorActionPreference = "Stop"
 
+# The directory the person ran the installer FROM. Captured here, before any
+# Set-Location moves to the package root, because the project .mcp.json merge
+# near the end must target their project, not the package.
+$InvokedFromDir = (Get-Location).Path
+
 $RootDir       = Split-Path -Parent $PSScriptRoot
 $BootstrapDb   = Join-Path (Join-Path $RootDir "scripts") "bootstrap-state-db.js"
 $EgcInstall    = Join-Path (Join-Path $RootDir "scripts") "install-apply.js"
@@ -268,11 +273,12 @@ if (-not $DryRun) {
     }
 
     # Claude Code - project .mcp.json: merge into an existing file in the
-    # invoking directory only. The package's own bundled .mcp.json is not a
-    # user project, and creating a file in an arbitrary cwd would litter.
-    $invokingDir = (Get-Location).Path
-    $projectMcp = Join-Path $invokingDir ".mcp.json"
-    if ((Test-Path $projectMcp) -and ($invokingDir -ne $RootDir)) {
+    # directory the installer was invoked from only. The package's own
+    # bundled .mcp.json is not a user project, and creating a file in an
+    # arbitrary cwd would litter. (Get-Location is useless here - the
+    # script Set-Location'd to the package root long ago.)
+    $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
+    if ((Test-Path $projectMcp) -and ($InvokedFromDir -ne $RootDir)) {
         Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
     }
 
@@ -339,7 +345,11 @@ fs.writeFileSync(t,c);
     }
 
     # Obsidian propagation (delegated to Node)
-    $obsidianSources = @($agyConfig, $geminiConfig, $claudeConfig, $cursorConfig)
+    # $claudeConfig (Claude Desktop's file) is gone from both lists: Claude
+    # Code never read it, so it was a dead source and a dead target alike.
+    # Propagating obsidian into Claude Code's real user scope needs the CLI
+    # (claude mcp add-json) and is tracked as a follow-up.
+    $obsidianSources = @($agyConfig, $geminiConfig, $cursorConfig)
     $findObsTmp = Join-Path $env:TEMP ("egc_obs_find_" + [System.Guid]::NewGuid().ToString("N") + ".js")
     Set-Content -Path $findObsTmp -Encoding UTF8 -Value @'
 const fs=require("fs");
@@ -370,7 +380,6 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
         $propagateTargets = @(
             @{ P = $agyConfig;     L = "Antigravity CLI" }
             @{ P = $geminiConfig;  L = "Gemini CLI" }
-            @{ P = $claudeConfig;  L = "Claude Code" }
             @{ P = $cursorConfig;  L = "Cursor" }
             @{ P = $kiroConfig;    L = "Kiro" }
             @{ P = $opencodeConfig; L = "OpenCode" }

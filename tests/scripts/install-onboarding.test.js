@@ -166,7 +166,7 @@ function runTests() {
       assert.ok(sources.powerShell.includes(message), `install.ps1 missing: ${message}`);
     }
     assert.ok(sources.bash.includes(DASHBOARD_LAUNCHER_REF), 'install.sh must launch the dashboard through the shared CLI wrapper');
-    assert.ok(sources.powerShell.includes('scripts/lib/dashboard-launch-cli.js'), 'install.ps1 must launch the dashboard through the shared CLI wrapper');
+    assert.ok(sources.powerShell.includes(DASHBOARD_LAUNCHER_REF), 'install.ps1 must launch the dashboard through the shared CLI wrapper');
     assert.ok(sources.bash.includes('if [ "$_has_install_args" = false ]; then'));
     assert.ok(sources.powerShell.includes('if (-not $hasInstallArgs)'));
   })) passed++; else failed++;
@@ -182,6 +182,39 @@ function runTests() {
       }
     } finally {
       cleanup();
+    }
+  })) passed++; else failed++;
+
+  if (test('bare Bash install merges an existing project .mcp.json from the invoking directory', () => {
+    if (process.platform === 'win32') return;
+
+    // The installer cd's to the package root early, so this only works when
+    // the invoking directory is captured before that cd - the exact
+    // regression this test pins.
+    const fixture = createInstallerFixture();
+    const projectDir = path.join(fixture.root, 'my-project');
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(path.join(projectDir, '.mcp.json'), JSON.stringify({ mcpServers: {} }, null, 2));
+    const result = spawnSync(fixture.bash, [fixture.installScript], {
+      cwd: projectDir,
+      env: {
+        ...process.env,
+        CI: '1',
+        HOME: fixture.homeDir,
+        USERPROFILE: fixture.homeDir,
+        PATH: fixture.binDir,
+      },
+      encoding: 'utf8',
+      timeout: INSTALL_TIMEOUT_MS,
+    });
+    try {
+      assertSuccessfulRun(result);
+      assert.ok(
+        result.stdout.includes('registered in Claude Code (project .mcp.json)'),
+        `invoking-directory .mcp.json must be merged, got:\n${result.stdout}`
+      );
+    } finally {
+      fs.rmSync(fixture.root, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 

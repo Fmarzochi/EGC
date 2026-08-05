@@ -2,6 +2,10 @@
 set -e
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# The directory the person ran the installer FROM. Captured here, before the
+# first cd (line ~94 already moves to the package root), because the project
+# .mcp.json merge near the end must target their project, not the package.
+INVOKED_FROM_DIR="$(pwd -P)"
 
 # On Windows via Git Bash/MSYS, $ROOT_DIR is a POSIX-style mount path (e.g.
 # /c/Users/x/EGC) that bash and node-run-from-bash understand, but any path
@@ -374,11 +378,12 @@ fi
 if command -v claude >/dev/null 2>&1; then
   register_mcp_claude_cli
 fi
-# Merge into an existing project .mcp.json in the invoking directory only:
-# the package's own bundled .mcp.json is not a user project, and creating a
-# file in an arbitrary cwd would litter.
-if [ -f "$PWD/.mcp.json" ] && [ "$PWD" != "$ROOT_DIR" ]; then
-  register_mcp_json "$PWD/.mcp.json" "Claude Code (project .mcp.json)"
+# Merge into an existing project .mcp.json in the directory the installer
+# was invoked from only: the package's own bundled .mcp.json is not a user
+# project, and creating a file in an arbitrary cwd would litter. ($PWD is
+# useless here - the script cd'd to the package root long ago.)
+if [ -f "$INVOKED_FROM_DIR/.mcp.json" ] && [ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]; then
+  register_mcp_json "$INVOKED_FROM_DIR/.mcp.json" "Claude Code (project .mcp.json)"
 fi
 
 # Cursor
