@@ -159,11 +159,19 @@ function runTests() {
       fs.mkdirSync(path.dirname(cursorConfig), { recursive: true });
       fs.writeFileSync(cursorConfig, broken);
 
+      // Hermetic on purpose: an empty PATH means no PATH-gated target can
+      // fire, so this never touches a real claude/cursor/kiro/codex on the
+      // machine running the suite and the output does not vary by host. The
+      // only target that opens is the Cursor config seeded above, which is
+      // exactly the one under test. process.execPath runs the CLI directly,
+      // so node itself does not need to be on PATH.
+      const emptyBin = createTempDir('egc-install-nopath-');
       const out = execFileSync(
         process.execPath,
         [path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register-cli.js'), '/tmp/guardian.js', '/tmp/memory.js'],
-        { env: { ...process.env, HOME: home, USERPROFILE: home }, encoding: 'utf8', cwd: home }
+        { env: { ...process.env, HOME: home, USERPROFILE: home, PATH: emptyBin }, encoding: 'utf8', cwd: home }
       );
+      cleanup(emptyBin);
 
       assert.ok(
         /note: skipped Cursor[\s\S]*is not valid JSON/.test(out),
