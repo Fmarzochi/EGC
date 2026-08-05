@@ -34,8 +34,14 @@ function openBrowser() {
 
 // log(msg) receives already-formatted lines so each caller keeps its own
 // styling. Resolves once the launch decision is made, never rejects.
-function launchDashboard({ rootDir, log = () => {} }) {
-  const dashboardScript = path.join(rootDir, 'scripts', 'dashboard.js');
+function launchDashboard({ log = () => {} } = {}) {
+  // The script to run is derived from this file's own location, never from
+  // a caller-supplied root. Every caller (init.js, install-apply.js, the
+  // shell wrapper) already resolved the same package root, so nothing
+  // changes in practice -- but a path that arrives from outside and reaches
+  // spawn() is a command-injection shape no matter how it is escaped, and
+  // there is no path left to validate once it cannot arrive at all.
+  const dashboardScript = path.join(__dirname, '..', 'dashboard.js');
   if (!fs.existsSync(dashboardScript)) return Promise.resolve(false);
 
   return pingDashboard().then(already => {
@@ -44,11 +50,12 @@ function launchDashboard({ rootDir, log = () => {} }) {
       openBrowser();
       return true;
     }
-    // No shell, on any platform. process.execPath is the absolute path to
-    // the running node binary and dashboardScript is built from rootDir, so
-    // there is nothing for a shell to resolve -- but with `shell: true`
-    // Windows would hand both to cmd.exe for re-parsing, where a directory
-    // containing a space or a metacharacter changes what actually runs.
+    // No shell, on any platform. Both arguments are absolute paths this
+    // process already owns (process.execPath, and a sibling of __dirname),
+    // so there is nothing for a shell to resolve. Node's documentation is
+    // explicit that shell is only needed for .bat/.cmd files, that detached
+    // works on Windows without it, and that enabling it with unsanitized
+    // input allows arbitrary command execution.
     const child = spawn(process.execPath, [dashboardScript], {
       detached: true,
       stdio: 'ignore',

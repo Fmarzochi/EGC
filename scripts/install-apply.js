@@ -251,7 +251,7 @@ function main() {
       printHumanPlan(result, false);
       const { launchDashboard, shouldAutoLaunch } = require('./lib/dashboard-launch');
       if (shouldAutoLaunch()) {
-        launchDashboard({ rootDir: require('node:path').join(__dirname, '..'), log: msg => console.log(`  ${msg}`) });
+        launchDashboard({ log: msg => console.log(`  ${msg}`) });
       }
     }
   } catch (error) {

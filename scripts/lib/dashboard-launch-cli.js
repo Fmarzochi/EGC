@@ -3,19 +3,18 @@
 
 // Tiny CLI wrapper over dashboard-launch for the shell installers: they
 // cannot require() the module directly, and the launch decision must stay
-// in one place. argv[2] is the repo/package root the dashboard runs from.
+// in one place. No argument is read: launchDashboard resolves the script
+// from its own location, so nothing a caller passes can influence what is
+// spawned.
 
-const path = require('node:path');
 const { launchDashboard, shouldAutoLaunch } = require('./dashboard-launch');
-
-const rootDir = process.argv[2] || path.join(__dirname, '..', '..');
 
 if (shouldAutoLaunch()) {
   // launchDashboard resolves rather than rejects on its own failures, but an
   // unexpected rejection here would surface as an UnhandledPromiseRejection
   // and take the installer's exit code with it: a dashboard that did not
   // start is never a reason to fail an otherwise complete installation.
-  launchDashboard({ rootDir, log: (line) => console.log(line) })
+  launchDashboard({ log: (line) => console.log(line) })
     // A rejection value is not guaranteed to be an Error; reading .message
     // off null here would throw inside the handler and reintroduce the very
     // unhandled rejection this catch exists to prevent.

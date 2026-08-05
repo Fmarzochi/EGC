@@ -511,6 +511,42 @@ function commandExists(cmd) {
  * looks exactly like "the command is not installed" - which would silently
  * skip work for a tool the person really does have.
  */
+// PATH entries, cleaned. POSIX shells read a leading, trailing or doubled
+// separator as the current directory; Windows does not, so the empty entry
+// is dropped there instead of silently searching somewhere it never would.
+// Windows entries are also sometimes quoted, and those quotes are shell
+// syntax rather than part of the directory name.
+function pathDirectories(rawPath, onWindows) {
+  const emptyEntryMeans = onWindows ? null : '.';
+  return rawPath
+    .split(path.delimiter)
+    .map(entry => (entry === '' ? emptyEntryMeans : entry))
+    .filter(entry => entry !== null)
+    .map(entry => (onWindows ? entry.replace(/^"(.*)"$/, '$1') : entry));
+}
+
+// A name that already carries an extension is looked up exactly as written.
+// Appending PATHEXT on top of it would search for tool.exe.CMD and report a
+// match the shell would never resolve.
+function pathExtensions(cmd, onWindows) {
+  if (!onWindows || path.extname(cmd)) return [''];
+  return (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
+}
+
+// A directory named like the command would pass both the Windows existence
+// check and the POSIX executable check (searchable directories carry the
+// execute bit), so the type is settled before anything else.
+function isExecutableFile(candidate, onWindows) {
+  try {
+    if (!fs.statSync(candidate).isFile()) return false;
+    if (onWindows) return true;
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function existsOnPath(cmd) {
   const rawPath = process.env.PATH;
   // An unset or empty PATH means there is nowhere to look, which is not the
@@ -518,45 +554,16 @@ function existsOnPath(cmd) {
   if (!rawPath) return false;
 
   // Read at call time, not from the module-level isWindows, so the Windows
-  // rules below are reachable under test on any host. The separator stays
+  // rules are reachable under test on any host. The separator stays
   // path.delimiter, which is already ';' in any real Windows process and is
   // what actually separates the entries of the PATH being read.
   const onWindows = process.platform === 'win32';
-
-  // POSIX shells read a leading, trailing or doubled separator as the
-  // current directory; Windows does not, so the empty entry is dropped
-  // there instead of silently searching somewhere it never would.
-  const emptyEntryMeans = onWindows ? null : '.';
-  const directories = rawPath
-    .split(path.delimiter)
-    .map(entry => (entry === '' ? emptyEntryMeans : entry))
-    .filter(entry => entry !== null)
-    // Windows PATH entries are sometimes quoted; the quotes are shell
-    // syntax, not part of the directory name, and would make every lookup
-    // inside that entry fail.
-    .map(entry => (onWindows ? entry.replace(/^"(.*)"$/, '$1') : entry));
-  // A name that already carries an extension is looked up exactly as
-  // written. Appending PATHEXT on top of it would search for tool.exe.CMD
-  // and report a match that the shell would never resolve.
-  let extensions = [''];
-  if (onWindows && !path.extname(cmd)) {
-    extensions = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
-  }
+  const directories = pathDirectories(rawPath, onWindows);
+  const extensions = pathExtensions(cmd, onWindows);
 
   for (const directory of directories) {
     for (const extension of extensions) {
-      const candidate = path.join(directory, cmd + extension);
-      try {
-        // A directory named like the command would pass both the Windows
-        // existence check and the POSIX executable check (searchable
-        // directories carry the execute bit), so the type is settled first.
-        if (!fs.statSync(candidate).isFile()) continue;
-        if (onWindows) return true;
-        fs.accessSync(candidate, fs.constants.X_OK);
-        return true;
-      } catch {
-        // Not here; keep looking.
-      }
+      if (isExecutableFile(path.join(directory, cmd + extension), onWindows)) return true;
     }
   }
   return false;

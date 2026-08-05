@@ -281,16 +281,36 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await testAsync('launchDashboard declines without spawning anything when the dashboard script is absent', async () => {
-    const { launchDashboard } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch'));
-    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-root-'));
-    const logged = [];
+  if (test('launchDashboard declines without spawning anything when the dashboard script is absent', () => {
+    // launchDashboard resolves the script from its own location rather than
+    // from an argument (nothing outside the package can influence what gets
+    // spawned), so an incomplete install is reproduced by copying the module
+    // into a tree that has no scripts/dashboard.js beside it.
+    const partialRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-partial-'));
     try {
-      const launched = await launchDashboard({ rootDir: emptyRoot, log: (line) => logged.push(line) });
-      assert.strictEqual(launched, false, 'a missing dashboard script must not be treated as a launch');
-      assert.deepStrictEqual(logged, [], 'nothing to say when there is nothing to launch');
+      const libDir = path.join(partialRoot, 'scripts', 'lib');
+      const dashboardDir = path.join(partialRoot, 'dashboard');
+      fs.mkdirSync(libDir, { recursive: true });
+      fs.mkdirSync(dashboardDir, { recursive: true });
+      for (const file of ['dashboard-launch.js', 'dashboard-launch-cli.js']) {
+        fs.copyFileSync(path.join(REPO_ROOT, 'scripts', 'lib', file), path.join(libDir, file));
+      }
+      // dashboard-launch resolves the shared port module from the package
+      // root; only scripts/dashboard.js is deliberately left out.
+      fs.copyFileSync(path.join(REPO_ROOT, 'dashboard', 'port.js'), path.join(dashboardDir, 'port.js'));
+
+      const result = spawnSync(
+        process.execPath,
+        ['-e', `require(${JSON.stringify(path.join(libDir, 'dashboard-launch.js'))})
+          .launchDashboard({ log: (line) => console.log('LOGGED:' + line) })
+          .then(r => console.log('RESULT:' + r));`],
+        { encoding: 'utf8' }
+      );
+
+      assert.ok(result.stdout.includes('RESULT:false'), `a missing dashboard script must not be treated as a launch, got:\n${result.stdout}${result.stderr}`);
+      assert.ok(!result.stdout.includes('LOGGED:'), 'nothing to say when there is nothing to launch');
     } finally {
-      fs.rmSync(emptyRoot, { recursive: true, force: true });
+      fs.rmSync(partialRoot, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 
