@@ -120,5 +120,35 @@ if (test('pipeline handles mixed chunk types', () => {
   assert.ok(r.bytes_after <= r.bytes_before);
 })) passed++; else failed++;
 
+if (test('routes an object wrapping a list to the JSON crusher, not to text', () => {
+  // The crusher can reduce a list nested one key down, but the pipeline only
+  // hands it chunks classified as json_array. Requiring a leading '[' meant
+  // the common {"items": [...], "totalCount": N} shape never reached it.
+  const items = Array.from({ length: 12 }, (_, i) => ({ id: i % 3, state: 'open' }));
+  assert.strictEqual(classifyChunk(JSON.stringify({ items, totalCount: 12 })), 'json_array');
+  assert.strictEqual(classifyChunk(JSON.stringify(items)), 'json_array', 'top-level lists keep working');
+  assert.notStrictEqual(
+    classifyChunk(JSON.stringify({ status: 'ok', count: 2 })),
+    'json_array',
+    'an object with no list must not be routed to the list crusher'
+  );
+})) passed++; else failed++;
+
+if (test('crushes an object-wrapped list end to end and keeps its surrounding fields', () => {
+  // Routing alone proves nothing: this runs the whole pipeline and checks
+  // the payload that comes out the other side.
+  const items = Array.from({ length: 30 }, (_, i) => ({ id: i % 4, state: 'open', title: `t-${i % 3}` }));
+  const payload = JSON.stringify({ items, totalCount: 30, pageInfo: { hasNextPage: false } });
+
+  const r = runPipeline([payload]);
+  assert.strictEqual(r.chunks_crushed, 1, 'the object-wrapped list must actually be crushed');
+  assert.ok(r.bytes_after < r.bytes_before, 'the crushed payload must be smaller');
+
+  const out = JSON.parse(r.chunks[0]);
+  assert.strictEqual(out.totalCount, 30, 'totalCount must survive the pipeline');
+  assert.deepStrictEqual(out.pageInfo, { hasNextPage: false }, 'pagination must survive the pipeline');
+  assert.ok(out.items.length < items.length, 'the list itself must be reduced');
+})) passed++; else failed++;
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

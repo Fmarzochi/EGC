@@ -25,16 +25,7 @@ function rowSignature(row: Record<string, unknown>, keys: string[]): string {
   return keys.map(k => toKey(row[k]).slice(0, 32)).join('|');
 }
 
-export function reduceJsonArray(text: string): ReduceResult | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text.trim());
-  } catch {
-    return null;
-  }
-
-  if (!Array.isArray(parsed)) return null;
-  const rows = parsed.filter(r => r !== null && typeof r === 'object') as Record<string, unknown>[];
+function reduceRows(rows: Record<string, unknown>[]): Record<string, unknown>[] | null {
   if (rows.length < MIN_ROWS_TO_ANALYZE) return null;
 
   const allKeys = [...new Set(rows.flatMap(r => Object.keys(r)))];
@@ -59,15 +50,68 @@ export function reduceJsonArray(text: string): ReduceResult | null {
     final = [...head, ...tail];
   }
 
-  if (final.length >= rows.length) return null;
+  return final.length >= rows.length ? null : final;
+}
 
-  const crushed = JSON.stringify(final, null, 2);
-  const savingsPct = Math.round((1 - final.length / rows.length) * 100);
+// Only a list where every element is a record is reducible. A mixed list
+// (records beside scalars, nulls or nested arrays) is left alone: the row
+// logic can only speak about records, so filtering the rest out would
+// silently drop real elements from a payload the reader still believes is
+// complete.
+function objectRows(value: unknown): Record<string, unknown>[] | null {
+  if (!Array.isArray(value) || value.length < MIN_ROWS_TO_ANALYZE) return null;
+  const allRecords = value.every(r => r !== null && typeof r === 'object' && !Array.isArray(r));
+  return allRecords ? (value as Record<string, unknown>[]) : null;
+}
+
+// The bulk of a REST or CLI payload is almost never the top-level value: it
+// is a list nested one key down, beside a handful of small scalars
+// (`{"items": [...], "totalCount": 812}`, `{"workflow_runs": [...]}`,
+// `{"jobs": [...]}`). Requiring an array at the very top meant every one of
+// those passed through at full size. The largest such list is reduced and
+// everything around it is preserved, so counts and pagination cursors still
+// read correctly.
+function largestNestedList(parsed: Record<string, unknown>): { key: string; rows: Record<string, unknown>[] } | null {
+  let best: { key: string; rows: Record<string, unknown>[] } | null = null;
+  for (const [key, value] of Object.entries(parsed)) {
+    const rows = objectRows(value);
+    if (rows && (!best || rows.length > best.rows.length)) best = { key, rows };
+  }
+  return best;
+}
+
+export function reduceJsonArray(text: string): ReduceResult | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    return null;
+  }
+
+  if (Array.isArray(parsed)) {
+    const rows = objectRows(parsed);
+    if (!rows) return null;
+    const final = reduceRows(rows);
+    if (!final) return null;
+    return {
+      crushed: JSON.stringify(final, null, 2),
+      rows_before: rows.length,
+      rows_after: final.length,
+      savings_pct: Math.round((1 - final.length / rows.length) * 100),
+    };
+  }
+
+  if (parsed === null || typeof parsed !== 'object') return null;
+
+  const target = largestNestedList(parsed as Record<string, unknown>);
+  if (!target) return null;
+  const final = reduceRows(target.rows);
+  if (!final) return null;
 
   return {
-    crushed,
-    rows_before: rows.length,
+    crushed: JSON.stringify({ ...(parsed as Record<string, unknown>), [target.key]: final }, null, 2),
+    rows_before: target.rows.length,
     rows_after: final.length,
-    savings_pct: savingsPct,
+    savings_pct: Math.round((1 - final.length / target.rows.length) * 100),
   };
 }
