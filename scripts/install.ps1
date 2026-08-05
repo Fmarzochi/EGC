@@ -334,25 +334,6 @@ if (-not $DryRun) {
         }
     }
 
-
-    # Claude Code - project .mcp.json: merge into an existing file in the
-    # directory the installer was invoked from only. The package's own
-    # bundled .mcp.json is not a user project, and creating a file in an
-    # arbitrary cwd would litter. (Get-Location is useless here - the
-    # script Set-Location'd to the package root long ago.)
-    $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
-    if (Test-Path $projectMcp) {
-        $invokedPhysical = Resolve-PhysicalDirectory $InvokedFromDir
-        $rootPhysical = Resolve-PhysicalDirectory $RootDir
-        if (-not $invokedPhysical -or -not $rootPhysical) {
-            # Unresolvable means unknown, and an unknown directory is never
-            # worth the risk of writing into the package's own config.
-            Write-Host "  note: skipped project .mcp.json (could not resolve $InvokedFromDir to a physical path)"
-        } elseif ($invokedPhysical -ne $rootPhysical) {
-            Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
-        }
-    }
-
     # One registration list for every entry point. This block used to be a
     # hand-written copy of scripts/lib/mcp-register.js and had drifted:
     # Continue.dev and Zed were never registered here, so installing through

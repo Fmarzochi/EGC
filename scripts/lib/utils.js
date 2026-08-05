@@ -489,14 +489,46 @@ function commandExists(cmd) {
     if (isWindows) {
       // shell:true inherits PATHEXT so `where npm` resolves npm.cmd/.exe correctly
       const result = spawnSync('where', [cmd], { stdio: 'pipe', shell: true });
-      return result.status === 0;
+      if (result.status === 0) return true;
     } else {
       const result = spawnSync('which', [cmd], { stdio: 'pipe' });
-      return result.status === 0;
+      if (result.status === 0) return true;
     }
   } catch {
-    return false;
+    // Fall through to the manual scan below.
   }
+
+  return existsOnPath(cmd);
+}
+
+/**
+ * PATH scan without spawning anything. Minimal images (Alpine, distroless,
+ * some CI containers) ship no `which` at all, and a probe that cannot run
+ * looks exactly like "the command is not installed" - which would silently
+ * skip work for a tool the person really does have.
+ */
+function existsOnPath(cmd) {
+  const directories = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const extensions = isWindows
+    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+    : [''];
+
+  for (const directory of directories) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory, cmd + extension);
+      try {
+        if (isWindows) {
+          if (fs.existsSync(candidate)) return true;
+        } else {
+          fs.accessSync(candidate, fs.constants.X_OK);
+          return true;
+        }
+      } catch {
+        // Not here; keep looking.
+      }
+    }
+  }
+  return false;
 }
 
 /**

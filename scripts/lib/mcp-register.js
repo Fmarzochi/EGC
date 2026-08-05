@@ -17,6 +17,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+// A tool the person installed but never launched owns no config directory,
+// so an existence check alone would skip it. The shell installers used to
+// cover that with `command -v`; sharing the repo's own probe keeps the two
+// detections from drifting, and it falls back to a PATH scan where `which`
+// itself is missing.
+const { commandExists } = require('./utils');
 
 let TOML = null;
 try {
@@ -66,16 +72,6 @@ function tomlHasActiveServer(content, serverName) {
  * `gate()` returns true, so we don't create config files for tools the
  * person doesn't have installed.
  */
-// A tool the person has installed but has not launched yet owns no config
-// directory, so an existence check alone would skip it. The shell
-// installers used to cover that case with `command -v`; the registry now
-// carries it, or delegating to the registry would silently drop those
-// registrations.
-function commandExists(command) {
-  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [command], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- fixed tool names from this file, array form, no shell
-  return probe.status === 0 && Boolean((probe.stdout || '').trim());
-}
-
 // %APPDATA% is the documented location, with the conventional layout as a
 // fallback for the rare environment that does not export it. Computed once
 // so the path a target advertises and the path its gate checks can never

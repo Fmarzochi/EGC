@@ -33,7 +33,13 @@ if (!guardianBin || !memoryBin) {
 }
 
 const bins = { guardianBin, memoryBin };
-const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+// Git for Windows sets HOME to the MSYS home, which is not where the tools
+// this registers keep their config. On Windows the profile the installer
+// itself uses is USERPROFILE, so that wins there; everywhere else HOME is
+// the answer.
+const homeDir = process.platform === 'win32'
+  ? (process.env.USERPROFILE || process.env.HOME || os.homedir())
+  : (process.env.HOME || process.env.USERPROFILE || os.homedir());
 
 registerMcpServers(homeDir, bins, {
   onRegister: (target) => console.log(`  ✓ registered in ${target.name} (${target.path})`),
@@ -44,10 +50,23 @@ registerMcpServers(homeDir, bins, {
 // directory is the process's own working directory, so no argument can turn
 // this into a writer of arbitrary files. The package's own bundled config
 // is excluded: it is nobody's project.
+// Compared physically and, on Windows, case-insensitively: reaching the
+// package root through a junction or a differently-cased path would
+// otherwise read as somebody's project and rewrite the bundled config.
+function canonical(dir) {
+  let resolved;
+  try {
+    resolved = fs.realpathSync.native(dir);
+  } catch {
+    resolved = path.resolve(dir);
+  }
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
 const packageRoot = path.resolve(__dirname, '..', '..');
 const projectMcp = path.join(process.cwd(), '.mcp.json');
 
-if (path.dirname(projectMcp) !== packageRoot && fs.existsSync(projectMcp)) {
+if (canonical(path.dirname(projectMcp)) !== canonical(packageRoot) && fs.existsSync(projectMcp)) {
   try {
     if (registerJson(projectMcp, bins)) {
       console.log(`  ✓ registered in Claude Code (project .mcp.json) (${projectMcp})`);
