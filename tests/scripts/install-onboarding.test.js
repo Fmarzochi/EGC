@@ -244,8 +244,12 @@ async function runTests() {
       // The shell's job is to hand the registration CLI the directory the
       // person invoked it from; the merge itself is covered by the
       // mcp-register unit tests.
+      // realpath, because the installer captures the invoking directory
+      // with `pwd -P`: on macOS a temp dir under /var is physically
+      // /private/var, and comparing the two spellings would fail there
+      // while passing on Linux.
       assert.ok(
-        result.stdout.includes(`MCP-CLI-PROJECT-ARG:${path.join(projectDir, '.mcp.json')}`),
+        result.stdout.includes(`MCP-CLI-PROJECT-ARG:${path.join(fs.realpathSync(projectDir), '.mcp.json')}`),
         `installer must pass the invoking directory's .mcp.json to the registration CLI, got:\n${result.stdout}`
       );
     } finally {

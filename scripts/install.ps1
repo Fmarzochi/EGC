@@ -334,42 +334,6 @@ if (-not $DryRun) {
         }
     }
 
-    # Claude Code: registration goes through the CLI's own user scope. The
-    # old path here wrote Claude Desktop's config file while labeling it
-    # Claude Code - a different application entirely. No CLI on PATH means
-    # no Claude Code to register into.
-    if (Get-Command claude -ErrorAction SilentlyContinue) {
-        # A non-zero exit from `claude mcp get` is the expected "not
-        # registered yet" answer, but PowerShell 7.4+ turns native exit
-        # codes into terminating errors while $ErrorActionPreference is
-        # Stop, which would abort the whole installer before the check
-        # below could read $LASTEXITCODE.
-        $previousNativePref = $null
-        if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
-            $previousNativePref = $PSNativeCommandUseErrorActionPreference
-            $PSNativeCommandUseErrorActionPreference = $false
-        }
-        try {
-            foreach ($server in @(
-                @{ Name = "egc-guardian"; Bin = $GuardianBin },
-                @{ Name = "egc-memory"; Bin = $MemoryBin }
-            )) {
-                claude mcp get $server.Name *> $null
-                if ($LASTEXITCODE -ne 0) {
-                    claude mcp add -s user $server.Name -- node $server.Bin *> $null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "  v registered $($server.Name) in Claude Code (user scope)"
-                    } else {
-                        Write-Host "  note: could not register $($server.Name) in Claude Code. Run manually: claude mcp add -s user $($server.Name) -- node `"$($server.Bin)`""
-                    }
-                }
-            }
-        } finally {
-            if ($null -ne $previousNativePref) {
-                $PSNativeCommandUseErrorActionPreference = $previousNativePref
-            }
-        }
-    }
 
     # Claude Code - project .mcp.json: merge into an existing file in the
     # directory the installer was invoked from only. The package's own

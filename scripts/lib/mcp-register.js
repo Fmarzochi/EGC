@@ -66,7 +66,27 @@ function tomlHasActiveServer(content, serverName) {
  * `gate()` returns true, so we don't create config files for tools the
  * person doesn't have installed.
  */
+// A tool the person has installed but has not launched yet owns no config
+// directory, so an existence check alone would skip it. The shell
+// installers used to cover that case with `command -v`; the registry now
+// carries it, or delegating to the registry would silently drop those
+// registrations.
+function commandExists(command) {
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [command], { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- fixed tool names from this file, array form, no shell
+  return probe.status === 0 && Boolean((probe.stdout || '').trim());
+}
+
+// %APPDATA% is the documented location, with the conventional layout as a
+// fallback for the rare environment that does not export it. Computed once
+// so the path a target advertises and the path its gate checks can never
+// drift apart.
+function windowsAppDataOpenCodeConfig(homeDir) {
+  const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
+  return path.join(appData, 'opencode', 'config.json');
+}
+
 function buildMcpRegistrationTargets(homeDir) {
+  const openCodeAppData = windowsAppDataOpenCodeConfig(homeDir);
   return [
     {
       name: 'Antigravity CLI',
@@ -96,7 +116,7 @@ function buildMcpRegistrationTargets(homeDir) {
     {
       name: 'Cursor',
       path: path.join(homeDir, '.cursor', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.cursor')),
+      gate: () => fs.existsSync(path.join(homeDir, '.cursor')) || commandExists('cursor'),
       format: 'json',
     },
     {
@@ -124,19 +144,19 @@ function buildMcpRegistrationTargets(homeDir) {
     {
       name: 'Kiro',
       path: path.join(homeDir, '.kiro', 'settings', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.kiro')),
+      gate: () => fs.existsSync(path.join(homeDir, '.kiro')) || commandExists('kiro'),
       format: 'json',
     },
     {
       name: 'Codex CLI',
       path: path.join(homeDir, '.codex', 'config.toml'),
-      gate: () => fs.existsSync(path.join(homeDir, '.codex', 'config.toml')),
+      gate: () => fs.existsSync(path.join(homeDir, '.codex', 'config.toml')) || commandExists('codex'),
       format: 'toml',
     },
     {
       name: 'OpenCode',
       path: path.join(homeDir, '.config', 'opencode', 'config.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json')),
+      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json')) || commandExists('opencode'),
       format: 'json',
     },
     {
@@ -152,9 +172,8 @@ function buildMcpRegistrationTargets(homeDir) {
     // used to work; on any other platform the gate never opens.
     {
       name: 'OpenCode (Windows AppData)',
-      path: path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'opencode', 'config.json'),
-      gate: () => process.platform === 'win32'
-        && fs.existsSync(path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'opencode', 'config.json')),
+      path: openCodeAppData,
+      gate: () => process.platform === 'win32' && fs.existsSync(openCodeAppData),
       format: 'json',
     },
   ];

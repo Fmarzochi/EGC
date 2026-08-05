@@ -252,26 +252,6 @@ fi
 GUARDIAN_BIN="$MCP_ROOT_DIR/mcp/servers/egc-guardian/build/index.js"
 MEMORY_BIN="$MCP_ROOT_DIR/mcp/servers/egc-memory/build/index.js"
 
-# Claude Code's user-scope MCP list lives in ~/.claude.json, owned by the
-# CLI itself; `claude mcp add -s user` is the stable interface (the same
-# approach scripts/lib/mcp-register.js uses for `egc init`). `claude mcp
-# get` exiting 0 means the server is already registered.
-register_mcp_claude_cli() {
-  local name bin
-  for name in egc-guardian egc-memory; do
-    bin="$GUARDIAN_BIN"
-    if [[ "$name" = "egc-memory" ]]; then bin="$MEMORY_BIN"; fi
-    if claude mcp get "$name" >/dev/null 2>&1; then
-      continue
-    fi
-    if claude mcp add -s user "$name" -- node "$bin" >/dev/null 2>&1; then
-      echo "  ✓ registered $name in Claude Code (user scope)"
-    else
-      echo "  note: could not register $name in Claude Code. Run manually: claude mcp add -s user $name -- node \"$bin\""
-    fi
-  done
-}
-
 set +e
 echo "  registering MCP servers..."
 
@@ -285,17 +265,9 @@ _project_mcp=""
 if [[ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]]; then
   _project_mcp="$INVOKED_FROM_DIR/.mcp.json"
 fi
+# Claude Code is part of that same list (registered through its own CLI, in
+# user scope), so there is no separate call for it here any more.
 node "$ROOT_DIR/scripts/lib/mcp-register-cli.js" "$GUARDIAN_BIN" "$MEMORY_BIN" "$_project_mcp"
-
-# Claude Code: registration goes through the CLI's own user scope. The old
-# path here wrote ~/.claude/claude_desktop_config.json, a file Claude Code
-# never reads (that filename belongs to Claude Desktop, which keeps its
-# config elsewhere entirely), so install reported a registration that did
-# nothing. Kept in the shell because the CLI call needs a real terminal
-# environment, unlike the file writes above.
-if command -v claude >/dev/null 2>&1; then
-  register_mcp_claude_cli
-fi
 
 set -e
 
