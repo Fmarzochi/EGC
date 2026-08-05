@@ -64,6 +64,7 @@ function run(args = [], options = {}) {
     ...process.env,
     HOME: options.homeDir || process.env.HOME,
     USERPROFILE: options.homeDir || process.env.USERPROFILE,
+    ...(options.env || {}),
   };
 
   try {
@@ -598,6 +599,75 @@ function runTests() {
       assert.ok(result.stdout.includes('1 stray state.db copy'));
       assert.ok(result.stdout.includes(strayPath));
       assert.ok(result.stdout.includes('merge-fragmented-state-dbs.js'), 'must point at the consolidation script');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('keeps the egc init guidance when nothing exists but a stray fragment does', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      // ~/.egc exists but holds no store yet, so resolution lands there
+      // (Tier 3a) and the harness-dir copy is genuinely a stray.
+      fs.mkdirSync(path.join(homeDir, '.egc'), { recursive: true });
+      const strayPath = path.join(homeDir, '.claude', 'egc', 'state.db');
+      fs.mkdirSync(path.dirname(strayPath), { recursive: true });
+      fs.writeFileSync(strayPath, 'stale-bytes');
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('WARNING: state.db not found'), 'a fragment must not swallow the missing-store guidance');
+      assert.ok(result.stdout.includes('Run: egc init'), 'the person still needs to know how to create the store');
+      assert.ok(result.stdout.includes(strayPath), 'and the fragment must still be listed');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('warns about a misplaced CLI store without listing the canonical ~/.egc store as a stray', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const harnessDir = path.join(homeDir, '.gemini');
+      const misplacedDb = path.join(harnessDir, 'egc', 'state.db');
+      const canonicalDb = path.join(homeDir, '.egc', 'egc', 'state.db');
+      const memoryDb = path.join(homeDir, '.egc', 'memory', 'state.db');
+      for (const file of [misplacedDb, canonicalDb, memoryDb]) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, '');
+      }
+
+      // EGC_DIR pins resolution to the harness dir, reproducing a CLI whose
+      // store landed away from ~/.egc.
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DIR: harnessDir } });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('WARNING: the CLI event store landed in a harness directory'));
+      assert.ok(result.stdout.includes(misplacedDb));
+      assert.ok(!result.stdout.includes(`${canonicalDb} (`), 'the canonical ~/.egc store must never be listed as a stray copy');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('--json always emits the full stateDb shape', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run(['--json'], { cwd: projectRoot, homeDir });
+      const parsed = JSON.parse(result.stdout);
+      assert.ok(parsed.stateDb, 'missing stores must still produce a stateDb block');
+      for (const key of ['missing', 'dbPath', 'memoryDbPath', 'hasHarnessDb', 'hasMemoryDb', 'cliStoreMisplaced', 'fragments']) {
+        assert.ok(Object.hasOwn(parsed.stateDb, key), `stateDb must always carry ${key}`);
+      }
+      assert.strictEqual(parsed.stateDb.missing, true);
+      assert.ok(Array.isArray(parsed.stateDb.fragments));
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
