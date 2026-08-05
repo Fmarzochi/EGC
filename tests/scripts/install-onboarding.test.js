@@ -109,6 +109,7 @@ case "$1" in
   -e) printf '20' ;;
   --version) printf 'v20.0.0\\n' ;;
   *dashboard-launch-cli.js) printf "Dashboard not started (headless environment). Run 'egc dashboard' to start it.\\n" ;;
+  *mcp-register-cli.js) printf "MCP-CLI-PROJECT-ARG:%s\\n" "$4" ;;
 esac
 exit 0
 `);
@@ -240,9 +241,12 @@ async function runTests() {
     });
     try {
       assertSuccessfulRun(result);
+      // The shell's job is to hand the registration CLI the directory the
+      // person invoked it from; the merge itself is covered by the
+      // mcp-register unit tests.
       assert.ok(
-        result.stdout.includes('registered in Claude Code (project .mcp.json)'),
-        `invoking-directory .mcp.json must be merged, got:\n${result.stdout}`
+        result.stdout.includes(`MCP-CLI-PROJECT-ARG:${path.join(projectDir, '.mcp.json')}`),
+        `installer must pass the invoking directory's .mcp.json to the registration CLI, got:\n${result.stdout}`
       );
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });

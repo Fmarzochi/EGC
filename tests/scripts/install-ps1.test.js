@@ -132,12 +132,24 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('escapes backslashes and quotes before writing a path into Codex CLI TOML', () => {
-    // A raw Windows path (C:\Users\x\...) concatenated into a TOML basic
-    // string is corrupted: TOML treats \U as the start of an 8-hex-digit
-    // Unicode escape. Must mirror install.sh's tomlEscape.
-    assert.ok(scriptSource.includes('tomlEscape'), 'Codex CLI TOML writer must escape paths via a tomlEscape helper');
-    assert.ok(scriptSource.includes('tomlEscape(g)') && scriptSource.includes('tomlEscape(m)'), 'both guardian and memory TOML entries must go through tomlEscape');
+  if (test('delegates MCP registration to the shared CLI instead of keeping its own copy of the list', () => {
+    // Both installers and `egc init` now read one list, so Continue.dev and
+    // Zed cannot silently go unregistered on the shell path again, and the
+    // Codex TOML escaping this test used to police lives with the writer
+    // itself (registerToml/tomlEscape in scripts/lib/mcp-register.js,
+    // covered by tests/lib/mcp-register.test.js).
+    assert.ok(
+      scriptSource.includes('scripts/lib/mcp-register-cli.js'),
+      'install.ps1 must register MCP servers through the shared CLI'
+    );
+    assert.ok(
+      !scriptSource.includes('[[mcp_servers]]'),
+      'install.ps1 must not carry its own TOML writer any more'
+    );
+    assert.ok(
+      !bashSource.includes('[[mcp_servers]]'),
+      'install.sh must not carry its own TOML writer any more'
+    );
   })) passed++; else failed++;
 
   if (test('only builds egc-guardian/egc-memory when src/ is present (published tarball has none)', () => {

@@ -145,6 +145,18 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'zed')),
       format: 'zed-context-servers',
     },
+    // Windows installs of OpenCode have been seen under %APPDATA% rather
+    // than the XDG-style path above, which is where install.ps1 wrote until
+    // the three registration lists were unified. Kept as a separate,
+    // existence-gated entry so no Windows user loses a registration that
+    // used to work; on any other platform the gate never opens.
+    {
+      name: 'OpenCode (Windows AppData)',
+      path: path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'opencode', 'config.json'),
+      gate: () => process.platform === 'win32'
+        && fs.existsSync(path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'opencode', 'config.json')),
+      format: 'json',
+    },
   ];
 }
 

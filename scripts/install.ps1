@@ -389,67 +389,21 @@ if (-not $DryRun) {
         }
     }
 
-    # Cursor (Windows path)
-    $cursorConfig = Join-Path (Join-Path $env:USERPROFILE ".cursor") "mcp.json"
-    if ((Get-Command cursor -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".cursor"))) {
-        Register-McpJson -Target $cursorConfig -Label "Cursor"
-    }
-
-    # Kiro
-    $kiroConfig = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".kiro") "settings") "mcp.json"
-    if ((Get-Command kiro -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".kiro"))) {
-        Register-McpJson -Target $kiroConfig -Label "Kiro"
-    }
-
-    # OpenCode
-    $opencodeConfig = Join-Path (Join-Path $env:APPDATA "opencode") "config.json"
-    if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path (Split-Path $opencodeConfig -Parent))) {
-        Register-McpJson -Target $opencodeConfig -Label "OpenCode"
-    }
-
-    # AGY (Antigravity CLI)
-    $agyDir    = Join-Path (Join-Path $env:USERPROFILE ".gemini") "antigravity-cli"
-    $agyConfig = Join-Path $agyDir "mcp_config.json"
-    if (Test-Path $agyDir) {
-        Register-McpJson -Target $agyConfig -Label "Antigravity CLI"
-    }
-
-    # Gemini CLI (only when AGY is absent)
+    # One registration list for every entry point. This block used to be a
+    # hand-written copy of scripts/lib/mcp-register.js and had drifted:
+    # Continue.dev and Zed were never registered here, so installing through
+    # PowerShell wired up fewer tools than `egc init` did on the same machine.
+    # The paths below are still computed because the Obsidian propagation
+    # further down reads them.
+    $cursorConfig    = Join-Path (Join-Path $env:USERPROFILE ".cursor") "mcp.json"
+    $kiroConfig      = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".kiro") "settings") "mcp.json"
+    $opencodeConfig  = Join-Path (Join-Path $env:APPDATA "opencode") "config.json"
+    $agyDir          = Join-Path (Join-Path $env:USERPROFILE ".gemini") "antigravity-cli"
+    $agyConfig       = Join-Path $agyDir "mcp_config.json"
     $geminiConfigDir = Join-Path (Join-Path $env:USERPROFILE ".gemini") "config"
     $geminiConfig    = Join-Path $geminiConfigDir "mcp_config.json"
-    if ((Test-Path $geminiConfigDir) -and -not (Test-Path $agyDir)) {
-        Register-McpJson -Target $geminiConfig -Label "Gemini CLI"
-    }
 
-    # Codex CLI (TOML - delegated to Node)
-    $codexToml = Join-Path (Join-Path $env:USERPROFILE ".codex") "config.toml"
-    if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path $codexToml)) {
-        $tmpCodexJs = Join-Path $env:TEMP ("egc_codex_" + [System.Guid]::NewGuid().ToString("N") + ".js")
-        Set-Content -Path $tmpCodexJs -Encoding UTF8 -Value @'
-const fs=require("fs"),path=require("path");
-const[,,t,g,m]=process.argv;
-// Escape backslashes (Windows paths are the common case here) and double
-// quotes so the path stays a valid TOML basic string; mirrors tomlEscape in
-// scripts/install.sh and scripts/lib/mcp-register.js. Without this, a raw
-// Windows path like C:\Users\x\... corrupts the TOML (\U... reads as an
-// invalid/wrong Unicode escape).
-const tomlEscape=(p)=>p.split("\\").join("\\\\").split('"').join('\\"');
-const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+tomlEscape(g)+'"]\n';
-const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+tomlEscape(m)+'"]\n';
-let c=fs.existsSync(t)?fs.readFileSync(t,"utf8"):"";
-let ch=false;
-if(!c.includes("egc-guardian")){c+=ge;ch=true;}
-if(!c.includes("egc-memory")){c+=me;ch=true;}
-if(!ch)process.exit(0);
-const d=path.dirname(t);if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});
-fs.writeFileSync(t,c);
-'@
-        try {
-            node $tmpCodexJs $codexToml $GuardianBin $MemoryBin 2>$null
-            if ($LASTEXITCODE -eq 0) { Write-Host "  v registered in Codex CLI ($codexToml)" }
-        } catch {}
-        Remove-Item $tmpCodexJs -ErrorAction SilentlyContinue
-    }
+    & node (Join-Path $RootDir "scripts/lib/mcp-register-cli.js") $GuardianBin $MemoryBin
 
     # Obsidian propagation (delegated to Node)
     # $claudeConfig (Claude Desktop's file) is gone from both lists: Claude
