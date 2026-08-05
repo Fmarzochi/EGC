@@ -56,6 +56,20 @@ function writeFakeExecutable(filePath) {
   fs.chmodSync(filePath, 0o755);
 }
 
+// Windows resolves binaries through PATHEXT, so an extension-less fake is
+// invisible to `where`; a .cmd file is the faithful stand-in for the real
+// npm.cmd/yarn.cmd wrappers there.
+function writeFakeCommand(dir, name) {
+  if (process.platform === 'win32') {
+    const binPath = path.join(dir, `${name}.cmd`);
+    fs.writeFileSync(binPath, '@echo off\r\nexit /b 0\r\n');
+    return binPath;
+  }
+  const binPath = path.join(dir, name);
+  writeFakeExecutable(binPath);
+  return binPath;
+}
+
 function test(name, fn) {
   try {
     fn();
@@ -171,10 +185,8 @@ function runTests() {
     try {
       const installedShimDir = path.join(installHome, '.egc', 'bin');
       fs.mkdirSync(installedShimDir, { recursive: true });
-      const launcher = path.join(installedShimDir, 'npm');
-      writeFakeExecutable(launcher);
-      const realNpm = path.join(realBinDir, 'npm');
-      writeFakeExecutable(realNpm);
+      const launcher = writeFakeCommand(installedShimDir, 'npm');
+      const realNpm = writeFakeCommand(realBinDir, 'npm');
 
       withHome(overrideHome, () => {
         const savedPath = process.env.PATH;
@@ -200,10 +212,8 @@ function runTests() {
     try {
       const installedShimDir = path.join(installHome, '.egc', 'bin');
       fs.mkdirSync(installedShimDir, { recursive: true });
-      const launcher = path.join(installedShimDir, 'npm');
-      writeFakeExecutable(launcher);
-      const realNpm = path.join(installHome, 'real-npm');
-      writeFakeExecutable(realNpm);
+      const launcher = writeFakeCommand(installedShimDir, 'npm');
+      const realNpm = writeFakeCommand(installHome, 'real-npm');
       fs.writeFileSync(path.join(installedShimDir, 'manifest.json'), JSON.stringify({ npm: realNpm }));
 
       withHome(overrideHome, () => {
@@ -222,10 +232,8 @@ function runTests() {
       withHome(home, () => {
         const dir = shimDir();
         fs.mkdirSync(dir, { recursive: true });
-        const launcher = path.join(dir, 'npm');
-        writeFakeExecutable(launcher);
-        const realNpm = path.join(realBinDir, 'npm');
-        writeFakeExecutable(realNpm);
+        const launcher = writeFakeCommand(dir, 'npm');
+        const realNpm = writeFakeCommand(realBinDir, 'npm');
         fs.writeFileSync(manifestPath(), JSON.stringify({ npm: launcher }));
 
         const savedPath = process.env.PATH;
