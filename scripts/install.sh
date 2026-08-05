@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Both of these resolve symlinks (pwd -P). Mixing logical and physical
+# paths would break the comparison further down on macOS, where /tmp is a
+# symlink to /private/tmp: a repo cloned under /tmp would look like an
+# unrelated user project to the installer.
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 # The directory the person ran the installer FROM. Captured here, before the
 # first cd (line ~94 already moves to the package root), because the project
 # .mcp.json merge near the end must target their project, not the package.
@@ -524,14 +528,11 @@ fi
 echo ""
 echo "Installation complete."
 if [ "$_has_install_args" = false ]; then
-  if [[ "$DRY_RUN" = true ]]; then
-    echo "Dashboard launch skipped (--dry-run)."
-  else
-    # The README promises a live dashboard right after installation. The
-    # launch/skip decision lives in exactly one place - shouldAutoLaunch()
-    # inside the wrapper - so the shell never second-guesses it; the
-    # wrapper prints the headless message itself when it declines.
-    node "$ROOT_DIR/scripts/lib/dashboard-launch-cli.js" "$ROOT_DIR" || true
-  fi
+  # The README promises a live dashboard right after installation. The
+  # launch/skip decision lives in exactly one place, shouldAutoLaunch()
+  # inside the wrapper, so the shell never second-guesses it; the wrapper
+  # prints the headless message itself when it declines. (No --dry-run
+  # branch here: a dry run exits long before this point.)
+  node "$ROOT_DIR/scripts/lib/dashboard-launch-cli.js" "$ROOT_DIR" || true
 fi
 echo "Run 'egc doctor' to verify."

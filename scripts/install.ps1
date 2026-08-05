@@ -256,18 +256,34 @@ if (-not $DryRun) {
     # Claude Code - a different application entirely. No CLI on PATH means
     # no Claude Code to register into.
     if (Get-Command claude -ErrorAction SilentlyContinue) {
-        foreach ($server in @(
-            @{ Name = "egc-guardian"; Bin = $GuardianBin },
-            @{ Name = "egc-memory"; Bin = $MemoryBin }
-        )) {
-            claude mcp get $server.Name *> $null
-            if ($LASTEXITCODE -ne 0) {
-                claude mcp add -s user $server.Name -- node $server.Bin *> $null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "  v registered $($server.Name) in Claude Code (user scope)"
-                } else {
-                    Write-Host "  note: could not register $($server.Name) in Claude Code. Run manually: claude mcp add -s user $($server.Name) -- node `"$($server.Bin)`""
+        # A non-zero exit from `claude mcp get` is the expected "not
+        # registered yet" answer, but PowerShell 7.4+ turns native exit
+        # codes into terminating errors while $ErrorActionPreference is
+        # Stop, which would abort the whole installer before the check
+        # below could read $LASTEXITCODE.
+        $previousNativePref = $null
+        if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $previousNativePref = $PSNativeCommandUseErrorActionPreference
+            $PSNativeCommandUseErrorActionPreference = $false
+        }
+        try {
+            foreach ($server in @(
+                @{ Name = "egc-guardian"; Bin = $GuardianBin },
+                @{ Name = "egc-memory"; Bin = $MemoryBin }
+            )) {
+                claude mcp get $server.Name *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    claude mcp add -s user $server.Name -- node $server.Bin *> $null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "  v registered $($server.Name) in Claude Code (user scope)"
+                    } else {
+                        Write-Host "  note: could not register $($server.Name) in Claude Code. Run manually: claude mcp add -s user $($server.Name) -- node `"$($server.Bin)`""
+                    }
                 }
+            }
+        } finally {
+            if ($null -ne $previousNativePref) {
+                $PSNativeCommandUseErrorActionPreference = $previousNativePref
             }
         }
     }
@@ -277,8 +293,12 @@ if (-not $DryRun) {
     # bundled .mcp.json is not a user project, and creating a file in an
     # arbitrary cwd would litter. (Get-Location is useless here - the
     # script Set-Location'd to the package root long ago.)
+    # Raw string comparison would call C:/repo and C:\repo different
+    # directories, which is exactly what happens when the installer is
+    # launched from Git Bash on Windows.
+    $normalize = { param($p) [System.IO.Path]::GetFullPath($p).TrimEnd('\', '/') }
     $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
-    if ((Test-Path $projectMcp) -and ($InvokedFromDir -ne $RootDir)) {
+    if ((Test-Path $projectMcp) -and ((& $normalize $InvokedFromDir) -ne (& $normalize $RootDir))) {
         Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
     }
 

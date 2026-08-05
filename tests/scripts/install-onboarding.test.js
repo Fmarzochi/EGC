@@ -104,6 +104,11 @@ fi
 exit 0
 `);
   writeExecutable(path.join(binDir, 'npx'), '#!/bin/sh\nexit 0\n');
+  // Without this stand-in, a machine that really has Claude Code on PATH
+  // would have the suite register MCP servers into its own user scope.
+  // Exit 0 means "already registered", so the installer performs no
+  // mutation at all.
+  writeExecutable(path.join(binDir, 'claude'), '#!/bin/sh\nexit 0\n');
 
   const bash = findExecutable('bash');
   assert.ok(bash, 'bash is required for install.sh execution coverage');
