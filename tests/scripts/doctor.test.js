@@ -611,7 +611,7 @@ function runTests() {
 
     try {
       // ~/.egc exists but holds no store yet, so resolution lands there
-      // (Tier 3a) and the harness-dir copy is genuinely a stray.
+      // (tier 4 of getEGCDir) and the harness-dir copy is genuinely a stray.
       fs.mkdirSync(path.join(homeDir, '.egc'), { recursive: true });
       const strayPath = path.join(homeDir, '.claude', 'egc', 'state.db');
       fs.mkdirSync(path.dirname(strayPath), { recursive: true });

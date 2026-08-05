@@ -116,9 +116,13 @@ function checkStateDb(homeDir) {
   const hasHarnessDb = fs.existsSync(dbPath);
   const hasMemoryDb = fs.existsSync(memoryDbPath);
   const fragments = findStateDbFragments(dbPath, canonicalDbPath, homeDir);
-  // The CLI store belongs in the shared ~/.egc; anywhere else means path
-  // resolution picked a harness directory and history is being split.
-  const cliStoreMisplaced = hasHarnessDb && !samePath(dbPath, canonicalDbPath);
+  // The CLI store belongs in the shared ~/.egc; landing in a KNOWN harness
+  // directory means resolution picked a harness and history is being split.
+  // An explicit custom EGC_DIR anywhere else is a deliberate override, not
+  // a misplacement, and gets no scary guidance.
+  const cliStoreMisplaced = hasHarnessDb
+    && !samePath(dbPath, canonicalDbPath)
+    && getKnownHarnessDirs(homeDir).some((harnessDir) => samePath(rootDir, harnessDir));
   // Fragments never substitute for a live store: the egc init guidance has
   // to survive their presence.
   const missing = !hasHarnessDb && !hasMemoryDb;
