@@ -109,6 +109,7 @@ case "$1" in
   -e) printf '20' ;;
   --version) printf 'v20.0.0\\n' ;;
   *dashboard-launch-cli.js) printf "Dashboard not started (headless environment). Run 'egc dashboard' to start it.\\n" ;;
+  *mcp-register-cli.js) printf "MCP-CLI-CWD:%s\\n" "$(pwd -P)" ;;
 esac
 exit 0
 `);
@@ -240,9 +241,16 @@ async function runTests() {
     });
     try {
       assertSuccessfulRun(result);
+      // The shell's job is to hand the registration CLI the directory the
+      // person invoked it from; the merge itself is covered by the
+      // mcp-register unit tests.
+      // realpath, because the installer captures the invoking directory
+      // with `pwd -P`: on macOS a temp dir under /var is physically
+      // /private/var, and comparing the two spellings would fail there
+      // while passing on Linux.
       assert.ok(
-        result.stdout.includes('registered in Claude Code (project .mcp.json)'),
-        `invoking-directory .mcp.json must be merged, got:\n${result.stdout}`
+        result.stdout.includes(`MCP-CLI-CWD:${fs.realpathSync(projectDir)}`),
+        `the registration CLI must run from the invoking directory, got:\n${result.stdout}`
       );
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });

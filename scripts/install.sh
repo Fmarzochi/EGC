@@ -252,163 +252,21 @@ fi
 GUARDIAN_BIN="$MCP_ROOT_DIR/mcp/servers/egc-guardian/build/index.js"
 MEMORY_BIN="$MCP_ROOT_DIR/mcp/servers/egc-memory/build/index.js"
 
-register_mcp_json() {
-  local target="$1"
-  local label="$2"
-  node - "$target" "$GUARDIAN_BIN" "$MEMORY_BIN" <<'NODEEOF'
-const fs   = require("fs");
-const path = require("path");
-
-const [,, target, guardianBin, memoryBin] = process.argv;
-
-let obj = { mcpServers: {} };
-if (fs.existsSync(target)) {
-  try {
-    obj = JSON.parse(fs.readFileSync(target, "utf8"));
-  } catch (_) {
-    // Existing config is not valid JSON: leave it untouched and signal a skip
-    // (exit 2) so the caller does not print a false "registered" success.
-    process.exit(2);
-  }
-}
-if (!obj.mcpServers) obj.mcpServers = {};
-
-let changed = false;
-if (!obj.mcpServers["egc-guardian"]) {
-  obj.mcpServers["egc-guardian"] = { command: "node", args: [guardianBin] };
-  changed = true;
-}
-if (!obj.mcpServers["egc-memory"]) {
-  obj.mcpServers["egc-memory"] = { command: "node", args: [memoryBin] };
-  changed = true;
-}
-if (!changed) process.exit(0);
-
-const dir = path.dirname(target);
-if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-fs.writeFileSync(target, JSON.stringify(obj, null, 2) + "\n");
-NODEEOF
-  local rc=$?
-  if [[ $rc -eq 0 ]]; then
-    echo "  ✓ registered in $label ($target)"
-  elif [[ $rc -eq 2 ]]; then
-    echo "  note: skipped $label ($target): existing config is not valid JSON"
-  fi
-}
-
-# Claude Code's user-scope MCP list lives in ~/.claude.json, owned by the
-# CLI itself; `claude mcp add -s user` is the stable interface (the same
-# approach scripts/lib/mcp-register.js uses for `egc init`). `claude mcp
-# get` exiting 0 means the server is already registered.
-register_mcp_claude_cli() {
-  local name bin
-  for name in egc-guardian egc-memory; do
-    bin="$GUARDIAN_BIN"
-    if [[ "$name" = "egc-memory" ]]; then bin="$MEMORY_BIN"; fi
-    if claude mcp get "$name" >/dev/null 2>&1; then
-      continue
-    fi
-    if claude mcp add -s user "$name" -- node "$bin" >/dev/null 2>&1; then
-      echo "  ✓ registered $name in Claude Code (user scope)"
-    else
-      echo "  note: could not register $name in Claude Code. Run manually: claude mcp add -s user $name -- node \"$bin\""
-    fi
-  done
-}
-
-register_mcp_toml_codex() {
-  local target="$1"
-  node - "$target" "$GUARDIAN_BIN" "$MEMORY_BIN" <<'NODEEOF'
-const fs   = require("fs");
-const path = require("path");
-
-const [,, target, guardianBin, memoryBin] = process.argv;
-
-// Escape backslashes (Windows paths) and double quotes (legal in a POSIX dir
-// name) so the path stays a valid TOML basic string; mirrors tomlEscape in
-// scripts/lib/mcp-register.js.
-const tomlEscape = (p) => p.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-
-const guardianEntry =
-  `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
-const memoryEntry =
-  `\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
-
-let content = "";
-if (fs.existsSync(target)) {
-  content = fs.readFileSync(target, "utf8");
-}
-
-let appended = false;
-if (!content.includes('"egc-guardian"') && !content.includes("'egc-guardian'")) {
-  content += guardianEntry;
-  appended = true;
-}
-if (!content.includes('"egc-memory"') && !content.includes("'egc-memory'")) {
-  content += memoryEntry;
-  appended = true;
-}
-if (!appended) process.exit(0);
-
-const dir = path.dirname(target);
-if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-fs.writeFileSync(target, content);
-NODEEOF
-  local rc=$?
-  if [ $rc -eq 0 ]; then
-    echo "  ✓ registered in Codex CLI ($target)"
-  fi
-}
-
 set +e
 echo "  registering MCP servers..."
 
-# AGY (Antigravity CLI)
-if [ -d "$HOME/.gemini/antigravity-cli" ]; then
-  register_mcp_json "$HOME/.gemini/antigravity-cli/mcp_config.json" "Antigravity CLI"
-fi
-
-# Gemini CLI (only when AGY is absent to avoid duplication)
-if [ -d "$HOME/.gemini/config" ] && ! [ -d "$HOME/.gemini/antigravity-cli" ]; then
-  register_mcp_json "$HOME/.gemini/config/mcp_config.json" "Gemini CLI"
-fi
-
-# Claude Code: global config
-# Claude Code: registration goes through the CLI's own user scope. The old
-# path here wrote ~/.claude/claude_desktop_config.json, a file Claude Code
-# never reads (that filename belongs to Claude Desktop, which keeps its
-# config elsewhere entirely), so install reported a registration that did
-# nothing. No CLI on PATH means no Claude Code to register into.
-if command -v claude >/dev/null 2>&1; then
-  register_mcp_claude_cli
-fi
-# Merge into an existing project .mcp.json in the directory the installer
-# was invoked from only: the package's own bundled .mcp.json is not a user
-# project, and creating a file in an arbitrary cwd would litter. ($PWD is
-# useless here - the script cd'd to the package root long ago.)
-if [[ -f "$INVOKED_FROM_DIR/.mcp.json" ]] && [[ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]]; then
-  register_mcp_json "$INVOKED_FROM_DIR/.mcp.json" "Claude Code (project .mcp.json)"
-fi
-
-# Cursor
-if command -v cursor >/dev/null 2>&1 || [ -d "$HOME/.cursor" ]; then
-  register_mcp_json "$HOME/.cursor/mcp.json" "Cursor"
-fi
-
-# Kiro
-if command -v kiro >/dev/null 2>&1 || [ -d "$HOME/.kiro" ]; then
-  register_mcp_json "$HOME/.kiro/settings/mcp.json" "Kiro"
-fi
-
-# Codex CLI
-if command -v codex >/dev/null 2>&1 || [ -f "$HOME/.codex/config.toml" ]; then
-  register_mcp_toml_codex "$HOME/.codex/config.toml"
-fi
-
-# OpenCode
-if command -v opencode >/dev/null 2>&1 || [ -f "$HOME/.config/opencode/config.json" ]; then
-  register_mcp_json "$HOME/.config/opencode/config.json" "OpenCode"
-fi
+# One registration list for every entry point. This block used to be a
+# hand-written copy of scripts/lib/mcp-register.js, and the copies had
+# drifted: Continue.dev and Zed were never registered by the shell
+# installers at all, so installing through the shell wired up fewer tools
+# than `egc init` did on the same machine. The project .mcp.json is passed
+# in because only the shell knows the directory the person invoked it from.
+# Claude Code is part of that same list (registered through its own CLI, in
+# user scope), so there is no separate call for it here any more. The
+# subshell runs the CLI from the directory the person invoked the installer
+# in, which is how a project .mcp.json there gets picked up: the script
+# itself cd'd to the package root long ago.
+(cd "$INVOKED_FROM_DIR" && node "$ROOT_DIR/scripts/lib/mcp-register-cli.js" "$GUARDIAN_BIN" "$MEMORY_BIN")
 
 set -e
 

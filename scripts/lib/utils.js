@@ -489,14 +489,64 @@ function commandExists(cmd) {
     if (isWindows) {
       // shell:true inherits PATHEXT so `where npm` resolves npm.cmd/.exe correctly
       const result = spawnSync('where', [cmd], { stdio: 'pipe', shell: true });
-      return result.status === 0;
+      if (result.status === 0) return true;
     } else {
       const result = spawnSync('which', [cmd], { stdio: 'pipe' });
-      return result.status === 0;
+      if (result.status === 0) return true;
     }
   } catch {
-    return false;
+    // Fall through to the manual scan below.
   }
+
+  return existsOnPath(cmd);
+}
+
+/**
+ * PATH scan without spawning anything. Minimal images (Alpine, distroless,
+ * some CI containers) ship no `which` at all, and a probe that cannot run
+ * looks exactly like "the command is not installed" - which would silently
+ * skip work for a tool the person really does have.
+ */
+function existsOnPath(cmd) {
+  const rawPath = process.env.PATH;
+  // An unset or empty PATH means there is nowhere to look, which is not the
+  // same as an empty entry inside a populated PATH.
+  if (!rawPath) return false;
+
+  const directories = rawPath
+    .split(path.delimiter)
+    // POSIX shells read a leading, trailing or doubled separator as the
+    // current directory; Windows does not, so the empty entry is dropped
+    // there instead of silently searching somewhere it never would.
+    .map(entry => (entry === '' ? (isWindows ? null : '.') : entry))
+    .filter(entry => entry !== null)
+    // Windows PATH entries are sometimes quoted; the quotes are shell
+    // syntax, not part of the directory name, and would make every lookup
+    // inside that entry fail.
+    .map(entry => (isWindows ? entry.replace(/^"(.*)"$/, '$1') : entry));
+  // An explicit extension is honored as written: appending PATHEXT to a
+  // name that already carries one would only ever look for node.exe.EXE.
+  const extensions = isWindows
+    ? [...(path.extname(cmd) ? [''] : []), ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+    : [''];
+
+  for (const directory of directories) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory, cmd + extension);
+      try {
+        // A directory named like the command would pass both the Windows
+        // existence check and the POSIX executable check (searchable
+        // directories carry the execute bit), so the type is settled first.
+        if (!fs.statSync(candidate).isFile()) continue;
+        if (isWindows) return true;
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return true;
+      } catch {
+        // Not here; keep looking.
+      }
+    }
+  }
+  return false;
 }
 
 /**

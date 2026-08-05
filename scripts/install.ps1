@@ -334,121 +334,28 @@ if (-not $DryRun) {
         }
     }
 
-    # Claude Code: registration goes through the CLI's own user scope. The
-    # old path here wrote Claude Desktop's config file while labeling it
-    # Claude Code - a different application entirely. No CLI on PATH means
-    # no Claude Code to register into.
-    if (Get-Command claude -ErrorAction SilentlyContinue) {
-        # A non-zero exit from `claude mcp get` is the expected "not
-        # registered yet" answer, but PowerShell 7.4+ turns native exit
-        # codes into terminating errors while $ErrorActionPreference is
-        # Stop, which would abort the whole installer before the check
-        # below could read $LASTEXITCODE.
-        $previousNativePref = $null
-        if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
-            $previousNativePref = $PSNativeCommandUseErrorActionPreference
-            $PSNativeCommandUseErrorActionPreference = $false
-        }
-        try {
-            foreach ($server in @(
-                @{ Name = "egc-guardian"; Bin = $GuardianBin },
-                @{ Name = "egc-memory"; Bin = $MemoryBin }
-            )) {
-                claude mcp get $server.Name *> $null
-                if ($LASTEXITCODE -ne 0) {
-                    claude mcp add -s user $server.Name -- node $server.Bin *> $null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "  v registered $($server.Name) in Claude Code (user scope)"
-                    } else {
-                        Write-Host "  note: could not register $($server.Name) in Claude Code. Run manually: claude mcp add -s user $($server.Name) -- node `"$($server.Bin)`""
-                    }
-                }
-            }
-        } finally {
-            if ($null -ne $previousNativePref) {
-                $PSNativeCommandUseErrorActionPreference = $previousNativePref
-            }
-        }
-    }
-
-    # Claude Code - project .mcp.json: merge into an existing file in the
-    # directory the installer was invoked from only. The package's own
-    # bundled .mcp.json is not a user project, and creating a file in an
-    # arbitrary cwd would litter. (Get-Location is useless here - the
-    # script Set-Location'd to the package root long ago.)
-    $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
-    if (Test-Path $projectMcp) {
-        $invokedPhysical = Resolve-PhysicalDirectory $InvokedFromDir
-        $rootPhysical = Resolve-PhysicalDirectory $RootDir
-        if (-not $invokedPhysical -or -not $rootPhysical) {
-            # Unresolvable means unknown, and an unknown directory is never
-            # worth the risk of writing into the package's own config.
-            Write-Host "  note: skipped project .mcp.json (could not resolve $InvokedFromDir to a physical path)"
-        } elseif ($invokedPhysical -ne $rootPhysical) {
-            Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
-        }
-    }
-
-    # Cursor (Windows path)
-    $cursorConfig = Join-Path (Join-Path $env:USERPROFILE ".cursor") "mcp.json"
-    if ((Get-Command cursor -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".cursor"))) {
-        Register-McpJson -Target $cursorConfig -Label "Cursor"
-    }
-
-    # Kiro
-    $kiroConfig = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".kiro") "settings") "mcp.json"
-    if ((Get-Command kiro -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".kiro"))) {
-        Register-McpJson -Target $kiroConfig -Label "Kiro"
-    }
-
-    # OpenCode
-    $opencodeConfig = Join-Path (Join-Path $env:APPDATA "opencode") "config.json"
-    if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path (Split-Path $opencodeConfig -Parent))) {
-        Register-McpJson -Target $opencodeConfig -Label "OpenCode"
-    }
-
-    # AGY (Antigravity CLI)
-    $agyDir    = Join-Path (Join-Path $env:USERPROFILE ".gemini") "antigravity-cli"
-    $agyConfig = Join-Path $agyDir "mcp_config.json"
-    if (Test-Path $agyDir) {
-        Register-McpJson -Target $agyConfig -Label "Antigravity CLI"
-    }
-
-    # Gemini CLI (only when AGY is absent)
+    # One registration list for every entry point. This block used to be a
+    # hand-written copy of scripts/lib/mcp-register.js and had drifted:
+    # Continue.dev and Zed were never registered here, so installing through
+    # PowerShell wired up fewer tools than `egc init` did on the same machine.
+    # The paths below are still computed because the Obsidian propagation
+    # further down reads them.
+    $cursorConfig    = Join-Path (Join-Path $env:USERPROFILE ".cursor") "mcp.json"
+    $kiroConfig      = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".kiro") "settings") "mcp.json"
+    $opencodeConfig  = Join-Path (Join-Path $env:APPDATA "opencode") "config.json"
+    $agyDir          = Join-Path (Join-Path $env:USERPROFILE ".gemini") "antigravity-cli"
+    $agyConfig       = Join-Path $agyDir "mcp_config.json"
     $geminiConfigDir = Join-Path (Join-Path $env:USERPROFILE ".gemini") "config"
     $geminiConfig    = Join-Path $geminiConfigDir "mcp_config.json"
-    if ((Test-Path $geminiConfigDir) -and -not (Test-Path $agyDir)) {
-        Register-McpJson -Target $geminiConfig -Label "Gemini CLI"
-    }
 
-    # Codex CLI (TOML - delegated to Node)
-    $codexToml = Join-Path (Join-Path $env:USERPROFILE ".codex") "config.toml"
-    if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path $codexToml)) {
-        $tmpCodexJs = Join-Path $env:TEMP ("egc_codex_" + [System.Guid]::NewGuid().ToString("N") + ".js")
-        Set-Content -Path $tmpCodexJs -Encoding UTF8 -Value @'
-const fs=require("fs"),path=require("path");
-const[,,t,g,m]=process.argv;
-// Escape backslashes (Windows paths are the common case here) and double
-// quotes so the path stays a valid TOML basic string; mirrors tomlEscape in
-// scripts/install.sh and scripts/lib/mcp-register.js. Without this, a raw
-// Windows path like C:\Users\x\... corrupts the TOML (\U... reads as an
-// invalid/wrong Unicode escape).
-const tomlEscape=(p)=>p.split("\\").join("\\\\").split('"').join('\\"');
-const ge='\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["'+tomlEscape(g)+'"]\n';
-const me='\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["'+tomlEscape(m)+'"]\n';
-let c=fs.existsSync(t)?fs.readFileSync(t,"utf8"):"";
-let ch=false;
-if(!c.includes("egc-guardian")){c+=ge;ch=true;}
-if(!c.includes("egc-memory")){c+=me;ch=true;}
-if(!ch)process.exit(0);
-const d=path.dirname(t);if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});
-fs.writeFileSync(t,c);
-'@
-        try {
-            node $tmpCodexJs $codexToml $GuardianBin $MemoryBin 2>$null
-            if ($LASTEXITCODE -eq 0) { Write-Host "  v registered in Codex CLI ($codexToml)" }
-        } catch {}
-        Remove-Item $tmpCodexJs -ErrorAction SilentlyContinue
+    # Run from the directory the person invoked the installer in, so a
+    # project .mcp.json there is picked up; the script itself moved to the
+    # package root long ago.
+    Push-Location $InvokedFromDir
+    try {
+        & node (Join-Path $RootDir "scripts/lib/mcp-register-cli.js") $GuardianBin $MemoryBin
+    } finally {
+        Pop-Location
     }
 
     # Obsidian propagation (delegated to Node)

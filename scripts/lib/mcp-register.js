@@ -17,6 +17,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+// A tool the person installed but never launched owns no config directory,
+// so an existence check alone would skip it. The shell installers used to
+// cover that with `command -v`; sharing the repo's own probe keeps the two
+// detections from drifting, and it falls back to a PATH scan where `which`
+// itself is missing.
+const { commandExists } = require('./utils');
 
 let TOML = null;
 try {
@@ -66,7 +72,17 @@ function tomlHasActiveServer(content, serverName) {
  * `gate()` returns true, so we don't create config files for tools the
  * person doesn't have installed.
  */
+// %APPDATA% is the documented location, with the conventional layout as a
+// fallback for the rare environment that does not export it. Computed once
+// so the path a target advertises and the path its gate checks can never
+// drift apart.
+function windowsAppDataOpenCodeConfig(homeDir) {
+  const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
+  return path.join(appData, 'opencode', 'config.json');
+}
+
 function buildMcpRegistrationTargets(homeDir) {
+  const openCodeAppData = windowsAppDataOpenCodeConfig(homeDir);
   return [
     {
       name: 'Antigravity CLI',
@@ -96,7 +112,7 @@ function buildMcpRegistrationTargets(homeDir) {
     {
       name: 'Cursor',
       path: path.join(homeDir, '.cursor', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.cursor')),
+      gate: () => fs.existsSync(path.join(homeDir, '.cursor')) || commandExists('cursor'),
       format: 'json',
     },
     {
@@ -124,19 +140,24 @@ function buildMcpRegistrationTargets(homeDir) {
     {
       name: 'Kiro',
       path: path.join(homeDir, '.kiro', 'settings', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.kiro')),
+      gate: () => fs.existsSync(path.join(homeDir, '.kiro')) || commandExists('kiro'),
       format: 'json',
     },
     {
       name: 'Codex CLI',
       path: path.join(homeDir, '.codex', 'config.toml'),
-      gate: () => fs.existsSync(path.join(homeDir, '.codex', 'config.toml')),
+      gate: () => fs.existsSync(path.join(homeDir, '.codex', 'config.toml')) || commandExists('codex'),
       format: 'toml',
     },
     {
       name: 'OpenCode',
       path: path.join(homeDir, '.config', 'opencode', 'config.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json')),
+      // The PATH signal deliberately does not open this target on Windows:
+      // OpenCode reads %APPDATA% there, so writing the XDG-style file for a
+      // freshly installed copy would produce a config the editor never sees.
+      // The AppData target below handles that case instead.
+      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json'))
+        || (process.platform !== 'win32' && commandExists('opencode')),
       format: 'json',
     },
     {
@@ -144,6 +165,18 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(homeDir, '.config', 'zed', 'settings.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'zed')),
       format: 'zed-context-servers',
+    },
+    // Windows installs of OpenCode have been seen under %APPDATA% rather
+    // than the XDG-style path above, which is where install.ps1 wrote until
+    // the three registration lists were unified. Kept as a separate,
+    // existence-gated entry so no Windows user loses a registration that
+    // used to work; on any other platform the gate never opens.
+    {
+      name: 'OpenCode (Windows AppData)',
+      path: openCodeAppData,
+      gate: () => process.platform === 'win32'
+        && (fs.existsSync(openCodeAppData) || commandExists('opencode')),
+      format: 'json',
     },
   ];
 }
