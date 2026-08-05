@@ -34,10 +34,14 @@ function Install-Deps {
 function Resolve-PhysicalDirectory {
     param([string]$Path)
 
+    # Returns $null when the path cannot be fully resolved. Callers must
+    # treat that as "unknown", never as "different": a partial answer here
+    # is what would let the installer mistake its own directory for a user
+    # project and rewrite the bundled .mcp.json.
     try {
         $full = [System.IO.Path]::GetFullPath($Path)
     } catch {
-        return $Path.TrimEnd('\', '/')
+        return $null
     }
 
     # Components are consumed from a queue rather than a fixed list: when one
@@ -54,7 +58,9 @@ function Resolve-PhysicalDirectory {
     $steps = 0
     while ($pending.Count -gt 0) {
         $steps++
-        if ($steps -gt 512) { break }
+        # Only a cyclic link chain gets here; a real tree never does. The
+        # path stays unresolved rather than half-resolved.
+        if ($steps -gt 512) { return $null }
 
         $segment = $pending.Dequeue()
         if ($segment -eq '.') { continue }
@@ -371,8 +377,16 @@ if (-not $DryRun) {
     # arbitrary cwd would litter. (Get-Location is useless here - the
     # script Set-Location'd to the package root long ago.)
     $projectMcp = Join-Path $InvokedFromDir ".mcp.json"
-    if ((Test-Path $projectMcp) -and ((Resolve-PhysicalDirectory $InvokedFromDir) -ne (Resolve-PhysicalDirectory $RootDir))) {
-        Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
+    if (Test-Path $projectMcp) {
+        $invokedPhysical = Resolve-PhysicalDirectory $InvokedFromDir
+        $rootPhysical = Resolve-PhysicalDirectory $RootDir
+        if (-not $invokedPhysical -or -not $rootPhysical) {
+            # Unresolvable means unknown, and an unknown directory is never
+            # worth the risk of writing into the package's own config.
+            Write-Host "  note: skipped project .mcp.json (could not resolve $InvokedFromDir to a physical path)"
+        } elseif ($invokedPhysical -ne $rootPhysical) {
+            Register-McpJson -Target $projectMcp -Label "Claude Code (project .mcp.json)"
+        }
     }
 
     # Cursor (Windows path)
