@@ -508,7 +508,18 @@ function commandExists(cmd) {
  * skip work for a tool the person really does have.
  */
 function existsOnPath(cmd) {
-  const directories = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const rawPath = process.env.PATH;
+  // An unset or empty PATH means there is nowhere to look, which is not the
+  // same as an empty entry inside a populated PATH.
+  if (!rawPath) return false;
+
+  const directories = rawPath
+    .split(path.delimiter)
+    // POSIX shells read a leading, trailing or doubled separator as the
+    // current directory; Windows does not, so the empty entry is dropped
+    // there instead of silently searching somewhere it never would.
+    .map(entry => (entry === '' ? (isWindows ? null : '.') : entry))
+    .filter(entry => entry !== null);
   const extensions = isWindows
     ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
     : [''];
@@ -517,12 +528,13 @@ function existsOnPath(cmd) {
     for (const extension of extensions) {
       const candidate = path.join(directory, cmd + extension);
       try {
-        if (isWindows) {
-          if (fs.existsSync(candidate)) return true;
-        } else {
-          fs.accessSync(candidate, fs.constants.X_OK);
-          return true;
-        }
+        // A directory named like the command would pass both the Windows
+        // existence check and the POSIX executable check (searchable
+        // directories carry the execute bit), so the type is settled first.
+        if (!fs.statSync(candidate).isFile()) continue;
+        if (isWindows) return true;
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return true;
       } catch {
         // Not here; keep looking.
       }
