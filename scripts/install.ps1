@@ -342,7 +342,10 @@ if (-not $DryRun) {
     # Run from the directory the person invoked the installer in, so a
     # project .mcp.json there is picked up; the script itself moved to the
     # package root long ago.
-    Push-Location $InvokedFromDir
+    # -LiteralPath: a real directory whose name contains [ ] * or ? is a
+    # wildcard pattern to Push-Location otherwise, and the resulting error
+    # would abort the installer before registration and everything after it.
+    Push-Location -LiteralPath $InvokedFromDir
     try {
         & node (Join-Path $RootDir "scripts/lib/mcp-register-cli.js") $GuardianBin $MemoryBin
     } finally {
