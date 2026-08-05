@@ -34,20 +34,10 @@ function test(name, fn) {
   try {
     const returned = fn();
     // A promise returned into this synchronous harness would be reported as
-    // a pass before its assertions ran; async cases must use testAsync.
-    assert.ok(!(returned && typeof returned.then === 'function'), 'async test body must be run through testAsync');
-    console.log(`  \u2713 ${name}`);
-    return true;
-  } catch (error) {
-    console.log(`  \u2717 ${name}`);
-    console.log(`    Error: ${error.message}`);
-    return false;
-  }
-}
-
-async function testAsync(name, fn) {
-  try {
-    await fn();
+    // a pass before its assertions ever ran, so it is rejected outright.
+    // Every case here is synchronous; an async one would need an awaiting
+    // variant added back alongside this guard.
+    assert.ok(!(returned && typeof returned.then === 'function'), 'this harness is synchronous: await inside the case and assert on the result');
     console.log(`  \u2713 ${name}`);
     return true;
   } catch (error) {
