@@ -505,12 +505,6 @@ function commandExists(cmd) {
   return existsOnPath(cmd);
 }
 
-/**
- * PATH scan without spawning anything. Minimal images (Alpine, distroless,
- * some CI containers) ship no `which` at all, and a probe that cannot run
- * looks exactly like "the command is not installed" - which would silently
- * skip work for a tool the person really does have.
- */
 // PATH entries, cleaned. POSIX shells read a leading, trailing or doubled
 // separator as the current directory; Windows does not, so the empty entry
 // is dropped there instead of silently searching somewhere it never would.
@@ -547,6 +541,12 @@ function isExecutableFile(candidate, onWindows) {
   }
 }
 
+/**
+ * PATH scan without spawning anything. Minimal images (Alpine, distroless,
+ * some CI containers) ship no `which` at all, and a probe that cannot run
+ * looks exactly like "the command is not installed" - which would silently
+ * skip work for a tool the person really does have.
+ */
 function existsOnPath(cmd) {
   const rawPath = process.env.PATH;
   // An unset or empty PATH means there is nowhere to look, which is not the

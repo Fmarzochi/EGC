@@ -37,7 +37,13 @@ function test(name, fn) {
     // a pass before its assertions ever ran, so it is rejected outright.
     // Every case here is synchronous; an async one would need an awaiting
     // variant added back alongside this guard.
-    assert.ok(!(returned && typeof returned.then === 'function'), 'this harness is synchronous: await inside the case and assert on the result');
+    if (returned && typeof returned.then === 'function') {
+      // Swallow the eventual settlement first: rejecting this case is the
+      // right verdict, but leaving the promise unhandled would let Node
+      // terminate the whole suite before it prints its results.
+      returned.catch(() => {});
+      assert.fail('this harness is synchronous: await inside the case and assert on the result');
+    }
     console.log(`  \u2713 ${name}`);
     return true;
   } catch (error) {
