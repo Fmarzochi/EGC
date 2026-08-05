@@ -38,12 +38,26 @@ registerMcpServers(homeDir, bins, {
   onWarn: (target, err) => console.log(`  note: skipped ${target.name} (${target.path}): ${err.message}`),
 });
 
-if (projectMcpPath && fs.existsSync(projectMcpPath)) {
-  try {
-    if (registerJson(projectMcpPath, bins)) {
-      console.log(`  ✓ registered in Claude Code (project .mcp.json) (${path.resolve(projectMcpPath)})`);
+// The project path arrives as a command-line argument, so it is validated
+// before any filesystem access: this flow may only ever touch a file named
+// .mcp.json that already exists. A mistyped or malicious argument can
+// therefore not turn the installer into a writer of arbitrary files.
+function resolveProjectMcpPath(candidate) {
+  const resolved = path.resolve(candidate);
+  if (path.basename(resolved) !== '.mcp.json') return null;
+  if (!fs.existsSync(resolved)) return null;
+  return resolved;
+}
+
+if (projectMcpPath) {
+  const resolvedProjectMcp = resolveProjectMcpPath(projectMcpPath);
+  if (resolvedProjectMcp) {
+    try {
+      if (registerJson(resolvedProjectMcp, bins)) {
+        console.log(`  ✓ registered in Claude Code (project .mcp.json) (${resolvedProjectMcp})`);
+      }
+    } catch (err) {
+      console.log(`  note: skipped project .mcp.json (${resolvedProjectMcp}): ${err.message}`);
     }
-  } catch (err) {
-    console.log(`  note: skipped project .mcp.json (${projectMcpPath}): ${err.message}`);
   }
 }
