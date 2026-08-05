@@ -161,6 +161,89 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a HOME override never makes resolution return the launcher itself (fork-bomb regression)', () => {
+    // The exact failure that used to fork-bomb the machine: launchers
+    // installed under one home, the process running with HOME pointing
+    // somewhere else, and the launcher's own directory still on PATH.
+    const installHome = createTempDir('egc-shim-paths-install-');
+    const overrideHome = createTempDir('egc-shim-paths-override-');
+    const realBinDir = createTempDir('egc-shim-paths-real-');
+    try {
+      const installedShimDir = path.join(installHome, '.egc', 'bin');
+      fs.mkdirSync(installedShimDir, { recursive: true });
+      const launcher = path.join(installedShimDir, 'npm');
+      writeFakeExecutable(launcher);
+      const realNpm = path.join(realBinDir, 'npm');
+      writeFakeExecutable(realNpm);
+
+      withHome(overrideHome, () => {
+        const savedPath = process.env.PATH;
+        process.env.PATH = `${installedShimDir}${path.delimiter}${realBinDir}${path.delimiter}${savedPath}`;
+        try {
+          const found = resolveRealBinary('npm', launcher);
+          assert.ok(found, 'expected npm to resolve somewhere');
+          assert.strictEqual(path.resolve(found), path.resolve(realNpm), 'must skip the launcher directory and find the real npm');
+        } finally {
+          process.env.PATH = savedPath;
+        }
+      });
+    } finally {
+      cleanup(installHome);
+      cleanup(overrideHome);
+      cleanup(realBinDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('the manifest next to the launcher wins even when HOME points elsewhere', () => {
+    const installHome = createTempDir('egc-shim-paths-install-');
+    const overrideHome = createTempDir('egc-shim-paths-override-');
+    try {
+      const installedShimDir = path.join(installHome, '.egc', 'bin');
+      fs.mkdirSync(installedShimDir, { recursive: true });
+      const launcher = path.join(installedShimDir, 'npm');
+      writeFakeExecutable(launcher);
+      const realNpm = path.join(installHome, 'real-npm');
+      writeFakeExecutable(realNpm);
+      fs.writeFileSync(path.join(installedShimDir, 'manifest.json'), JSON.stringify({ npm: realNpm }));
+
+      withHome(overrideHome, () => {
+        assert.strictEqual(resolveRealBinary('npm', launcher), realNpm);
+      });
+    } finally {
+      cleanup(installHome);
+      cleanup(overrideHome);
+    }
+  })) passed++; else failed++;
+
+  if (test('a manifest entry pointing back into a shim directory is rejected, not spawned', () => {
+    const home = createTempDir('egc-shim-paths-');
+    const realBinDir = createTempDir('egc-shim-paths-real-');
+    try {
+      withHome(home, () => {
+        const dir = shimDir();
+        fs.mkdirSync(dir, { recursive: true });
+        const launcher = path.join(dir, 'npm');
+        writeFakeExecutable(launcher);
+        const realNpm = path.join(realBinDir, 'npm');
+        writeFakeExecutable(realNpm);
+        fs.writeFileSync(manifestPath(), JSON.stringify({ npm: launcher }));
+
+        const savedPath = process.env.PATH;
+        process.env.PATH = `${dir}${path.delimiter}${realBinDir}${path.delimiter}${savedPath}`;
+        try {
+          const found = resolveRealBinary('npm', launcher);
+          assert.ok(found, 'expected npm to resolve somewhere');
+          assert.strictEqual(path.resolve(found), path.resolve(realNpm), 'a poisoned manifest must fall through to a real PATH lookup');
+        } finally {
+          process.env.PATH = savedPath;
+        }
+      });
+    } finally {
+      cleanup(home);
+      cleanup(realBinDir);
+    }
+  })) passed++; else failed++;
+
   if (test('resolveRealBinary prefers a valid manifest entry over a fresh PATH lookup', () => {
     const dir = createTempDir('egc-shim-paths-');
     try {

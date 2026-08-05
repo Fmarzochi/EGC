@@ -95,6 +95,20 @@ function seedManifest(homeDir, entries) {
   fs.writeFileSync(path.join(binDir, 'manifest.json'), JSON.stringify(entries));
 }
 
+// Mirrors shim-install.js's posixLauncherSource(): the exact launcher shape
+// `egc crusher-shim install` writes to ~/.egc/bin/<name>, pointing back at
+// this checkout's shim-dispatch.js.
+function writeShimLauncher(binDir, name) {
+  const launcherPath = path.join(binDir, name);
+  fs.writeFileSync(launcherPath, [
+    '#!/usr/bin/env node',
+    `require(${jsStringLiteral(DISPATCH_SCRIPT)}).runShim(${jsStringLiteral(name)}, process.argv.slice(2));`,
+    '',
+  ].join('\n'));
+  fs.chmodSync(launcherPath, 0o755);
+  return launcherPath;
+}
+
 function runShim(homeDir, name, args, options = {}) {
   // os.homedir() reads USERPROFILE on Windows, HOME everywhere else -- both
   // must be set or the real runner/user home leaks into the child process.
@@ -250,6 +264,86 @@ function runTests() {
       const result = runShim(dir, 'totally-fake-binary-xyz-123', []);
       assert.strictEqual(result.status, 127);
       assert.strictEqual(result.signal, null, 'must exit cleanly, not crash/signal');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a HOME override hiding the manifest still resolves the real binary, never the shim itself (fork-bomb regression)', () => {
+    if (process.platform === 'win32') return; // exercises the POSIX shebang launcher
+    const installHome = createTempDir('egc-shim-dispatch-install-');
+    const overrideHome = createTempDir('egc-shim-dispatch-override-');
+    const realBinDir = createTempDir('egc-shim-dispatch-real-');
+    try {
+      const installedShimDir = path.join(installHome, '.egc', 'bin');
+      fs.mkdirSync(installedShimDir, { recursive: true });
+      const launcher = writeShimLauncher(installedShimDir, 'npm');
+      writeFakeBinary(realBinDir, 'npm', { stdout: 'REAL-NPM-RAN\n' });
+
+      // No manifest anywhere reachable: HOME points at an empty directory,
+      // and the launcher's own directory is first on PATH -- the exact
+      // pre-fix setup where resolution found the launcher and forked until
+      // the machine died.
+      const result = spawnSync(launcher, ['--version'], {
+        encoding: 'utf8',
+        timeout: 15000,
+        env: {
+          ...process.env,
+          HOME: overrideHome,
+          USERPROFILE: overrideHome,
+          PATH: [installedShimDir, realBinDir, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
+        },
+      });
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes('REAL-NPM-RAN'), 'expected the real npm to run');
+    } finally {
+      cleanup(installHome);
+      cleanup(overrideHome);
+      cleanup(realBinDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('when nothing but the shim itself is on PATH, the launcher fails open with 127 instead of recursing', () => {
+    if (process.platform === 'win32') return; // exercises the POSIX shebang launcher
+    const installHome = createTempDir('egc-shim-dispatch-install-');
+    const overrideHome = createTempDir('egc-shim-dispatch-override-');
+    try {
+      const installedShimDir = path.join(installHome, '.egc', 'bin');
+      fs.mkdirSync(installedShimDir, { recursive: true });
+      // A name that exists nowhere else guarantees resolution can only ever
+      // find the launcher itself -- which it must refuse.
+      const launcher = writeShimLauncher(installedShimDir, 'egc-test-shim-only-binary');
+
+      const result = spawnSync(launcher, [], {
+        encoding: 'utf8',
+        timeout: 15000,
+        env: {
+          ...process.env,
+          HOME: overrideHome,
+          USERPROFILE: overrideHome,
+          PATH: [installedShimDir, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
+        },
+      });
+      assert.strictEqual(result.status, 127);
+      assert.ok(result.stderr.includes('command not found'), `expected a clean failure, got: ${result.stderr}`);
+    } finally {
+      cleanup(installHome);
+      cleanup(overrideHome);
+    }
+  })) passed++; else failed++;
+
+  if (test('a shim spawned directly by a same-name shim refuses to recurse (EGC_SHIM_PENDING circuit breaker)', () => {
+    const dir = createTempDir('egc-shim-dispatch-');
+    try {
+      seedManifest(dir, {});
+      // This process plays the role of the outer shim: the child sees
+      // EGC_SHIM_PENDING naming it with its direct parent's pid, which is
+      // the depth-1 signature of the shim having resolved to itself.
+      const result = runShim(dir, 'npm', ['--version'], {
+        env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_SHIM_PENDING: `npm:${process.pid}` },
+      });
+      assert.strictEqual(result.status, 127);
+      assert.ok(result.stderr.includes('refused to recurse'), `expected the circuit-breaker message, got: ${result.stderr}`);
     } finally {
       cleanup(dir);
     }
