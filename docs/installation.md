@@ -32,14 +32,18 @@ Memory is shared across EGC targets. Context saved while using Copilot is the sa
 
 ### Zed
 
-EGC registers `egc-guardian` and `egc-memory` directly into Zed's `context_servers` config. Paths are resolved at install time so it works regardless of how EGC was installed.
-
 ```bash
 npm install -g @egchq/egc
 egc install --target zed
 ```
 
-The installer writes to `~/.config/zed/settings.json` under the `context_servers` key. No manual JSON editing required.
+This installs EGC's skills into `~/.config/zed/`. It does **not** register the MCP servers: `--target <tool>` only ever installs skills and rules.
+
+To get `egc-guardian` and `egc-memory` into Zed's `context_servers`, run the installer or `egc init` instead. Both detect Zed and write to `~/.config/zed/settings.json` with paths resolved at install time:
+
+```bash
+egc init
+```
 
 ---
 
