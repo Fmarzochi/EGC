@@ -1047,6 +1047,11 @@ function createRepairPlanFromRecord(record, context) {
   };
 }
 
+function resolveRepairStatus(repairedCount, unrepairableCount) {
+  if (unrepairableCount > 0) return repairedCount > 0 ? 'partial' : 'error';
+  return repairedCount > 0 ? 'repaired' : 'ok';
+}
+
 function repairInstalledStates(options = {}) {
   const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
   const manifests = loadInstallManifests({ repoRoot });
@@ -1079,16 +1084,14 @@ function repairInstalledStates(options = {}) {
       const desiredPlan = createRepairPlanFromRecord(record, context);
       const operationHealth = summarizeManagedOperationHealth(context.repoRoot, desiredPlan.operations);
 
-      if (operationHealth.missingSource.length > 0) {
-        return {
-          adapter: record.adapter,
-          status: 'error',
-          installStatePath: record.installStatePath,
-          repairedPaths: [],
-          plannedRepairs: [],
-          error: `Missing source file(s): ${operationHealth.missingSource.map(entry => entry.sourcePath).join(', ')}`,
-        };
-      }
+      // A source file that no longer exists in the reference repo (renamed,
+      // dropped from the package, or synced from a different checkout) used
+      // to abort this target outright: everything else it managed stayed
+      // broken because of one orphan. The orphans are reported and the rest
+      // is repaired, which is what someone running `egc repair` on a damaged
+      // install actually needs.
+      const unrepairable = operationHealth.missingSource.map(entry => entry.sourcePath);
+      const failureReasons = [];
 
       const repairOperations = [
         ...operationHealth.missing.map(entry => ({ ...entry.operation })),
@@ -1103,19 +1106,28 @@ function repairInstalledStates(options = {}) {
           installStatePath: record.installStatePath,
           repairedPaths: [],
           plannedRepairs,
+          unrepairable,
           stateRefreshed: plannedRepairs.length === 0,
-          error: null,
+          error: unrepairable.length > 0 ? `Source file(s) no longer in the reference repo: ${unrepairable.join(', ')}` : null,
         };
       }
 
-      if (repairOperations.length > 0) {
-        for (const operation of repairOperations) {
+      // Each operation is executed on its own: one that cannot be carried
+      // out (its source was renamed away, or the destination is not
+      // writable) is recorded and the loop moves on, instead of throwing
+      // out to the catch below and leaving every other managed file broken.
+      const repairedPaths = [];
+      for (const operation of repairOperations) {
+        try {
           executeRepairOperation(context.repoRoot, operation);
+          repairedPaths.push(operation.destinationPath);
+        } catch (operationError) {
+          unrepairable.push(operation.sourceRelativePath || operation.destinationPath);
+          failureReasons.push(operationError.message);
         }
-        writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
-      } else {
-        writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
       }
+
+      writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
 
       syncInstallStateToStore(desiredPlan.statePreview, {
         onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
@@ -1123,12 +1135,18 @@ function repairInstalledStates(options = {}) {
 
       return {
         adapter: record.adapter,
-        status: repairOperations.length > 0 ? 'repaired' : 'ok',
+        // 'partial' when real work was done but something is still
+        // unfixable: neither a clean success nor a total failure, and the
+        // exit code keeps saying attention is needed.
+        status: resolveRepairStatus(repairedPaths.length, unrepairable.length),
         installStatePath: record.installStatePath,
-        repairedPaths: plannedRepairs,
+        repairedPaths,
         plannedRepairs: [],
+        unrepairable,
         stateRefreshed: true,
-        error: null,
+        error: unrepairable.length > 0
+          ? `Unrepairable: ${unrepairable.join(', ')}${failureReasons.length > 0 ? ` (${failureReasons[0]})` : ''}`
+          : null,
       };
     } catch (error) {
       return {
@@ -1144,14 +1162,19 @@ function repairInstalledStates(options = {}) {
 
   const summary = results.reduce((accumulator, result) => ({
     checkedCount: accumulator.checkedCount + 1,
-    repairedCount: accumulator.repairedCount + (result.status === 'repaired' ? 1 : 0),
+    // 'partial' counts as repaired: files really were rebuilt. It also
+    // counts as an error, so the exit code keeps reporting that something
+    // still needs attention.
+    repairedCount: accumulator.repairedCount + (result.status === 'repaired' || result.status === 'partial' ? 1 : 0),
     plannedRepairCount: accumulator.plannedRepairCount + (result.status === 'planned' ? 1 : 0),
-    errorCount: accumulator.errorCount + (result.status === 'error' ? 1 : 0),
+    errorCount: accumulator.errorCount + (result.status === 'error' || result.status === 'partial' ? 1 : 0),
+    unrepairableCount: accumulator.unrepairableCount + (result.unrepairable?.length || 0),
   }), {
     checkedCount: 0,
     repairedCount: 0,
     plannedRepairCount: 0,
     errorCount: 0,
+    unrepairableCount: 0,
   });
 
   return {

@@ -38,16 +38,29 @@ function printHuman(result) {
     console.log(`  Status: ${entry.status.toUpperCase()}`);
     console.log(`  Install-state: ${entry.installStatePath}`);
 
-    if (entry.error) {
+    // An unreadable install-state entry says nothing about repairs, so it
+    // still reports only the error. An entry with orphaned sources is a
+    // different situation: work was done, and the count must not be hidden.
+    if (entry.error && !(entry.unrepairable?.length > 0)) {
       console.log(`  Error: ${entry.error}`);
       continue;
     }
 
     const paths = result.dryRun ? entry.plannedRepairs : entry.repairedPaths;
     console.log(`  ${result.dryRun ? 'Planned repairs' : 'Repaired paths'}: ${paths.length}`);
+
+    if (entry.unrepairable?.length > 0) {
+      console.log(`  Unrepairable (source no longer in the reference repo): ${entry.unrepairable.length}`);
+      for (const sourcePath of entry.unrepairable) {
+        console.log(`    - ${sourcePath}`);
+      }
+    }
   }
 
-  console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'repaired'}=${result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount}, errors=${result.summary.errorCount}`);
+  const unrepairable = result.summary.unrepairableCount
+    ? `, unrepairable=${result.summary.unrepairableCount}`
+    : '';
+  console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'repaired'}=${result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount}, errors=${result.summary.errorCount}${unrepairable}`);
 }
 
 function executePluginRepairs(options) {
