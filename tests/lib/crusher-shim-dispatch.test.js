@@ -327,17 +327,21 @@ function runTests() {
       const realNpm = writeFakeBinary(realBinDir, 'npm', { stdout: 'REAL-NPM-RAN\n' });
       fs.writeFileSync(path.join(installedShimDir, 'manifest.json'), JSON.stringify({ npm: realNpm }));
 
+      // realBinDir deliberately NOT on PATH: the only way to reach the real
+      // binary is the manifest sitting beside the anchored launcher dir, so
+      // a regression in that anchored lookup fails here instead of being
+      // masked by an equivalent PATH fallback.
       const result = runShim(overrideHome, 'npm', ['--version'], {
         env: {
           ...process.env,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           EGC_SHIM_LAUNCHER_DIR: installedShimDir,
-          PATH: [installedShimDir, realBinDir, path.dirname(process.execPath)].join(path.delimiter),
+          PATH: [installedShimDir, path.dirname(process.execPath)].join(path.delimiter),
         },
       });
       assert.strictEqual(result.status, 0, result.stderr);
-      assert.ok(result.stdout.includes('REAL-NPM-RAN'), 'the manifest beside the anchored launcher dir must win over the decoy');
+      assert.ok(result.stdout.includes('REAL-NPM-RAN'), 'only the manifest beside the anchored launcher dir can reach the real npm');
     } finally {
       cleanup(installHome);
       cleanup(overrideHome);

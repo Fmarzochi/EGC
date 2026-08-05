@@ -25,7 +25,7 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { writeSync } = require('node:fs');
-const { resolveRealBinary } = require('./shim-paths');
+const { resolveRealBinary, realpathOrResolve } = require('./shim-paths');
 
 const SPAWN_OPTIONS = {
   encoding: 'utf8',
@@ -65,8 +65,11 @@ function exitLikeChild(result) {
 // is this module, not the launcher), so the .cmd bakes its own directory
 // into EGC_SHIM_LAUNCHER_DIR via %~dp0 -- that wins when present.
 function launcherDir() {
-  if (process.env.EGC_SHIM_LAUNCHER_DIR) return path.resolve(process.env.EGC_SHIM_LAUNCHER_DIR);
-  return process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : null;
+  if (process.env.EGC_SHIM_LAUNCHER_DIR) return realpathOrResolve(process.env.EGC_SHIM_LAUNCHER_DIR);
+  // realpath the launcher FILE before dirname: a launcher reached through a
+  // symlink (say /usr/local/bin/npm -> ~/.egc/bin/npm) must anchor to the
+  // physical shim directory, not to wherever the symlink happens to live.
+  return process.argv[1] ? path.dirname(realpathOrResolve(process.argv[1])) : null;
 }
 
 // Last line of defense against the shim spawning itself: if resolution
@@ -75,6 +78,12 @@ function launcherDir() {
 // OOM killer steps in. A legitimate nested invocation (an npm script
 // running npm) never trips this: the pid recorded by the outer shim is the
 // shim's own, not the real binary that spawned the inner one.
+// Known limitation: on Windows the .cmd launcher interposes a cmd.exe hop,
+// so process.ppid is the intermediate cmd.exe and the recorded pid never
+// matches -- this breaker cannot fire there. The physical-anchor exclusion
+// (launcherDir / EGC_SHIM_LAUNCHER_DIR) is the effective defense on that
+// platform; bridging the pid chain across cmd.exe would need a per-call
+// process walk that costs more than it protects.
 function refuseDirectRecursion(name) {
   if (process.env.EGC_SHIM_PENDING !== `${name}:${process.ppid}`) return;
   process.stderr.write(

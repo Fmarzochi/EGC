@@ -118,12 +118,15 @@ function resolveWithoutShim(name, extraExcludeDirs = []) {
 // `where` lists an extension-less sibling first when one exists (common in
 // Node installs, where `npm` is an MSYS shell wrapper next to npm.cmd), and
 // CreateProcess cannot execute it -- resolution must skip candidates the
-// platform cannot actually spawn.
+// platform cannot actually spawn. Deliberately NOT the full PATHEXT list:
+// .exe/.com launch directly and .cmd/.bat go through the shell (see
+// needsShellOnWindows), but .JS/.VBS/.WSF entries need cscript and would
+// fail the dispatch instead of letting a later usable candidate run.
+const WINDOWS_SPAWNABLE_EXTS = ['.exe', '.com', '.cmd', '.bat'];
 function isSpawnable(candidate) {
   if (process.platform !== 'win32') return true;
-  const exts = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
   const lower = candidate.toLowerCase();
-  return exts.some(ext => lower.endsWith(ext.toLowerCase()));
+  return WINDOWS_SPAWNABLE_EXTS.some(ext => lower.endsWith(ext));
 }
 
 // launcherDir is the physical directory of the launcher for the invocation
@@ -158,6 +161,7 @@ module.exports = {
   readManifest,
   pathEnvKey,
   normalizePathForCompare,
+  realpathOrResolve,
   resolveWithoutShim,
   resolveRealBinary,
 };
