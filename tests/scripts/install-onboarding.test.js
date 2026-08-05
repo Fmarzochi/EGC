@@ -28,6 +28,7 @@ const DASHBOARD_MESSAGES = [
   "Dashboard not started (headless environment). Run 'egc dashboard' to start it.",
 ];
 const DASHBOARD_LAUNCHER_REF = 'scripts/lib/dashboard-launch-cli.js';
+const DASHBOARD_LAUNCHER = path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch-cli.js');
 
 function test(name, fn) {
   try {
@@ -84,10 +85,15 @@ function createInstallerFixture() {
     fs.symlinkSync(executable, path.join(binDir, command));
   }
 
+  // The fake node also stands in for the dashboard wrapper: the installer
+  // now delegates the whole launch decision to it, so the fixture emulates
+  // what the real wrapper prints in a headless environment (the CI=1 the
+  // runner sets is exactly the case shouldAutoLaunch() declines).
   writeExecutable(path.join(binDir, 'node'), `#!/bin/sh
 case "$1" in
   -e) printf '20' ;;
   --version) printf 'v20.0.0\\n' ;;
+  *dashboard-launch-cli.js) printf "Dashboard not started (headless environment). Run 'egc dashboard' to start it.\\n" ;;
 esac
 exit 0
 `);
@@ -144,6 +150,7 @@ function runTests() {
       installApply: fs.readFileSync(INSTALL_APPLY, 'utf8'),
       bash: fs.readFileSync(INSTALL_SH, 'utf8'),
       powerShell: fs.readFileSync(INSTALL_PS1, 'utf8'),
+      dashboardWrapper: fs.readFileSync(DASHBOARD_LAUNCHER, 'utf8'),
       guide: fs.readFileSync(INSTALLATION_GUIDE, 'utf8'),
     };
   })) passed++; else failed++;
@@ -160,13 +167,17 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('bash and PowerShell explain dashboard startup after bare installs only', () => {
+  if (test('bash and PowerShell delegate dashboard startup to the shared wrapper, after bare installs only', () => {
+    // The launch/skip decision and its wording live in exactly one place;
+    // the shells must not re-implement either.
     for (const message of DASHBOARD_MESSAGES) {
-      assert.ok(sources.bash.includes(message), `install.sh missing: ${message}`);
-      assert.ok(sources.powerShell.includes(message), `install.ps1 missing: ${message}`);
+      assert.ok(sources.dashboardWrapper.includes(message), `dashboard-launch-cli.js missing: ${message}`);
+      assert.ok(!sources.bash.includes(message), 'install.sh must not duplicate the wrapper wording');
+      assert.ok(!sources.powerShell.includes(message), 'install.ps1 must not duplicate the wrapper wording');
     }
     assert.ok(sources.bash.includes(DASHBOARD_LAUNCHER_REF), 'install.sh must launch the dashboard through the shared CLI wrapper');
     assert.ok(sources.powerShell.includes(DASHBOARD_LAUNCHER_REF), 'install.ps1 must launch the dashboard through the shared CLI wrapper');
+    assert.ok(sources.dashboardWrapper.includes('shouldAutoLaunch'), 'the wrapper owns the launch decision');
     assert.ok(sources.bash.includes('if [ "$_has_install_args" = false ]; then'));
     assert.ok(sources.powerShell.includes('if (-not $hasInstallArgs)'));
   })) passed++; else failed++;
@@ -216,6 +227,23 @@ function runTests() {
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });
     }
+  })) passed++; else failed++;
+
+  if (test('the dashboard wrapper itself declines and explains in a headless environment', () => {
+    // Runs the real wrapper (not a fixture stand-in) with stdout piped and
+    // CI set: the branch every headless install takes, end to end.
+    const wrapper = path.join(REPO_ROOT, 'scripts', 'lib', 'dashboard-launch-cli.js');
+    const result = spawnSync(process.execPath, [wrapper, REPO_ROOT], {
+      encoding: 'utf8',
+      env: { ...process.env, CI: '1' },
+      timeout: INSTALL_TIMEOUT_MS,
+    });
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(
+      result.stdout.trim(),
+      "Dashboard not started (headless environment). Run 'egc dashboard' to start it.",
+      'the wrapper owns the launch decision and must explain itself when it declines'
+    );
   })) passed++; else failed++;
 
   if (test('Bash install arguments suppress the bare-install dashboard notice', () => {

@@ -411,14 +411,10 @@ fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
     Write-Host ""
     Write-Host "Installation complete."
     if (-not $hasInstallArgs) {
-        # Same rule as install.sh and shouldAutoLaunch(): a person at an
-        # interactive terminal gets the dashboard the README promises; CI
-        # and redirected runs stay headless with an honest message.
-        if (-not [Console]::IsOutputRedirected -and -not $env:CI) {
-            & node (Join-Path $RootDir "scripts/lib/dashboard-launch-cli.js") $RootDir
-        } else {
-            Write-Host "Dashboard not started (headless environment). Run 'egc dashboard' to start it."
-        }
+        # Same single decision point as install.sh: shouldAutoLaunch()
+        # inside the wrapper decides whether to launch, and prints the
+        # headless message itself when it declines.
+        & node (Join-Path $RootDir "scripts/lib/dashboard-launch-cli.js") $RootDir
     }
     Write-Host "Run 'egc doctor' to verify."
 }
