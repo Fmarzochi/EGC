@@ -214,5 +214,140 @@ run('git config includeIf.<condition>.path write is blocked (audit EGC-533, Find
   assert.strictEqual(v.allowed, false, 'includeIf.*.path loads another config file wholesale, same as include.path');
 });
 
+// Reading and writing carry different risk. Writing into these directories
+// can hijack execution or plant persistence; reading a manifest or a service
+// config only tells you how your own install is set up, and denying that was
+// blocking legitimate diagnosis.
+run('reading a functional file under a write-protected directory is allowed', () => {
+  const home = require('node:os').homedir();
+  for (const cmd of [
+    `cat ${path.join(home, '.egc', 'bin', 'manifest.json')}`,
+    `ls ${path.join(home, '.egc', 'bin')}`,
+    'cat /etc/systemd/oomd.conf',
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, true, `${cmd} exposes no secret and must be readable`);
+  }
+});
+
+run('reading an actual secret is still refused', () => {
+  const home = require('node:os').homedir();
+  for (const cmd of [
+    `cat ${path.join(home, '.ssh', 'id_rsa')}`,
+    `cat ${path.join(home, '.egc', 'encryption.key')}`,
+    `cat ${path.join(home, '.npmrc')}`,
+    'cat /etc/shadow',
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} exposes a credential and must stay denied`);
+  }
+});
+
+run('recursive walks stay out of protected trees, readable subdirectory or not', () => {
+  const home = require('node:os').homedir();
+  // Direct denied roots, and -- the case that actually matters here -- a
+  // directory whose *contents* are readable one file at a time. `cat
+  // ~/.egc/bin/manifest.json` is allowed; walking ~/.egc/bin is not, because
+  // tree-walking commands keep the full write-protection check rather than
+  // the narrower read one.
+  for (const cmd of [
+    `grep -r secret ${path.join(home, '.egc')}`,
+    `find ${path.join(home, '.config', 'github-copilot')} -name "*.json"`,
+    `grep -r token ${path.join(home, '.egc', 'bin')}`,
+    `find ${path.join(home, '.egc', 'metrics')} -name "*.jsonl"`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} walks a protected tree`);
+  }
+
+  // The single-file reads inside those same directories stay allowed, which
+  // is the whole point of the split.
+  assert.strictEqual(
+    validateCommand(`cat ${path.join(home, '.egc', 'bin', 'manifest.json')}`).allowed,
+    true,
+    'reading one operational file must still work'
+  );
+});
+
+run('a case variant cannot name a secret past the guard', () => {
+  // macOS and Windows open .ENV and /etc/SHADOW as the same files their
+  // lower-case spellings name. The check folds case there, so the variant is
+  // refused; on Linux these are genuinely different paths and the assertion
+  // only applies where the filesystem behaves that way.
+  if (process.platform !== 'darwin' && process.platform !== 'win32') return;
+  const home = require('node:os').homedir();
+  for (const cmd of ['cat /etc/SHADOW', 'cat .ENV', `cat ${path.join(home, '.egc', 'ENCRYPTION.KEY')}`]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} names a protected file`);
+  }
+
+  // The same folding has to apply to the readable side, or the case fix
+  // would turn harmless reads into denials on exactly those systems.
+  for (const cmd of [
+    `cat ${path.join(home, '.BASHRC')}`,
+    `cat ${path.join(home, '.GITCONFIG')}`,
+    `cat ${path.join(home, '.egc', 'BIN', 'manifest.json')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, true, `${cmd} names a harmless file`);
+  }
+});
+
+run('credential stores outside the readable areas stay denied', () => {
+  const home = require('node:os').homedir();
+  // These are covered by the write protection and are not on the read-safe
+  // list, so subtraction keeps them denied without restating them.
+  for (const cmd of [
+    `cat ${path.join(home, '.codex', 'auth.json')}`,
+    `cat ${path.join(home, '.gemini', 'google_accounts.json')}`,
+    `cat ${path.join(home, '.local', 'share', 'kiro-cli', 'data.sqlite3')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} is a credential store`);
+  }
+});
+
+run('a persistence-file name cannot unlock a credential directory', () => {
+  const home = require('node:os').homedir();
+  // .bashrc and .gitconfig are readable where they normally live, but the
+  // filename must not make them readable inside a credential store, and the
+  // .git/config pattern must not stretch to .git/config_keys.
+  for (const cmd of [
+    `cat ${path.join(home, '.ssh', '.gitconfig')}`,
+    `cat ${path.join(home, '.aws', '.bashrc')}`,
+    `cat ${path.join(home, '.ssh', '.git', 'config')}`,
+    `cat ${path.join(home, '.ssh', '.git', 'config_keys')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} sits inside a credential store`);
+  }
+});
+
+run('system secrets are denied without having to be enumerated', () => {
+  // The readable set is narrow on purpose (specific directories, not whole
+  // trees), so none of these had to be listed anywhere to stay protected --
+  // which is the point, since an audit found every one of them missing from
+  // an earlier attempt that opened /etc and ~/.egc wholesale.
+  const home = require('node:os').homedir();
+  for (const cmd of [
+    'cat /etc/shadow-',
+    'cat /etc/gshadow-',
+    'cat /etc/sudoers.tmp',
+    'cat /etc/ssl/private/server.key',
+    'cat /etc/wireguard/wg0.conf',
+    'cat /etc/krb5.keytab',
+    'cat /etc/master.passwd',
+    `cat ${path.join(home, '.egc', 'encryption.key.bak')}`,
+    `cat ${path.join(home, '.egc', 'state.bak')}`,
+    `cat ${path.join(home, '.egc', 'state', 'project.md')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} must stay denied`);
+  }
+});
+
+run('write protection is untouched by the read split', () => {
+  const home = require('node:os').homedir();
+  for (const target of [
+    path.join(home, '.egc', 'bin', 'git'),
+    path.join(home, '.ssh', 'authorized_keys'),
+    '/etc/passwd',
+  ]) {
+    assert.strictEqual(validateWrite(target).allowed, false, `${target} must remain write-protected`);
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

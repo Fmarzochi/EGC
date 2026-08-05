@@ -760,6 +760,15 @@ export function resolveRealOrLexical(p: string): string {
 // pass it explicitly -- otherwise a relative path is judged against this
 // process's own cwd, which is not guaranteed to match the shell the command
 // actually runs in.
+// macOS and Windows resolve paths case-insensitively; Linux does not. Every
+// path comparison in this file folds through here so a case variant cannot
+// name a protected file while dodging the check written for it.
+const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform === 'win32';
+
+function foldCase(p: string): string {
+  return CASE_INSENSITIVE_FS ? p.toLowerCase() : p;
+}
+
 export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
   // Trim first: a trailing newline (routine for anything piped through
   // `echo`) or stray whitespace survives path.resolve() into the final
@@ -777,21 +786,114 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
   // this check into a denied path. Fall back to the lexical path (then the
   // parent) when the target does not exist yet, e.g. a write being created.
   const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
+  // macOS and Windows open `.ENV`, `/etc/SHADOW` and `~/.SSH/id_rsa` as the
+  // very same files their lower-case spellings name, so a comparison that is
+  // not folded there protects only one spelling of each secret. Folding is
+  // applied to both sides, and only where the filesystem actually behaves
+  // that way -- on Linux those are genuinely different files.
+  const candidate = foldCase(normalizedP);
 
   for (const denied of DENIED_PATHS) {
-    const resolvedDenied = resolveRealOrLexical(denied);
-    if (normalizedP === resolvedDenied || normalizedP.startsWith(resolvedDenied + path.sep)) {
+    const resolvedDenied = foldCase(resolveRealOrLexical(denied));
+    if (candidate === resolvedDenied || candidate.startsWith(resolvedDenied + path.sep)) {
       return true;
     }
   }
 
   for (const pattern of PROTECTED_FILE_PATTERNS) {
-    if (pattern.test(normalizedP)) {
+    if (pattern.test(candidate)) {
       return true;
     }
   }
 
   return false;
+}
+
+// Reading and writing carry different risk, and treating them alike is what
+// made the guardian deny `cat ~/.egc/bin/manifest.json`, `ls ~/.egc/bin` or
+// `cat /etc/systemd/oomd.conf` -- none of which expose a secret, all of
+// which someone diagnosing their own install genuinely needs. Writing into
+// those directories can hijack execution or plant persistence, so every
+// write denial stays exactly as it was.
+//
+// Derived from the write protection by subtraction, never restated: a read
+// is denied wherever a write is denied, EXCEPT for the locations listed
+// here. Stating the readable set positively (rather than re-listing what to
+// deny) means a credential store added to the write protection tomorrow is
+// read-protected automatically, instead of silently becoming readable
+// because a parallel list was not updated.
+//
+// Deliberately narrow: specific directories whose entire contents are
+// operational, never a whole tree with secrets carved back out. Opening
+// /etc or ~/.egc wholesale and then listing the secrets inside them is a
+// denylist wearing an allowlist's clothes, and it leaks by omission -- an
+// audit of exactly that shape turned up /etc/ssl/private, /etc/wireguard,
+// /etc/krb5.keytab, the shadow backup files (/etc/shadow-), and
+// ~/.egc/encryption.key.bak, none of which had been listed. Anything not
+// named here stays denied, so a secret nobody thought of stays protected.
+function buildReadSafePaths(): string[] {
+  const home = os.homedir();
+  return [
+    // EGC's own install surface: shim manifest and the binaries it wraps.
+    path.join(home, '.egc', 'bin'),
+    // Token Crusher ledger, which `egc gain` reports from.
+    path.join(home, '.egc', 'metrics'),
+    path.join(home, '.egc', 'logs'),
+    // Service definitions: what runs, and how.
+    '/etc/systemd',
+    path.join(home, '.config', 'systemd', 'user'),
+    // Listing what sits ahead of /usr/bin on PATH is diagnosis, not exposure.
+    path.join(home, '.local', 'bin'),
+  ];
+}
+
+export const READ_SAFE_PATHS: string[] = buildReadSafePaths();
+
+// Files that are dangerous to modify but harmless to read: shell startup
+// files and git config are persistence mechanisms, not credential stores.
+// Anchored, and only ever consulted for a path that is NOT inside a denied
+// directory -- otherwise a file named ~/.ssh/.gitconfig would read as safe.
+const READ_SAFE_FILE_PATTERNS: RegExp[] = [
+  /(^|[\\/])\.(bashrc|zshrc|bash_profile|zprofile|profile)$/,
+  /(^|[\\/])\.gitconfig$/,
+  /(^|[\\/])\.git[\\/](config|hooks)$/,
+  /(^|[\\/])\.git[\\/]hooks[\\/]/,
+];
+
+function isUnder(candidate: string, parent: string): boolean {
+  const resolvedParent = foldCase(resolveRealOrLexical(parent));
+  const folded = foldCase(candidate);
+  return folded === resolvedParent || folded.startsWith(resolvedParent + path.sep);
+}
+
+// Whether the protection comes from the path living inside a denied
+// directory (a credential store) rather than from the filename alone.
+function isUnderDeniedDirectory(normalizedP: string): boolean {
+  return DENIED_PATHS.some(denied => isUnder(normalizedP, denied));
+}
+
+export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): boolean {
+  // Not protected at all: nothing to decide.
+  if (!isProtectedPath(p, baseDir)) return false;
+
+  const trimmed = p.trim();
+  const expanded = trimmed.startsWith('~')
+    ? path.join(os.homedir(), trimmed.slice(1))
+    : trimmed;
+  const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
+
+  // An explicitly operational location is readable.
+  if (READ_SAFE_PATHS.some(safe => isUnder(normalizedP, safe))) return false;
+
+  // Inside a credential store, the filename means nothing: deny.
+  if (isUnderDeniedDirectory(normalizedP)) return true;
+
+  // Protection came from the filename alone. Allow the persistence-only
+  // ones; everything else (.env, .pem, tokens, auth files) stays denied.
+  // Folded on the same terms as the denial side: where the filesystem opens
+  // ~/.BASHRC and ~/.bashrc as one file, both spellings have to be readable,
+  // or the case fix would have quietly turned a harmless read into a denial.
+  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(foldCase(normalizedP)));
 }
 
 export interface ValidationResult {
@@ -986,7 +1088,7 @@ a => a === '-r' || a === '-R' || a === '--recursive' ||
     }
   }
   for (const p of fileFlagValues) {
-    if (isProtectedPath(p, cwd)) {
+    if (isReadDeniedPath(p, cwd)) {
       return {
         allowed: false,
         reason: `grep pattern file '${p}' is a protected path`,
@@ -1028,7 +1130,7 @@ if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath
 
   // Even without -r, block explicit protected paths
   for (const p of pathArgs) {
-if (isProtectedPath(p, cwd)) {
+if (isReadDeniedPath(p, cwd)) {
   return {
     allowed: false,
     reason: `grep over protected path '${p}' is forbidden`,
@@ -1043,7 +1145,7 @@ if (isProtectedPath(p, cwd)) {
 function validateCatArgs(args: string[], cwd?: string): ValidationResult {
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isProtectedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `cat of protected path '${arg}' is forbidden`,
@@ -1088,7 +1190,7 @@ function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: str
   // These are read-only but we still block protected paths
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isProtectedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
