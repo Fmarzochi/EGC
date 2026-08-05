@@ -8,7 +8,20 @@ import path from 'node:path';
 // reach. The npm package's "files" list ships scripts/ and
 // mcp/servers/egc-memory/build/ at the same relative depth as this repo, so the
 // path below resolves identically in a real `npm install -g` layout.
-function tryRequireMemoryFilters(): typeof import('../../../../scripts/lib/memory-filters') | null {
+// The shape is declared here rather than pulled in with `typeof import(...)`:
+// that form makes the compiler resolve a file outside this package, so the
+// build failed outright anywhere the repo root was not present (a copied
+// server directory, a vendored tree). The require below is already
+// fault-tolerant at runtime; only the type was making the dependency hard.
+interface MemoryFilters {
+  configureMemoryFilters(options: {
+    projectDir: string;
+    scriptPath: string;
+    dryRun: boolean;
+  }): { configured: boolean; reason?: string; actions: string[] };
+}
+
+function tryRequireMemoryFilters(): MemoryFilters | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('../../../../scripts/lib/memory-filters');

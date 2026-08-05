@@ -17,5 +17,11 @@ if (!fs.existsSync(entry)) {
 }
 
 if (process.platform !== 'win32') {
-  fs.chmodSync(entry, 0o755);
+  // Add the owner's execute bit to whatever mode the compiler produced,
+  // rather than forcing 0o755. The server is always run by the user who
+  // installed it, so world-execute buys nothing, and a fixed mode would
+  // also widen read access on a file the compiler had written more
+  // narrowly.
+  const { mode } = fs.statSync(entry);
+  fs.chmodSync(entry, mode | 0o100);
 }
