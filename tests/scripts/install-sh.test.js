@@ -148,11 +148,43 @@ function runTests() {
     );
 
     // A pre-existing config that is not valid JSON must be skipped with an
-    // honest note, never reported as a successful registration.
-    assert.ok(
-      /is not valid JSON/.test(script),
-      'install.sh must print an honest skip note when an existing config cannot be parsed'
-    );
+    // honest note, never reported as a successful registration. install.sh
+    // delegates that to the registration CLI now, so the behavior is
+    // exercised there for real: a broken Cursor config in a throwaway HOME
+    // must produce a skip note and come back byte-for-byte unchanged.
+    const home = createTempDir('egc-install-badjson-');
+    // Hermetic on purpose: an empty PATH means no PATH-gated target can
+    // fire, so this never touches a real claude/cursor/kiro/codex on the
+    // machine running the suite and the output does not vary by host. The
+    // only target that opens is the Cursor config seeded below, which is
+    // exactly the one under test. process.execPath runs the CLI directly,
+    // so node itself does not need to be on PATH.
+    const emptyBin = createTempDir('egc-install-nopath-');
+    try {
+      const cursorConfig = path.join(home, '.cursor', 'mcp.json');
+      const broken = '{ "mcpServers": { oops';
+      fs.mkdirSync(path.dirname(cursorConfig), { recursive: true });
+      fs.writeFileSync(cursorConfig, broken);
+
+      const out = execFileSync(
+        process.execPath,
+        [path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register-cli.js'), '/tmp/guardian.js', '/tmp/memory.js'],
+        { env: { ...process.env, HOME: home, USERPROFILE: home, PATH: emptyBin }, encoding: 'utf8', cwd: home }
+      );
+
+      assert.ok(
+        /note: skipped Cursor[\s\S]*is not valid JSON/.test(out),
+        `an unparseable config must be reported as skipped, got:\n${out}`
+      );
+      assert.ok(
+        !/registered in Cursor/.test(out),
+        `an unparseable config must never be reported as registered, got:\n${out}`
+      );
+      assert.strictEqual(fs.readFileSync(cursorConfig, 'utf8'), broken, 'the broken file must be left untouched');
+    } finally {
+      cleanup(home);
+      cleanup(emptyBin);
+    }
   })) passed++; else failed++;
 
   if (test('MCP config paths are Windows-native under Git Bash, not the POSIX mount form', () => {

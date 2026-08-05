@@ -127,7 +127,12 @@ function runTests() {
     const savedPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const savedPath = process.env.PATH;
     const savedAppData = process.env.APPDATA;
-    fs.writeFileSync(path.join(binDir, 'opencode.cmd'), '@echo off\r\n', { mode: 0o755 });
+    const savedPathExt = process.env.PATHEXT;
+    // PATHEXT is pinned and the stand-in named to match it exactly: Windows
+    // itself is case-insensitive, but this assertion has to hold on the
+    // case-sensitive filesystem the tests actually run on.
+    process.env.PATHEXT = '.CMD';
+    fs.writeFileSync(path.join(binDir, 'opencode.CMD'), '@echo off\r\n', { mode: 0o755 });
     fs.writeFileSync(path.join(binDir, 'opencode'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
     process.env.PATH = `${binDir}${path.delimiter}${savedPath}`;
     process.env.APPDATA = path.join(tmpHome, 'AppData', 'Roaming');
@@ -147,6 +152,7 @@ function runTests() {
       if (savedPlatform) Object.defineProperty(process, 'platform', savedPlatform);
       process.env.PATH = savedPath;
       if (savedAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = savedAppData;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });
       fs.rmSync(binDir, { recursive: true, force: true });
     }

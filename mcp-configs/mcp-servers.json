@@ -133,14 +133,6 @@
       },
       "description": "AI browser agent for web tasks"
     },
-    "obsidian": {
-      "type": "http",
-      "url": "https://127.0.0.1:27124/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${OBSIDIAN_TOKEN}"
-      },
-      "description": "Obsidian vault via Local REST API plugin. Requires: Obsidian open with obsidian-local-rest-api plugin active. Set OBSIDIAN_TOKEN env var before starting the harness."
-    },
     "devfleet": {
       "type": "http",
       "url": "http://localhost:18801/mcp",

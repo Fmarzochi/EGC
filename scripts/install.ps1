@@ -338,73 +338,18 @@ if (-not $DryRun) {
     # hand-written copy of scripts/lib/mcp-register.js and had drifted:
     # Continue.dev and Zed were never registered here, so installing through
     # PowerShell wired up fewer tools than `egc init` did on the same machine.
-    # The paths below are still computed because the Obsidian propagation
-    # further down reads them.
-    $cursorConfig    = Join-Path (Join-Path $env:USERPROFILE ".cursor") "mcp.json"
-    $kiroConfig      = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".kiro") "settings") "mcp.json"
-    $opencodeConfig  = Join-Path (Join-Path $env:APPDATA "opencode") "config.json"
-    $agyDir          = Join-Path (Join-Path $env:USERPROFILE ".gemini") "antigravity-cli"
-    $agyConfig       = Join-Path $agyDir "mcp_config.json"
-    $geminiConfigDir = Join-Path (Join-Path $env:USERPROFILE ".gemini") "config"
-    $geminiConfig    = Join-Path $geminiConfigDir "mcp_config.json"
 
     # Run from the directory the person invoked the installer in, so a
     # project .mcp.json there is picked up; the script itself moved to the
     # package root long ago.
-    Push-Location $InvokedFromDir
+    # -LiteralPath: a real directory whose name contains [ ] * or ? is a
+    # wildcard pattern to Push-Location otherwise, and the resulting error
+    # would abort the installer before registration and everything after it.
+    Push-Location -LiteralPath $InvokedFromDir
     try {
         & node (Join-Path $RootDir "scripts/lib/mcp-register-cli.js") $GuardianBin $MemoryBin
     } finally {
         Pop-Location
-    }
-
-    # Obsidian propagation (delegated to Node)
-    # $claudeConfig (Claude Desktop's file) is gone from both lists: Claude
-    # Code never read it, so it was a dead source and a dead target alike.
-    # Propagating obsidian into Claude Code's real user scope needs the CLI
-    # (claude mcp add-json) and is tracked as a follow-up.
-    $obsidianSources = @($agyConfig, $geminiConfig, $cursorConfig)
-    $findObsTmp = Join-Path $env:TEMP ("egc_obs_find_" + [System.Guid]::NewGuid().ToString("N") + ".js")
-    Set-Content -Path $findObsTmp -Encoding UTF8 -Value @'
-const fs=require("fs");
-const srcs=process.argv.slice(2);
-for(const s of srcs){try{const o=JSON.parse(fs.readFileSync(s,"utf8"));if(o.mcpServers&&o.mcpServers.obsidian){process.stdout.write(JSON.stringify(o.mcpServers.obsidian));process.exit(0);}}catch(_){}}
-'@
-    $existingSources = $obsidianSources | Where-Object { Test-Path $_ }
-    $obsBlock = $null
-    if ($existingSources) {
-        try { $obsBlock = & node $findObsTmp @existingSources 2>$null } catch {}
-    }
-    Remove-Item $findObsTmp -ErrorAction SilentlyContinue
-
-    if ($obsBlock) {
-        $propObsTmp = Join-Path $env:TEMP ("egc_obs_prop_" + [System.Guid]::NewGuid().ToString("N") + ".js")
-        Set-Content -Path $propObsTmp -Encoding UTF8 -Value @'
-const fs=require("fs"),path=require("path");
-const[,,t,b]=process.argv;
-let obs;try{obs=JSON.parse(b);}catch(_){process.exit(0);}
-let obj={mcpServers:{}};
-if(fs.existsSync(t)){try{obj=JSON.parse(fs.readFileSync(t,"utf8"));}catch(_){process.exit(0);}}
-if(!obj.mcpServers)obj.mcpServers={};
-if(obj.mcpServers.obsidian)process.exit(0);
-obj.mcpServers.obsidian=obs;
-const d=path.dirname(t);if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});
-fs.writeFileSync(t,JSON.stringify(obj,null,2)+"\n");
-'@
-        $propagateTargets = @(
-            @{ P = $agyConfig;     L = "Antigravity CLI" }
-            @{ P = $geminiConfig;  L = "Gemini CLI" }
-            @{ P = $cursorConfig;  L = "Cursor" }
-            @{ P = $kiroConfig;    L = "Kiro" }
-            @{ P = $opencodeConfig; L = "OpenCode" }
-        )
-        foreach ($pt in $propagateTargets) {
-            try {
-                node $propObsTmp $pt.P $obsBlock 2>$null
-                if ($LASTEXITCODE -eq 0) { Write-Host "  v obsidian synced to $($pt.L)" }
-            } catch {}
-        }
-        Remove-Item $propObsTmp -ErrorAction SilentlyContinue
     }
 
     # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort:

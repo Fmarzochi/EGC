@@ -485,8 +485,12 @@ function commandExists(cmd) {
     return false;
   }
 
+  // Read at call time rather than using the module-level isWindows: callers
+  // that need to exercise the Windows lookup rules (tests, cross-platform
+  // registration logic) can then do so, and the value is identical in any
+  // real process.
   try {
-    if (isWindows) {
+    if (process.platform === 'win32') {
       // shell:true inherits PATHEXT so `where npm` resolves npm.cmd/.exe correctly
       const result = spawnSync('where', [cmd], { stdio: 'pipe', shell: true });
       if (result.status === 0) return true;
@@ -513,22 +517,30 @@ function existsOnPath(cmd) {
   // same as an empty entry inside a populated PATH.
   if (!rawPath) return false;
 
+  // Read at call time, not from the module-level isWindows, so the Windows
+  // rules below are reachable under test on any host. The separator stays
+  // path.delimiter, which is already ';' in any real Windows process and is
+  // what actually separates the entries of the PATH being read.
+  const onWindows = process.platform === 'win32';
+
   const directories = rawPath
     .split(path.delimiter)
     // POSIX shells read a leading, trailing or doubled separator as the
     // current directory; Windows does not, so the empty entry is dropped
     // there instead of silently searching somewhere it never would.
-    .map(entry => (entry === '' ? (isWindows ? null : '.') : entry))
+    .map(entry => (entry === '' ? (onWindows ? null : '.') : entry))
     .filter(entry => entry !== null)
     // Windows PATH entries are sometimes quoted; the quotes are shell
     // syntax, not part of the directory name, and would make every lookup
     // inside that entry fail.
-    .map(entry => (isWindows ? entry.replace(/^"(.*)"$/, '$1') : entry));
-  // An explicit extension is honored as written: appending PATHEXT to a
-  // name that already carries one would only ever look for node.exe.EXE.
-  const extensions = isWindows
-    ? [...(path.extname(cmd) ? [''] : []), ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
-    : [''];
+    .map(entry => (onWindows ? entry.replace(/^"(.*)"$/, '$1') : entry));
+  // A name that already carries an extension is looked up exactly as
+  // written. Appending PATHEXT on top of it would search for tool.exe.CMD
+  // and report a match that the shell would never resolve.
+  let extensions = [''];
+  if (onWindows && !path.extname(cmd)) {
+    extensions = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
+  }
 
   for (const directory of directories) {
     for (const extension of extensions) {
@@ -538,7 +550,7 @@ function existsOnPath(cmd) {
         // existence check and the POSIX executable check (searchable
         // directories carry the execute bit), so the type is settled first.
         if (!fs.statSync(candidate).isFile()) continue;
-        if (isWindows) return true;
+        if (onWindows) return true;
         fs.accessSync(candidate, fs.constants.X_OK);
         return true;
       } catch {
