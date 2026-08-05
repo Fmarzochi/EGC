@@ -271,5 +271,5 @@ console.log(`  ${c.dim}Route heavy commands through \`egc run <cmd>\`; see savin
 
 if (!flags.dryRun) {
   const { launchDashboard } = require('./lib/dashboard-launch');
-  launchDashboard({ rootDir: ROOT_DIR, log: msg => console.log(`\n  ${c.cyan}${msg}${c.reset}`) });
+  launchDashboard({ log: msg => console.log(`\n  ${c.cyan}${msg}${c.reset}`) });
 }
