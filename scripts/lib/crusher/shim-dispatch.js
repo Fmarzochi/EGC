@@ -17,11 +17,15 @@
 //   - Engine/metrics modules unavailable, or the command kind is 'generic'
 //     -> full passthrough, zero capture, zero behavior change.
 //   - Any unexpected error at any point -> full passthrough.
+//   - Resolution that would re-enter the shim itself (seen under HOME
+//     overrides that hide the manifest) -> rejected up front by physical
+//     path, and a child that still turns out to be the shim exits 127 at
+//     depth 1 instead of recursing (see refuseDirectRecursion).
 
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { writeSync } = require('node:fs');
-const { resolveRealBinary } = require('./shim-paths');
+const { resolveRealBinary, realpathOrResolve } = require('./shim-paths');
 
 const SPAWN_OPTIONS = {
   encoding: 'utf8',
@@ -52,8 +56,50 @@ function exitLikeChild(result) {
   process.exit(typeof result.status === 'number' ? result.status : 1);
 }
 
-function passthrough(realBinary, args) {
-  const result = spawnSync(realBinary, args, { stdio: 'inherit', shell: needsShellOnWindows(realBinary) });
+// The physical directory of the launcher for this exact invocation, immune
+// to HOME/USERPROFILE overrides -- which is what makes it a trustworthy
+// "never resolve back into here" anchor, unlike anything derived from
+// os.homedir() (see resolveRealBinary in shim-paths). On POSIX the shebang
+// launcher require()s this module, so process.argv[1] is the launcher file.
+// The Windows .cmd spawns `node shim-dispatch.js <name>` instead (argv[1]
+// is this module, not the launcher), so the .cmd bakes its own directory
+// into EGC_SHIM_LAUNCHER_DIR via %~dp0 -- that wins when present.
+function launcherDir() {
+  if (process.env.EGC_SHIM_LAUNCHER_DIR) return realpathOrResolve(process.env.EGC_SHIM_LAUNCHER_DIR);
+  // realpath the launcher FILE before dirname: a launcher reached through a
+  // symlink (say /usr/local/bin/npm -> ~/.egc/bin/npm) must anchor to the
+  // physical shim directory, not to wherever the symlink happens to live.
+  return process.argv[1] ? path.dirname(realpathOrResolve(process.argv[1])) : null;
+}
+
+// Last line of defense against the shim spawning itself: if resolution
+// still handed back the shim, the child sees its own name recorded by its
+// direct parent and stops at depth 1 instead of forking until the machine's
+// OOM killer steps in. A legitimate nested invocation (an npm script
+// running npm) never trips this: the pid recorded by the outer shim is the
+// shim's own, not the real binary that spawned the inner one.
+// Known limitation: on Windows the .cmd launcher interposes a cmd.exe hop,
+// so process.ppid is the intermediate cmd.exe and the recorded pid never
+// matches -- this breaker cannot fire there. The physical-anchor exclusion
+// (launcherDir / EGC_SHIM_LAUNCHER_DIR) is the effective defense on that
+// platform; bridging the pid chain across cmd.exe would need a per-call
+// process walk that costs more than it protects.
+function refuseDirectRecursion(name) {
+  if (process.env.EGC_SHIM_PENDING !== `${name}:${process.ppid}`) return;
+  process.stderr.write(
+    `${name}: the EGC Token Crusher shim resolved to itself and refused to recurse ` +
+    `(usually a HOME override hiding the shim's manifest). Re-run 'egc crusher-shim install' ` +
+    `to rebuild the manifest, or drop the shim directory from PATH for this command.\n`
+  );
+  process.exit(127);
+}
+
+function childEnv(name) {
+  return { ...process.env, EGC_SHIM_PENDING: `${name}:${process.pid}` };
+}
+
+function passthrough(name, realBinary, args) {
+  const result = spawnSync(realBinary, args, { stdio: 'inherit', shell: needsShellOnWindows(realBinary), env: childEnv(name) });
   if (result.error) {
     process.stderr.write(`${path.basename(realBinary)}: ${result.error.message}\n`);
     process.exit(127);
@@ -70,7 +116,9 @@ function loadCrusher() {
 }
 
 function runShim(name, args) {
-  const realBinary = resolveRealBinary(name);
+  refuseDirectRecursion(name);
+
+  const realBinary = resolveRealBinary(name, launcherDir());
   if (!realBinary) {
     process.stderr.write(`${name}: command not found\n`);
     process.exit(127);
@@ -81,16 +129,16 @@ function runShim(name, args) {
   // and compress on its own otherwise, since it runs as an independent child
   // with no other visibility into that intent.
   if (process.env.EGC_CRUSHER_RAW === '1' || process.stdout.isTTY) {
-    return passthrough(realBinary, args);
+    return passthrough(name, realBinary, args);
   }
 
   const crusher = loadCrusher();
   const commandLine = [name, ...args].join(' ');
   if (!crusher || crusher.commandKind(commandLine) === 'generic') {
-    return passthrough(realBinary, args);
+    return passthrough(name, realBinary, args);
   }
 
-  const result = spawnSync(realBinary, args, { ...SPAWN_OPTIONS, shell: needsShellOnWindows(realBinary) });
+  const result = spawnSync(realBinary, args, { ...SPAWN_OPTIONS, shell: needsShellOnWindows(realBinary), env: childEnv(name) });
   if (result.error) {
     // ENOBUFS (output exceeded maxBuffer) is not "command not found" -- exit
     // 127 there would be actively misleading to anything inspecting the

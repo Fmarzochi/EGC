@@ -56,6 +56,20 @@ function writeFakeExecutable(filePath) {
   fs.chmodSync(filePath, 0o755);
 }
 
+// Windows resolves binaries through PATHEXT, so an extension-less fake is
+// invisible to `where`; a .cmd file is the faithful stand-in for the real
+// npm.cmd/yarn.cmd wrappers there.
+function writeFakeCommand(dir, name) {
+  if (process.platform === 'win32') {
+    const binPath = path.join(dir, `${name}.cmd`);
+    fs.writeFileSync(binPath, '@echo off\r\nexit /b 0\r\n');
+    return binPath;
+  }
+  const binPath = path.join(dir, name);
+  writeFakeExecutable(binPath);
+  return binPath;
+}
+
 function test(name, fn) {
   try {
     fn();
@@ -158,6 +172,88 @@ function runTests() {
       });
     } finally {
       cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a HOME override never makes resolution return the launcher itself (fork-bomb regression)', () => {
+    // The exact failure that used to fork-bomb the machine: launchers
+    // installed under one home, the process running with HOME pointing
+    // somewhere else, and the launcher's own directory still on PATH.
+    const installHome = createTempDir('egc-shim-paths-install-');
+    const overrideHome = createTempDir('egc-shim-paths-override-');
+    const realBinDir = createTempDir('egc-shim-paths-real-');
+    try {
+      const installedShimDir = path.join(installHome, '.egc', 'bin');
+      fs.mkdirSync(installedShimDir, { recursive: true });
+      writeFakeCommand(installedShimDir, 'npm');
+      const realNpm = writeFakeCommand(realBinDir, 'npm');
+
+      withHome(overrideHome, () => {
+        const savedPath = process.env.PATH;
+        process.env.PATH = `${installedShimDir}${path.delimiter}${realBinDir}${path.delimiter}${savedPath}`;
+        try {
+          const found = resolveRealBinary('npm', installedShimDir);
+          assert.ok(found, 'expected npm to resolve somewhere');
+          // realpathSync.native, not plain realpathSync: only the native
+          // call expands Windows 8.3 short names, and the runner hands out
+          // the temp dir as RUNNER~1 while `where` reports runneradmin --
+          // same file, two spellings.
+          assert.strictEqual(fs.realpathSync.native(found), fs.realpathSync.native(realNpm), 'must skip the launcher directory and find the real npm');
+        } finally {
+          process.env.PATH = savedPath;
+        }
+      });
+    } finally {
+      cleanup(installHome);
+      cleanup(overrideHome);
+      cleanup(realBinDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('the manifest next to the launcher wins even when HOME points elsewhere', () => {
+    const installHome = createTempDir('egc-shim-paths-install-');
+    const overrideHome = createTempDir('egc-shim-paths-override-');
+    try {
+      const installedShimDir = path.join(installHome, '.egc', 'bin');
+      fs.mkdirSync(installedShimDir, { recursive: true });
+      writeFakeCommand(installedShimDir, 'npm');
+      const realNpm = writeFakeCommand(installHome, 'real-npm');
+      fs.writeFileSync(path.join(installedShimDir, 'manifest.json'), JSON.stringify({ npm: realNpm }));
+
+      withHome(overrideHome, () => {
+        assert.strictEqual(resolveRealBinary('npm', installedShimDir), realNpm);
+      });
+    } finally {
+      cleanup(installHome);
+      cleanup(overrideHome);
+    }
+  })) passed++; else failed++;
+
+  if (test('a manifest entry pointing back into a shim directory is rejected, not spawned', () => {
+    const home = createTempDir('egc-shim-paths-');
+    const realBinDir = createTempDir('egc-shim-paths-real-');
+    try {
+      withHome(home, () => {
+        const dir = shimDir();
+        fs.mkdirSync(dir, { recursive: true });
+        const launcher = writeFakeCommand(dir, 'npm');
+        const realNpm = writeFakeCommand(realBinDir, 'npm');
+        fs.writeFileSync(manifestPath(), JSON.stringify({ npm: launcher }));
+
+        const savedPath = process.env.PATH;
+        process.env.PATH = `${dir}${path.delimiter}${realBinDir}${path.delimiter}${savedPath}`;
+        try {
+          const found = resolveRealBinary('npm', dir);
+          assert.ok(found, 'expected npm to resolve somewhere');
+          // realpathSync.native for the same 8.3 short-name reason as above.
+          assert.strictEqual(fs.realpathSync.native(found), fs.realpathSync.native(realNpm), 'a poisoned manifest must fall through to a real PATH lookup');
+        } finally {
+          process.env.PATH = savedPath;
+        }
+      });
+    } finally {
+      cleanup(home);
+      cleanup(realBinDir);
     }
   })) passed++; else failed++;
 
