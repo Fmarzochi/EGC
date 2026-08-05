@@ -276,6 +276,16 @@ run('a case variant cannot name a secret past the guard', () => {
   for (const cmd of ['cat /etc/SHADOW', 'cat .ENV', `cat ${path.join(home, '.egc', 'ENCRYPTION.KEY')}`]) {
     assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} names a protected file`);
   }
+
+  // The same folding has to apply to the readable side, or the case fix
+  // would turn harmless reads into denials on exactly those systems.
+  for (const cmd of [
+    `cat ${path.join(home, '.BASHRC')}`,
+    `cat ${path.join(home, '.GITCONFIG')}`,
+    `cat ${path.join(home, '.egc', 'BIN', 'manifest.json')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, true, `${cmd} names a harmless file`);
+  }
 });
 
 run('credential stores outside the readable areas stay denied', () => {

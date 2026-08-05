@@ -890,7 +890,10 @@ export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): bo
 
   // Protection came from the filename alone. Allow the persistence-only
   // ones; everything else (.env, .pem, tokens, auth files) stays denied.
-  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(normalizedP));
+  // Folded on the same terms as the denial side: where the filesystem opens
+  // ~/.BASHRC and ~/.bashrc as one file, both spellings have to be readable,
+  // or the case fix would have quietly turned a harmless read into a denial.
+  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(foldCase(normalizedP)));
 }
 
 export interface ValidationResult {
