@@ -7,7 +7,12 @@ const os = require('node:os');
 const path = require('node:path');
 
 const HOOK_ID = 'egc-session-bridge';
-const DEFAULT_TIMEOUT_MS = 5000;
+// Python's cold start on Windows routinely costs several seconds (interpreter
+// launch plus whatever scans the machine runs on a new process), and when the
+// budget runs out mid-write the bridge records nothing while this hook still
+// exits 0 by design. The result is a session whose events silently never land.
+// The old 5s applied everywhere and was too tight for exactly that platform.
+const DEFAULT_TIMEOUT_MS = process.platform === 'win32' ? 20000 : 5000;
 const SAFE_PYTHON_BASENAMES = new Set(['python3', 'python3.exe', 'python', 'python.exe']);
 
 function readStdin() {
@@ -82,7 +87,12 @@ function run() {
   });
 
   if (result.error) {
-    process.stderr.write(`[${HOOK_ID}] soft-fail: ${result.error.message}\n`);
+    // ETIMEDOUT arrives here too, and it is the failure worth naming: it
+    // means the bridge was killed before it could record anything.
+    const detail = result.error.code === 'ETIMEDOUT'
+      ? `timed out after ${DEFAULT_TIMEOUT_MS}ms`
+      : result.error.message;
+    process.stderr.write(`[${HOOK_ID}] soft-fail: ${detail}\n`);
     return 0;
   }
   if ((result.stderr || '').trim()) {
