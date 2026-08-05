@@ -105,6 +105,11 @@ function runTests() {
     );
     assert.strictEqual(quoteForCmdShell('has"quote'), '"has""quote"', 'embedded quotes double, the cmd convention');
     assert.strictEqual(quoteForCmdShell('C:\\Program Files\\nodejs\\npm.cmd'), '"C:\\Program Files\\nodejs\\npm.cmd"');
+    assert.strictEqual(
+      quoteForCmdShell('C:\\pct%path%\\index.js'),
+      'C:\\pct%path%\\index.js',
+      'percent is not a quoting trigger: cmd expands %var% even inside quotes, so quoting would only fake safety'
+    );
   }) ? passed++ : failed++);
 
   (test('no target points at claude_desktop_config.json (dead-file regression)', () => {
@@ -175,6 +180,34 @@ function runTests() {
         assert.strictEqual(changed, false);
         const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
         assert.strictEqual(calls.filter(call => call[1] === 'add').length, 0, 'must not re-add registered servers');
+      });
+    }) ? passed++ : failed++);
+
+    (test('the shell branch delivers intact argv end to end (quoting exercised through a real shell)', () => {
+      withFakeClaude('1', (logPath) => {
+        // Forcing the shell branch on POSIX runs the exact quoting path the
+        // Windows .cmd flow uses; /bin/sh applies the same double-quote
+        // grouping rules this code relies on for whitespace, so a path with
+        // spaces must still arrive as ONE argv element in the fake CLI.
+        const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
+        const originalNeedsShell = dispatch.needsShellOnWindows;
+        dispatch.needsShellOnWindows = () => true;
+        const spacedBins = {
+          guardianBin: '/fake dir with space/egc-guardian/build/index.js',
+          memoryBin: '/fake dir with space/egc-memory/build/index.js',
+        };
+        try {
+          const changed = registerClaudeCli('/ignored', spacedBins);
+          assert.strictEqual(changed, true);
+          const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+          const adds = calls.filter(call => call[1] === 'add');
+          assert.deepStrictEqual(adds, [
+            ['mcp', 'add', '-s', 'user', 'egc-guardian', '--', 'node', spacedBins.guardianBin],
+            ['mcp', 'add', '-s', 'user', 'egc-memory', '--', 'node', spacedBins.memoryBin],
+          ], 'every argument must survive the shell hop unsplit and unquoted');
+        } finally {
+          dispatch.needsShellOnWindows = originalNeedsShell;
+        }
       });
     }) ? passed++ : failed++);
 

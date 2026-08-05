@@ -360,10 +360,14 @@ function resolveClaudeCli() {
 // onto the command line verbatim (windowsVerbatimArguments): no quoting at
 // all, so an install path with a space (C:\Users\First Last\..., Program
 // Files) splits into two arguments and the add silently registers garbage.
-// Quote anything cmd.exe would misparse, doubling embedded quotes, the cmd
-// convention. POSIX callers never hit this path (shell stays false there).
+// Quote what double quotes actually neutralize in cmd.exe: whitespace,
+// quotes, and shell metacharacters. Deliberately NOT % or !: cmd expands
+// %var% (and !var! under delayed expansion) even inside double quotes, so
+// including them would only pretend a safety this quoting cannot provide.
+// Embedded quotes double, the cmd convention. POSIX callers never hit this
+// path (shell stays false there).
 function quoteForCmdShell(arg) {
-  if (!/[\s"^&|<>()%!]/.test(arg)) return arg;
+  if (!/[\s"^&|<>()]/.test(arg)) return arg;
   return '"' + arg.replaceAll('"', '""') + '"';
 }
 
