@@ -367,7 +367,15 @@ if (-not $DryRun) {
     $geminiConfigDir = Join-Path (Join-Path $env:USERPROFILE ".gemini") "config"
     $geminiConfig    = Join-Path $geminiConfigDir "mcp_config.json"
 
-    & node (Join-Path $RootDir "scripts/lib/mcp-register-cli.js") $GuardianBin $MemoryBin
+    # Run from the directory the person invoked the installer in, so a
+    # project .mcp.json there is picked up; the script itself moved to the
+    # package root long ago.
+    Push-Location $InvokedFromDir
+    try {
+        & node (Join-Path $RootDir "scripts/lib/mcp-register-cli.js") $GuardianBin $MemoryBin
+    } finally {
+        Pop-Location
+    }
 
     # Obsidian propagation (delegated to Node)
     # $claudeConfig (Claude Desktop's file) is gone from both lists: Claude

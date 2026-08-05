@@ -261,13 +261,12 @@ echo "  registering MCP servers..."
 # installers at all, so installing through the shell wired up fewer tools
 # than `egc init` did on the same machine. The project .mcp.json is passed
 # in because only the shell knows the directory the person invoked it from.
-_project_mcp=""
-if [[ "$INVOKED_FROM_DIR" != "$ROOT_DIR" ]]; then
-  _project_mcp="$INVOKED_FROM_DIR/.mcp.json"
-fi
 # Claude Code is part of that same list (registered through its own CLI, in
-# user scope), so there is no separate call for it here any more.
-node "$ROOT_DIR/scripts/lib/mcp-register-cli.js" "$GUARDIAN_BIN" "$MEMORY_BIN" "$_project_mcp"
+# user scope), so there is no separate call for it here any more. The
+# subshell runs the CLI from the directory the person invoked the installer
+# in, which is how a project .mcp.json there gets picked up: the script
+# itself cd'd to the package root long ago.
+(cd "$INVOKED_FROM_DIR" && node "$ROOT_DIR/scripts/lib/mcp-register-cli.js" "$GUARDIAN_BIN" "$MEMORY_BIN")
 
 set -e
 

@@ -12,18 +12,20 @@
 // There is one list now, and all three paths read it from here.
 //
 // Usage:
-//   node scripts/lib/mcp-register-cli.js <guardianBin> <memoryBin> [projectMcpPath]
+//   node scripts/lib/mcp-register-cli.js <guardianBin> <memoryBin>
 //
-// projectMcpPath is optional and only merged when the file already exists:
-// creating a project config in a directory the person did not ask about is
-// litter, and the package's own bundled .mcp.json is nobody's project.
+// A project .mcp.json is picked up from the working directory this runs in,
+// which the shell installers set to the directory the person invoked them
+// from. It is only ever merged when it already exists: creating a project
+// config in a directory nobody asked about is litter, and the package's own
+// bundled .mcp.json is nobody's project.
 
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { registerMcpServers, registerJson } = require('./mcp-register');
 
-const [, , guardianBin, memoryBin, projectMcpPath] = process.argv;
+const [, , guardianBin, memoryBin] = process.argv;
 
 if (!guardianBin || !memoryBin) {
   console.error('mcp-register-cli: guardian and memory bin paths are required');
@@ -38,26 +40,19 @@ registerMcpServers(homeDir, bins, {
   onWarn: (target, err) => console.log(`  note: skipped ${target.name} (${target.path}): ${err.message}`),
 });
 
-// The project path arrives as a command-line argument, so it is validated
-// before any filesystem access: this flow may only ever touch a file named
-// .mcp.json that already exists. A mistyped or malicious argument can
-// therefore not turn the installer into a writer of arbitrary files.
-function resolveProjectMcpPath(candidate) {
-  const resolved = path.resolve(candidate);
-  if (path.basename(resolved) !== '.mcp.json') return null;
-  if (!fs.existsSync(resolved)) return null;
-  return resolved;
-}
+// The filename is fixed here rather than accepted from the caller, and the
+// directory is the process's own working directory, so no argument can turn
+// this into a writer of arbitrary files. The package's own bundled config
+// is excluded: it is nobody's project.
+const packageRoot = path.resolve(__dirname, '..', '..');
+const projectMcp = path.join(process.cwd(), '.mcp.json');
 
-if (projectMcpPath) {
-  const resolvedProjectMcp = resolveProjectMcpPath(projectMcpPath);
-  if (resolvedProjectMcp) {
-    try {
-      if (registerJson(resolvedProjectMcp, bins)) {
-        console.log(`  ✓ registered in Claude Code (project .mcp.json) (${resolvedProjectMcp})`);
-      }
-    } catch (err) {
-      console.log(`  note: skipped project .mcp.json (${resolvedProjectMcp}): ${err.message}`);
+if (path.dirname(projectMcp) !== packageRoot && fs.existsSync(projectMcp)) {
+  try {
+    if (registerJson(projectMcp, bins)) {
+      console.log(`  ✓ registered in Claude Code (project .mcp.json) (${projectMcp})`);
     }
+  } catch (err) {
+    console.log(`  note: skipped project .mcp.json (${projectMcp}): ${err.message}`);
   }
 }
