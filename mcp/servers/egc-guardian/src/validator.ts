@@ -805,64 +805,77 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
 // keys, credential stores, token files, the shadow password database. The
 // directories below are denied wholesale because everything inside them is
 // of that kind.
-function buildReadDeniedPaths(): string[] {
+// Derived from the write protection by subtraction, never restated: a read
+// is denied wherever a write is denied, EXCEPT for the few locations listed
+// here. Stating the readable set positively (rather than re-listing what to
+// deny) means a credential store added to the write protection tomorrow is
+// read-protected automatically, instead of silently becoming readable
+// because a parallel list was not updated.
+//
+// Every entry below is functional configuration, not a credential: knowing
+// its contents tells you how an install is wired, nothing more.
+function buildReadSafePaths(): string[] {
   const home = os.homedir();
-  const paths = [
-    path.join(home, '.ssh'),
-    path.join(home, '.aws'),
-    path.join(home, '.gnupg'),
-    // The key that decrypts EGC's own state files.
+  return [
+    // EGC's own install surface: shim manifest, metrics ledger, logs.
+    path.join(home, '.egc'),
+    // System and service configuration.
+    '/etc',
+    // Binary directory: listing what is on PATH is diagnosis, not exposure.
+    path.join(home, '.local', 'bin'),
+    // User service units: what runs at login.
+    path.join(home, '.config', 'systemd', 'user'),
+  ];
+}
+
+export const READ_SAFE_PATHS: string[] = buildReadSafePaths();
+
+// Carved back out of the read-safe areas above, because their content IS
+// the secret even though they sit inside an otherwise diagnosable tree.
+function buildReadSecretPaths(): string[] {
+  const home = os.homedir();
+  return [
     path.join(home, '.egc', 'encryption.key'),
+    path.join(home, '.egc', 'state'),
     '/etc/shadow',
     '/etc/gshadow',
     '/etc/sudoers',
     '/etc/sudoers.d',
     '/etc/ssh',
   ];
-
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA || '';
-    if (appData) paths.push(path.join(appData, 'gnupg'));
-  }
-
-  return paths;
 }
 
-export const READ_DENIED_PATHS: string[] = buildReadDeniedPaths();
+export const READ_SECRET_PATHS: string[] = buildReadSecretPaths();
 
-// File patterns whose content is the secret, wherever they live. This is the
-// subset of PROTECTED_FILE_PATTERNS that a read must still refuse; the rest
-// of that list covers files that are merely dangerous to *modify*.
-export const READ_DENIED_FILE_PATTERNS: RegExp[] = [
-  /\.env$/,
-  /\.env\.(?!example$|sample$|template$)/,
-  /\.pem$/,
-  /\.key$/,
-  /\.p12$/,
-  /\.npmrc$/,
-  /\.pypirc$/,
-  /credentials?\.json$/i,
-  /oauth[^\\/]*\.json$/i,
-  /[^\\/]*token[^\\/]*\.json$/i,
-  /(^|[\\/])\.claude\.json$/,
-  /(^|[\\/])id_(rsa|dsa|ecdsa|ed25519)$/,
+// Files that are dangerous to modify but harmless to read: shell startup
+// files and git config are persistence mechanisms, not credential stores.
+const READ_SAFE_FILE_PATTERNS: RegExp[] = [
+  /(^|[\\/])\.(bashrc|zshrc|bash_profile|zprofile|profile)$/,
+  /(^|[\\/])\.gitconfig$/,
+  /(^|[\\/])\.git[\\/](config|hooks([\\/]|$))/,
 ];
 
+function isUnder(candidate: string, parent: string): boolean {
+  const resolvedParent = resolveRealOrLexical(parent);
+  return candidate === resolvedParent || candidate.startsWith(resolvedParent + path.sep);
+}
+
 export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): boolean {
+  // Not protected at all: nothing to decide.
+  if (!isProtectedPath(p, baseDir)) return false;
+
   const trimmed = p.trim();
   const expanded = trimmed.startsWith('~')
     ? path.join(os.homedir(), trimmed.slice(1))
     : trimmed;
   const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
 
-  for (const denied of READ_DENIED_PATHS) {
-    const resolvedDenied = resolveRealOrLexical(denied);
-    if (normalizedP === resolvedDenied || normalizedP.startsWith(resolvedDenied + path.sep)) {
-      return true;
-    }
-  }
+  // A secret carved out of a readable tree wins over that tree.
+  if (READ_SECRET_PATHS.some(secret => isUnder(normalizedP, secret))) return true;
 
-  return READ_DENIED_FILE_PATTERNS.some(pattern => pattern.test(normalizedP));
+  if (READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(normalizedP))) return false;
+
+  return !READ_SAFE_PATHS.some(safe => isUnder(normalizedP, safe));
 }
 
 export interface ValidationResult {
@@ -1078,7 +1091,7 @@ a => a === '-r' || a === '-R' || a === '--recursive' ||
 
   if (isRecursive) {
 for (const p of pathArgs) {
-  if (p === '/' || p === home || isReadDeniedPath(p, cwd)) {
+  if (p === '/' || p === home || isProtectedPath(p, cwd)) {
     return {
       allowed: false,
       reason: `grep recursive over protected path '${p}' is forbidden`,
@@ -1088,7 +1101,7 @@ for (const p of pathArgs) {
 }
 // If no explicit path args, grep defaults to '.', which is fine.
 // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isReadDeniedPath(positionalArgs[0], cwd))) {
+if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
   return {
     allowed: false,
     reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
@@ -1144,7 +1157,7 @@ return {
     .map(a => (a.startsWith('-') ? embeddedPathCandidate(a) : a))
     .filter((a): a is string => a !== null);
   for (const p of pathArgs) {
-if (isReadDeniedPath(p, cwd)) {
+if (isProtectedPath(p, cwd)) {
   return {
     allowed: false,
     reason: `find over protected path '${p}' is forbidden`,

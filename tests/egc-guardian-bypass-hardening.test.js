@@ -241,6 +241,31 @@ run('reading an actual secret is still refused', () => {
   }
 });
 
+run('a recursive walk cannot reach a secret through a readable parent', () => {
+  const home = require('node:os').homedir();
+  // Reading one functional file inside ~/.egc is fine; walking the tree is
+  // not, because the walk would reach the encryption key.
+  for (const cmd of [
+    `grep -r secret ${path.join(home, '.egc')}`,
+    `find ${path.join(home, '.config', 'github-copilot')} -name "*.json"`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} traverses into protected content`);
+  }
+});
+
+run('credential stores outside the readable areas stay denied', () => {
+  const home = require('node:os').homedir();
+  // These are covered by the write protection and are not on the read-safe
+  // list, so subtraction keeps them denied without restating them.
+  for (const cmd of [
+    `cat ${path.join(home, '.codex', 'auth.json')}`,
+    `cat ${path.join(home, '.gemini', 'google_accounts.json')}`,
+    `cat ${path.join(home, '.local', 'share', 'kiro-cli', 'data.sqlite3')}`,
+  ]) {
+    assert.strictEqual(validateCommand(cmd).allowed, false, `${cmd} is a credential store`);
+  }
+});
+
 run('write protection is untouched by the read split', () => {
   const home = require('node:os').homedir();
   for (const target of [
