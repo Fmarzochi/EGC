@@ -555,7 +555,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('warns about a divergent database architecture when both harness and memory state.db exist', () => {
+  if (test('stays quiet when both stores live in the shared ~/.egc (two-store layout is the current design)', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -570,11 +570,53 @@ function runTests() {
 
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(!result.stdout.includes('Divergent database architecture'), 'the healthy two-store layout must not be presented as a defect');
+      assert.ok(!result.stdout.includes('State store:'), 'nothing to report means no state-store section at all');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('lists stray state.db fragments with size, last write, and the merge-script pointer', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const egcDir = computeEGCDirForHome(homeDir);
+      fs.mkdirSync(path.join(egcDir, 'egc'), { recursive: true });
+      fs.mkdirSync(path.join(egcDir, 'memory'), { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'egc', 'state.db'), '');
+      fs.writeFileSync(path.join(egcDir, 'memory', 'state.db'), '');
+      const strayPath = path.join(homeDir, '.gemini', 'egc', 'state.db');
+      fs.mkdirSync(path.dirname(strayPath), { recursive: true });
+      fs.writeFileSync(strayPath, 'stale-bytes');
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('State store:'));
-      assert.ok(result.stdout.includes('WARNING: Divergent database architecture detected!'));
-      assert.ok(result.stdout.includes(`Harness DB: ${dbPath}`));
-      assert.ok(result.stdout.includes(`Memory DB:  ${memoryDbPath}`));
-      assert.ok(result.stdout.includes('known architectural limitation'));
+      assert.ok(result.stdout.includes('1 stray state.db copy'));
+      assert.ok(result.stdout.includes(strayPath));
+      assert.ok(result.stdout.includes('merge-fragmented-state-dbs.js'), 'must point at the consolidation script');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('notes a not-yet-created memory store as informational, not a warning', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const egcDir = computeEGCDirForHome(homeDir);
+      fs.mkdirSync(path.join(egcDir, 'egc'), { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'egc', 'state.db'), '');
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('Note: the MCP memory store does not exist yet'));
+      assert.ok(!result.stdout.includes('WARNING: the CLI event store'), 'a store in the right place must not trigger the misplacement warning');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
