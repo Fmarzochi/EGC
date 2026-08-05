@@ -194,10 +194,11 @@ function runTests() {
         try {
           const found = resolveRealBinary('npm', installedShimDir);
           assert.ok(found, 'expected npm to resolve somewhere');
-          // realpathSync, not path.resolve: Windows runners hand out the
-          // temp dir under its 8.3 short name (RUNNER~1) while `where`
-          // reports the long form -- same file, two spellings.
-          assert.strictEqual(fs.realpathSync(found), fs.realpathSync(realNpm), 'must skip the launcher directory and find the real npm');
+          // realpathSync.native, not plain realpathSync: only the native
+          // call expands Windows 8.3 short names, and the runner hands out
+          // the temp dir as RUNNER~1 while `where` reports runneradmin --
+          // same file, two spellings.
+          assert.strictEqual(fs.realpathSync.native(found), fs.realpathSync.native(realNpm), 'must skip the launcher directory and find the real npm');
         } finally {
           process.env.PATH = savedPath;
         }
@@ -244,8 +245,8 @@ function runTests() {
         try {
           const found = resolveRealBinary('npm', dir);
           assert.ok(found, 'expected npm to resolve somewhere');
-          // realpathSync for the same 8.3 short-name reason as above.
-          assert.strictEqual(fs.realpathSync(found), fs.realpathSync(realNpm), 'a poisoned manifest must fall through to a real PATH lookup');
+          // realpathSync.native for the same 8.3 short-name reason as above.
+          assert.strictEqual(fs.realpathSync.native(found), fs.realpathSync.native(realNpm), 'a poisoned manifest must fall through to a real PATH lookup');
         } finally {
           process.env.PATH = savedPath;
         }

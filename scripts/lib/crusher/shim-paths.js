@@ -56,10 +56,13 @@ function normalizePathForCompare(p) {
 // launcher files stay where they are. Identity comparisons therefore go
 // through the filesystem's physical view of a path whenever the path exists;
 // path.resolve alone would keep a symlinked PATH entry distinct from the
-// shim directory it aliases.
+// shim directory it aliases. realpathSync.native, not plain realpathSync:
+// only the native call canonicalizes Windows 8.3 short names (RUNNER~1 vs
+// runneradmin), and a PATH entry spelled in short form must still match the
+// long-form launcher directory it aliases.
 function realpathOrResolve(p) {
   try {
-    return fs.realpathSync(p);
+    return fs.realpathSync.native(p);
   } catch {
     return path.resolve(p);
   }
