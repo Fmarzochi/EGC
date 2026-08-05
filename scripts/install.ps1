@@ -40,28 +40,64 @@ function Resolve-PhysicalDirectory {
         return $Path.TrimEnd('\', '/')
     }
 
-    $current = [System.IO.Path]::GetPathRoot($full)
-    $remainder = $full.Substring($current.Length).Trim('\', '/')
-    if ($remainder) {
-        foreach ($segment in ($remainder -split '[\\/]+')) {
-            $current = Join-Path $current $segment
-            for ($hop = 0; $hop -lt 10; $hop++) {
-                try {
-                    $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
-                } catch {
-                    break
-                }
-                if (-not $item.PSObject.Properties['Target'] -or -not $item.Target) { break }
-                $target = @($item.Target)[0]
-                if (-not [System.IO.Path]::IsPathRooted($target)) {
-                    $target = Join-Path (Split-Path -Parent $item.FullName) $target
-                }
-                $current = [System.IO.Path]::GetFullPath($target)
-            }
-        }
+    # Components are consumed from a queue rather than a fixed list: when one
+    # of them turns out to be a link, the target's own components are pushed
+    # back onto the front of the queue, so links nested inside a link target
+    # get resolved on the same pass. The step budget only bounds pathological
+    # cycles; it is never reached by a real directory tree.
+    $pending = New-Object 'System.Collections.Generic.Queue[string]'
+    $resolved = [System.IO.Path]::GetPathRoot($full)
+    foreach ($segment in ($full.Substring($resolved.Length).Trim('\', '/') -split '[\\/]+')) {
+        if ($segment) { $pending.Enqueue($segment) }
     }
 
-    return [System.IO.Path]::GetFullPath($current).TrimEnd('\', '/')
+    $steps = 0
+    while ($pending.Count -gt 0) {
+        $steps++
+        if ($steps -gt 512) { break }
+
+        $segment = $pending.Dequeue()
+        if ($segment -eq '.') { continue }
+        if ($segment -eq '..') {
+            $resolved = [System.IO.Path]::GetFullPath((Join-Path $resolved '..'))
+            continue
+        }
+
+        $candidate = Join-Path $resolved $segment
+        $item = $null
+        try {
+            $item = Get-Item -LiteralPath $candidate -Force -ErrorAction Stop
+        } catch {
+            $item = $null
+        }
+
+        $target = $null
+        if ($item -and $item.PSObject.Properties['Target'] -and $item.Target) {
+            $target = @($item.Target)[0]
+        }
+        if (-not $target) {
+            $resolved = $candidate
+            continue
+        }
+
+        $remaining = @($pending.ToArray())
+        $pending.Clear()
+        if ([System.IO.Path]::IsPathRooted($target)) {
+            $targetRoot = [System.IO.Path]::GetPathRoot($target)
+            $targetTail = $target.Substring($targetRoot.Length)
+            $resolved = $targetRoot
+        } else {
+            # A relative target is relative to the link's own directory, which
+            # is exactly where $resolved already points.
+            $targetTail = $target
+        }
+        foreach ($piece in ($targetTail.Trim('\', '/') -split '[\\/]+')) {
+            if ($piece) { $pending.Enqueue($piece) }
+        }
+        foreach ($piece in $remaining) { $pending.Enqueue($piece) }
+    }
+
+    return [System.IO.Path]::GetFullPath($resolved).TrimEnd('\', '/')
 }
 
 # Forward --help directly to the Node installer
