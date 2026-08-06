@@ -6,6 +6,15 @@ All notable changes to EGC are documented here.
 
 ## [1.1.18] - 2026-08-06
 
+### Added
+
+- **Guardian command validation extended across the tool ecosystem**: real pre-action blocking hooks wired into Cursor, OpenCode, Kiro CLI, Cline, Amp, Amazon Q Developer CLI, Goose, and OpenHands, each through a host-specific adapter over shared parsing and merge libraries (#1067-#1092); an earlier viability report that wrongly classified three of those hosts as prompt-only was corrected against each project's own source.
+- **Token Crusher PATH-level binary shim** (`egc crusher-shim install|uninstall|status`): transparently compresses output from git, npm, gh, pip and friends without an explicit `egc run` wrapper, with full passthrough on TTYs and clean degradation on any resolution failure (#1107, #1110, #1112, #1114).
+- **NLI session bus and memory protocol coverage extended** to Aider, Warp, Windsurf, Zed and more, completing the 23-tool surface (#1059-#1062).
+- **`egc gain` scoped savings breakdown**: today, current session, current project, since install, and rolling 7/30-day windows, with local-calendar-day boundaries (#1118, @Tyr1onX).
+- **Claude Code re-injects project context after compaction** (#1069), and OpenCode restores project context on session creation instead of starting cold (#1115, @Tyr1onX).
+- **`doctor`, `repair`, and `auto-update` accept `--repo-root`**, and the cognitive protocol marker is versioned across all 11 install targets so existing installs pick up new protocol sections on the next update (#1093, #1095).
+
 ### Security
 
 - **Guardian no longer denies reading paths it only protects against writes**: legitimate diagnostics of EGC's own install were blocked; now six operational directories are readable and everything else stays denied by default, a design that went through two independent security audits before merging (#1205).
