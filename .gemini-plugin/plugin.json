@@ -1,6 +1,6 @@
 {
   "name": "egc",
-  "version": "1.1.17",
+  "version": "1.1.18",
   "description": "EGC - Extended Global Context: persistent memory and shared context for AI coding tools. 63 agents, 230 skills, 77 commands, production-ready hooks, and selective install workflows evolved through continuous real-world use",
   "author": {
     "name": "Felipe Marzochi",
