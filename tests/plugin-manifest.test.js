@@ -358,7 +358,7 @@ test('.mcp.json has mcpServers object', () => {
   );
 });
 
-test('.mcp.json bundles no MCP servers (parity with the Gemini plugin manifest)', () => {
+test('.mcp.json bundles no MCP servers', () => {
   assert.deepStrictEqual(
     mcpConfig.mcpServers,
     {},
