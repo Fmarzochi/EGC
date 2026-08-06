@@ -701,6 +701,10 @@ async function runTests() {
           additionalContext.includes('stale lock during startup'),
           'Should summarize the When to Activate section, not the intro paragraph'
         );
+        assert.ok(
+          !additionalContext.includes('Background notes that should not become the summary'),
+          'Intro paragraph must not leak into the learned skill summary'
+        );
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
