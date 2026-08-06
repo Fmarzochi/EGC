@@ -136,7 +136,7 @@
     "devfleet": {
       "type": "http",
       "url": "http://localhost:18801/mcp",
-      "description": "Multi-agent orchestration: dispatch parallel Gemini Code agents in isolated worktrees. Plan projects, auto-chain missions, read structured reports. Repo: https://github.com/LEC-AI/egc-devfleet. Requires: devfleet process running on localhost:18801."
+      "description": "Multi-agent orchestration: dispatch parallel Gemini Code agents in isolated worktrees. Plan projects, auto-chain missions, read structured reports. Repo: https://github.com/LEC-AI/claude-devfleet. Requires: devfleet process running on localhost:18801."
     },
     "token-optimizer": {
       "command": "npx",
