@@ -8,7 +8,7 @@ EGC supports 23 AI coding tools through 3 distinct integration mechanisms. This 
 
 | Tier | Name | What ships | Install pipeline |
 |------|------|------------|------------------|
-| **1** | Full unified | Skills, agents, rules, hooks, MCP, install manifest | `scripts/install-apply.js` via `SUPPORTED_INSTALL_TARGETS` |
+| **1** | Full unified | Skills, agents, rules, hooks, install manifest | `scripts/install-apply.js` via `SUPPORTED_INSTALL_TARGETS` |
 | **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
@@ -16,7 +16,7 @@ EGC supports 23 AI coding tools through 3 distinct integration mechanisms. This 
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
-| 1 | **Claude Code** | 1 | `claude` | `~/.claude/skills/<name>/SKILL.md` | Skills installed flat; MCP + cognitive bootstrap via `~/.claude/CLAUDE.md` |
+| 1 | **Claude Code** | 1 | `claude` | `~/.claude/skills/<name>/SKILL.md` | Skills installed flat; cognitive bootstrap via `~/.claude/CLAUDE.md`. MCP registration happens through Claude Code's own CLI (`claude mcp add -s user`), driven by `egc init` and the shell installers, not by this target (#1193) |
 | 2 | **Antigravity (AGY)** | 1 | `antigravity` | `.agents/` (project-scoped, per repo) | Skills, agents, rules, and commands installed per-project; GateGuard hooks registered; no home-level target (Antigravity has no global rule discovery) |
 | 3 | **Gemini CLI** | 1 | `gemini` | `~/.gemini/` | Cognitive bootstrap into `GEMINI.md` |
 | 4 | **Cursor** | 1 | `cursor` | `~/.cursor/` | Rules injected into global cursor.rules |
@@ -26,8 +26,8 @@ EGC supports 23 AI coding tools through 3 distinct integration mechanisms. This 
 | 8 | **Windsurf** | 1 | `windsurf` | `~/.codeium/windsurf/skills/<name>/SKILL.md` | Skills installed flat |
 | 9 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat; Guardian + Token Crusher wired via Amp's Plugin API (`tool.call` event, `.amp/plugins/` project or `~/.config/amp/plugins/` home -- a genuinely different root than the skills path above), executed in-process by Amp's own Bun runtime, same pattern as OpenCode's plugin |
 | 10 | **VS Code Copilot** | 1 | `copilot` | `~/.github/skills/<name>/SKILL.md` | Skills installed flat |
-| 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); MCP via `context_servers` in `settings.json`; cognitive bootstrap into `~/.config/zed/AGENTS.md` |
-| 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<name>/SKILL.md` | Skills installed flat; MCP via YAML block files in `~/.continue/mcpServers/`; memory protocol prompt in `~/.continue/prompts/`; rules discovered natively at workspace `.continue/rules/` |
+| 11 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); cognitive bootstrap into `~/.config/zed/AGENTS.md`. MCP registration into `context_servers` in `settings.json` is **not** part of this target: like every `--target`, it installs skills and rules only. The MCP servers are registered by `egc init` and by the shell installers, which detect Zed independently (corrected in #1206) |
+| 12 | **Continue.dev** | 1 | `continue` | `~/.continue/skills/<name>/SKILL.md` | Skills installed flat; memory protocol prompt in `~/.continue/prompts/`; rules discovered natively at workspace `.continue/rules/`. MCP registration writes YAML block files into `~/.continue/mcpServers/`, but it belongs to `egc init` and the shell installers, not to this target (#1197 made all three entry points share one registration list) |
 | 13 | **Kiro** | 1 | `kiro` | `~/.kiro/skills/<name>/` (home) and `.kiro/skills/<name>/` (project) | Skills installed flat via the unified pipeline; the legacy `.kiro/install.sh` script still handles project-local agents, steering docs, hooks, scripts, and settings (a separate concern from skill distribution, not yet migrated) |
 | 14 | **Trae** | 1 | `trae` | `.trae/skills/<name>/` (project only, no home target) | Skills installed flat via the unified pipeline; the legacy `.trae/install.sh` script still handles commands, agents, rules, and the `~/.trae/MEMORY.md` memory protocol (project-scoped only; `TRAE_ENV=cn` for `~/.trae-cn/`) |
 | 15 | **JetBrains Junie** | 1 | `junie` | `.junie/guidelines.md` | Project guidelines installed via the unified pipeline using JetBrains Junie's native guidelines discovery path |
