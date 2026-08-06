@@ -214,8 +214,11 @@ function runTests() {
       const mcpConfig = readJson(path.join(projectDir, '.cursor', 'mcp.json'));
       assert.strictEqual(hooksConfig.version, 1);
       assert.ok(hooksConfig.hooks.sessionStart, 'Should keep Cursor sessionStart hooks');
-      assert.ok(mcpConfig.mcpServers.github, 'Should install shared MCP servers into Cursor');
-      assert.ok(mcpConfig.mcpServers.context7, 'Should include bundled documentation MCPs');
+      assert.deepStrictEqual(
+        mcpConfig.mcpServers,
+        {},
+        'Cursor installs must not inject bundled third-party MCP servers'
+      );
 
       const statePath = path.join(projectDir, '.cursor', 'egc-install-state.json');
       const state = readJson(statePath);
@@ -296,7 +299,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('installs Cursor MCP config by merging bundled servers into an existing mcp.json', () => {
+  if (test('Cursor install preserves an existing mcp.json without injecting bundled servers', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -317,8 +320,8 @@ function runTests() {
 
       const mcpConfig = readJson(path.join(projectDir, '.cursor', 'mcp.json'));
       assert.ok(mcpConfig.mcpServers.custom, 'Should preserve existing custom Cursor MCP servers');
-      assert.ok(mcpConfig.mcpServers.github, 'Should merge bundled GitHub MCP server');
-      assert.ok(mcpConfig.mcpServers.playwright, 'Should merge bundled Playwright MCP server');
+      assert.ok(!mcpConfig.mcpServers.github, 'Must not inject the bundled GitHub MCP server');
+      assert.ok(!mcpConfig.mcpServers.playwright, 'Must not inject the bundled Playwright MCP server');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
