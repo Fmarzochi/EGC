@@ -4,10 +4,37 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.18] - 2026-08-06
+
+### Added
+
+- **Guardian command validation extended across the tool ecosystem**: real pre-action blocking hooks wired into Cursor, OpenCode, Kiro CLI, Cline, Amp, Amazon Q Developer CLI, Goose, and OpenHands, each through a host-specific adapter over shared parsing and merge libraries (#1067-#1092); an earlier viability report that wrongly classified three of those hosts as prompt-only was corrected against each project's own source.
+- **Token Crusher PATH-level binary shim** (`egc crusher-shim install|uninstall|status`): transparently compresses output from git, npm, gh, pip and friends without an explicit `egc run` wrapper, with full passthrough on TTYs and clean degradation on any resolution failure (#1107, #1110, #1112, #1114).
+- **NLI session bus and memory protocol coverage extended** to Aider, Warp, Windsurf, Zed and more, completing the 23-tool surface (#1059-#1062).
+- **`egc gain` scoped savings breakdown**: today, current session, current project, since install, and rolling 7/30-day windows, with local-calendar-day boundaries (#1118, @Tyr1onX).
+- **Claude Code re-injects project context after compaction** (#1069), and OpenCode restores project context on session creation instead of starting cold (#1115, @Tyr1onX).
+- **`doctor`, `repair`, and `auto-update` accept `--repo-root`**, and the cognitive protocol marker is versioned across all 11 install targets so existing installs pick up new protocol sections on the next update (#1093, #1095).
+
+### Security
+
+- **Guardian no longer denies reading paths it only protects against writes**: legitimate diagnostics of EGC's own install were blocked; now six operational directories are readable and everything else stays denied by default, a design that went through two independent security audits before merging (#1205).
+- **Prompt-injection scanning wired into the WebFetch path**: every fetched page is scanned automatically by the advisory heuristic scanner instead of requiring a manual call (#1123, #1126, #1127).
+
 ### Bug Fixes
 
+- **Token Crusher PATH shim could fork-bomb the host under an isolated HOME** (sandboxed installs, CI, containers): shim identity is now anchored to the launcher's physical directory with realpath checks and a circuit breaker, covered by POSIX and Windows regression tests (#1191).
+- **Installers now do what the docs say**: Claude Code MCP registration goes through the real CLI instead of a dead config file (#1193), the bare install merges the project `.mcp.json` of the directory you ran it from (#1195), one registration list serves all three entry points so Continue.dev and Zed are finally registered by the shell installers (#1197), and the installation guide matches actual behavior (#1196, #1206).
+- **Token Crusher compresses JSON with nested lists**, the shape almost every real API returns; measured on a real payload: 637 KB down to 31 KB (#1204).
+- **`egc repair` rebuilds what it can** and reports what it cannot, with the cause, instead of abandoning the whole target over one orphaned file (#1210); `egc doctor` reports state stores honestly instead of a blanket divergence warning (#1194).
+- **MCP server builds are self-contained and cross-platform**, no longer reaching outside the package or requiring `chmod` on Windows (#1211).
+- **Windows reliability**: the session bridge no longer drops events on slow cold starts (#1203), and subprocess test budgets are sized per platform (#1209, #1212).
+- **Learned skills with a `When to Activate` section are summarized correctly** at session start instead of falling back to the intro paragraph (#1213); the devfleet catalog entry points at the repository that exists (#1214).
 - **Memory corruption from an orphaned marker fixed at the root**: a stale marker left behind in propagated context files (`.cursor`, `.trae`, `AGENTS.md`, `GEMINI.md` and 10 more) could delete real user content instead of just the EGC-managed section; an outdated MCP runtime made it worse by overwriting `.cursor` with no marker at all. Reported directly by Helal Ferrari Cabral (@helalferrari). 57 new tests, CI green on all 3 OSes (#1102, #1103).
 - **`egc doctor` / state-store divergence fixed**: a bare terminal invocation of `getEGCDir()` fell back to the first harness directory that happened to exist on disk (for example OpenCode) instead of the tool-agnostic `~/.egc` default, silently routing commands to the wrong `state.db`. Reported directly by Helal Ferrari Cabral (@helalferrari) (#1104).
+
+### Changed
+
+- **Cloning the repository or installing the Codex plugin no longer auto-bundles six third-party MCP servers** (close to 1 GB of RAM combined); the root `.mcp.json` stays for the plugin contract but declares nothing, the Cursor install stops injecting them, and the `mcp-configs/` catalog remains the documented path for installing any of them by hand (#1215). Personal tooling entries left the published package earlier in the same effort (#1202).
 
 ## [1.1.17] - 2026-07-27
 
