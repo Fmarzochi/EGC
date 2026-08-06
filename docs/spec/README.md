@@ -4,7 +4,7 @@ The EGC specification is executable. It lives in JSON Schemas under `schemas/`, 
 
 ## Spec version
 
-`SPEC_VERSION = 0.1.0` (declared in `agent.yaml`)
+`SPEC_VERSION = 0.1.1` (declared in `agent.yaml`)
 
 Semver applies: `MAJOR.MINOR.PATCH`.
 
