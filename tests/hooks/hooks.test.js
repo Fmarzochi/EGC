@@ -664,6 +664,17 @@ async function runTests() {
           'Use when a CLI tool silently exits without a result payload.',
         ].join('\n'),
       );
+      fs.writeFileSync(
+        path.join(learnedDir, 'activation-pattern.md'),
+        [
+          '# Activation Pattern',
+          '',
+          'Background notes that should not become the summary.',
+          '',
+          '## When to Activate',
+          'Use when the harness reports a stale lock during startup.',
+        ].join('\n'),
+      );
 
       try {
         const result = await runScript(path.join(scriptsDir, 'session-start.js'), '', {
@@ -685,6 +696,10 @@ async function runTests() {
         assert.ok(
           additionalContext.includes('CLI tool silently exits'),
           'Should summarize directory-style learned skill trigger text'
+        );
+        assert.ok(
+          additionalContext.includes('stale lock during startup'),
+          'Should summarize the When to Activate section, not the intro paragraph'
         );
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });

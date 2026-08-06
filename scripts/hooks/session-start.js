@@ -437,6 +437,7 @@ function summarizeLearnedSkillFile(filePath, learnedRoot) {
   const title = extractMarkdownHeading(content) || slug;
   const summary = truncateSummary(
     extractSection(content, 'When to Use')
+      || extractSection(content, 'When to Activate')
       || extractSection(content, 'Trigger')
       || extractSection(content, 'Problem')
       || extractFirstParagraph(content)
