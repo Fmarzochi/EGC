@@ -358,16 +358,12 @@ test('.mcp.json has mcpServers object', () => {
   );
 });
 
-test('.mcp.json includes at least github, context7, and exa servers', () => {
-  const servers = Object.keys(mcpConfig.mcpServers);
-  assert.ok(servers.includes('github'), 'Expected github MCP server');
-  assert.ok(servers.includes('context7'), 'Expected context7 MCP server');
-  assert.ok(servers.includes('exa'), 'Expected exa MCP server');
-});
-
-test('.mcp.json declares exa as an http MCP server', () => {
-  assert.strictEqual(mcpConfig.mcpServers.exa.type, 'http', 'Expected exa MCP server to declare type=http');
-  assert.strictEqual(mcpConfig.mcpServers.exa.url, 'https://mcp.exa.ai/mcp', 'Expected exa MCP server URL to remain unchanged');
+test('.mcp.json bundles no MCP servers (parity with the Gemini plugin manifest)', () => {
+  assert.deepStrictEqual(
+    mcpConfig.mcpServers,
+    {},
+    'Plugin installs and repo checkouts must not auto-load third-party MCP servers; the mcp-configs/ catalog remains the manual install path',
+  );
 });
 
 // ── Codex marketplace file ────────────────────────────────────────────────────
