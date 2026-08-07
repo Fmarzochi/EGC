@@ -14,7 +14,11 @@ function printInstallResult(result) {
   console.log(`Shim directory: ${result.dir}`);
   if (result.installed.length) console.log(`Installed: ${result.installed.join(', ')}`);
   if (result.skipped.length) console.log(`Not found on this machine (skipped): ${result.skipped.join(', ')}`);
-  const changed = result.pathResult.filter(r => r.changed);
+  const rawPathResult = result?.pathResult;
+  const pathResultArray = Array.isArray(rawPathResult) 
+    ? rawPathResult 
+    : (rawPathResult ? [rawPathResult] : []);
+  const changed = pathResultArray.filter(r => r && r.changed);
   if (changed.length) {
     console.log(`PATH updated in: ${changed.map(r => r.path).join(', ')}`);
     console.log('Open a new terminal (or `source` the file above) for it to take effect.');
