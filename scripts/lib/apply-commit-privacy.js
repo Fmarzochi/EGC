@@ -1,16 +1,12 @@
 const path = require('path');
-const { applyCommitPrivacyFilterCli } = require('./memory-filters');
+const { applyCommitPrivacyFilterCli } = require('./apply-commit-privacy-filter-cli');
 
-const rootDir = process.argv[2] || process.cwd();
-const scriptPath = path.join(rootDir, 'scripts', 'check-state-leak.js');
+const scriptPath = process.argv[2]
+  ? path.resolve(process.argv[2], 'scripts', 'git-hooks', 'commit-privacy-filter.js')
+  : undefined;
 
-try {
-  applyCommitPrivacyFilterCli({
-    projectDir: process.cwd(),
-    scriptPath: scriptPath,
-    log: (m) => console.log('  ' + m)
-  });
-} catch (err) {
-  console.log(`  note: commit-privacy filter setup failed (non-fatal): ${err.message}`);
-  process.exitCode = 1;
-}
+applyCommitPrivacyFilterCli({
+  projectDir: process.cwd(),
+  scriptPath: scriptPath,
+  log: (m) => console.log('  ' + m)
+});

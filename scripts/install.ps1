@@ -218,7 +218,7 @@ if (-not $DryRun) {
     # but only `egc init` configured the filter that keeps that promise --
     # this quick-start script (the README's own documented command) never
     # did (2026-08-01 audit finding). Best-effort: must not fail the install.
-    node scripts/lib/apply-commit-privacy.js $RootDir
+    node "$RootDir/scripts/lib/apply-commit-privacy.js" $RootDir
     if ($LASTEXITCODE -ne 0) { Write-Host "  note: commit-privacy filter setup failed (non-fatal)" }
 
     # Write harness config
