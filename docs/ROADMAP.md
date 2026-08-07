@@ -4,6 +4,8 @@ This document describes the planned development direction for EGC (Extended Glob
 
 ## Unreleased
 
+- `egc <command>` hands the caller's terminal to its subcommand (`stdio: 'inherit'`) instead of buffering everything through a captured pipe: the piped default made every subcommand non-interactive and held all output until exit, which is how the v1.1.18 Windows report (#1217) ended up with `install.ps1`'s prompt-library step silently skipped and `egc doctor` stuck at the previous version's install-state; the `install.ps1` interactivity gate now also detects a redirected stdin (`[Console]::IsInputRedirected`) and treats a `$null` `Read-Host` answer as the default Y, both installers announce the skip instead of vanishing, and the fossilized prompt-library counts (62/228/74) match the CI-tested README (61/230/77) again behind a new three-way parity test (#1228)
+
 ## v1.1.18: Production Hardening (Released 2026-08-06)
 
 - Guardian Bash command validator extended to three more hosts with a genuine pre-action blocking hook: Cursor (#1071), OpenCode (#1072), and Kiro CLI (#1073), each wired through a host-specific translation adapter that reuses shared stdin-parsing and hooks-merge libraries; Token Crusher wired into OpenCode (#1072) and into Antigravity's global hooks.json (#1067)

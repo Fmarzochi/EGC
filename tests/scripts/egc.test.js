@@ -89,6 +89,17 @@ function main() {
       assert.strictEqual(result.stdout.trim(), PACKAGE_VERSION);
       assert.strictEqual(result.stderr, '');
     }],
+    ['runs subcommands on the inherited stdio so prompts and progress reach the terminal', () => {
+      // The old pipe-and-replay transport made every subcommand
+      // non-interactive: through `egc install`, install.ps1's prompt-library
+      // Read-Host got a dead pipe and returned $null, silently skipping the
+      // whole ecosystem step (#1217), and no output reached the user until
+      // the child exited.
+      const source = fs.readFileSync(SCRIPT, 'utf8');
+      const runCommandBody = source.slice(source.indexOf('function runCommand('), source.indexOf('async function main('));
+      assert.ok(runCommandBody.includes("stdio: 'inherit'"), 'runCommand must hand the terminal to the child');
+      assert.ok(!runCommandBody.includes('maxBuffer'), 'no capture buffer: output must stream, not accumulate');
+    }],
     ['delegates explicit install command', () => {
       const result = runCli(['install', '--dry-run', '--json', 'typescript']);
       assert.strictEqual(result.status, 0, result.stderr);
