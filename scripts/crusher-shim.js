@@ -17,7 +17,11 @@ function printInstallResult(result) {
   const rawPathResult = result?.pathResult;
   const pathResultArray = Array.isArray(rawPathResult) 
     ? rawPathResult 
-    : (rawPathResult ? [rawPathResult] : []);
+    : (rawPathResult ? [{ 
+      ...rawPathResult, 
+      path: rawPathResult.path || 'Windows Shim Directory' // <-- Añadimos un label por defecto
+    }] : []);
+
   const changed = pathResultArray.filter(r => r && r.changed);
   if (changed.length) {
     console.log(`PATH updated in: ${changed.map(r => r.path).join(', ')}`);

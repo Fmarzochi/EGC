@@ -12,4 +12,5 @@ try {
   });
 } catch (err) {
   console.log(`  note: commit-privacy filter setup failed (non-fatal): ${err.message}`);
+  process.exitCode = 1;
 }
