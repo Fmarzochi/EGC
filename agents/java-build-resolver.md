@@ -2,7 +2,7 @@
 name: java-build-resolver
 description: Java/Maven/Gradle build, compilation, and dependency error resolution specialist. Fixes build errors, Java compiler errors, and Maven/Gradle issues with minimal changes. Use when Java or Spring Boot builds fail.
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-model: gemini-2.5-pro
+model: gemini-3.1-pro
 stack: ["java"]
 ---
 

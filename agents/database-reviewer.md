@@ -2,7 +2,7 @@
 name: database-reviewer
 description: PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance.
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-model: gemini-2.5-pro
+model: gemini-3.1-pro
 stack: ["*"]
 ---
 

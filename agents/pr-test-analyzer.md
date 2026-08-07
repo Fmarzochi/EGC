@@ -1,7 +1,7 @@
 ---
 name: pr-test-analyzer
 description: Review pull request test coverage quality and completeness, with emphasis on behavioral coverage and real bug prevention.
-model: gemini-2.5-pro
+model: gemini-3.1-pro
 tools: [Read, Grep, Glob, Bash]
 stack: ["*"]
 ---

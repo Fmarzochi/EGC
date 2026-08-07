@@ -1,7 +1,7 @@
 ---
 name: conversation-analyzer
 description: Use this agent when analyzing conversation transcripts to find behaviors worth preventing with hooks. Triggered by /hookify without arguments.
-model: gemini-2.5-pro
+model: gemini-3.1-pro
 tools: [Read, Grep]
 stack: ["*"]
 ---
