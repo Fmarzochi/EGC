@@ -253,10 +253,10 @@ if ($hasInstallArgs) {
 }
 
 # Interactive ecosystem install (skipped in headless/CI)
-$isInteractive = [Environment]::UserInteractive -and -not $env:CI
+$isInteractive = [Environment]::UserInteractive -and -not $env:CI -and -not [Console]::IsInputRedirected
 if ($isInteractive -and -not $DryRun) {
-    $ans = Read-Host "`n  Install prompt library? (62 agents, 228 skills, 74 commands) [Y/n]"
-    if ($ans -eq '' -or $ans -eq 'Y' -or $ans -eq 'y') {
+    $ans = Read-Host "`n  Install prompt library? (61 agents, 230 skills, 77 commands) [Y/n]"
+    if ([string]::IsNullOrEmpty($ans) -or $ans -eq 'Y' -or $ans -eq 'y') {
         if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".gemini"))) {
             Write-Host "  installing to Gemini / AGY..."
             node $EgcInstall --target egc --profile full
@@ -294,6 +294,12 @@ if ($isInteractive -and -not $DryRun) {
             }
         }
     }
+} elseif (-not $DryRun) {
+    # A piped or redirected stdin used to reach the Read-Host above and come
+    # back $null instantly, and `$null -eq ''` is false in PowerShell, so the
+    # whole ecosystem block vanished without a word (Windows report in #1217:
+    # install-state left at the previous version). Announce the skip instead.
+    Write-Host "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --target <tool> --profile full' to add it."
 }
 
 if (-not $DryRun) {

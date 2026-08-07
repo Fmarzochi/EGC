@@ -107,6 +107,35 @@ function runTests() {
     assert.strictEqual(ps1Floor[1], bashFloor[1], 'install.ps1 Node floor must match install.sh');
   })) passed++; else failed++;
 
+  if (test('prompt-library counts match install.sh and the README catalog numbers', () => {
+    const countsOf = (source, label) => {
+      const m = source.match(/Install prompt library\? \((\d+) agents, (\d+) skills, (\d+) commands\)/);
+      assert.ok(m, `could not read the prompt-library counts out of ${label}`);
+      return m.slice(1, 4);
+    };
+    const ps1Counts = countsOf(scriptSource, 'install.ps1');
+    const bashCounts = countsOf(bashSource, 'install.sh');
+    assert.deepStrictEqual(ps1Counts, bashCounts, 'install.ps1 counts must match install.sh');
+    const readme = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf8');
+    const readmeCounts = readme.match(/(\d+) agents, (\d+) skills, and (\d+) commands/);
+    assert.ok(readmeCounts, 'could not read the catalog counts out of README.md');
+    assert.deepStrictEqual(ps1Counts, readmeCounts.slice(1, 4), 'installer counts must match the README; they sat at 62/228/74 while the README shipped 61/230/77');
+  })) passed++; else failed++;
+
+  if (test('prompt-library gate treats redirected stdin as non-interactive and survives a null Read-Host', () => {
+    // Through `egc install`, stdin reaches this script as a pipe:
+    // [Environment]::UserInteractive stays true there, Read-Host returns
+    // $null immediately, and `$null -eq ''` is false in PowerShell, so the
+    // ecosystem block used to vanish without a word (Windows report in
+    // #1217 left install-state at the previous version).
+    const gateLine = scriptSource.match(/\$isInteractive\s*=.*/);
+    assert.ok(gateLine, 'could not find the interactivity gate in install.ps1');
+    assert.ok(gateLine[0].includes('[Console]::IsInputRedirected'), 'the gate must test IsInputRedirected; UserInteractive alone cannot see a piped stdin');
+    assert.ok(scriptSource.includes('[string]::IsNullOrEmpty($ans)'), 'the default-Y branch must accept a null Read-Host result, not just the empty string');
+    assert.ok(scriptSource.includes('skipping the prompt-library step'), 'install.ps1 must announce the skip instead of vanishing silently');
+    assert.ok(bashSource.includes('skipping the prompt-library step'), 'install.sh must announce the skip too');
+  })) passed++; else failed++;
+
   if (test('installs dependencies via a lockfile-aware helper matching install.sh exactly (no npm install fallback)', () => {
     assert.ok(scriptSource.includes('function Install-Deps'), 'should define the lockfile-aware helper');
     assert.ok(scriptSource.includes('Test-Path "package-lock.json"'));

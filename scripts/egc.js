@@ -309,27 +309,23 @@ function runCommand(commandName, args) {
     throw new Error(`Unknown command: ${commandName}`);
   }
 
+  // stdio 'inherit' keeps the child on the caller's terminal. The piped
+  // default made every subcommand non-interactive (install.ps1's
+  // prompt-library Read-Host returned $null through `egc install`, so the
+  // whole ecosystem step silently vanished) and held all output back
+  // until the child exited.
   const result = spawnSync(
     process.execPath,
     [path.join(__dirname, command.script), ...args],
     {
       cwd: process.cwd(),
       env: process.env,
-      encoding: 'utf8',
-      maxBuffer: 10 * 1024 * 1024,
+      stdio: 'inherit',
     }
   );
 
   if (result.error) {
     throw result.error;
-  }
-
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
-  }
-
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
   }
 
   if (typeof result.status === 'number') {

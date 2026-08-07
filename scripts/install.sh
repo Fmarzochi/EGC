@@ -215,7 +215,7 @@ node scripts/egc.js doctor --repo-root "$ROOT_DIR" || true
 
 # Interactive ecosystem install (skipped in CI/headless environments)
 if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
-  printf "\n  Install prompt library? (62 agents, 228 skills, 74 commands) [Y/n] "
+  printf "\n  Install prompt library? (61 agents, 230 skills, 77 commands) [Y/n] "
   read -r _install_ans
   _install_ans="${_install_ans:-Y}"
   if [ "$_install_ans" = "Y" ] || [ "$_install_ans" = "y" ]; then
@@ -245,6 +245,10 @@ if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
       bash "$ROOT_DIR/.codebuddy/install.sh" ~
     fi
   fi
+elif [ "$DRY_RUN" = false ]; then
+  # Mirrors install.ps1: a non-TTY stdin skips the prompt-library step.
+  # Announce it instead of skipping silently.
+  echo "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --target <tool> --profile full' to add it."
 fi
 
 # ── MCP auto-registration ─────────────────────────────────────────────────────
