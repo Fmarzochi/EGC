@@ -12,7 +12,7 @@ const AGENTS_DIR = path.join(__dirname, '../../agents');
 const REQUIRED_FIELDS = ['model', 'tools'];
 const VALID_MODELS = [
   'haiku', 'sonnet', 'opus', 'pro', 'flash', 'lite', 'ultra',
-  'gemini-3.1-pro',
+  'gemini-3.1-pro', 'gemini-3.6-flash',
   'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
   'gemini-2.0-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite',
   'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'
