@@ -10,11 +10,25 @@
 
 const { install, uninstall, status } = require('./lib/crusher/shim-install');
 
+function toPathResultArray(rawPathResult) {
+  if (Array.isArray(rawPathResult)) {
+    return rawPathResult;
+  }
+  if (rawPathResult) {
+    return [{
+      ...rawPathResult,
+      path: rawPathResult.path || 'Windows user PATH (registry)'
+    }];
+  }
+  return [];
+}
+
 function printInstallResult(result) {
   console.log(`Shim directory: ${result.dir}`);
   if (result.installed.length) console.log(`Installed: ${result.installed.join(', ')}`);
   if (result.skipped.length) console.log(`Not found on this machine (skipped): ${result.skipped.join(', ')}`);
-  const changed = result.pathResult.filter(r => r.changed);
+  const pathResultArray = toPathResultArray(result.pathResult);
+  const changed = pathResultArray.filter(r => r && r.changed);
   if (changed.length) {
     console.log(`PATH updated in: ${changed.map(r => r.path).join(', ')}`);
     console.log('Open a new terminal (or `source` the file above) for it to take effect.');
@@ -26,7 +40,8 @@ function printInstallResult(result) {
 function printUninstallResult(result) {
   console.log(`Shim directory: ${result.dir}`);
   console.log(result.removed.length ? `Removed: ${result.removed.join(', ')}` : 'Nothing to remove.');
-  const changed = result.pathResult.filter(r => r.changed);
+  const pathResultArray = toPathResultArray(result.pathResult);
+  const changed = pathResultArray.filter(r => r && r.changed);
   if (changed.length) console.log(`PATH entry removed from: ${changed.map(r => r.path).join(', ')}`);
 }
 
