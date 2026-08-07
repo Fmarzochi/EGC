@@ -1,8 +1,8 @@
 const path = require('path');
-const { applyCommitPrivacyFilterCli } = require('./apply-commit-privacy-filter-cli');
+const { applyCommitPrivacyFilterCli } = require('./memory-filters');
 
 const scriptPath = process.argv[2]
-  ? path.resolve(process.argv[2], 'scripts', 'git-hooks', 'commit-privacy-filter.js')
+  ? path.resolve(process.argv[2], 'scripts', 'check-state-leak.js')
   : undefined;
 
 applyCommitPrivacyFilterCli({
