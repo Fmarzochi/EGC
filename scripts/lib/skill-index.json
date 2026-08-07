@@ -712,6 +712,11 @@
     },
     {
       "kind": "skill",
+      "name": "lazy-code",
+      "description": "Use this skill when writing, adding, refactoring, fixing, or reviewing code, and when choosing a library or dependency. Forces the smallest solution that actually works: question whether the task needs to exist (YAGNI), reuse what the codebase already has, reach for the standard library and native platform features before custom code and before new dependencies, one line before fifty. Also use when the user says \"be lazy\", \"simplest solution\", \"minimal solution\", \"do less\", \"shortest path\", or complains about over-engineering, bloat, boilerplate, or unnecessary dependencies. Supports intensity levels lite, full, and ultra. Do NOT use for non-coding requests such as research, investigation, documentation, prose, translation, or summaries, where the ruleset is pure token cost with no code to shrink."
+    },
+    {
+      "kind": "skill",
       "name": "healthcare-emr-patterns",
       "description": "EMR/EHR development patterns for healthcare applications. Clinical safety, encounter workflows, prescription generation, clinical decision support integration, and accessibility-first UI for medical data entry."
     },
