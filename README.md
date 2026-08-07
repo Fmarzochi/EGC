@@ -29,7 +29,7 @@ npm install -g @egchq/egc && egc install
 ```
 
 - **Reduce context waste by up to 90%, cut token costs, and keep every AI perfectly aligned across sessions.**
-- **Guardian: validate every command before execution and block dangerous writes. Every shared brain comes with a built-in safety layer.** ([coverage depends on each tool's hook support](docs/security/SECURITY-ASSESSMENT.md#known-limitations))
+- **Guardian: validate every command before execution and block dangerous writes. Every shared brain comes with a built-in safety layer.**
 - **One command, zero config: memory stays local and encrypted on your machine, and never gets committed to git.**
 
 <div align="center">
