@@ -1,12 +1,14 @@
 const path = require('path');
 const { applyCommitPrivacyFilterCli } = require('./memory-filters');
 
-const scriptPath = process.argv[2]
-  ? path.resolve(process.argv[2], 'scripts', 'check-state-leak.js')
-  : undefined;
+// The repo root is fixed relative to this file (scripts/lib/ sits two levels
+// below it). Deriving it from __dirname instead of argv keeps externally
+// influenced strings out of the git-config command this ultimately feeds;
+// mcp-register-cli and dashboard-launch resolve their paths the same way.
+const rootDir = path.join(__dirname, '..', '..');
 
 applyCommitPrivacyFilterCli({
   projectDir: process.cwd(),
-  scriptPath: scriptPath,
+  scriptPath: path.join(rootDir, 'scripts', 'check-state-leak.js'),
   log: (m) => console.log('  ' + m)
 });
