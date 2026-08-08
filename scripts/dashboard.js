@@ -69,11 +69,16 @@ async function start() {
   // The server's own require() resolves dependencies by walking up from
   // dashboard/, so they may live in dashboard/node_modules (git checkout
   // with a local install) or in the package root's node_modules (global
-  // npm install: express and ws are root dependencies). Only when neither
-  // resolves is an on-demand install attempted, and only where it can
-  // succeed: inside a root-owned global prefix, npm install can only die
-  // with EACCES behind the detached spawn, which is how #1233 was hit.
-  const depsResolve = ['express', 'ws'].every(dep => {
+  // npm install ships every dashboard dependency at the root). The list is
+  // read from dashboard/package.json so the two can never drift apart.
+  // Only when something does not resolve is an on-demand install
+  // attempted, and only where it can succeed: inside a root-owned global
+  // prefix, npm install can only die with EACCES behind the detached
+  // spawn, which is how #1233 was hit.
+  const dashboardDeps = Object.keys(
+    JSON.parse(fs.readFileSync(path.join(DASHBOARD_DIR, 'package.json'), 'utf8')).dependencies || {}
+  );
+  const depsResolve = dashboardDeps.every(dep => {
     try { require.resolve(dep, { paths: [DASHBOARD_DIR] }); return true; } catch (_) { return false; } // NOSONAR: unresolved simply routes to the install below
   });
   if (!depsResolve) {
