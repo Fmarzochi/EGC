@@ -66,8 +66,32 @@ async function start() {
 
   const PORT = getPort();
 
-  const nmDir = path.join(DASHBOARD_DIR, 'node_modules');
-  if (!fs.existsSync(nmDir)) {
+  // Dependency gate shared with the init/install launcher: the list comes
+  // from dashboard/package.json (never drifts from the manifest) and a dep
+  // counts as present when require() can resolve it walking up from
+  // dashboard/. Only when something does not resolve is an on-demand
+  // install attempted, and only where it can succeed: inside a root-owned
+  // global prefix, npm install can only die with EACCES behind the
+  // detached spawn, which is how #1233 was hit.
+  const { checkDashboardDeps } = require(path.join(__dirname, 'lib', 'dashboard-deps'));
+  const depsReport = checkDashboardDeps(DASHBOARD_DIR);
+  if (depsReport.manifestError) {
+    console.error('Dashboard manifest missing or unreadable:');
+    console.error('  ' + path.join(DASHBOARD_DIR, 'package.json'));
+    console.error('  (' + depsReport.manifestError.message + ')');
+    console.error('The installed package looks damaged. Reinstall with: npm install -g @egchq/egc');
+    process.exit(1);
+  }
+  if (depsReport.missing.length > 0) {
+    let writable = true;
+    try { fs.accessSync(DASHBOARD_DIR, fs.constants.W_OK); } catch (_) { writable = false; } // NOSONAR: probe only
+    if (!writable) {
+      console.error('Dashboard dependencies are missing and the package directory is not writable:');
+      console.error('  ' + DASHBOARD_DIR);
+      console.error('Update EGC to a release that ships them preinstalled, or install them once with:');
+      console.error('  sudo npm --prefix "' + DASHBOARD_DIR + '" install');
+      process.exit(1);
+    }
     console.log('Installing dashboard dependencies...');
     const r = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install'], {
       cwd: DASHBOARD_DIR, stdio: 'inherit',
