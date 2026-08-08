@@ -20,6 +20,16 @@ function pingDashboard() {
   });
 }
 
+function waitForDashboard(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const poll = () => pingDashboard().then(up => {
+    if (up) return true;
+    if (Date.now() >= deadline) return false;
+    return new Promise(resolve => setTimeout(resolve, 250)).then(poll);
+  });
+  return poll();
+}
+
 function openBrowser() {
   let cmd;
   if (process.platform === 'win32') {
@@ -63,9 +73,20 @@ function launchDashboard({ log = () => {} } = {}) {
     });
     child.unref();
     log(`EGC Dashboard starting at ${DASHBOARD_URL}`);
-    log('Minimize it to keep working. Run `egc dashboard stop` to close.');
-    setTimeout(openBrowser, 1500);
-    return true;
+    // The spawn above is detached with its output discarded, so this poll
+    // is the only honesty available: without it, a server that dies during
+    // startup (missing deps in a root-owned prefix, #1233) leaves the
+    // success line as the last word while the port refuses connections.
+    return waitForDashboard(4000).then(ready => {
+      if (ready) {
+        log('Minimize it to keep working. Run `egc dashboard stop` to close.');
+        openBrowser();
+        return true;
+      }
+      log('EGC Dashboard did not start.');
+      log(`See the startup error with: node "${dashboardScript}" start`);
+      return false;
+    });
   }).catch(err => {
     log(`Dashboard startup skipped: ${err.message}`);
     return false;

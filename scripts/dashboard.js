@@ -66,8 +66,26 @@ async function start() {
 
   const PORT = getPort();
 
-  const nmDir = path.join(DASHBOARD_DIR, 'node_modules');
-  if (!fs.existsSync(nmDir)) {
+  // The server's own require() resolves dependencies by walking up from
+  // dashboard/, so they may live in dashboard/node_modules (git checkout
+  // with a local install) or in the package root's node_modules (global
+  // npm install: express and ws are root dependencies). Only when neither
+  // resolves is an on-demand install attempted, and only where it can
+  // succeed: inside a root-owned global prefix, npm install can only die
+  // with EACCES behind the detached spawn, which is how #1233 was hit.
+  const depsResolve = ['express', 'ws'].every(dep => {
+    try { require.resolve(dep, { paths: [DASHBOARD_DIR] }); return true; } catch (_) { return false; } // NOSONAR: unresolved simply routes to the install below
+  });
+  if (!depsResolve) {
+    let writable = true;
+    try { fs.accessSync(DASHBOARD_DIR, fs.constants.W_OK); } catch (_) { writable = false; } // NOSONAR: probe only
+    if (!writable) {
+      console.error('Dashboard dependencies are missing and the package directory is not writable:');
+      console.error('  ' + DASHBOARD_DIR);
+      console.error('Update EGC to a release that ships them preinstalled, or install them once with:');
+      console.error('  sudo npm --prefix "' + DASHBOARD_DIR + '" install');
+      process.exit(1);
+    }
     console.log('Installing dashboard dependencies...');
     const r = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install'], {
       cwd: DASHBOARD_DIR, stdio: 'inherit',
