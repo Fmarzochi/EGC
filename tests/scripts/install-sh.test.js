@@ -232,6 +232,37 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('skips npm link when running from the global npm install (#1218)', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    // `egc install` after `npm install -g @egchq/egc` runs this script from
+    // inside the global npm prefix: the egc bin on PATH already points at
+    // this tree, so npm link is redundant there, and with a root-owned
+    // prefix (distro Node) it fails and prints a note about a checkout the
+    // person does not have. The guard must compare the resolved global
+    // package dir against ROOT_DIR before ever attempting the link.
+    assert.ok(
+      /npm root -g/.test(script),
+      'install.sh must locate the global npm package root for the guard'
+    );
+    assert.ok(
+      script.includes('@egchq/egc'),
+      'the guard must target the published package directory'
+    );
+    assert.ok(
+      script.indexOf('npm root -g') < script.indexOf('npm link --silent'),
+      'the global-install guard must run before npm link'
+    );
+    assert.ok(
+      /npm link --silent/.test(script),
+      'the git-checkout path must still link the egc command'
+    );
+    assert.ok(
+      script.includes('already provided by the global npm install'),
+      'the skip must be announced, not silent'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
