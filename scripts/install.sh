@@ -116,7 +116,7 @@ if [ "$DRY_RUN" = false ]; then
   # lack permission to the global npm prefix, and that must not abort the
   # rest of the install.
   GLOBAL_PKG_DIR="$(npm root -g 2>/dev/null || true)/@egchq/egc"
-  if [ -d "$GLOBAL_PKG_DIR" ] && [ "$(cd "$GLOBAL_PKG_DIR" && pwd -P)" = "$ROOT_DIR" ]; then
+  if [[ -d "$GLOBAL_PKG_DIR" && "$(cd "$GLOBAL_PKG_DIR" && pwd -P)" == "$ROOT_DIR" ]]; then
     echo "  egc command already provided by the global npm install"
   else
     echo "  linking the egc command to this checkout..."
