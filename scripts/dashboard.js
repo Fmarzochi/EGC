@@ -66,22 +66,23 @@ async function start() {
 
   const PORT = getPort();
 
-  // The server's own require() resolves dependencies by walking up from
-  // dashboard/, so they may live in dashboard/node_modules (git checkout
-  // with a local install) or in the package root's node_modules (global
-  // npm install ships every dashboard dependency at the root). The list is
-  // read from dashboard/package.json so the two can never drift apart.
-  // Only when something does not resolve is an on-demand install
-  // attempted, and only where it can succeed: inside a root-owned global
-  // prefix, npm install can only die with EACCES behind the detached
-  // spawn, which is how #1233 was hit.
-  const dashboardDeps = Object.keys(
-    JSON.parse(fs.readFileSync(path.join(DASHBOARD_DIR, 'package.json'), 'utf8')).dependencies || {}
-  );
-  const depsResolve = dashboardDeps.every(dep => {
-    try { require.resolve(dep, { paths: [DASHBOARD_DIR] }); return true; } catch (_) { return false; } // NOSONAR: unresolved simply routes to the install below
-  });
-  if (!depsResolve) {
+  // Dependency gate shared with the init/install launcher: the list comes
+  // from dashboard/package.json (never drifts from the manifest) and a dep
+  // counts as present when require() can resolve it walking up from
+  // dashboard/. Only when something does not resolve is an on-demand
+  // install attempted, and only where it can succeed: inside a root-owned
+  // global prefix, npm install can only die with EACCES behind the
+  // detached spawn, which is how #1233 was hit.
+  const { checkDashboardDeps } = require(path.join(__dirname, 'lib', 'dashboard-deps'));
+  const depsReport = checkDashboardDeps(DASHBOARD_DIR);
+  if (depsReport.manifestError) {
+    console.error('Dashboard manifest missing or unreadable:');
+    console.error('  ' + path.join(DASHBOARD_DIR, 'package.json'));
+    console.error('  (' + depsReport.manifestError.message + ')');
+    console.error('The installed package looks damaged. Reinstall with: npm install -g @egchq/egc');
+    process.exit(1);
+  }
+  if (depsReport.missing.length > 0) {
     let writable = true;
     try { fs.accessSync(DASHBOARD_DIR, fs.constants.W_OK); } catch (_) { writable = false; } // NOSONAR: probe only
     if (!writable) {

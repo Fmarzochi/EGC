@@ -77,13 +77,23 @@ function launchDashboard({ log = () => {} } = {}) {
     // is the only honesty available: without it, a server that dies during
     // startup (missing deps in a root-owned prefix, #1233) leaves the
     // success line as the last word while the port refuses connections.
-    return waitForDashboard(4000).then(ready => {
+    // The budget covers the child's own path: when every dashboard dep
+    // already resolves the server answers in well under 4s, but a first
+    // launch in a writable checkout may run a full npm install first, so
+    // announcing failure at 4s there would be a false verdict (PR #1234
+    // review).
+    const { checkDashboardDeps } = require(path.join(__dirname, 'dashboard-deps'));
+    const depsReport = checkDashboardDeps(path.join(__dirname, '..', '..', 'dashboard'));
+    const installAhead = depsReport.manifestError !== null || depsReport.missing.length > 0;
+    if (installAhead) log('First launch may install dashboard dependencies; giving it up to a minute.');
+    const budgetMs = installAhead ? 60000 : 4000;
+    return waitForDashboard(budgetMs).then(ready => {
       if (ready) {
         log('Minimize it to keep working. Run `egc dashboard stop` to close.');
         openBrowser();
         return true;
       }
-      log('EGC Dashboard did not start.');
+      log(`EGC Dashboard did not respond within ${Math.round(budgetMs / 1000)}s.`);
       log(`See the startup error with: node "${dashboardScript}" start`);
       return false;
     });
@@ -99,4 +109,4 @@ function shouldAutoLaunch() {
   return Boolean(process.stdout.isTTY) && !process.env.CI;
 }
 
-module.exports = { launchDashboard, shouldAutoLaunch, DASHBOARD_URL };
+module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, DASHBOARD_URL };
