@@ -118,8 +118,10 @@ async function runTests() {
       assert.deepStrictEqual(clean.missing, []);
 
       // Unwritable directory (POSIX only: chmod cannot revoke directory
-      // write access on Windows, matching how install-sh.test.js skips).
-      if (process.platform !== 'win32') {
+      // write access on Windows, matching how install-sh.test.js skips;
+      // also skipped as root, which bypasses the W_OK probe entirely, so
+      // the case would fail in root-running Docker/CI).
+      if (process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() !== 0) {
         fs.chmodSync(tmp, 0o555);
         try {
           const readonly = checkDashboardDeps(tmp);
