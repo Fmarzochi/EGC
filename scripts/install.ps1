@@ -149,16 +149,34 @@ if (-not $DryRun) {
     # message at the end of this script tells the user to run (and anything
     # else they type afterward) targets the code that was just installed
     # rather than a stale prior global install left on PATH from an earlier
-    # npm publish. Best-effort: some environments lack permission to the
-    # global npm prefix, and that must not abort the rest of the install.
-    Write-Host "  linking the egc command to this checkout..."
-    # PowerShell does not treat a non-zero exit code from a native command as
-    # a terminating error, so a try/catch here would never fire: check
-    # $LASTEXITCODE explicitly instead, matching the "||" pattern install.sh
-    # uses for the same fallback (cubic review, PR #1096).
-    npm link --silent 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts\egc.js <command>' from this checkout." -ForegroundColor Yellow
+    # npm publish. Skipped when this tree IS the global npm install
+    # (`egc install` right after `npm install -g @egchq/egc`): the egc
+    # command on PATH already points here, so there is nothing stale to
+    # outrank, and without permission to the global prefix the link can only
+    # fail and print a note about a checkout the person does not have
+    # (#1218 Linux report). Best-effort: some environments lack permission
+    # to the global npm prefix, and that must not abort the rest of the
+    # install.
+    $GlobalNpmRoot = (& npm root -g 2>$null)
+    $IsGlobalNpmInstall = $false
+    if ($GlobalNpmRoot) {
+        $GlobalPkgDir = Join-Path (Join-Path $GlobalNpmRoot "@egchq") "egc"
+        if (Test-Path $GlobalPkgDir) {
+            $IsGlobalNpmInstall = ((Resolve-Path $GlobalPkgDir).Path -eq (Resolve-Path $RootDir).Path)
+        }
+    }
+    if ($IsGlobalNpmInstall) {
+        Write-Host "  egc command already provided by the global npm install"
+    } else {
+        Write-Host "  linking the egc command to this checkout..."
+        # PowerShell does not treat a non-zero exit code from a native command as
+        # a terminating error, so a try/catch here would never fire: check
+        # $LASTEXITCODE explicitly instead, matching the "||" pattern install.sh
+        # uses for the same fallback (cubic review, PR #1096).
+        npm link --silent 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts\egc.js <command>' from this checkout." -ForegroundColor Yellow
+        }
     }
 
     # Verify native modules (better-sqlite3 requires Build Tools on Windows)

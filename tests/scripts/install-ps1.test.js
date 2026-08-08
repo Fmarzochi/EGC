@@ -199,6 +199,29 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('skips npm link from the global npm install, matching install.sh (#1218)', () => {
+    // Same guard as install.sh: running `egc install` from the globally
+    // installed package must not attempt npm link (redundant there, and it
+    // fails with a note about a nonexistent checkout when the prefix is not
+    // writable). Parity-checked so the two installers cannot drift.
+    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
+      assert.ok(/npm root -g/.test(source), `${label} must locate the global npm package root`);
+      assert.ok(
+        source.includes('already provided by the global npm install'),
+        `${label} must announce the skip instead of linking`
+      );
+      assert.ok(
+        source.indexOf('npm root -g') < source.indexOf('npm link --silent'),
+        `${label} must guard before attempting npm link`
+      );
+      assert.ok(/npm link --silent/.test(source), `${label} must still link on the checkout path`);
+    }
+    assert.ok(
+      scriptSource.includes('(Resolve-Path $GlobalPkgDir).Path -eq (Resolve-Path $RootDir).Path'),
+      'install.ps1 must compare resolved paths, not raw strings'
+    );
+  })) passed++; else failed++;
+
   if (!powerShellCommand) {
     console.log('  - skipped delegation test; PowerShell is not available in PATH');
   } else if (test('delegates to the Node installer and preserves dry-run output', () => {
