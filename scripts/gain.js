@@ -5,7 +5,8 @@
 // ledger only and prints to the terminal, so the report itself costs zero
 // tokens. `egc saved` stays as the short summary; gain is the detailed view.
 
-const { readAll, aggregateBreakdown, metricsFilePath } = require('./lib/crusher/metrics');
+const { readAll, metricsFilePath } = require('./lib/crusher/metrics');
+const operations = require('./lib/operations');
 
 const BAR_WIDTH = 24;
 
@@ -67,13 +68,11 @@ function main() {
     return;
   }
 
-  const report = aggregateBreakdown(entries);
+  const report = operations.execute('crusher.aggregate_breakdown', { entries });
   const totals = report.sinceInstall;
 
   if (json) {
-    // Preserve the existing top-level lifetime fields while adding the scoped
-    // report, so scripts consuming runs/bytes/tokens/byKind keep working.
-    console.log(JSON.stringify({ ...totals, ...report, entries: entries.length }, null, 2));
+    console.log(JSON.stringify(report, null, 2));
     return;
   }
 

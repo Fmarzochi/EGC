@@ -23,51 +23,14 @@ const MIME = {
 
 const SERVER_START = Date.now();
 
-const EGC_DB_CANDIDATES = [
-  path.join(os.homedir(), '.claude', 'egc', 'state.db'),
-  path.join(os.homedir(), '.gemini', 'egc', 'state.db'),
-  path.join(os.homedir(), '.egc', 'egc', 'state.db'),
-  path.join(os.homedir(), '.cursor', 'egc', 'state.db'),
-  path.join(os.homedir(), '.kiro', 'egc', 'state.db'),
-];
+const operations = require('../scripts/lib/operations');
 
-function queryEgcStats() {
-  for (const dbPath of EGC_DB_CANDIDATES) {
-    if (!fs.existsSync(dbPath)) continue;
-    const q = (sql) => {
-      try {
-        const out = execFileSync('sqlite3', ['-readonly', dbPath, sql],
-          { encoding: 'utf8', timeout: 500, stdio: ['ignore', 'pipe', 'ignore'] });
-        return parseInt(out.trim(), 10) || 0;
-      } catch (_) { return 0; }
-    };
-    return {
-      decisions: q('SELECT COUNT(*) FROM decisions'),
-      lessons:   q('SELECT COUNT(*) FROM lessons WHERE archived = 0'),
-      patterns:  q('SELECT COUNT(*) FROM patterns'),
-    };
-  }
-  return null;
+async function queryEgcStats() {
+  return await operations.execute('state_store.db_stats');
 }
 
-// Count decisions from ## Active Decisions section in egc-memory state files.
-// update_state writes decisions here; store_decision writes to SQLite.
 function countStateFileDecisions() {
-  try {
-    const dir = path.join(os.homedir(), '.egc', 'state');
-    if (!fs.existsSync(dir)) return 0;
-    const files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).slice(0, 6);
-    let d = 0;
-    for (const f of files) {
-      const c = fs.readFileSync(path.join(dir, f), 'utf8');
-      for (const section of c.split(/^## /m)) {
-        if (section.startsWith('Active Decisions')) {
-          d += (section.match(/^- /gm) || []).length;
-        }
-      }
-    }
-    return d;
-  } catch (_) { return 0; }
+  return operations.execute('state_store.markdown_decisions');
 }
 
 function buildStaticManifest(dir) {
@@ -405,17 +368,22 @@ const grandTotal = Object.values(byIde).reduce(
       longTermPct: null, workingPct: null,
     };
 
-    const egcStats = queryEgcStats();
-    if (egcStats) {
-      stats.decisions = egcStats.decisions || countStateFileDecisions();
-      stats.lessons   = egcStats.lessons;
-      stats.patterns  = egcStats.patterns;
-    } else {
-      stats.decisions = countStateFileDecisions();
-    }
+    queryEgcStats().then(egcStats => {
+      if (egcStats) {
+        stats.decisions = egcStats.decisions || countStateFileDecisions();
+        stats.lessons   = egcStats.lessons;
+        stats.patterns  = egcStats.patterns;
+      } else {
+        stats.decisions = countStateFileDecisions();
+      }
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(stats));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(stats));
+    }).catch(_ => {
+      stats.decisions = countStateFileDecisions();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(stats));
+    });
     return;
   }
 

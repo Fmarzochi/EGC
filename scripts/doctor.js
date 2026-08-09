@@ -3,9 +3,8 @@
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs');
-const { buildDoctorReport } = require('./lib/install-lifecycle');
+const operations = require('./lib/operations');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
-const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 
 function showHelp(exitCode = 0) {
@@ -71,73 +70,6 @@ function printHuman(report) {
   console.log(`\nSummary: checked=${report.summary.checkedCount}, ok=${report.summary.okCount}, warnings=${report.summary.warningCount}, errors=${report.summary.errorCount}`);
 }
 
-// Windows filesystems are case-insensitive and drive letters arrive in
-// either case depending on the shell (C:\Users vs c:\users under Git
-// Bash), so path identity folds case there; POSIX stays case-sensitive.
-function samePath(a, b) {
-  const resolvedA = path.resolve(a);
-  const resolvedB = path.resolve(b);
-  if (process.platform === 'win32') return resolvedA.toLowerCase() === resolvedB.toLowerCase();
-  return resolvedA === resolvedB;
-}
-
-// Stray copies of the CLI store left in harness directories by the
-// pre-#1104 resolution order (the state-fragmentation bug). Reported with
-// size and last write so the person can tell live data from stale copies.
-// Neither the store in active use nor the canonical ~/.egc location ever
-// counts as a stray: when the CLI resolves to a harness directory, the
-// canonical store is what everything consolidates INTO, not a fragment.
-function findStateDbFragments(activeDbPath, canonicalDbPath, homeDir) {
-  const fragments = [];
-  const roots = [path.join(homeDir, '.egc'), ...getKnownHarnessDirs(homeDir)];
-  for (const root of roots) {
-    const candidate = path.join(root, 'egc', 'state.db');
-    if (samePath(candidate, activeDbPath) || samePath(candidate, canonicalDbPath)) continue;
-    try {
-      const stat = fs.statSync(candidate);
-      fragments.push({ path: candidate, sizeBytes: stat.size, modifiedAt: stat.mtime.toISOString() });
-    } catch {
-      // Absent: not a fragment.
-    }
-  }
-  return fragments;
-}
-
-function checkStateDb(homeDir) {
-  const rootDir = getEGCDir();
-  const dbPath = path.join(rootDir, 'egc', 'state.db');
-  const canonicalDbPath = path.join(homeDir, '.egc', 'egc', 'state.db');
-  // The memory server always keeps its store under ~/.egc/memory, no matter
-  // what getEGCDir() resolves to (mcp/servers/egc-memory/src/index.ts).
-  // Probing it under rootDir made this check blind whenever the CLI
-  // resolved to a harness directory.
-  const memoryDbPath = path.join(homeDir, '.egc', 'memory', 'state.db');
-
-  const hasHarnessDb = fs.existsSync(dbPath);
-  const hasMemoryDb = fs.existsSync(memoryDbPath);
-  const fragments = findStateDbFragments(dbPath, canonicalDbPath, homeDir);
-  // The CLI store belongs in the shared ~/.egc; landing in a KNOWN harness
-  // directory means resolution picked a harness and history is being split.
-  // An explicit custom EGC_DIR anywhere else is a deliberate override, not
-  // a misplacement, and gets no scary guidance.
-  const cliStoreMisplaced = hasHarnessDb
-    && !samePath(dbPath, canonicalDbPath)
-    && getKnownHarnessDirs(homeDir).some((harnessDir) => samePath(rootDir, harnessDir));
-  // Fragments never substitute for a live store: the egc init guidance has
-  // to survive their presence.
-  const missing = !hasHarnessDb && !hasMemoryDb;
-
-  if (hasHarnessDb && hasMemoryDb && !cliStoreMisplaced && fragments.length === 0) {
-    // Both stores exist where they belong and no strays: the two-store
-    // layout (CLI events + MCP memory, different engines and schemas) is
-    // the current design, not a fault - nothing to report.
-    return null;
-  }
-  // One predictable shape for --json consumers no matter which condition
-  // fired.
-  return { missing, dbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
-}
-
 function main() {
   try {
     const options = parseArgs(process.argv);
@@ -146,18 +78,17 @@ function main() {
     }
 
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-    const report = buildDoctorReport({
+    const report = operations.execute('doctor.report', {
       repoRoot: options.repoRoot || path.join(__dirname, '..'),
       homeDir,
       projectRoot: process.cwd(),
       targets: options.targets,
     });
     const hasIssues = report.summary.errorCount > 0 || report.summary.warningCount > 0;
-    const stateDb = checkStateDb(homeDir);
+    const stateDb = report.stateDb;
 
     if (options.json) {
-      const out = stateDb ? { ...report, stateDb } : report;
-      console.log(JSON.stringify(out, null, 2));
+      console.log(JSON.stringify(report, null, 2));
     } else {
       printHuman(report);
       if (stateDb) {
@@ -204,3 +135,4 @@ function main() {
 }
 
 main();
+
