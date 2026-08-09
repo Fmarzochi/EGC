@@ -5,7 +5,8 @@
 // ledger only and prints to the terminal, so the report itself costs zero
 // tokens. `egc saved` stays as the short summary; gain is the detailed view.
 
-const { readAll, aggregateBreakdown, metricsFilePath } = require('./lib/crusher/metrics');
+const { readAll, metricsFilePath } = require('./lib/crusher/metrics');
+const { savingsLedger: savingsLedgerOp } = require('./lib/operations/index');
 
 const BAR_WIDTH = 24;
 
@@ -67,7 +68,7 @@ function main() {
     return;
   }
 
-  const report = aggregateBreakdown(entries);
+  const report = savingsLedgerOp();
   const totals = report.sinceInstall;
 
   if (json) {

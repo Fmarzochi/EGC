@@ -26,22 +26,16 @@ const SERVER_START = Date.now();
 // EGC state queries are routed through the shared operations layer (#1235).
 // The private EGC_DB_CANDIDATES list, raw sqlite3 shell invocations, and the
 // hand-rolled ~/.egc/state/*.md parser that lived here have all been removed;
-// createStateStore (via operations.state()) handles path resolution and
-// connection management for every supported harness location.
-const { state: openStateStore } = require('../scripts/lib/operations/index');
+// operations.state() returns plain JSON {decisions, lessons, patterns, dbPath}
+// and handles path resolution and store lifecycle internally.
+const { state: queryStateOp } = require('../scripts/lib/operations/index');
 
 async function queryEgcStats() {
-  let store;
   try {
-    store = await openStateStore();
-    const decisions = store.countDecisions ? store.countDecisions() : 0;
-    const lessons   = store.countLessons  ? store.countLessons({ archivedOnly: false }) : 0;
-    const patterns  = store.countPatterns ? store.countPatterns() : 0;
-    return { decisions, lessons, patterns };
+    // state() opens, queries, and closes the store; returns plain JSON only.
+    return await queryStateOp();
   } catch (_) {
     return null;
-  } finally {
-    try { store?.close(); } catch (_) {} // NOSONAR: best-effort close
   }
 }
 
