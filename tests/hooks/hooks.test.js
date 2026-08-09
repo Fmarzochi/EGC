@@ -2831,6 +2831,7 @@ async function runTests() {
       try {
         fs.mkdirSync(homeDir, { recursive: true });
         fs.mkdirSync(repoDir, { recursive: true });
+        fs.writeFileSync(path.join(homeDir, '.cloud-locale-test.skip'), '');
         spawnSync('git', ['init'], { cwd: repoDir, stdio: 'ignore' });
         spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/example/egc-test.git'], { cwd: repoDir, stdio: 'ignore' });
 
@@ -2858,7 +2859,9 @@ async function runTests() {
 
         assert.strictEqual(code, 0, `detect-project should source cleanly, stderr: ${stderr}`);
 
-        const [projectId, projectDir] = stdout.trim().split(/\r?\n/);
+        const stdoutLines = stdout.trim().split(/\r?\n/).filter(l => l.trim() && !l.includes('WARNING') && !l.startsWith('_'));
+        const projectId = stdoutLines[stdoutLines.length - 2];
+        const projectDir = stdoutLines[stdoutLines.length - 1];
         const registryPath = path.join(homeDir, '.gemini', 'homunculus', 'projects.json');
         const expectedProjectDir = path.join(
           homeDir,

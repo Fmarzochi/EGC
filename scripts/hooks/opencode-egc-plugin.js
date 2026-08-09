@@ -72,8 +72,11 @@ function withTimeout(operation, timeoutMs) {
 function loadSessionContext(projectDirectory, sessionId) {
   return new Promise(resolve => {
     const timeoutMs = positiveIntegerEnv(
-      'EGC_SESSION_CONTEXT_TIMEOUT_MS',
-      DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+      'EGC_SESSION_CONTEXT_LOAD_TIMEOUT_MS',
+      positiveIntegerEnv(
+        'EGC_SESSION_CONTEXT_TIMEOUT_MS',
+        DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+      )
     );
     const maxOutputBytes = positiveIntegerEnv(
       'EGC_SESSION_CONTEXT_MAX_BYTES',
@@ -156,8 +159,11 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
       if (!context) return;
 
       const timeoutMs = positiveIntegerEnv(
-        'EGC_SESSION_CONTEXT_TIMEOUT_MS',
-        DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+        'EGC_SESSION_PROMPT_TIMEOUT_MS',
+        positiveIntegerEnv(
+          'EGC_SESSION_CONTEXT_TIMEOUT_MS',
+          DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+        )
       );
       await withTimeout(
         prompt.call(client.session, {

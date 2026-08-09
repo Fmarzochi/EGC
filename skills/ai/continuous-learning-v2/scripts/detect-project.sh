@@ -184,19 +184,25 @@ project_file = os.path.join(project_dir, "project.json")
 os.makedirs(project_dir, exist_ok=True)
 
 def atomic_write_json(path, payload):
+    parent_dir = os.path.dirname(path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(
         prefix=f".{os.path.basename(path)}.tmp.",
-        dir=os.path.dirname(path),
+        dir=parent_dir or ".",
         text=True,
     )
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
             f.write("\n")
         os.replace(tmp_path, path)
     finally:
         if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 try:
     with open(registry_path) as f:
