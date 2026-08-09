@@ -48,7 +48,7 @@ async function main() {
     'install.create_plan',
     'state_store.db_stats',
     'state_store.markdown_decisions',
-    'state_store.query',
+    'state_store.query'
   ];
 
   runSync('operations.list() returns all expected registered operations', () => {
@@ -73,7 +73,7 @@ async function main() {
     } catch (err) {
       threw = true;
       if (!err.message.includes('Unknown operation')) {
-        throw new Error(`Unexpected error message: ${err.message}`);
+        throw new Error(`Unexpected error message: ${err.message}`, { cause: err });
       }
     }
     if (!threw) throw new Error('Executing unknown operation did not throw');
@@ -83,8 +83,12 @@ async function main() {
     const originalLog = console.log;
     const originalError = console.error;
     let logged = false;
-    console.log = () => { logged = true; };
-    console.error = () => { logged = true; };
+    console.log = () => {
+      logged = true;
+    };
+    console.error = () => {
+      logged = true;
+    };
     try {
       const result = operations.execute('crusher.aggregate_breakdown', { entries: [] });
       if (typeof result !== 'object' || result === null) {
@@ -105,8 +109,12 @@ async function main() {
     const originalLog = console.log;
     const originalError = console.error;
     let logged = false;
-    console.log = () => { logged = true; };
-    console.error = () => { logged = true; };
+    console.log = () => {
+      logged = true;
+    };
+    console.error = () => {
+      logged = true;
+    };
     try {
       const result = operations.execute('doctor.report', { targets: [] });
       if (typeof result !== 'object' || result === null) {

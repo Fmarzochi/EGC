@@ -2,7 +2,6 @@
 
 const os = require('node:os');
 const path = require('node:path');
-const fs = require('node:fs');
 const operations = require('./lib/operations');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { parseTargetArgs } = require('./lib/cli-target-args');
@@ -82,7 +81,7 @@ function main() {
       repoRoot: options.repoRoot || path.join(__dirname, '..'),
       homeDir,
       projectRoot: process.cwd(),
-      targets: options.targets,
+      targets: options.targets
     });
     const hasIssues = report.summary.errorCount > 0 || report.summary.warningCount > 0;
     const stateDb = report.stateDb;
@@ -135,4 +134,3 @@ function main() {
 }
 
 main();
-
