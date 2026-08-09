@@ -221,8 +221,8 @@ async function main() {
     assert.ok(result && typeof result.then === 'function',
       'state() must return a Promise');
     // Clean up: resolve it
-    return result.catch(() => {}).finally(() => {
-      try { fs.unlinkSync(tmpDb); } catch (_) {}
+    return result.catch(() => { /* ignore DB open failure, tested in later assertions */ }).finally(() => {
+      try { fs.unlinkSync(tmpDb); } catch (_) { /* temp file may not exist: ignore */ }
     });
   });
 
@@ -238,7 +238,7 @@ async function main() {
       const json = JSON.stringify(result);
       assert.deepStrictEqual(JSON.parse(json), result, 'state() result must survive JSON round-trip');
     } finally {
-      try { fs.unlinkSync(tmpDb); } catch (_) {}
+      try { fs.unlinkSync(tmpDb); } catch (_) { /* temp file may not exist: ignore */ }
     }
   });
 
@@ -251,7 +251,7 @@ async function main() {
       assert.ok(typeof result.patterns  === 'number', 'state().patterns must be a number');
       assert.ok(typeof result.dbPath    === 'string', 'state().dbPath must be a string');
     } finally {
-      try { fs.unlinkSync(tmpDb); } catch (_) {}
+      try { fs.unlinkSync(tmpDb); } catch (_) { /* temp file may not exist: ignore */ }
     }
   });
 
@@ -262,7 +262,7 @@ async function main() {
       assert.strictEqual(lines.length, 0,
         `state() wrote to stdout/stderr: ${lines.join('')}`);
     } finally {
-      try { fs.unlinkSync(tmpDb); } catch (_) {}
+      try { fs.unlinkSync(tmpDb); } catch (_) { /* temp file may not exist: ignore */ }
     }
   });
 

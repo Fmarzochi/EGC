@@ -169,7 +169,7 @@ async function state(params) {
     // Return plain JSON only — no store methods, no _database reference.
     return { decisions, lessons, patterns, dbPath: store.dbPath };
   } finally {
-    try { store?.close(); } catch (_) {} // NOSONAR: best-effort close
+    try { store?.close(); } catch (_) { /* best-effort close: ignore errors */ } // NOSONAR
   }
 }
 
