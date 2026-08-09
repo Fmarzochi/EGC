@@ -12,7 +12,7 @@
  *   3. Run cognitive bootstrap (writes the memory protocol into each
  *      detected tool's instruction file)
  *   4. Register MCP servers in detected tool configs
- *   5. Run `egc doctor` for final validation
+ *   5. Run `egc doctor` as the final check
  *
  * Flags:
  *   --dry-run     Show what would happen without writing files

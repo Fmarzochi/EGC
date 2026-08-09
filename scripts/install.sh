@@ -323,4 +323,4 @@ if [ "$_has_install_args" = false ]; then
   # branch here: a dry run exits long before this point.)
   node "$ROOT_DIR/scripts/lib/dashboard-launch-cli.js" "$ROOT_DIR" || true
 fi
-echo "Run 'egc doctor' to verify."
+echo "Re-check anytime with 'egc doctor'."
