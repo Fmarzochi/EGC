@@ -46,9 +46,9 @@ function statusLabel(status) {
 
 function printHuman(report) {
   if (report.results.length === 0) {
-    console.log('No EGC install-state files found for the current home/project context.');
-    console.log('This is expected after a bare `egc install`; the core runtime is installed without a managed target profile.');
-    console.log('Run `egc install --target <target> --profile full` when you want to install managed content.');
+    console.log('Core runtime: OK. No managed target profile installed (that is what a bare `egc install` does).');
+    console.log('Managed content (skills, rules, hooks) is optional; add it anytime with:');
+    console.log('  egc install --target <target> --profile full');
     return;
   }
 
@@ -184,14 +184,17 @@ function main() {
           console.log('    node scripts/maintenance/merge-fragmented-state-dbs.js');
         }
         if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
-          console.log('  Note: the MCP memory store does not exist yet at');
-          console.log(`    ${stateDb.memoryDbPath}`);
-          console.log('  It is created automatically the first time a session saves state.');
+          // "Nothing to do." only when no warning printed above it in this
+          // block; a stray-fragment or misplacement warning followed by a
+          // blanket reassurance would contradict itself.
+          const blockIsClean = !stateDb.cliStoreMisplaced && stateDb.fragments.length === 0;
+          console.log('  OK: the MCP memory store appears after your first session saves state.');
+          console.log(`    It will live at ${stateDb.memoryDbPath}.${blockIsClean ? ' Nothing to do.' : ''}`);
         }
         if (!stateDb.hasHarnessDb && stateDb.hasMemoryDb) {
-          console.log('  Note: the CLI event store does not exist yet at');
+          console.log('  Pending: the CLI event store has not been created yet at');
           console.log(`    ${stateDb.dbPath}`);
-          console.log('  Run: egc init  to create it');
+          console.log('  It is created by `egc init`.');
         }
       }
     }

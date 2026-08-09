@@ -399,5 +399,5 @@ if (-not $DryRun) {
         # headless message itself when it declines.
         & node (Join-Path $RootDir "scripts/lib/dashboard-launch-cli.js") $RootDir
     }
-    Write-Host "Run 'egc doctor' to verify."
+    Write-Host "Re-check anytime with 'egc doctor'."
 }

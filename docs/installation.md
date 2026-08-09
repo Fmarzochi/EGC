@@ -148,7 +148,7 @@ Installed: git, npm, gh, ...
 
 Installation complete.
 EGC Dashboard starting at http://localhost:7890
-Run 'egc doctor' to verify.
+Re-check anytime with 'egc doctor'.
 ```
 
 Only the tools you actually have are touched, so your own output will be

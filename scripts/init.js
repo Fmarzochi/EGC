@@ -12,7 +12,7 @@
  *   3. Run cognitive bootstrap (writes the memory protocol into each
  *      detected tool's instruction file)
  *   4. Register MCP servers in detected tool configs
- *   5. Run `egc doctor` for final validation
+ *   5. Run `egc doctor` as the final check
  *
  * Flags:
  *   --dry-run     Show what would happen without writing files
@@ -213,7 +213,7 @@ function reconcileResolutionDrift() {
 
 function runDoctor() {
   const doctorScript = path.join(ROOT_DIR, 'scripts', 'doctor.js');
-  log(`\n${c.dim}  running egc doctor for final validation...${c.reset}`);
+  log(`\n${c.dim}  checking the finished install (egc doctor)...${c.reset}`);
   if (flags.dryRun) {
     logDry(`would run: node scripts/doctor.js`);
     return;
@@ -226,13 +226,13 @@ function runDoctor() {
   reconcileResolutionDrift();
 
   const repairScript = path.join(ROOT_DIR, 'scripts', 'repair.js');
-  log(`\n  auto-repairing drift detected by doctor...`);
+  log(`\n  the check flagged fixable items; repairing them now...`);
   spawnSync(process.execPath, [repairScript], { stdio: 'inherit' });
 
   log(`\n${c.dim}  re-running egc doctor to confirm...${c.reset}`);
   const verifyResult = spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
   if (verifyResult.status !== 0) {
-    warn('doctor still reports issues', 'run `egc doctor` for details');
+    warn('some items still need attention', 'details: egc doctor');
   }
 }
 
@@ -267,7 +267,7 @@ runDoctor();
 console.log('');
 console.log(`  ${c.green}${c.bold}Installation complete.${c.reset}`);
 console.log(`  ${c.green}Memory loaded (project + global)${c.reset} ${c.dim}|${c.reset} ${c.bold}Token Crusher engaged:${c.reset} shell output compressed up to 90%`);
-console.log(`  ${c.dim}Route heavy commands through \`egc run <cmd>\`; see savings anytime with \`egc saved\`. Run \`egc doctor\` to verify.${c.reset}`);
+console.log(`  ${c.dim}Route heavy commands through \`egc run <cmd>\`; see savings anytime with \`egc saved\`. Re-check anytime with \`egc doctor\`.${c.reset}`);
 
 if (!flags.dryRun) {
   const { launchDashboard } = require('./lib/dashboard-launch');

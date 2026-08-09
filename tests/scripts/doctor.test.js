@@ -111,7 +111,7 @@ function runTests() {
     try {
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
-      assert.ok(result.stdout.includes('This is expected after a bare `egc install`'));
+      assert.ok(result.stdout.includes('Core runtime: OK. No managed target profile installed'));
       assert.ok(result.stdout.includes('egc install --target <target> --profile full'));
     } finally {
       cleanup(homeDir);
@@ -685,7 +685,7 @@ function runTests() {
 
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
-      assert.ok(result.stdout.includes('Note: the MCP memory store does not exist yet'));
+      assert.ok(result.stdout.includes('OK: the MCP memory store appears after your first session saves state'));
       assert.ok(!result.stdout.includes('WARNING: the CLI event store'), 'a store in the right place must not trigger the misplacement warning');
     } finally {
       cleanup(homeDir);
