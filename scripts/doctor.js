@@ -184,8 +184,12 @@ function main() {
           console.log('    node scripts/maintenance/merge-fragmented-state-dbs.js');
         }
         if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
+          // "Nothing to do." only when no warning printed above it in this
+          // block; a stray-fragment or misplacement warning followed by a
+          // blanket reassurance would contradict itself.
+          const blockIsClean = !stateDb.cliStoreMisplaced && stateDb.fragments.length === 0;
           console.log('  OK: the MCP memory store appears after your first session saves state.');
-          console.log(`    It will live at ${stateDb.memoryDbPath}. Nothing to do.`);
+          console.log(`    It will live at ${stateDb.memoryDbPath}.${blockIsClean ? ' Nothing to do.' : ''}`);
         }
         if (!stateDb.hasHarnessDb && stateDb.hasMemoryDb) {
           console.log('  Pending: the CLI event store has not been created yet at');
