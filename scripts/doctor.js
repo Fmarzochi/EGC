@@ -3,7 +3,7 @@
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs');
-const { buildDoctorReport } = require('./lib/install-lifecycle');
+const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
@@ -146,7 +146,7 @@ function main() {
     }
 
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-    const report = buildDoctorReport({
+    const report = doctorOp({
       repoRoot: options.repoRoot || path.join(__dirname, '..'),
       homeDir,
       projectRoot: process.cwd(),

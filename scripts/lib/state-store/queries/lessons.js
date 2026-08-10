@@ -106,6 +106,12 @@ function createLessonQueries(db) {
     SELECT * FROM lessons WHERE archived = 0
   `);
 
+  const countLessonsStatement = db.prepare(`
+    SELECT COUNT(*) AS total_count
+    FROM lessons
+    WHERE archived = 0
+  `);
+
   const updateLessonDecayStatement = db.prepare(`
     UPDATE lessons SET confidence = @confidence, archived = @archived WHERE id = @id
   `);
@@ -131,6 +137,10 @@ function createLessonQueries(db) {
     });
     const row = getLessonStatement.get(normalized.id);
     return row ? mapLessonRow(row) : null;
+  }
+
+  function countLessons() {
+    return countLessonsStatement.get().total_count;
   }
 
   function listLessons(options = {}) {
@@ -185,7 +195,7 @@ function createLessonQueries(db) {
     return affected;
   }
 
-  return { upsertLesson, getLessonById, listLessons, reinforceLesson, applyDecaySweep };
+  return { countLessons, upsertLesson, getLessonById, listLessons, reinforceLesson, applyDecaySweep };
 }
 
 module.exports = {

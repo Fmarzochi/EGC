@@ -231,7 +231,7 @@ function writeGuardianCliMarker() {
   }
 }
 
-function applyInstallPlan(plan) {
+function applyInstallPlan(plan, { onWarning } = {}) {
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
@@ -265,14 +265,30 @@ function applyInstallPlan(plan) {
   writeInstallState(plan.installStatePath, plan.statePreview);
   writeGuardianCliMarker();
 
-  syncInstallStateToStore(plan.statePreview, {
-    onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
+  // Capture the async promise so callers (e.g. install() in the operations
+  // registry) can await it before restoring console.error, ensuring that the
+  // onError callback fires while any console intercept is still in place.
+  // The promise is attached as a non-enumerable property so it never appears
+  // in JSON.stringify() output (e.g. egc install --json).
+  const syncPromise = syncInstallStateToStore(plan.statePreview, {
+    onError: error => {
+      const msg = `Warning: Failed to sync install state to status store: ${error.message}`;
+      if (typeof onWarning === 'function') {
+        onWarning(msg);
+      } else {
+        console.error(msg);
+      }
+    },
   });
 
-  return {
-    ...plan,
-    applied: true,
-  };
+  const result = { ...plan, applied: true };
+  Object.defineProperty(result, 'syncPromise', {
+    value: syncPromise,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return result;
 }
 
 module.exports = {
