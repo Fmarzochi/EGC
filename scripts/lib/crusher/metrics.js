@@ -48,11 +48,23 @@ function normalizeEntry(entry) {
 /** Resolve the attribution available to a Crusher child process. */
 function resolveMetricContext({ cwd = process.cwd(), env = process.env } = {}) {
   const project = env.EGC_PROJECT_ROOT || env.EGC_PROJECT_DIR || env.PROJECT_ROOT || cwd;
-  const session = env.EGC_SESSION_ID || env.ECC_SESSION_ID;
+  // The environment only carries a session id under a wrapper-launched host
+  // (e.g. the Gemini CLI). Hooks cannot export variables into the harness's
+  // Bash environment, so everywhere else the SessionStart-written marker file
+  // is the bridge; env always wins when both exist.
+  const session = env.EGC_SESSION_ID || env.ECC_SESSION_ID || readSessionMarker();
   return {
     project: normalizeProject(project),
     session: normalizeScope(session),
   };
+}
+
+function readSessionMarker() {
+  try {
+    return require('./session-marker').readMarkerSession();
+  } catch { // NOSONAR: attribution is best-effort; a missing marker lib means no fallback
+    return null;
+  }
 }
 
 /** Append one best-effort ledger row without ever breaking the wrapped command. */
