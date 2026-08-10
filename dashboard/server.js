@@ -9,6 +9,7 @@ const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
 const { createOpsHandler, loadOrCreateOpsToken } = require('./ops');
 const { PORT } = require('./port');
+const { validateOpsToken, getGainBreakdown } = require('../scripts/lib/operations');
 const PUBLIC = path.join(__dirname, 'public');
 const CFG    = path.join(__dirname, 'config.json');
 
@@ -165,8 +166,50 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin',
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin) ? reqOrigin : `http://localhost:${PORT}`);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Ops-Token, Authorization');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // ── Uniform /ops Token Gate & Operations Routes ─────────────
+  if (req.url === '/ops' || req.url.startsWith('/ops/') || req.url.startsWith('/ops?')) {
+    if (!validateOpsToken(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized', message: 'Invalid or missing operations token' }));
+      return;
+    }
+
+    if (req.method === 'GET' && (req.url === '/ops/gain' || req.url.startsWith('/ops/gain?') || req.url === '/ops/savings' || req.url.startsWith('/ops/savings?'))) {
+      const urlObj = new URL(req.url, 'http://localhost');
+      const nowParam = urlObj.searchParams.get('now');
+      const ledgerPath = urlObj.searchParams.get('ledgerPath') || urlObj.searchParams.get('file');
+      const options = {};
+      if (nowParam) {
+        const parsed = Date.parse(nowParam);
+        if (Number.isFinite(parsed)) options.now = new Date(parsed);
+      }
+      if (ledgerPath) options.ledgerPath = ledgerPath;
+
+      const report = getGainBreakdown(options);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        report,
+        today: report.today,
+        currentSession: report.currentSession,
+        currentProject: report.currentProject,
+        sinceInstall: report.sinceInstall,
+        last7Days: report.last7Days,
+        last30Days: report.last30Days,
+        runs: report.runs,
+        averagePerRun: report.averagePerRun,
+        biggest: report.biggest
+      }));
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not Found', message: 'Operation route not found' }));
+    return;
+  }
 
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
