@@ -93,7 +93,7 @@ test('validateOpsToken handles token gate configuration and request headers/quer
   try {
     delete process.env.EGC_OPS_TOKEN;
     delete process.env.OPS_TOKEN;
-    assert.equal(validateOpsToken({}), true, 'open access when no token configured');
+    assert.equal(validateOpsToken({}), false, 'fail closed when no token configured');
 
     process.env.EGC_OPS_TOKEN = 'secret-ops-key-42';
     assert.equal(validateOpsToken({}), false, 'refused when token missing');
@@ -107,9 +107,47 @@ test('validateOpsToken handles token gate configuration and request headers/quer
   }
 });
 
+test('getGainBreakdown restricts ledger path to metrics directory', () => {
+  const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
+  const metricsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-metrics-dir-'));
+  const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-external-dir-'));
+  
+  const validLedger = path.join(metricsDir, 'crusher.jsonl');
+  const externalLedger = path.join(externalDir, 'outside.jsonl');
+  
+  fs.writeFileSync(validLedger, JSON.stringify({ ts: new Date().toISOString(), tokensSaved: 100 }) + '\n');
+  fs.writeFileSync(externalLedger, JSON.stringify({ ts: new Date().toISOString(), tokensSaved: 9999 }) + '\n');
+
+  try {
+    process.env.EGC_CRUSHER_METRICS_FILE = validLedger;
+
+    // Passing arbitrary path outside metrics dir should be rejected
+    const reportOutside = getGainBreakdown({ ledgerPath: externalLedger });
+    assert.equal(reportOutside.runs, 0);
+    assert.equal(reportOutside.sinceInstall.tokensSaved, 0);
+
+    // Passing relative traversal path outside metrics dir should be rejected
+    const reportTraversal = getGainBreakdown({ ledgerPath: '../egc-external-dir-/outside.jsonl' });
+    assert.equal(reportTraversal.runs, 0);
+    assert.equal(reportTraversal.sinceInstall.tokensSaved, 0);
+
+    // Valid path inside metrics dir is allowed
+    const reportValid = getGainBreakdown({ ledgerPath: 'crusher.jsonl' });
+    assert.equal(reportValid.runs, 1);
+    assert.equal(reportValid.sinceInstall.tokensSaved, 100);
+  } finally {
+    if (origFile !== undefined) process.env.EGC_CRUSHER_METRICS_FILE = origFile;
+    else delete process.env.EGC_CRUSHER_METRICS_FILE;
+    fs.rmSync(metricsDir, { recursive: true, force: true });
+    fs.rmSync(externalDir, { recursive: true, force: true });
+  }
+});
+
 test('Parity test: panel numbers equal egc gain output for every range against the same fixture ledger', () => {
   const testNow = new Date();
   const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
+  const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
+  process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
   try {
     // 1. Get CLI output using egc gain --json
@@ -180,6 +218,8 @@ test('Parity test: panel numbers equal egc gain output for every range against t
       assert.equal(panelReport.biggest.cmd, cliOutput.biggest.cmd, 'Biggest crush cmd parity mismatch');
     }
   } finally {
+    if (origFile !== undefined) process.env.EGC_CRUSHER_METRICS_FILE = origFile;
+    else delete process.env.EGC_CRUSHER_METRICS_FILE;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
@@ -189,10 +229,12 @@ test('HTTP /ops/gain route responds with 401 when token invalid, and 200 with pa
   const { validateOpsToken, getGainBreakdown } = require('../scripts/lib/operations');
 
   const origToken = process.env.EGC_OPS_TOKEN;
+  const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
   process.env.EGC_OPS_TOKEN = 'test-token-777';
 
   const testNow = new Date();
   const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
+  process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
   const server = http.createServer((req, res) => {
     if (req.url === '/ops' || req.url.startsWith('/ops/')) {
@@ -251,6 +293,8 @@ test('HTTP /ops/gain route responds with 401 when token invalid, and 200 with pa
     server.close();
     if (origToken !== undefined) process.env.EGC_OPS_TOKEN = origToken;
     else delete process.env.EGC_OPS_TOKEN;
+    if (origFile !== undefined) process.env.EGC_CRUSHER_METRICS_FILE = origFile;
+    else delete process.env.EGC_CRUSHER_METRICS_FILE;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

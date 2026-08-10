@@ -2858,7 +2858,8 @@ async function runTests() {
 
         assert.strictEqual(code, 0, `detect-project should source cleanly, stderr: ${stderr}`);
 
-        const [projectId, projectDir] = stdout.trim().split(/\r?\n/);
+        const lines = stdout.trim().split(/\r?\n/);
+        const [projectId, projectDir] = lines.slice(-2);
         const registryPath = path.join(homeDir, '.gemini', 'homunculus', 'projects.json');
         const expectedProjectDir = path.join(
           homeDir,

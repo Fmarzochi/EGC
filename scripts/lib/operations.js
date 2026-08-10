@@ -5,7 +5,9 @@
  * Provides token-gated operation handlers for panel and API routes.
  */
 
-const { readAll, aggregateBreakdown } = require('./crusher/metrics');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const { readAll, aggregateBreakdown, metricsFilePath } = require('./crusher/metrics');
 
 /**
  * Validate that an incoming HTTP request satisfies the /ops token gate.
@@ -18,8 +20,10 @@ const { readAll, aggregateBreakdown } = require('./crusher/metrics');
 function validateOpsToken(req) {
   const expectedToken = process.env.EGC_OPS_TOKEN || process.env.OPS_TOKEN;
   if (!expectedToken || !expectedToken.trim()) {
-    return true; // No token gate set: allow local access
+    return false; // Fail closed by default if no token is configured
   }
+
+  const expectedTrimmed = expectedToken.trim();
 
   let token = null;
   if (req && req.headers) {
@@ -43,7 +47,42 @@ function validateOpsToken(req) {
     }
   }
 
-  return token === expectedToken.trim();
+  if (!token) {
+    return false;
+  }
+
+  const a = Buffer.from(String(token));
+  const b = Buffer.from(expectedTrimmed);
+
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Constrains a caller-supplied ledger path to the configured metrics ledger directory.
+ * Resolves relative to the directory containing metricsFilePath() and rejects any path outside it.
+ */
+function resolveSafeLedgerPath(targetPath) {
+  const defaultPath = path.resolve(metricsFilePath());
+  if (!targetPath || typeof targetPath !== 'string') {
+    return defaultPath;
+  }
+  const baseDir = path.dirname(defaultPath);
+  const resolved = path.resolve(baseDir, targetPath);
+
+  if (resolved === defaultPath) {
+    return resolved;
+  }
+
+  const relative = path.relative(baseDir, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null; // Reject: path is outside the allowed metrics directory
+  }
+
+  return resolved;
 }
 
 /**
@@ -51,11 +90,18 @@ function validateOpsToken(req) {
  * Reads the crusher metrics ledger and aggregates by time and scope ranges.
  */
 function getGainBreakdown(options = {}) {
-  const entries = readAll(options.ledgerPath || options.filePath);
+  const rawPath = options.ledgerPath || options.filePath;
+  const safePath = resolveSafeLedgerPath(rawPath);
+  if (!safePath) {
+    return aggregateBreakdown([], options);
+  }
+  const entries = readAll(safePath);
   return aggregateBreakdown(entries, options);
 }
 
 module.exports = {
   validateOpsToken,
   getGainBreakdown,
+  resolveSafeLedgerPath,
 };
+
