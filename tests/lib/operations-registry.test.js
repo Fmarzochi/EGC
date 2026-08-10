@@ -108,11 +108,13 @@ async function main() {
     );
   });
 
-  await run('async flag is true only for state operation', () => {
+  await run('async flag is true for install and state, false for doctor and savingsLedger', () => {
+    const asyncOps = ['install', 'state'];
+    const syncOps  = ['doctor', 'savingsLedger'];
     for (const entry of REGISTRY) {
-      if (entry.name === 'state') {
-        assert.strictEqual(entry.async, true, '"state" must be marked async: true');
-      } else {
+      if (asyncOps.includes(entry.name)) {
+        assert.strictEqual(entry.async, true, `"${entry.name}" must be marked async: true`);
+      } else if (syncOps.includes(entry.name)) {
         assert.strictEqual(entry.async, false, `"${entry.name}" must be marked async: false`);
       }
     }
@@ -141,15 +143,14 @@ async function main() {
     assert.ok(result && typeof result === 'object');
   });
 
-  await run('install with non-object options does not throw on null', () => {
-    // We only check that normalizeParams normalises — we don't apply here
-    // to avoid filesystem side-effects in CI.
-    assert.doesNotThrow(() => {
-      // Call with a minimal no-op dryRun so no filesystem is touched.
-      // install() itself is tested shape-only here.
-      const { install: installOp } = require('../../scripts/lib/operations/index');
-      assert.strictEqual(typeof installOp, 'function');
-    });
+  await run('install is exported as an async function', () => {
+    // Shape-only check: install is async (returns a Promise when called).
+    // Full invocation with dryRun:true is tested in the install contract suite.
+    assert.strictEqual(typeof install, 'function');
+    assert.ok(
+      install.constructor.name === 'AsyncFunction',
+      'install must be an async function'
+    );
   });
 
   // ── doctor() ─────────────────────────────────────────────────────────────

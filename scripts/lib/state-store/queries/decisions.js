@@ -68,6 +68,15 @@ function createDecisionQueries(db) {
       created_at = excluded.created_at
   `);
 
+  const countDecisionsStatement = db.prepare(`
+    SELECT COUNT(*) AS total_count
+    FROM decisions
+  `);
+
+  function countDecisions() {
+    return countDecisionsStatement.get().total_count;
+  }
+
   function listDecisionsForSession(sessionId) {
     return getSessionDecisionsStatement.all(sessionId).map(mapDecisionRow);
   }
@@ -88,7 +97,7 @@ function createDecisionQueries(db) {
     return normalized;
   }
 
-  return { listDecisionsForSession, insertDecision };
+  return { countDecisions, listDecisionsForSession, insertDecision };
 }
 
 module.exports = { mapDecisionRow, normalizeDecisionInput, createDecisionQueries };

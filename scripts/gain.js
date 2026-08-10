@@ -8,6 +8,7 @@
 const { readAll, metricsFilePath } = require('./lib/crusher/metrics');
 const { savingsLedger: savingsLedgerOp } = require('./lib/operations/index');
 
+
 const BAR_WIDTH = 24;
 
 function formatBytes(n) {
@@ -57,9 +58,12 @@ function printScopedTokens(label, totals, unavailableMessage) {
 
 function main() {
   const json = process.argv.includes('--json');
-  const entries = readAll();
 
+  // --history needs the raw entry list; for all other paths we use a single
+  // savingsLedgerOp() snapshot so the entry count and aggregate totals always
+  // describe the same read (fixes double-read race reported in review).
   if (process.argv.includes('--history')) {
+    const entries = readAll();
     if (json) {
       console.log(JSON.stringify(entries, null, 2));
       return;
@@ -73,8 +77,9 @@ function main() {
 
   if (json) {
     // Preserve the existing top-level lifetime fields while adding the scoped
-    // report, so scripts consuming runs/bytes/tokens/byKind keep working.
-    console.log(JSON.stringify({ ...totals, ...report, entries: entries.length }, null, 2));
+    // report. Derive entry count from report.runs — both come from the same
+    // ledger snapshot, avoiding a double-read race.
+    console.log(JSON.stringify({ ...totals, ...report, entries: report.runs }, null, 2));
     return;
   }
 

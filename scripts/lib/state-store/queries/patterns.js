@@ -68,6 +68,11 @@ function createPatternQueries(db) {
       first_seen = MIN(patterns.first_seen, excluded.first_seen),
       window_days = excluded.window_days
   `);
+  const countPatternsStatement = db.prepare(`
+    SELECT COUNT(*) AS total_count
+    FROM patterns
+  `);
+
   const listPatternsStatement = db.prepare(`
     SELECT *
     FROM patterns
@@ -92,12 +97,16 @@ function createPatternQueries(db) {
     return normalized;
   }
 
+  function countPatterns() {
+    return countPatternsStatement.get().total_count;
+  }
+
   function listPatterns(options = {}) {
     const limit = normalizeLimit(options.limit, 100);
     return listPatternsStatement.all(limit).map(mapPatternRow);
   }
 
-  return { upsertPattern, listPatterns };
+  return { countPatterns, upsertPattern, listPatterns };
 }
 
 module.exports = { mapPatternRow, normalizePatternInput, createPatternQueries };

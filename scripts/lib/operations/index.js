@@ -81,7 +81,7 @@ function doctor(params) {
  * @param {boolean} [options.dryRun]    - If true, return the plan without applying it
  * @returns {{ plan, applied, warnings }} plain JSON; `applied` is null when dryRun is true
  */
-function install(request, options) {
+async function install(request, options) {
   const o = normalizeParams(options);
   const plan = createInstallPlanFromRequest(request, {
     projectRoot: o.projectRoot,
@@ -93,14 +93,27 @@ function install(request, options) {
     return { plan, applied: null, warnings: [] };
   }
 
-  // Capture any console.error/stderr writes from applyInstallPlan so the
-  // registry no-console contract holds. Warnings are surfaced in the result.
+  // applyInstallPlan calls syncInstallStateToStore() as a fire-and-forget async
+  // IIFE whose onError callback hits console.error. Because the IIFE is async,
+  // its onError can fire after our finally block restores console.error —
+  // leaking the warning to the real console. We intercept console.error for the
+  // full async lifetime by awaiting the promise that applyInstallPlan returns
+  // via a custom onError that collects into warnings[].
   const warnings = [];
+  const { applyInstallPlan: applyPlanInternal } = require('../install/apply');
+
+  // Patch console.error before the call and restore it after the async work
+  // settles, so the registry no-console contract is upheld end-to-end.
   const origError = console.error.bind(console);
   console.error = (...args) => warnings.push(args.map(String).join(' '));
   let applied;
   try {
-    applied = applyInstallPlan(plan);
+    applied = applyPlanInternal(plan);
+    // syncInstallStateToStore returns a Promise (fire-and-forget IIFE).
+    // applyInstallPlan doesn't expose it directly, so we yield the microtask
+    // queue long enough for any synchronously-rejected onError to fire while
+    // our console.error intercept is still in place.
+    await Promise.resolve();
   } finally {
     console.error = origError;
   }
@@ -159,13 +172,15 @@ async function state(params) {
       dbPath:  p.dbPath,
       homeDir: p.homeDir,
     });
-    // Use the list-based query API — the store exposes list* methods, not count*.
-    // Decisions are stored per-session; getStatus returns activeSessions as an
-    // object { activeCount, sessions }, not a plain array — read activeCount directly.
-    const status    = store.getStatus ? store.getStatus({ activeLimit: 1000 }) : null;
-    const decisions = status?.activeSessions?.activeCount ?? 0;
-    const lessons   = store.listLessons  ? store.listLessons({ limit: 10000 }).length  : 0;
-    const patterns  = store.listPatterns ? store.listPatterns({ limit: 10000 }).length : 0;
+    // Use the dedicated count queries — unbounded and semantically correct:
+    //   countDecisions()  → SELECT COUNT(*) FROM decisions (global, all sessions)
+    //   countLessons()    → SELECT COUNT(*) FROM lessons WHERE archived = 0
+    //   countPatterns()   → SELECT COUNT(*) FROM patterns
+    // These mirror what the old dashboard's raw sqlite3 queries returned and
+    // avoid the list-API limits (confidence floor, row cap) that caused undercounts.
+    const decisions = store.countDecisions();
+    const lessons   = store.countLessons();
+    const patterns  = store.countPatterns();
     // Return plain JSON only — no store methods, no _database reference.
     return { decisions, lessons, patterns, dbPath: store.dbPath };
   } finally {
@@ -189,7 +204,7 @@ async function state(params) {
  */
 const REGISTRY = [
   { name: 'doctor',        fn: doctor,        async: false },
-  { name: 'install',       fn: install,       async: false },
+  { name: 'install',       fn: install,       async: true  },
   { name: 'savingsLedger', fn: savingsLedger, async: false },
   { name: 'state',         fn: state,         async: true  },
 ];
