@@ -16,7 +16,6 @@
 
 const { buildDoctorReport }            = require('../install-lifecycle');
 const { createInstallPlanFromRequest }  = require('../install/runtime');
-const { applyInstallPlan }             = require('../install/apply');
 const { readAll, aggregateBreakdown }  = require('../crusher/metrics');
 const { createStateStore }             = require('../state-store/index');
 
