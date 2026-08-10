@@ -38,7 +38,9 @@ function validateOpsToken(req) {
     try {
       const urlObj = new URL(req.url, 'http://localhost');
       token = urlObj.searchParams.get('token') || urlObj.searchParams.get('ops_token');
-    } catch (_) {}
+    } catch (_) {
+      // Ignore invalid URL parse errors
+    }
   }
 
   return token === expectedToken.trim();
