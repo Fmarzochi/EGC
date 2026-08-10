@@ -23,12 +23,25 @@ const path   = require('node:path');
 const operations = require('../scripts/lib/operations/index');
 const { normalizeInstallRequest } = require('../scripts/lib/install/request');
 const { listInstallTargetAdapters } = require('../scripts/lib/install-targets/registry');
+const { findDefaultInstallConfigPath, loadInstallConfig } = require('../scripts/lib/install/config');
+const { listInstallProfiles } = require('../scripts/lib/install-manifests');
+const { applyCommitPrivacyFilterCli } = require('../scripts/lib/memory-filters');
+const { listInstalledPlugins, reinstallAllPlugins } = require('../scripts/lib/plugin-registry');
 
 const TOKEN_FILE_NAME = 'dashboard-token';
 const TOKEN_BYTES     = 32;
 const TOKEN_HEADER    = 'x-egc-token';
 const MAX_BODY_BYTES  = 64 * 1024;
 const OPS_PREFIX      = '/ops/';
+// Bounded wait for a concurrent creator to finish writing the token file.
+const TOKEN_RACE_ATTEMPTS = 10;
+const TOKEN_RACE_WAIT_MS  = 5;
+// An empty token file younger than this is a live writer; older than it, the
+// writer died between creating and writing and nobody is coming back for it.
+const TOKEN_STALE_MS = 5000;
+// Every token this writes is exactly TOKEN_BYTES hex-encoded. Accepting
+// anything shorter would let a truncated write pass as a whole token.
+const TOKEN_PATTERN = new RegExp(`^[0-9a-f]{${TOKEN_BYTES * 2}}$`, 'i');
 
 // The reference repo is wherever this dashboard lives, which for a global
 // install is the published npm package - the same default `egc doctor` and
@@ -43,17 +56,72 @@ function resolveTokenPath(homeDir) {
   return path.join(resolveHomeDir(homeDir), '.egc', TOKEN_FILE_NAME);
 }
 
-function readTokenFile(tokenPath) {
-  try {
-    const raw = fs.readFileSync(tokenPath, 'utf8').trim();
-    return /^[0-9a-f]{32,}$/i.test(raw) ? raw : null;
-  } catch (_) {
-    return null;
-  }
+// The token is resolved once, at startup, before the server accepts a
+// connection, so blocking here delays nothing that is already running.
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 /**
- * Return the local ops token, creating it on first launch.
+ * The token on disk, or null when the file is absent or holds no whole token.
+ *
+ * Only ENOENT means "absent". A file that exists but cannot be read - root
+ * owned after a `sudo egc dashboard`, a restrictive ACL - still holds somebody
+ * else's live token, and reporting it as missing would lead to replacing it.
+ * Those errors propagate so the caller can degrade instead of overwrite.
+ */
+function readTokenFile(tokenPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(tokenPath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  const token = raw.trim();
+  return TOKEN_PATTERN.test(token) ? token : null;
+}
+
+// fs.writeSync is not obliged to write the whole buffer in one call, and a
+// short write here leaves a truncated token that the next reader would have to
+// reject - or, worse, accept.
+function writeAllSync(fd, text) {
+  const buffer = Buffer.from(text, 'utf8');
+  let written = 0;
+  while (written < buffer.length) {
+    written += fs.writeSync(fd, buffer, written, buffer.length - written);
+  }
+}
+
+// An empty token file is either a winner between its create and its write, or
+// the wreckage of one that died in that window. mtime tells the two apart.
+function emptyTokenFileAge(tokenPath) {
+  const stat = fs.statSync(tokenPath);
+  return stat.size === 0 ? Date.now() - stat.mtimeMs : null;
+}
+
+function replaceTokenFile(tokenPath, token) {
+  // 'w' hands its mode argument to open(), and POSIX applies that only when
+  // O_CREAT actually creates the file. Replacing an existing token file
+  // therefore inherits whatever mode it already had, so a world-readable one
+  // left by a shell redirect or a restored backup would receive the live
+  // token and stay world-readable. Set the permission explicitly.
+  const fd = fs.openSync(tokenPath, 'w', 0o600);
+  try {
+    writeAllSync(fd, `${token}\n`);
+    try {
+      fs.fchmodSync(fd, 0o600);
+    } catch (_) {
+      // Windows has no POSIX mode to set; the file is already user-scoped.
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return token;
+}
+
+/**
+ * Read the token from disk, or write `candidate` there if nobody has yet.
  *
  * ~/.egc/dashboard-token is shared across concurrent EGC processes: two
  * dashboards started close together can both observe it as absent. The write
@@ -62,42 +130,76 @@ function readTokenFile(tokenPath) {
  * silently 401 every request from the panel the winner already served.
  * See CONTRIBUTING "Concurrent-Access Regression Tests".
  *
- * @param {object} [options]
- * @param {string} [options.homeDir] - Resolve the token under this home
- * @returns {{ token: string, tokenPath: string }}
+ * Throws whatever the filesystem throws; loadOrCreateOpsToken decides what a
+ * failure means.
  */
-function loadOrCreateOpsToken(options = {}) {
-  const tokenPath = resolveTokenPath(options.homeDir);
+function persistOpsToken(tokenPath, candidate) {
   fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
 
   const existing = readTokenFile(tokenPath);
-  if (existing) {
-    return { token: existing, tokenPath };
-  }
-
-  const candidate = crypto.randomBytes(TOKEN_BYTES).toString('hex');
+  if (existing) return existing;
 
   try {
     const fd = fs.openSync(tokenPath, 'wx', 0o600);
     try {
-      fs.writeSync(fd, `${candidate}\n`);
+      writeAllSync(fd, `${candidate}\n`);
     } finally {
       fs.closeSync(fd);
     }
-    return { token: candidate, tokenPath };
+    return candidate;
   } catch (error) {
     if (error.code !== 'EEXIST') throw error;
 
-    // Lost the race: whoever created the file owns the token.
-    const winner = readTokenFile(tokenPath);
-    if (winner) {
-      return { token: winner, tokenPath };
+    // Lost the race: whoever created the file owns the token. The file is
+    // created before it is written, so a loser that looks in that window sees
+    // it empty - that is a winner mid-write, not a corrupt file, and replacing
+    // it would hand two live dashboards two different tokens. Give the winner
+    // time to finish before concluding the file is unusable.
+    for (let attempt = 0; attempt < TOKEN_RACE_ATTEMPTS; attempt += 1) {
+      const winner = readTokenFile(tokenPath);
+      if (winner) return winner;
+      sleepSync(TOKEN_RACE_WAIT_MS);
     }
 
-    // The file exists but holds nothing usable, so no panel can be
-    // authenticating against it. Replace it rather than refuse to start.
-    fs.writeFileSync(tokenPath, `${candidate}\n`, { mode: 0o600 });
-    return { token: candidate, tokenPath };
+    // Still nothing usable. An empty file that was touched moments ago is the
+    // winner-mid-write case the loop above is for, and racing its pending
+    // write is worse than not persisting at all - so leave it and let this
+    // process run on a token that lives only in memory. Anything else (an
+    // empty file nobody came back to, content that is not a token) is
+    // wreckage, and replacing it is what lets the next start be healthy.
+    const emptyFor = emptyTokenFileAge(tokenPath);
+    if (emptyFor !== null && emptyFor < TOKEN_STALE_MS) {
+      throw new Error(
+        `${tokenPath} is being written by another EGC process`,
+        { cause: error }
+      );
+    }
+    return replaceTokenFile(tokenPath, candidate);
+  }
+}
+
+/**
+ * Return the local ops token, creating it on first launch.
+ *
+ * A token that cannot be written is not a reason to take the dashboard down:
+ * ~/.egc is root-owned on the global installs EGC#1231/#1234/#1239 exist to
+ * survive, and this runs at module load in server.js, so throwing here would
+ * kill the whole panel over a feature it does not need to render. The session
+ * falls back to a token that lives only in memory - /ops still works for the
+ * panel this process serves, and only survival across a restart is lost.
+ *
+ * @param {object} [options]
+ * @param {string} [options.homeDir] - Resolve the token under this home
+ * @returns {{ token: string, tokenPath: string, persisted: boolean, error?: string }}
+ */
+function loadOrCreateOpsToken(options = {}) {
+  const tokenPath = resolveTokenPath(options.homeDir);
+  const candidate = crypto.randomBytes(TOKEN_BYTES).toString('hex');
+
+  try {
+    return { token: persistOpsToken(tokenPath, candidate), tokenPath, persisted: true };
+  } catch (error) {
+    return { token: candidate, tokenPath, persisted: false, error: error.message };
   }
 }
 
@@ -135,8 +237,14 @@ function readJsonBody(req) {
         exceeded = true;
         const error = new Error('Payload too large');
         error.statusCode = 413;
+        // Stop reading, but do NOT destroy the socket here: reject() only
+        // schedules the .catch that writes the 413, so destroying now would
+        // tear the connection down before a single byte of it went out and
+        // the caller would see a network error instead of the reason. Node
+        // closes the socket itself once the response ends with the request
+        // body unread.
+        req.pause();
         reject(error);
-        req.destroy();
         return;
       }
       chunks.push(chunk);
@@ -177,6 +285,40 @@ function toStringArray(value) {
   return value.map(entry => String(entry).trim()).filter(Boolean);
 }
 
+function badRequest(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+/**
+ * Check target and profile names against the registries before any library
+ * sees them. Two reasons. A name that is not a target is a bad request, and
+ * without this it surfaces as a 500 carrying an internal message. And the
+ * manifests look profiles up on a plain object, so an inherited name like
+ * `constructor` reaches `profile.modules is not iterable` instead of the
+ * "Unknown install profile" this returns - the same shape of hole the
+ * operation dispatch had, closed here at the edge of the new HTTP surface.
+ */
+function assertKnownTargets(targets) {
+  if (targets.length === 0) return targets;
+  const known = new Set(listInstallTargetAdapters().flatMap(a => [a.id, a.target]));
+  for (const target of targets) {
+    if (!known.has(target)) throw badRequest(`Unknown install target: ${target}`);
+  }
+  return targets;
+}
+
+function assertKnownProfile(profileId) {
+  if (profileId === undefined || profileId === null || profileId === '') return profileId;
+  if (typeof profileId !== 'string') throw badRequest('profile must be a string');
+  const known = listInstallProfiles().map(profile => profile.id);
+  if (!known.includes(profileId)) {
+    throw badRequest(`Unknown install profile: ${profileId}`);
+  }
+  return profileId;
+}
+
 /**
  * Every install target the panel can offer, flagged with whether the doctor
  * report already found an install-state for it. buildDoctorReport only reports
@@ -201,60 +343,124 @@ function runDoctor(body, context) {
     repoRoot:    REPO_ROOT,
     homeDir:     context.homeDir,
     projectRoot: context.projectRoot,
-    targets:     toStringArray(body.targets),
+    targets:     assertKnownTargets(toStringArray(body.targets)),
   });
   return { result: report, targets: listTargetCatalog(report) };
 }
 
 /**
- * Mirror of scripts/install-apply.js: the same normalized request, planned and
- * applied with the same projectRoot/homeDir. sourceRoot is deliberately left to
- * its default so the plan resolves against the same reference repo the CLI uses
- * - that is what keeps the written install-state byte-identical.
+ * `egc install` merges ./egc-install.json into the request whenever no --config
+ * and no positional languages were given (scripts/install-apply.js
+ * resolveInstallConfig). The panel passes neither, so the same default applies
+ * to it - without this, a project holding an egc-install.json would get a
+ * different install-state from the button than from the command beside it.
+ */
+function loadDefaultInstallConfig(projectRoot) {
+  const configPath = findDefaultInstallConfigPath({ cwd: projectRoot });
+  return configPath ? loadInstallConfig(configPath, { cwd: projectRoot }) : null;
+}
+
+/**
+ * The git filter that keeps the README's "memory never gets committed" promise.
+ * `egc install` sets it up after applying (scripts/install-apply.js
+ * configureCommitPrivacyFilterBestEffort) and, as the name says, never lets a
+ * failure here fail the install.
+ */
+function configureCommitPrivacyBestEffort(projectRoot) {
+  const messages = [];
+  try {
+    applyCommitPrivacyFilterCli({
+      projectDir: projectRoot,
+      scriptPath: path.join(REPO_ROOT, 'scripts', 'check-state-leak.js'),
+      log:        message => messages.push(String(message)),
+    });
+    return { ok: true, messages };
+  } catch (error) {
+    return { ok: false, messages, error: error.message };
+  }
+}
+
+/**
+ * Mirror of scripts/install-apply.js: the same normalized request - default
+ * install config included - planned and applied with the same projectRoot and
+ * homeDir, then the same commit-privacy filter setup. sourceRoot is
+ * deliberately left to its default so the plan resolves against the same
+ * reference repo the CLI uses; that is what keeps the install-state identical.
  */
 function runInstall(body, context) {
   let request;
   try {
+    assertKnownProfile(body.profile);
+    if (body.target) assertKnownTargets([String(body.target)]);
     request = normalizeInstallRequest({
       target:              body.target,
       profileId:           body.profile,
       moduleIds:           toStringArray(body.modules),
       includeComponentIds: toStringArray(body.with),
       excludeComponentIds: toStringArray(body.without),
+      config:              loadDefaultInstallConfig(context.projectRoot),
     });
   } catch (error) {
     error.statusCode = 400;
     throw error;
   }
 
+  const result = operations.install(request, {
+    projectRoot: context.projectRoot,
+    homeDir:     context.homeDir,
+  });
+
   return {
-    result: operations.install(request, {
-      projectRoot: context.projectRoot,
-      homeDir:     context.homeDir,
-    }),
+    result: {
+      ...result,
+      commitPrivacy: configureCommitPrivacyBestEffort(context.projectRoot),
+    },
   };
+}
+
+/**
+ * `egc repair` repairs install-state and then reinstalls every plugin in the
+ * lock file (scripts/repair.js executePluginRepairs), skipping both on a dry
+ * run and when nothing is installed. The command printed beside the Repair
+ * button does that, so the button does too.
+ */
+function reinstallPluginsBestEffort() {
+  try {
+    if (listInstalledPlugins().length === 0) return [];
+    return reinstallAllPlugins();
+  } catch (error) {
+    return [{ name: '(plugins)', success: false, errors: [error.message] }];
+  }
 }
 
 function runRepair(body, context) {
-  return {
-    result: operations.repair({
-      repoRoot:    REPO_ROOT,
-      homeDir:     context.homeDir,
-      projectRoot: context.projectRoot,
-      targets:     toStringArray(body.targets),
-      dryRun:      body.dryRun === true,
-    }),
-  };
+  const dryRun = body.dryRun === true;
+  const result = operations.repair({
+    repoRoot:    REPO_ROOT,
+    homeDir:     context.homeDir,
+    projectRoot: context.projectRoot,
+    targets:     assertKnownTargets(toStringArray(body.targets)),
+    dryRun,
+  });
+
+  const pluginRepairs = dryRun ? [] : reinstallPluginsBestEffort();
+  return { result: pluginRepairs.length > 0 ? { ...result, pluginRepairs } : result };
 }
 
-const OPERATION_HANDLERS = {
-  doctor:  runDoctor,
-  install: runInstall,
-  repair:  runRepair,
-};
+// A Map, not an object literal: the operation name comes straight off the
+// request path, and an object literal would resolve inherited keys too.
+// `OPERATION_HANDLERS['constructor']` is a truthy function, so it would sail
+// past the not-found check and be invoked - answering 200 for /ops/constructor,
+// or throwing out of the handler for /ops/__defineGetter__. A Map lookup only
+// ever sees keys that were explicitly put in it.
+const OPERATION_HANDLERS = new Map([
+  ['doctor',  runDoctor],
+  ['install', runInstall],
+  ['repair',  runRepair],
+]);
 
 function listOpsOperations() {
-  return Object.keys(OPERATION_HANDLERS);
+  return [...OPERATION_HANDLERS.keys()];
 }
 
 /**
@@ -309,7 +515,7 @@ function createOpsHandler(options = {}) {
     }
 
     const operation = pathname.slice(OPS_PREFIX.length);
-    const handler = OPERATION_HANDLERS[operation];
+    const handler = OPERATION_HANDLERS.get(operation);
     if (!handler) {
       sendJson(res, 404, { ok: false, error: `Unknown operation: ${operation}` });
       return true;

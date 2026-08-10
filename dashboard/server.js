@@ -14,7 +14,8 @@ const CFG    = path.join(__dirname, 'config.json');
 
 // Minted before the first request is served: /ops refuses anything that does
 // not present it, and the panel receives it the same way it receives the port.
-const { token: OPS_TOKEN } = loadOrCreateOpsToken();
+const OPS = loadOrCreateOpsToken();
+const OPS_TOKEN = OPS.token;
 const handleOps = createOpsHandler({ token: OPS_TOKEN, port: PORT });
 
 const MIME = {
@@ -444,6 +445,14 @@ const grandTotal = Object.values(byIde).reduce(
   }
   if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
+    if (segment === '/index.html') {
+      // This is the one response that carries the ops token, so it does not
+      // get the permissive any-loopback-port header the rest of the routes
+      // share: another local web origin must not be able to read the token
+      // out of it. /ops would refuse that origin anyway, but the token has no
+      // reason to leave this one.
+      res.setHeader('Access-Control-Allow-Origin', `http://localhost:${PORT}`);
+    }
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
     if (segment === '/index.html') {
       // Inject the configured port so the frontend WebSocket connects to the
@@ -478,6 +487,10 @@ try {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`EGC Dashboard running at http://localhost:${PORT}`);
+  if (!OPS.persisted) {
+    console.error(`[EGC] Could not write ${OPS.tokenPath} (${OPS.error}).`);
+    console.error('[EGC] Doctor actions still work; the token is regenerated on each restart.');
+  }
 });
 
 server.on('error', err => {

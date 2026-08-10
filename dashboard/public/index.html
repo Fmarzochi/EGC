@@ -851,17 +851,42 @@ function renderDoctor(payload){
   document.getElementById('docBody').innerHTML=blocks.join('');
 }
 
-async function runDoctor(){
-  if(docBusy) return;
-  docSetBusy(true);
+/* `force` is how opInstall/opRepair refresh the screen: they still hold the
+   busy flag so the buttons stay disabled until their own success line is
+   shown, and without it this would return before re-reading the report and
+   leave the screen showing pre-operation state. */
+async function runDoctor(force){
+  if(docBusy&&!force) return false;
+  if(!force) docSetBusy(true);
   try{
     renderDoctor(await callOp('doctor'));
+    return true;
   }catch(err){
+    /* The token is read once, at page load. A 401 means the one on disk has
+       changed since, and only a reload can pick the new one up. */
+    const hint=/token/i.test(err.message)?' Reload the page to pick up the current token.':'';
     document.getElementById('docBody').innerHTML=
-      `<div class="doc-note err" id="docStatus">${esc(err.message)}</div>`;
+      `<div class="doc-note err" id="docStatus">${esc(err.message+hint)}</div>`;
+    return false;
   }finally{
-    docSetBusy(false);
+    /* renderDoctor replaced #docBody, so the disabled flags were set on
+       buttons that no longer exist - re-apply them to the fresh ones. */
+    docSetBusy(Boolean(force));
   }
+}
+
+/* The operation succeeded but the refresh that follows it did not: the error
+   runDoctor painted is the only thing on screen, and overwriting it with a
+   green success line would erase the one message that explains the empty
+   report. Say both, and keep the failure's styling. */
+function docReport(refreshed,message,warnings){
+  const detail=(warnings||[]).length ? ` ${warnings.join(' ')}` : '';
+  if(!refreshed){
+    const el=document.getElementById('docStatus');
+    if(el) el.textContent=`${message}${detail} — but the report could not be reloaded: ${el.textContent}`;
+    return;
+  }
+  docSay(`${message}${detail}`, detail ? '' : 'ok');
 }
 
 async function opInstall(target){
@@ -869,9 +894,13 @@ async function opInstall(target){
   docSetBusy(true);
   docSay(`Installing ${target}…`);
   try{
-    await callOp('install',{target,profile:'full'});
-    await runDoctor();
-    docSay(`Installed ${target}.`,'ok');
+    const {result}=await callOp('install',{target,profile:'full'});
+    /* applyInstallPlan's stderr is captured into result.warnings precisely so
+       a caller can surface it - "every module was skipped" arrives that way,
+       and reads as a clean success if it is thrown away. */
+    const warnings=[...(result.warnings||[]),...((result.plan&&result.plan.warnings)||[])].map(String);
+    const refreshed=await runDoctor(true);
+    docReport(refreshed,`Installed ${target}.`,warnings);
   }catch(err){
     docSay(err.message,'err');
   }finally{
@@ -885,9 +914,25 @@ async function opRepair(target){
   docSay(`Repairing ${target}…`);
   try{
     const {result}=await callOp('repair',{targets:[target]});
-    const repaired=(result.results||[]).reduce((n,r)=>n+(r.repairedPaths||[]).length,0);
-    await runDoctor();
-    docSay(`Repaired ${repaired} file${repaired===1?'':'s'} for ${target}.`,'ok');
+    const entries=result.results||[];
+    const repaired=entries.reduce((n,r)=>n+(r.repairedPaths||[]).length,0);
+    const unrepairable=entries.reduce((n,r)=>n+(r.unrepairable||[]).length,0);
+    const failedPlugins=(result.pluginRepairs||[]).filter(p=>!p.success).length;
+    const refreshed=await runDoctor(true);
+
+    /* `egc repair` distinguishes these; a green "Repaired 0 files" over a
+       target whose files could not be written, or whose install-state is
+       gone, would say the opposite of what happened. */
+    if(entries.length===0){
+      docSay(`No install-state found for ${target}. Nothing to repair.`,'err');
+    }else if(unrepairable>0||failedPlugins>0||(result.summary&&result.summary.errorCount>0)){
+      const parts=[`Repaired ${repaired} file${repaired===1?'':'s'} for ${target}`];
+      if(unrepairable>0) parts.push(`${unrepairable} could not be repaired`);
+      if(failedPlugins>0) parts.push(`${failedPlugins} plugin${failedPlugins===1?'':'s'} failed to reinstall`);
+      docSay(`${parts.join('; ')}. Run the command above for the details.`,'err');
+    }else{
+      docReport(refreshed,`Repaired ${repaired} file${repaired===1?'':'s'} for ${target}.`);
+    }
   }catch(err){
     docSay(err.message,'err');
   }finally{
