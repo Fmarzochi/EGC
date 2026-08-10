@@ -293,7 +293,7 @@ test('installing a target over /ops writes the same install-state as the CLI pat
     // The same operation the CLI reaches, with the arguments install-apply.js
     // passes, run against a second scratch project.
     const request = normalizeInstallRequest({ target: 'cursor', profileId: 'minimal' });
-    const cli = operations.install(request, { projectRoot: cliProject, homeDir });
+    const cli = await operations.install(request, { projectRoot: cliProject, homeDir });
 
     const panelStatePath = res.payload.result.applied.installStatePath;
     const cliStatePath = cli.applied.installStatePath;

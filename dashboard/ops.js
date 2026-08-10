@@ -387,7 +387,7 @@ function configureCommitPrivacyBestEffort(projectRoot) {
  * deliberately left to its default so the plan resolves against the same
  * reference repo the CLI uses; that is what keeps the install-state identical.
  */
-function runInstall(body, context) {
+async function runInstall(body, context) {
   let request;
   try {
     assertKnownProfile(body.profile);
@@ -405,7 +405,9 @@ function runInstall(body, context) {
     throw error;
   }
 
-  const result = operations.install(request, {
+  // install() awaits the install-state store sync internally, so warnings that
+  // only surface after that IO land in result.warnings rather than nowhere.
+  const result = await operations.install(request, {
     projectRoot: context.projectRoot,
     homeDir:     context.homeDir,
   });
@@ -522,8 +524,12 @@ function createOpsHandler(options = {}) {
     }
 
     readJsonBody(req)
-      .then(body => {
-        const { result, targets } = handler(body, context);
+      // Handlers may be sync or async - install() is async since #1235, because
+      // it awaits the install-state store sync so late warnings are captured.
+      // Resolving the handler's return here keeps both kinds working, instead
+      // of serialising a Promise into the response body.
+      .then(body => handler(body, context))
+      .then(({ result, targets }) => {
         const payload = { ok: true, operation, result };
         if (targets) payload.targets = targets;
         sendJson(res, 200, payload);
