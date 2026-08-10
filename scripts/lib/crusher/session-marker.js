@@ -25,6 +25,9 @@ const path = require('node:path');
 
 const SESSION_ID_RE = /^[A-Za-z0-9._-]{1,128}$/;
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Filesystem mtime granularity can land a fresh write fractionally ahead of
+// Date.now(); a marker is only "from the future" past this slack.
+const FUTURE_SKEW_MS = 60 * 1000;
 
 function markerFilePath() {
   return process.env.EGC_SESSION_MARKER_FILE
@@ -53,16 +56,28 @@ function writeMarker(sessionId, { source } = {}) {
   }
 }
 
-/** Return the fresh marker session id, or null when absent, stale or invalid. */
+/**
+ * Return the fresh marker session id, or null when absent, stale or invalid.
+ *
+ * Freshness is measured from the file's mtime, not from startedAt: every
+ * successful read touches the file, so a session that keeps recording ledger
+ * entries keeps its own marker fresh past the window, while a marker nobody
+ * uses ages out. startedAt stays in the body as the informational session
+ * start. A stale or invalid marker is never touched.
+ */
 function readMarkerSession({ maxAgeMs = DEFAULT_MAX_AGE_MS, now = Date.now() } = {}) {
   try {
-    const raw = fs.readFileSync(markerFilePath(), 'utf8');
-    const row = JSON.parse(raw);
+    const file = markerFilePath();
+    const mtimeMs = fs.statSync(file).mtimeMs;
+    const age = now - mtimeMs;
+    if (age < -FUTURE_SKEW_MS || age > maxAgeMs) return null;
+    const row = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (typeof row?.session !== 'string' || !SESSION_ID_RE.test(row.session)) return null;
-    const startedAt = Date.parse(row.startedAt);
-    if (!Number.isFinite(startedAt)) return null;
-    const age = now - startedAt;
-    if (age < 0 || age > maxAgeMs) return null;
+    try {
+      fs.utimesSync(file, new Date(now), new Date(now));
+    } catch { // NOSONAR: refreshing is best-effort; a read-only marker still resolves
+      // stale-out will eventually apply; resolution still works this call
+    }
     return row.session;
   } catch { // NOSONAR: no marker (or an unreadable one) simply means no fallback
     return null;

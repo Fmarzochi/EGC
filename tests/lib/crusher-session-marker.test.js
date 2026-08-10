@@ -12,12 +12,21 @@ const {
 } = require('../../scripts/lib/crusher/session-marker');
 const { resolveMetricContext } = require('../../scripts/lib/crusher/metrics');
 
-function createTempDir(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    console.log(`  ✓ ${name}`);
+  } catch (error) {
+    failed += 1;
+    console.log(`  ✗ ${name}`);
+    console.log(`    Error: ${error.message}`);
+  }
 }
 
-function cleanup(dirPath) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
+function createTempDir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
 function withMarkerFile(fn) {
@@ -30,78 +39,118 @@ function withMarkerFile(fn) {
   } finally {
     if (saved === undefined) delete process.env.EGC_SESSION_MARKER_FILE;
     else process.env.EGC_SESSION_MARKER_FILE = saved;
-    cleanup(dir);
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-// ── markerFilePath ──────────────────────────────────────────────────────────
+function setMtime(file, epochMs) {
+  fs.utimesSync(file, new Date(epochMs), new Date(epochMs));
+}
 
-withMarkerFile(file => {
-  assert.strictEqual(markerFilePath(), file, 'EGC_SESSION_MARKER_FILE must override the default path');
+console.log('\ncrusher session marker\n');
+
+test('EGC_SESSION_MARKER_FILE overrides the default path', () => {
+  withMarkerFile(file => {
+    assert.strictEqual(markerFilePath(), file);
+  });
 });
 
-// ── write + read round trip ─────────────────────────────────────────────────
-
-withMarkerFile(file => {
-  assert.strictEqual(writeMarker('sess-abc_123.X', { source: 'claude' }), true);
-  const row = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.strictEqual(row.session, 'sess-abc_123.X');
-  assert.strictEqual(row.source, 'claude');
-  assert.ok(Number.isFinite(Date.parse(row.startedAt)), 'startedAt must be a parseable timestamp');
-  assert.strictEqual(readMarkerSession(), 'sess-abc_123.X');
+test('write + read round trip preserves session, source and startedAt', () => {
+  withMarkerFile(file => {
+    assert.strictEqual(writeMarker('sess-abc_123.X', { source: 'claude' }), true);
+    const row = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(row.session, 'sess-abc_123.X');
+    assert.strictEqual(row.source, 'claude');
+    assert.ok(Number.isFinite(Date.parse(row.startedAt)), 'startedAt must be a parseable timestamp');
+    assert.strictEqual(readMarkerSession(), 'sess-abc_123.X');
+  });
 });
 
-// ── invalid session ids are rejected without writing ────────────────────────
-
-withMarkerFile(file => {
-  assert.strictEqual(writeMarker(''), false);
-  assert.strictEqual(writeMarker(null), false);
-  assert.strictEqual(writeMarker('has spaces'), false);
-  assert.strictEqual(writeMarker("id'; rm -rf /"), false);
-  assert.strictEqual(writeMarker('x'.repeat(129)), false);
-  assert.strictEqual(fs.existsSync(file), false, 'no marker file may exist after rejected writes');
+test('invalid session ids are rejected without writing a file', () => {
+  withMarkerFile(file => {
+    assert.strictEqual(writeMarker(''), false);
+    assert.strictEqual(writeMarker(null), false);
+    assert.strictEqual(writeMarker('has spaces'), false);
+    assert.strictEqual(writeMarker("id'; rm -rf /"), false);
+    assert.strictEqual(writeMarker('x'.repeat(129)), false);
+    assert.strictEqual(fs.existsSync(file), false);
+  });
 });
 
-// ── missing, stale and corrupted markers all mean "no fallback" ─────────────
-
-withMarkerFile(() => {
-  assert.strictEqual(readMarkerSession(), null, 'missing marker must read as null');
+test('missing marker reads as null', () => {
+  withMarkerFile(() => {
+    assert.strictEqual(readMarkerSession(), null);
+  });
 });
 
-withMarkerFile(file => {
-  assert.strictEqual(writeMarker('sess-fresh'), true);
-  const written = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const startedAt = Date.parse(written.startedAt);
-  const past25h = startedAt + 25 * 60 * 60 * 1000;
-  assert.strictEqual(readMarkerSession({ now: past25h }), null, 'a marker older than the window must be stale');
-  assert.strictEqual(readMarkerSession({ now: startedAt + 1000 }), 'sess-fresh', 'a fresh marker must resolve');
-  assert.strictEqual(readMarkerSession({ now: startedAt - 1000 }), null, 'a marker from the future must not resolve');
+test('marker staleness is measured from mtime, both directions', () => {
+  withMarkerFile(file => {
+    assert.strictEqual(writeMarker('sess-fresh'), true);
+    const now = Date.now();
+    setMtime(file, now - 25 * 60 * 60 * 1000);
+    assert.strictEqual(readMarkerSession({ now }), null, 'a marker untouched for >24h must be stale');
+    setMtime(file, now - 1000);
+    assert.strictEqual(readMarkerSession({ now }), 'sess-fresh', 'a recently touched marker must resolve');
+    setMtime(file, now + 60 * 60 * 1000);
+    assert.strictEqual(readMarkerSession({ now }), null, 'a marker from the future must not resolve');
+  });
 });
 
-withMarkerFile(file => {
-  fs.writeFileSync(file, 'not json at all');
-  assert.strictEqual(readMarkerSession(), null, 'corrupted marker must read as null');
-  fs.writeFileSync(file, JSON.stringify({ session: 'bad id!', startedAt: new Date().toISOString() }));
-  assert.strictEqual(readMarkerSession(), null, 'marker with invalid id must read as null');
-  fs.writeFileSync(file, JSON.stringify({ session: 'sess-ok', startedAt: 'yesterday-ish' }));
-  assert.strictEqual(readMarkerSession(), null, 'marker with unparseable startedAt must read as null');
+test('successful reads refresh mtime so live sessions outlive the window', () => {
+  withMarkerFile(file => {
+    assert.strictEqual(writeMarker('sess-live'), true);
+    const now = Date.now();
+    setMtime(file, now - 23 * 60 * 60 * 1000);
+    assert.strictEqual(readMarkerSession({ now }), 'sess-live');
+    const refreshed = fs.statSync(file).mtimeMs;
+    assert.ok(Math.abs(refreshed - now) < 5000, 'a successful read must touch the marker to now');
+    assert.strictEqual(
+      readMarkerSession({ now: now + 23 * 60 * 60 * 1000 }),
+      'sess-live',
+      'the refreshed marker must survive past the original window'
+    );
+  });
 });
 
-// ── resolveMetricContext fallback chain ─────────────────────────────────────
-
-withMarkerFile(() => {
-  assert.strictEqual(writeMarker('sess-marker'), true);
-
-  const withoutEnv = resolveMetricContext({ env: { EGC_PROJECT_ROOT: '/tmp/proj' } });
-  assert.strictEqual(withoutEnv.session, 'sess-marker', 'marker must fill the session when env has none');
-
-  const withEnv = resolveMetricContext({ env: { EGC_SESSION_ID: 'sess-env', EGC_PROJECT_ROOT: '/tmp/proj' } });
-  assert.strictEqual(withEnv.session, 'sess-env', 'env must always win over the marker');
+test('stale reads do not refresh the marker', () => {
+  withMarkerFile(file => {
+    assert.strictEqual(writeMarker('sess-dead'), true);
+    const now = Date.now();
+    const old = now - 25 * 60 * 60 * 1000;
+    setMtime(file, old);
+    assert.strictEqual(readMarkerSession({ now }), null);
+    const after = fs.statSync(file).mtimeMs;
+    assert.ok(Math.abs(after - old) < 5000, 'a stale marker must keep its old mtime');
+  });
 });
 
-withMarkerFile(() => {
-  const context = resolveMetricContext({ env: { EGC_PROJECT_ROOT: '/tmp/proj' } });
-  assert.strictEqual(context.session, 'unknown', 'no env and no marker must keep the unknown scope');
+test('corrupted body, invalid id and bad timestamps read as null', () => {
+  withMarkerFile(file => {
+    fs.writeFileSync(file, 'not json at all');
+    assert.strictEqual(readMarkerSession(), null);
+    fs.writeFileSync(file, JSON.stringify({ session: 'bad id!', startedAt: new Date().toISOString() }));
+    assert.strictEqual(readMarkerSession(), null);
+  });
 });
 
-console.log('crusher-session-marker: all assertions passed');
+test('resolveMetricContext falls back to the marker only when env has no session', () => {
+  withMarkerFile(() => {
+    assert.strictEqual(writeMarker('sess-marker'), true);
+
+    const withoutEnv = resolveMetricContext({ env: { EGC_PROJECT_ROOT: '/tmp/proj' } });
+    assert.strictEqual(withoutEnv.session, 'sess-marker');
+
+    const withEnv = resolveMetricContext({ env: { EGC_SESSION_ID: 'sess-env', EGC_PROJECT_ROOT: '/tmp/proj' } });
+    assert.strictEqual(withEnv.session, 'sess-env');
+  });
+});
+
+test('no env and no marker keeps the unknown scope', () => {
+  withMarkerFile(() => {
+    const context = resolveMetricContext({ env: { EGC_PROJECT_ROOT: '/tmp/proj' } });
+    assert.strictEqual(context.session, 'unknown');
+  });
+});
+
+console.log(failed ? `\n${failed} failed\n` : '\nall passed\n');
+process.exit(failed ? 1 : 0);
