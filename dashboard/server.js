@@ -7,9 +7,15 @@ const fs      = require('fs');
 const os      = require('os');
 const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
+const { createOpsHandler, loadOrCreateOpsToken } = require('./ops');
 const { PORT } = require('./port');
 const PUBLIC = path.join(__dirname, 'public');
 const CFG    = path.join(__dirname, 'config.json');
+
+// Minted before the first request is served: /ops refuses anything that does
+// not present it, and the panel receives it the same way it receives the port.
+const { token: OPS_TOKEN } = loadOrCreateOpsToken();
+const handleOps = createOpsHandler({ token: OPS_TOKEN, port: PORT });
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -149,6 +155,11 @@ const clients = new Set();
 
 // ── HTTP server ─────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+  // ── POST /ops/<operation> ───────────────────────────────
+  // Answered first so it sets its own token-aware CORS headers instead of the
+  // permissive any-loopback-port ones the telemetry routes below carry.
+  if (handleOps(req, res)) return;
+
   const reqOrigin = req.headers.origin || '';
   res.setHeader('Access-Control-Allow-Origin',
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin) ? reqOrigin : `http://localhost:${PORT}`);
@@ -436,9 +447,12 @@ const grandTotal = Object.values(byIde).reduce(
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
     if (segment === '/index.html') {
       // Inject the configured port so the frontend WebSocket connects to the
-      // correct address regardless of what EGC_PORT is set to.
+      // correct address regardless of what EGC_PORT is set to, and the local
+      // ops token so the panel this server just served is the only client that
+      // can drive POST /ops.
       const html = fs.readFileSync(filePath, 'utf8')
-        .replace('</head>', `<script>window.__EGC_PORT=${PORT};</script></head>`);
+        .replace('</head>',
+          `<script>window.__EGC_PORT=${PORT};window.__EGC_OPS_TOKEN=${JSON.stringify(OPS_TOKEN)};</script></head>`);
       res.end(html);
     } else {
       res.end(fs.readFileSync(filePath));

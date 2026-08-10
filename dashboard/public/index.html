@@ -223,6 +223,33 @@ body.minimized footer{display:none!important;}
 .tl-what{font-family:SFMono-Regular,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .tl-dur{text-align:right;font-variant-numeric:tabular-nums;font-size:10px;}
 
+/* ── DOCTOR SCREEN ────────────────────────────────────── */
+.doc-open{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);background:none;border:1px solid var(--hairline);border-radius:6px;padding:4px 10px;font-family:inherit;cursor:pointer;transition:color .12s,border-color .12s;}
+.doc-open:hover{color:var(--primary);border-color:var(--primary-soft);}
+.doctor-screen{display:none;position:fixed;inset:0;z-index:200;background:var(--canvas);flex-direction:column;}
+.doctor-screen.on{display:flex;}
+.doc-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 20px;border-bottom:1px solid var(--hairline);flex-shrink:0;}
+.doc-head-l{display:flex;align-items:center;gap:10px;}
+.doc-sum{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.doc-body{flex:1;overflow-y:auto;padding:14px 20px 28px;display:flex;flex-direction:column;gap:10px;}
+.doc-body::-webkit-scrollbar{width:2px;}
+.doc-body::-webkit-scrollbar-thumb{background:var(--hairline);}
+.doc-sec{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:8px;}
+.doc-item{border:1px solid var(--hairline);border-radius:9px;padding:11px 13px;display:flex;flex-direction:column;gap:7px;}
+.doc-item-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.doc-name{font-size:12px;font-weight:600;color:var(--ink);}
+.doc-kind{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
+.doc-badge{font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;border-radius:9999px;padding:2px 9px;border:1px solid var(--hairline);color:var(--muted);}
+.doc-badge.ok{color:var(--primary);border-color:rgba(0,217,146,.35);}
+.doc-badge.warning{color:#e0a33a;border-color:rgba(224,163,58,.35);}
+.doc-badge.error{color:#e5534b;border-color:rgba(229,83,75,.35);}
+.doc-issue{font-size:11px;color:var(--muted);font-family:SFMono-Regular,monospace;word-break:break-all;}
+.doc-action{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.doc-cmd{font-family:SFMono-Regular,monospace;font-size:10.5px;color:var(--muted);background:var(--canvas-soft);border:1px solid var(--hairline);border-radius:5px;padding:3px 8px;user-select:all;}
+.doc-note{font-size:11px;color:var(--muted);}
+.doc-note.err{color:#e5534b;}
+.doc-note.ok{color:var(--primary);}
+
 /* ── RESPONSIVE ───────────────────────────────────────── */
 @media(max-width:1100px)and(min-width:681px){
   .main{grid-template-columns:1fr 1fr;}
@@ -435,6 +462,8 @@ body.minimized footer{display:none!important;}
     <div class="ide-pills" id="idePills"></div>
     <div class="vd"></div>
     <div class="ws-chip"><div class="ws-dot" id="wsDot"></div><span id="wsLbl">offline</span></div>
+    <div class="vd"></div>
+    <button class="doc-open" id="docOpen" onclick="openDoctor()" title="Install health">Doctor</button>
     <div class="win-controls">
       <button class="wc-btn wc-min" id="wcMin" title="Minimize">
         <svg width="8" height="2" viewBox="0 0 8 2"><rect y="0" width="8" height="2" fill="#000" opacity=".5"/></svg>
@@ -580,6 +609,20 @@ body.minimized footer{display:none!important;}
   <div class="tl-list" id="tlList"></div>
 </footer>
 
+<section class="doctor-screen" id="doctorScreen">
+  <div class="doc-head">
+    <div class="doc-head-l">
+      <span class="eye">Doctor</span>
+      <span class="doc-sum" id="docSummary">not run yet</span>
+    </div>
+    <div class="doc-head-l">
+      <button class="btn-sm" id="docRefresh" onclick="runDoctor()">refresh</button>
+      <button class="btn-sm" onclick="closeDoctor()">close</button>
+    </div>
+  </div>
+  <div class="doc-body" id="docBody"></div>
+</section>
+
 <nav class="tab-bar">
   <div class="tab-btn a" id="tb-brain" onclick="swTab('brain')"><span class="tab-ico">🧠</span>Brain</div>
   <div class="tab-btn" id="tb-agents" onclick="swTab('agents')"><span class="tab-ico">🤖</span>Agents</div>
@@ -701,6 +744,165 @@ function swTab(name){
   if(name==='brain') setTimeout(()=>brain?.resize(),50);
 }
 swTab('brain');
+
+/* ── DOCTOR SCREEN ─────────────────────────────────────── */
+/* Every button here posts to POST /ops/<operation>, which runs the same
+   operations-registry function the CLI runs. The command shown next to a
+   button is the CLI equivalent of pressing it, so either door does the same
+   work. The token was injected into this page by the server that served it;
+   without it /ops answers 401. */
+const OPS_TOKEN = window.__EGC_OPS_TOKEN || '';
+let docBusy = false;
+
+async function callOp(operation, body){
+  const res = await fetch(`/ops/${operation}`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-EGC-Token':OPS_TOKEN},
+    body:JSON.stringify(body||{}),
+  });
+  let payload={};
+  try{ payload=await res.json(); }catch(_){}
+  if(!res.ok||!payload.ok) throw new Error(payload.error||`${operation} failed (HTTP ${res.status})`);
+  return payload;
+}
+
+function docSay(message,kind){
+  const el=document.getElementById('docStatus');
+  if(!el) return;
+  el.className='doc-note'+(kind?' '+kind:'');
+  el.textContent=message;
+}
+
+function docSetBusy(busy){
+  docBusy=busy;
+  document.querySelectorAll('#docBody button, #docRefresh').forEach(b=>{b.disabled=busy;});
+}
+
+/* One row per target, not per adapter: `egc install --target <x>` resolves to
+   a single adapter, so a target with both a home and a project adapter still
+   has exactly one correct command. */
+function docTargetRows(targets){
+  const byTarget=new Map();
+  for(const entry of targets||[]){
+    const row=byTarget.get(entry.target)||{target:entry.target,kinds:[],installed:false};
+    row.kinds.push(entry.kind);
+    row.installed=row.installed||entry.installed;
+    byTarget.set(entry.target,row);
+  }
+  return [...byTarget.values()];
+}
+
+function docResultBlock(result){
+  const status=result.status||'ok';
+  const target=result.adapter?.target||'';
+  const issues=(result.issues||[])
+    .map(i=>`<div class="doc-issue">[${esc(i.severity)}] ${esc(i.code)}: ${esc(i.message)}</div>`)
+    .join('');
+  const action=status==='ok'?'':`<div class="doc-action">
+        <button class="btn-sm" onclick="opRepair('${esc(target)}')">Repair</button>
+        <code class="doc-cmd">egc repair --target ${esc(target)}</code>
+      </div>`;
+  return `<div class="doc-item">
+      <div class="doc-item-head">
+        <span class="doc-name">${esc(result.adapter?.id||'')}</span>
+        <span class="doc-badge ${esc(status)}">${esc(status)}</span>
+        <span class="doc-kind">${esc(result.adapter?.kind||'')}</span>
+      </div>
+      <div class="doc-issue">${esc(result.installStatePath||'')}</div>
+      ${issues}
+      ${action}
+    </div>`;
+}
+
+function docInstallBlock(row){
+  return `<div class="doc-item">
+      <div class="doc-item-head">
+        <span class="doc-name">${esc(row.target)}</span>
+        <span class="doc-badge">not installed</span>
+        <span class="doc-kind">${esc(row.kinds.join(' · '))}</span>
+      </div>
+      <div class="doc-action">
+        <button class="btn-sm" onclick="opInstall('${esc(row.target)}')">Install</button>
+        <code class="doc-cmd">egc install --target ${esc(row.target)} --profile full</code>
+      </div>
+    </div>`;
+}
+
+function renderDoctor(payload){
+  const report=payload.result||{};
+  const results=report.results||[];
+  const summary=report.summary||{};
+  document.getElementById('docSummary').textContent=
+    `checked ${summary.checkedCount||0} · ok ${summary.okCount||0} · warnings ${summary.warningCount||0} · errors ${summary.errorCount||0}`;
+
+  const missing=docTargetRows(payload.targets).filter(row=>!row.installed);
+  const blocks=['<div class="doc-note" id="docStatus">Each button runs the command shown beside it.</div>'];
+
+  blocks.push('<div class="doc-sec">Installed targets</div>');
+  blocks.push(results.length
+    ? results.map(docResultBlock).join('')
+    : '<div class="doc-note">No install-state found for this home/project. That is the expected state after a bare install — pick a target below.</div>');
+
+  if(missing.length){
+    blocks.push('<div class="doc-sec">Available targets</div>');
+    blocks.push(missing.map(docInstallBlock).join(''));
+  }
+
+  document.getElementById('docBody').innerHTML=blocks.join('');
+}
+
+async function runDoctor(){
+  if(docBusy) return;
+  docSetBusy(true);
+  try{
+    renderDoctor(await callOp('doctor'));
+  }catch(err){
+    document.getElementById('docBody').innerHTML=
+      `<div class="doc-note err" id="docStatus">${esc(err.message)}</div>`;
+  }finally{
+    docSetBusy(false);
+  }
+}
+
+async function opInstall(target){
+  if(docBusy) return;
+  docSetBusy(true);
+  docSay(`Installing ${target}…`);
+  try{
+    await callOp('install',{target,profile:'full'});
+    await runDoctor();
+    docSay(`Installed ${target}.`,'ok');
+  }catch(err){
+    docSay(err.message,'err');
+  }finally{
+    docSetBusy(false);
+  }
+}
+
+async function opRepair(target){
+  if(docBusy) return;
+  docSetBusy(true);
+  docSay(`Repairing ${target}…`);
+  try{
+    const {result}=await callOp('repair',{targets:[target]});
+    const repaired=(result.results||[]).reduce((n,r)=>n+(r.repairedPaths||[]).length,0);
+    await runDoctor();
+    docSay(`Repaired ${repaired} file${repaired===1?'':'s'} for ${target}.`,'ok');
+  }catch(err){
+    docSay(err.message,'err');
+  }finally{
+    docSetBusy(false);
+  }
+}
+
+function openDoctor(){
+  document.getElementById('doctorScreen').classList.add('on');
+  runDoctor();
+}
+
+function closeDoctor(){
+  document.getElementById('doctorScreen').classList.remove('on');
+}
 
 /* ── SESSION TIMER — anchored to server start ───────────── */
 let T0=Date.now();
@@ -1501,6 +1703,10 @@ if('serviceWorker' in navigator){
   document.addEventListener('fullscreenchange',()=>{
     const btn=document.getElementById('wcMax');
     btn.title=document.fullscreenElement?'Exit Fullscreen':'Maximize';
+  });
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&document.getElementById('doctorScreen')?.classList.contains('on')) closeDoctor();
   });
 
   document.getElementById('wcClose').addEventListener('click',()=>{
