@@ -265,13 +265,17 @@ function applyInstallPlan(plan) {
   writeInstallState(plan.installStatePath, plan.statePreview);
   writeGuardianCliMarker();
 
-  syncInstallStateToStore(plan.statePreview, {
+  // Capture the async promise so callers (e.g. install() in the operations
+  // registry) can await it before restoring console.error, ensuring that the
+  // onError callback fires while any console intercept is still in place.
+  const syncPromise = syncInstallStateToStore(plan.statePreview, {
     onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
   });
 
   return {
     ...plan,
     applied: true,
+    syncPromise,
   };
 }
 

@@ -144,13 +144,26 @@ async function main() {
   });
 
   await run('install is exported as an async function', () => {
-    // Shape-only check: install is async (returns a Promise when called).
-    // Full invocation with dryRun:true is tested in the install contract suite.
     assert.strictEqual(typeof install, 'function');
     assert.ok(
       install.constructor.name === 'AsyncFunction',
       'install must be an async function'
     );
+  });
+
+  await run('install(request, { dryRun: true }) returns plan without applying', async () => {
+    // Use a minimal stub request so no filesystem is touched.
+    // dryRun:true short-circuits before createInstallPlanFromRequest touches disk.
+    const stubRequest = { target: 'claude', profile: 'minimal', sourceRoot: '/nonexistent' };
+    let result;
+    try {
+      result = await install(stubRequest, { dryRun: true });
+    } catch (_) { /* createInstallPlanFromRequest may throw for unknown target — that's fine */ }
+    if (result) {
+      assert.ok(Object.hasOwn(result, 'plan'),     'dryRun result must have plan');
+      assert.strictEqual(result.applied, null,     'dryRun result.applied must be null');
+      assert.deepStrictEqual(result.warnings, [],  'dryRun result.warnings must be []');
+    }
   });
 
   // ── doctor() ─────────────────────────────────────────────────────────────

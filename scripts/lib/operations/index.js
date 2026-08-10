@@ -92,31 +92,31 @@ async function install(request, options) {
     return { plan, applied: null, warnings: [] };
   }
 
-  // applyInstallPlan calls syncInstallStateToStore() as a fire-and-forget async
-  // IIFE whose onError callback hits console.error. Because the IIFE is async,
-  // its onError can fire after our finally block restores console.error —
-  // leaking the warning to the real console. We intercept console.error for the
-  // full async lifetime by awaiting the promise that applyInstallPlan returns
-  // via a custom onError that collects into warnings[].
+  // syncInstallStateToStore is an async IIFE that opens the state store
+  // (await createStateStore) and does real file IO before calling onError.
+  // A single Promise.resolve() yield is not enough — the warning fires long
+  // after finally restores console.error. Fix: applyInstallPlan now captures
+  // the sync promise and returns it as applied.syncPromise; we await it inside
+  // the try block so console.error stays patched for the full async lifetime.
   const warnings = [];
   const { applyInstallPlan: applyPlanInternal } = require('../install/apply');
 
-  // Patch console.error before the call and restore it after the async work
-  // settles, so the registry no-console contract is upheld end-to-end.
   const origError = console.error.bind(console);
   console.error = (...args) => warnings.push(args.map(String).join(' '));
-  let applied;
+  let result;
   try {
-    applied = applyPlanInternal(plan);
-    // syncInstallStateToStore returns a Promise (fire-and-forget IIFE).
-    // applyInstallPlan doesn't expose it directly, so we yield the microtask
-    // queue long enough for any synchronously-rejected onError to fire while
-    // our console.error intercept is still in place.
-    await Promise.resolve();
+    result = applyPlanInternal(plan);
+    // Await the captured store-sync promise so its onError fires while our
+    // console.error intercept is still in place (Fmarzochi review, final round).
+    if (result.syncPromise) {
+      await result.syncPromise;
+    }
   } finally {
     console.error = origError;
   }
 
+  // Strip syncPromise (non-serializable) from the plain-JSON result.
+  const { syncPromise: _ignored, ...applied } = result; // eslint-disable-line no-unused-vars
   return { plan, applied, warnings };
 }
 
