@@ -832,8 +832,17 @@ function renderDoctor(payload){
   const report=payload.result||{};
   const results=report.results||[];
   const summary=report.summary||{};
+  /* Warnings are informative, the same way `egc doctor` now exits 0 on a
+     warnings-only run: the headline says healthy unless something actually
+     failed. The warning count is still shown, and a warned target still gets
+     its Repair button - it is reported, just not called broken. */
+  const errors=summary.errorCount||0;
+  const warnings=summary.warningCount||0;
+  const headline=errors>0
+    ? `${errors} error${errors===1?'':'s'}`
+    : (warnings>0?'healthy, with warnings':'healthy');
   document.getElementById('docSummary').textContent=
-    `checked ${summary.checkedCount||0} · ok ${summary.okCount||0} · warnings ${summary.warningCount||0} · errors ${summary.errorCount||0}`;
+    `${headline} · checked ${summary.checkedCount||0} · ok ${summary.okCount||0} · warnings ${warnings} · errors ${errors}`;
 
   const missing=docTargetRows(payload.targets).filter(row=>!row.installed);
   const blocks=['<div class="doc-note" id="docStatus">Each button runs the command shown beside it.</div>'];

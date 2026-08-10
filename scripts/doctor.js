@@ -152,7 +152,10 @@ function main() {
       projectRoot: process.cwd(),
       targets: options.targets,
     });
-    const hasIssues = report.summary.errorCount > 0 || report.summary.warningCount > 0;
+    // Warnings are informative: drift and version skew are worth reporting but
+    // do not mean the install is broken, and a warnings-only run is a healthy
+    // run. Exit 1 is reserved for real failures so scripts and CI can trust it.
+    const hasFailures = report.summary.errorCount > 0;
     const stateDb = checkStateDb(homeDir);
 
     if (options.json) {
@@ -199,7 +202,7 @@ function main() {
       }
     }
 
-    process.exitCode = hasIssues ? 1 : 0;
+    process.exitCode = hasFailures ? 1 : 0;
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);

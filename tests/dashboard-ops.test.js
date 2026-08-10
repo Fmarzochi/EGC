@@ -32,6 +32,7 @@ const {
 } = require('../dashboard/ops');
 
 const { normalizeInstallRequest } = require('../scripts/lib/install/request');
+const { getInstallTargetAdapter } = require('../scripts/lib/install-targets/registry');
 const operations = require('../scripts/lib/operations/index');
 
 const SERVER_SOURCE = fs.readFileSync(
@@ -341,9 +342,17 @@ test('the panel install matches the real `egc install` CLI, not just the same li
         env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, EGC_INSTALL_DELEGATED: '1' },
       }
     );
-    assert.equal(cli.status, 0, `CLI install failed: ${cli.stderr}`);
+    assert.equal(cli.status, 0, `CLI install failed: ${cli.stderr}\n${cli.stdout}`);
 
-    const cliStatePath = JSON.parse(cli.stdout).result.installStatePath;
+    // Ask the adapter where the install-state lands rather than parsing the
+    // CLI's stdout: install-apply.js runs regenerateTopologyCache() before it
+    // prints, and scripts/runtime/discovery.js logs to stdout when it
+    // succeeds, so the JSON is not reliably the only thing on that stream.
+    const cliStatePath = getInstallTargetAdapter('cursor').getInstallStatePath({
+      repoRoot:    path.join(__dirname, '..'),
+      projectRoot: cliProject,
+      homeDir,
+    });
     const panelStatePath = res.payload.result.applied.installStatePath;
 
     assert.equal(

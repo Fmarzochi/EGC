@@ -379,7 +379,9 @@ function runTests() {
 
       const result = run(['--target', 'egc', '--repo-root', altRepoRoot, '--json'], { cwd: projectRoot, homeDir });
       const parsed = JSON.parse(result.stdout);
-      assert.strictEqual(result.code, 1);
+      // Drift is a warning, and warnings are informative: the exit code stays
+      // 0. What this test guards is that the drift is still *reported*.
+      assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(
         parsed.results[0].issues.some(issue => issue.code === 'drifted-managed-files'),
         'a real content edit must still be reported as drift, CRLF normalization must not mask it'
@@ -452,6 +454,71 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a warnings-only run exits 0, an error exits 1 (warnings are informative)', () => {
+    // Product decision: drift and version skew are worth reporting but do not
+    // mean the install is broken. Exit 1 is reserved for real failures so a
+    // script or CI job can branch on it. Both directions are asserted here so
+    // neither half can regress on its own.
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const targetRoot = path.join(homeDir, '.gemini');
+      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
+      const managedFile = path.join(targetRoot, 'rules', 'common', 'coding-style.md');
+      fs.mkdirSync(path.dirname(managedFile), { recursive: true });
+      fs.writeFileSync(managedFile, 'DRIFTED CONTENT, does not match the repo file\n');
+
+      writeState(statePath, {
+        adapter: { id: 'egc-home', target: 'egc', kind: 'home' },
+        targetRoot,
+        installStatePath: statePath,
+        request: {
+          profile: null,
+          modules: [],
+          legacyLanguages: ['typescript'],
+          legacyMode: true,
+        },
+        resolution: {
+          selectedModules: ['legacy-egc-rules'],
+          skippedModules: [],
+        },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'legacy-egc-rules',
+            sourceRelativePath: 'rules/common/coding-style.md',
+            destinationPath: managedFile,
+            strategy: 'preserve-relative-path',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+        ],
+        source: {
+          repoVersion: CURRENT_PACKAGE_VERSION,
+          repoCommit: 'abc123',
+          manifestVersion: CURRENT_MANIFEST_VERSION,
+        },
+      });
+
+      const warned = run(['--target', 'egc', '--json'], { cwd: projectRoot, homeDir });
+      const warnedReport = JSON.parse(warned.stdout);
+      assert.ok(warnedReport.summary.warningCount > 0, 'the fixture must produce a warning');
+      assert.strictEqual(warnedReport.summary.errorCount, 0, 'and no error');
+      assert.strictEqual(warned.code, 0, `a warnings-only run must exit 0: ${warned.stderr}`);
+
+      // Same install, managed file removed: that is a real failure.
+      fs.rmSync(managedFile, { force: true });
+      const failed = run(['--target', 'egc', '--json'], { cwd: projectRoot, homeDir });
+      const failedReport = JSON.parse(failed.stdout);
+      assert.ok(failedReport.summary.errorCount > 0, 'a missing managed file must be an error');
+      assert.strictEqual(failed.code, 1, 'a run with errors must still exit 1');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('reports a drifted install as WARNING with issue detail in human-readable output', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
@@ -496,7 +563,9 @@ function runTests() {
       });
 
       const result = run(['--target', 'egc'], { cwd: projectRoot, homeDir });
-      assert.strictEqual(result.code, 1, result.stderr);
+      // Warnings are informative, so a warnings-only run exits 0: exit 1 is
+      // reserved for real failures.
+      assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Status: WARNING'));
       assert.ok(result.stdout.includes('[warning] drifted-managed-files'));
     } finally {
