@@ -25,6 +25,11 @@ const path = require('node:path');
 
 const SESSION_ID_RE = /^[A-Za-z0-9._-]{1,128}$/;
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Hard cap measured from startedAt: readers touch the file to keep a live
+// session's attribution alive past the idle window, but any reader can touch
+// (record() from strays, a plain egc gain), so without this cap a dead
+// session's marker could be kept alive indefinitely by machine-wide activity.
+const DEFAULT_MAX_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 // Filesystem mtime granularity can land a fresh write fractionally ahead of
 // Date.now(); a marker is only "from the future" past this slack.
 const FUTURE_SKEW_MS = 60 * 1000;
@@ -59,13 +64,16 @@ function writeMarker(sessionId, { source } = {}) {
 /**
  * Return the fresh marker session id, or null when absent, stale or invalid.
  *
- * Freshness is measured from the file's mtime, not from startedAt: every
- * successful read touches the file, so a session that keeps recording ledger
- * entries keeps its own marker fresh past the window, while a marker nobody
- * uses ages out. startedAt stays in the body as the informational session
- * start. A stale or invalid marker is never touched.
+ * Two clocks bound the fallback. The idle window reads from the file's
+ * mtime: every successful read touches the file, so a session that keeps
+ * recording ledger entries keeps its own marker fresh past the window, while
+ * a marker nobody uses ages out. The lifetime cap reads from startedAt: any
+ * reader can touch the file (strays, a plain egc gain), so idle refresh alone
+ * would let machine-wide activity keep a dead session's marker alive forever;
+ * past the cap the marker expires no matter how recently it was touched. A
+ * stale or invalid marker is never touched.
  */
-function readMarkerSession({ maxAgeMs = DEFAULT_MAX_AGE_MS, now = Date.now() } = {}) {
+function readMarkerSession({ maxAgeMs = DEFAULT_MAX_AGE_MS, maxLifetimeMs = DEFAULT_MAX_LIFETIME_MS, now = Date.now() } = {}) {
   try {
     const file = markerFilePath();
     const mtimeMs = fs.statSync(file).mtimeMs;
@@ -73,6 +81,8 @@ function readMarkerSession({ maxAgeMs = DEFAULT_MAX_AGE_MS, now = Date.now() } =
     if (age < -FUTURE_SKEW_MS || age > maxAgeMs) return null;
     const row = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (typeof row?.session !== 'string' || !SESSION_ID_RE.test(row.session)) return null;
+    const startedAt = Date.parse(row.startedAt);
+    if (!Number.isFinite(startedAt) || now - startedAt > maxLifetimeMs) return null;
     try {
       fs.utimesSync(file, new Date(now), new Date(now));
     } catch { // NOSONAR: refreshing is best-effort; a read-only marker still resolves

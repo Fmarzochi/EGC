@@ -13,15 +13,30 @@ const {
 const { resolveMetricContext } = require('../../scripts/lib/crusher/metrics');
 
 let failed = 0;
+const pending = [];
 
+function report(name, error) {
+  if (error === undefined) {
+    console.log(`  ✓ ${name}`);
+    return;
+  }
+  failed += 1;
+  console.log(`  ✗ ${name}`);
+  console.log(`    Error: ${error.message}`);
+}
+
+// Sync and async alike: a returned promise is awaited before the exit code is
+// decided, so a rejected async case reports ✗ instead of being swallowed.
 function test(name, fn) {
   try {
-    fn();
-    console.log(`  ✓ ${name}`);
+    const ret = fn();
+    if (ret && typeof ret.then === 'function') {
+      pending.push(ret.then(() => report(name), error => report(name, error)));
+      return;
+    }
+    report(name);
   } catch (error) {
-    failed += 1;
-    console.log(`  ✗ ${name}`);
-    console.log(`    Error: ${error.message}`);
+    report(name, error);
   }
 }
 
@@ -130,6 +145,33 @@ test('corrupted body, invalid id and bad timestamps read as null', () => {
     assert.strictEqual(readMarkerSession(), null);
     fs.writeFileSync(file, JSON.stringify({ session: 'bad id!', startedAt: new Date().toISOString() }));
     assert.strictEqual(readMarkerSession(), null);
+    fs.writeFileSync(file, JSON.stringify({ session: 'sess-ok', startedAt: 'yesterday-ish' }));
+    assert.strictEqual(readMarkerSession(), null);
+  });
+});
+
+test('the startedAt lifetime cap expires a marker no matter how fresh its mtime', () => {
+  withMarkerFile(file => {
+    const now = Date.now();
+    const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString();
+    const sixDaysAgo = new Date(now - 6 * 24 * 60 * 60 * 1000).toISOString();
+
+    fs.writeFileSync(file, JSON.stringify({ session: 'sess-old', source: 'claude', startedAt: eightDaysAgo }));
+    setMtime(file, now - 1000);
+    assert.strictEqual(readMarkerSession({ now }), null, 'past the lifetime cap even a touched marker must expire');
+
+    fs.writeFileSync(file, JSON.stringify({ session: 'sess-week', source: 'claude', startedAt: sixDaysAgo }));
+    setMtime(file, now - 1000);
+    assert.strictEqual(readMarkerSession({ now }), 'sess-week', 'within the cap a fresh marker must resolve');
+  });
+});
+
+test('a rejected async test reports as a failure (harness self-check)', () => {
+  const before = failed;
+  test('async harness probe (expected ✗)', () => Promise.reject(new Error('probe')));
+  return Promise.resolve().then(() => Promise.resolve()).then(() => {
+    assert.strictEqual(failed, before + 1, 'the async rejection must increment failed');
+    failed = before;
   });
 });
 
@@ -152,5 +194,7 @@ test('no env and no marker keeps the unknown scope', () => {
   });
 });
 
-console.log(failed ? `\n${failed} failed\n` : '\nall passed\n');
-process.exit(failed ? 1 : 0);
+Promise.all(pending).then(() => {
+  console.log(failed ? `\n${failed} failed\n` : '\nall passed\n');
+  process.exit(failed ? 1 : 0);
+});
