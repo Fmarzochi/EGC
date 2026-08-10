@@ -152,18 +152,22 @@ async function main() {
   });
 
   await run('install(request, { dryRun: true }) returns plan without applying', async () => {
-    // Use a minimal stub request so no filesystem is touched.
-    // dryRun:true short-circuits before createInstallPlanFromRequest touches disk.
-    const stubRequest = { target: 'claude', profile: 'minimal', sourceRoot: '/nonexistent' };
-    let result;
-    try {
-      result = await install(stubRequest, { dryRun: true });
-    } catch (_) { /* createInstallPlanFromRequest may throw for unknown target — that's fine */ }
-    if (result) {
-      assert.ok(Object.hasOwn(result, 'plan'),     'dryRun result must have plan');
-      assert.strictEqual(result.applied, null,     'dryRun result.applied must be null');
-      assert.deepStrictEqual(result.warnings, [],  'dryRun result.warnings must be []');
-    }
+    // mode:'legacy' with a valid target and sourceRoot so createInstallPlanFromRequest
+    // succeeds. dryRun:true short-circuits before any filesystem writes.
+    const stubRequest = {
+      mode: 'legacy',
+      target: 'cursor',
+      languages: ['javascript'],
+    };
+    const result = await install(stubRequest, {
+      dryRun: true,
+      sourceRoot: path.join(__dirname, '../..'),
+    });
+    assert.ok(Object.hasOwn(result, 'plan'),    'dryRun result must have plan');
+    assert.strictEqual(result.applied, null,    'dryRun result.applied must be null');
+    assert.deepStrictEqual(result.warnings, [], 'dryRun result.warnings must be []');
+    // syncPromise must not appear in JSON output (non-enumerable)
+    assert.ok(!Object.keys(result).includes('syncPromise'), 'syncPromise must not be enumerable');
   });
 
   // ── doctor() ─────────────────────────────────────────────────────────────

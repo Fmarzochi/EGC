@@ -92,32 +92,23 @@ async function install(request, options) {
     return { plan, applied: null, warnings: [] };
   }
 
-  // syncInstallStateToStore is an async IIFE that opens the state store
-  // (await createStateStore) and does real file IO before calling onError.
-  // A single Promise.resolve() yield is not enough — the warning fires long
-  // after finally restores console.error. Fix: applyInstallPlan now captures
-  // the sync promise and returns it as applied.syncPromise; we await it inside
-  // the try block so console.error stays patched for the full async lifetime.
+  // Pass a warning collector into applyInstallPlan instead of patching the
+  // global console.error — avoids concurrent-call corruption where two parallel
+  // install() calls would clobber each other's console intercept.
+  // applyInstallPlan forwards the collector to syncInstallStateToStore's onError,
+  // and returns the sync promise as a non-enumerable property so we can await it
+  // here before returning, capturing any async warnings that fire after IO.
   const warnings = [];
+  const onWarning = (msg) => warnings.push(msg);
   const { applyInstallPlan: applyPlanInternal } = require('../install/apply');
 
-  const origError = console.error.bind(console);
-  console.error = (...args) => warnings.push(args.map(String).join(' '));
-  let result;
-  try {
-    result = applyPlanInternal(plan);
-    // Await the captured store-sync promise so its onError fires while our
-    // console.error intercept is still in place (Fmarzochi review, final round).
-    if (result.syncPromise) {
-      await result.syncPromise;
-    }
-  } finally {
-    console.error = origError;
+  const result = applyPlanInternal(plan, { onWarning });
+  // Await the store-sync promise so its onError fires before we return.
+  if (result.syncPromise) {
+    await result.syncPromise;
   }
 
-  // Strip syncPromise (non-serializable) from the plain-JSON result.
-  const { syncPromise: _ignored, ...applied } = result; // eslint-disable-line no-unused-vars
-  return { plan, applied, warnings };
+  return { plan, applied: { ...result }, warnings };
 }
 
 // ---------------------------------------------------------------------------
