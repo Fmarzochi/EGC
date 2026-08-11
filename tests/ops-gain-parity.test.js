@@ -43,7 +43,7 @@ function createFixtureLedger(nowDate) {
       project: projectPath,
     },
     {
-      ts: new Date(nowMs - 2 * 60 * 60 * 1000).toISOString(), // Today
+      ts: new Date(nowMs - 2 * 60 * 1000).toISOString(), // Today
       kind: 'npm-install',
       cmd: 'npm install',
       tokensSaved: 3500,
