@@ -44,9 +44,9 @@ Walk this ladder top to bottom before writing any code, and stop at the FIRST ru
 6. **New unit**: a new function or module, only after rungs 1 to 5 genuinely fail.
 7. **New abstraction or dependency**: last resort; justify why every lower rung failed.
 
-When the choice is not obvious, state the rung you picked in one line. Climbing without need is overengineering; refusing to climb when the problem demands it is lazy code. Both are defects.
+When the choice is not obvious, state the rung you picked in one line. Climbing without need is overengineering; refusing to climb when the problem demands it is a half-done fix. Both are defects.
 
-### Never Simplified Away
+### The Floor
 
 Minimal never means dropping any of these: error handling, input validation at boundaries, tests for changed behavior, security checks, resource cleanup, documented invariants. A "simpler" version that loses one of them is not simpler; it is broken.
 

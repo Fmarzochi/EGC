@@ -712,8 +712,8 @@
     },
     {
       "kind": "skill",
-      "name": "lazy-code",
-      "description": "Apply the minimal-change ladder when writing or modifying code, choosing the smallest rung that truly solves the task and refusing both padded overengineering and lazy stubs. Use for implementation, refactoring, and bug-fix requests; not for research, documentation, or conversation."
+      "name": "minimal-change",
+      "description": "Apply the minimal-change ladder when writing or modifying code, choosing the smallest rung that truly solves the task and refusing both padded overengineering and half-done stubs. Use for implementation, refactoring, and bug-fix requests; not for research, documentation, or conversation."
     },
     {
       "kind": "skill",

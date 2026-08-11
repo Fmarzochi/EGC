@@ -237,7 +237,7 @@
         "skills/testing/eval-harness",
         "skills/workflows/hookify-rules",
         "skills/workflows/iterative-retrieval",
-        "skills/general/lazy-code",
+        "skills/general/minimal-change",
         "skills/general_part2/plankton-code-quality",
         "skills/workflows/skill-stocktake",
         "skills/workflows/strategic-compact",
