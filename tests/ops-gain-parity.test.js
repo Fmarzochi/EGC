@@ -15,7 +15,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { getGainBreakdown, validateOpsToken } = require('../scripts/lib/operations');
+const { savingsLedger: savingsLedgerOp } = require('../scripts/lib/operations/index');
+const { loadOrCreateOpsToken, validateOpsToken, createOpsHandler } = require('../dashboard/ops');
 
 const ROOT = path.join(__dirname, '..');
 const GAIN_CLI = path.join(ROOT, 'scripts', 'gain.js');
@@ -88,7 +89,31 @@ function createFixtureLedger(nowDate) {
   return { tmpDir, ledgerPath, sessionId, projectPath };
 }
 
-test('validateOpsToken handles token gate configuration and request headers/query params', () => {
+test('loadOrCreateOpsToken loads environment token or auto-creates token file', () => {
+  const origToken = process.env.EGC_OPS_TOKEN;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-token-test-'));
+  const tokenFile = path.join(tmpDir, 'ops_token');
+
+  try {
+    delete process.env.EGC_OPS_TOKEN;
+    delete process.env.OPS_TOKEN;
+
+    const token = loadOrCreateOpsToken({ tokenPath: tokenFile });
+    assert.ok(token, 'Generates non-empty token');
+    assert.equal(fs.readFileSync(tokenFile, 'utf8').trim(), token, 'Persists generated token to file');
+    assert.equal(process.env.EGC_OPS_TOKEN, token, 'Populates process.env.EGC_OPS_TOKEN');
+
+    // Reloading returns the existing token from environment / file
+    const reloaded = loadOrCreateOpsToken({ tokenPath: tokenFile });
+    assert.equal(reloaded, token, 'Reloads identical token');
+  } finally {
+    if (origToken !== undefined) process.env.EGC_OPS_TOKEN = origToken;
+    else delete process.env.EGC_OPS_TOKEN;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('validateOpsToken handles token gate configuration and request headers', () => {
   const origToken = process.env.EGC_OPS_TOKEN;
   try {
     delete process.env.EGC_OPS_TOKEN;
@@ -100,46 +125,30 @@ test('validateOpsToken handles token gate configuration and request headers/quer
     assert.equal(validateOpsToken({ headers: { 'x-ops-token': 'wrong-key' } }), false, 'refused on wrong token');
     assert.equal(validateOpsToken({ headers: { 'x-ops-token': 'secret-ops-key-42' } }), true, 'accepted on x-ops-token');
     assert.equal(validateOpsToken({ headers: { authorization: 'Bearer secret-ops-key-42' } }), true, 'accepted on Bearer token');
-    assert.equal(validateOpsToken({ url: '/ops/gain?token=secret-ops-key-42' }), true, 'accepted on query param token');
+    assert.equal(validateOpsToken({ url: '/ops/gain?token=secret-ops-key-42' }), false, 'refused on query string token per security policy');
   } finally {
     if (origToken !== undefined) process.env.EGC_OPS_TOKEN = origToken;
     else delete process.env.EGC_OPS_TOKEN;
   }
 });
 
-test('getGainBreakdown restricts ledger path to metrics directory', () => {
+test('savingsLedger operation reads environment-configured metrics ledger without client path parameter exposure', () => {
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
   const metricsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-metrics-dir-'));
-  const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-external-dir-'));
-  
   const validLedger = path.join(metricsDir, 'crusher.jsonl');
-  const externalLedger = path.join(externalDir, 'outside.jsonl');
   
   fs.writeFileSync(validLedger, JSON.stringify({ ts: new Date().toISOString(), tokensSaved: 100 }) + '\n');
-  fs.writeFileSync(externalLedger, JSON.stringify({ ts: new Date().toISOString(), tokensSaved: 9999 }) + '\n');
 
   try {
     process.env.EGC_CRUSHER_METRICS_FILE = validLedger;
 
-    // Passing arbitrary path outside metrics dir should be rejected
-    const reportOutside = getGainBreakdown({ ledgerPath: externalLedger });
-    assert.equal(reportOutside.runs, 0);
-    assert.equal(reportOutside.sinceInstall.tokensSaved, 0);
-
-    // Passing relative traversal path outside metrics dir should be rejected
-    const reportTraversal = getGainBreakdown({ ledgerPath: '../egc-external-dir-/outside.jsonl' });
-    assert.equal(reportTraversal.runs, 0);
-    assert.equal(reportTraversal.sinceInstall.tokensSaved, 0);
-
-    // Valid path inside metrics dir is allowed
-    const reportValid = getGainBreakdown({ ledgerPath: 'crusher.jsonl' });
+    const reportValid = savingsLedgerOp();
     assert.equal(reportValid.runs, 1);
     assert.equal(reportValid.sinceInstall.tokensSaved, 100);
   } finally {
     if (origFile !== undefined) process.env.EGC_CRUSHER_METRICS_FILE = origFile;
     else delete process.env.EGC_CRUSHER_METRICS_FILE;
     fs.rmSync(metricsDir, { recursive: true, force: true });
-    fs.rmSync(externalDir, { recursive: true, force: true });
   }
 });
 
@@ -164,9 +173,8 @@ test('Parity test: panel numbers equal egc gain output for every range against t
     assert.equal(cliRes.status, 0, `CLI failed: ${cliRes.stderr}`);
     const cliOutput = JSON.parse(cliRes.stdout);
 
-    // 2. Get panel / operation output via getGainBreakdown
-    const panelReport = getGainBreakdown({
-      ledgerPath,
+    // 2. Get panel / operation output via savingsLedgerOp
+    const panelReport = savingsLedgerOp({
       now: testNow,
       session: sessionId,
       project: projectPath,
@@ -226,7 +234,6 @@ test('Parity test: panel numbers equal egc gain output for every range against t
 
 test('HTTP /ops/gain route responds with 401 when token invalid, and 200 with parity report when authorized', async () => {
   const http = require('node:http');
-  const { validateOpsToken, getGainBreakdown } = require('../scripts/lib/operations');
 
   const origToken = process.env.EGC_OPS_TOKEN;
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
@@ -236,20 +243,12 @@ test('HTTP /ops/gain route responds with 401 when token invalid, and 200 with pa
   const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
   process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
+  const handleOps = createOpsHandler({
+    savingsLedger: (opts) => savingsLedgerOp({ ...opts, now: testNow, session: sessionId, project: projectPath }),
+  });
+
   const server = http.createServer((req, res) => {
-    if (req.url === '/ops' || req.url.startsWith('/ops/')) {
-      if (!validateOpsToken(req)) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
-      if (req.method === 'GET' && req.url.startsWith('/ops/gain')) {
-        const report = getGainBreakdown({ ledgerPath, now: testNow, session: sessionId, project: projectPath });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, report }));
-        return;
-      }
-    }
+    if (handleOps(req, res)) return;
     res.writeHead(404);
     res.end();
   });
@@ -298,3 +297,4 @@ test('HTTP /ops/gain route responds with 401 when token invalid, and 200 with pa
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+

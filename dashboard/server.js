@@ -5,11 +5,13 @@ const http    = require('http');
 const path    = require('path');
 const fs      = require('fs');
 const os      = require('os');
+const crypto  = require('crypto');
 const { execSync, execFileSync } = require('child_process');
 const { createAccumulator } = require('./accumulator');
 const { createOpsHandler, loadOrCreateOpsToken } = require('./ops');
 const { PORT } = require('./port');
-const { validateOpsToken, getGainBreakdown } = require('../scripts/lib/operations');
+const { loadOrCreateOpsToken, createOpsHandler } = require('./ops');
+const { savingsLedger: savingsLedgerOp, state: queryStateOp } = require('../scripts/lib/operations/index');
 const PUBLIC = path.join(__dirname, 'public');
 const CFG    = path.join(__dirname, 'config.json');
 
@@ -31,12 +33,11 @@ const MIME = {
 
 const SERVER_START = Date.now();
 
-// EGC state queries are routed through the shared operations layer (#1235).
-// The private EGC_DB_CANDIDATES list, raw sqlite3 shell invocations, and the
-// hand-rolled ~/.egc/state/*.md parser that lived here have all been removed;
+// EGC operations and state queries are routed through the shared operations layer (#1235).
 // operations.state() returns plain JSON {decisions, lessons, patterns, dbPath}
 // and handles path resolution and store lifecycle internally.
-const { state: queryStateOp } = require('../scripts/lib/operations/index');
+
+const handleOps = createOpsHandler();
 
 async function queryEgcStats() {
   try {
@@ -170,44 +171,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   // ── Uniform /ops Token Gate & Operations Routes ─────────────
-  if (req.url === '/ops' || req.url.startsWith('/ops/') || req.url.startsWith('/ops?')) {
-    if (!validateOpsToken(req)) {
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Unauthorized', message: 'Invalid or missing operations token' }));
-      return;
-    }
-
-    if (req.method === 'GET' && (req.url === '/ops/gain' || req.url.startsWith('/ops/gain?') || req.url === '/ops/savings' || req.url.startsWith('/ops/savings?'))) {
-      const urlObj = new URL(req.url, 'http://localhost');
-      const nowParam = urlObj.searchParams.get('now');
-      const ledgerPath = urlObj.searchParams.get('ledgerPath') || urlObj.searchParams.get('file');
-      const options = {};
-      if (nowParam) {
-        const parsed = Date.parse(nowParam);
-        if (Number.isFinite(parsed)) options.now = new Date(parsed);
-      }
-      if (ledgerPath) options.ledgerPath = ledgerPath;
-
-      const report = getGainBreakdown(options);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        ok: true,
-        report,
-        today: report.today,
-        currentSession: report.currentSession,
-        currentProject: report.currentProject,
-        sinceInstall: report.sinceInstall,
-        last7Days: report.last7Days,
-        last30Days: report.last30Days,
-        runs: report.runs,
-        averagePerRun: report.averagePerRun,
-        biggest: report.biggest
-      }));
-      return;
-    }
-
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not Found', message: 'Operation route not found' }));
+  if (handleOps(req, res)) {
     return;
   }
 
@@ -544,3 +508,8 @@ server.on('error', err => {
   }
   process.exit(1);
 });
+
+module.exports = {
+  loadOrCreateOpsToken,
+  createOpsHandler,
+};
