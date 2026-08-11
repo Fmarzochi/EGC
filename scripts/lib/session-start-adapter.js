@@ -76,6 +76,15 @@ function runSessionStartAdapter({ host, projectEnv }) {
   const projectPath = resolveProjectPath(input, projectEnv);
   const restored = restoreContext(projectPath, normalizedHost);
   postSessionStart(restored.host || normalizedHost, input.session_id || null);
+  if (input.session_id) {
+    try {
+      // Bridge the payload session id to Crusher children (see session-marker.js):
+      // a hook cannot export env vars into the harness's future Bash commands.
+      require('./crusher/session-marker').writeMarker(input.session_id, { source: normalizedHost });
+    } catch { // NOSONAR: the marker is best-effort; session start must never break
+      // keep going: restoring context matters more than attribution
+    }
+  }
   return restored;
 }
 
