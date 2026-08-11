@@ -77,15 +77,32 @@ function runSessionStartAdapter({ host, projectEnv }) {
   const restored = restoreContext(projectPath, normalizedHost);
   postSessionStart(restored.host || normalizedHost, input.session_id || null);
   if (input.session_id) {
-    try {
-      // Bridge the payload session id to Crusher children (see session-marker.js):
-      // a hook cannot export env vars into the harness's future Bash commands.
-      require('./crusher/session-marker').writeMarker(input.session_id, { source: normalizedHost });
-    } catch { // NOSONAR: the marker is best-effort; session start must never break
-      // keep going: restoring context matters more than attribution
+    // Bridge the payload session id to Crusher children (see session-marker.js):
+    // a hook cannot export env vars into the harness's future Bash commands.
+    const marker = requireSessionMarker();
+    if (marker) {
+      try {
+        marker.writeMarker(input.session_id, { source: normalizedHost });
+      } catch { // NOSONAR: the marker is best-effort; session start must never break
+        // keep going: restoring context matters more than attribution
+      }
     }
   }
   return restored;
+}
+
+// Repo layout keeps the lib at ./crusher/session-marker; the flattened egc/lib
+// install (claude-home HOOK_LIB_SOURCES) lands it beside this file instead.
+function requireSessionMarker() {
+  try {
+    return require('./crusher/session-marker');
+  } catch { // NOSONAR: flattened install layout, fall through
+    try {
+      return require('./session-marker');
+    } catch { // NOSONAR: no marker lib shipped means no attribution bridge
+      return null;
+    }
+  }
 }
 
 module.exports = { runSessionStartAdapter };
