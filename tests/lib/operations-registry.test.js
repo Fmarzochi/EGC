@@ -166,8 +166,69 @@ async function main() {
     assert.ok(Object.hasOwn(result, 'plan'),    'dryRun result must have plan');
     assert.strictEqual(result.applied, null,    'dryRun result.applied must be null');
     assert.deepStrictEqual(result.warnings, [], 'dryRun result.warnings must be []');
-    // syncPromise must not appear in JSON output (non-enumerable)
-    assert.ok(!Object.keys(result).includes('syncPromise'), 'syncPromise must not be enumerable');
+  });
+
+  await run('applyInstallPlan() result has no enumerable syncPromise and survives JSON round-trip', async () => {
+    // Regression test for #1245: the non-enumerable syncPromise property added
+    // to the applyInstallPlan result must not appear in JSON.stringify output.
+    // All side effects are isolated: projectRoot, homeDir, and dbPath all point
+    // into a single temp directory so no real ~/.egc state is touched.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-test-apply-'));
+    try {
+      const { createInstallPlanFromRequest } = require('../../scripts/lib/install/runtime');
+      const { applyInstallPlan }             = require('../../scripts/lib/install/apply');
+
+      const plan = createInstallPlanFromRequest(
+        { mode: 'legacy', target: 'cursor', languages: ['javascript'] },
+        { sourceRoot: path.join(__dirname, '../..'), projectRoot: tmpDir }
+      );
+
+      // Use spread to collect warnings immutably; pass homeDir+dbPath so
+      // writeGuardianCliMarker and syncInstallStateToStore stay inside tmpDir.
+      let warnings = [];
+      const tmpDbPath = path.join(tmpDir, 'state.db');
+      const result = applyInstallPlan(plan, {
+        onWarning: msg => { warnings = [...warnings, msg]; },
+        homeDir:   tmpDir,
+        dbPath:    tmpDbPath,
+      });
+
+      // Assert syncPromise exists on the result as a non-enumerable, thenable property.
+      const descriptor = Object.getOwnPropertyDescriptor(result, 'syncPromise');
+      assert.ok(descriptor !== undefined,
+        'syncPromise must exist as an own property on the apply result');
+      assert.strictEqual(descriptor.enumerable, false,
+        'syncPromise must be non-enumerable');
+      assert.ok(typeof descriptor.value.then === 'function',
+        'syncPromise must be thenable (a Promise)');
+
+      // Assert syncPromise does not appear in JSON output
+      const json = JSON.stringify(result);
+      assert.ok(!json.includes('syncPromise'),
+        'JSON.stringify(result) must not contain "syncPromise"');
+
+      // All enumerable keys must survive a JSON round-trip without data loss
+      const enumerableKeys = Object.keys(result);
+      const reparsed = JSON.parse(json);
+      assert.deepStrictEqual(
+        Object.keys(reparsed).sort(),
+        enumerableKeys.sort(),
+        'round-tripped result must have the same enumerable keys'
+      );
+      assert.strictEqual(reparsed.applied, true,
+        'round-tripped result.applied must be true');
+
+      // Settle the sync promise; store failures are expected since tmpDir has
+      // no real EGC install — assert they land in warnings, not on the console.
+      await result.syncPromise;
+      // The sync either succeeded (db written) or its failure was captured by onWarning.
+      assert.ok(
+        fs.existsSync(tmpDbPath) || warnings.some(w => w.includes('Failed to sync install state')),
+        'store sync must either write the isolated db or surface its failure through onWarning'
+      );
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   // ── doctor() ─────────────────────────────────────────────────────────────
