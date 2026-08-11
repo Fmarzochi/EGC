@@ -10,11 +10,12 @@
  * Wraps (without rewriting):
  *   - doctor        → buildDoctorReport       (install-lifecycle.js)
  *   - install       → createInstallPlanFromRequest + applyInstallPlan
+ *   - repair        → repairInstalledStates    (install-lifecycle.js)
  *   - savingsLedger → aggregateBreakdown       (crusher/metrics.js)
  *   - state         → createStateStore + createQueryApi (state-store/)
  */
 
-const { buildDoctorReport }            = require('../install-lifecycle');
+const { buildDoctorReport, repairInstalledStates } = require('../install-lifecycle');
 const { createInstallPlanFromRequest }  = require('../install/runtime');
 const { readAll, aggregateBreakdown }  = require('../crusher/metrics');
 const { createStateStore }             = require('../state-store/index');
@@ -112,6 +113,35 @@ async function install(request, options) {
 }
 
 // ---------------------------------------------------------------------------
+// Operation: repair
+// ---------------------------------------------------------------------------
+
+/**
+ * Rebuild the EGC-managed files recorded in install-state.
+ *
+ * Same parameters `egc repair` passes through, so a caller that hands over
+ * `{ targets, dryRun }` gets the result the CLI would print.
+ *
+ * @param {object} [params]
+ * @param {string} [params.repoRoot]     - Reference repo to repair against
+ * @param {string} [params.homeDir]      - Override home directory
+ * @param {string} [params.projectRoot]  - Override project root path
+ * @param {string[]} [params.targets]    - Specific install targets to repair
+ * @param {boolean} [params.dryRun]      - Plan the repairs without writing them
+ * @returns {{ dryRun, results, summary }}
+ */
+function repair(params) {
+  const p = normalizeParams(params);
+  return repairInstalledStates({
+    repoRoot:    p.repoRoot,
+    homeDir:     p.homeDir,
+    projectRoot: p.projectRoot,
+    targets:     p.targets,
+    dryRun:      p.dryRun,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Operation: savingsLedger
 // ---------------------------------------------------------------------------
 
@@ -195,6 +225,7 @@ async function state(params) {
 const REGISTRY = [
   { name: 'doctor',        fn: doctor,        async: false },
   { name: 'install',       fn: install,       async: true  },
+  { name: 'repair',        fn: repair,        async: false },
   { name: 'savingsLedger', fn: savingsLedger, async: false },
   { name: 'state',         fn: state,         async: true  },
 ];
@@ -210,6 +241,7 @@ function listOperations() {
 module.exports = {
   doctor,
   install,
+  repair,
   savingsLedger,
   state,
   listOperations,

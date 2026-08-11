@@ -84,7 +84,7 @@ async function main() {
 
   await run('listOperations() returns all expected operations', () => {
     const names = listOperations();
-    for (const expected of ['doctor', 'install', 'savingsLedger', 'state']) {
+    for (const expected of ['doctor', 'install', 'repair', 'savingsLedger', 'state']) {
       assert.ok(names.includes(expected),
         `Expected operation "${expected}" missing. Got: ${names.join(', ')}`);
     }

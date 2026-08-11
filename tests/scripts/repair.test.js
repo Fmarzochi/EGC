@@ -108,7 +108,9 @@ function runTests() {
         cwd: projectRoot,
         homeDir,
       });
-      assert.strictEqual(doctorBefore.code, 1);
+      // Drift is a warning, and a warnings-only doctor run exits 0. What
+      // matters here is that the drift is reported, asserted next.
+      assert.strictEqual(doctorBefore.code, 0, doctorBefore.stderr);
       assert.ok(JSON.parse(doctorBefore.stdout).results[0].issues.some(issue => issue.code === 'drifted-managed-files'));
 
       const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'cursor', '--json'], {
@@ -298,7 +300,9 @@ function runTests() {
         cwd: projectRoot,
         homeDir,
       });
-      assert.strictEqual(doctorBefore.code, 1);
+      // Drift is a warning, and a warnings-only doctor run exits 0. What
+      // matters here is that the drift is reported, asserted next.
+      assert.strictEqual(doctorBefore.code, 0, doctorBefore.stderr);
       assert.ok(JSON.parse(doctorBefore.stdout).results[0].issues.some(issue => issue.code === 'drifted-managed-files'));
 
       const installedAtBefore = JSON.parse(fs.readFileSync(statePath, 'utf8')).installedAt;
