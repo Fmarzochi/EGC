@@ -88,7 +88,10 @@ function createFixtureLedger(nowDate) {
 
   fs.writeFileSync(ledgerPath, entries.map(e => JSON.stringify(e)).join('\n') + '\n');
 
-  return { tmpDir, ledgerPath, sessionId, projectPath };
+  // The normalized clock is returned so every caller derives now/EGC_NOW from
+  // the same instant the fixture entries used; deriving it separately at the
+  // call site is what reintroduces the midnight-boundary parity break.
+  return { tmpDir, ledgerPath, sessionId, projectPath, now: baseDate };
 }
 
 test('savingsLedger operation reads environment-configured metrics ledger without client path parameter exposure', () => {
@@ -112,9 +115,7 @@ test('savingsLedger operation reads environment-configured metrics ledger withou
 });
 
 test('Parity test: panel numbers equal egc gain output for every range against the same fixture ledger', () => {
-  const testNow = new Date();
-  testNow.setHours(12, 0, 0, 0);
-  const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
+  const { tmpDir, ledgerPath, sessionId, projectPath, now: testNow } = createFixtureLedger(new Date());
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
   process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
@@ -197,9 +198,7 @@ test('HTTP POST /ops/savingsLedger route responds with 401 when token missing/in
   const http = require('node:http');
 
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
-  const testNow = new Date();
-  testNow.setHours(12, 0, 0, 0);
-  const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
+  const { tmpDir, ledgerPath, sessionId, projectPath, now: testNow } = createFixtureLedger(new Date());
   process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
   const TEST_TOKEN = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
