@@ -1,8 +1,14 @@
 ---
-description: "EGC coding style: immutability, file organization, error handling, validation"
+description: "EGC coding style: minimal-change ladder, immutability, file organization, error handling, validation"
 alwaysApply: true
 ---
 # Coding Style
+
+## The Minimal-Change Ladder (CRITICAL)
+
+Stop at the FIRST rung that truly solves the request: 1 no change (it already exists), 2 deletion, 3 one-line fix at the root cause, 4 local change, 5 extend an existing seam, 6 new unit, 7 new abstraction or dependency (justify why every lower rung failed). State the rung when the choice is not obvious. Climbing without need is overengineering; refusing to climb is lazy code.
+
+Never simplified away: error handling, boundary validation, tests for changed behavior, security checks, resource cleanup, documented invariants.
 
 ## Immutability (CRITICAL)
 

@@ -32,6 +32,24 @@ Rationale: Immutable data prevents hidden side effects, makes debugging easier, 
 - Avoid speculative generality
 - Start simple, then refactor when the pressure is real
 
+## The Minimal-Change Ladder (CRITICAL)
+
+Walk this ladder top to bottom before writing any code, and stop at the FIRST rung that truly solves the request:
+
+1. **No change**: the capability already exists (a flag, a config, an existing API). Point to it.
+2. **Deletion**: removing code solves the problem. Prefer deleting over adding.
+3. **One-line fix**: the smallest edit at the true root cause, never at the symptom.
+4. **Local change**: contained to one function or file, using what is already imported.
+5. **Existing seam**: extend an abstraction that already exists instead of creating one.
+6. **New unit**: a new function or module, only after rungs 1 to 5 genuinely fail.
+7. **New abstraction or dependency**: last resort; justify why every lower rung failed.
+
+When the choice is not obvious, state the rung you picked in one line. Climbing without need is overengineering; refusing to climb when the problem demands it is lazy code. Both are defects.
+
+### Never Simplified Away
+
+Minimal never means dropping any of these: error handling, input validation at boundaries, tests for changed behavior, security checks, resource cleanup, documented invariants. A "simpler" version that loses one of them is not simpler; it is broken.
+
 ## File Organization
 
 MANY SMALL FILES > FEW LARGE FILES:
