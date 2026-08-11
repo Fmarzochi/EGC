@@ -220,13 +220,12 @@ async function main() {
 
       // Settle the sync promise; store failures are expected since tmpDir has
       // no real EGC install — assert they land in warnings, not on the console.
-      try {
-        await result.syncPromise;
-      } catch (storeError) {
-        // Store open/migration failure in isolated dir: confirm onWarning captured it.
-        assert.ok(warnings.length > 0 || storeError,
-          'store errors must either be caught by onWarning or be rethrown here');
-      }
+      await result.syncPromise;
+      // The sync either succeeded (db written) or its failure was captured by onWarning.
+      assert.ok(
+        fs.existsSync(tmpDbPath) || warnings.some(w => w.includes('Failed to sync install state')),
+        'store sync must either write the isolated db or surface its failure through onWarning'
+      );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
