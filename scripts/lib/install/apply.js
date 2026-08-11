@@ -217,8 +217,8 @@ function resolvePackageRoot() {
 // HOME, permissions) only removes one of four resolution strategies -- the
 // existing ones are unaffected -- so it is logged and swallowed rather than
 // failing the whole install.
-function writeGuardianCliMarker(onWarning) {
-  const markerPath = path.join(os.homedir(), '.egc', 'guardian-cli-path.json');
+function writeGuardianCliMarker(onWarning, homeDir) {
+  const markerPath = path.join(homeDir || os.homedir(), '.egc', 'guardian-cli-path.json');
   try {
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
     fs.writeFileSync(
@@ -236,7 +236,7 @@ function writeGuardianCliMarker(onWarning) {
   }
 }
 
-function applyInstallPlan(plan, { onWarning } = {}) {
+function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
@@ -268,7 +268,7 @@ function applyInstallPlan(plan, { onWarning } = {}) {
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
-  writeGuardianCliMarker(onWarning);
+  writeGuardianCliMarker(onWarning, homeDir);
 
   // Capture the async promise so callers (e.g. install() in the operations
   // registry) can await it before restoring console.error, ensuring that the
@@ -276,6 +276,8 @@ function applyInstallPlan(plan, { onWarning } = {}) {
   // The promise is attached as a non-enumerable property so it never appears
   // in JSON.stringify() output (e.g. egc install --json).
   const syncPromise = syncInstallStateToStore(plan.statePreview, {
+    homeDir,
+    dbPath,
     onError: error => {
       const msg = `Warning: Failed to sync install state to status store: ${error.message}`;
       if (typeof onWarning === 'function') {
