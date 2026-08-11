@@ -223,6 +223,33 @@ body.minimized footer{display:none!important;}
 .tl-what{font-family:SFMono-Regular,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .tl-dur{text-align:right;font-variant-numeric:tabular-nums;font-size:10px;}
 
+/* ── DOCTOR SCREEN ────────────────────────────────────── */
+.doc-open{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);background:none;border:1px solid var(--hairline);border-radius:6px;padding:4px 10px;font-family:inherit;cursor:pointer;transition:color .12s,border-color .12s;}
+.doc-open:hover{color:var(--primary);border-color:var(--primary-soft);}
+.doctor-screen{display:none;position:fixed;inset:0;z-index:200;background:var(--canvas);flex-direction:column;}
+.doctor-screen.on{display:flex;}
+.doc-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 20px;border-bottom:1px solid var(--hairline);flex-shrink:0;}
+.doc-head-l{display:flex;align-items:center;gap:10px;}
+.doc-sum{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.doc-body{flex:1;overflow-y:auto;padding:14px 20px 28px;display:flex;flex-direction:column;gap:10px;}
+.doc-body::-webkit-scrollbar{width:2px;}
+.doc-body::-webkit-scrollbar-thumb{background:var(--hairline);}
+.doc-sec{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:8px;}
+.doc-item{border:1px solid var(--hairline);border-radius:9px;padding:11px 13px;display:flex;flex-direction:column;gap:7px;}
+.doc-item-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.doc-name{font-size:12px;font-weight:600;color:var(--ink);}
+.doc-kind{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
+.doc-badge{font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;border-radius:9999px;padding:2px 9px;border:1px solid var(--hairline);color:var(--muted);}
+.doc-badge.ok{color:var(--primary);border-color:rgba(0,217,146,.35);}
+.doc-badge.warning{color:#e0a33a;border-color:rgba(224,163,58,.35);}
+.doc-badge.error{color:#e5534b;border-color:rgba(229,83,75,.35);}
+.doc-issue{font-size:11px;color:var(--muted);font-family:SFMono-Regular,monospace;word-break:break-all;}
+.doc-action{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.doc-cmd{font-family:SFMono-Regular,monospace;font-size:10.5px;color:var(--muted);background:var(--canvas-soft);border:1px solid var(--hairline);border-radius:5px;padding:3px 8px;user-select:all;}
+.doc-note{font-size:11px;color:var(--muted);}
+.doc-note.err{color:#e5534b;}
+.doc-note.ok{color:var(--primary);}
+
 /* ── RESPONSIVE ───────────────────────────────────────── */
 @media(max-width:1100px)and(min-width:681px){
   .main{grid-template-columns:1fr 1fr;}
@@ -435,6 +462,8 @@ body.minimized footer{display:none!important;}
     <div class="ide-pills" id="idePills"></div>
     <div class="vd"></div>
     <div class="ws-chip"><div class="ws-dot" id="wsDot"></div><span id="wsLbl">offline</span></div>
+    <div class="vd"></div>
+    <button class="doc-open" id="docOpen" onclick="openDoctor()" title="Install health">Doctor</button>
     <div class="win-controls">
       <button class="wc-btn wc-min" id="wcMin" title="Minimize">
         <svg width="8" height="2" viewBox="0 0 8 2"><rect y="0" width="8" height="2" fill="#000" opacity=".5"/></svg>
@@ -505,6 +534,23 @@ body.minimized footer{display:none!important;}
       <span class="eye">Economy</span>
       <div class="eco-session" id="currentSessionEco" style="display:none;margin-bottom:6px;background:var(--canvas-soft);border:1px solid var(--primary-dim);border-radius:7px;padding:9px 12px;"></div>
       <div id="ecoContent"><div class="eco-empty">Waiting for provider events…</div></div>
+    </div>
+
+    <div class="rcard" id="gainCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span class="eye">Token Savings (egc gain)</span>
+        <span style="font-size:9px;color:var(--muted);cursor:pointer;" onclick="fetchGainData()">↻ refresh</span>
+      </div>
+      <div class="gain-range-wrap" style="display:flex;gap:4px;margin-bottom:10px;overflow-x:auto;">
+        <button class="cost-range-btn active" id="grToday" onclick="setGainRange('today')">Today</button>
+        <button class="cost-range-btn" id="grSession" onclick="setGainRange('session')">Session</button>
+        <button class="cost-range-btn" id="gr7d" onclick="setGainRange('7d')">7d</button>
+        <button class="cost-range-btn" id="gr30d" onclick="setGainRange('30d')">30d</button>
+        <button class="cost-range-btn" id="grSinceInstall" onclick="setGainRange('sinceInstall')">Since Install</button>
+      </div>
+      <div id="gainContent">
+        <div class="eco-empty">Loading savings ledger...</div>
+      </div>
     </div>
     <div class="rcard">
   <span class="eye">Usage Analytics</span>
@@ -579,6 +625,20 @@ body.minimized footer{display:none!important;}
   </div>
   <div class="tl-list" id="tlList"></div>
 </footer>
+
+<section class="doctor-screen" id="doctorScreen">
+  <div class="doc-head">
+    <div class="doc-head-l">
+      <span class="eye">Doctor</span>
+      <span class="doc-sum" id="docSummary">not run yet</span>
+    </div>
+    <div class="doc-head-l">
+      <button class="btn-sm" id="docRefresh" onclick="runDoctor()">refresh</button>
+      <button class="btn-sm" onclick="closeDoctor()">close</button>
+    </div>
+  </div>
+  <div class="doc-body" id="docBody"></div>
+</section>
 
 <nav class="tab-bar">
   <div class="tab-btn a" id="tb-brain" onclick="swTab('brain')"><span class="tab-ico">🧠</span>Brain</div>
@@ -701,6 +761,219 @@ function swTab(name){
   if(name==='brain') setTimeout(()=>brain?.resize(),50);
 }
 swTab('brain');
+
+/* ── DOCTOR SCREEN ─────────────────────────────────────── */
+/* Every button here posts to POST /ops/<operation>, which runs the same
+   operations-registry function the CLI runs. The command shown next to a
+   button is the CLI equivalent of pressing it, so either door does the same
+   work. The token was injected into this page by the server that served it;
+   without it /ops answers 401. */
+const OPS_TOKEN = window.__EGC_OPS_TOKEN || '';
+let docBusy = false;
+
+async function callOp(operation, body){
+  const res = await fetch(`/ops/${operation}`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-EGC-Token':OPS_TOKEN},
+    body:JSON.stringify(body||{}),
+  });
+  let payload={};
+  try{ payload=await res.json(); }catch(_){}
+  if(!res.ok||!payload.ok) throw new Error(payload.error||`${operation} failed (HTTP ${res.status})`);
+  return payload;
+}
+
+function docSay(message,kind){
+  const el=document.getElementById('docStatus');
+  if(!el) return;
+  el.className='doc-note'+(kind?' '+kind:'');
+  el.textContent=message;
+}
+
+function docSetBusy(busy){
+  docBusy=busy;
+  document.querySelectorAll('#docBody button, #docRefresh').forEach(b=>{b.disabled=busy;});
+}
+
+/* One row per target, not per adapter: `egc install --target <x>` resolves to
+   a single adapter, so a target with both a home and a project adapter still
+   has exactly one correct command. */
+function docTargetRows(targets){
+  const byTarget=new Map();
+  for(const entry of targets||[]){
+    const row=byTarget.get(entry.target)||{target:entry.target,kinds:[],installed:false};
+    row.kinds.push(entry.kind);
+    row.installed=row.installed||entry.installed;
+    byTarget.set(entry.target,row);
+  }
+  return [...byTarget.values()];
+}
+
+function docResultBlock(result){
+  const status=result.status||'ok';
+  const target=result.adapter?.target||'';
+  const issues=(result.issues||[])
+    .map(i=>`<div class="doc-issue">[${esc(i.severity)}] ${esc(i.code)}: ${esc(i.message)}</div>`)
+    .join('');
+  const action=status==='ok'?'':`<div class="doc-action">
+        <button class="btn-sm" onclick="opRepair('${esc(target)}')">Repair</button>
+        <code class="doc-cmd">egc repair --target ${esc(target)}</code>
+      </div>`;
+  return `<div class="doc-item">
+      <div class="doc-item-head">
+        <span class="doc-name">${esc(result.adapter?.id||'')}</span>
+        <span class="doc-badge ${esc(status)}">${esc(status)}</span>
+        <span class="doc-kind">${esc(result.adapter?.kind||'')}</span>
+      </div>
+      <div class="doc-issue">${esc(result.installStatePath||'')}</div>
+      ${issues}
+      ${action}
+    </div>`;
+}
+
+function docInstallBlock(row){
+  return `<div class="doc-item">
+      <div class="doc-item-head">
+        <span class="doc-name">${esc(row.target)}</span>
+        <span class="doc-badge">not installed</span>
+        <span class="doc-kind">${esc(row.kinds.join(' · '))}</span>
+      </div>
+      <div class="doc-action">
+        <button class="btn-sm" onclick="opInstall('${esc(row.target)}')">Install</button>
+        <code class="doc-cmd">egc install --target ${esc(row.target)} --profile full</code>
+      </div>
+    </div>`;
+}
+
+function renderDoctor(payload){
+  const report=payload.result||{};
+  const results=report.results||[];
+  const summary=report.summary||{};
+  /* Warnings are informative, the same way `egc doctor` now exits 0 on a
+     warnings-only run: the headline says healthy unless something actually
+     failed. The warning count is still shown, and a warned target still gets
+     its Repair button - it is reported, just not called broken. */
+  const errors=summary.errorCount||0;
+  const warnings=summary.warningCount||0;
+  const headline=errors>0
+    ? `${errors} error${errors===1?'':'s'}`
+    : (warnings>0?'healthy, with warnings':'healthy');
+  document.getElementById('docSummary').textContent=
+    `${headline} · checked ${summary.checkedCount||0} · ok ${summary.okCount||0} · warnings ${warnings} · errors ${errors}`;
+
+  const missing=docTargetRows(payload.targets).filter(row=>!row.installed);
+  const blocks=['<div class="doc-note" id="docStatus">Each button runs the command shown beside it.</div>'];
+
+  blocks.push('<div class="doc-sec">Installed targets</div>');
+  blocks.push(results.length
+    ? results.map(docResultBlock).join('')
+    : '<div class="doc-note">No install-state found for this home/project. That is the expected state after a bare install — pick a target below.</div>');
+
+  if(missing.length){
+    blocks.push('<div class="doc-sec">Available targets</div>');
+    blocks.push(missing.map(docInstallBlock).join(''));
+  }
+
+  document.getElementById('docBody').innerHTML=blocks.join('');
+}
+
+/* `force` is how opInstall/opRepair refresh the screen: they still hold the
+   busy flag so the buttons stay disabled until their own success line is
+   shown, and without it this would return before re-reading the report and
+   leave the screen showing pre-operation state. */
+async function runDoctor(force){
+  if(docBusy&&!force) return false;
+  if(!force) docSetBusy(true);
+  try{
+    renderDoctor(await callOp('doctor'));
+    return true;
+  }catch(err){
+    /* The token is read once, at page load. A 401 means the one on disk has
+       changed since, and only a reload can pick the new one up. */
+    const hint=/token/i.test(err.message)?' Reload the page to pick up the current token.':'';
+    document.getElementById('docBody').innerHTML=
+      `<div class="doc-note err" id="docStatus">${esc(err.message+hint)}</div>`;
+    return false;
+  }finally{
+    /* renderDoctor replaced #docBody, so the disabled flags were set on
+       buttons that no longer exist - re-apply them to the fresh ones. */
+    docSetBusy(Boolean(force));
+  }
+}
+
+/* The operation succeeded but the refresh that follows it did not: the error
+   runDoctor painted is the only thing on screen, and overwriting it with a
+   green success line would erase the one message that explains the empty
+   report. Say both, and keep the failure's styling. */
+function docReport(refreshed,message,warnings){
+  const detail=(warnings||[]).length ? ` ${warnings.join(' ')}` : '';
+  if(!refreshed){
+    const el=document.getElementById('docStatus');
+    if(el) el.textContent=`${message}${detail} — but the report could not be reloaded: ${el.textContent}`;
+    return;
+  }
+  docSay(`${message}${detail}`, detail ? '' : 'ok');
+}
+
+async function opInstall(target){
+  if(docBusy) return;
+  docSetBusy(true);
+  docSay(`Installing ${target}…`);
+  try{
+    const {result}=await callOp('install',{target,profile:'full'});
+    /* applyInstallPlan's stderr is captured into result.warnings precisely so
+       a caller can surface it - "every module was skipped" arrives that way,
+       and reads as a clean success if it is thrown away. */
+    const warnings=[...(result.warnings||[]),...((result.plan&&result.plan.warnings)||[])].map(String);
+    const refreshed=await runDoctor(true);
+    docReport(refreshed,`Installed ${target}.`,warnings);
+  }catch(err){
+    docSay(err.message,'err');
+  }finally{
+    docSetBusy(false);
+  }
+}
+
+async function opRepair(target){
+  if(docBusy) return;
+  docSetBusy(true);
+  docSay(`Repairing ${target}…`);
+  try{
+    const {result}=await callOp('repair',{targets:[target]});
+    const entries=result.results||[];
+    const repaired=entries.reduce((n,r)=>n+(r.repairedPaths||[]).length,0);
+    const unrepairable=entries.reduce((n,r)=>n+(r.unrepairable||[]).length,0);
+    const failedPlugins=(result.pluginRepairs||[]).filter(p=>!p.success).length;
+    const refreshed=await runDoctor(true);
+
+    /* `egc repair` distinguishes these; a green "Repaired 0 files" over a
+       target whose files could not be written, or whose install-state is
+       gone, would say the opposite of what happened. */
+    if(entries.length===0){
+      docSay(`No install-state found for ${target}. Nothing to repair.`,'err');
+    }else if(unrepairable>0||failedPlugins>0||(result.summary&&result.summary.errorCount>0)){
+      const parts=[`Repaired ${repaired} file${repaired===1?'':'s'} for ${target}`];
+      if(unrepairable>0) parts.push(`${unrepairable} could not be repaired`);
+      if(failedPlugins>0) parts.push(`${failedPlugins} plugin${failedPlugins===1?'':'s'} failed to reinstall`);
+      docSay(`${parts.join('; ')}. Run the command above for the details.`,'err');
+    }else{
+      docReport(refreshed,`Repaired ${repaired} file${repaired===1?'':'s'} for ${target}.`);
+    }
+  }catch(err){
+    docSay(err.message,'err');
+  }finally{
+    docSetBusy(false);
+  }
+}
+
+function openDoctor(){
+  document.getElementById('doctorScreen').classList.add('on');
+  runDoctor();
+}
+
+function closeDoctor(){
+  document.getElementById('doctorScreen').classList.remove('on');
+}
 
 /* ── SESSION TIMER — anchored to server start ───────────── */
 let T0=Date.now();
@@ -1503,6 +1776,10 @@ if('serviceWorker' in navigator){
     btn.title=document.fullscreenElement?'Exit Fullscreen':'Maximize';
   });
 
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&document.getElementById('doctorScreen')?.classList.contains('on')) closeDoctor();
+  });
+
   document.getElementById('wcClose').addEventListener('click',()=>{
     window.close();
     // Fallback if window.close() is blocked (tab not opened by script)
@@ -1550,6 +1827,114 @@ async function exportSessionsAs(format) {
     setTimeout(() => { btn.textContent = original; }, 1500);
   }
 }
+</script>
+<script>
+let currentGainRange = 'today';
+let gainReportData = null;
+
+function formatGainBytes(n) {
+  if (!n) return '0 B';
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function formatGainTokens(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+async function fetchGainData() {
+  const contentEl = document.getElementById('gainContent');
+  if (!contentEl) return;
+  try {
+    const headers = {};
+    if (window.__EGC_OPS_TOKEN) {
+      headers['X-Ops-Token'] = window.__EGC_OPS_TOKEN;
+    }
+    const res = await fetch('/ops/gain', { headers });
+    if (!res.ok) {
+      contentEl.innerHTML = '<div class="eco-empty">Failed to load savings ledger (HTTP ' + res.status + ')</div>';
+      return;
+    }
+    const json = await res.json();
+    gainReportData = json.report || json;
+    renderGainView();
+  } catch (err) {
+    console.error('Failed to fetch gain data:', err);
+    contentEl.innerHTML = '<div class="eco-empty">Error connecting to operations service</div>';
+  }
+}
+
+function setGainRange(rangeKey) {
+  currentGainRange = rangeKey;
+  const ids = {
+    today: 'grToday',
+    session: 'grSession',
+    '7d': 'gr7d',
+    '30d': 'gr30d',
+    sinceInstall: 'grSinceInstall'
+  };
+  Object.entries(ids).forEach(([k, id]) => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      if (k === rangeKey) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+  renderGainView();
+}
+
+function renderGainView() {
+  const contentEl = document.getElementById('gainContent');
+  if (!contentEl) return;
+  if (!gainReportData) {
+    contentEl.innerHTML = '<div class="eco-empty">No savings ledger data available</div>';
+    return;
+  }
+
+  const rangeMap = {
+    today: gainReportData.today,
+    session: gainReportData.currentSession,
+    '7d': gainReportData.last7Days,
+    '30d': gainReportData.last30Days,
+    sinceInstall: gainReportData.sinceInstall,
+  };
+
+  const scoped = rangeMap[currentGainRange] || gainReportData.sinceInstall;
+  if (!scoped || (scoped.available === false)) {
+    contentEl.innerHTML = '<div class="eco-empty">Scope unavailable for this range</div>';
+    return;
+  }
+
+  const tokens = scoped.tokensSaved || 0;
+  const runs = scoped.runs || 0;
+  const bytesIn = scoped.bytesIn || 0;
+  const bytesOut = scoped.bytesOut || 0;
+  const pct = bytesIn > 0 ? (1 - bytesOut / bytesIn) * 100 : 0;
+
+  contentEl.innerHTML = `
+    <div style="margin-bottom:8px;">
+      <div class="eco-row"><span class="eco-lbl">Tokens Saved</span><span class="eco-val" style="color:var(--primary);font-size:14px;font-weight:700;">~${formatGainTokens(tokens)} tokens</span></div>
+      <div class="eco-row"><span class="eco-lbl">Crushed Runs</span><span class="eco-val">${runs.toLocaleString()}</span></div>
+      <div class="eco-row"><span class="eco-lbl">Output Size</span><span class="eco-val">${formatGainBytes(bytesIn)} → ${formatGainBytes(bytesOut)}</span></div>
+      <div class="eco-row"><span class="eco-lbl">Efficiency</span><span class="eco-val">${pct.toFixed(1)}%</span></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);border-top:1px dashed var(--hairline);padding-top:6px;margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+        <span>Avg per run: ~${formatGainTokens(gainReportData.averagePerRun || 0)} tokens</span>
+        <span>Total runs: ${gainReportData.runs || 0}</span>
+      </div>
+      ${gainReportData.biggest && gainReportData.biggest.cmd ? `<div>Biggest: ~${formatGainTokens(gainReportData.biggest.tokensSaved)} tokens (${gainReportData.biggest.cmd})</div>` : ''}
+    </div>
+  `;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetchGainData();
+});
 </script>
 </body>
 </html>
