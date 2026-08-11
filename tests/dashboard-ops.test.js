@@ -205,7 +205,7 @@ test('an inherited Object.prototype key is not dispatchable as an operation', as
 });
 
 test('listOpsOperations reports only the explicitly registered operations', () => {
-  assert.deepEqual(listOpsOperations().sort(), ['doctor', 'install', 'repair']);
+  assert.deepEqual(listOpsOperations().sort(), ['doctor', 'install', 'repair', 'savingsLedger']);
 });
 
 test('every registered operation actually dispatches to something callable', async () => {

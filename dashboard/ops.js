@@ -449,6 +449,11 @@ function runRepair(body, context) {
   return { result: pluginRepairs.length > 0 ? { ...result, pluginRepairs } : result };
 }
 
+function runSavingsLedger(body) {
+  const report = operations.savingsLedger(body);
+  return { result: report };
+}
+
 // A Map, not an object literal: the operation name comes straight off the
 // request path, and an object literal would resolve inherited keys too.
 // `OPERATION_HANDLERS['constructor']` is a truthy function, so it would sail
@@ -456,9 +461,10 @@ function runRepair(body, context) {
 // or throwing out of the handler for /ops/__defineGetter__. A Map lookup only
 // ever sees keys that were explicitly put in it.
 const OPERATION_HANDLERS = new Map([
-  ['doctor',  runDoctor],
-  ['install', runInstall],
-  ['repair',  runRepair],
+  ['doctor',        runDoctor],
+  ['install',       runInstall],
+  ['repair',        runRepair],
+  ['savingsLedger', runSavingsLedger],
 ]);
 
 function listOpsOperations() {

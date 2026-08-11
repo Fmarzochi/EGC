@@ -160,7 +160,7 @@ function savingsLedger(params) {
   const p = normalizeParams(params);
   const entries = readAll();
   return aggregateBreakdown(entries, {
-    now:     p.now,
+    now:     p.now ?? (process.env.EGC_NOW ? new Date(process.env.EGC_NOW) : undefined),
     project: p.project,
     session: p.session,
     context: p.context,

@@ -14,7 +14,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Return the machine-local Crusher ledger path. */
 function metricsFilePath() {
-  return path.join(os.homedir(), '.egc', 'metrics', 'crusher.jsonl');
+  return process.env.EGC_CRUSHER_METRICS_FILE || process.env.EGC_METRICS_FILE || path.join(os.homedir(), '.egc', 'metrics', 'crusher.jsonl');
 }
 
 /** Normalize a session-like scope label while preserving legacy unknowns. */
@@ -86,9 +86,10 @@ function record(entry) {
 }
 
 /** Read every valid JSONL row and normalize legacy scope fields. */
-function readAll() {
+function readAll(filePath) {
   try {
-    const raw = fs.readFileSync(metricsFilePath(), 'utf8');
+    const file = filePath || metricsFilePath();
+    const raw = fs.readFileSync(file, 'utf8');
     return raw.split('\n').filter(Boolean).map(line => {
       try {
         return normalizeEntry(JSON.parse(line));

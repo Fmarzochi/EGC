@@ -535,6 +535,23 @@ body.minimized footer{display:none!important;}
       <div class="eco-session" id="currentSessionEco" style="display:none;margin-bottom:6px;background:var(--canvas-soft);border:1px solid var(--primary-dim);border-radius:7px;padding:9px 12px;"></div>
       <div id="ecoContent"><div class="eco-empty">Waiting for provider events…</div></div>
     </div>
+
+    <div class="rcard" id="gainCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span class="eye">Token Savings (egc gain)</span>
+        <span style="font-size:9px;color:var(--muted);cursor:pointer;" onclick="fetchGainData()">↻ refresh</span>
+      </div>
+      <div class="gain-range-wrap" style="display:flex;gap:4px;margin-bottom:10px;overflow-x:auto;">
+        <button class="cost-range-btn active" id="grToday" onclick="setGainRange('today')">Today</button>
+        <button class="cost-range-btn" id="grSession" onclick="setGainRange('session')">Session</button>
+        <button class="cost-range-btn" id="gr7d" onclick="setGainRange('7d')">7d</button>
+        <button class="cost-range-btn" id="gr30d" onclick="setGainRange('30d')">30d</button>
+        <button class="cost-range-btn" id="grSinceInstall" onclick="setGainRange('sinceInstall')">Since Install</button>
+      </div>
+      <div id="gainContent">
+        <div class="eco-empty">Loading savings ledger...</div>
+      </div>
+    </div>
     <div class="rcard">
   <span class="eye">Usage Analytics</span>
 
@@ -1810,6 +1827,104 @@ async function exportSessionsAs(format) {
     setTimeout(() => { btn.textContent = original; }, 1500);
   }
 }
+</script>
+<script>
+let currentGainRange = 'today';
+let gainReportData = null;
+
+function formatGainBytes(n) {
+  if (!n) return '0 B';
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function formatGainTokens(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+async function fetchGainData() {
+  const contentEl = document.getElementById('gainContent');
+  if (!contentEl) return;
+  try {
+    const payload = await callOp('savingsLedger', {});
+    gainReportData = payload.result;
+    renderGainView();
+  } catch (err) {
+    contentEl.innerHTML = '<div class="eco-empty">' + (err.message || 'Error loading savings ledger') + '</div>';
+  }
+}
+
+function setGainRange(rangeKey) {
+  currentGainRange = rangeKey;
+  const ids = {
+    today: 'grToday',
+    session: 'grSession',
+    '7d': 'gr7d',
+    '30d': 'gr30d',
+    sinceInstall: 'grSinceInstall'
+  };
+  Object.entries(ids).forEach(([k, id]) => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      if (k === rangeKey) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+  renderGainView();
+}
+
+function renderGainView() {
+  const contentEl = document.getElementById('gainContent');
+  if (!contentEl) return;
+  if (!gainReportData) {
+    contentEl.innerHTML = '<div class="eco-empty">No savings ledger data available</div>';
+    return;
+  }
+
+  const rangeMap = {
+    today: gainReportData.today,
+    session: gainReportData.currentSession,
+    '7d': gainReportData.last7Days,
+    '30d': gainReportData.last30Days,
+    sinceInstall: gainReportData.sinceInstall,
+  };
+
+  const scoped = rangeMap[currentGainRange] || gainReportData.sinceInstall;
+  if (!scoped || (scoped.available === false)) {
+    contentEl.innerHTML = '<div class="eco-empty">Scope unavailable for this range</div>';
+    return;
+  }
+
+  const tokens = scoped.tokensSaved || 0;
+  const runs = scoped.runs || 0;
+  const bytesIn = scoped.bytesIn || 0;
+  const bytesOut = scoped.bytesOut || 0;
+  const pct = bytesIn > 0 ? (1 - bytesOut / bytesIn) * 100 : 0;
+
+  contentEl.innerHTML = `
+    <div style="margin-bottom:8px;">
+      <div class="eco-row"><span class="eco-lbl">Tokens Saved</span><span class="eco-val" style="color:var(--primary);font-size:14px;font-weight:700;">~${formatGainTokens(tokens)} tokens</span></div>
+      <div class="eco-row"><span class="eco-lbl">Crushed Runs</span><span class="eco-val">${runs.toLocaleString()}</span></div>
+      <div class="eco-row"><span class="eco-lbl">Output Size</span><span class="eco-val">${formatGainBytes(bytesIn)} → ${formatGainBytes(bytesOut)}</span></div>
+      <div class="eco-row"><span class="eco-lbl">Efficiency</span><span class="eco-val">${pct.toFixed(1)}%</span></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);border-top:1px dashed var(--hairline);padding-top:6px;margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+        <span>Avg per run: ~${formatGainTokens(gainReportData.averagePerRun || 0)} tokens</span>
+        <span>Total runs: ${gainReportData.runs || 0}</span>
+      </div>
+      ${gainReportData.biggest && gainReportData.biggest.cmd ? `<div>Biggest: ~${formatGainTokens(gainReportData.biggest.tokensSaved)} tokens (${esc(gainReportData.biggest.cmd)})</div>` : ''}
+    </div>
+  `;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetchGainData();
+});
 </script>
 </body>
 </html>
