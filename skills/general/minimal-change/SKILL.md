@@ -30,7 +30,7 @@ Every code deliverable under this skill must satisfy all of these:
 ## Strictness modes
 
 - **Strict** (default for production paths, shared libraries, installers, security-adjacent code): full protocol, rung announcement mandatory, contract enforced item by item.
-- **Light** (prototypes, spikes, throwaway scripts, sandboxes): the ladder still guides rung choice, but announcements are optional and the contract relaxes to: no silent broken edges, and label the artifact as a prototype.
+- **Light** (prototypes, spikes, throwaway scripts, sandboxes): the ladder still guides rung choice and The Floor holds in full; no mode ever waives it. Announcements become optional, and the rest of the contract relaxes to: no silent broken edges, and label the artifact as a prototype.
 
 When in doubt about which mode applies, ask or default to strict.
 
