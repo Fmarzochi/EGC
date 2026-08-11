@@ -214,9 +214,22 @@ test('every registered operation actually dispatches to something callable', asy
   // stopped being callable would look exactly like a name that was never
   // registered. Asserting each registered name does NOT 404 catches that.
   const token = 'b2'.repeat(32);
-  const server = await startOpsServer({ token });
+  // Scratch home AND project, like every other round-trip test here. Inheriting
+  // process.cwd() as the project root is safe only by accident today: runInstall
+  // reads ./egc-install.json from it before normalizeInstallRequest can reject
+  // an empty body, so the day this repo grows one at its root this test would
+  // start installing into the checkout of whoever runs it.
+  const homeDir = makeTempDir('egc-ops-dispatch-home-');
+  const projectRoot = makeTempDir('egc-ops-dispatch-project-');
+  const server = await startOpsServer({ token, homeDir, projectRoot });
+
+  // Materialised once and asserted non-empty, so this cannot pass vacuously if
+  // the registry ever came back empty.
+  const operations = listOpsOperations();
+  assert.ok(operations.length > 0, 'the registry must expose at least one operation');
+
   try {
-    for (const name of listOpsOperations()) {
+    for (const name of operations) {
       const res = await postOps(server, name, { token, body: {} });
       assert.notEqual(
         res.status,
@@ -226,6 +239,8 @@ test('every registered operation actually dispatches to something callable', asy
     }
   } finally {
     await server.close();
+    removeDir(projectRoot);
+    removeDir(homeDir);
   }
 });
 
@@ -483,13 +498,22 @@ test('doctor over /ops reports every install target adapter for the buttons', as
 
 test('an install request with no profile or modules is a 400, not a 500', async () => {
   const token = '4'.repeat(64);
-  const server = await startOpsServer({ token });
+  // Isolated for the same reason as the dispatch test: a known target with no
+  // profile clears both boundary checks, so runInstall reaches
+  // loadDefaultInstallConfig(projectRoot). Against the checkout, an
+  // egc-install.json at the repo root would supply the missing profile and turn
+  // this into a real install before the assertion could fail.
+  const homeDir = makeTempDir('egc-ops-noselection-home-');
+  const projectRoot = makeTempDir('egc-ops-noselection-project-');
+  const server = await startOpsServer({ token, homeDir, projectRoot });
   try {
     const res = await postOps(server, 'install', { token, body: { target: 'cursor' } });
     assert.equal(res.status, 400);
     assert.equal(res.payload.ok, false);
   } finally {
     await server.close();
+    removeDir(projectRoot);
+    removeDir(homeDir);
   }
 });
 
