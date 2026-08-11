@@ -217,7 +217,7 @@ function resolvePackageRoot() {
 // HOME, permissions) only removes one of four resolution strategies -- the
 // existing ones are unaffected -- so it is logged and swallowed rather than
 // failing the whole install.
-function writeGuardianCliMarker() {
+function writeGuardianCliMarker(onWarning) {
   const markerPath = path.join(os.homedir(), '.egc', 'guardian-cli-path.json');
   try {
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
@@ -227,7 +227,12 @@ function writeGuardianCliMarker() {
       'utf8'
     );
   } catch (error) {
-    console.error(`Warning: Failed to write Guardian CLI marker: ${error.message}`);
+    const msg = `Warning: Failed to write Guardian CLI marker: ${error.message}`;
+    if (typeof onWarning === 'function') {
+      onWarning(msg);
+    } else {
+      console.error(msg);
+    }
   }
 }
 
@@ -263,7 +268,7 @@ function applyInstallPlan(plan, { onWarning } = {}) {
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
-  writeGuardianCliMarker();
+  writeGuardianCliMarker(onWarning);
 
   // Capture the async promise so callers (e.g. install() in the operations
   // registry) can await it before restoring console.error, ensuring that the

@@ -166,8 +166,48 @@ async function main() {
     assert.ok(Object.hasOwn(result, 'plan'),    'dryRun result must have plan');
     assert.strictEqual(result.applied, null,    'dryRun result.applied must be null');
     assert.deepStrictEqual(result.warnings, [], 'dryRun result.warnings must be []');
-    // syncPromise must not appear in JSON output (non-enumerable)
-    assert.ok(!Object.keys(result).includes('syncPromise'), 'syncPromise must not be enumerable');
+  });
+
+  await run('applyInstallPlan() result has no enumerable syncPromise and survives JSON round-trip', async () => {
+    // Regression test for #1245: the non-enumerable syncPromise property added
+    // to the applyInstallPlan result must not appear in JSON.stringify output.
+    // This test calls the real apply path (not dryRun) against an isolated temp
+    // directory so no production state is touched.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-test-apply-'));
+    try {
+      const { createInstallPlanFromRequest } = require('../../scripts/lib/install/runtime');
+      const { applyInstallPlan }             = require('../../scripts/lib/install/apply');
+
+      const plan = createInstallPlanFromRequest(
+        { mode: 'legacy', target: 'cursor', languages: ['javascript'] },
+        { sourceRoot: path.join(__dirname, '../..'), projectRoot: tmpDir }
+      );
+
+      const warnings = [];
+      const result = applyInstallPlan(plan, { onWarning: msg => warnings.push(msg) });
+
+      // syncPromise must not be enumerable — should not appear in JSON output
+      assert.ok(
+        !Object.keys(result).includes('syncPromise'),
+        'syncPromise must not be an enumerable key on the apply result'
+      );
+      const json = JSON.stringify(result);
+      assert.ok(
+        !json.includes('syncPromise'),
+        'JSON.stringify(result) must not contain "syncPromise"'
+      );
+
+      // Result must survive a JSON round-trip without data loss on serializable fields
+      const reparsed = JSON.parse(json);
+      assert.ok(reparsed.applied === true, 'round-tripped result.applied must be true');
+
+      // Settle the sync promise to avoid unhandled rejection
+      if (result.syncPromise) {
+        await result.syncPromise.catch(() => { /* best-effort: ignore store errors in test */ });
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   // ── doctor() ─────────────────────────────────────────────────────────────
