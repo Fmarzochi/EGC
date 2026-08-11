@@ -517,8 +517,15 @@ function createOpsHandler(options = {}) {
     }
 
     const operation = pathname.slice(OPS_PREFIX.length);
+    // typeof, not just truthiness: the operation name comes off the request
+    // path, and this is the guard that has to hold before it selects what gets
+    // called. A Map already keeps inherited keys out of reach, so this is
+    // belt-and-braces against a non-function ever being registered in the
+    // table by mistake - and it is the sanitizer CodeQL's
+    // js/unvalidated-dynamic-method-call recognises, which a truthiness check
+    // alone is not.
     const handler = OPERATION_HANDLERS.get(operation);
-    if (!handler) {
+    if (typeof handler !== 'function') {
       sendJson(res, 404, { ok: false, error: `Unknown operation: ${operation}` });
       return true;
     }

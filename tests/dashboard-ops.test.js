@@ -208,6 +208,27 @@ test('listOpsOperations reports only the explicitly registered operations', () =
   assert.deepEqual(listOpsOperations().sort(), ['doctor', 'install', 'repair']);
 });
 
+test('every registered operation actually dispatches to something callable', async () => {
+  // The other side of the `typeof handler !== 'function'` guard: that check
+  // turns a non-function in the table into a 404, so a name that silently
+  // stopped being callable would look exactly like a name that was never
+  // registered. Asserting each registered name does NOT 404 catches that.
+  const token = 'b2'.repeat(32);
+  const server = await startOpsServer({ token });
+  try {
+    for (const name of listOpsOperations()) {
+      const res = await postOps(server, name, { token, body: {} });
+      assert.notEqual(
+        res.status,
+        404,
+        `/ops/${name} is registered but did not dispatch (got 404)`
+      );
+    }
+  } finally {
+    await server.close();
+  }
+});
+
 test('a non-POST method on /ops is rejected', async () => {
   const token = 'e'.repeat(64);
   const server = await startOpsServer({ token });
