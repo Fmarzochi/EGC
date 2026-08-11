@@ -42,6 +42,9 @@ const {
 
 const HOOK_LIB_SOURCES = [
   'scripts/lib/session-start-adapter.js',
+  // Flattens next to the adapter; its require falls back from
+  // ./crusher/session-marker to ./session-marker for exactly this layout.
+  'scripts/lib/crusher/session-marker.js',
   'scripts/lib/session-context-loader.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/global-state.js',

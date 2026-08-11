@@ -79,7 +79,9 @@ function main() {
     // Preserve the existing top-level lifetime fields while adding the scoped
     // report. Derive entry count from report.runs — both come from the same
     // ledger snapshot, avoiding a double-read race.
-    console.log(JSON.stringify({ ...totals, ...report, entries: report.runs }, null, 2));
+    // Machine-readable report printed to the caller's own terminal by design:
+    // the ledger is local, zero-cost, and --json exists to expose it whole.
+    console.log(JSON.stringify({ ...totals, ...report, entries: report.runs }, null, 2)); // NOSONAR jssecurity:S8689
     return;
   }
 
