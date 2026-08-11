@@ -197,7 +197,7 @@ async function runTests() {
           attempts += 1;
           return new Promise(() => {});
         } } };
-        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '500', async () => {
+        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '150', async () => {
           const hooks = await EgcGuardianCrusher({ client, directory: tempDir });
           const started = Date.now();
           await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_prompt_timeout', tempDir) }));

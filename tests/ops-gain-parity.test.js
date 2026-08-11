@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * Parity and integration tests for egc gain panel screen and /ops/gain operation route.
+ * Parity and integration tests for egc gain panel screen and POST /ops/savingsLedger operation route.
  * Verifies that for any given range (today, session, 7d, 30d, since install),
  * the panel's numbers equal egc gain's output for that range when comparing
  * both against the same fixture ledger.
- * Also verifies uniform /ops token gating.
+ * Also verifies POST /ops/savingsLedger authentication using the shared dashboard-token infrastructure (#1243).
  */
 
 const test = require('node:test');
@@ -16,7 +16,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { savingsLedger: savingsLedgerOp } = require('../scripts/lib/operations/index');
-const { loadOrCreateOpsToken, validateOpsToken, createOpsHandler } = require('../dashboard/ops');
+const { createOpsHandler } = require('../dashboard/ops');
 
 const ROOT = path.join(__dirname, '..');
 const GAIN_CLI = path.join(ROOT, 'scripts', 'gain.js');
@@ -88,49 +88,6 @@ function createFixtureLedger(nowDate) {
 
   return { tmpDir, ledgerPath, sessionId, projectPath };
 }
-
-test('loadOrCreateOpsToken loads environment token or auto-creates token file', () => {
-  const origToken = process.env.EGC_OPS_TOKEN;
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-token-test-'));
-  const tokenFile = path.join(tmpDir, 'ops_token');
-
-  try {
-    delete process.env.EGC_OPS_TOKEN;
-    delete process.env.OPS_TOKEN;
-
-    const token = loadOrCreateOpsToken({ tokenPath: tokenFile });
-    assert.ok(token, 'Generates non-empty token');
-    assert.equal(fs.readFileSync(tokenFile, 'utf8').trim(), token, 'Persists generated token to file');
-    assert.equal(process.env.EGC_OPS_TOKEN, token, 'Populates process.env.EGC_OPS_TOKEN');
-
-    // Reloading returns the existing token from environment / file
-    const reloaded = loadOrCreateOpsToken({ tokenPath: tokenFile });
-    assert.equal(reloaded, token, 'Reloads identical token');
-  } finally {
-    if (origToken !== undefined) process.env.EGC_OPS_TOKEN = origToken;
-    else delete process.env.EGC_OPS_TOKEN;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test('validateOpsToken handles token gate configuration and request headers', () => {
-  const origToken = process.env.EGC_OPS_TOKEN;
-  try {
-    delete process.env.EGC_OPS_TOKEN;
-    delete process.env.OPS_TOKEN;
-    assert.equal(validateOpsToken({}), false, 'fail closed when no token configured');
-
-    process.env.EGC_OPS_TOKEN = 'secret-ops-key-42';
-    assert.equal(validateOpsToken({}), false, 'refused when token missing');
-    assert.equal(validateOpsToken({ headers: { 'x-ops-token': 'wrong-key' } }), false, 'refused on wrong token');
-    assert.equal(validateOpsToken({ headers: { 'x-ops-token': 'secret-ops-key-42' } }), true, 'accepted on x-ops-token');
-    assert.equal(validateOpsToken({ headers: { authorization: 'Bearer secret-ops-key-42' } }), true, 'accepted on Bearer token');
-    assert.equal(validateOpsToken({ url: '/ops/gain?token=secret-ops-key-42' }), false, 'refused on query string token per security policy');
-  } finally {
-    if (origToken !== undefined) process.env.EGC_OPS_TOKEN = origToken;
-    else delete process.env.EGC_OPS_TOKEN;
-  }
-});
 
 test('savingsLedger operation reads environment-configured metrics ledger without client path parameter exposure', () => {
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
@@ -232,69 +189,77 @@ test('Parity test: panel numbers equal egc gain output for every range against t
   }
 });
 
-test('HTTP /ops/gain route responds with 401 when token invalid, and 200 with parity report when authorized', async () => {
+test('HTTP POST /ops/savingsLedger route responds with 401 when token missing/invalid, and 200 with parity report when authorized', async () => {
   const http = require('node:http');
 
-  const origToken = process.env.EGC_OPS_TOKEN;
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
-  process.env.EGC_OPS_TOKEN = 'test-token-777';
-
   const testNow = new Date();
   const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
   process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
-  const handleOps = createOpsHandler({
-    savingsLedger: (opts) => savingsLedgerOp({ ...opts, now: testNow, session: sessionId, project: projectPath }),
-  });
+  const TEST_TOKEN = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
-  const server = http.createServer((req, res) => {
-    if (handleOps(req, res)) return;
+  let port;
+  const server = http.createServer(async (req, res) => {
+    const handleOps = createOpsHandler({ token: TEST_TOKEN, port, projectRoot: projectPath });
+    if (await handleOps(req, res)) return;
     res.writeHead(404);
     res.end();
   });
 
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const port = server.address().port;
+  port = server.address().port;
 
   try {
     // 1. Unauthorized request (no token header)
     const res401 = await new Promise((resolve, reject) => {
-      http.get(`http://127.0.0.1:${port}/ops/gain`, (res) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/ops/savingsLedger',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }, (res) => {
         let body = '';
         res.on('data', chunk => body += chunk);
         res.on('end', () => resolve({ status: res.statusCode, data: JSON.parse(body) }));
-      }).on('error', reject);
+      });
+      req.on('error', reject);
+      req.end(JSON.stringify({ now: testNow, session: sessionId, project: projectPath }));
     });
 
     assert.equal(res401.status, 401);
-    assert.equal(res401.data.error, 'Unauthorized');
+    assert.equal(res401.data.ok, false);
 
-    // 2. Authorized request (X-Ops-Token header)
+    // 2. Authorized request (X-EGC-Token header)
     const res200 = await new Promise((resolve, reject) => {
-      const options = {
+      const req = http.request({
         hostname: '127.0.0.1',
         port,
-        path: '/ops/gain',
-        headers: { 'X-Ops-Token': 'test-token-777' },
-      };
-      http.get(options, (res) => {
+        path: '/ops/savingsLedger',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-EGC-Token': TEST_TOKEN,
+        },
+      }, (res) => {
         let body = '';
         res.on('data', chunk => body += chunk);
         res.on('end', () => resolve({ status: res.statusCode, data: JSON.parse(body) }));
-      }).on('error', reject);
+      });
+      req.on('error', reject);
+      req.end(JSON.stringify({ now: testNow, session: sessionId, project: projectPath }));
     });
 
     assert.equal(res200.status, 200);
     assert.equal(res200.data.ok, true);
-    assert.ok(res200.data.report);
-    assert.equal(res200.data.report.today.tokensSaved, 4700);
+    assert.equal(res200.data.operation, 'savingsLedger');
+    assert.ok(res200.data.result);
+    assert.equal(res200.data.result.today.tokensSaved, 4700);
   } finally {
     server.close();
-    if (origToken !== undefined) process.env.EGC_OPS_TOKEN = origToken;
-    else delete process.env.EGC_OPS_TOKEN;
     if (origFile !== undefined) process.env.EGC_CRUSHER_METRICS_FILE = origFile;
     else delete process.env.EGC_CRUSHER_METRICS_FILE;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
-
