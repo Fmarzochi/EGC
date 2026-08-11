@@ -1917,7 +1917,7 @@ function renderGainView() {
         <span>Avg per run: ~${formatGainTokens(gainReportData.averagePerRun || 0)} tokens</span>
         <span>Total runs: ${gainReportData.runs || 0}</span>
       </div>
-      ${gainReportData.biggest && gainReportData.biggest.cmd ? `<div>Biggest: ~${formatGainTokens(gainReportData.biggest.tokensSaved)} tokens (${gainReportData.biggest.cmd})</div>` : ''}
+      ${gainReportData.biggest && gainReportData.biggest.cmd ? `<div>Biggest: ~${formatGainTokens(gainReportData.biggest.tokensSaved)} tokens (${esc(gainReportData.biggest.cmd)})</div>` : ''}
     </div>
   `;
 }

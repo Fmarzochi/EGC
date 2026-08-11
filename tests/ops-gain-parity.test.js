@@ -27,7 +27,9 @@ function createFixtureLedger(nowDate) {
   const sessionId = 'test-session-123';
   const projectPath = path.resolve(tmpDir);
 
-  const nowMs = nowDate.getTime();
+  const baseDate = nowDate ? new Date(nowDate) : new Date();
+  baseDate.setHours(12, 0, 0, 0);
+  const nowMs = baseDate.getTime();
   const dayMs = 24 * 60 * 60 * 1000;
 
   // Ledger entries across different time spans
@@ -111,6 +113,7 @@ test('savingsLedger operation reads environment-configured metrics ledger withou
 
 test('Parity test: panel numbers equal egc gain output for every range against the same fixture ledger', () => {
   const testNow = new Date();
+  testNow.setHours(12, 0, 0, 0);
   const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
   process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
@@ -124,6 +127,7 @@ test('Parity test: panel numbers equal egc gain output for every range against t
         EGC_CRUSHER_METRICS_FILE: ledgerPath,
         EGC_SESSION_ID: sessionId,
         EGC_PROJECT_ROOT: projectPath,
+        EGC_NOW: testNow.toISOString(),
       },
     });
 
@@ -194,6 +198,7 @@ test('HTTP POST /ops/savingsLedger route responds with 401 when token missing/in
 
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
   const testNow = new Date();
+  testNow.setHours(12, 0, 0, 0);
   const { tmpDir, ledgerPath, sessionId, projectPath } = createFixtureLedger(testNow);
   process.env.EGC_CRUSHER_METRICS_FILE = ledgerPath;
 
