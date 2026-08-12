@@ -712,6 +712,11 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
+    "name": "minimal-change",
+    "description": "Apply the minimal-change ladder when writing or modifying code, choosing the smallest rung that truly solves the task and refusing both padded overengineering and half-done stubs. Use for implementation, refactoring, and bug-fix requests; not for research, documentation, or conversation."
+  },
+  {
+    "kind": "skill",
     "name": "healthcare-emr-patterns",
     "description": "EMR/EHR development patterns for healthcare applications. Clinical safety, encounter workflows, prescription generation, clinical decision support integration, and accessibility-first UI for medical data entry."
   },

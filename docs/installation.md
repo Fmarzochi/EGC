@@ -116,7 +116,7 @@ sh scripts/install.sh
 
 > **Note:** Gemini CLI free tier was discontinued on June 18, 2026 for individual users. The `~/.gemini/GEMINI.md` target still works for paid Google accounts. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative: EGC supports it via `egc install --target antigravity`.
 4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (61 agents, 230 skills, 77 commands): skipped automatically in CI
+5. Asks interactively whether to install the prompt library (61 agents, 231 skills, 77 commands): skipped automatically in CI
 6. Installs the Token Crusher binary shim (`~/.egc/bin`): a best-effort, non-fatal step, see [Token Crusher](#token-crusher) below
 
 ### Example output
@@ -140,7 +140,7 @@ EGC install
   ✓ registered egc-memory in Claude Code (user scope)
   ✓ registered in Cursor (~/.cursor/mcp.json)
 
-Install prompt library? (61 agents, 230 skills, 77 commands) [y/N]:
+Install prompt library? (61 agents, 231 skills, 77 commands) [y/N]:
 
 Installing Token Crusher binary shim...
 Shim directory: ~/.egc/bin
