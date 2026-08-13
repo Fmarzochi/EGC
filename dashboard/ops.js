@@ -454,6 +454,47 @@ function runSavingsLedger(body) {
   return { result: report };
 }
 
+// ---------------------------------------------------------------------------
+// Session Bus handlers (slice 3, #1238)
+//
+// Bridge the panel to the egc-memory session bus via the shared operations
+// library. The actual MCP stdio call lives in scripts/lib/operations/index.js
+// so the CLI can reach the same code path through its own door.
+//
+// BUG-08 dependency (documented per acceptance criteria): the egc-memory MCP
+// server opens ~/.egc/memory/state.db while the CLI state store uses
+// ~/.egc/egc/state.db. The bus operates on a separate SQLite file from the
+// one operations.state() reads. Do not fix here; this slice works with the
+// bus as it exists today.
+// ---------------------------------------------------------------------------
+
+async function runSessionPeers(body) {
+  const result = await operations.sessionPeers({
+    projectPath: body.projectPath || undefined,
+  });
+  return { result };
+}
+
+async function runSessionSend(body) {
+  const result = await operations.sessionSend({
+    sessionId:   body.sessionId   || undefined,
+    toSession:   body.toSession   || undefined,
+    projectPath: body.projectPath || undefined,
+    kind:        body.kind,
+    payload:     body.payload     || undefined,
+  });
+  return { result };
+}
+
+async function runSessionEvents(body) {
+  const result = await operations.sessionEvents({
+    sessionId:   body.sessionId   || undefined,
+    projectPath: body.projectPath || undefined,
+    peek:        body.peek !== undefined ? Boolean(body.peek) : undefined,
+  });
+  return { result };
+}
+
 // A Map, not an object literal: the operation name comes straight off the
 // request path, and an object literal would resolve inherited keys too.
 // `OPERATION_HANDLERS['constructor']` is a truthy function, so it would sail
@@ -465,6 +506,10 @@ const OPERATION_HANDLERS = new Map([
   ['install',       runInstall],
   ['repair',        runRepair],
   ['savingsLedger', runSavingsLedger],
+  // Session bus (slice 3, #1238)
+  ['sessionPeers',  runSessionPeers],
+  ['sessionSend',   runSessionSend],
+  ['sessionEvents', runSessionEvents],
 ]);
 
 function listOpsOperations() {
