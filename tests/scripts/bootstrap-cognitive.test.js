@@ -114,12 +114,12 @@ async function runClaudeCodeAndGeminiCliTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('writes Gemini CLI GEMINI.md when ~/.gemini exists', () => {
+  if (await test('writes GEMINI.md into ~/.gemini for Antigravity (Gemini home) when it exists', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.gemini'));
       const output = run(home);
-      assert.ok(/Gemini CLI: memory protocol installed/.test(output), 'should report install');
+      assert.ok(output.includes('Antigravity (Gemini home): memory protocol installed'), 'should report install');
       const target = path.join(home, '.gemini', 'GEMINI.md');
       const content = fs.readFileSync(target, 'utf8');
       assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
@@ -128,13 +128,13 @@ async function runClaudeCodeAndGeminiCliTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Gemini CLI: logs an error instead of crashing when the GEMINI.md path is structurally broken', () => {
+  if (await test('Antigravity (Gemini home): logs an error instead of crashing when the GEMINI.md path is structurally broken', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.gemini'));
       fs.mkdirSync(path.join(home, '.gemini', 'GEMINI.md'));
       const output = run(home);
-      assert.ok(/Gemini CLI: unexpected error:/.test(output), 'should report the error, not crash');
+      assert.ok(output.includes('Antigravity (Gemini home): unexpected error:'), 'should report the error, not crash');
     } finally {
       cleanup(home);
     }
@@ -405,7 +405,6 @@ async function runStandaloneTargetUpgradeTests() {
     { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae (.trae)' },
     { home: '.trae-cn', target: ['.trae-cn', 'MEMORY.md'], label: 'Trae (.trae-cn)' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
-    { home: '.continue', target: ['.continue', 'prompts', 'egc-memory.prompt'], label: 'Continue.dev' },
   ];
 
   let passed = 0;
@@ -457,7 +456,6 @@ async function runStandaloneCatchBlockTests() {
     { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
     { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
-    { home: '.continue', target: ['.continue', 'prompts', 'egc-memory.prompt'], label: 'Continue.dev' },
   ];
 
   let passed = 0;
@@ -570,14 +568,13 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, CodeBuddy, and Continue.dev', () => {
+  if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, and CodeBuddy', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));
       fs.mkdirSync(path.join(home, '.opencode'));
       fs.mkdirSync(path.join(home, '.trae'));
       fs.mkdirSync(path.join(home, '.codebuddy'));
-      fs.mkdirSync(path.join(home, '.continue'));
       // No .cursor/.config/Cursor -> exercises the injectProtocol(BLOCK) fallback,
       // already covered by the BLOCK-wide assertion above; here we cover the
       // 5 harnesses that used to ship an abbreviated, hand-duplicated copy.
@@ -588,7 +585,6 @@ async function runTests() {
         path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'),
         path.join(home, '.trae', 'MEMORY.md'),
         path.join(home, '.codebuddy', 'MEMORY.md'),
-        path.join(home, '.continue', 'prompts', 'egc-memory.prompt'),
       ];
       for (const filePath of filesToCheck) {
         const content = fs.readFileSync(filePath, 'utf8');

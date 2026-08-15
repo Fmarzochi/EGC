@@ -114,7 +114,7 @@ ${MESH_MD}
 `;
 
 // Standalone Markdown file used by harnesses that read a static instructions
-// file instead of a global rules block (OpenCode/Trae/CodeBuddy/Continue.dev).
+// file instead of a global rules block (OpenCode/Trae/CodeBuddy).
 // Carries the same version marker as BLOCK so injectStandaloneProtocol() can
 // detect and upgrade an already-installed copy instead of leaving it frozen.
 function markdownProtocolBody(title) {
@@ -195,13 +195,17 @@ try {
   console.log(`  [cognitive] Claude Code: unexpected error: ${e.message}`);
 }
 
-// ── Gemini CLI / AGY ──────────────────────────────────────────────────────────
+// ── Antigravity (Gemini home) ─────────────────────────────────────────────────
+// The standalone Gemini CLI stopped serving on 2026-06-18 (Enterprise Code
+// Assist licenses excepted); Antigravity is its official successor and kept
+// reading ~/.gemini/GEMINI.md through the migration, so this write now
+// serves Antigravity surfaces (and any remaining Enterprise Gemini CLI).
 try {
   if (fs.existsSync(path.join(HOME, '.gemini'))) {
-    injectProtocol(path.join(HOME, '.gemini', 'GEMINI.md'), 'Gemini CLI');
+    injectProtocol(path.join(HOME, '.gemini', 'GEMINI.md'), 'Antigravity (Gemini home)');
   }
 } catch (e) {
-  console.log(`  [cognitive] Gemini CLI: unexpected error: ${e.message}`);
+  console.log(`  [cognitive] Antigravity (Gemini home): unexpected error: ${e.message}`);
 }
 
 function cursorRulesBlock() {
@@ -421,20 +425,9 @@ const CODEX_SKIP_MESSAGES = {
   }
 })();
 
-// ── Continue.dev (~/.continue/prompts/egc-memory.prompt) ─────────────────────
-(function bootstrapContinue() {
-  try {
-    const continueDir = path.join(HOME, '.continue');
-    if (!fs.existsSync(continueDir)) return;
-    const promptsDir = path.join(continueDir, 'prompts');
-    if (!fs.existsSync(promptsDir)) fs.mkdirSync(promptsDir, { recursive: true });
-    const target = path.join(promptsDir, 'egc-memory.prompt');
-    const content = `name: EGC Session Memory\ndescription: Restore and persist EGC cross-session memory\n---\n${MARKER}\nAt the start of every session call \`get_state({})\` via egc-memory to restore context. At the end call \`update_state({...})\` to save decisions.\n\n${AUTO_INTUITION_MD}\n\n${GUARDIAN_MD}\n\n${CRUSHER_MD}\n<!-- /egc-memory-protocol -->\n`;
-    injectStandaloneProtocol(target, 'Continue.dev', content);
-  } catch (e) {
-    console.log(`  [cognitive] Continue.dev: unexpected error: ${e.message}`);
-  }
-})();
+// Continue.dev was retired here after Cursor's acqui-hire shut the product
+// down (final release 2026-06-19, repository read-only): a config written
+// into ~/.continue would instruct a tool that can no longer receive fixes.
 
 // ── Kiro (~/.kiro/hooks/) ─────────────────────────────────────────────────────
 (function bootstrapKiro() {

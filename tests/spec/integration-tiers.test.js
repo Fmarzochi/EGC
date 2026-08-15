@@ -18,10 +18,12 @@ const PACKAGE_PATH = path.join(REPO_ROOT, 'package.json');
 const GLAMA_PATH = path.join(REPO_ROOT, 'glama.json');
 const COPILOT_INSTRUCTIONS_PATH = path.join(REPO_ROOT, '.github', 'copilot-instructions.md');
 
+// Gemini CLI, Continue.dev, and Roo Code were retired on 2026-08-16 (shut
+// down, shut down, and archived upstream respectively): they left this list
+// together with SUPPORTED_INSTALL_TARGETS and the doc's table.
 const EXPECTED_HARNESSES = [
   'Claude Code',
   'Antigravity',
-  'Gemini CLI',
   'Qwen Code',
   'Cursor',
   'Codex CLI',
@@ -32,7 +34,6 @@ const EXPECTED_HARNESSES = [
   'Junie',
   'Goose',
   'Amazon Q Developer CLI',
-  'Roo Code',
   'OpenHands',
   'Aider',
   'Cline',
@@ -40,11 +41,10 @@ const EXPECTED_HARNESSES = [
   'Windsurf',
   'Amp',
   'VS Code Copilot',
-  'Continue.dev',
   'Zed',
 ];
 
-const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'continue', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'roocode', 'openhands', 'aider', 'cline', 'warp'];
+const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'cline', 'warp'];
 const EXPECTED_TIER2_INSTALLERS = ['.kiro/install.sh', '.trae/install.sh'];
 
 function loadDoc() {

@@ -4,7 +4,11 @@ const path = require('node:path');
 const { getInstallTargetAdapter, planInstallTargetScaffold } = require('./install-targets/registry');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
-const SUPPORTED_INSTALL_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'gemini', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'continue', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'roocode', 'openhands', 'aider', 'cline', 'warp'];
+// gemini, continue, and roocode were retired on 2026-08-16: the standalone
+// Gemini CLI stopped serving (Antigravity succeeded it on the same ~/.gemini
+// home that the egc target owns), Continue.dev shut down after the Cursor
+// acqui-hire, and Roo Code has been archived upstream since 2026-05-15.
+const SUPPORTED_INSTALL_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'cline', 'warp'];
 const COMPONENT_FAMILY_PREFIXES = {
   baseline: 'baseline:',
   language: 'lang:',

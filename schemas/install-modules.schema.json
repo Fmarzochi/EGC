@@ -52,14 +52,12 @@
                 "cursor",
                 "antigravity",
                 "codex",
-                "gemini",
                 "opencode",
                 "codebuddy",
                 "windsurf",
                 "amp",
                 "copilot",
                 "zed",
-                "continue",
                 "kiro",
                 "trae",
                 "goose",
@@ -69,7 +67,6 @@
                 "cline",
                 "warp",
                 "junie",
-                "roocode",
                 "qwen"
               ]
             }
