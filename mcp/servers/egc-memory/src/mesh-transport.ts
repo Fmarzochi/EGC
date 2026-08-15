@@ -1,0 +1,132 @@
+// Mesh transport v0 (design issue #1251, layer C2): wake-on-write delivery
+// over the session-bus store. An fs.watch on the store's directory is only a
+// wake signal: correctness always comes from re-reading the bus tables under
+// the same cursor semantics as session_events, so a missed, coalesced, or
+// spurious filesystem event can delay one delivery round (bounded by the
+// caller's repoll ceiling) but can never lose or duplicate an event.
+//
+// SQLite in WAL mode appends to `<db>-wal` and periodically checkpoints back
+// into the main file, sometimes replacing files wholesale. Watching the
+// directory instead of a single file survives both patterns; the basename
+// filter keeps unrelated writes in the same directory from waking waiters.
+// Push stays off unless EGC_MESH_PUSH=1, so the server's default behavior is
+// exactly what it was before this module existed.
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+export const MESH_PUSH_FLAG = 'EGC_MESH_PUSH';
+export const DEFAULT_DEBOUNCE_MS = 25;
+// Ceiling for a single waitForChange round: callers loop with
+// `min(remaining, ceiling)` so a lost filesystem event degrades to a slow
+// poll instead of a hang until the caller's full timeout.
+export const DEFAULT_REPOLL_CEILING_MS = 2000;
+// Hard cap for one session_wait call, kept well under MCP client timeouts.
+export const MAX_SESSION_WAIT_MS = 25000;
+
+export type WakeReason = 'change' | 'timeout' | 'closed';
+
+export interface MeshTransportOptions {
+  dbPath: string;
+  debounceMs?: number;
+  // Test seam; also exercised as the fallback path for platforms where
+  // fs.watch is unavailable or throws at creation time.
+  watchImpl?: typeof fs.watch;
+}
+
+export interface MeshTransport {
+  readonly mode: 'watch' | 'interval';
+  pendingWaiters(): number;
+  waitForChange(timeoutMs: number): Promise<WakeReason>;
+  close(): void;
+}
+
+export function meshPushEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env[MESH_PUSH_FLAG] === '1';
+}
+
+export function createMeshTransport(options: MeshTransportOptions): MeshTransport {
+  const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
+  const dir = path.dirname(options.dbPath);
+  const base = path.basename(options.dbPath);
+  const waiters = new Set<(reason: WakeReason) => void>();
+  let debounceTimer: NodeJS.Timeout | null = null;
+  let closed = false;
+
+  const wakeAll = (reason: WakeReason): void => {
+    const pending = [...waiters];
+    waiters.clear();
+    for (const resolve of pending) resolve(reason);
+  };
+
+  const scheduleWake = (): void => {
+    if (closed || debounceTimer) return;
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      wakeAll('change');
+    }, debounceMs);
+    debounceTimer.unref();
+  };
+
+  let watcher: fs.FSWatcher | null = null;
+  let mode: 'watch' | 'interval' = 'watch';
+  try {
+    const watchImpl = options.watchImpl ?? fs.watch;
+    // persistent:false so a live transport never keeps the process alive.
+    watcher = watchImpl(dir, { persistent: false }, (_event, filename) => {
+      // A null filename (delivered by some platforms under load) must wake:
+      // waking on too little risks a stall until the repoll ceiling, waking
+      // on too much only costs one SQL re-read.
+      if (filename === null || String(filename).startsWith(base)) scheduleWake();
+    });
+    watcher.on('error', () => {
+      // A watcher that dies at runtime (e.g. watch descriptor limits) must
+      // not take delivery down with it: waiters keep resolving through their
+      // own timers, which is precisely the interval mode contract.
+      watcher = null;
+      mode = 'interval';
+    });
+  } catch {
+    watcher = null;
+    mode = 'interval';
+  }
+
+  return {
+    get mode() {
+      return mode;
+    },
+    pendingWaiters(): number {
+      return waiters.size;
+    },
+    waitForChange(timeoutMs: number): Promise<WakeReason> {
+      if (closed) return Promise.resolve('closed');
+      return new Promise<WakeReason>(resolve => {
+        const waiter = (reason: WakeReason): void => {
+          clearTimeout(timer);
+          resolve(reason);
+        };
+        // Deliberately NOT unref'd: a pending waiter is a promise owed to a
+        // caller, and the process must not exit out from under it. close()
+        // clears these timers, so shutdown is never delayed by a parked wait.
+        const timer = setTimeout(() => {
+          waiters.delete(waiter);
+          resolve('timeout');
+        }, Math.max(1, timeoutMs));
+        waiters.add(waiter);
+      });
+    },
+    close(): void {
+      if (closed) return;
+      closed = true;
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      if (watcher) {
+        watcher.close();
+        watcher = null;
+      }
+      wakeAll('closed');
+    }
+  };
+}
