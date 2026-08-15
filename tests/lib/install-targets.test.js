@@ -53,8 +53,8 @@ function runTests() {
     for (const retired of ['gemini', 'continue', 'continue-project', 'roocode', 'roocode-project']) {
       assert.throws(
         () => getInstallTargetAdapter(retired),
-        /Unknown install target adapter/,
-        `${retired} must stay retired`
+        /Install target retired/,
+        `${retired} must stay retired, with the retirement explained`
       );
     }
   })) passed++; else failed++;

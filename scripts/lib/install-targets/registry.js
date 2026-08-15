@@ -66,10 +66,24 @@ function listInstallTargetAdapters() {
   return ADAPTERS.slice();
 }
 
+// Recognized so every command (install, doctor, repair, auto-update) can
+// explain a retirement instead of calling a formerly valid id "unknown".
+const RETIRED_TARGET_IDS = Object.freeze(new Set([
+  'gemini', 'gemini-project',
+  'continue', 'continue-home', 'continue-project',
+  'roocode', 'roocode-project',
+]));
+
 function getInstallTargetAdapter(targetOrAdapterId) {
   const adapter = ADAPTERS.find(candidate => candidate.supports(targetOrAdapterId));
 
   if (!adapter) {
+    if (RETIRED_TARGET_IDS.has(String(targetOrAdapterId))) {
+      throw new Error(
+        `Install target retired: ${targetOrAdapterId} (its product was discontinued; `
+        + 'the install package no longer manages it, see docs/spec/integration-tiers.md)'
+      );
+    }
     throw new Error(`Unknown install target adapter: ${targetOrAdapterId}`);
   }
 
