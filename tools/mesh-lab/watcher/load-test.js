@@ -118,11 +118,15 @@ async function main() {
 
     for (const state of subscribers) state.child.send({ type: 'stop' });
     // Bounded on purpose: a stuck subscriber must fail the run, not hang
-    // it; the finally below SIGKILLs any survivor.
+    // it; the finally below SIGKILLs any survivor. The deadline timer is
+    // cleared after the race so a fast shutdown does not keep the process
+    // alive for the full grace period.
+    let stopDeadline = null;
     const stoppedInTime = await Promise.race([
       Promise.all(subscribers.map(s => s.stopped)).then(() => true),
-      new Promise(resolve => setTimeout(() => resolve(false), 10000))
+      new Promise(resolve => { stopDeadline = setTimeout(() => resolve(false), 10000); })
     ]);
+    if (stopDeadline) clearTimeout(stopDeadline);
 
     const check = (ok, label) => {
       console.log(`  ${ok ? 'PASS' : 'FAIL'} ${label}`);
