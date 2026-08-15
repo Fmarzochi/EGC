@@ -49,23 +49,37 @@ async function benchWakeLatency(baseDir) {
   const target = path.join(dir, 'state.db-wal');
   fs.writeFileSync(target, 'seed');
   let pending = null;
+  let lastEventAt = 0;
   const watchErrors = [];
-  const watcher = fs.watch(dir, (_event, filename) => {
-    if (filename !== null && !String(filename).startsWith('state.db')) return;
-    if (pending) {
-      const waiter = pending;
-      pending = null;
-      waiter.resolve(nowMs() - waiter.t0);
-    }
-  });
-  // A watcher that dies mid-bench (e.g. instance limits) must degrade to
-  // reported misses, not crash the whole run with an unhandled error.
+  let watcher;
+  try {
+    // fs.watch throws SYNCHRONOUSLY when the platform watcher cannot be
+    // created (e.g. inotify instance limits): that must degrade to a
+    // reported error, not crash the run before any handler attaches.
+    watcher = fs.watch(dir, (_event, filename) => {
+      if (filename !== null && !String(filename).startsWith('state.db')) return;
+      lastEventAt = nowMs();
+      if (pending) {
+        const waiter = pending;
+        pending = null;
+        waiter.resolve(nowMs() - waiter.t0);
+      }
+    });
+  } catch (err) {
+    return { ...stats([]), misses: WAKE_SAMPLES, watchErrors: [err.code || String(err)] };
+  }
+  // A watcher that dies mid-bench must also degrade to reported misses.
   watcher.on('error', err => watchErrors.push(err.code || String(err)));
   const latencies = [];
   let misses = 0;
   try {
     for (let i = 0; i < WAKE_SAMPLES; i++) {
-      await sleep(3);
+      // Arm only after the stream has gone quiet: a trailing notification
+      // from the previous append (FSEvents delivers ~50ms late) must not
+      // resolve the next sample with a near-zero latency and bias the
+      // distribution low.
+      const quietCap = nowMs() + 500;
+      while (nowMs() < quietCap && nowMs() - lastEventAt < 120) await sleep(10);
       const wake = new Promise(resolve => { pending = { t0: 0, resolve }; });
       pending.t0 = nowMs();
       fs.appendFileSync(target, 'x');
@@ -91,11 +105,17 @@ async function benchCoalescing(baseDir) {
   for (let round = 0; round < COALESCE_ROUNDS; round++) {
     let notifications = 0;
     let lastEventAt = nowMs();
-    const watcher = fs.watch(dir, (_event, filename) => {
-      if (filename !== null && !String(filename).startsWith('state.db')) return;
-      notifications += 1;
-      lastEventAt = nowMs();
-    });
+    let watcher;
+    try {
+      watcher = fs.watch(dir, (_event, filename) => {
+        if (filename !== null && !String(filename).startsWith('state.db')) return;
+        notifications += 1;
+        lastEventAt = nowMs();
+      });
+    } catch (err) {
+      watchErrors.push(err.code || String(err));
+      break;
+    }
     watcher.on('error', err => watchErrors.push(err.code || String(err)));
     try {
       await sleep(10);
@@ -117,7 +137,9 @@ async function benchCoalescing(baseDir) {
       max: Math.max(...perRound),
       mean: Math.round((total / perRound.length) * 100) / 100
     },
-    appendsPerNotification: Math.round((COALESCE_BURST * COALESCE_ROUNDS / Math.max(1, total)) * 100) / 100,
+    appendsPerNotification: total === 0
+      ? null
+      : Math.round((COALESCE_BURST * perRound.length / total) * 100) / 100,
     watchErrors
   };
 }
@@ -135,8 +157,13 @@ async function benchRenamePatterns(baseDir) {
     const dirEvents = [];
     const fileEvents = [];
     let dirWatchError = null;
-    const dirWatcher = fs.watch(dir, (event, filename) => dirEvents.push(`${event}:${filename}`));
-    dirWatcher.on('error', err => { dirWatchError = err.code || String(err); });
+    let dirWatcher = null;
+    try {
+      dirWatcher = fs.watch(dir, (event, filename) => dirEvents.push(`${event}:${filename}`));
+      dirWatcher.on('error', err => { dirWatchError = err.code || String(err); });
+    } catch (err) {
+      dirWatchError = err.code || String(err);
+    }
     let fileWatcher = null;
     let fileWatchError = null;
     try {
@@ -167,7 +194,7 @@ async function benchRenamePatterns(baseDir) {
         }
       });
     } finally {
-      dirWatcher.close();
+      if (dirWatcher) dirWatcher.close();
       if (fileWatcher) fileWatcher.close();
     }
   };
@@ -223,6 +250,10 @@ function readLimits() {
 async function main() {
   const jsonFlag = process.argv.indexOf('--json');
   const jsonPath = jsonFlag > -1 ? process.argv[jsonFlag + 1] : null;
+  if (jsonFlag > -1 && !jsonPath) {
+    console.error('usage: node run-bench.js [--json <path>]');
+    process.exit(2);
+  }
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-watch-bench-'));
   try {
     console.log(`watch-bench: ${process.platform} ${os.release()} ${os.arch()}, node ${process.version}`);
