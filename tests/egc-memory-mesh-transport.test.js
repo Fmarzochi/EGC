@@ -83,7 +83,17 @@ async function main() {
       try {
         const wake = transport.waitForChange(400);
         fs.writeFileSync(path.join(dir, 'unrelated.txt'), 'noise');
-        assert.strictEqual(await wake, 'timeout');
+        fs.writeFileSync(`${dbPath}.backup`, 'cousin, not a sidecar');
+        const reason = await wake;
+        if (process.platform === 'linux') {
+          // inotify always delivers the filename, so the tight name filter
+          // must hold exactly: neither file above is db or a `-` sidecar.
+          assert.strictEqual(reason, 'timeout');
+        } else {
+          // Platforms may deliver a null filename, which legitimately wakes
+          // the waiter: waking on too much is the safe side of the contract.
+          assert.ok(reason === 'timeout' || reason === 'change', `unexpected reason ${reason}`);
+        }
       } finally {
         transport.close();
       }

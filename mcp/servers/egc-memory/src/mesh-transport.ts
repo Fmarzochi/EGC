@@ -113,8 +113,12 @@ export function createMeshTransport(options: MeshTransportOptions): MeshTranspor
     watcher = watchImpl(dir, { persistent: false }, (_event, filename) => {
       // A null filename (delivered by some platforms under load) must wake:
       // waking on too little risks a stall until the repoll ceiling, waking
-      // on too much only costs one SQL re-read.
-      if (filename === null || String(filename).startsWith(base)) scheduleWake();
+      // on too much only costs one SQL re-read. The name match is tight on
+      // purpose: the db itself and its `-wal`/`-shm`/`-journal` sidecars
+      // wake waiters, while cousins like `state.db.backup` do not, so
+      // unrelated snapshots in the directory cannot churn parked readers.
+      const name = filename === null ? null : String(filename);
+      if (name === null || name === base || name.startsWith(`${base}-`)) scheduleWake();
     });
     watcher.on('error', () => {
       // A watcher that dies at runtime (e.g. watch descriptor limits) must

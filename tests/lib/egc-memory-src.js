@@ -51,7 +51,14 @@ function compileMemoryModule(name, ts) {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), `egc-memory-src-${name}-`));
   const outPath = path.join(outDir, `${name}.js`);
   fs.writeFileSync(outPath, out.outputText);
-  return require(outPath);
+  try {
+    return require(outPath);
+  } finally {
+    // The module lives in the require cache from here on; the on-disk
+    // artifact is disposable, and keeping it would strand one tmpdir per
+    // compiled module per test run.
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
 }
 
 module.exports = { loadTypescript, loadSqliteDriver, compileMemoryModule, serverDir };
