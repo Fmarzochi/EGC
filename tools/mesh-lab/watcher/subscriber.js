@@ -70,8 +70,9 @@ async function main() {
   await db.close();
   // The driver and watcher hand their descriptors back through the event
   // loop, not synchronously at close(): poll with a deadline instead of
-  // reading once and racing the release.
-  const deadline = Date.now() + 2000;
+  // reading once and racing the release. Generous on purpose: a contended
+  // CI runner can delay libuv's handle sweep well past the common case.
+  const deadline = Date.now() + 5000;
   let fdFinal = countOpenFds();
   while (fdFinal > fdBaseline && Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 10));
