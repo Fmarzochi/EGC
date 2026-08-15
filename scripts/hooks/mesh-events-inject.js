@@ -75,7 +75,11 @@ function main() {
     fs.writeFileSync(cachePath, JSON.stringify({ lastSeenMs: mtime, lastNoticeMs: Date.now() }));
   } catch (_) { /* an unwritable cache only costs repeated notices */ } // NOSONAR
 
-  process.stdout.write(JSON.stringify({
+  // Synchronous write to fd 1: process.exit() right after an async
+  // process.stdout.write() can truncate a piped stdout mid-payload (the
+  // same failure family as the repo's fs.writeSync-before-exit fixes), and
+  // a truncated payload breaks harnesses that parse stdout as strict JSON.
+  fs.writeSync(1, JSON.stringify({
     additionalContext: NOTICE,
     hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: NOTICE }
   }));
