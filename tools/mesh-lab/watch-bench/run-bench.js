@@ -49,6 +49,7 @@ async function benchWakeLatency(baseDir) {
   const target = path.join(dir, 'state.db-wal');
   fs.writeFileSync(target, 'seed');
   let pending = null;
+  const watchErrors = [];
   const watcher = fs.watch(dir, (_event, filename) => {
     if (filename !== null && !String(filename).startsWith('state.db')) return;
     if (pending) {
@@ -57,6 +58,9 @@ async function benchWakeLatency(baseDir) {
       waiter.resolve(nowMs() - waiter.t0);
     }
   });
+  // A watcher that dies mid-bench (e.g. instance limits) must degrade to
+  // reported misses, not crash the whole run with an unhandled error.
+  watcher.on('error', err => watchErrors.push(err.code || String(err)));
   const latencies = [];
   let misses = 0;
   try {
@@ -72,7 +76,7 @@ async function benchWakeLatency(baseDir) {
   } finally {
     watcher.close();
   }
-  return { ...stats(latencies), misses };
+  return { ...stats(latencies), misses, watchErrors };
 }
 
 // Coalescing: how many back-to-back appends collapse into one notification.
@@ -83,6 +87,7 @@ async function benchCoalescing(baseDir) {
   const target = path.join(dir, 'state.db-wal');
   fs.writeFileSync(target, 'seed');
   const perRound = [];
+  const watchErrors = [];
   for (let round = 0; round < COALESCE_ROUNDS; round++) {
     let notifications = 0;
     let lastEventAt = nowMs();
@@ -91,6 +96,7 @@ async function benchCoalescing(baseDir) {
       notifications += 1;
       lastEventAt = nowMs();
     });
+    watcher.on('error', err => watchErrors.push(err.code || String(err)));
     try {
       await sleep(10);
       notifications = 0;
@@ -111,7 +117,8 @@ async function benchCoalescing(baseDir) {
       max: Math.max(...perRound),
       mean: Math.round((total / perRound.length) * 100) / 100
     },
-    appendsPerNotification: Math.round((COALESCE_BURST * COALESCE_ROUNDS / Math.max(1, total)) * 100) / 100
+    appendsPerNotification: Math.round((COALESCE_BURST * COALESCE_ROUNDS / Math.max(1, total)) * 100) / 100,
+    watchErrors
   };
 }
 
@@ -127,7 +134,9 @@ async function benchRenamePatterns(baseDir) {
     fs.writeFileSync(target, 'seed');
     const dirEvents = [];
     const fileEvents = [];
+    let dirWatchError = null;
     const dirWatcher = fs.watch(dir, (event, filename) => dirEvents.push(`${event}:${filename}`));
+    dirWatcher.on('error', err => { dirWatchError = err.code || String(err); });
     let fileWatcher = null;
     let fileWatchError = null;
     try {
@@ -153,7 +162,8 @@ async function benchRenamePatterns(baseDir) {
         probeAppendAfter: {
           dirWatchSaw: dirEvents.length > 0,
           fileWatchSaw: fileEvents.length > 0,
-          fileWatchError
+          fileWatchError,
+          dirWatchError
         }
       });
     } finally {
