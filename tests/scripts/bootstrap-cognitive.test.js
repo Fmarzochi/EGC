@@ -10,6 +10,12 @@ const REPO_ROOT = path.join(__dirname, '..', '..');
 const SCRIPT_PATH = path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js');
 const SCRIPT_SOURCE = fs.readFileSync(SCRIPT_PATH, 'utf8');
 
+// Derived from the script itself so a protocol bump never breaks this suite
+// again: every scenario asserts against the CURRENT version, and the
+// upgrade-from-legacy cases stay meaningful at any version number.
+const PROTOCOL_VERSION = Number(/const PROTOCOL_VERSION = (\d+);/.exec(SCRIPT_SOURCE)[1]);
+const V = `v${PROTOCOL_VERSION}`;
+
 function mktempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bootstrap-cognitive-'));
 }
@@ -87,7 +93,7 @@ async function runClaudeCodeAndGeminiCliTests() {
 
       const content = fs.readFileSync(target, 'utf8');
       assert.ok(content.includes('Keep this line.'), 'prior content must be preserved, not overwritten');
-      assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'protocol block must be appended');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'protocol block must be appended');
       assert.strictEqual(fs.readFileSync(target + '.egc.bak', 'utf8'), original, 'backup must hold the pre-append content');
     } finally {
       cleanup(home);
@@ -140,12 +146,12 @@ async function runClaudeCodeAndGeminiCliTests() {
 // Split out from runTests() to keep its cyclomatic complexity down: covers
 // the two non-markdown protocol formats (Cursor's JSON cursor.rules, Codex's
 // TOML persistent_instructions), each needing its own upgrade-from-legacy
-// and stay-idempotent-at-v2 case.
+// and stay-idempotent-at-current-version case.
 async function runCursorAndCodexUpgradeTests() {
   let passed = 0;
   let failed = 0;
 
-  if (await test('Cursor settings.json: a pre-versioning legacy cursor.rules (no marker, no closing tag) is upgraded by appending v2 with the Crusher tag, never deleting the old text', () => {
+  if (await test('Cursor settings.json: a pre-versioning legacy cursor.rules (no marker, no closing tag) is upgraded by appending the current version with the Crusher tag, never deleting the old text', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
@@ -157,13 +163,13 @@ async function runCursorAndCodexUpgradeTests() {
       }), 'utf8');
 
       const output = run(home);
-      assert.ok(/Cursor: memory protocol upgraded v1 -> v2/.test(output), `should report a v1 -> v2 upgrade, got: ${output}`);
+      assert.ok(output.includes(`Cursor: memory protocol upgraded v1 -> ${V}`), `should report a v1 upgrade to the current version, got: ${output}`);
 
       const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
       assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
       assert.ok(parsed['cursor.rules'].includes('Legacy pre-Crusher rules'), 'the old unclosed legacy block is never deleted, since there is no reliable end marker to cut it at');
       assert.ok(parsed['cursor.rules'].includes('[egc-token-crusher]'), 'upgraded cursor.rules must include the Crusher tag');
-      assert.ok(parsed['cursor.rules'].includes('[egc-memory-protocol:v2]'), 'marker must be stamped with the current version');
+      assert.ok(parsed['cursor.rules'].includes(`[egc-memory-protocol:${V}]`), 'marker must be stamped with the current version');
     } finally {
       cleanup(home);
     }
@@ -191,7 +197,7 @@ async function runCursorAndCodexUpgradeTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Cursor settings.json: a v2 install is left untouched on rerun (idempotent)', () => {
+  if (await test('Cursor settings.json: a current-version install is left untouched on rerun (idempotent)', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
@@ -201,13 +207,13 @@ async function runCursorAndCodexUpgradeTests() {
 
       run(home);
       const second = run(home);
-      assert.ok(/Cursor: already configured \(v2\)/.test(second), `second run should report already configured, got: ${second}`);
+      assert.ok(second.includes(`Cursor: already configured (${V})`), `second run should report already configured, got: ${second}`);
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('Codex config.toml: a pre-versioning legacy persistent_instructions (no marker) is upgraded to v2 with the Crusher text, staying a valid single-line TOML string', () => {
+  if (await test('Codex config.toml: a pre-versioning legacy persistent_instructions (no marker) is upgraded to the current version with the Crusher text, staying a valid single-line TOML string', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));
@@ -215,13 +221,13 @@ async function runCursorAndCodexUpgradeTests() {
       fs.writeFileSync(tomlPath, 'persistent_instructions = "State lives at ~/.egc/state/<slug>.md. Legacy pre-Crusher text mentioning get_state and update_state."\n', 'utf8');
 
       const output = run(home);
-      assert.ok(/Codex: memory protocol upgraded v1 -> v2/.test(output), `should report a v1 -> v2 upgrade, got: ${output}`);
+      assert.ok(output.includes(`Codex: memory protocol upgraded v1 -> ${V}`), `should report a v1 upgrade to the current version, got: ${output}`);
 
       const content = fs.readFileSync(tomlPath, 'utf8');
       const match = content.match(/^persistent_instructions = "(.*)"$/m);
       assert.ok(match, 'persistent_instructions must remain a single-line double-quoted TOML string');
       assert.ok(!match[1].includes('"'), 'the TOML string value must not contain an unescaped double-quote');
-      assert.ok(match[1].includes('[egc-protocol:v2]'), 'upgraded value must carry the current version marker');
+      assert.ok(match[1].includes(`[egc-protocol:${V}]`), 'upgraded value must carry the current version marker');
       assert.ok(match[1].includes('Token Crusher Protocol'), 'upgraded value must include the Crusher section');
       assert.ok(match[1].includes('Legacy pre-Crusher text'), 'pre-marker legacy text is left in place rather than guessed-and-removed');
     } finally {
@@ -247,13 +253,13 @@ async function runCursorAndCodexUpgradeTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Codex config.toml: a v2 install is left untouched on rerun (idempotent)', () => {
+  if (await test('Codex config.toml: a current-version install is left untouched on rerun (idempotent)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));
       run(home);
       const second = run(home);
-      assert.ok(/Codex: already configured \(v2\)/.test(second), `second run should report already configured, got: ${second}`);
+      assert.ok(second.includes(`Codex: already configured (${V})`), `second run should report already configured, got: ${second}`);
     } finally {
       cleanup(home);
     }
@@ -280,7 +286,7 @@ async function runCursorAndCodexEdgeCaseTests() {
       assert.ok(/Cursor: memory protocol installed/.test(output), `should report install, got: ${output}`);
       const target = path.join(home, '.cursor', 'rules');
       const content = fs.readFileSync(target, 'utf8');
-      assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'protocol block must be written to ~/.cursor/rules');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'protocol block must be written to ~/.cursor/rules');
     } finally {
       cleanup(home);
     }
@@ -367,7 +373,7 @@ async function runCursorAndCodexEdgeCaseTests() {
       assert.ok(content.includes('foo = "bar"'), 'pre-existing unrelated TOML content must be preserved');
       const match = content.match(/^persistent_instructions = "(.*)"$/m);
       assert.ok(match, 'persistent_instructions must be appended as a single-line double-quoted TOML string');
-      assert.ok(match[1].includes('[egc-protocol:v2]'), 'appended value must carry the current version marker');
+      assert.ok(match[1].includes(`[egc-protocol:${V}]`), 'appended value must carry the current version marker');
     } finally {
       cleanup(home);
     }
@@ -392,7 +398,7 @@ async function runCursorAndCodexEdgeCaseTests() {
 
 // Same complexity-budget reasoning as above: the 4 standalone markdown
 // targets (OpenCode, Trae, CodeBuddy, Continue.dev) each need the same pair
-// of upgrade-from-legacy / stay-idempotent-at-v2 cases.
+// of upgrade-from-legacy / stay-idempotent-at-current-version cases.
 async function runStandaloneTargetUpgradeTests() {
   const STANDALONE_TARGETS = [
     { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
@@ -406,7 +412,7 @@ async function runStandaloneTargetUpgradeTests() {
   let failed = 0;
 
   for (const spec of STANDALONE_TARGETS) {
-    if (await test(`${spec.label}: a pre-versioning legacy install (no marker at all) is upgraded to v2 with the Crusher section, not left frozen`, () => {
+    if (await test(`${spec.label}: a pre-versioning legacy install (no marker at all) is upgraded to the current version with the Crusher section, not left frozen`, () => {
       const home = mktempHome();
       try {
         fs.mkdirSync(path.join(home, spec.home), { recursive: true });
@@ -419,19 +425,19 @@ async function runStandaloneTargetUpgradeTests() {
 
         const content = fs.readFileSync(target, 'utf8');
         assert.ok(content.includes('EGC Token Crusher Protocol'), 'upgraded content must include the Crusher section');
-        assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'upgraded content must carry the current version marker');
+        assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'upgraded content must carry the current version marker');
       } finally {
         cleanup(home);
       }
     })) passed++; else failed++;
 
-    if (await test(`${spec.label}: a v2 install is left untouched on rerun (idempotent)`, () => {
+    if (await test(`${spec.label}: a current-version install is left untouched on rerun (idempotent)`, () => {
       const home = mktempHome();
       try {
         fs.mkdirSync(path.join(home, spec.home), { recursive: true });
         run(home);
         const second = run(home);
-        assert.ok(second.includes(`${spec.label}: already configured (v2)`), `second run should report ${spec.label} as already configured, got: ${second}`);
+        assert.ok(second.includes(`${spec.label}: already configured (${V})`), `second run should report ${spec.label} as already configured, got: ${second}`);
       } finally {
         cleanup(home);
       }
@@ -732,7 +738,7 @@ async function runTests() {
       fs.writeFileSync(target, `# My custom rules\n\nKeep this line.\n\n${oldBlock}\nKeep this line too.\n`, 'utf8');
 
       const output = run(home);
-      assert.ok(/Windsurf: memory protocol upgraded v1 -> v2/.test(output), 'should report a v1 -> v2 upgrade');
+      assert.ok(output.includes(`Windsurf: memory protocol upgraded v1 -> ${V}`), 'should report a v1 upgrade to the current version');
 
       const content = fs.readFileSync(target, 'utf8');
       assert.ok(content.includes('Keep this line.'), 'content before the block must survive');
@@ -743,7 +749,7 @@ async function runTests() {
         1,
         'exactly one protocol marker after the upgrade, no duplication'
       );
-      assert.ok(content.includes('<!-- egc-memory-protocol:v2 -->'), 'marker must be stamped with the current version');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'marker must be stamped with the current version');
     } finally {
       cleanup(home);
     }
