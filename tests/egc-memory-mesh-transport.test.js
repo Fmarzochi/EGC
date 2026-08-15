@@ -204,6 +204,68 @@ async function main() {
         }
       });
     });
+
+    await run('waitForBusEvents parks write-free: no self-waking storm', async () => {
+      await withTempDir(async dir => {
+        const bus = compileMemoryModule('session-bus', ts);
+        const dbPath = path.join(dir, 'state.db');
+        const db = await driver.open({ filename: dbPath, driver: driver.sqlite3.Database });
+        const transport = mesh.createMeshTransport({ dbPath });
+        try {
+          await db.exec('PRAGMA journal_mode = WAL;');
+          await bus.createSessionBusTables(db);
+          const readFresh = async () => {
+            await bus.announce(db, { sessionId: 'mesh-b', projectPath: '/p' });
+            return bus.readEvents(db, { sessionId: 'mesh-b' });
+          };
+          const readQuiet = () => bus.readEvents(db, { sessionId: 'mesh-b' });
+          const result = await mesh.waitForBusEvents({
+            transport, readFresh, readQuiet, timeoutMs: 1200, repollCeilingMs: 400
+          });
+          assert.strictEqual(result.events.length, 0);
+          assert.ok(result.waitedMs >= 1100, `waited ${result.waitedMs}ms, expected ~1200`);
+          // A loop whose re-reads write to the store would retrigger its own
+          // watcher every debounce tick (~25ms: dozens of rounds in 1200ms).
+          // A write-free park sees only the initial announce's spurious wake
+          // plus the repoll-ceiling rounds (1200 / 400 = 3).
+          assert.ok(result.rounds <= 6, `expected a parked wait, saw ${result.rounds} rounds`);
+        } finally {
+          transport.close();
+          await db.close();
+        }
+      });
+    });
+
+    await run('waitForBusEvents wakes and delivers on a mid-wait send', async () => {
+      await withTempDir(async dir => {
+        const bus = compileMemoryModule('session-bus', ts);
+        const dbPath = path.join(dir, 'state.db');
+        const db = await driver.open({ filename: dbPath, driver: driver.sqlite3.Database });
+        const transport = mesh.createMeshTransport({ dbPath });
+        try {
+          await db.exec('PRAGMA journal_mode = WAL;');
+          await bus.createSessionBusTables(db);
+          await bus.announce(db, { sessionId: 'mesh-a', projectPath: '/p' });
+          await bus.announce(db, { sessionId: 'mesh-b', projectPath: '/p' });
+          const sendLater = new Promise(resolve => setTimeout(() => {
+            bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'late', payload: 'x' }).then(resolve);
+          }, 150));
+          const result = await mesh.waitForBusEvents({
+            transport,
+            readFresh: () => bus.readEvents(db, { sessionId: 'mesh-b' }),
+            readQuiet: () => bus.readEvents(db, { sessionId: 'mesh-b' }),
+            timeoutMs: 8000
+          });
+          await sendLater;
+          assert.strictEqual(result.events.length, 1);
+          assert.strictEqual(result.events[0].kind, 'late');
+          assert.ok(result.waitedMs < 3000, `delivered ${result.waitedMs}ms after the wait began`);
+        } finally {
+          transport.close();
+          await db.close();
+        }
+      });
+    });
   }
 
   await run('no watcher survives close()', async () => {

@@ -45,6 +45,43 @@ export function meshPushEnabled(env: Record<string, string | undefined> = proces
   return env[MESH_PUSH_FLAG] === '1';
 }
 
+export interface BusWaitParams {
+  transport: MeshTransport;
+  // First read of the wait: may refresh presence (announce/sweep writes).
+  readFresh: () => Promise<Record<string, unknown>[]>;
+  // Every re-read after a wake. MUST NOT write to the store while the queue
+  // is empty: the loop's own writes would land in the WAL, retrigger the
+  // watcher, and turn the parked long-poll into a self-waking storm that
+  // burns CPU and grows the WAL until the timeout. (A cursor advance when
+  // events DO arrive is fine: the loop exits on delivery.)
+  readQuiet: () => Promise<Record<string, unknown>[]>;
+  timeoutMs: number;
+  repollCeilingMs?: number;
+}
+
+export interface BusWaitResult {
+  events: Record<string, unknown>[];
+  waitedMs: number;
+  rounds: number;
+}
+
+export async function waitForBusEvents(params: BusWaitParams): Promise<BusWaitResult> {
+  const startedAt = Date.now();
+  const deadline = startedAt + params.timeoutMs;
+  const ceiling = params.repollCeilingMs ?? DEFAULT_REPOLL_CEILING_MS;
+  let rounds = 0;
+  let events = await params.readFresh();
+  while (events.length === 0) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    const reason = await params.transport.waitForChange(Math.min(remaining, ceiling));
+    if (reason === 'closed') break;
+    rounds += 1;
+    events = await params.readQuiet();
+  }
+  return { events, waitedMs: Date.now() - startedAt, rounds };
+}
+
 export function createMeshTransport(options: MeshTransportOptions): MeshTransport {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const dir = path.dirname(options.dbPath);
