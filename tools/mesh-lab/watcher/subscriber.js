@@ -78,8 +78,11 @@ async function main() {
     await new Promise(resolve => setTimeout(resolve, 10));
     fdFinal = countOpenFds();
   }
-  process.send({ type: 'stopped', fdBaseline, fdFinal });
-  process.exit(0);
+  // No process.exit here: a hard exit can discard the async IPC write. The
+  // send callback disconnects the channel, the loop drains, and the process
+  // leaves on its own with the report guaranteed delivered.
+  process.send({ type: 'stopped', fdBaseline, fdFinal }, () => process.disconnect());
+  process.exitCode = 0;
 }
 
 main().catch(err => {

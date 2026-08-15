@@ -79,20 +79,30 @@ async function main() {
   console.log(`\n--- load test: ${TOTAL_EVENTS} events -> ${SUBSCRIBERS} subscriber processes ---`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-load-'));
   const dbPath = path.join(dir, 'state.db');
-  const db = await openStore(driver, dbPath);
   const subscribers = [];
   let failures = 0;
+  let db = null;
   try {
+    db = await openStore(driver, dbPath);
     for (let i = 0; i < SUBSCRIBERS; i++) subscribers.push(spawnSubscriber(dbPath));
     await Promise.all(subscribers.map(s => s.ready));
 
     const bursts = TOTAL_EVENTS / BURST_SIZE;
     const checkpointAt = Math.floor(bursts / 2);
+    let checkpointResult = null;
     let seq = 0;
     for (let burst = 0; burst < bursts; burst++) {
       if (burst === checkpointAt) {
-        // The mid-run rewrite the mission calls out: naive watchers die here.
-        await db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+        // The mid-run rewrite the mission calls out: naive watchers die
+        // here. TRUNCATE reports busy=1 without throwing when readers hold
+        // the WAL, so the result is captured and asserted below: an
+        // unverified checkpoint would let this acceptance test claim a
+        // rewrite that never actually happened.
+        for (let attempt = 0; attempt < 10; attempt++) {
+          checkpointResult = await db.get('PRAGMA wal_checkpoint(TRUNCATE);');
+          if (checkpointResult && Number(checkpointResult.busy) === 0) break;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
       }
       for (let i = 0; i < BURST_SIZE; i++) {
         seq += 1;
@@ -107,7 +117,12 @@ async function main() {
     );
 
     for (const state of subscribers) state.child.send({ type: 'stop' });
-    await Promise.all(subscribers.map(s => s.stopped));
+    // Bounded on purpose: a stuck subscriber must fail the run, not hang
+    // it; the finally below SIGKILLs any survivor.
+    const stoppedInTime = await Promise.race([
+      Promise.all(subscribers.map(s => s.stopped)).then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 10000))
+    ]);
 
     const check = (ok, label) => {
       console.log(`  ${ok ? 'PASS' : 'FAIL'} ${label}`);
@@ -115,6 +130,9 @@ async function main() {
     };
 
     check(allArrived, `every subscriber received all ${TOTAL_EVENTS} events within 30s of the last send`);
+    check(stoppedInTime, 'every subscriber stopped and reported within 10s');
+    check(checkpointResult !== null && Number(checkpointResult.busy) === 0,
+      `mid-run wal_checkpoint(TRUNCATE) actually completed (${checkpointResult ? `busy=${checkpointResult.busy}` : 'never ran'})`);
 
     const latencies = [];
     subscribers.forEach((state, index) => {
@@ -147,14 +165,14 @@ async function main() {
       console.log(`    ${label.padStart(7)}ms: ${String(n).padStart(6)} (${((n / latencies.length) * 100).toFixed(1)}%)`);
     }
 
-    const passed = 2 + SUBSCRIBERS * 4 - failures;
+    const passed = 4 + SUBSCRIBERS * 4 - failures;
     console.log(`\n${passed} passed, ${failures} failed\n`);
     process.exitCode = failures > 0 ? 1 : 0;
   } finally {
     for (const state of subscribers) {
       if (state.child.exitCode === null) state.child.kill('SIGKILL');
     }
-    await db.close();
+    if (db) await db.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

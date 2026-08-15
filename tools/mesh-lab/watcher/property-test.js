@@ -66,6 +66,11 @@ async function round(driver, seed) {
 
     const startId = await maxEventId(db);
     const drained = drainUntil(db, watcher, startId, WRITERS * EVENTS_PER_WRITER, 15000);
+    // If an insert below throws, teardown closes the db while drainUntil is
+    // still in flight; without a handler its rejection would surface as an
+    // unhandled rejection and mask the real failure. The later await still
+    // propagates drain errors on the normal path.
+    drained.catch(() => {});
 
     const nextSeq = new Array(WRITERS).fill(1);
     for (const w of schedule) {

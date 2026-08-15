@@ -23,9 +23,16 @@ let failed = 0;
 
 console.log('=== mesh-lab watcher: push delivery over the session-bus WAL store ===');
 for (const suite of suites) {
-  const result = spawnSync(process.execPath, [path.join(__dirname, suite)], { stdio: 'inherit' });
-  if (result.status === 0) passed += 1;
-  else failed += 1;
+  // A hung suite must fail the harness, not park CI forever; and a spawn
+  // failure or signal kill should say so instead of a bare non-zero status.
+  const result = spawnSync(process.execPath, [path.join(__dirname, suite)], { stdio: 'inherit', timeout: 180000 });
+  if (result.status === 0) {
+    passed += 1;
+  } else {
+    failed += 1;
+    if (result.error) console.log(`  [!] ${suite}: ${result.error.message}`);
+    if (result.signal) console.log(`  [!] ${suite}: killed by ${result.signal}`);
+  }
 }
 
 console.log(`\n=== mesh-lab watcher summary: ${passed} suites passed, ${failed} failed ===`);

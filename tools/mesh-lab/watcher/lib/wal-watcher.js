@@ -42,8 +42,11 @@ function createWalWatcher(dbPath, options = {}) {
     // persistent:false: a parked watcher must never keep a process alive.
     watcher = fs.watch(dir, { persistent: false }, (_event, filename) => {
       // A null filename must wake: waking on too little stalls delivery,
-      // waking on too much only costs one indexed SQL re-read.
-      if (filename === null || String(filename).startsWith(base)) scheduleWake();
+      // waking on too much only costs one indexed SQL re-read. The name
+      // match is tight: db and dash sidecars (-wal/-shm/-journal) wake,
+      // cousins like state.db.backup do not.
+      const name = filename === null ? null : String(filename);
+      if (name === null || name === base || name.startsWith(`${base}-`)) scheduleWake();
     });
     watcher.on('error', () => {
       watcher = null;

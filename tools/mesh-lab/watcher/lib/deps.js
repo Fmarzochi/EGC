@@ -25,4 +25,4 @@ function loadSqliteDriver() {
   return { sqlite3, open: sqlite.open };
 }
 
-module.exports = { loadSqliteDriver, repoRoot };
+module.exports = { loadSqliteDriver };

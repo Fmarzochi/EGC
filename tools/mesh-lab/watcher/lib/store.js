@@ -20,11 +20,18 @@ const DDL = `
 
 async function openStore(driver, dbPath) {
   const db = await driver.open({ filename: dbPath, driver: driver.sqlite3.Database });
-  await db.exec('PRAGMA journal_mode = WAL;');
-  await db.exec('PRAGMA synchronous = NORMAL;');
-  await db.exec('PRAGMA busy_timeout = 10000;');
-  await db.exec(DDL);
-  return db;
+  try {
+    await db.exec('PRAGMA journal_mode = WAL;');
+    await db.exec('PRAGMA synchronous = NORMAL;');
+    await db.exec('PRAGMA busy_timeout = 10000;');
+    await db.exec(DDL);
+    return db;
+  } catch (err) {
+    // The caller never receives the handle on a failed init, so it must be
+    // closed here or the descriptor leaks with no owner.
+    await db.close().catch(() => {});
+    throw err;
+  }
 }
 
 async function insertEvent(db, { from, kind, payload }) {
