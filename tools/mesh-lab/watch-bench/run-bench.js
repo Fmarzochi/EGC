@@ -176,21 +176,37 @@ async function benchRenamePatterns(baseDir) {
       await sleep(20);
       dirEvents.length = 0;
       fileEvents.length = 0;
-      mutate(dir, target);
+      let mutationError = null;
+      try {
+        mutate(dir, target);
+      } catch (err) {
+        // On Windows an active watcher can hold the target open and fail
+        // the rename or delete with EPERM/EBUSY. That is itself a platform
+        // semantics result worth reporting, not a reason to crash the run
+        // on the exact platform whose numbers the report still needs.
+        mutationError = err.code || String(err);
+      }
       await sleep(200);
       const eventsDuringMutation = { dir: [...dirEvents], file: [...fileEvents] };
       dirEvents.length = 0;
       fileEvents.length = 0;
-      fs.appendFileSync(target, 'probe');
+      let probeError = null;
+      try {
+        fs.appendFileSync(target, 'probe');
+      } catch (err) {
+        probeError = err.code || String(err);
+      }
       await sleep(200);
       scenarios.push({
         scenario: name,
+        mutationError,
         eventsDuringMutation,
         probeAppendAfter: {
           dirWatchSaw: dirEvents.length > 0,
           fileWatchSaw: fileEvents.length > 0,
           fileWatchError,
-          dirWatchError
+          dirWatchError,
+          probeError
         }
       });
     } finally {
