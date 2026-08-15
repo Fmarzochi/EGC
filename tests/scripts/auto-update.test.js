@@ -98,11 +98,11 @@ function ensureFakeNpmRepo(repoRoot) {
   fs.writeFileSync(path.join(repoRoot, 'scripts', 'install-apply.js'), '#!/usr/bin/env node\n');
 }
 
-function writeGeminiInstallState(projectRoot) {
-  const targetRoot = path.join(projectRoot, '.gemini');
+function writeQwenInstallState(projectRoot) {
+  const targetRoot = path.join(projectRoot, '.qwen');
   const installStatePath = path.join(targetRoot, 'egc-install-state.json');
   const state = createInstallState({
-    adapter: { id: 'gemini-project', target: 'gemini', kind: 'project' },
+    adapter: { id: 'qwen-project', target: 'qwen', kind: 'project' },
     targetRoot,
     installStatePath,
     request: {
@@ -918,7 +918,40 @@ function runTests() {
         path.join(repoRoot, 'scripts', 'install-apply.js'),
         '#!/usr/bin/env node\nconsole.log(JSON.stringify({ dryRun: true, result: { ok: true } }));\n'
       );
-      writeGeminiInstallState(projectRoot);
+      writeQwenInstallState(projectRoot);
+
+      const result = spawnSync(process.execPath, [
+        AUTO_UPDATE_SCRIPT_PATH,
+        '--repo-root', repoRoot,
+        '--target', 'qwen',
+        '--dry-run',
+      ], {
+        cwd: projectRoot,
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+        encoding: 'utf8',
+      });
+
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes('Auto-update dry run:'), result.stdout);
+      assert.ok(result.stdout.includes(`Repo root: ${repoRoot}`), result.stdout);
+      assert.ok(result.stdout.includes('- qwen-project'), result.stdout);
+      assert.ok(result.stdout.includes('Status: PLANNED'), result.stdout);
+      assert.ok(result.stdout.includes('Reinstall args:'), result.stdout);
+      assert.ok(result.stdout.includes('Summary: checked=1, planned=1, errors=0'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(repoRoot);
+    }
+  })) passed += 1; else failed += 1;
+
+  if (test('auto-update.js CLI skips a retired target with a notice instead of crashing', () => {
+    const homeDir = createTempDir('auto-update-cli-retired-home-');
+    const projectRoot = createTempDir('auto-update-cli-retired-project-');
+    const repoRoot = createTempDir('auto-update-cli-retired-repo-');
+
+    try {
+      ensureFakeNpmRepo(repoRoot);
 
       const result = spawnSync(process.execPath, [
         AUTO_UPDATE_SCRIPT_PATH,
@@ -931,13 +964,12 @@ function runTests() {
         encoding: 'utf8',
       });
 
+      // A retirement (an old script or shell history pointing at a target the
+      // package no longer manages) is reported and skipped, never a crash.
       assert.strictEqual(result.status, 0, result.stderr);
-      assert.ok(result.stdout.includes('Auto-update dry run:'), result.stdout);
-      assert.ok(result.stdout.includes(`Repo root: ${repoRoot}`), result.stdout);
-      assert.ok(result.stdout.includes('- gemini-project'), result.stdout);
-      assert.ok(result.stdout.includes('Status: PLANNED'), result.stdout);
-      assert.ok(result.stdout.includes('Reinstall args:'), result.stdout);
-      assert.ok(result.stdout.includes('Summary: checked=1, planned=1, errors=0'), result.stdout);
+      assert.ok(result.stdout.includes('Status: SKIPPED'), result.stdout);
+      assert.ok(result.stdout.includes('retired or unknown'), result.stdout);
+      assert.ok(result.stdout.includes('Summary: checked=1, planned=0, errors=0'), result.stdout);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
@@ -960,12 +992,12 @@ function runTests() {
         path.join(repoRoot, 'scripts', 'bootstrap-cognitive.js'),
         '#!/usr/bin/env node\nconsole.log("[cognitive] stub bootstrap executed successfully");\n'
       );
-      writeGeminiInstallState(projectRoot);
+      writeQwenInstallState(projectRoot);
 
       const result = spawnSync(process.execPath, [
         AUTO_UPDATE_SCRIPT_PATH,
         '--repo-root', repoRoot,
-        '--target', 'gemini',
+        '--target', 'qwen',
       ], {
         cwd: projectRoot,
         env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
@@ -980,7 +1012,7 @@ function runTests() {
         result.stdout.includes('[cognitive] stub bootstrap executed successfully'),
         result.stdout
       );
-      assert.ok(result.stdout.includes('- gemini-project'), result.stdout);
+      assert.ok(result.stdout.includes('- qwen-project'), result.stdout);
       assert.ok(result.stdout.includes('Status: UPDATED'), result.stdout);
       assert.ok(result.stdout.includes('Summary: checked=1, updated=1, errors=0'), result.stdout);
     } finally {
@@ -1005,12 +1037,12 @@ function runTests() {
         path.join(repoRoot, 'scripts', 'bootstrap-cognitive.js'),
         '#!/usr/bin/env node\nconsole.error("bootstrap-cognitive stub failed intentionally");\nprocess.exit(1);\n'
       );
-      writeGeminiInstallState(projectRoot);
+      writeQwenInstallState(projectRoot);
 
       const result = spawnSync(process.execPath, [
         AUTO_UPDATE_SCRIPT_PATH,
         '--repo-root', repoRoot,
-        '--target', 'gemini',
+        '--target', 'qwen',
       ], {
         cwd: projectRoot,
         env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },

@@ -7,6 +7,7 @@ const { spawnSync } = require('node:child_process');
 const { version: PKG_VERSION } = require('../package.json');
 
 const { discoverInstalledStates } = require('./lib/install-lifecycle');
+const { getInstallTargetAdapter } = require('./lib/install-targets/registry');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 
@@ -268,20 +269,42 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   const homeDir = options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir();
   const projectRoot = options.projectRoot || process.cwd();
   const requestedRepoRoot = options.repoRoot ? validateRepoRoot(options.repoRoot) : null;
-  const records = discover({
-    homeDir,
-    projectRoot,
-    targets: options.targets,
-  }).filter(record => record.exists);
 
+  // A retired or unknown target id (an old script, shell history, or an
+  // install predating a retirement) must not crash the whole update: it is
+  // reported as skipped and every still-registered target proceeds.
   const results = [];
+  const requestedTargets = Array.isArray(options.targets) ? options.targets : [];
+  const resolvableTargets = [];
+  for (const target of requestedTargets) {
+    try {
+      getInstallTargetAdapter(target);
+      resolvableTargets.push(target);
+    } catch (_error) { // NOSONAR: unknown adapter is the signal, not a failure
+      results.push({
+        adapter: { id: String(target), target: String(target), kind: 'unknown' },
+        installStatePath: '(not managed)',
+        status: 'skipped',
+        error: `target "${target}" is retired or unknown; the install package no longer manages it`,
+      });
+    }
+  }
+
+  const records = (requestedTargets.length > 0 && resolvableTargets.length === 0)
+    ? []
+    : discover({
+      homeDir,
+      projectRoot,
+      targets: resolvableTargets.length > 0 ? resolvableTargets : options.targets,
+    }).filter(record => record.exists);
+
   if (records.length === 0) {
     return {
       dryRun: Boolean(options.dryRun),
       repoRoot: requestedRepoRoot,
       results,
       summary: {
-        checkedCount: 0,
+        checkedCount: results.length,
         updatedCount: 0,
         errorCount: 0,
       },
