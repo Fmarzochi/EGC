@@ -129,10 +129,14 @@ async function benchCoalescing(baseDir) {
     }
   }
   const total = perRound.reduce((a, b) => a + b, 0);
+  // Statistics are based on the rounds that actually ran: when watcher
+  // creation failed early, min/max over an empty list would report
+  // non-finite values while claiming the full round count.
   return {
     burstSize: COALESCE_BURST,
-    rounds: COALESCE_ROUNDS,
-    notificationsPerBurst: {
+    roundsPlanned: COALESCE_ROUNDS,
+    roundsMeasured: perRound.length,
+    notificationsPerBurst: perRound.length === 0 ? null : {
       min: Math.min(...perRound),
       max: Math.max(...perRound),
       mean: Math.round((total / perRound.length) * 100) / 100
