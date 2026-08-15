@@ -397,7 +397,7 @@ async function runCursorAndCodexEdgeCaseTests() {
 }
 
 // Same complexity-budget reasoning as above: the 4 standalone markdown
-// targets (OpenCode, Trae, CodeBuddy, Continue.dev) each need the same pair
+// targets (OpenCode, Trae, CodeBuddy) each need the same pair
 // of upgrade-from-legacy / stay-idempotent-at-current-version cases.
 async function runStandaloneTargetUpgradeTests() {
   const STANDALONE_TARGETS = [

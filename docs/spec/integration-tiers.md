@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 23 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 ## Tier definitions
 
@@ -49,7 +49,7 @@ Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude
 
 ## What "supported" guarantees
 
-For all 23 harnesses, EGC guarantees:
+For all 20 harnesses, EGC guarantees:
 
 - The install path is documented above
 - MCP server registration (if the tool supports MCP)
@@ -83,5 +83,5 @@ Tier 1 is preferred when possible. Tier 2 is acceptable for tools with non-stand
 
 ## Known gaps (audit findings 2026-06-10)
 
-- Both Kiro's and Trae's skill distribution moved to Tier 1 (see rows 13-14); each tool's non-skill assets remain on its legacy `.{tool}/install.sh` path
+- Both Kiro's and Trae's skill distribution moved to Tier 1 (see rows 11-12); each tool's non-skill assets remain on its legacy `.{tool}/install.sh` path
 - `harness-audit` scores the repo, not individual harnesses - per-harness rollup is the next maturation step

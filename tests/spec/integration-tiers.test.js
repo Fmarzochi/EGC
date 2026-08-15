@@ -95,6 +95,10 @@ function testPublicHarnessCountMatchesRegistry() {
     ['package.json description', JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')).description || ''],
     ['glama.json description', JSON.parse(fs.readFileSync(GLAMA_PATH, 'utf8')).description || ''],
     ['.github/copilot-instructions.md', fs.readFileSync(COPILOT_INSTRUCTIONS_PATH, 'utf8')],
+    // The spec doc itself advertises the count in prose (intro and the
+    // guarantees section), which the 2026-08-16 retirement round proved can
+    // drift silently when only the table is updated.
+    ['docs/spec/integration-tiers.md', loadDoc()],
   ];
 
   for (const [label, content] of sources) {
