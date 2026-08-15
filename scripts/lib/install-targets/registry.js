@@ -1,7 +1,6 @@
 const aiderProject = require('./aider-project');
 const amazonqProject = require('./amazonq-project');
 const amazonqHome = require('./amazonq-home');
-const roocodeProject = require('./roocode-project');
 const antigravityProject = require('./antigravity-project');
 const claudeCodeHome = require('./claude-home');
 const egcHome = require('./gemini-home');
@@ -9,7 +8,6 @@ const codebuddyProject = require('./codebuddy-project');
 const clineProject = require('./cline-project');
 const codexHome = require('./codex-home');
 const cursorProject = require('./cursor-project');
-const geminiProject = require('./gemini-project');
 const gooseHome = require('./goose-home');
 const kiroHome = require('./kiro-home');
 const openhandsHome = require('./openhands-home');
@@ -23,13 +21,17 @@ const ampHome = require('./amp-home');
 const ampProject = require('./amp-project');
 const copilotHome = require('./copilot-home');
 const zedHome = require('./zed-home');
-const continueHome = require('./continue-home');
-const continueProject = require('./continue-project');
 const traeProject = require('./trae-project');
 const junieHome = require('./junie-home');
 const junieProject = require('./junie-project');
 const warpProject = require('./warp-project');
 
+// Retired adapters (files kept for history and trivial rollback, never
+// registered): gemini-project (standalone Gemini CLI stopped serving
+// 2026-06-18; its successor Antigravity reads the shared ~/.gemini home,
+// which egc-home still owns), continue-home/continue-project (Continue.dev
+// shut down after the Cursor acqui-hire, repo read-only since 2026-06),
+// roocode-project (project archived upstream since 2026-05-15).
 const ADAPTERS = Object.freeze([
   egcHome,
   claudeCodeHome,
@@ -37,14 +39,12 @@ const ADAPTERS = Object.freeze([
   antigravityProject,
   amazonqProject,
   amazonqHome,
-  roocodeProject,
   aiderProject,
   codexHome,
   gooseHome,
   openhandsHome,
   openhandsProject,
   qwenProject,
-  geminiProject,
   opencodeHome,
   codebuddyProject,
   clineProject,
@@ -56,8 +56,6 @@ const ADAPTERS = Object.freeze([
   ampProject,
   copilotHome,
   zedHome,
-  continueHome,
-  continueProject,
   traeProject,
   junieHome,
   junieProject,
@@ -68,10 +66,24 @@ function listInstallTargetAdapters() {
   return ADAPTERS.slice();
 }
 
+// Recognized so every command (install, doctor, repair, auto-update) can
+// explain a retirement instead of calling a formerly valid id "unknown".
+const RETIRED_TARGET_IDS = Object.freeze(new Set([
+  'gemini', 'gemini-project',
+  'continue', 'continue-home', 'continue-project',
+  'roocode', 'roocode-project',
+]));
+
 function getInstallTargetAdapter(targetOrAdapterId) {
   const adapter = ADAPTERS.find(candidate => candidate.supports(targetOrAdapterId));
 
   if (!adapter) {
+    if (RETIRED_TARGET_IDS.has(String(targetOrAdapterId))) {
+      throw new Error(
+        `Install target retired: ${targetOrAdapterId} (its product was discontinued; `
+        + 'the install package no longer manages it, see docs/spec/integration-tiers.md)'
+      );
+    }
     throw new Error(`Unknown install target adapter: ${targetOrAdapterId}`);
   }
 
