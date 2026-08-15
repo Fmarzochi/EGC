@@ -257,8 +257,13 @@ async function main() {
           await bus.createSessionBusTables(db);
           await bus.announce(db, { sessionId: 'mesh-a', projectPath: '/p' });
           await bus.announce(db, { sessionId: 'mesh-b', projectPath: '/p' });
-          const sendLater = new Promise(resolve => setTimeout(() => {
-            bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'late', payload: 'x' }).then(resolve);
+          const sendLater = new Promise((resolve, reject) => setTimeout(() => {
+            bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'late', payload: 'x' })
+              .then(sent => {
+                assert.strictEqual(sent.ok, true, 'mid-wait send accepted');
+                resolve();
+              })
+              .catch(reject);
           }, 150));
           const result = await mesh.waitForBusEvents({
             transport,
