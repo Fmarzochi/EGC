@@ -291,7 +291,11 @@ async function main() {
       let woke = false;
       const observer = mesh.createMeshTransport({ dbPath });
       try {
-        const wait = observer.waitForChange(300).then(reason => { woke = reason === 'change'; });
+        // A generous deadline, not a tight window: on macOS a just-created
+        // FSEvents stream takes a beat before it starts reporting, and 300ms
+        // flaked on a busy runner (main run for 5dc0c116). The assertion
+        // still requires the wake to arrive.
+        const wait = observer.waitForChange(5000).then(reason => { woke = reason === 'change'; });
         fs.appendFileSync(`${dbPath}-wal`, 'append');
         await wait;
         assert.strictEqual(woke, true, 'a live transport still wakes (sanity)');
