@@ -217,7 +217,22 @@ async function main() {
 
           const wake = transport.waitForChange(8000);
           await bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'ping' });
-          assert.strictEqual(await wake, 'change', 'sqlite write woke the parked waiter');
+          // A single write can land inside FSEvents' stream warm-up window on
+          // a fresh watcher and get dropped (the exact macOS-runner race the
+          // #1277 deadline fix and the fresh-watcher append fix documented),
+          // so keep the bus moving with neutral heartbeat re-announces until
+          // the waiter wakes: production sessions keep writing too, and the
+          // delivery assert below reads the bus, never one wake.
+          const heartbeat = setInterval(() => {
+            bus.announce(db, { sessionId: 'mesh-a', projectPath: '/p' }).catch(() => {});
+          }, 250);
+          let reason;
+          try {
+            reason = await wake;
+          } finally {
+            clearInterval(heartbeat);
+          }
+          assert.strictEqual(reason, 'change', 'sqlite write woke the parked waiter');
           const events = await bus.readEvents(db, { sessionId: 'mesh-b' });
           assert.strictEqual(events.length, 1);
           assert.strictEqual(events[0].kind, 'ping');
@@ -310,7 +325,19 @@ async function main() {
         // still requires the wake to arrive.
         const wait = observer.waitForChange(5000).then(reason => { woke = reason === 'change'; });
         fs.appendFileSync(`${dbPath}-wal`, 'append');
-        await wait;
+        // Same FSEvents warm-up race as the waiter case above: one append can
+        // be dropped by a brand-new stream even inside a generous deadline
+        // (macOS runner, run for 4b38c7f), so keep appending until the sanity
+        // wake lands. The closed transport's zero-waiters assert is unaffected
+        // by extra writes.
+        const appender = setInterval(() => {
+          try { fs.appendFileSync(`${dbPath}-wal`, 'append'); } catch { /* dir gone on teardown */ } // NOSONAR
+        }, 250);
+        try {
+          await wait;
+        } finally {
+          clearInterval(appender);
+        }
         assert.strictEqual(woke, true, 'a live transport still wakes (sanity)');
         assert.strictEqual(transport.pendingWaiters(), 0, 'closed transport holds no waiters');
       } finally {
