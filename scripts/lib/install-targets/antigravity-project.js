@@ -15,11 +15,13 @@ const {
   resolveGateGuardHookScriptDestination,
   createCrusherScriptCopyOperations,
   createBashGuardianScriptCopyOperations,
+  createMeshNoticeScriptCopyOperations,
 } = require('../claude-settings-hooks');
 const {
   createProjectGateGuardHookMergeOperation,
   createProjectCrusherHookMergeOperation,
   createProjectBashGuardianHookMergeOperation,
+  createProjectMeshNoticeHookMergeOperation,
 } = require('../antigravity-settings-hooks');
 
 const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills', '.agents', 'AGENTS.md'];
@@ -85,6 +87,17 @@ function createGateGuardOperations(adapter, targetRoot, projectRoot) {
       targetRoot
     ),
     createProjectBashGuardianHookMergeOperation(targetRoot, projectRoot, 'Bash'),
+    // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
+    // hook loop, which reads the hookSpecificOutput.additionalContext field
+    // mesh-events-inject.js already emits, so the same standalone script is
+    // copied and registered on UserPromptSubmit with zero translation.
+    ...createMeshNoticeScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) => (
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+      ),
+      targetRoot
+    ),
+    createProjectMeshNoticeHookMergeOperation(targetRoot, projectRoot),
   ];
 }
 

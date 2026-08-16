@@ -1870,6 +1870,44 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
+  // hook loop, which reads the hookSpecificOutput.additionalContext field
+  // mesh-events-inject.js emits, so the same standalone script is registered
+  // on UserPromptSubmit at both the project hooks file (antigravity target)
+  // and the global one (egc target owns ~/.gemini).
+  if (test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Antigravity (project and global)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+      { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json'), root: path.join(homeDir, '.gemini') },
+    ];
+
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const meshScriptPath = path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js');
+
+      const meshOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'UserPromptSubmit'
+        && operation.destinationPath === hooksFilePath
+        && operation.hookScriptPath === meshScriptPath
+      ));
+      assert.strictEqual(meshOps.length, 1, `${target}: mesh notice registered once`);
+      assert.strictEqual(meshOps[0].hookMatcher, undefined, `${target}: prompt hooks carry no tool matcher`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          && operation.destinationPath === meshScriptPath
+        )),
+        `${target}: mesh notice script scaffolded`
+      );
+    }
+  })) passed++; else failed++;
+
   // EGC Guardian: 2026-07-27 audit (EGC-460..464) found these three targets
   // had GateGuard + Crusher wired (tests above) but never the Guardian
   // command validator itself -- neither one actually checks a Bash command

@@ -78,6 +78,8 @@ const BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-bash-g
 const BASH_GUARDIAN_HOOK_MODULE_ID = 'egc-bash-guardian-hook';
 const CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/crusher-hook.js';
 const CRUSHER_HOOK_MODULE_ID = 'egc-crusher-hook';
+const MESH_NOTICE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/mesh-events-inject.js';
+const MESH_NOTICE_HOOK_MODULE_ID = 'egc-mesh-notice-hook';
 const PRE_COMPACT_EVENT = 'PreCompact';
 const POST_COMPACT_EVENT = 'PostCompact';
 const EGC_MEMORY_SAVE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/egc-memory-save.js';
@@ -767,6 +769,41 @@ function createCrusherHookMergeOperationForDestination(destinationPath, hookScri
   };
 }
 
+// Session-mesh wake-signal notice (mesh-events-inject.js): standalone
+// UserPromptSubmit hook, dependency-free by design (node builtins only), so
+// a single script copy suffices. It emits the dual-field JSON shape
+// (additionalContext + hookSpecificOutput) that Claude-schema and
+// Gemini-schema hosts both read, which is exactly what Antigravity's
+// hooks.json (project and global) consumes.
+function resolveMeshNoticeHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'mesh-events-inject.js');
+}
+
+function createMeshNoticeScriptCopyOperations(createRemappedOperation, targetRoot) {
+  return [
+    createRemappedOperation(
+      MESH_NOTICE_HOOK_MODULE_ID,
+      MESH_NOTICE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveMeshNoticeHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+  ];
+}
+
+function createMeshNoticeHookMergeOperationForDestination(destinationPath, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: MESH_NOTICE_HOOK_MODULE_ID,
+    sourceRelativePath: MESH_NOTICE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: USER_PROMPT_SUBMIT_EVENT,
+    hookScriptPath,
+  };
+}
+
 // EGC Guardian command validator (pre-bash-guardian-validate.js): standalone
 // PreToolUse hook, same shape as the Crusher hook above, for hosts other than
 // Claude Code that read hooks.json with the same schema. 2026-07-27 audit
@@ -1173,6 +1210,11 @@ module.exports = {
   createPreToolUseCrusherHookMergeOperation,
   createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
+  MESH_NOTICE_HOOK_MODULE_ID,
+  MESH_NOTICE_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  createMeshNoticeScriptCopyOperations,
+  createMeshNoticeHookMergeOperationForDestination,
+  resolveMeshNoticeHookScriptDestination,
   createBashGuardianScriptCopyOperations,
   createPreToolUseBashGuardianHookMergeOperation,
   createBashGuardianHookMergeOperationForDestination,
