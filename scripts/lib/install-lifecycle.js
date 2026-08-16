@@ -668,7 +668,12 @@ function inspectManagedOperation(repoRoot, operation) {
 // one representative speaks for the destination, preferably one whose source
 // still exists, so repair re-copies a single deterministic source and
 // converges instead of ping-ponging between owners forever.
-function collapseSharedDestinationInspections(inspections) {
+function operationSourceExists(repoRoot, operation) {
+  const sourcePath = resolveOperationSourcePath(repoRoot, operation);
+  return Boolean(sourcePath) && fs.existsSync(sourcePath);
+}
+
+function collapseSharedDestinationInspections(repoRoot, inspections) {
   const groupsByDestination = new Map();
   for (const inspection of inspections) {
     if (inspection.operation?.kind !== 'copy-file' || !inspection.destinationPath) {
@@ -687,7 +692,16 @@ function collapseSharedDestinationInspections(inspections) {
     if (group.length < 2) {
       continue;
     }
+    // Representative order: a matching owner proves the file healthy; then a
+    // repairable owner whose source still exists (a missing destination
+    // reports 'missing' for every owner without looking at sources, so an
+    // orphaned first owner must not shadow a sibling repair could actually
+    // copy from); then any repairable owner; then whatever is first.
     const keeper = group.find(inspection => inspection.status === 'ok')
+      || group.find(inspection => (
+        (inspection.status === 'drifted' || inspection.status === 'missing')
+        && operationSourceExists(repoRoot, inspection.operation)
+      ))
       || group.find(inspection => inspection.status === 'drifted' || inspection.status === 'missing')
       || group[0];
     for (const inspection of group) {
@@ -702,6 +716,7 @@ function collapseSharedDestinationInspections(inspections) {
 
 function summarizeManagedOperationHealth(repoRoot, operations) {
   const inspections = collapseSharedDestinationInspections(
+    repoRoot,
     operations.map(operation => inspectManagedOperation(repoRoot, operation))
   );
 

@@ -1040,6 +1040,48 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('doctor accepts a shared destination matching the first recorded source too', () => {
+    const fixture = writeSharedDestinationFixture('native flavor\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      const report = buildDoctorReport({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.ok(!report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'));
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair of a missing shared destination copies from the owner whose source still exists', () => {
+    const fixture = writeSharedDestinationFixture('about to vanish\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      fs.rmSync(fixture.destinationPath);
+      fs.rmSync(path.join(fixture.repoRootFixture, 'native', 'skills', 'demo', 'SKILL.md'));
+
+      const result = repairInstalledStates({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.deepStrictEqual(result.results[0].repairedPaths, [fixture.destinationPath]);
+      assert.strictEqual(fs.readFileSync(fixture.destinationPath, 'utf8'), 'catalog flavor\n');
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (test('doctor reports manifest resolution drift for non-legacy installs', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');

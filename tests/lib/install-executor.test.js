@@ -170,14 +170,19 @@ function runTests() {
     const projectRoot = createTempDir('install-executor-project-');
     try {
       writeJson(sourceRoot, 'package.json', { version: '1.2.3' });
+      // The catalog module comes FIRST in the manifest on purpose: plan
+      // operations follow manifest order, so the catalog source is recorded
+      // first and only the native-preference replacement branch can make the
+      // native tree win. With the native module first, first-recorded-wins
+      // alone would produce the same winner and the branch would go untested.
       writeJson(sourceRoot, path.join('manifests', 'install-modules.json'), {
         version: 7,
         modules: [
           {
-            id: 'fixture-native-tree',
-            kind: 'agents',
-            description: 'Native tree fixture',
-            paths: ['.agents'],
+            id: 'fixture-catalog',
+            kind: 'skills',
+            description: 'Catalog fixture',
+            paths: ['skills/testing/demo'],
             targets: ['codex'],
             dependencies: [],
             defaultInstall: true,
@@ -185,10 +190,10 @@ function runTests() {
             stability: 'stable',
           },
           {
-            id: 'fixture-catalog',
-            kind: 'skills',
-            description: 'Catalog fixture',
-            paths: ['skills/testing/demo'],
+            id: 'fixture-native-tree',
+            kind: 'agents',
+            description: 'Native tree fixture',
+            paths: ['.agents'],
             targets: ['codex'],
             dependencies: [],
             defaultInstall: true,

@@ -663,9 +663,10 @@ function materializeScaffoldOperation(sourceRoot, operation) {
 // layout is that target's own propagated format), otherwise the first
 // recorded one.
 function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
-  const nativeRoot = String(nativeRootRelativePath || '')
-    .replaceAll('\\', '/')
-    .replace(/\/+$/, '');
+  let nativeRoot = String(nativeRootRelativePath || '').replaceAll('\\', '/');
+  while (nativeRoot.endsWith('/')) {
+    nativeRoot = nativeRoot.slice(0, -1);
+  }
   const isNativeSource = operation => {
     if (!nativeRoot) {
       return false;
