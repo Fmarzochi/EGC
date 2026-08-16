@@ -217,7 +217,22 @@ async function main() {
 
           const wake = transport.waitForChange(8000);
           await bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'ping' });
-          assert.strictEqual(await wake, 'change', 'sqlite write woke the parked waiter');
+          // A single write can land inside FSEvents' stream warm-up window on
+          // a fresh watcher and get dropped (the exact macOS-runner race the
+          // #1277 deadline fix and the fresh-watcher append fix documented),
+          // so keep the bus moving with neutral heartbeat re-announces until
+          // the waiter wakes: production sessions keep writing too, and the
+          // delivery assert below reads the bus, never one wake.
+          const heartbeat = setInterval(() => {
+            bus.announce(db, { sessionId: 'mesh-a', projectPath: '/p' }).catch(() => {});
+          }, 250);
+          let reason;
+          try {
+            reason = await wake;
+          } finally {
+            clearInterval(heartbeat);
+          }
+          assert.strictEqual(reason, 'change', 'sqlite write woke the parked waiter');
           const events = await bus.readEvents(db, { sessionId: 'mesh-b' });
           assert.strictEqual(events.length, 1);
           assert.strictEqual(events[0].kind, 'ping');
