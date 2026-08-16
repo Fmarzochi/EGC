@@ -73,9 +73,24 @@ run('resolves canonical project and session conventions with legacy fallbacks', 
   const legacy = resolveMetricContext({ cwd, env: { PROJECT_ROOT: legacyRoot } });
   assert.strictEqual(legacy.project, path.resolve(legacyRoot));
 
-  const fallback = resolveMetricContext({ cwd, env: {} });
-  assert.strictEqual(fallback.project, path.resolve(cwd));
-  assert.strictEqual(fallback.session, UNKNOWN_SCOPE);
+  // The marker fallback reads process.env and the real home directory, not
+  // the injected env above, so on a machine with a live session (the marker
+  // file kept fresh by that session's hooks) this case would resolve the
+  // REAL session id instead of the unknown fallback. Point the marker at a
+  // path that cannot exist so the case is hermetic everywhere.
+  const priorMarkerFile = process.env.EGC_SESSION_MARKER_FILE;
+  process.env.EGC_SESSION_MARKER_FILE = path.join(os.tmpdir(), `egc-metrics-no-marker-${process.pid}.json`);
+  try {
+    const fallback = resolveMetricContext({ cwd, env: {} });
+    assert.strictEqual(fallback.project, path.resolve(cwd));
+    assert.strictEqual(fallback.session, UNKNOWN_SCOPE);
+  } finally {
+    if (priorMarkerFile === undefined) {
+      delete process.env.EGC_SESSION_MARKER_FILE;
+    } else {
+      process.env.EGC_SESSION_MARKER_FILE = priorMarkerFile;
+    }
+  }
 });
 
 run('normalizes legacy rows into unknown attribution buckets', () => {
