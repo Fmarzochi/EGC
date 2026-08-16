@@ -1524,7 +1524,7 @@ async function handleSessionWait(db: Database, toolArgs: unknown) {
   }
   const modeLine = pushEnabled
     ? `mesh push: on (${getMeshTransport().mode} mode), waited ${waitedMs}ms`
-    : `mesh push: off (set ${MESH_PUSH_FLAG}=1 in the server environment to enable long-poll delivery); returned after a single read`;
+    : `mesh push: off by ${MESH_PUSH_FLAG}=0 override (remove it to restore the default long-poll delivery); returned after a single read`;
   if (events.length === 0) {
     return { content: [{ type: "text", text: `No new events for this session.\n${modeLine}` }] };
   }

@@ -4,26 +4,7 @@ const {
   createRemappedOperation,
 } = require('./helpers');
 const { createKiroGuardianOperations } = require('../kiro-guardian-operations');
-const {
-  createMeshNoticeScriptCopyOperations,
-  createKiroMeshHookFileOperation,
-  resolveMeshNoticeHookScriptDestination,
-} = require('../claude-settings-hooks');
-
-// Session-mesh wake-signal notice: Kiro's hook panel (.kiro/hooks/*.json)
-// runs a UserPromptSubmit command whose stdout becomes agent context, so the
-// shared script ships under the adapter root and a dedicated hook document
-// points at it with --format=text. See kiro-mesh-hooks.js for the evidence.
-function createKiroMeshNoticeOperations(adapter, targetRoot) {
-  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
-    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-  );
-
-  return [
-    ...createMeshNoticeScriptCopyOperations(remap, targetRoot),
-    createKiroMeshHookFileOperation(targetRoot, resolveMeshNoticeHookScriptDestination(targetRoot)),
-  ];
-}
+const { createKiroMeshNoticeOperations } = require('../kiro-mesh-operations');
 
 module.exports = createInstallTargetAdapter({
   id: 'kiro-project',
@@ -43,7 +24,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation),
-      ...createKiroMeshNoticeOperations(adapter, targetRoot),
+      ...createKiroMeshNoticeOperations(adapter, targetRoot, createRemappedOperation),
     ];
   },
 });

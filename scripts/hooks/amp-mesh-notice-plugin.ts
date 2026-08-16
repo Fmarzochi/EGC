@@ -18,7 +18,13 @@ export const description = 'EGC session mesh: injects a one-line wake notice whe
 
 export default function egcMeshNoticePlugin(amp: any) {
   amp.on('agent.start', (event: any) => {
-    const sessionId = event && typeof event.sessionId === 'string' ? event.sessionId : undefined;
+    // Every Amp window is its own Bun process, so the pid is a stable
+    // per-session fallback: without it, concurrent Amp sessions would all
+    // share the 'anon' cache key and the first one to observe a bus update
+    // would consume the wake notice meant for the others.
+    const sessionId = event && typeof event.sessionId === 'string'
+      ? event.sessionId
+      : `amp-${process.pid}`;
     const notice = runMeshNotice({ session_id: sessionId });
     if (!notice) return undefined;
     // display:false keeps the notice out of the visible thread; it reaches

@@ -1884,12 +1884,14 @@ function runTests() {
       { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
       { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json'), root: path.join(homeDir, '.gemini') },
       { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex') },
-      { target: 'trae', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.trae', 'hooks.json'), root: path.join(projectRoot, '.trae') },
+      // Trae feeds plain-text stdout to the model, so its registered command
+      // is the host adapter, not the shared JSON-emitting script directly.
+      { target: 'trae', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.trae', 'hooks.json'), root: path.join(projectRoot, '.trae'), registeredScript: 'trae-mesh-notice-adapter.js' },
     ];
 
-    for (const { target, input, hooksFilePath, root } of cases) {
+    for (const { target, input, hooksFilePath, root, registeredScript } of cases) {
       const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
-      const meshScriptPath = path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js');
+      const meshScriptPath = path.join(root, 'scripts', 'hooks', registeredScript || 'mesh-events-inject.js');
 
       const meshOps = plan.operations.filter(operation => (
         operation.kind === 'merge-claude-settings-hooks'
@@ -1902,10 +1904,17 @@ function runTests() {
 
       assert.ok(
         plan.operations.some(operation => (
-          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          normalizedRelativePath(operation.sourceRelativePath) === `scripts/hooks/${registeredScript || 'mesh-events-inject.js'}`
           && operation.destinationPath === meshScriptPath
         )),
-        `${target}: mesh notice script scaffolded`
+        `${target}: registered hook script scaffolded`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          && operation.destinationPath === path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js')
+        )),
+        `${target}: shared mesh implementation scaffolded`
       );
     }
   })) passed++; else failed++;
@@ -2830,7 +2839,11 @@ function runTests() {
     assert.ok(crusherMerge, 'Should plan the Crusher merge');
     assert.ok(meshMerge, 'Should plan the mesh notice merge');
     assert.strictEqual(meshMerge.hookEvent, 'UserPromptSubmit', 'mesh notice rides the prompt boundary');
-    assert.strictEqual(meshMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'mesh-events-inject.js'));
+    assert.strictEqual(
+      meshMerge.hookScriptPath,
+      path.join(targetRoot, 'scripts', 'hooks', 'trae-mesh-notice-adapter.js'),
+      'Trae registers the plain-text host adapter, not the JSON-emitting script'
+    );
     assert.strictEqual(guardianMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js'));
     assert.strictEqual(crusherMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'crusher-hook.js'));
 

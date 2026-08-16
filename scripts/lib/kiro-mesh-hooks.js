@@ -60,19 +60,25 @@ function removeKiroMeshHookFromFile(hookFilePath) {
   try {
     fs.unlinkSync(hookFilePath);
     return { changed: true };
-  } catch {
-    return { changed: false };
+  } catch (error) {
+    // Only a missing file is a clean no-op; a permissions or I/O failure
+    // must surface, or uninstall would report success while the hook keeps
+    // firing on every Kiro prompt.
+    if (error && error.code === 'ENOENT') {
+      return { changed: false };
+    }
+    throw error;
   }
 }
 
 function inspectKiroMeshHookFile(hookFilePath, meshScriptPath) {
   try {
-    const parsed = JSON.parse(fs.readFileSync(hookFilePath, 'utf8'));
-    const hooks = Array.isArray(parsed?.hooks) ? parsed.hooks : [];
-    const command = buildMeshHookCommand(meshScriptPath);
-    return hooks.some(entry => entry?.action?.command === command && entry?.trigger === 'UserPromptSubmit')
-      ? 'ok'
-      : 'drifted';
+    const onDisk = JSON.parse(fs.readFileSync(hookFilePath, 'utf8'));
+    // Whole-document comparison: this file exists solely for the EGC entry,
+    // so ANY hand edit (action type, trigger, enabled flag, extra hooks) is
+    // drift the doctor should surface, not just a changed command string.
+    const desired = buildMeshHookDocument(meshScriptPath);
+    return JSON.stringify(onDisk) === JSON.stringify(desired) ? 'ok' : 'drifted';
   } catch {
     return 'drifted';
   }

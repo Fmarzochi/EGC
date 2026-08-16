@@ -106,7 +106,11 @@ function main() {
   }));
 }
 
-module.exports = { run };
+function readStdinPayload() {
+  return parsePayload(readStdin());
+}
+
+module.exports = { run, readStdinPayload };
 
 if (require.main === module) {
   try {
