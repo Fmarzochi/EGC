@@ -672,7 +672,7 @@ function inspectManagedOperation(repoRoot, operation) {
 // (a skill file reshaped into a folder across versions) must not be
 // preferred, or repair's copyFileSync would fail on it while a sibling with
 // a real file source sat unused.
-function operationSourceExists(repoRoot, operation) {
+function operationHasCopyableSource(repoRoot, operation) {
   const sourcePath = resolveOperationSourcePath(repoRoot, operation);
   if (!sourcePath) {
     return false;
@@ -711,7 +711,7 @@ function collapseSharedDestinationInspections(repoRoot, inspections) {
     const keeper = group.find(inspection => inspection.status === 'ok')
       || group.find(inspection => (
         (inspection.status === 'drifted' || inspection.status === 'missing')
-        && operationSourceExists(repoRoot, inspection.operation)
+        && operationHasCopyableSource(repoRoot, inspection.operation)
       ))
       || group.find(inspection => inspection.status === 'drifted' || inspection.status === 'missing')
       || group[0];
