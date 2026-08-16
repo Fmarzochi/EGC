@@ -1082,6 +1082,31 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('repair skips an orphaned source that survives as a directory and copies from the file sibling', () => {
+    const fixture = writeSharedDestinationFixture('about to vanish\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      fs.rmSync(fixture.destinationPath);
+      const nativeSourcePath = path.join(fixture.repoRootFixture, 'native', 'skills', 'demo', 'SKILL.md');
+      fs.rmSync(nativeSourcePath);
+      fs.mkdirSync(nativeSourcePath);
+
+      const result = repairInstalledStates({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.deepStrictEqual(result.results[0].repairedPaths, [fixture.destinationPath]);
+      assert.strictEqual(fs.readFileSync(fixture.destinationPath, 'utf8'), 'catalog flavor\n');
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (test('doctor reports manifest resolution drift for non-legacy installs', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');

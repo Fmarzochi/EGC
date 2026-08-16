@@ -668,9 +668,20 @@ function inspectManagedOperation(repoRoot, operation) {
 // one representative speaks for the destination, preferably one whose source
 // still exists, so repair re-copies a single deterministic source and
 // converges instead of ping-ponging between owners forever.
+// A regular file only: an orphaned source path that survives as a DIRECTORY
+// (a skill file reshaped into a folder across versions) must not be
+// preferred, or repair's copyFileSync would fail on it while a sibling with
+// a real file source sat unused.
 function operationSourceExists(repoRoot, operation) {
   const sourcePath = resolveOperationSourcePath(repoRoot, operation);
-  return Boolean(sourcePath) && fs.existsSync(sourcePath);
+  if (!sourcePath) {
+    return false;
+  }
+  try {
+    return fs.statSync(sourcePath).isFile();
+  } catch (_error) { // NOSONAR: an unreadable source is simply not preferable
+    return false;
+  }
 }
 
 function collapseSharedDestinationInspections(repoRoot, inspections) {
