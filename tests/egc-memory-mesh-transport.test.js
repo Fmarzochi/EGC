@@ -49,11 +49,11 @@ async function main() {
   let failed = 0;
   const run = async (name, fn) => { (await test(name, fn)) ? passed++ : failed++; };
 
-  await run('meshPushEnabled requires the exact opt-in value', async () => {
-    assert.strictEqual(mesh.meshPushEnabled({}), false);
+  await run('meshPushEnabled defaults ON and honors only the exact opt-out value', async () => {
     assert.strictEqual(mesh.meshPushEnabled({ EGC_MESH_PUSH: '0' }), false);
-    assert.strictEqual(mesh.meshPushEnabled({ EGC_MESH_PUSH: 'true' }), false);
+    assert.strictEqual(mesh.meshPushEnabled({ EGC_MESH_PUSH: 'true' }), true);
     assert.strictEqual(mesh.meshPushEnabled({ EGC_MESH_PUSH: '1' }), true);
+    assert.strictEqual(mesh.meshPushEnabled({}), true);
   });
 
   await run('a waiter wakes on an append to the -wal file', async () => {

@@ -9,8 +9,9 @@
 // into the main file, sometimes replacing files wholesale. Watching the
 // directory instead of a single file survives both patterns; the basename
 // filter keeps unrelated writes in the same directory from waking waiters.
-// Push stays off unless EGC_MESH_PUSH=1, so the server's default behavior is
-// exactly what it was before this module existed.
+// Push is ON by default since 2026-08-16 (the README's promise is real-time
+// context with no manual steps); EGC_MESH_PUSH=0 opts a server out, restoring
+// the pre-mesh behavior where session_wait degrades to a single read.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,7 +43,7 @@ export interface MeshTransport {
 }
 
 export function meshPushEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env[MESH_PUSH_FLAG] === '1';
+  return env[MESH_PUSH_FLAG] !== '0';
 }
 
 export interface BusWaitParams {
