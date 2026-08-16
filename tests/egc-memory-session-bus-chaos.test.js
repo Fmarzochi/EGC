@@ -337,4 +337,352 @@ class WorkerClient {
   }
 
   resume(id, phase) {
-    this.proc.stdin.write(`${JSON.stringify-Ê—«zË¦z'bv˜Z±êajÇ§jÌ§rÈ ’)e‰ûaŠÇ±Š×­ën®w(žË^Æ+^vw°>º&ŠÇ«zÊ%½
+    this.proc.stdin.write(`${JSON.stringify({ type: 'resume', id, phase })}\n`);
+  }
+
+  async sigkill() {
+    if (this.exited) return;
+    const exited = new Promise(resolve => this.proc.once('exit', resolve));
+    this.proc.kill('SIGKILL');
+    await exited;
+  }
+
+  async close() {
+    if (this.exited) return;
+    try {
+      await this.command('close');
+    } catch {
+      if (!this.exited) this.proc.kill('SIGTERM');
+    }
+  }
+}
+
+class Scenario {
+  constructor(root, busModule, name) {
+    this.dir = fs.mkdtempSync(path.join(root, `${name}-`));
+    this.dbPath = path.join(this.dir, 'state.db');
+    this.busModule = busModule;
+    this.workers = [];
+  }
+
+  async init(bus) {
+    const db = await openBusDb(this.dbPath);
+    try {
+      await bus.createSessionBusTables(db);
+    } finally {
+      await db.close();
+    }
+  }
+
+  async worker(name) {
+    const worker = new WorkerClient({ name, dbPath: this.dbPath, busModule: this.busModule });
+    this.workers.push(worker);
+    await worker.ready;
+    return worker;
+  }
+
+  async inspect(fn) {
+    const db = await openBusDb(this.dbPath);
+    try {
+      return await fn(db);
+    } finally {
+      await db.close();
+    }
+  }
+
+  async close() {
+    await Promise.all(this.workers.map(worker => worker.close()));
+  }
+}
+
+function eventPayloads(events) {
+  return events.map(event => String(event.payload));
+}
+
+async function drainEvents(worker, sessionId, projectPath) {
+  const all = [];
+  for (;;) {
+    const batch = await worker.command('events', { sessionId, projectPath });
+    if (batch.length === 0) return all;
+    all.push(...batch);
+  }
+}
+
+async function sendSequence(worker, senderId, projectPath, prefix, start, count) {
+  for (let i = start; i < start + count; i++) {
+    const payload = `${prefix}:${String(i).padStart(3, '0')}`;
+    const result = await worker.command('send', {
+      fromSession: senderId,
+      projectPath,
+      kind: 'chaos-load',
+      payload
+    });
+    assert.strictEqual(result.ok, true, `${prefix} send ${i} refused: ${result.reason || 'unknown reason'}`);
+  }
+}
+
+async function runHarness() {
+  if (process.platform !== 'linux') {
+    console.log('[SKIP] #1254 chaos harness is Linux-only (requires SIGKILL semantics).');
+    return;
+  }
+
+  const ts = loadTypescript();
+  if (!ts) {
+    console.log('[SKIP] #1254 chaos harness could not resolve TypeScript from the repo root or egc-memory server install.');
+    return;
+  }
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-session-bus-chaos-'));
+  const busModule = compileProductionBus(tempRoot, ts);
+  const bus = require(busModule);
+  const results = [];
+  const metrics = {};
+
+  async function run(name, fn) {
+    try {
+      const detail = await fn();
+      results.push({ name, ok: true, detail });
+      console.log(`  PASS ${name}${detail ? `  [${detail}]` : ''}`);
+    } catch (error) {
+      results.push({ name, ok: false, detail: error.message });
+      console.log(`  FAIL ${name}`);
+      console.log(`    ${error.stack || error}`);
+    }
+  }
+
+  console.log('\n=== egc-memory session bus multi-process chaos harness ===\n');
+
+  await run('simultaneous path claim has exactly one winner and names the holder', async () => {
+    const scenario = new Scenario(tempRoot, busModule, 'claim');
+    await scenario.init(bus);
+    try {
+      const [a, b] = await Promise.all([scenario.worker('claim-a'), scenario.worker('claim-b')]);
+      await Promise.all([
+        a.command('announce', { sessionId: 'claim-a', projectPath: '/chaos', territory: 'left' }),
+        b.command('announce', { sessionId: 'claim-b', projectPath: '/chaos', territory: 'right' })
+      ]);
+
+      const ca = a.start('claim', { sessionId: 'claim-a', path: 'src/shared.js', ttlSeconds: 30 }, 'before-lock-insert');
+      const cb = b.start('claim', { sessionId: 'claim-b', path: 'src/shared.js', ttlSeconds: 30 }, 'before-lock-insert');
+      await Promise.all([
+        a.waitForPhase(ca.id, 'before-lock-insert'),
+        b.waitForPhase(cb.id, 'before-lock-insert')
+      ]);
+      a.resume(ca.id, 'before-lock-insert');
+      b.resume(cb.id, 'before-lock-insert');
+      const [ra, rb] = await Promise.all([ca.result, cb.result]);
+      const winners = [
+        { id: 'claim-a', result: ra },
+        { id: 'claim-b', result: rb }
+      ].filter(entry => entry.result.ok);
+      assert.strictEqual(winners.length, 1, `expected one winner, got ${JSON.stringify({ ra, rb })}`);
+      const winner = winners[0];
+      const loser = winner.id === 'claim-a' ? rb : ra;
+      assert.strictEqual(loser.ok, false);
+      assert.strictEqual(loser.holder, winner.id, `loser did not identify holder: ${JSON.stringify(loser)}`);
+      return `winner=${winner.id}`;
+    } finally {
+      await scenario.close();
+    }
+  });
+
+  await run('overlapping readers consume each event exactly once per receiving session', async () => {
+    const scenario = new Scenario(tempRoot, busModule, 'overlap');
+    await scenario.init(bus);
+    try {
+      const [sender, readerA, readerB] = await Promise.all([
+        scenario.worker('overlap-sender'),
+        scenario.worker('overlap-reader-a'),
+        scenario.worker('overlap-reader-b')
+      ]);
+      await sender.command('announce', { sessionId: 'sender', projectPath: '/chaos' });
+      await readerA.command('announce', { sessionId: 'receiver', projectPath: '/chaos' });
+      await readerB.command('announce', { sessionId: 'receiver', projectPath: '/chaos' });
+
+      const expected = [];
+      for (let i = 0; i < 12; i++) {
+        const payload = `overlap:${i}`;
+        expected.push(payload);
+        const sent = await sender.command('send', {
+          fromSession: 'sender',
+          projectPath: '/chaos',
+          kind: 'overlap',
+          payload
+        });
+        assert.strictEqual(sent.ok, true);
+      }
+
+      const readA = readerA.start('events', { sessionId: 'receiver', projectPath: '/chaos' }, 'after-event-select');
+      const readB = readerB.start('events', { sessionId: 'receiver', projectPath: '/chaos' }, 'after-event-select');
+      const [selectedA, selectedB] = await Promise.all([
+        readerA.waitForPhase(readA.id, 'after-event-select'),
+        readerB.waitForPhase(readB.id, 'after-event-select')
+      ]);
+      assert.deepStrictEqual(selectedA.selected, selectedB.selected, 'barrier did not force both readers onto the same cursor snapshot');
+      readerA.resume(readA.id, 'after-event-select');
+      readerB.resume(readB.id, 'after-event-select');
+      const [eventsA, eventsB] = await Promise.all([readA.result, readB.result]);
+      const payloadsA = eventPayloads(eventsA);
+      const payloadsB = eventPayloads(eventsB);
+      const all = [...payloadsA, ...payloadsB];
+      const counts = new Map();
+      for (const payload of all) counts.set(payload, (counts.get(payload) || 0) + 1);
+      const duplicates = [...counts.entries()].filter(([, count]) => count > 1).map(([payload]) => payload);
+      const missing = expected.filter(payload => !counts.has(payload));
+      assert.deepStrictEqual(missing, [], `events lost across overlapping readers: ${missing.join(', ')}`);
+      assert.deepStrictEqual(duplicates, [], `events delivered more than once to one receiving session: ${duplicates.join(', ')}`);
+      assert.strictEqual(all.length, expected.length, `expected ${expected.length} total deliveries, got ${all.length}`);
+      return `${expected.length} events`;
+    } finally {
+      await scenario.close();
+    }
+  });
+
+  await run('SIGKILLed lock holder is released by TTL and heartbeat sweep removes the dead session', async () => {
+    const scenario = new Scenario(tempRoot, busModule, 'sigkill-lock');
+    await scenario.init(bus);
+    try {
+      const holder = await scenario.worker('lock-holder');
+      const janitor = await scenario.worker('lock-janitor');
+      await holder.command('announce', { sessionId: 'dead-holder', projectPath: '/chaos', territory: 'src/' });
+      const claim = await holder.command('claim', { sessionId: 'dead-holder', path: 'src/owned.js', ttlSeconds: 1 });
+      assert.strictEqual(claim.ok, true);
+      const killedAt = Date.now();
+      await holder.sigkill();
+
+      await pollUntil(async () => {
+        await janitor.command('sweep', {});
+        const locks = await janitor.command('locks');
+        return locks.every(lock => lock.path !== 'src/owned.js');
+      }, { timeoutMs: 3000, label: 'dead holder lock TTL' });
+      metrics.lockReleaseMs = Date.now() - killedAt;
+      assert.ok(metrics.lockReleaseMs < 3000, `lock survived ${metrics.lockReleaseMs}ms after SIGKILL`);
+
+      const future = Date.now() + (bus.SESSION_TTL_SECONDS + 1) * 1000;
+      await janitor.command('sweep', {}, future);
+      const peers = await janitor.command('peers', { projectPath: '/chaos' });
+      assert.ok(!peers.some(peer => peer.id === 'dead-holder'), 'heartbeat sweep retained SIGKILLed session');
+
+      const successor = await scenario.worker('lock-successor');
+      await successor.command('announce', { sessionId: 'successor', projectPath: '/chaos' });
+      const reclaimed = await successor.command('claim', { sessionId: 'successor', path: 'src/owned.js', ttlSeconds: 5 });
+      assert.strictEqual(reclaimed.ok, true, 'expired lock was not reclaimable');
+      return `release=${metrics.lockReleaseMs}ms`;
+    } finally {
+      await scenario.close();
+    }
+  });
+
+  await run('writer death at the INSERT boundary creates no phantom and loses no committed event', async () => {
+    const scenario = new Scenario(tempRoot, busModule, 'writer-death');
+    await scenario.init(bus);
+    try {
+      const receiver = await scenario.worker('death-receiver');
+      await receiver.command('announce', { sessionId: 'receiver', projectPath: '/chaos' });
+
+      const preCommit = await scenario.worker('death-precommit');
+      await preCommit.command('announce', { sessionId: 'writer-pre', projectPath: '/chaos' });
+      const before = preCommit.start('send', {
+        fromSession: 'writer-pre',
+        projectPath: '/chaos',
+        kind: 'death-before',
+        payload: 'must-not-appear'
+      }, 'before-event-insert');
+      const beforeResult = before.result.catch(() => null);
+      await preCommit.waitForPhase(before.id, 'before-event-insert');
+      await preCommit.sigkill();
+      await beforeResult;
+      const phantomCount = await scenario.inspect(db => db.get("SELECT COUNT(*) AS n FROM bus_events WHERE payload = 'must-not-appear'"));
+      assert.strictEqual(Number(phantomCount.n), 0, 'event partially appeared when writer died before INSERT');
+
+      const postCommit = await scenario.worker('death-postcommit');
+      await postCommit.command('announce', { sessionId: 'writer-post', projectPath: '/chaos' });
+      const after = postCommit.start('send', {
+        fromSession: 'writer-post',
+        projectPath: '/chaos',
+        kind: 'death-after',
+        payload: 'must-survive'
+      }, 'after-event-insert');
+      const afterResult = after.result.catch(() => null);
+      const committed = await postCommit.waitForPhase(after.id, 'after-event-insert');
+      assert.ok(committed.lastID > 0, 'INSERT did not produce an event id before kill');
+      await postCommit.sigkill();
+      await afterResult;
+
+      const persisted = await scenario.inspect(db => db.get("SELECT COUNT(*) AS n FROM bus_events WHERE payload = 'must-survive'"));
+      assert.strictEqual(Number(persisted.n), 1, 'committed event disappeared after writer SIGKILL');
+      const received = await drainEvents(receiver, 'receiver', '/chaos');
+      const survivors = eventPayloads(received).filter(payload => payload === 'must-survive');
+      assert.deepStrictEqual(survivors, ['must-survive'], 'receiver did not consume committed event exactly once');
+      return `event=${committed.lastID}`;
+    } finally {
+      await scenario.close();
+    }
+  });
+
+  await run('four concurrent writers preserve all events and per-sender order for early and late readers', async () => {
+    const scenario = new Scenario(tempRoot, busModule, 'writers');
+    await scenario.init(bus);
+    try {
+      const early = await scenario.worker('early-reader');
+      await early.command('announce', { sessionId: 'early', projectPath: '/chaos' });
+      const writers = await Promise.all(Array.from({ length: 4 }, (_, i) => scenario.worker(`writer-${i}`)));
+      await Promise.all(writers.map((writer, i) => writer.command('announce', { sessionId: `writer-${i}`, projectPath: '/chaos' })));
+
+      await Promise.all(writers.map((writer, i) => sendSequence(writer, `writer-${i}`, '/chaos', `w${i}`, 0, 5)));
+      const late = await scenario.worker('late-reader');
+      await late.command('announce', { sessionId: 'late', projectPath: '/chaos' });
+      await Promise.all(writers.map((writer, i) => sendSequence(writer, `writer-${i}`, '/chaos', `w${i}`, 5, 10)));
+
+      const [earlyEvents, lateEvents] = await Promise.all([
+        drainEvents(early, 'early', '/chaos'),
+        drainEvents(late, 'late', '/chaos')
+      ]);
+      assert.strictEqual(earlyEvents.length, 60, `early reader expected 60, got ${earlyEvents.length}`);
+      assert.strictEqual(lateEvents.length, 40, `late reader expected only post-join 40, got ${lateEvents.length}`);
+      assert.strictEqual(new Set(eventPayloads(earlyEvents)).size, 60, 'early reader saw duplicate payloads');
+      assert.strictEqual(new Set(eventPayloads(lateEvents)).size, 40, 'late reader saw duplicate payloads');
+
+      for (let writer = 0; writer < 4; writer++) {
+        const earlySeq = eventPayloads(earlyEvents)
+          .filter(payload => payload.startsWith(`w${writer}:`))
+          .map(payload => Number(payload.split(':')[1]));
+        const lateSeq = eventPayloads(lateEvents)
+          .filter(payload => payload.startsWith(`w${writer}:`))
+          .map(payload => Number(payload.split(':')[1]));
+        assert.deepStrictEqual(earlySeq, Array.from({ length: 15 }, (_, i) => i), `writer ${writer} order changed for early reader`);
+        assert.deepStrictEqual(lateSeq, Array.from({ length: 10 }, (_, i) => i + 5), `writer ${writer} order changed for late reader`);
+      }
+      return '4 writers / 60 events';
+    } finally {
+      await scenario.close();
+    }
+  });
+
+  const passed = results.filter(result => result.ok).length;
+  const failed = results.length - passed;
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (metrics.lockReleaseMs !== undefined) console.log(`lock release after SIGKILL: ${metrics.lockReleaseMs}ms`);
+  if (failed > 0) {
+    console.log('\nInvariant violations are intentional hard failures for #1254; do not mask them as expected failures.');
+  }
+  try {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(`[WARN] failed to remove chaos temp directory: ${error.message}`);
+  }
+  process.exitCode = failed > 0 ? 1 : 0;
+}
+
+if (IS_WORKER) {
+  workerMain().catch(error => {
+    console.error(error.stack || error);
+    process.exit(1);
+  });
+} else {
+  runHarness().catch(error => {
+    console.error('[FAIL] chaos harness crashed:', error.stack || error);
+    process.exit(1);
+  });
+}
