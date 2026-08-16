@@ -64,7 +64,7 @@ function removeKiroMeshHookFromFile(hookFilePath) {
     // Only a missing file is a clean no-op; a permissions or I/O failure
     // must surface, or uninstall would report success while the hook keeps
     // firing on every Kiro prompt.
-    if (error && error.code === 'ENOENT') {
+    if (error?.code === 'ENOENT') {
       return { changed: false };
     }
     throw error;

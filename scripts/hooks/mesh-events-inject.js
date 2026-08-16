@@ -65,7 +65,7 @@ function storeMtimeMs(memoryDir) {
 // the notice string when the store moved since this session's last look,
 // null when there is nothing to say.
 function run(payload) {
-  const sessionKey = safeSessionKey(payload && payload.session_id);
+  const sessionKey = safeSessionKey(payload?.session_id);
   const memoryDir = path.join(os.homedir(), '.egc', 'memory');
   const mtime = storeMtimeMs(memoryDir);
   if (mtime === 0) return null; // no bus store on this machine: stay silent
