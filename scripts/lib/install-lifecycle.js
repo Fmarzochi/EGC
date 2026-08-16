@@ -659,9 +659,53 @@ function inspectManagedOperation(repoRoot, operation) {
   return inspectResult('unverified', operation, destinationPath);
 }
 
+// Install-states written before copy-file destinations were deduplicated at
+// plan time can record several copy-file operations for one destination (two
+// modules shipping the same file, e.g. a target's native tree and the
+// flattened skill catalog). The file on disk can only ever match one source,
+// so when ANY recorded owner matches, the destination is healthy and the
+// other owners must not report it as drifted. When no owner matches, exactly
+// one representative speaks for the destination, preferably one whose source
+// still exists, so repair re-copies a single deterministic source and
+// converges instead of ping-ponging between owners forever.
+function collapseSharedDestinationInspections(inspections) {
+  const groupsByDestination = new Map();
+  for (const inspection of inspections) {
+    if (inspection.operation?.kind !== 'copy-file' || !inspection.destinationPath) {
+      continue;
+    }
+    const group = groupsByDestination.get(inspection.destinationPath);
+    if (group) {
+      group.push(inspection);
+    } else {
+      groupsByDestination.set(inspection.destinationPath, [inspection]);
+    }
+  }
+
+  const suppressed = new Set();
+  for (const group of groupsByDestination.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+    const keeper = group.find(inspection => inspection.status === 'ok')
+      || group.find(inspection => inspection.status === 'drifted' || inspection.status === 'missing')
+      || group[0];
+    for (const inspection of group) {
+      if (inspection !== keeper) {
+        suppressed.add(inspection);
+      }
+    }
+  }
+
+  return inspections.filter(inspection => !suppressed.has(inspection));
+}
+
 function summarizeManagedOperationHealth(repoRoot, operations) {
-  return operations.reduce((summary, operation) => {
-    const inspection = inspectManagedOperation(repoRoot, operation);
+  const inspections = collapseSharedDestinationInspections(
+    operations.map(operation => inspectManagedOperation(repoRoot, operation))
+  );
+
+  return inspections.reduce((summary, inspection) => {
     if (inspection.status === 'missing') {
       summary.missing.push(inspection);
     } else if (inspection.status === 'drifted') {

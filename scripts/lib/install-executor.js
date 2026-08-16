@@ -651,6 +651,53 @@ function materializeScaffoldOperation(sourceRoot, operation) {
   });
 }
 
+// Two modules can record a copy-file for the same destination with different
+// sources: on the codex target the native .agents tree (agents-core) and the
+// flattened skills/<category> catalog modules both cover
+// <root>/skills/<name>/SKILL.md, and the two sources differ in frontmatter.
+// apply.js writes operations in order, so the last writer wins on disk while
+// every other recorded owner keeps flagging the file as drifted in doctor,
+// and repair re-copies it back and forth between sources forever. One
+// destination keeps exactly one copy-file operation: the one whose source
+// lives under the adapter's native tree when the target has one (the native
+// layout is that target's own propagated format), otherwise the first
+// recorded one.
+function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
+  const nativeRoot = String(nativeRootRelativePath || '')
+    .replaceAll('\\', '/')
+    .replace(/\/+$/, '');
+  const isNativeSource = operation => {
+    if (!nativeRoot) {
+      return false;
+    }
+    const source = String(operation.sourceRelativePath || '').replaceAll('\\', '/');
+    return source === nativeRoot || source.startsWith(`${nativeRoot}/`);
+  };
+
+  const winnerIndexByDestination = new Map();
+  const result = [];
+
+  for (const operation of operations) {
+    if (operation.kind !== 'copy-file') {
+      result.push(operation);
+      continue;
+    }
+
+    const winnerIndex = winnerIndexByDestination.get(operation.destinationPath);
+    if (winnerIndex === undefined) {
+      winnerIndexByDestination.set(operation.destinationPath, result.length);
+      result.push(operation);
+      continue;
+    }
+
+    if (isNativeSource(operation) && !isNativeSource(result[winnerIndex])) {
+      result[winnerIndex] = operation;
+    }
+  }
+
+  return result;
+}
+
 function createManifestInstallPlan(options = {}) {
   const sourceRoot = options.sourceRoot || getSourceRoot();
   const projectRoot = options.projectRoot || process.cwd();
@@ -696,7 +743,10 @@ function createManifestInstallPlan(options = {}) {
     target,
   });
   const adapter = getInstallTargetAdapter(target);
-  const operations = plan.operations.flatMap(operation => materializeScaffoldOperation(sourceRoot, operation));
+  const operations = dedupeCopyFileDestinations(
+    plan.operations.flatMap(operation => materializeScaffoldOperation(sourceRoot, operation)),
+    adapter.nativeRootRelativePath
+  );
   const source = {
     repoVersion: getPackageVersion(sourceRoot),
     repoCommit: getRepoCommit(sourceRoot),
