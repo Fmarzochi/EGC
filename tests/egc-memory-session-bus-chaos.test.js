@@ -203,6 +203,9 @@ async function workerMain() {
       handleMessage(JSON.parse(line));
     }
   });
+  process.stdin.on('end', () => {
+    process.exit(0);
+  });
 
   send({ type: 'ready', pid: process.pid });
 }
@@ -434,6 +437,18 @@ async function runHarness() {
   }
 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-session-bus-chaos-'));
+  try {
+    await runHarnessInTemp(tempRoot, ts);
+  } finally {
+    try {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    } catch (error) {
+      console.warn(`[WARN] failed to remove chaos temp directory: ${error.message}`);
+    }
+  }
+}
+
+async function runHarnessInTemp(tempRoot, ts) {
   const busModule = compileProductionBus(tempRoot, ts);
   const bus = require(busModule);
   const results = [];
@@ -666,11 +681,6 @@ async function runHarness() {
   if (metrics.lockReleaseMs !== undefined) console.log(`lock release after SIGKILL: ${metrics.lockReleaseMs}ms`);
   if (failed > 0) {
     console.log('\nInvariant violations are intentional hard failures for #1254; do not mask them as expected failures.');
-  }
-  try {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  } catch (error) {
-    console.warn(`[WARN] failed to remove chaos temp directory: ${error.message}`);
   }
   process.exitCode = failed > 0 ? 1 : 0;
 }
