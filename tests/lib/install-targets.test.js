@@ -1942,6 +1942,40 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Kiro takes a dedicated whole-file hook document under <root>/hooks/,
+  // dispatched on its own tag so apply/remove never merge user content.
+  if (test('mesh notice hook document is planned for Kiro at both roots', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'kiro-project', input: { projectRoot }, root: path.join(projectRoot, '.kiro') },
+      { target: 'kiro-home', input: { homeDir }, root: path.join(homeDir, '.kiro') },
+    ];
+
+    for (const { target, input, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const meshScriptPath = path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js');
+
+      const docOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'kiro-mesh-hook-file'
+        && operation.destinationPath === path.join(root, 'hooks', 'egc-mesh-notice.json')
+        && operation.hookScriptPath === meshScriptPath
+      ));
+      assert.strictEqual(docOps.length, 1, `${target}: hook document planned once`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          && operation.destinationPath === meshScriptPath
+        )),
+        `${target}: shared mesh script scaffolded under the adapter root`
+      );
+    }
+  })) passed++; else failed++;
+
   // EGC Guardian: 2026-07-27 audit (EGC-460..464) found these three targets
   // had GateGuard + Crusher wired (tests above) but never the Guardian
   // command validator itself -- neither one actually checks a Bash command

@@ -4,6 +4,24 @@ const {
   createRemappedOperation,
 } = require('./helpers');
 const { createKiroGuardianOperations } = require('../kiro-guardian-operations');
+const {
+  createMeshNoticeScriptCopyOperations,
+  createKiroMeshHookFileOperation,
+  resolveMeshNoticeHookScriptDestination,
+} = require('../claude-settings-hooks');
+
+// Session-mesh wake-signal notice: same panel-hook document as
+// kiro-project.js, at the home-scope ~/.kiro/hooks/ location.
+function createKiroMeshNoticeOperations(adapter, targetRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  return [
+    ...createMeshNoticeScriptCopyOperations(remap, targetRoot),
+    createKiroMeshHookFileOperation(targetRoot, resolveMeshNoticeHookScriptDestination(targetRoot)),
+  ];
+}
 
 module.exports = createInstallTargetAdapter({
   id: 'kiro-home',
@@ -23,6 +41,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation),
+      ...createKiroMeshNoticeOperations(adapter, targetRoot),
     ];
   },
 });

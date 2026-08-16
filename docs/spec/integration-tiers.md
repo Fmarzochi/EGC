@@ -51,7 +51,8 @@ Every harness participates in the real-time session mesh through two always-on l
    - **Codex CLI**: same hook at `~/.codex/hooks.json` (`additionalContext` documented).
    - **Trae**: same hook at `.trae/hooks.json` (hook stdout becomes model context).
    - **Amp**: `agent.start` plugin at `.amp/plugins/` and `~/.config/amp/plugins/` returning a hidden context message.
-   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), Kiro (IDE hooks inject but the CLI agent-config surface this repo integrates has confirmed upstream inconsistencies), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Windsurf, VS Code Copilot, Zed, Junie, Amazon Q, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
+   - **Kiro**: dedicated hook document at `.kiro/hooks/egc-mesh-notice.json` (project and home), `UserPromptSubmit` command action whose stdout becomes agent context (`--format=text`).
+   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Windsurf, VS Code Copilot, Zed, Junie, Amazon Q, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
 
 ## Why three tiers (history, not aspiration)
 
