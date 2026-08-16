@@ -100,6 +100,29 @@ async function runClaudeCodeAndGeminiCliTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('protocol carries the busy-session drain rule in both the block and Codex forms (#1293)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.claude'));
+      fs.mkdirSync(path.join(home, '.codex'));
+      run(home);
+
+      const block = fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8');
+      assert.ok(
+        block.includes('Busy sessions drain too'),
+        'markdown protocol must tell busy sessions to drain each turn'
+      );
+
+      const toml = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
+      assert.ok(
+        toml.includes('including loop ticks and scheduled wakeups'),
+        'Codex protocol must tell busy sessions to drain each turn'
+      );
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('Claude Code: logs an error instead of crashing when the CLAUDE.md path is structurally broken', () => {
     const home = mktempHome();
     try {

@@ -80,6 +80,10 @@ run('emits the dual-field JSON notice the first time the store moved', () => {
   assert.strictEqual(result.status, 0);
   const parsed = JSON.parse(result.stdout);
   assert.ok(parsed.additionalContext.includes('[egc-mesh]'), 'top-level additionalContext carries the notice');
+  assert.ok(
+    parsed.additionalContext.includes('scheduled wakeups'),
+    'the notice must reach loop turns too, not only user-typed prompts (#1293)'
+  );
   assert.strictEqual(parsed.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
   assert.strictEqual(parsed.hookSpecificOutput.additionalContext, parsed.additionalContext, 'both consumers read the same text');
   assert.strictEqual(result.stdout.trim(), result.stdout, 'strict JSON only, no stray output');
