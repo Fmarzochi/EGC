@@ -39,6 +39,20 @@ EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This 
 | 19 | **Warp** | 1 | `warp` | `.warp/skills/<name>.md` + index in project root `AGENTS.md` (project only, no home target) | Warp only discovers a single root `AGENTS.md`/`WARP.md` file as project rules, not a directory of skill files -- confirmed a plain `AGENTS.md` is sufficient (Warp's own docs call it the default project rules file; `WARP.md` is legacy and only takes priority if both exist). Full skill content is copied flat to `.warp/skills/<name>.md` (read on demand); a short index (name + one-line description + path) is merged into a marked block inside `AGENTS.md` via a new `merge-markdown-skill-index` operation kind, since concatenating all 230+ skills (~2MB) into the always-loaded rules file would blow the context budget. Install/repair/uninstall all wired; uninstall never deletes `AGENTS.md` itself, only the EGC block |
 | 20 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; no hook wiring |
 
+## Session-mesh delivery per harness
+
+Every harness participates in the real-time session mesh through two always-on layers, plus a native turn signal where the host's own extension surface supports context injection (each claim below was verified against the vendor's current official documentation, or its source code, on 2026-08-16):
+
+1. **MCP bus (all 20):** `session_announce`, `session_events`, `session_send`, `claim_path`, `working_memory_*`, and the long-poll `session_wait` (wake-on-write, ON by default; `EGC_MESH_PUSH=0` opts a server out).
+2. **Cognitive protocol v3 (all 20):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, claim paths before shared edits, and park with `session_wait` when idle.
+3. **Native turn signal (hosts with injection-capable surfaces):** the standalone `mesh-events-inject.js` stats the bus store on every user prompt and injects a one-line drain notice.
+   - **Claude Code**: `UserPromptSubmit` hook (settings.json).
+   - **Antigravity**: same hook at `.agents/hooks.json` (project) and `~/.gemini/antigravity-cli/hooks.json` (global).
+   - **Codex CLI**: same hook at `~/.codex/hooks.json` (`additionalContext` documented).
+   - **Trae**: same hook at `.trae/hooks.json` (hook stdout becomes model context).
+   - **Amp**: `agent.start` plugin at `.amp/plugins/` and `~/.config/amp/plugins/` returning a hidden context message.
+   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), Kiro (IDE hooks inject but the CLI agent-config surface this repo integrates has confirmed upstream inconsistencies), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Windsurf, VS Code Copilot, Zed, Junie, Amazon Q, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
+
 ## Why three tiers (history, not aspiration)
 
 Tier 1 (unified) is the canonical pipeline. It is the result of `install-plan.js` resolving install manifests against `SUPPORTED_INSTALL_TARGETS`, then `install-apply.js` materializing files. The pipeline emits provenance, supports dry-run, and is covered by 200+ tests under `tests/`.
