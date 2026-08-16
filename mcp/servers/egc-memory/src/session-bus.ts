@@ -207,10 +207,11 @@ export async function sendEvent(
 }
 
 // Cursor-based read: each session sees every event addressed to it (direct or
-// broadcast, excluding its own) exactly once across calls, oldest first.
-// Exactly-once holds per session id within one server process; two processes
-// sharing the same session id degrade to at-least-once, since the cursor
-// update happens after the select.
+// broadcast, excluding its own) exactly once across calls and processes that
+// share the same session id, oldest first. Readers optimistically select from
+// the same cursor snapshot, then compare-and-swap the cursor. Only the reader
+// that advances the expected cursor may deliver that batch; a loser discards
+// its stale snapshot so overlapping readers cannot duplicate delivery.
 export async function readEvents(
   db: BusDb,
   input: { sessionId: string; projectPath?: string; peek?: boolean }
@@ -232,14 +233,23 @@ export async function readEvents(
      LIMIT ${MAX_EVENTS_PER_READ}`,
     ...params
   );
-  if (events.length > 0 && !input.peek) {
-    const maxId = Number(events[events.length - 1].id);
-    await db.run(
-      `INSERT INTO bus_event_cursors (session_id, last_event_id) VALUES (?, ?)
-       ON CONFLICT(session_id) DO UPDATE SET last_event_id = excluded.last_event_id
-       WHERE excluded.last_event_id > bus_event_cursors.last_event_id`,
+  if (events.length === 0 || input.peek) return events;
+
+  const maxId = Number(events[events.length - 1].id);
+  const claim = cursor
+    ? await db.run(
+      `UPDATE bus_event_cursors
+       SET last_event_id = ?
+       WHERE session_id = ? AND last_event_id = ?`,
+      maxId, input.sessionId, after
+    )
+    : await db.run(
+      `INSERT OR IGNORE INTO bus_event_cursors (session_id, last_event_id)
+       VALUES (?, ?)`,
       input.sessionId, maxId
     );
-  }
-  return events;
+  const claimed = typeof (claim as { changes?: number })?.changes === 'number'
+    && (claim as { changes: number }).changes > 0;
+
+  return claimed ? events : [];
 }
