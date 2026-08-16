@@ -4,6 +4,24 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.19] - 2026-08-16
+
+### Added
+
+- **Real-time session mesh, end to end**: wake-on-write delivery over the session-bus store with the `session_wait` long-poll tool, **ON by default** (`EGC_MESH_PUSH=0` opts out); cognitive protocol **v4** teaches every install to announce presence, drain events on the `[egc-mesh]` notice, claim paths before shared edits, and park when idle; and a native turn-boundary wake signal ships for Claude Code, Antigravity (project and global), Codex CLI, Trae, Amp, and Kiro, each wiring verified against the vendor's current documentation or source (#1273, #1274, #1275, #1277, #1278, #1281). Measured: 26ms wake, p95 11ms, zero loss or duplication at 1000 events across 10 subscribers; the per-harness delivery map lives in `docs/spec/integration-tiers.md` behind a parity test.
+- **Multi-process chaos harness for the session bus** (expert audition #1254): SIGKILL lock recovery within TTL, contested claims with a single winner, writer-death atomicity, and per-sender ordering under concurrent writers, barrier-based with no sleep synchronization (#1271, #1284, @Tyr1onX).
+- **Operable session bus view in the dashboard**: live sessions, path locks, and handoffs surfaced through the shared operations registry (#1265, @Maqbool61).
+
+### Changed
+
+- **Gemini CLI, Continue.dev, and Roo Code retired from the install package** after their vendors discontinued them: 20 supported tools, with the adapters kept in the tree for rollback, the public counts moved together behind the parity test, and the registry explaining a retirement instead of calling a formerly valid id unknown. Antigravity succeeds Gemini CLI on the same `~/.gemini` home (#1279).
+
+### Fixed
+
+- **Session event delivery is exactly-once across overlapping readers**: a real double-delivery race surfaced by the chaos harness, closed with a compare-and-swap on the event cursor so a losing reader safely re-reads (#1271, @Tyr1onX).
+- **`egc auto-update` skips retired or unknown targets** with an honest notice instead of crashing the whole run (#1279).
+- The misleading npm-link note in the install docs, found during a real-day Linux test mission, ships corrected (#1231, reported by @rathaur-ankit).
+
 ## [1.1.18] - 2026-08-06
 
 ### Added
