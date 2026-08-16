@@ -7,8 +7,10 @@ const {
 } = require('./helpers');
 const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
+  MESH_NOTICE_HOOK_MODULE_ID,
   createBashGuardianScriptCopyOperations,
   createCrusherScriptCopyOperations,
+  createMeshNoticeScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 // GateGuard fact-forcing gate is intentionally NOT wired for Amp -- separate
@@ -33,6 +35,7 @@ const {
 // independently of adapter.resolveRoot() instead of reusing the skills
 // targetRoot.
 const PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-guardian-crusher-plugin.ts';
+const MESH_PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-mesh-notice-plugin.ts';
 
 function resolveAmpConfigRoot(homeDir) {
   return path.join(homeDir || os.homedir(), '.config', 'amp');
@@ -40,6 +43,30 @@ function resolveAmpConfigRoot(homeDir) {
 
 function resolvePluginScriptDestination(configRoot) {
   return path.join(configRoot, 'plugins', 'egc-guardian-crusher.ts');
+}
+
+function resolveMeshPluginScriptDestination(configRoot) {
+  return path.join(configRoot, 'plugins', 'egc-mesh-notice.ts');
+}
+
+// Session-mesh wake-signal notice: agent.start plugin bridge, same
+// in-process pattern as the Guardian/Crusher plugin above; the shared
+// mesh-events-inject.js is copied under the config root so the plugin's
+// relative require resolves at install time.
+function createAmpMeshNoticeOperations(adapter, configRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  return [
+    ...createMeshNoticeScriptCopyOperations(remap, configRoot),
+    remap(
+      MESH_NOTICE_HOOK_MODULE_ID,
+      MESH_PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveMeshPluginScriptDestination(configRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+  ];
 }
 
 function createAmpGuardianCrusherOperations(adapter, configRoot) {
@@ -72,6 +99,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createAmpGuardianCrusherOperations(adapter, configRoot),
+      ...createAmpMeshNoticeOperations(adapter, configRoot),
     ];
   },
 });

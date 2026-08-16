@@ -20,6 +20,9 @@ const {
   createGateGuardScriptCopyOperations,
   createCrusherScriptCopyOperations,
   createBashGuardianScriptCopyOperations,
+  createMeshNoticeScriptCopyOperations,
+  createMeshNoticeHookMergeOperationForDestination,
+  resolveMeshNoticeHookScriptDestination,
 } = require('../claude-settings-hooks');
 
 // Codex CLI's skills root (~/.agents, this adapter's own resolveRoot()) and
@@ -147,6 +150,28 @@ function createCodexGuardianOperations(adapter, codexHome) {
   return [...copyOperations, mergeOperation];
 }
 
+// Session-mesh wake-signal notice for Codex: the official hooks docs
+// (https://developers.openai.com/codex/hooks) document UserPromptSubmit with
+// hookSpecificOutput.additionalContext "added as extra developer context",
+// which is exactly the dual-field JSON mesh-events-inject.js already emits,
+// so the standalone script is copied under CODEX_HOME and registered with no
+// translation, same copy-plus-merge discipline as the three wirings above.
+function createCodexMeshNoticeOperations(adapter, codexHome) {
+  const copyOperations = createMeshNoticeScriptCopyOperations(
+    (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    codexHome
+  );
+
+  const mergeOperation = createMeshNoticeHookMergeOperationForDestination(
+    path.join(codexHome, 'hooks.json'),
+    resolveMeshNoticeHookScriptDestination(codexHome)
+  );
+
+  return [...copyOperations, mergeOperation];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'codex-home',
   target: 'codex',
@@ -169,6 +194,7 @@ module.exports = createInstallTargetAdapter({
       ...createCodexGateGuardOperations(adapter, codexHome),
       ...createCodexCrusherOperations(adapter, codexHome),
       ...createCodexGuardianOperations(adapter, codexHome),
+      ...createCodexMeshNoticeOperations(adapter, codexHome),
     ];
   },
 });

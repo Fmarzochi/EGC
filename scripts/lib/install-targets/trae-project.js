@@ -11,6 +11,9 @@ const {
   createBashGuardianScriptCopyOperations,
   createCrusherHookMergeOperationForDestination,
   createCrusherScriptCopyOperations,
+  createMeshNoticeScriptCopyOperations,
+  createMeshNoticeHookMergeOperationForDestination,
+  resolveMeshNoticeHookScriptDestination,
 } = require('../claude-settings-hooks');
 
 // Trae reads the same {hooks: {PreToolUse: [{matcher, hooks: [{type,
@@ -77,6 +80,27 @@ function createTraeCrusherOperations(adapter, traeRoot) {
   return [...copyOperations, mergeOperation];
 }
 
+// Session-mesh wake-signal notice for Trae: the same hook reference above
+// documents UserPromptSubmit with hook stdout provided to the model as
+// additional context, and Trae reads the Claude hook schema this file
+// already writes, so the standalone mesh-events-inject.js registers with
+// its default dual-field JSON and no translation.
+function createTraeMeshNoticeOperations(adapter, traeRoot) {
+  const copyOperations = createMeshNoticeScriptCopyOperations(
+    (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    traeRoot
+  );
+
+  const mergeOperation = createMeshNoticeHookMergeOperationForDestination(
+    resolveTraeHooksJsonPath(traeRoot),
+    resolveMeshNoticeHookScriptDestination(traeRoot)
+  );
+
+  return [...copyOperations, mergeOperation];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'trae-project',
   target: 'trae',
@@ -103,6 +127,7 @@ module.exports = createInstallTargetAdapter({
       ...moduleOperations,
       ...createTraeGuardianOperations(adapter, traeRoot),
       ...createTraeCrusherOperations(adapter, traeRoot),
+      ...createTraeMeshNoticeOperations(adapter, traeRoot),
     ];
   },
 });

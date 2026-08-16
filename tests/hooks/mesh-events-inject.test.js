@@ -84,6 +84,18 @@ run('emits the dual-field JSON notice the first time the store moved', () => {
   assert.strictEqual(result.stdout.trim(), result.stdout, 'strict JSON only, no stray output');
 });
 
+run('--format=text emits the bare notice for raw-stdout hosts (Trae, Amp bridge)', () => {
+  const home = makeHome();
+  touchWal(home, 1000000000000);
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const result = spawnSync(process.execPath, [HOOK, '--format=text'], {
+    env, encoding: 'utf8', timeout: 10000, input: JSON.stringify({ session_id: 'tab-a' }),
+  });
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.stdout.startsWith('[egc-mesh]'), 'plain notice, no JSON wrapper');
+  assert.throws(() => JSON.parse(result.stdout), 'text mode must not be valid JSON');
+});
+
 run('stays silent on the next prompt when nothing moved', () => {
   const home = makeHome();
   touchWal(home, 1000000000000);
