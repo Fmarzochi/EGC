@@ -158,6 +158,93 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  // The native .agents tree and the flattened skills/<category> catalog both
+  // cover <root>/skills/<name>/SKILL.md on the codex target with sources that
+  // differ, so without plan-time dedupe the same destination gets two
+  // copy-file owners and doctor/repair disagree about which one the file
+  // should match. The plan must keep exactly one owner per destination and
+  // prefer the source under the adapter's native tree.
+  if (test('keeps one copy-file owner per destination, preferring the native tree source', () => {
+    const sourceRoot = createTempDir('install-executor-source-');
+    const homeDir = createTempDir('install-executor-home-');
+    const projectRoot = createTempDir('install-executor-project-');
+    try {
+      writeJson(sourceRoot, 'package.json', { version: '1.2.3' });
+      // The catalog module comes FIRST in the manifest on purpose: plan
+      // operations follow manifest order, so the catalog source is recorded
+      // first and only the native-preference replacement branch can make the
+      // native tree win. With the native module first, first-recorded-wins
+      // alone would produce the same winner and the branch would go untested.
+      writeJson(sourceRoot, path.join('manifests', 'install-modules.json'), {
+        version: 7,
+        modules: [
+          {
+            id: 'fixture-catalog',
+            kind: 'skills',
+            description: 'Catalog fixture',
+            paths: ['skills/testing/demo'],
+            targets: ['codex'],
+            dependencies: [],
+            defaultInstall: true,
+            cost: 'light',
+            stability: 'stable',
+          },
+          {
+            id: 'fixture-native-tree',
+            kind: 'agents',
+            description: 'Native tree fixture',
+            paths: ['.agents'],
+            targets: ['codex'],
+            dependencies: [],
+            defaultInstall: true,
+            cost: 'light',
+            stability: 'stable',
+          },
+        ],
+      });
+      writeJson(sourceRoot, path.join('manifests', 'install-profiles.json'), {
+        version: 1,
+        profiles: {
+          fixture: {
+            description: 'Fixture profile',
+            modules: ['fixture-native-tree', 'fixture-catalog'],
+          },
+        },
+      });
+      writeFile(sourceRoot, path.join('.agents', 'skills', 'demo', 'SKILL.md'), 'native flavor\n');
+      writeFile(sourceRoot, path.join('skills', 'testing', 'demo', 'SKILL.md'), 'catalog flavor\n');
+      fs.mkdirSync(path.join(homeDir, '.agents'), { recursive: true });
+
+      const plan = createManifestInstallPlan({
+        sourceRoot,
+        homeDir,
+        projectRoot,
+        target: 'codex',
+        profileId: 'fixture',
+      });
+
+      const skillOperations = plan.operations.filter(operation => (
+        operation.kind === 'copy-file'
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'demo', 'SKILL.md')
+      ));
+      assert.strictEqual(skillOperations.length, 1);
+      assert.strictEqual(skillOperations[0].moduleId, 'fixture-native-tree');
+      assert.strictEqual(
+        skillOperations[0].sourceRelativePath.split(path.sep).join('/'),
+        '.agents/skills/demo/SKILL.md'
+      );
+
+      const copyDestinations = plan.operations
+        .filter(operation => operation.kind === 'copy-file')
+        .map(operation => operation.destinationPath);
+      assert.strictEqual(new Set(copyDestinations).size, copyDestinations.length);
+    } finally {
+      cleanup(sourceRoot);
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('plans Gemini legacy rules with warnings and state preview', () => {
     const sourceRoot = createTempDir('install-executor-source-');
     const homeDir = createTempDir('install-executor-home-');

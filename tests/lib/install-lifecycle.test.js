@@ -918,6 +918,195 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // States written before plan-time destination dedupe can hold two copy-file
+  // operations for one destination with sources that legitimately differ (the
+  // codex target's native tree vs the flattened skill catalog). The three
+  // cases below pin the contract: matching either source is healthy, a real
+  // mismatch is reported once, and repair converges in a single pass instead
+  // of ping-ponging between the two sources.
+  function writeSharedDestinationFixture(withDestinationContent) {
+    const repoRootFixture = createTempDir('install-lifecycle-sharedsrc-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    fs.writeFileSync(path.join(repoRootFixture, 'package.json'), '{"version":"1.2.3"}\n');
+    fs.mkdirSync(path.join(repoRootFixture, 'manifests'), { recursive: true });
+    fs.writeFileSync(path.join(repoRootFixture, 'manifests', 'install-modules.json'), '{"version":1,"modules":[]}\n');
+    fs.writeFileSync(path.join(repoRootFixture, 'manifests', 'install-profiles.json'), '{"version":1,"profiles":{}}\n');
+    fs.mkdirSync(path.join(repoRootFixture, 'native', 'skills', 'demo'), { recursive: true });
+    fs.writeFileSync(path.join(repoRootFixture, 'native', 'skills', 'demo', 'SKILL.md'), 'native flavor\n');
+    fs.mkdirSync(path.join(repoRootFixture, 'catalog', 'skills', 'demo'), { recursive: true });
+    fs.writeFileSync(path.join(repoRootFixture, 'catalog', 'skills', 'demo', 'SKILL.md'), 'catalog flavor\n');
+
+    const targetRoot = path.join(projectRoot, '.cursor');
+    const statePath = path.join(targetRoot, 'egc-install-state.json');
+    const destinationPath = path.join(targetRoot, 'skills', 'demo', 'SKILL.md');
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    fs.writeFileSync(destinationPath, withDestinationContent);
+
+    const buildOperation = sourceRelativePath => ({
+      kind: 'copy-file',
+      moduleId: 'fixture-module',
+      sourcePath: path.join(repoRootFixture, sourceRelativePath),
+      sourceRelativePath,
+      destinationPath,
+      strategy: 'preserve-relative-path',
+      ownership: 'managed',
+      scaffoldOnly: false,
+    });
+
+    writeState(statePath, {
+      adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
+      targetRoot,
+      installStatePath: statePath,
+      request: { profile: null, modules: [], legacyLanguages: [], legacyMode: true },
+      resolution: { selectedModules: ['fixture-module'], skippedModules: [] },
+      operations: [
+        buildOperation('native/skills/demo/SKILL.md'),
+        buildOperation('catalog/skills/demo/SKILL.md'),
+      ],
+      source: { repoVersion: '1.2.3', repoCommit: 'abc123', manifestVersion: 1 },
+    });
+
+    return { repoRootFixture, projectRoot, destinationPath };
+  }
+
+  if (test('doctor accepts a shared destination when the file matches either recorded source', () => {
+    const fixture = writeSharedDestinationFixture('catalog flavor\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      const report = buildDoctorReport({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.strictEqual(report.results.length, 1);
+      assert.ok(!report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'));
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('doctor reports a shared destination once when the file matches no recorded source', () => {
+    const fixture = writeSharedDestinationFixture('edited by hand\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      const report = buildDoctorReport({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      const driftIssue = report.results[0].issues.find(issue => issue.code === 'drifted-managed-files');
+      assert.ok(driftIssue);
+      assert.deepStrictEqual(driftIssue.paths, [fixture.destinationPath]);
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair converges a drifted shared destination in one pass', () => {
+    const fixture = writeSharedDestinationFixture('edited by hand\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      const firstPass = repairInstalledStates({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.deepStrictEqual(firstPass.results[0].repairedPaths, [fixture.destinationPath]);
+      assert.strictEqual(fs.readFileSync(fixture.destinationPath, 'utf8'), 'native flavor\n');
+
+      const secondPass = repairInstalledStates({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.strictEqual(secondPass.results[0].repairedPaths.length, 0);
+      assert.strictEqual(fs.readFileSync(fixture.destinationPath, 'utf8'), 'native flavor\n');
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('doctor accepts a shared destination matching the first recorded source too', () => {
+    const fixture = writeSharedDestinationFixture('native flavor\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      const report = buildDoctorReport({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.ok(!report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'));
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair of a missing shared destination copies from the owner whose source still exists', () => {
+    const fixture = writeSharedDestinationFixture('about to vanish\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      fs.rmSync(fixture.destinationPath);
+      fs.rmSync(path.join(fixture.repoRootFixture, 'native', 'skills', 'demo', 'SKILL.md'));
+
+      const result = repairInstalledStates({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.deepStrictEqual(result.results[0].repairedPaths, [fixture.destinationPath]);
+      assert.strictEqual(fs.readFileSync(fixture.destinationPath, 'utf8'), 'catalog flavor\n');
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair skips an orphaned source that survives as a directory and copies from the file sibling', () => {
+    const fixture = writeSharedDestinationFixture('about to vanish\n');
+    const homeDir = createTempDir('install-lifecycle-home-');
+    try {
+      fs.rmSync(fixture.destinationPath);
+      const nativeSourcePath = path.join(fixture.repoRootFixture, 'native', 'skills', 'demo', 'SKILL.md');
+      fs.rmSync(nativeSourcePath);
+      fs.mkdirSync(nativeSourcePath);
+
+      const result = repairInstalledStates({
+        repoRoot: fixture.repoRootFixture,
+        homeDir,
+        projectRoot: fixture.projectRoot,
+        targets: ['cursor'],
+      });
+
+      assert.deepStrictEqual(result.results[0].repairedPaths, [fixture.destinationPath]);
+      assert.strictEqual(fs.readFileSync(fixture.destinationPath, 'utf8'), 'catalog flavor\n');
+    } finally {
+      cleanup(fixture.repoRootFixture);
+      cleanup(fixture.projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (test('doctor reports manifest resolution drift for non-legacy installs', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
