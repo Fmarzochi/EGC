@@ -4,6 +4,17 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.20] - 2026-08-16
+
+### Fixed
+
+- **PowerShell install suite adopts the shared Windows subprocess budgets** (#1286): the dry-run delegation case ran the full Node planning pipeline under a hardcoded 30s cap, which starved a slow cold runner during the v1.1.19 tag validation; the shared 90s win32 full-install budget now applies, and the detection probe uses the shared CLI budget.
+- **Chaos harness cleanup guarantees** (#1284, @Tyr1onX): workers exit when the parent dies and the temp directory is removed on every failure path.
+
+### Changed
+
+- **Release checklist codifies the missing gates** (#1286): the tag-ref CI run must finish green, the inbox must be swept, and the published artifact must be verified end to end before a release is announced.
+
 ## [1.1.19] - 2026-08-16
 
 ### Added
