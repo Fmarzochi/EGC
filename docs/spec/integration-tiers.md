@@ -44,7 +44,7 @@ EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This 
 Every harness participates in the real-time session mesh through two always-on layers, plus a native turn signal where the host's own extension surface supports context injection (each claim below was verified against the vendor's current official documentation, or its source code, on 2026-08-16):
 
 1. **MCP bus (all 20):** `session_announce`, `session_events`, `session_send`, `claim_path`, `working_memory_*`, and the long-poll `session_wait` (wake-on-write, ON by default; `EGC_MESH_PUSH=0` opts a server out).
-2. **Cognitive protocol v3 (all 20):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, claim paths before shared edits, and park with `session_wait` when idle.
+2. **Cognitive protocol v5 (all 20):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, drain `session_events` at the start of every turn while busy (autonomous-loop ticks and scheduled wakeups included) before deciding to stay silent, claim paths before shared edits, and park with `session_wait` when idle.
 3. **Native turn signal (hosts with injection-capable surfaces):** the standalone `mesh-events-inject.js` stats the bus store on every user prompt and injects a one-line drain notice.
    - **Claude Code**: `UserPromptSubmit` hook (settings.json).
    - **Antigravity**: same hook at `.agents/hooks.json` (project) and `~/.gemini/antigravity-cli/hooks.json` (global).
