@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS, FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.ps1');
 const BASH_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
@@ -29,7 +30,7 @@ function resolvePowerShellCommand() {
     const result = spawnSync(candidate, ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()'], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5000,
+      timeout: CLI_TIMEOUT_MS,
     });
 
     if (!result.error && result.status === 0) {
@@ -53,7 +54,11 @@ function run(powerShellCommand, args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      // Full-install budget from the shared fixture: a PowerShell dry-run
+      // spawns the whole Node planning pipeline, and 30s starved slow
+      // Windows runners (the tag-run failure of v1.1.19: pwsh killed by
+      // timeout, exit 1 with empty stderr).
+      timeout: FULL_INSTALL_TIMEOUT_MS,
     });
 
     return { code: 0, stdout, stderr: '' };
