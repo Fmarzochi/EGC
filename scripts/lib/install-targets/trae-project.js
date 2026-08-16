@@ -11,6 +11,9 @@ const {
   createBashGuardianScriptCopyOperations,
   createCrusherHookMergeOperationForDestination,
   createCrusherScriptCopyOperations,
+  MESH_NOTICE_HOOK_MODULE_ID,
+  createMeshNoticeScriptCopyOperations,
+  createMeshNoticeHookMergeOperationForDestination,
 } = require('../claude-settings-hooks');
 
 // Trae reads the same {hooks: {PreToolUse: [{matcher, hooks: [{type,
@@ -77,6 +80,42 @@ function createTraeCrusherOperations(adapter, traeRoot) {
   return [...copyOperations, mergeOperation];
 }
 
+// Session-mesh wake-signal notice for Trae: the same hook reference above
+// documents UserPromptSubmit feeding a hook's PLAIN-TEXT stdout to the
+// model as additional context (its JSON stdout channel is workflow
+// control, not context injection), so the registered command is the tiny
+// trae-mesh-notice-adapter.js, which delegates to the shared
+// implementation and prints the bare notice: same host-adapter pattern as
+// kiro-guardian-adapter.js. Both scripts ship under the adapter root so
+// the adapter's relative require resolves at install time.
+const TRAE_MESH_ADAPTER_SOURCE_RELATIVE_PATH = 'scripts/hooks/trae-mesh-notice-adapter.js';
+
+function resolveTraeMeshAdapterDestination(traeRoot) {
+  return path.join(traeRoot, 'scripts', 'hooks', 'trae-mesh-notice-adapter.js');
+}
+
+function createTraeMeshNoticeOperations(adapter, traeRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  const mergeOperation = createMeshNoticeHookMergeOperationForDestination(
+    resolveTraeHooksJsonPath(traeRoot),
+    resolveTraeMeshAdapterDestination(traeRoot)
+  );
+
+  return [
+    ...createMeshNoticeScriptCopyOperations(remap, traeRoot),
+    remap(
+      MESH_NOTICE_HOOK_MODULE_ID,
+      TRAE_MESH_ADAPTER_SOURCE_RELATIVE_PATH,
+      resolveTraeMeshAdapterDestination(traeRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    mergeOperation,
+  ];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'trae-project',
   target: 'trae',
@@ -103,6 +142,7 @@ module.exports = createInstallTargetAdapter({
       ...moduleOperations,
       ...createTraeGuardianOperations(adapter, traeRoot),
       ...createTraeCrusherOperations(adapter, traeRoot),
+      ...createTraeMeshNoticeOperations(adapter, traeRoot),
     ];
   },
 });

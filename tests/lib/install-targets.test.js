@@ -1870,6 +1870,121 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
+  // hook loop, which reads the hookSpecificOutput.additionalContext field
+  // mesh-events-inject.js emits, so the same standalone script is registered
+  // on UserPromptSubmit at both the project hooks file (antigravity target)
+  // and the global one (egc target owns ~/.gemini).
+  if (test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Antigravity, Codex, and Trae', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+      { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json'), root: path.join(homeDir, '.gemini') },
+      { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex') },
+      // Trae feeds plain-text stdout to the model, so its registered command
+      // is the host adapter, not the shared JSON-emitting script directly.
+      { target: 'trae', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.trae', 'hooks.json'), root: path.join(projectRoot, '.trae'), registeredScript: 'trae-mesh-notice-adapter.js' },
+    ];
+
+    for (const { target, input, hooksFilePath, root, registeredScript } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const meshScriptPath = path.join(root, 'scripts', 'hooks', registeredScript || 'mesh-events-inject.js');
+
+      const meshOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'UserPromptSubmit'
+        && operation.destinationPath === hooksFilePath
+        && operation.hookScriptPath === meshScriptPath
+      ));
+      assert.strictEqual(meshOps.length, 1, `${target}: mesh notice registered once`);
+      assert.strictEqual(meshOps[0].hookMatcher, undefined, `${target}: prompt hooks carry no tool matcher`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === `scripts/hooks/${registeredScript || 'mesh-events-inject.js'}`
+          && operation.destinationPath === meshScriptPath
+        )),
+        `${target}: registered hook script scaffolded`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          && operation.destinationPath === path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js')
+        )),
+        `${target}: shared mesh implementation scaffolded`
+      );
+    }
+  })) passed++; else failed++;
+
+  // Amp has no hooks.json: its turn boundary is the agent.start plugin event,
+  // so the mesh ships as a plugin file plus the shared script it requires.
+  if (test('mesh notice plugin is scaffolded for Amp at both plugin roots', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'amp-project', input: { projectRoot }, pluginRoot: path.join(projectRoot, '.amp') },
+      { target: 'amp-home', input: { homeDir }, pluginRoot: path.join(homeDir, '.config', 'amp') },
+    ];
+
+    for (const { target, input, pluginRoot } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/amp-mesh-notice-plugin.ts'
+          && operation.destinationPath === path.join(pluginRoot, 'plugins', 'egc-mesh-notice.ts')
+        )),
+        `${target}: mesh notice plugin scaffolded`
+      );
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          && operation.destinationPath === path.join(pluginRoot, 'scripts', 'hooks', 'mesh-events-inject.js')
+        )),
+        `${target}: shared mesh script scaffolded next to the plugin`
+      );
+    }
+  })) passed++; else failed++;
+
+  // Kiro takes a dedicated whole-file hook document under <root>/hooks/,
+  // dispatched on its own tag so apply/remove never merge user content.
+  if (test('mesh notice hook document is planned for Kiro at both roots', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+
+    const cases = [
+      { target: 'kiro-project', input: { projectRoot }, root: path.join(projectRoot, '.kiro') },
+      { target: 'kiro-home', input: { homeDir }, root: path.join(homeDir, '.kiro') },
+    ];
+
+    for (const { target, input, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const meshScriptPath = path.join(root, 'scripts', 'hooks', 'mesh-events-inject.js');
+
+      const docOps = plan.operations.filter(operation => (
+        operation.kind === 'merge-claude-settings-hooks'
+        && operation.hookEvent === 'kiro-mesh-hook-file'
+        && operation.destinationPath === path.join(root, 'hooks', 'egc-mesh-notice.json')
+        && operation.hookScriptPath === meshScriptPath
+      ));
+      assert.strictEqual(docOps.length, 1, `${target}: hook document planned once`);
+
+      assert.ok(
+        plan.operations.some(operation => (
+          normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/mesh-events-inject.js'
+          && operation.destinationPath === meshScriptPath
+        )),
+        `${target}: shared mesh script scaffolded under the adapter root`
+      );
+    }
+  })) passed++; else failed++;
+
   // EGC Guardian: 2026-07-27 audit (EGC-460..464) found these three targets
   // had GateGuard + Crusher wired (tests above) but never the Guardian
   // command validator itself -- neither one actually checks a Bash command
@@ -2709,16 +2824,26 @@ function runTests() {
     });
 
     const mergeOperations = plan.operations.filter(operation => operation.destinationPath === hooksJsonPath);
-    assert.strictEqual(mergeOperations.length, 2, 'Guardian and Crusher should each plan exactly one merge into .trae/hooks.json');
+    assert.strictEqual(mergeOperations.length, 3, 'Guardian, Crusher, and mesh notice should each plan exactly one merge into .trae/hooks.json');
     assert.ok(
-      mergeOperations.every(operation => operation.hookEvent === 'PreToolUse' && operation.hookMatcher === 'RunCommand'),
-      'Both merges must target PreToolUse with the RunCommand matcher (Trae\'s tool_name for shell, not Bash/Shell)'
+      mergeOperations
+        .filter(operation => operation.hookEvent === 'PreToolUse')
+        .every(operation => operation.hookMatcher === 'RunCommand'),
+      'Tool merges must target PreToolUse with the RunCommand matcher (Trae\'s tool_name for shell, not Bash/Shell)'
     );
 
     const guardianMerge = mergeOperations.find(operation => operation.moduleId === 'egc-bash-guardian-hook');
     const crusherMerge = mergeOperations.find(operation => operation.moduleId === 'egc-crusher-hook');
+    const meshMerge = mergeOperations.find(operation => operation.moduleId === 'egc-mesh-notice-hook');
     assert.ok(guardianMerge, 'Should plan the Guardian merge');
     assert.ok(crusherMerge, 'Should plan the Crusher merge');
+    assert.ok(meshMerge, 'Should plan the mesh notice merge');
+    assert.strictEqual(meshMerge.hookEvent, 'UserPromptSubmit', 'mesh notice rides the prompt boundary');
+    assert.strictEqual(
+      meshMerge.hookScriptPath,
+      path.join(targetRoot, 'scripts', 'hooks', 'trae-mesh-notice-adapter.js'),
+      'Trae registers the plain-text host adapter, not the JSON-emitting script'
+    );
     assert.strictEqual(guardianMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js'));
     assert.strictEqual(crusherMerge.hookScriptPath, path.join(targetRoot, 'scripts', 'hooks', 'crusher-hook.js'));
 
@@ -2765,8 +2890,8 @@ function runTests() {
     ));
     assert.strictEqual(
       hooksJsonOps.length,
-      2,
-      'Guardian and Crusher should still be planned unconditionally when neither modules nor module is present'
+      3,
+      'Guardian, Crusher, and mesh notice should still be planned unconditionally when neither modules nor module is present'
     );
   })) passed++; else failed++;
 

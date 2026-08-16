@@ -26,6 +26,8 @@ const {
   resolveCrusherHookScriptDestination,
   createBashGuardianHookMergeOperationForDestination,
   resolveBashGuardianHookScriptDestination,
+  createMeshNoticeHookMergeOperationForDestination,
+  resolveMeshNoticeHookScriptDestination,
 } = require('./claude-settings-hooks');
 
 function resolveAntigravityProjectHooksFilePath(projectRoot) {
@@ -98,6 +100,26 @@ function createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, matcher
   );
 }
 
+// Session-mesh wake-signal notice: UserPromptSubmit entry (no tool matcher)
+// pointing at the standalone mesh-events-inject.js under the adapter root.
+// Antigravity inherited the Gemini CLI hook loop, which reads the
+// hookSpecificOutput.additionalContext field the script already emits, so
+// registering the same script here gives Antigravity tabs the native
+// turn-boundary wake signal with zero payload translation.
+function createProjectMeshNoticeHookMergeOperation(targetRoot, projectRoot) {
+  return createMeshNoticeHookMergeOperationForDestination(
+    resolveAntigravityProjectHooksFilePath(projectRoot),
+    resolveMeshNoticeHookScriptDestination(targetRoot)
+  );
+}
+
+function createGlobalMeshNoticeHookMergeOperation(targetRoot, homeDir) {
+  return createMeshNoticeHookMergeOperationForDestination(
+    resolveAntigravityGlobalHooksFilePath(homeDir),
+    resolveMeshNoticeHookScriptDestination(targetRoot)
+  );
+}
+
 module.exports = {
   createGlobalGateGuardHookMergeOperation,
   createProjectGateGuardHookMergeOperation,
@@ -105,6 +127,8 @@ module.exports = {
   createGlobalCrusherHookMergeOperation,
   createProjectBashGuardianHookMergeOperation,
   createGlobalBashGuardianHookMergeOperation,
+  createProjectMeshNoticeHookMergeOperation,
+  createGlobalMeshNoticeHookMergeOperation,
   resolveAntigravityGlobalHooksFilePath,
   resolveAntigravityProjectHooksFilePath,
 };

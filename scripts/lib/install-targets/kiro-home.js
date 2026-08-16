@@ -4,6 +4,7 @@ const {
   createRemappedOperation,
 } = require('./helpers');
 const { createKiroGuardianOperations } = require('../kiro-guardian-operations');
+const { createKiroMeshNoticeOperations } = require('../kiro-mesh-operations');
 
 module.exports = createInstallTargetAdapter({
   id: 'kiro-home',
@@ -23,6 +24,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation),
+      ...createKiroMeshNoticeOperations(adapter, targetRoot, createRemappedOperation),
     ];
   },
 });

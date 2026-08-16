@@ -6,8 +6,10 @@ const {
 } = require('./helpers');
 const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
+  MESH_NOTICE_HOOK_MODULE_ID,
   createBashGuardianScriptCopyOperations,
   createCrusherScriptCopyOperations,
+  createMeshNoticeScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 // GateGuard fact-forcing gate is intentionally NOT wired for Amp -- it is a
@@ -27,9 +29,35 @@ const {
 // `modify` action can rewrite the tool input, so -- like OpenCode -- Amp
 // gets both the Guardian and the Crusher, not the Guardian alone.
 const PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-guardian-crusher-plugin.ts';
+const MESH_PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-mesh-notice-plugin.ts';
 
 function resolvePluginScriptDestination(targetRoot) {
   return path.join(targetRoot, 'plugins', 'egc-guardian-crusher.ts');
+}
+
+function resolveMeshPluginScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'plugins', 'egc-mesh-notice.ts');
+}
+
+// Session-mesh wake-signal notice via the same Plugin API: agent.start fires
+// on every user prompt and its return value can add a context message, so
+// the plugin calls the shared mesh-events-inject.js run() in-process (the
+// script is copied alongside, preserve-relative-path, exactly like the
+// Guardian/Crusher dependencies above).
+function createAmpMeshNoticeOperations(adapter, targetRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+  );
+
+  return [
+    ...createMeshNoticeScriptCopyOperations(remap, targetRoot),
+    remap(
+      MESH_NOTICE_HOOK_MODULE_ID,
+      MESH_PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveMeshPluginScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+  ];
 }
 
 function createAmpGuardianCrusherOperations(adapter, targetRoot) {
@@ -67,6 +95,7 @@ module.exports = createInstallTargetAdapter({
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createAmpGuardianCrusherOperations(adapter, targetRoot),
+      ...createAmpMeshNoticeOperations(adapter, targetRoot),
     ];
   },
 });

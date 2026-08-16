@@ -12,11 +12,13 @@ const {
   createGlobalGateGuardHookMergeOperation,
   createGlobalCrusherHookMergeOperation,
   createGlobalBashGuardianHookMergeOperation,
+  createGlobalMeshNoticeHookMergeOperation,
 } = require('../antigravity-settings-hooks');
 const {
   createGateGuardScriptCopyOperations,
   createCrusherScriptCopyOperations,
   createBashGuardianScriptCopyOperations,
+  createMeshNoticeScriptCopyOperations,
 } = require('../claude-settings-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
@@ -69,6 +71,19 @@ function createAntigravityGlobalCrusherOperations(targetRoot, homeDir, createRem
 // first found createGlobalBashGuardianHookMergeOperation was added to
 // antigravity-settings-hooks.js but never actually called anywhere, then
 // (once wired) found the same missing-script-copy gap GateGuard had.
+// Session-mesh wake-signal notice: same reasoning as the three above -- copy
+// the standalone mesh-events-inject.js explicitly (it is dependency-free, so
+// one copy suffices) and register it on UserPromptSubmit at Antigravity's
+// global hooks file, giving every Antigravity session the native
+// turn-boundary wake signal even when only the `egc` target is installed.
+function createAntigravityGlobalMeshNoticeOperations(targetRoot, homeDir, createRemap) {
+  const scriptCopyOperations = createMeshNoticeScriptCopyOperations(createRemap, targetRoot);
+  return [
+    ...scriptCopyOperations,
+    createGlobalMeshNoticeHookMergeOperation(targetRoot, homeDir),
+  ];
+}
+
 function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRemap) {
   const scriptCopyOperations = createBashGuardianScriptCopyOperations(createRemap, targetRoot);
   return [
@@ -237,6 +252,7 @@ module.exports = createInstallTargetAdapter({
       ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
       ...createAntigravityGlobalCrusherOperations(targetRoot, homeDir, remap),
       ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),
+      ...createAntigravityGlobalMeshNoticeOperations(targetRoot, homeDir, remap),
     ]);
   },
 });
