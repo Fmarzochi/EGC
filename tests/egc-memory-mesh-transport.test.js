@@ -325,7 +325,19 @@ async function main() {
         // still requires the wake to arrive.
         const wait = observer.waitForChange(5000).then(reason => { woke = reason === 'change'; });
         fs.appendFileSync(`${dbPath}-wal`, 'append');
-        await wait;
+        // Same FSEvents warm-up race as the waiter case above: one append can
+        // be dropped by a brand-new stream even inside a generous deadline
+        // (macOS runner, run for 4b38c7f), so keep appending until the sanity
+        // wake lands. The closed transport's zero-waiters assert is unaffected
+        // by extra writes.
+        const appender = setInterval(() => {
+          try { fs.appendFileSync(`${dbPath}-wal`, 'append'); } catch { /* dir gone on teardown */ } // NOSONAR
+        }, 250);
+        try {
+          await wait;
+        } finally {
+          clearInterval(appender);
+        }
         assert.strictEqual(woke, true, 'a live transport still wakes (sanity)');
         assert.strictEqual(transport.pendingWaiters(), 0, 'closed transport holds no waiters');
       } finally {
