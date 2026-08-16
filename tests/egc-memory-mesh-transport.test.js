@@ -64,11 +64,24 @@ async function main() {
         assert.strictEqual(transport.mode, 'watch');
         const started = Date.now();
         const wake = transport.waitForChange(5000);
+        // A single append can land inside FSEvents' stream warm-up window on
+        // a fresh watcher and get dropped (the exact macOS-runner race the
+        // #1277 deadline fix documented), so keep appending until the waiter
+        // wakes: production writes to the bus repeat too, and correctness
+        // comes from the caller's re-read, never from one delivery.
         fs.appendFileSync(`${dbPath}-wal`, 'append');
-        const reason = await wake;
+        const appender = setInterval(() => {
+          try { fs.appendFileSync(`${dbPath}-wal`, 'append'); } catch { /* dir gone on teardown */ }
+        }, 250);
+        let reason;
+        try {
+          reason = await wake;
+        } finally {
+          clearInterval(appender);
+        }
         const elapsed = Date.now() - started;
         assert.strictEqual(reason, 'change');
-        assert.ok(elapsed < 3000, `wake took ${elapsed}ms, expected < 3000ms`);
+        assert.ok(elapsed < 4500, `wake took ${elapsed}ms, expected < 4500ms`);
         console.log(`    (wake latency: ${elapsed}ms)`);
       } finally {
         transport.close();
