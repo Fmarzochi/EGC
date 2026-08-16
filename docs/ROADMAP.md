@@ -4,6 +4,10 @@ This document describes the planned development direction for EGC (Extended Glob
 
 ## Unreleased
 
+## v1.1.20: The Mesh, Hardened (Released 2026-08-16)
+
+- The recommended release of the mesh line: everything v1.1.19 shipped plus the corrections born from its own release process. The PowerShell install suite adopts the shared Windows subprocess budgets (a hardcoded 30s cap starved a slow cold runner during the v1.1.19 tag validation while the bit-identical script passed everywhere else), the chaos harness gained cleanup guarantees (workers die with their parent, and the temp directory is removed on every failure path, #1284 by Tyr1onX), and the release checklist now codifies the gates whose absence let a red tag run go unnoticed: the tag-ref CI run must finish green, the inbox must be swept, and the published artifact must be verified end to end before any announcement. This release was the first shipped under the full protocol (#1286, #1287)
+
 ## v1.1.19: The Real-Time Session Mesh (Released 2026-08-16)
 
 - The shared coding style now opens with a seven-rung minimal-change ladder (no change, deletion, one-line fix at the root cause, local change, existing seam, new unit, new abstraction last) plus The Floor, the list of guarantees a minimal change can never drop, and a routed `minimal-change` skill turns the ladder into a working protocol: rung selection, delivery contract, strictness modes (with The Floor explicitly non-waivable in every mode), worked examples and an anti-pattern table. The rule rides `rules-core` and the cursor/kiro condensations, the skill ships through `workflow-quality` and both generated catalog indices, real installs into scratch homes verified the landing for claude, cursor and codex, and the prompt-library counts moved to 61/231/77 across the README, both installers and the installation guide behind the existing three-way parity test; first-party implementation of the idea @fuentes71 opened in #1188, co-authored on the squash commit (#1256)
