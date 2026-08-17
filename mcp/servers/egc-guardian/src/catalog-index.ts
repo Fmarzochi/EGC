@@ -922,6 +922,11 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   },
   {
     "kind": "skill",
+    "name": "content-scrubber",
+    "description": "Remove AI provenance marks from content you own: invisible Unicode carriers (zero-width, bidi, tag chars, variation selectors, exotic spaces, homoglyphs), long dashes, and AI co-authorship trailers in commit messages. Use when the user asks to clean invisible characters, strip AI watermarks or metadata from text they own, sanitize a file or a whole directory, or remove \"Co-Authored-By\" AI lines. The deterministic layer is verifiable; statistical token-sampling marks are best-effort via a rewrite workflow and are never claimed undetectable."
+  },
+  {
+    "kind": "skill",
     "name": "customs-trade-compliance",
     "description": "Codified expertise for customs documentation, tariff classification, duty optimization, restricted party screening, and regulatory compliance across multiple jurisdictions. Informed by trade compliance specialists with 15+ years experience. Includes HS classification logic, Incoterms application, FTA utilization, and penalty mitigation. Use when handling customs clearance, tariff classification, trade compliance, import/export documentation, or duty optimization."
   },
