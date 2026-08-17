@@ -35,35 +35,49 @@ function detectContainerFormat(name, text) {
 
 // --- Markdown -------------------------------------------------------------
 
-// A frontmatter key line: a bare, single-quoted, or double-quoted key followed
-// by a colon. Returns the key name, or null.
+// The frontmatter key on a top-level line: a bare, single-quoted, or
+// double-quoted key followed by a colon. Returns the key name, or null.
 function frontmatterKey(line) {
-  const m = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+))\s*:/.exec(line);
+  const m = /^(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+))\s*:/.exec(line);
   return m ? (m[1] || m[2] || m[3]) : null;
+}
+
+// A frontmatter fence is an unindented line of exactly `---` (trailing
+// whitespace allowed). An indented `---` inside a block scalar is not a fence.
+function isFence(line) {
+  return /^---[ \t]*\r?$/.test(line);
 }
 
 function cleanMarkdown(text) {
   const removed = [];
   const lines = text.split('\n');
-  // The opening fence must be a whole line of exactly `---`, not merely a `---`
-  // prefix, so ordinary Markdown starting with a horizontal rule is untouched.
-  if (lines.length < 2 || lines[0].trim() !== '---') return { cleaned: text, removed };
+  if (lines.length < 2 || !isFence(lines[0])) return { cleaned: text, removed };
 
   let close = -1;
   for (let i = 1; i < lines.length; i += 1) {
-    if (lines[i].trim() === '---') { close = i; break; }
+    if (isFence(lines[i])) { close = i; break; }
   }
   if (close < 0) return { cleaned: text, removed };
 
   const frontmatter = lines.slice(1, close);
-  const kept = frontmatter.filter(line => {
-    const key = frontmatterKey(line);
-    if (key && AI_PROVENANCE_KEYS.has(key.toLowerCase())) {
-      removed.push(key);
-      return false;
+  const kept = [];
+  let dropping = false;
+  for (const line of frontmatter) {
+    const isTopLevel = line.length > 0 && !/^\s/.test(line) && line.trim() !== '';
+    if (isTopLevel) {
+      const key = frontmatterKey(line);
+      if (key && AI_PROVENANCE_KEYS.has(key.toLowerCase())) {
+        removed.push(key);
+        dropping = true;
+        continue;
+      }
+      dropping = false;
     }
-    return true;
-  });
+    // Skip indented continuation lines (nested mapping / block scalar) of a
+    // dropped provenance key so no orphan value is left behind.
+    if (dropping) continue;
+    kept.push(line);
+  }
 
   if (removed.length === 0) return { cleaned: text, removed };
 
@@ -81,17 +95,28 @@ const TAG_BODY = '(?:"[^"]*"|\'[^\']*\'|[^>])*';
 const META_TAG = new RegExp(`<meta\\b${TAG_BODY}>\\s*`, 'gi');
 const SCRIPT_BLOCK = new RegExp(`<script\\b(${TAG_BODY})>([\\s\\S]*?)<\\/script>\\s*`, 'gi'); // NOSONAR: repo/local file content, never network-controlled input
 const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
-const LD_JSON_TYPE = /\btype\s*=\s*(?:"application\/ld\+json"|'application\/ld\+json'|application\/ld\+json\b)/i;
 // Explicit provenance FIELDS, not brand mentions: a JSON-LD block is only
 // stripped when it declares AI provenance, so a legitimate Article that merely
 // names a model or company survives.
 const LD_PROVENANCE = /"(aiGenerated|generator|softwareAgent|trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia|digitalSourceType|provenance)"\s*:/i;
 
-// Read an attribute value (quoted or unquoted) from a tag string.
-function tagAttr(tag, attr) {
-  const m = new RegExp(`\\b${attr}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag);
-  if (!m) return null;
-  return m[2] ?? m[3] ?? m[4] ?? '';
+// Parse attribute tokens from a tag string. The name is bounded by whitespace
+// or the tag start, so `data-name` is one token and never matches `name`.
+function parseAttrs(tag) {
+  const attrs = {};
+  const re = /(?:^|\s)([a-zA-Z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  let m = re.exec(tag);
+  while (m !== null) {
+    attrs[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[5] ?? '';
+    m = re.exec(tag);
+  }
+  return attrs;
+}
+
+function isProvenanceMetaValue(value) {
+  if (!value) return false;
+  const v = value.toLowerCase();
+  return v === 'generator' || /^ai[:-]/.test(v);
 }
 
 function cleanHtml(text) {
@@ -99,14 +124,18 @@ function cleanHtml(text) {
   let out = text;
 
   out = out.replace(META_TAG, tag => {
-    const name = String(tagAttr(tag, 'name') || tagAttr(tag, 'property') || '').toLowerCase();
-    if (name === 'generator') { removed.push('meta:generator'); return ''; }
-    if (/^ai[:-]/.test(name)) { removed.push('meta:ai'); return ''; }
+    const attrs = parseAttrs(tag);
+    // Evaluate name and property independently: an AI value on either removes it.
+    if (isProvenanceMetaValue(attrs.name) || isProvenanceMetaValue(attrs.property)) {
+      removed.push('meta:provenance');
+      return '';
+    }
     return tag;
   });
 
   out = out.replace(SCRIPT_BLOCK, (whole, attrs, body) => {
-    if (LD_JSON_TYPE.test(attrs) && LD_PROVENANCE.test(body)) {
+    const parsed = parseAttrs(attrs);
+    if (parsed.type && parsed.type.toLowerCase() === 'application/ld+json' && LD_PROVENANCE.test(body)) {
       removed.push('json-ld');
       return '';
     }
@@ -141,8 +170,6 @@ function cleanContainer(name, rawText) {
   if (kind === 'markdown') return { kind, ...cleanMarkdown(text) };
   if (kind === 'html') return { kind, ...cleanHtml(text) };
   if (kind === 'svg') return { kind, ...cleanSvg(text) };
-  // Not a container: hand back the original bytes (BOM included) untouched;
-  // the caller's Layer A pass handles any BOM.
   return { kind: null, cleaned: rawText, removed: [] };
 }
 
@@ -158,6 +185,7 @@ module.exports = {
   cleanSvg,
   cleanContainer,
   inspectContainer,
+  parseAttrs,
   stripBom,
   AI_PROVENANCE_KEYS,
 };

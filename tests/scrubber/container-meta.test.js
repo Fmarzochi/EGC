@@ -62,8 +62,8 @@ check('markdown drops the whole frontmatter when only AI keys remain', () => {
 check('html removes generator meta and AI meta, keeps others', () => {
   const html = '<head><meta name="viewport" content="w"><meta name="generator" content="SomeAI 1.0"><meta name="ai-model" content="x"></head>';
   const r = cleanHtml(html);
-  assert.ok(r.removed.includes('meta:generator'));
-  assert.ok(r.removed.includes('meta:ai'));
+  assert.ok(r.removed.includes('meta:provenance'));
+  assert.ok(r.removed.includes('meta:provenance'));
   assert.ok(/viewport/.test(r.cleaned));
   assert.ok(!/generator/.test(r.cleaned));
 });
@@ -123,7 +123,7 @@ check('cleanContainer strips a BOM before detecting markdown frontmatter', () =>
 check('html meta with a > inside a quoted value is not corrupted', () => {
   const html = '<meta name="description" content="a>b"><meta name="generator" content="AI">tail';
   const r = cleanHtml(html);
-  assert.ok(r.removed.includes('meta:generator'));
+  assert.ok(r.removed.includes('meta:provenance'));
   assert.ok(/content="a>b"/.test(r.cleaned));
   assert.ok(/tail/.test(r.cleaned));
   assert.ok(!/generator/.test(r.cleaned));
@@ -142,8 +142,8 @@ check('json-ld removes a block with an explicit provenance field, quoted or not'
 });
 
 check('meta and yaml accept unquoted and quoted forms', () => {
-  assert.ok(cleanHtml('<meta name=generator content=x>').removed.includes('meta:generator'));
-  assert.ok(cleanHtml('<meta name=ai-model content=x>').removed.includes('meta:ai'));
+  assert.ok(cleanHtml('<meta name=generator content=x>').removed.includes('meta:provenance'));
+  assert.ok(cleanHtml('<meta name=ai-model content=x>').removed.includes('meta:provenance'));
   assert.ok(cleanMarkdown('---\n"generator": ai\ntitle: t\n---\nb\n').removed.includes('generator'));
 });
 
@@ -152,6 +152,35 @@ check('markdown starting with a non-fence --- line is untouched', () => {
   const r = cleanMarkdown(md);
   assert.strictEqual(r.removed.length, 0);
   assert.strictEqual(r.cleaned, md);
+});
+
+check('does not mistake data-type or data-name for real attributes', () => {
+  const script = '<script data-type="application/ld+json">{"aiGenerated":true}</script>';
+  assert.strictEqual(cleanHtml(script).removed.length, 0);
+  const meta = '<meta data-name="generator" content="x">keep';
+  assert.strictEqual(cleanHtml(meta).removed.length, 0);
+});
+
+check('meta with a non-AI name and an AI property is removed', () => {
+  const meta = '<meta name="twitter:card" property="ai:model" content="x">';
+  assert.ok(cleanHtml(meta).removed.includes('meta:provenance'));
+});
+
+check('markdown removes a provenance key together with its nested value', () => {
+  const md = '---\ngenerator:\n  name: SomeAI\n  version: 2\ntitle: t\n---\nbody\n';
+  const r = cleanMarkdown(md);
+  assert.ok(r.removed.includes('generator'));
+  assert.ok(!/SomeAI/.test(r.cleaned));
+  assert.ok(!/version: 2/.test(r.cleaned));
+  assert.ok(/title: t/.test(r.cleaned));
+});
+
+check('an indented --- inside a block scalar is not treated as the fence', () => {
+  const md = '---\nnote: |\n  a line\n  ---\n  more\ngenerator: ai\n---\nbody\n';
+  const r = cleanMarkdown(md);
+  assert.ok(r.removed.includes('generator'));
+  assert.ok(/note:/.test(r.cleaned));
+  assert.ok(/body/.test(r.cleaned));
 });
 
 console.log(`\nPassed: ${passed}`);
