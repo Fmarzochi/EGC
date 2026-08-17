@@ -9,7 +9,11 @@ const path = require('node:path');
 
 function test(name, fn) {
   try {
-    fn();
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      result.catch(() => {}); // an accidental async test's rejection is handled, not fatal
+      throw new Error('async test cases are not supported by this harness');
+    }
     console.log(`  PASS ${name}`);
     return true;
   } catch (err) {

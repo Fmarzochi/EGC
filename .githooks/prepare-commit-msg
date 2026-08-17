@@ -4,7 +4,7 @@
 
 # Remove AI attribution trailers (keeps human co-authors). Fail-open.
 if command -v node >/dev/null 2>&1; then
-  node "$(git rev-parse --show-toplevel)/scripts/hooks/scrubber-precommit.js" "$1" 2>/dev/null || true
+  node "$(git rev-parse --show-toplevel)/scripts/hooks/scrubber-precommit.js" "$1" || true
 fi
 
 NAME=$(git config user.name)
