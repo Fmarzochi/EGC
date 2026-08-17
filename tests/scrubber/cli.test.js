@@ -220,6 +220,16 @@ check('rewrite rejects --strength with no value instead of silently defaulting',
   assert.ok(/--strength requires a value/.test(shortOpt.err));
 });
 
+check('rewrite propagates --lang to the backtranslate prompt', () => {
+  const file = tmpFile('draft-l.md', 'some text to translate');
+  const r = runCli(['rewrite', file, '--strength', 'backtranslate', '--lang', 'German']);
+  assert.strictEqual(r.code, 0);
+  assert.ok(/into German/.test(r.out), 'the pivot language must follow --lang, not the default');
+  const missing = runCli(['rewrite', file, '--strength', 'backtranslate', '--lang']);
+  assert.strictEqual(missing.code, 2);
+  assert.ok(/--lang/.test(missing.err));
+});
+
 check('rewrite refuses binary input', () => {
   const png = tmpFile('x.png', Buffer.from('\x89PNG\r\n\x1a\n\x00\x00binary', 'latin1'));
   const r = runCli(['rewrite', png]);
