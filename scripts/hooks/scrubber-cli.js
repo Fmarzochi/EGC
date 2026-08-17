@@ -176,7 +176,7 @@ function parseStrength(args) {
   const i = args.indexOf('--strength');
   if (i < 0) return 'paraphrase';
   const value = args[i + 1];
-  if (!value || value.startsWith('--')) return null;
+  if (!value || value.startsWith('-')) return null;
   return value;
 }
 

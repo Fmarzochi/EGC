@@ -53,14 +53,26 @@ const PROMPTS = {
 // outside the ladder: it is chosen per input kind, not reached by escalation.
 const STRENGTH_LADDER = ['paraphrase', 'humanize', 'backtranslate', 'structural'];
 
+// One segmenter for the whole module: locale and granularity never change, and
+// constructing an Intl.Segmenter is far costlier than reusing it across the
+// many candidates a rewrite batch scores.
+let cachedSegmenter;
+function wordSegmenter() {
+  if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') return null;
+  if (cachedSegmenter === undefined) {
+    cachedSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+  }
+  return cachedSegmenter;
+}
+
 // Unicode word segmentation so scripts without spaces (CJK, Thai) split into
 // real words instead of one giant token, where a one-character edit would read
 // as fully diverged. Falls back to a codepoint-class match if the runtime has
 // no Intl.Segmenter.
 function tokenize(text) {
   const lower = String(text).toLowerCase();
-  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+  const segmenter = wordSegmenter();
+  if (segmenter) {
     const words = [];
     for (const part of segmenter.segment(lower)) {
       if (part.isWordLike) words.push(part.segment);

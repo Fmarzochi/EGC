@@ -215,6 +215,9 @@ check('rewrite rejects --strength with no value instead of silently defaulting',
   const r = runCli(['rewrite', file, '--strength']);
   assert.strictEqual(r.code, 2);
   assert.ok(/--strength requires a value/.test(r.err));
+  const shortOpt = runCli(['rewrite', file, '--strength', '-o', 'out.md']);
+  assert.strictEqual(shortOpt.code, 2);
+  assert.ok(/--strength requires a value/.test(shortOpt.err));
 });
 
 check('rewrite refuses binary input', () => {
