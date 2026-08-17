@@ -88,11 +88,32 @@ check('clean -o writes to the chosen output path', () => {
   assert.strictEqual(fs.readFileSync(outPath, 'utf8'), 'pq');
 });
 
-check('refuses a binary file by its raw magic bytes', () => {
-  const file = tmpFile('e.txt', Buffer.from('\x89PNG\r\n\x1a\nrest', 'latin1'));
+check('refuses a non-image binary file by its raw magic bytes', () => {
+  const file = tmpFile('e.txt', Buffer.from('PK\x03\x04rest of a zip', 'latin1'));
   const r = runCli(['clean', file]);
   assert.strictEqual(r.code, 2);
-  assert.ok(/looks like a png/.test(r.err));
+  assert.ok(/looks like a zip/.test(r.err));
+});
+
+check('cleans an image file by stripping metadata chunks', () => {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    return Buffer.concat([len, Buffer.from(type, 'latin1'), data, Buffer.alloc(4)]);
+  };
+  const png = Buffer.concat([
+    sig,
+    chunk('IHDR', Buffer.alloc(13)),
+    chunk('tEXt', Buffer.from('k\0SomeAI', 'latin1')),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+  const file = tmpFile('img.png', png);
+  const r = runCli(['clean', file, '--json']);
+  assert.strictEqual(r.code, 0);
+  const cleaned = fs.readFileSync(path.join(tmp, 'img.cleaned.png'));
+  assert.ok(!cleaned.toString('latin1').includes('SomeAI'));
+  assert.ok(cleaned.subarray(0, 8).equals(sig));
 });
 
 check('reports the stats with --json', () => {
