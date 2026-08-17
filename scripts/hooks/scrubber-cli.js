@@ -221,9 +221,16 @@ function main(argv) {
     }
     const lang = optionValue(rest, '--lang');
     const originalLang = optionValue(rest, '--original-lang');
-    if (lang === null || originalLang === null) {
-      process.stderr.write('error: --lang / --original-lang require a value\n');
+    if (lang === null) {
+      process.stderr.write('error: --lang requires a value\n');
       return 2;
+    }
+    if (originalLang === null) {
+      process.stderr.write('error: --original-lang requires a value\n');
+      return 2;
+    }
+    if (strength !== 'backtranslate' && (lang !== undefined || originalLang !== undefined)) {
+      process.stderr.write('note: --lang / --original-lang only affect the backtranslate strength; ignored here\n');
     }
     return runRewrite(source, strength, lang, originalLang);
   }

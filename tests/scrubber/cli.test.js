@@ -228,6 +228,12 @@ check('rewrite propagates --lang to the backtranslate prompt', () => {
   const missing = runCli(['rewrite', file, '--strength', 'backtranslate', '--lang']);
   assert.strictEqual(missing.code, 2);
   assert.ok(/--lang/.test(missing.err));
+  const oneMissing = runCli(['rewrite', file, '--strength', 'backtranslate', '--lang', 'German', '--original-lang']);
+  assert.strictEqual(oneMissing.code, 2);
+  assert.ok(/--original-lang requires a value/.test(oneMissing.err), 'names the specific malformed flag');
+  const noEffect = runCli(['rewrite', file, '--strength', 'paraphrase', '--lang', 'German']);
+  assert.strictEqual(noEffect.code, 0);
+  assert.ok(/only affect the backtranslate/.test(noEffect.err), 'warns pivot flags have no effect here');
 });
 
 check('rewrite refuses binary input', () => {
