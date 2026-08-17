@@ -938,6 +938,29 @@ function runTests() {
     assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
   })) passed++; else failed++;
 
+  if (test('claude adapter plans the Scrubber write hook for Edit, Write, and MultiEdit', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [] });
+    const scrubberMerges = plan.operations.filter(
+      operation => normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/scrubber-hook.js'
+        && operation.hookEvent === 'PreToolUse'
+    );
+    assert.strictEqual(scrubberMerges.length, 3, 'Should register the Scrubber hook for Edit, Write, and MultiEdit');
+    for (const op of scrubberMerges) {
+      assert.strictEqual(op.destinationPath, path.join(homeDir, '.claude', 'settings.json'));
+    }
+    assert.deepStrictEqual(scrubberMerges.map(o => o.hookMatcher).sort(), ['Edit', 'MultiEdit', 'Write']);
+    // The hook script and its scrubber-lib dependencies are copied too, so a
+    // minimal install without hooks-runtime still has a working hook.
+    for (const dep of ['scripts/hooks/scrubber-hook.js', 'scripts/lib/scrubber/engine.js', 'scripts/lib/scrubber/binary-guard.js']) {
+      assert.ok(
+        plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === dep && op.hookEvent !== 'PreToolUse'),
+        `Should copy ${dep}`
+      );
+    }
+  })) passed++; else failed++;
+
   if (test('claude adapter copies egc-memory-save.js and its lib deps even with no modules selected (EGC-495)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
