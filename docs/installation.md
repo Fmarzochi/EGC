@@ -287,6 +287,16 @@ egc crusher-shim uninstall  # remove it
 
 ---
 
+## EGC Scrubber
+
+The Scrubber removes AI provenance marks from content you own, automatically. On hook-capable harnesses it registers a `PreToolUse` hook at `egc init` (the same way the Token Crusher and Guardian do), so files are cleaned as they are written: invisible Unicode carriers (zero-width family, BOM, tag characters, variation selectors, and more) and long dashes are stripped, while the invisibles that carry meaning (emoji joiners, complex-script joiners, flag tags, RTL marks) are preserved. A commit hook removes AI co-authorship from commit messages while keeping human co-authors.
+
+An opt-in `content-scrubber` skill and CLI cover on-demand and batch use, including metadata: they strip AI-provenance metadata from Markdown frontmatter, HTML head and SVG, from PNG and JPEG images, and from PDF Document Info dictionaries. Metadata cleaning is honest about partial coverage: compressed-stream and encrypted cases are reported, never altered.
+
+Everything is pure Node, deterministic, and fail-open: a parse error, an engine error, or binary input passes the original content through untouched, so the Scrubber can never block or corrupt a write. Opt out of the automatic write hook anytime with `EGC_DISABLED_HOOKS=pre:scrubber`.
+
+---
+
 ## Command reference
 
 You never need to type any of these. Talk to your AI naturally, in any language, and the auto-intuition protocol maps your intent to the right action: saying "how much did I save?" runs the savings report, saying "we are done for today" saves the session. The commands below exist for people who prefer explicit control, and every one of them is valid on its own:
