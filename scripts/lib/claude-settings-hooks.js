@@ -727,6 +727,15 @@ const CRUSHER_HOOK_LIB_SOURCES = [
   'scripts/lib/crusher/engine.js',
 ];
 
+// scrubber-hook.js's transitive scrubber-lib dependencies, copied next to it so
+// the write hook works even in an install that omits the hooks-runtime module.
+const SCRUBBER_HOOK_LIB_SOURCES = [
+  'scripts/lib/scrubber/engine.js',
+  'scripts/lib/scrubber/binary-guard.js',
+  'scripts/lib/scrubber/unicode-marks.js',
+  'scripts/lib/scrubber/dash-normalize.js',
+];
+
 function resolveCrusherHookScriptDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', 'crusher-hook.js');
 }
@@ -752,6 +761,25 @@ function createCrusherScriptCopyOperations(createRemappedOperation, targetRoot) 
     ),
     ...CRUSHER_HOOK_LIB_SOURCES.map(src => createRemappedOperation(
       CRUSHER_HOOK_MODULE_ID,
+      src,
+      path.join(targetRoot, ...src.split('/')),
+      { strategy: 'preserve-relative-path' }
+    )),
+  ];
+}
+
+// Copy scrubber-hook.js and its scrubber-lib dependencies unconditionally, so
+// registering the Scrubber settings entry never points at a missing script.
+function createScrubberScriptCopyOperations(createRemappedOperation, targetRoot) {
+  return [
+    createRemappedOperation(
+      SCRUBBER_HOOK_MODULE_ID,
+      SCRUBBER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+      resolveScrubberHookScriptDestination(targetRoot),
+      { strategy: 'preserve-relative-path' }
+    ),
+    ...SCRUBBER_HOOK_LIB_SOURCES.map(src => createRemappedOperation(
+      SCRUBBER_HOOK_MODULE_ID,
       src,
       path.join(targetRoot, ...src.split('/')),
       { strategy: 'preserve-relative-path' }
@@ -1275,6 +1303,7 @@ module.exports = {
   createAdapterStdinJsonCopyOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createPreToolUseScrubberHookMergeOperation,
+  createScrubberScriptCopyOperations,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,

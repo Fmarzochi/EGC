@@ -33,6 +33,7 @@ const {
   createPreToolUseBashDispatcherHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
   createPreToolUseScrubberHookMergeOperation,
+  createScrubberScriptCopyOperations,
   createPreToolUseGateGuardHookMergeOperation,
   createPreCompactHookMergeOperation,
   createPostCompactHookMergeOperation,
@@ -112,7 +113,14 @@ function createSessionStateHookOperations(adapter, targetRoot) {
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'MultiEdit'),
     // EGC Scrubber: clean invisible-Unicode and long-dash marks from written
-    // content before it hits disk, alongside the write validator above.
+    // content before it hits disk, alongside the write validator above. Copy the
+    // hook and its scrubber-lib deps unconditionally so it works even without
+    // the hooks-runtime module, then register it for Edit/Write/MultiEdit.
+    ...createScrubberScriptCopyOperations(
+      (moduleId, sourceRelativePath, destinationPath, options) =>
+        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options),
+      targetRoot
+    ),
     createPreToolUseScrubberHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseScrubberHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseScrubberHookMergeOperation(targetRoot, 'MultiEdit'),
