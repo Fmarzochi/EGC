@@ -19,6 +19,7 @@ const path = require('node:path');
 const { inspect, clean } = require('../lib/scrubber/engine');
 const { looksBinary } = require('../lib/scrubber/binary-guard');
 const { cleanContainer, inspectContainer } = require('../lib/scrubber/container-meta');
+const { detectImageFormat, cleanImage, inspectImage } = require('../lib/scrubber/image-meta');
 
 // The name used to route container formats (markdown/html/svg). Stdin has no
 // name, so it falls back to a content sniff inside container-meta.
@@ -67,9 +68,8 @@ function parseFlags(args) {
   };
 }
 
-// Read bytes, refuse binary on the raw buffer, then decode to text.
-function readTextOrRefuse(source) {
-  const bytes = readBytes(source);
+// Refuse binary on the raw buffer, then decode to text.
+function textFromBytes(bytes, source) {
   const binary = looksBinary(bytes);
   if (binary) {
     process.stderr.write(`refusing to treat ${source || 'stdin'} as text: it looks like ${binary}\n`);
@@ -78,8 +78,25 @@ function readTextOrRefuse(source) {
   return bytes.toString('utf8');
 }
 
+function writeCleaned(source, flags, data, textMode) {
+  if (source === '-' || source === undefined) {
+    process.stdout.write(data);
+    if (textMode && data.length > 0 && !String(data).endsWith('\n')) process.stdout.write('\n');
+  } else {
+    const dest = flags.inPlace ? source : flags.out || cleanedPath(source);
+    writeBytes(dest, data);
+    process.stderr.write(`wrote ${dest}\n`);
+  }
+}
+
 function runInspect(source) {
-  const text = readTextOrRefuse(source);
+  const bytes = readBytes(source);
+  const format = detectImageFormat(bytes);
+  if (format) {
+    process.stdout.write(`${JSON.stringify(inspectImage(bytes), null, 2)}\n`);
+    return 0;
+  }
+  const text = textFromBytes(bytes, source);
   if (text === null) return 2;
   const container = inspectContainer(containerName(source), text);
   const report = inspect(text);
@@ -89,22 +106,37 @@ function runInspect(source) {
 }
 
 function runClean(source, flags) {
-  const text = readTextOrRefuse(source);
+  const bytes = readBytes(source);
+  const format = detectImageFormat(bytes);
+  if (format) {
+    const img = cleanImage(bytes);
+    if (img.supported && img.valid) {
+      // A structurally valid PNG/JPEG: strip metadata blocks, write binary out.
+      writeCleaned(source, flags, img.cleaned, false);
+      if (flags.json) {
+        process.stderr.write(`${JSON.stringify({ format: img.format, supported: true, scanned: true, removed: img.removed }, null, 2)}\n`);
+      }
+      return 0;
+    }
+    if (!img.supported) {
+      // Recognized but not yet cleaned: never write an unchanged copy that
+      // looks scrubbed. Report honestly and touch nothing.
+      if (flags.json) {
+        process.stderr.write(`${JSON.stringify({ format, supported: false, scanned: false, removed: [] }, null, 2)}\n`);
+      } else {
+        process.stderr.write(`note: ${format} is a recognized image format the scrubber does not clean yet; nothing written\n`);
+      }
+      return 3;
+    }
+    // A supported format whose structure is malformed falls through to the
+    // binary guard below, which refuses a bare magic-byte prefix as binary.
+  }
+  const text = textFromBytes(bytes, source);
   if (text === null) return 2;
-  // Strip container metadata first (markdown/html/svg), then the Layer A pass
-  // on the remaining body.
+  // Strip container metadata first (markdown/html/svg), then the Layer A pass.
   const container = cleanContainer(containerName(source), text);
   const result = clean(container.cleaned, { aggressive: flags.aggressive, normalizeDashes: flags.normalizeDashes });
-
-  if (source === '-' || source === undefined) {
-    process.stdout.write(result.cleaned);
-    if (result.cleaned && !result.cleaned.endsWith('\n')) process.stdout.write('\n');
-  } else {
-    const dest = flags.inPlace ? source : flags.out || cleanedPath(source);
-    writeBytes(dest, result.cleaned);
-    process.stderr.write(`wrote ${dest}\n`);
-  }
-
+  writeCleaned(source, flags, result.cleaned, true);
   if (flags.json) {
     process.stderr.write(`${JSON.stringify({ ...result.stats, container: container.removed }, null, 2)}\n`);
   }
@@ -131,4 +163,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main, cleanedPath, safePath, readTextOrRefuse };
+module.exports = { main, cleanedPath, safePath, textFromBytes };
