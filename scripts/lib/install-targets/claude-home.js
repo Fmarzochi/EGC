@@ -60,7 +60,7 @@ const HOOK_LIB_SOURCES = [
   'scripts/check-state-leak.js',
 ];
 
-function createSessionStateHookOperations(adapter, targetRoot) {
+function createSessionStateHookOperations(adapter, targetRoot, includeScrubberCopy) {
   const libDestDir = path.join(targetRoot, 'egc', 'lib');
   const libOperations = HOOK_LIB_SOURCES.map(src =>
     createRemappedOperation(
@@ -114,13 +114,17 @@ function createSessionStateHookOperations(adapter, targetRoot) {
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'MultiEdit'),
     // EGC Scrubber: clean invisible-Unicode and long-dash marks from written
     // content before it hits disk, alongside the write validator above. Copy the
-    // hook and its scrubber-lib deps unconditionally so it works even without
-    // the hooks-runtime module, then register it for Edit/Write/MultiEdit.
-    ...createScrubberScriptCopyOperations(
-      (moduleId, sourceRelativePath, destinationPath, options) =>
-        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options),
-      targetRoot
-    ),
+    // hook and its scrubber-lib deps only when the hooks-runtime module is NOT
+    // present (that module already ships scripts/hooks + scripts/lib), so a
+    // minimal install still gets a working hook and no destination ever has two
+    // owners. Then register it for Edit/Write/MultiEdit.
+    ...(includeScrubberCopy
+      ? createScrubberScriptCopyOperations(
+        (moduleId, sourceRelativePath, destinationPath, options) =>
+          createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options),
+        targetRoot
+      )
+      : []),
     createPreToolUseScrubberHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseScrubberHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseScrubberHookMergeOperation(targetRoot, 'MultiEdit'),
@@ -153,9 +157,12 @@ module.exports = createInstallTargetAdapter({
 
     // Deterministic memory loading: every Claude Code install registers the
     // SessionStart state hook, even when no content modules are selected.
+    // hooks-runtime ships scripts/hooks + scripts/lib itself, so only copy the
+    // Scrubber files explicitly when that module is not part of this install.
+    const hasHooksRuntime = modules.some(module => module.id === 'hooks-runtime');
     return [
       ...moduleOperations,
-      ...createSessionStateHookOperations(adapter, targetRoot),
+      ...createSessionStateHookOperations(adapter, targetRoot, !hasHooksRuntime),
     ];
   },
 });
