@@ -22,6 +22,7 @@ same way the Crusher does. This document is the design contract.
 | Binary guard | `scripts/lib/scrubber/binary-guard.js` | refuse binary as text; text-extension allowlist |
 | Co-author stripper | `scripts/lib/scrubber/coauthor-strip.js` | remove AI trailers, keep humans |
 | Container metadata | `scripts/lib/scrubber/container-meta.js` | strip AI provenance from Markdown/HTML/SVG |
+| Image metadata | `scripts/lib/scrubber/image-meta.js` | strip EXIF/XMP/C2PA/text metadata from PNG and JPEG |
 | Write hook | `scripts/hooks/scrubber-hook.js` | clean Write/Edit/MultiEdit content |
 | Commit hook | `scripts/hooks/scrubber-precommit.js` | strip AI co-authorship in commit messages |
 | Manual CLI | `scripts/hooks/scrubber-cli.js` | on-demand inspect/clean |
