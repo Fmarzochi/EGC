@@ -68,15 +68,57 @@ function blankValueAfter(bytes, after) {
   return false;
 }
 
+// True only when /Encrypt appears as the trailer's indirect reference
+// (`/Encrypt N G R`), not when the literal shows up in page text or a stream.
+function isEncrypted(buf) {
+  return /\/Encrypt\s+\d+\s+\d+\s+R/.test(buf.toString('latin1'));
+}
+
+function isAlpha(byte) {
+  return (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a);
+}
+
+// Byte ranges [start, end) covered by `stream ... endstream` payloads. Metadata
+// is never blanked inside these: a stream holds binary (often Flate-compressed)
+// data, and editing it would corrupt the stream. The `stream` keyword ends a
+// line and is not the tail of `endstream`.
+function streamRegions(bytes) {
+  const streamKw = Buffer.from('stream', 'latin1');
+  const endKw = Buffer.from('endstream', 'latin1');
+  const regions = [];
+  let from = 0;
+  for (;;) {
+    const s = bytes.indexOf(streamKw, from);
+    if (s < 0) break;
+    const before = bytes[s - 1];
+    const after = bytes[s + streamKw.length];
+    const isKeyword = (after === 0x0a || after === 0x0d) && !isAlpha(before);
+    if (!isKeyword) { from = s + streamKw.length; continue; }
+    const e = bytes.indexOf(endKw, s + streamKw.length);
+    if (e < 0) break;
+    regions.push([s, e + endKw.length]);
+    from = e + endKw.length;
+  }
+  return regions;
+}
+
+function insideAny(regions, at) {
+  for (const [start, end] of regions) {
+    if (at >= start && at < end) return true;
+  }
+  return false;
+}
+
 function cleanPdf(buf) {
   if (!detectPdf(buf)) return { cleaned: buf, removed: [], partial: true, encrypted: false };
   // An encrypted PDF stores its strings as ciphertext; blanking them would not
   // reliably erase the plaintext and could confuse a reader. Leave it untouched.
-  if (buf.includes('/Encrypt')) {
+  if (isEncrypted(buf)) {
     return { cleaned: buf, removed: [], partial: true, encrypted: true };
   }
 
   const bytes = Buffer.from(buf); // never mutate the caller's buffer
+  const streams = streamRegions(bytes);
   const removed = [];
   for (const key of PDF_META_KEYS) {
     const token = Buffer.from(`/${key}`, 'latin1');
@@ -87,10 +129,12 @@ function cleanPdf(buf) {
       if (at < 0) break;
       const after = at + token.length;
       // The next byte must delimit the key name (whitespace or a value opener),
-      // so `/Creator` never matches inside `/CreatorTool`.
+      // so `/Creator` never matches inside `/CreatorTool`. Never touch a match
+      // inside a stream payload, which would corrupt it.
       const next = bytes[after];
-      if (next === undefined || isWhitespace(next) || next === LPAREN || next === LANGLE) {
-        if (blankValueAfter(bytes, after)) blankedThisKey = true;
+      const delimited = next === undefined || isWhitespace(next) || next === LPAREN || next === LANGLE;
+      if (delimited && !insideAny(streams, at) && blankValueAfter(bytes, after)) {
+        blankedThisKey = true;
       }
       from = after;
     }

@@ -98,6 +98,23 @@ check('inspectPdf reports partial and suspicious honestly', () => {
   assert.strictEqual(clean.suspicious, false);
 });
 
+check('does not treat /Encrypt in page text as an encrypted PDF', () => {
+  const buf = pdf('<< /Producer (SomeAI) >>\nBT (the word /Encrypt appears here) Tj ET');
+  const r = cleanPdf(buf);
+  assert.strictEqual(r.encrypted, false);
+  assert.ok(r.removed.includes('pdf:Producer'));
+  assert.ok(!r.cleaned.toString('latin1').includes('SomeAI'));
+});
+
+check('never blanks a metadata key inside a stream payload', () => {
+  const streamData = '/Producer (keep me: I am inside a stream)';
+  const buf = pdf(`<< /Producer (RealMeta) >>\n5 0 obj\n<< /Length ${streamData.length} >>\nstream\n${streamData}\nendstream\nendobj`);
+  const r = cleanPdf(buf);
+  assert.ok(r.removed.includes('pdf:Producer'));
+  assert.ok(!r.cleaned.toString('latin1').includes('RealMeta')); // dictionary value blanked
+  assert.ok(r.cleaned.toString('latin1').includes('keep me: I am inside a stream')); // stream untouched
+});
+
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
