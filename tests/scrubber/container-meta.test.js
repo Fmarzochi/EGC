@@ -11,6 +11,7 @@ const {
   cleanSvg,
   cleanContainer,
   inspectContainer,
+  parseAttrs,
 } = require('../../scripts/lib/scrubber/container-meta');
 
 const BOM = String.fromCodePoint(0xfeff);
@@ -166,13 +167,13 @@ check('meta with a non-AI name and an AI property is removed', () => {
   assert.ok(cleanHtml(meta).removed.includes('meta:provenance'));
 });
 
-check('markdown removes a provenance key together with its nested value', () => {
+check('markdown leaves a provenance key with a nested value intact (conservative)', () => {
+  // Removing a nested/multiline value reliably needs a full YAML parse, so the
+  // conservative contract keeps it rather than risk dropping unrelated lines.
   const md = '---\ngenerator:\n  name: SomeAI\n  version: 2\ntitle: t\n---\nbody\n';
   const r = cleanMarkdown(md);
-  assert.ok(r.removed.includes('generator'));
-  assert.ok(!/SomeAI/.test(r.cleaned));
-  assert.ok(!/version: 2/.test(r.cleaned));
-  assert.ok(/title: t/.test(r.cleaned));
+  assert.strictEqual(r.removed.length, 0);
+  assert.strictEqual(r.cleaned, md);
 });
 
 check('an indented --- inside a block scalar is not treated as the fence', () => {
@@ -183,22 +184,33 @@ check('an indented --- inside a block scalar is not treated as the fence', () =>
   assert.ok(/body/.test(r.cleaned));
 });
 
-check('markdown drops a provenance key with an unindented sequence value', () => {
+check('markdown leaves a provenance key with an unindented sequence value intact', () => {
   const md = '---\ngenerator:\n- item1\n- item2\ntitle: t\n---\nbody\n';
   const r = cleanMarkdown(md);
+  assert.strictEqual(r.removed.length, 0);
+  assert.ok(/item1/.test(r.cleaned));
+});
+
+check('markdown removes a scalar provenance key without touching a following comment or merge key', () => {
+  const md = '---\ngenerator: ai\n# keep this author note\n<<: *base\ntitle: t\n---\nbody\n';
+  const r = cleanMarkdown(md);
   assert.ok(r.removed.includes('generator'));
-  assert.ok(!/item1/.test(r.cleaned));
-  assert.ok(!/item2/.test(r.cleaned));
+  assert.ok(/keep this author note/.test(r.cleaned));
+  assert.ok(/<<: \*base/.test(r.cleaned));
   assert.ok(/title: t/.test(r.cleaned));
 });
 
-check('markdown drops a comment that sits inside a dropped provenance block', () => {
-  const md = '---\ngenerator:\n# a comment\n  name: ai\ntitle: t\n---\nbody\n';
-  const r = cleanMarkdown(md);
-  assert.ok(r.removed.includes('generator'));
-  assert.ok(!/name: ai/.test(r.cleaned));
-  assert.ok(!/a comment/.test(r.cleaned));
-  assert.ok(/title: t/.test(r.cleaned));
+check('parseAttrs is quote-aware and ignores attribute text inside quoted values', () => {
+  const meta = '<meta data-x="junk name=generator more" content="ok">';
+  assert.strictEqual(cleanHtml(meta).removed.length, 0);
+  const attrs = parseAttrs('<meta data-x="a name=generator b">');
+  assert.strictEqual(attrs.name, undefined);
+});
+
+check('parseAttrs records a prototype-colliding attribute name correctly', () => {
+  const attrs = parseAttrs('<meta constructor="x" name="viewport">');
+  assert.strictEqual(attrs.name, 'viewport');
+  assert.strictEqual(attrs.constructor, 'x');
 });
 
 console.log(`\nPassed: ${passed}`);

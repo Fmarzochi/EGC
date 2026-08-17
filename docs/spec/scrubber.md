@@ -22,6 +22,13 @@ same way the Crusher does. This document is the design contract.
 | Binary guard | `scripts/lib/scrubber/binary-guard.js` | refuse binary as text; text-extension allowlist |
 | Co-author stripper | `scripts/lib/scrubber/coauthor-strip.js` | remove AI trailers, keep humans |
 | Container metadata | `scripts/lib/scrubber/container-meta.js` | strip AI provenance from Markdown/HTML/SVG |
+
+Container metadata cleaning is conservative and fail-safe: it removes single-line
+scalar provenance keys from Markdown frontmatter, quote-aware HTML meta/JSON-LD
+provenance, and SVG metadata blocks, but it never corrupts ordinary content. A
+provenance key whose value is nested, a block scalar, or a sequence is left
+intact rather than risk dropping unrelated lines, since removing it reliably
+would need a full YAML parse.
 | Write hook | `scripts/hooks/scrubber-hook.js` | clean Write/Edit/MultiEdit content |
 | Commit hook | `scripts/hooks/scrubber-precommit.js` | strip AI co-authorship in commit messages |
 | Manual CLI | `scripts/hooks/scrubber-cli.js` | on-demand inspect/clean |

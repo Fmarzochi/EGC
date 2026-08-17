@@ -61,24 +61,24 @@ function cleanMarkdown(text) {
 
   const frontmatter = lines.slice(1, close);
   const kept = [];
-  let dropping = false;
-  for (const line of frontmatter) {
-    // Only a real top-level key line (unindented `key:`) starts or ends a drop.
-    // Comments, unindented `-` sequence entries, blank lines, and indented
-    // values are continuations of whatever key precedes them.
-    const topLevelKey = /^\S/.test(line) ? frontmatterKey(line) : null;
-    if (topLevelKey !== null) {
-      if (AI_PROVENANCE_KEYS.has(topLevelKey.toLowerCase())) {
-        removed.push(topLevelKey);
-        dropping = true;
+  for (let i = 0; i < frontmatter.length; i += 1) {
+    const line = frontmatter[i];
+    const key = /^\S/.test(line) ? frontmatterKey(line) : null;
+    if (key !== null && AI_PROVENANCE_KEYS.has(key.toLowerCase())) {
+      // Remove only a single-line scalar value: `key: value` with a non-empty,
+      // non-block-scalar value and no indented continuation next. Anything with
+      // a nested / multiline value is left intact (a safe miss): removing it
+      // reliably needs a full YAML parse and could drop unrelated lines
+      // (comments, merge keys, sibling entries).
+      const value = line.slice(line.indexOf(':') + 1).trim();
+      const next = frontmatter[i + 1];
+      const nextIndented = next !== undefined && /^\s/.test(next) && next.trim() !== '';
+      const blockScalar = /^[|>]/.test(value);
+      if (value !== '' && !blockScalar && !nextIndented) {
+        removed.push(key);
         continue;
       }
-      dropping = false;
-      kept.push(line);
-      continue;
     }
-    // Continuation line: drop it with its key, or keep it otherwise.
-    if (dropping) continue;
     kept.push(line);
   }
 
@@ -103,17 +103,30 @@ const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
 // names a model or company survives.
 const LD_PROVENANCE = /"(aiGenerated|generator|softwareAgent|trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia|digitalSourceType|provenance)"\s*:/i;
 
-// Parse attribute tokens from a tag string. The name is bounded by whitespace
-// or the tag start, so `data-name` is one token and never matches `name`.
+// Parse attribute tokens from a tag string. Quote-aware: the scanner skips over
+// quoted values whole (the second/third alternatives), so `name=generator`
+// inside a quoted value is never mistaken for a real attribute. The name
+// alternative matches the maximal attribute-name token, so `data-name` is one
+// token and never collapses to `name`. Uses a null-prototype object so a name
+// like `constructor` or `toString` records correctly and first-wins holds.
+function unquote(value) {
+  const first = value.charAt(0);
+  if ((first === '"' || first === "'") && value.charAt(value.length - 1) === first) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
 function parseAttrs(tag) {
-  const attrs = {};
-  const re = /(?:^|\s)([a-zA-Z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  const attrs = Object.create(null);
+  const re = /([a-zA-Z_:][\w:.-]*)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)|"[^"]*"|'[^']*'|\S/g;
   let m = re.exec(tag);
   while (m !== null) {
-    const key = m[1].toLowerCase();
-    // HTML honors the first occurrence of a repeated attribute; keep it so a
-    // benign duplicate cannot hide a provenance value.
-    if (!(key in attrs)) attrs[key] = m[3] ?? m[4] ?? m[5] ?? '';
+    if (m[1] !== undefined) {
+      const key = m[1].toLowerCase();
+      // HTML honors the first occurrence of a repeated attribute.
+      if (!(key in attrs)) attrs[key] = unquote(m[2]);
+    }
     m = re.exec(tag);
   }
   return attrs;
