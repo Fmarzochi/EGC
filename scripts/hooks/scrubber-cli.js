@@ -18,6 +18,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { inspect, clean } = require('../lib/scrubber/engine');
 const { looksBinary } = require('../lib/scrubber/binary-guard');
+const { cleanContainer, inspectContainer } = require('../lib/scrubber/container-meta');
+
+// The name used to route container formats (markdown/html/svg). Stdin has no
+// name, so it falls back to a content sniff inside container-meta.
+function containerName(source) {
+  return source && source !== '-' ? source : '';
+}
 
 // The CLI cleans a file the operator explicitly names, so the path is
 // operator-provided local input, never network-controlled. Reject null bytes
@@ -74,14 +81,20 @@ function readTextOrRefuse(source) {
 function runInspect(source) {
   const text = readTextOrRefuse(source);
   if (text === null) return 2;
-  process.stdout.write(`${JSON.stringify(inspect(text), null, 2)}\n`);
+  const container = inspectContainer(containerName(source), text);
+  const report = inspect(text);
+  report.container = { kind: container.kind, findings: container.findings };
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   return 0;
 }
 
 function runClean(source, flags) {
   const text = readTextOrRefuse(source);
   if (text === null) return 2;
-  const result = clean(text, { aggressive: flags.aggressive, normalizeDashes: flags.normalizeDashes });
+  // Strip container metadata first (markdown/html/svg), then the Layer A pass
+  // on the remaining body.
+  const container = cleanContainer(containerName(source), text);
+  const result = clean(container.cleaned, { aggressive: flags.aggressive, normalizeDashes: flags.normalizeDashes });
 
   if (source === '-' || source === undefined) {
     process.stdout.write(result.cleaned);
@@ -92,7 +105,9 @@ function runClean(source, flags) {
     process.stderr.write(`wrote ${dest}\n`);
   }
 
-  if (flags.json) process.stderr.write(`${JSON.stringify(result.stats, null, 2)}\n`);
+  if (flags.json) {
+    process.stderr.write(`${JSON.stringify({ ...result.stats, container: container.removed }, null, 2)}\n`);
+  }
   return 0;
 }
 
