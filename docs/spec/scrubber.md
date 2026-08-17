@@ -66,8 +66,32 @@ preserves the legitimate ones by default.
 
 ## Best-effort layer
 
-Statistical token-sampling text marks are handled only by the rewrite workflow in
-the skill. No model is bundled and no undetectability is claimed.
+Statistical token-sampling watermarks live in word choice, not in any removable
+character, so the only lever is to rewrite the prose. This layer is deliberately
+kept out of the automatic write hook and the deterministic CLI: it is a manual,
+opt-in workflow in the `content-scrubber` skill
+(`references/rewrite-workflow.md`), because a rewrite changes the text's meaning
+surface and must be a human decision, not a silent edit on every save.
+
+Contract for this layer:
+
+- **Best-effort only, never certified.** No public detector or key exists, so no
+  rewrite can be presented as proof of human authorship or as "undetectable".
+  The residual risk is reported honestly (lower for short, predictable text;
+  higher for long, high-entropy prose).
+- **No bundled model.** The agent running the skill is the rewrite model; EGC
+  ships no weights and makes no network call. Prefer a non-origin, open-weight
+  model, since rewriting with the same model that produced the text can re-stamp
+  it.
+- **Deterministic clean brackets every rewrite.** The workflow runs the
+  guaranteed layer (invisible Unicode + dashes) before and after the rewrite, so
+  the lossless removals always apply even when the statistical pass is skipped.
+- **Meaning is preserved.** Every fact, number, name, and technical identifier
+  survives; for code, only natural-language parts and private names change and
+  program behavior is untouched.
+
+The guaranteed layer stays the default: when quality matters more than
+statistical hygiene, use the lossless path and keep the original prose.
 
 ## Out of scope
 
