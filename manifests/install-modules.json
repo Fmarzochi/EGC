@@ -265,6 +265,7 @@
       "kind": "skills",
       "description": "Security review and security-focused framework guidance.",
       "paths": [
+        "skills/security/content-scrubber",
         "skills/security/defi-amm-security",
         "skills/backend/django-security",
         "skills/security/healthcare-phi-compliance",
