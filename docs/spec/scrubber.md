@@ -23,6 +23,7 @@ same way the Crusher does. This document is the design contract.
 | Co-author stripper | `scripts/lib/scrubber/coauthor-strip.js` | remove AI trailers, keep humans |
 | Container metadata | `scripts/lib/scrubber/container-meta.js` | strip AI provenance from Markdown/HTML/SVG |
 | Image metadata | `scripts/lib/scrubber/image-meta.js` | strip EXIF/XMP/C2PA/text metadata from PNG and JPEG |
+| PDF metadata | `scripts/lib/scrubber/pdf-meta.js` | redact PDF Document Info metadata in place (partial) |
 | Write hook | `scripts/hooks/scrubber-hook.js` | clean Write/Edit/MultiEdit content |
 | Commit hook | `scripts/hooks/scrubber-precommit.js` | strip AI co-authorship in commit messages |
 | Manual CLI | `scripts/hooks/scrubber-cli.js` | on-demand inspect/clean |
@@ -34,6 +35,15 @@ provenance, and SVG metadata blocks, but it never corrupts ordinary content. A
 provenance key whose value is nested, a block scalar, a flow collection, an open
 quote, or a sequence is left intact rather than risk dropping unrelated lines,
 since removing it reliably would need a full YAML parse.
+
+PDF metadata cleaning is explicitly partial and never claims to be exhaustive. It
+redacts the Document Information Dictionary values (Title, Author, Subject,
+Keywords, Creator, Producer, CreationDate, ModDate) in place with same-length
+blanks, so byte offsets and the cross-reference table stay valid and the file is
+never corrupted. Metadata inside compressed object streams or a compressed XMP
+packet is out of reach without decompressing and rebuilding the xref, and
+encrypted PDFs are left untouched; both cases are reported so a PDF clean is
+never treated as complete.
 
 ## Guaranteed layer (deterministic, verifiable)
 
