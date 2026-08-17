@@ -20,6 +20,7 @@ const { inspect, clean } = require('../lib/scrubber/engine');
 const { looksBinary } = require('../lib/scrubber/binary-guard');
 const { cleanContainer, inspectContainer } = require('../lib/scrubber/container-meta');
 const { detectImageFormat, cleanImage, inspectImage } = require('../lib/scrubber/image-meta');
+const { detectPdf, cleanPdf, inspectPdf } = require('../lib/scrubber/pdf-meta');
 
 // The name used to route container formats (markdown/html/svg). Stdin has no
 // name, so it falls back to a content sniff inside container-meta.
@@ -96,6 +97,10 @@ function runInspect(source) {
     process.stdout.write(`${JSON.stringify(inspectImage(bytes), null, 2)}\n`);
     return 0;
   }
+  if (detectPdf(bytes)) {
+    process.stdout.write(`${JSON.stringify(inspectPdf(bytes), null, 2)}\n`);
+    return 0;
+  }
   const text = textFromBytes(bytes, source);
   if (text === null) return 2;
   const container = inspectContainer(containerName(source), text);
@@ -130,6 +135,21 @@ function runClean(source, flags) {
     }
     // A supported format whose structure is malformed falls through to the
     // binary guard below, which refuses a bare magic-byte prefix as binary.
+  }
+  if (detectPdf(bytes)) {
+    const doc = cleanPdf(bytes);
+    if (doc.encrypted) {
+      if (flags.json) process.stderr.write(`${JSON.stringify({ format: 'pdf', encrypted: true, partial: true, removed: [] }, null, 2)}\n`);
+      else process.stderr.write('note: encrypted PDF left untouched; nothing written\n');
+      return 3;
+    }
+    // Same-length redaction keeps offsets valid; write the binary out. The
+    // result is honestly partial: compressed-stream and XMP metadata are not
+    // reached.
+    writeCleaned(source, flags, doc.cleaned, false);
+    if (flags.json) process.stderr.write(`${JSON.stringify({ format: 'pdf', partial: true, removed: doc.removed }, null, 2)}\n`);
+    else process.stderr.write('note: PDF metadata cleaned (partial: compressed-stream and XMP metadata are not handled)\n');
+    return 0;
   }
   const text = textFromBytes(bytes, source);
   if (text === null) return 2;

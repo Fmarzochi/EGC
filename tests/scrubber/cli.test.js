@@ -168,6 +168,25 @@ check('a bare image magic-byte prefix with no valid structure is refused as bina
   assert.ok(/looks like/.test(r.err));
 });
 
+check('cleans a pdf by redacting Info metadata in place', () => {
+  const pdfBuf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Producer (SomeAI) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n%%EOF\n', 'latin1');
+  const file = tmpFile('doc.pdf', pdfBuf);
+  const r = runCli(['clean', file, '--json']);
+  assert.strictEqual(r.code, 0);
+  const cleaned = fs.readFileSync(path.join(tmp, 'doc.cleaned.pdf'));
+  assert.strictEqual(cleaned.length, pdfBuf.length);
+  assert.ok(!cleaned.toString('latin1').includes('SomeAI'));
+});
+
+check('leaves an encrypted pdf untouched and exits 3', () => {
+  const pdfBuf = Buffer.from('%PDF-1.4\n<< /Encrypt 5 0 R /Producer (SomeAI) >>\n%%EOF\n', 'latin1');
+  const file = tmpFile('enc.pdf', pdfBuf);
+  const r = runCli(['clean', file]);
+  assert.strictEqual(r.code, 3);
+  assert.ok(/encrypted/.test(r.err));
+  assert.ok(!fs.existsSync(path.join(tmp, 'enc.cleaned.pdf')));
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(`\nPassed: ${passed}`);
