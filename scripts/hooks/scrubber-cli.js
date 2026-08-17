@@ -14,7 +14,8 @@
 //   node scrubber-cli.js rewrite <file|-> [--strength NAME]  print a Layer B rewrite prompt
 // Flags: --aggressive (normalize cross-script look-alikes), --no-dashes,
 //        --json (clean prints the stats report to stderr),
-//        --strength paraphrase|humanize|code|backtranslate|structural (rewrite).
+//        --strength paraphrase|humanize|code|backtranslate|structural (rewrite),
+//        --lang / --original-lang (pivot languages for backtranslate).
 //
 // inspect/clean are deterministic Layer A (plus metadata). rewrite is the
 // best-effort Layer B for statistical marks: it only prints the prompt for the
@@ -170,27 +171,33 @@ function runClean(source, flags) {
   return 0;
 }
 
-// Absent --strength keeps the default; a present --strength with a missing
-// value or another flag next is an error, not a silent fallback.
-function parseStrength(args) {
-  const i = args.indexOf('--strength');
-  if (i < 0) return 'paraphrase';
+// Returns the value after `name`: undefined when the option is absent, null
+// when it is present but the next token is missing or another option (so a
+// malformed flag is an error, never a silent default).
+function optionValue(args, name) {
+  const i = args.indexOf(name);
+  if (i < 0) return undefined;
   const value = args[i + 1];
   if (!value || value.startsWith('-')) return null;
   return value;
+}
+
+function parseStrength(args) {
+  const value = optionValue(args, '--strength');
+  return value === undefined ? 'paraphrase' : value;
 }
 
 // Layer B: emit the rewrite instruction for the host agent to carry out (relay
 // mode, no network, no bundled model). The statistical mark rides in word
 // choice, so the operator's own model does the rewrite; the honest note goes to
 // stderr.
-function runRewrite(source, strength) {
+function runRewrite(source, strength, lang, originalLang) {
   const bytes = readBytes(source);
   const text = textFromBytes(bytes, source);
   if (text === null) return 2;
   let plan;
   try {
-    plan = buildRewrite(text, { strength });
+    plan = buildRewrite(text, { strength, lang, originalLang });
   } catch (err) {
     process.stderr.write(`${err.message} (valid: ${STRENGTH_LADDER.join(', ')}, code)\n`);
     return 2;
@@ -212,7 +219,20 @@ function main(argv) {
       process.stderr.write('error: --strength requires a value\n');
       return 2;
     }
-    return runRewrite(source, strength);
+    const lang = optionValue(rest, '--lang');
+    const originalLang = optionValue(rest, '--original-lang');
+    if (lang === null) {
+      process.stderr.write('error: --lang requires a value\n');
+      return 2;
+    }
+    if (originalLang === null) {
+      process.stderr.write('error: --original-lang requires a value\n');
+      return 2;
+    }
+    if (strength !== 'backtranslate' && (lang !== undefined || originalLang !== undefined)) {
+      process.stderr.write('note: --lang / --original-lang only affect the backtranslate strength; ignored here\n');
+    }
+    return runRewrite(source, strength, lang, originalLang);
   }
 
   process.stderr.write('usage: scrubber-cli.js <inspect|clean|rewrite> <file|-> [-o OUT] [--in-place] [--aggressive] [--no-dashes] [--strength NAME] [--json]\n');
