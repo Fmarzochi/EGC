@@ -11,8 +11,14 @@
 //   node scrubber-cli.js clean   <file> [-o OUT]     write OUT (default: *.cleaned.EXT)
 //   node scrubber-cli.js clean   <file> --in-place   overwrite the file
 //   node scrubber-cli.js clean   -                   clean stdin to stdout
+//   node scrubber-cli.js rewrite <file|-> [--strength NAME]  print a Layer B rewrite prompt
 // Flags: --aggressive (normalize cross-script look-alikes), --no-dashes,
-//        --json (clean prints the stats report to stderr).
+//        --json (clean prints the stats report to stderr),
+//        --strength paraphrase|humanize|code|backtranslate|structural (rewrite).
+//
+// inspect/clean are deterministic Layer A (plus metadata). rewrite is the
+// best-effort Layer B for statistical marks: it only prints the prompt for the
+// host agent to run (no network, no bundled model), never a certified removal.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -21,6 +27,7 @@ const { looksBinary } = require('../lib/scrubber/binary-guard');
 const { cleanContainer, inspectContainer } = require('../lib/scrubber/container-meta');
 const { detectImageFormat, cleanImage, inspectImage } = require('../lib/scrubber/image-meta');
 const { detectPdf, cleanPdf, inspectPdf } = require('../lib/scrubber/pdf-meta');
+const { buildRewrite, STRENGTH_LADDER, HONEST_NOTE } = require('../lib/scrubber/rewrite');
 
 // The name used to route container formats (markdown/html/svg). Stdin has no
 // name, so it falls back to a content sniff inside container-meta.
@@ -163,14 +170,52 @@ function runClean(source, flags) {
   return 0;
 }
 
+// Absent --strength keeps the default; a present --strength with a missing
+// value or another flag next is an error, not a silent fallback.
+function parseStrength(args) {
+  const i = args.indexOf('--strength');
+  if (i < 0) return 'paraphrase';
+  const value = args[i + 1];
+  if (!value || value.startsWith('-')) return null;
+  return value;
+}
+
+// Layer B: emit the rewrite instruction for the host agent to carry out (relay
+// mode, no network, no bundled model). The statistical mark rides in word
+// choice, so the operator's own model does the rewrite; the honest note goes to
+// stderr.
+function runRewrite(source, strength) {
+  const bytes = readBytes(source);
+  const text = textFromBytes(bytes, source);
+  if (text === null) return 2;
+  let plan;
+  try {
+    plan = buildRewrite(text, { strength });
+  } catch (err) {
+    process.stderr.write(`${err.message} (valid: ${STRENGTH_LADDER.join(', ')}, code)\n`);
+    return 2;
+  }
+  process.stdout.write(`${plan.prompt}\n`);
+  process.stderr.write(`note: ${HONEST_NOTE}\n`);
+  return 0;
+}
+
 function main(argv) {
   const [command, source, ...rest] = argv.slice(2);
   const flags = parseFlags([source, ...rest].filter(a => a !== undefined));
 
   if (command === 'inspect') return runInspect(source);
   if (command === 'clean') return runClean(source, flags);
+  if (command === 'rewrite') {
+    const strength = parseStrength(rest);
+    if (strength === null) {
+      process.stderr.write('error: --strength requires a value\n');
+      return 2;
+    }
+    return runRewrite(source, strength);
+  }
 
-  process.stderr.write('usage: scrubber-cli.js <inspect|clean> <file|-> [-o OUT] [--in-place] [--aggressive] [--no-dashes] [--json]\n');
+  process.stderr.write('usage: scrubber-cli.js <inspect|clean|rewrite> <file|-> [-o OUT] [--in-place] [--aggressive] [--no-dashes] [--strength NAME] [--json]\n');
   return 2;
 }
 
