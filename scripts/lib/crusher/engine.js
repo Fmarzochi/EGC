@@ -40,7 +40,7 @@ const arrayCrusher = tryRequire('../../../mcp/servers/egc-guardian/build/egc-arr
 // positions and never trigger a \b boundary at all, silently failing to
 // match. \p{L}/\p{N} (with the u flag) are Unicode-aware, so lookaround
 // built from them correctly treats accented letters as word characters.
-const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(error|fail|failed|failing|warn|warning|fatal|denied|refused|exception|panic)(?![\p{L}\p{N}_])/iu;
+const KEEP_WORD_EN_RE = /(?<![\p{L}\p{N}_])(errors?|fails?|failed|failing|failures?|warns?|warned|warnings?|fatal|denied|refused|exceptions?|panic(?:ked|king|s)?)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_PT_RE = /(?<![\p{L}\p{N}_])(erro|falha|aviso|negado|recusado|exceção|pânico)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_ES_RE = /(?<![\p{L}\p{N}_])(fallo|falló|falla|fallé|fallando|fallado|fallaron|advertencia|denegado|rechazado|excepción)(?![\p{L}\p{N}_])/iu;
 const KEEP_WORD_FR_DE_IT_RE = /(?<![\p{L}\p{N}_])(erreur|échec|panne|avertissement|warnung|fehler|errore|avviso)(?![\p{L}\p{N}_])/iu;
