@@ -109,11 +109,21 @@ function runClean(source, flags) {
   const bytes = readBytes(source);
   const format = detectImageFormat(bytes);
   if (format) {
-    // Image: strip metadata blocks from the raw bytes, write binary out.
     const img = cleanImage(bytes);
-    writeCleaned(source, flags, img.cleaned, false);
-    if (flags.json) process.stderr.write(`${JSON.stringify({ format: img.format, removed: img.removed }, null, 2)}\n`);
-    return 0;
+    if (img.supported && img.valid) {
+      // A structurally valid PNG/JPEG: strip metadata blocks, write binary out.
+      writeCleaned(source, flags, img.cleaned, false);
+      if (flags.json) process.stderr.write(`${JSON.stringify({ format: img.format, removed: img.removed }, null, 2)}\n`);
+      return 0;
+    }
+    if (!img.supported) {
+      // Recognized but not yet cleaned: never write an unchanged copy that
+      // looks scrubbed. Report honestly and touch nothing.
+      process.stderr.write(`note: ${format} is a recognized image format the scrubber does not clean yet; nothing written\n`);
+      return 3;
+    }
+    // A supported format whose structure is malformed falls through to the
+    // binary guard below, which refuses a bare magic-byte prefix as binary.
   }
   const text = textFromBytes(bytes, source);
   if (text === null) return 2;

@@ -138,6 +138,23 @@ check('cleanedPath inserts .cleaned before the extension', () => {
   assert.strictEqual(cli.cleanedPath('dir/file.md'), 'dir/file.cleaned.md');
 });
 
+check('a recognized-but-unsupported image is not written and reports honestly', () => {
+  const webp = Buffer.concat([Buffer.from('RIFF', 'latin1'), Buffer.alloc(4), Buffer.from('WEBP', 'latin1'), Buffer.alloc(8)]);
+  const file = tmpFile('pic.webp', webp);
+  const r = runCli(['clean', file]);
+  assert.strictEqual(r.code, 3);
+  assert.ok(/not clean/.test(r.err));
+  assert.ok(!fs.existsSync(path.join(tmp, 'pic.cleaned.webp')));
+});
+
+check('a bare image magic-byte prefix with no valid structure is refused as binary', () => {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const file = tmpFile('broken.png', Buffer.concat([sig, Buffer.from('garbage', 'latin1')]));
+  const r = runCli(['clean', file]);
+  assert.strictEqual(r.code, 2);
+  assert.ok(/looks like/.test(r.err));
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(`\nPassed: ${passed}`);

@@ -1,15 +1,18 @@
 'use strict';
 
 // Scrubber image metadata: strip AI-provenance and other non-image metadata
-// (EXIF, XMP, C2PA, text, comments) from common raster formats by parsing the
-// container structure at the byte level. No dependencies. Fail-safe: on any
-// malformed or unexpected structure the original buffer is returned unchanged,
-// so a clean can never corrupt an image.
-//
-// Whole metadata blocks are dropped, never rewritten, and image data is copied
-// verbatim, so re-encoding artifacts are impossible.
+// (EXIF, XMP, C2PA, text, comments) from PNG and JPEG by parsing the container
+// structure at the byte level. No dependencies. Fail-safe: the cleaned buffer
+// is only emitted when the whole structure parsed to its exact terminator with
+// no leftover bytes (`valid: true`); on anything malformed the original buffer
+// is returned with `valid: false`, so a clean can never corrupt or truncate an
+// image. Whole metadata blocks are dropped, image data is copied verbatim.
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Formats we actually clean. Others may be detected (for an honest warning) but
+// are never rewritten.
+const SUPPORTED = new Set(['png', 'jpeg']);
 
 function detectImageFormat(buf) {
   if (!Buffer.isBuffer(buf) || buf.length < 4) return null;
@@ -23,95 +26,141 @@ function detectImageFormat(buf) {
 
 // --- PNG ------------------------------------------------------------------
 
-// Ancillary chunks that carry text / time / provenance, dropped whole. Image
-// and color chunks (IHDR, PLTE, IDAT, IEND, tRNS, gAMA, iCCP, ...) are kept.
-const PNG_DROP_CHUNKS = new Set(['tEXt', 'zTXt', 'iTXt', 'tIME', 'eXIf', 'caBX', 'caNv', 'orNT']);
+// Ancillary chunks worth keeping (color, transparency, rendering). Every other
+// ancillary chunk (text, time, EXIF, C2PA, and unknown/private chunks) is
+// dropped so provenance in an unlisted chunk cannot slip through. Critical
+// chunks (uppercase first letter: IHDR, PLTE, IDAT, IEND, ...) are always kept.
+const PNG_KEEP_ANCILLARY = new Set([
+  'tRNS', 'gAMA', 'cHRM', 'sRGB', 'iCCP', 'sBIT', 'bKGD', 'pHYs', 'sPLT', 'hIST',
+]);
+
+function keepPngChunk(type) {
+  const isCritical = (type.charCodeAt(0) & 0x20) === 0; // uppercase first letter
+  return isCritical || PNG_KEEP_ANCILLARY.has(type);
+}
 
 function cleanPng(buf) {
   const removed = [];
   const out = [PNG_SIGNATURE];
   let offset = PNG_SIGNATURE.length;
+  let sawIend = false;
 
   while (offset + 8 <= buf.length) {
     const length = buf.readUInt32BE(offset);
     const type = buf.toString('latin1', offset + 4, offset + 8);
-    const end = offset + 12 + length; // length + type(4) + data + crc(4)
-    if (length > buf.length || end > buf.length) return { cleaned: buf, removed: [] }; // malformed: bail
-    const chunk = buf.subarray(offset, end);
-    if (PNG_DROP_CHUNKS.has(type)) {
-      removed.push(`png:${type}`);
-    } else {
-      out.push(chunk);
-    }
+    const end = offset + 12 + length; // length(4) + type(4) + data + crc(4)
+    if (length > buf.length || end > buf.length) return { cleaned: buf, removed: [], valid: false };
+    if (keepPngChunk(type)) out.push(buf.subarray(offset, end));
+    else removed.push(`png:${type}`);
     offset = end;
-    if (type === 'IEND') break;
+    if (type === 'IEND') { sawIend = true; break; }
   }
-  if (removed.length === 0) return { cleaned: buf, removed };
-  return { cleaned: Buffer.concat(out), removed };
+
+  // Only rewrite a signature + chunks that end exactly at IEND with no trailing
+  // bytes. Anything else is left untouched.
+  if (!sawIend || offset !== buf.length) return { cleaned: buf, removed: [], valid: false };
+  if (removed.length === 0) return { cleaned: buf, removed, valid: true };
+  return { cleaned: Buffer.concat(out), removed, valid: true };
 }
 
 // --- JPEG -----------------------------------------------------------------
 
-// Markers with no length payload.
-const JPEG_STANDALONE = new Set([0xd8, 0xd9, 0x01]);
+const JPEG_STANDALONE = new Set([0xd8, 0x01]); // SOI and TEM carry no payload
 function isRstMarker(marker) {
   return marker >= 0xd0 && marker <= 0xd7;
 }
 // APP1 (EXIF/XMP), APP11 (JUMBF/C2PA), APP13 (IPTC/Photoshop), COM (comment).
 const JPEG_DROP_MARKERS = new Set([0xe1, 0xeb, 0xed, 0xfe]);
 
+function jpegDropLabel(marker) {
+  if (marker === 0xfe) return 'jpeg:com';
+  return `jpeg:app${marker - 0xe0}`; // 0xe1 -> app1, 0xeb -> app11, 0xed -> app13
+}
+
+// From the start of entropy-coded data, find the next real marker: a 0xff not
+// followed by 0x00 (byte stuffing) and not a restart marker (0xd0-0xd7).
+function scanEntropyEnd(buf, from) {
+  let p = from;
+  while (p + 1 < buf.length) {
+    if (buf[p] === 0xff) {
+      const next = buf[p + 1];
+      if (next !== 0x00 && !(next >= 0xd0 && next <= 0xd7)) return p;
+    }
+    p += 1;
+  }
+  return -1; // no terminating marker: truncated scan
+}
+
 function cleanJpeg(buf) {
   const removed = [];
   const out = [];
   let offset = 0;
+  let sawEoi = false;
 
   while (offset + 1 < buf.length) {
-    if (buf[offset] !== 0xff) return { cleaned: buf, removed: [] }; // not at a marker: bail
+    if (buf[offset] !== 0xff) return { cleaned: buf, removed: [], valid: false };
     const marker = buf[offset + 1];
 
+    if (marker === 0xd9) { // EOI
+      out.push(buf.subarray(offset, offset + 2));
+      offset += 2;
+      sawEoi = true;
+      break;
+    }
     if (JPEG_STANDALONE.has(marker) || isRstMarker(marker)) {
       out.push(buf.subarray(offset, offset + 2));
       offset += 2;
       continue;
     }
-    if (marker === 0xda) {
-      // Start of scan: the entropy-coded data runs to the end (or EOI). Copy
-      // the rest verbatim without parsing inside it.
-      out.push(buf.subarray(offset));
-      break;
-    }
-    if (offset + 4 > buf.length) return { cleaned: buf, removed: [] };
+    if (offset + 4 > buf.length) return { cleaned: buf, removed: [], valid: false };
     const segLength = buf.readUInt16BE(offset + 2);
-    const end = offset + 2 + segLength;
-    if (segLength < 2 || end > buf.length) return { cleaned: buf, removed: [] };
-    if (JPEG_DROP_MARKERS.has(marker)) {
-      removed.push(`jpeg:app${marker & 0x0f}`);
-    } else {
-      out.push(buf.subarray(offset, end));
+    const segEnd = offset + 2 + segLength;
+    if (segLength < 2 || segEnd > buf.length) return { cleaned: buf, removed: [], valid: false };
+
+    if (marker === 0xda) {
+      // Start of scan: header (segLength) then entropy data up to the next
+      // marker. Copy both verbatim, then resume segment parsing (progressive
+      // JPEGs have several scans with segments in between).
+      const scanEnd = scanEntropyEnd(buf, segEnd);
+      if (scanEnd < 0) return { cleaned: buf, removed: [], valid: false };
+      out.push(buf.subarray(offset, scanEnd));
+      offset = scanEnd;
+      continue;
     }
-    offset = end;
+    if (JPEG_DROP_MARKERS.has(marker)) removed.push(jpegDropLabel(marker));
+    else out.push(buf.subarray(offset, segEnd));
+    offset = segEnd;
   }
 
-  if (removed.length === 0) return { cleaned: buf, removed };
-  return { cleaned: Buffer.concat(out), removed };
+  // Require a clean EOI termination with no trailing bytes.
+  if (!sawEoi || offset !== buf.length) return { cleaned: buf, removed: [], valid: false };
+  if (removed.length === 0) return { cleaned: buf, removed, valid: true };
+  return { cleaned: Buffer.concat(out), removed, valid: true };
 }
 
 // --- Dispatch -------------------------------------------------------------
 
 function cleanImage(buf) {
   const format = detectImageFormat(buf);
+  const supported = SUPPORTED.has(format);
+  if (!supported) return { format, supported: false, valid: false, cleaned: buf, removed: [] };
   try {
-    if (format === 'png') return { format, ...cleanPng(buf) };
-    if (format === 'jpeg') return { format, ...cleanJpeg(buf) };
+    const result = format === 'png' ? cleanPng(buf) : cleanJpeg(buf);
+    return { format, supported: true, valid: result.valid, cleaned: result.cleaned, removed: result.removed };
   } catch {
-    return { format, cleaned: buf, removed: [] };
+    return { format, supported: true, valid: false, cleaned: buf, removed: [] };
   }
-  return { format, cleaned: buf, removed: [] };
 }
 
 function inspectImage(buf) {
-  const { format, removed } = cleanImage(buf);
-  return { format, findings: removed, suspicious: removed.length > 0 };
+  const { format, supported, valid, removed } = cleanImage(buf);
+  return {
+    format,
+    supported,
+    scanned: supported && valid,
+    findings: removed,
+    suspicious: removed.length > 0,
+  };
 }
 
 module.exports = {
@@ -120,6 +169,8 @@ module.exports = {
   cleanJpeg,
   cleanImage,
   inspectImage,
-  PNG_DROP_CHUNKS,
+  keepPngChunk,
+  jpegDropLabel,
+  SUPPORTED,
   JPEG_DROP_MARKERS,
 };
