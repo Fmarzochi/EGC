@@ -9,24 +9,17 @@
 // Frontmatter / meta keys that name an AI generation provenance (not content
 // tags). Matched case-insensitively against the key name only.
 const AI_PROVENANCE_KEYS = new Set([
-  'generator',
-  'generated_by',
-  'generated-by',
-  'generatedby',
-  'ai_generated',
-  'ai-generated',
-  'aigenerated',
-  'ai_model',
-  'ai-model',
-  'ai_provider',
-  'ai-provider',
-  'ai_tool',
-  'ai-tool',
-  'llm',
-  'llm_model',
-  'x_ai',
-  'x-ai',
+  'generator', 'generated_by', 'generated-by', 'generatedby',
+  'ai_generated', 'ai-generated', 'aigenerated',
+  'ai_model', 'ai-model', 'ai_provider', 'ai-provider',
+  'ai_tool', 'ai-tool', 'llm', 'llm_model', 'x_ai', 'x-ai',
 ]);
+
+const BOM = 0xfeff;
+
+function stripBom(text) {
+  return text.charCodeAt(0) === BOM ? text.slice(1) : text;
+}
 
 function detectContainerFormat(name, text) {
   const lower = String(name || '').toLowerCase();
@@ -34,7 +27,7 @@ function detectContainerFormat(name, text) {
   if (/\.(html?|xhtml)$/.test(lower)) return 'html';
   if (/\.svg$/.test(lower)) return 'svg';
   // Fall back to a light content sniff for extension-less input.
-  const head = String(text || '').slice(0, 512).trimStart();
+  const head = stripBom(String(text || '')).slice(0, 512).trimStart();
   if (head.startsWith('<svg') || head.includes('<svg ')) return 'svg';
   if (/^<!doctype html|^<html|<head[\s>]/i.test(head)) return 'html';
   return null;
@@ -42,24 +35,31 @@ function detectContainerFormat(name, text) {
 
 // --- Markdown -------------------------------------------------------------
 
-function frontmatterBounds(text) {
-  if (!text.startsWith('---')) return null;
-  const end = text.indexOf('\n---', 3);
-  if (end < 0) return null;
-  const afterFence = text.indexOf('\n', end + 1);
-  return { start: 0, bodyStart: afterFence < 0 ? text.length : afterFence + 1, block: text.slice(0, end + 1) };
+// A frontmatter key line: a bare, single-quoted, or double-quoted key followed
+// by a colon. Returns the key name, or null.
+function frontmatterKey(line) {
+  const m = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+))\s*:/.exec(line);
+  return m ? (m[1] || m[2] || m[3]) : null;
 }
 
 function cleanMarkdown(text) {
-  const bounds = frontmatterBounds(text);
   const removed = [];
-  if (!bounds) return { cleaned: text, removed };
+  const lines = text.split('\n');
+  // The opening fence must be a whole line of exactly `---`, not merely a `---`
+  // prefix, so ordinary Markdown starting with a horizontal rule is untouched.
+  if (lines.length < 2 || lines[0].trim() !== '---') return { cleaned: text, removed };
 
-  const lines = bounds.block.split('\n');
-  const kept = lines.filter(line => {
-    const match = /^([A-Za-z0-9_-]+)\s*:/.exec(line);
-    if (match && AI_PROVENANCE_KEYS.has(match[1].toLowerCase())) {
-      removed.push(match[1]);
+  let close = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === '---') { close = i; break; }
+  }
+  if (close < 0) return { cleaned: text, removed };
+
+  const frontmatter = lines.slice(1, close);
+  const kept = frontmatter.filter(line => {
+    const key = frontmatterKey(line);
+    if (key && AI_PROVENANCE_KEYS.has(key.toLowerCase())) {
+      removed.push(key);
       return false;
     }
     return true;
@@ -67,31 +67,52 @@ function cleanMarkdown(text) {
 
   if (removed.length === 0) return { cleaned: text, removed };
 
-  const body = text.slice(bounds.bodyStart);
-  // Drop the frontmatter entirely if only the fences remain.
-  const meaningful = kept.filter(l => l.trim() && l.trim() !== '---');
-  const rebuilt = meaningful.length === 0 ? '' : `${kept.join('\n')}\n---\n`;
+  const body = lines.slice(close + 1).join('\n');
+  const meaningful = kept.filter(l => l.trim());
+  const rebuilt = meaningful.length === 0 ? '' : `---\n${kept.join('\n')}\n---\n`;
   return { cleaned: rebuilt + body, removed };
 }
 
 // --- HTML -----------------------------------------------------------------
 
-const META_GENERATOR = /<meta\b[^>]*\bname\s*=\s*["']generator["'][^>]*>\s*/gi;
-const META_AI = /<meta\b[^>]*\b(?:name|property)\s*=\s*["']ai[:-][^"']*["'][^>]*>\s*/gi;
-const JSONLD = /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>\s*/gi; // NOSONAR: repo/local file content, never network-controlled input
+// A tag body segment that consumes quoted attribute values whole, so a `>`
+// inside a quoted value does not end the scan early.
+const TAG_BODY = '(?:"[^"]*"|\'[^\']*\'|[^>])*';
+const META_TAG = new RegExp(`<meta\\b${TAG_BODY}>\\s*`, 'gi');
+const SCRIPT_BLOCK = new RegExp(`<script\\b(${TAG_BODY})>([\\s\\S]*?)<\\/script>\\s*`, 'gi'); // NOSONAR: repo/local file content, never network-controlled input
 const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
-const AI_MARKER = /\b(ai[_-]?generated|aigenerated|provenance|trainedalgorithmicmedia|digitalsourcetype|softwareagent|gpt|claude|anthropic|openai|gemini|copilot)\b/i;
+const LD_JSON_TYPE = /\btype\s*=\s*(?:"application\/ld\+json"|'application\/ld\+json'|application\/ld\+json\b)/i;
+// Explicit provenance FIELDS, not brand mentions: a JSON-LD block is only
+// stripped when it declares AI provenance, so a legitimate Article that merely
+// names a model or company survives.
+const LD_PROVENANCE = /"(aiGenerated|generator|softwareAgent|trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia|digitalSourceType|provenance)"\s*:/i;
+
+// Read an attribute value (quoted or unquoted) from a tag string.
+function tagAttr(tag, attr) {
+  const m = new RegExp(`\\b${attr}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag);
+  if (!m) return null;
+  return m[2] ?? m[3] ?? m[4] ?? '';
+}
 
 function cleanHtml(text) {
   const removed = [];
   let out = text;
 
-  out = out.replace(META_GENERATOR, () => { removed.push('meta:generator'); return ''; });
-  out = out.replace(META_AI, () => { removed.push('meta:ai'); return ''; });
-  out = out.replace(JSONLD, (whole, body) => {
-    if (AI_MARKER.test(body)) { removed.push('json-ld'); return ''; }
+  out = out.replace(META_TAG, tag => {
+    const name = String(tagAttr(tag, 'name') || tagAttr(tag, 'property') || '').toLowerCase();
+    if (name === 'generator') { removed.push('meta:generator'); return ''; }
+    if (/^ai[:-]/.test(name)) { removed.push('meta:ai'); return ''; }
+    return tag;
+  });
+
+  out = out.replace(SCRIPT_BLOCK, (whole, attrs, body) => {
+    if (LD_JSON_TYPE.test(attrs) && LD_PROVENANCE.test(body)) {
+      removed.push('json-ld');
+      return '';
+    }
     return whole;
   });
+
   out = out.replace(DATA_AI_ATTR, () => { removed.push('attr:data-ai'); return ''; });
 
   return { cleaned: out, removed };
@@ -114,12 +135,15 @@ function cleanSvg(text) {
 
 // --- Dispatch -------------------------------------------------------------
 
-function cleanContainer(name, text) {
+function cleanContainer(name, rawText) {
+  const text = stripBom(rawText);
   const kind = detectContainerFormat(name, text);
   if (kind === 'markdown') return { kind, ...cleanMarkdown(text) };
   if (kind === 'html') return { kind, ...cleanHtml(text) };
   if (kind === 'svg') return { kind, ...cleanSvg(text) };
-  return { kind: null, cleaned: text, removed: [] };
+  // Not a container: hand back the original bytes (BOM included) untouched;
+  // the caller's Layer A pass handles any BOM.
+  return { kind: null, cleaned: rawText, removed: [] };
 }
 
 function inspectContainer(name, text) {
@@ -134,5 +158,6 @@ module.exports = {
   cleanSvg,
   cleanContainer,
   inspectContainer,
+  stripBom,
   AI_PROVENANCE_KEYS,
 };

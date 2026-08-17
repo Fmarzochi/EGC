@@ -13,6 +13,8 @@ const {
   inspectContainer,
 } = require('../../scripts/lib/scrubber/container-meta');
 
+const BOM = String.fromCodePoint(0xfeff);
+
 function test(name, fn) {
   try {
     fn();
@@ -108,6 +110,48 @@ check('cleanContainer dispatches and inspectContainer reports', () => {
   const i = inspectContainer('post.md', md);
   assert.strictEqual(i.suspicious, true);
   assert.strictEqual(inspectContainer('x.txt', 'plain').suspicious, false);
+});
+
+check('cleanContainer strips a BOM before detecting markdown frontmatter', () => {
+  const md = `${BOM}---\ngenerator: ai\ntitle: t\n---\nbody\n`;
+  const c = cleanContainer('post.md', md);
+  assert.ok(c.removed.includes('generator'));
+  assert.ok(!/generator/.test(c.cleaned));
+  assert.ok(/title: t/.test(c.cleaned));
+});
+
+check('html meta with a > inside a quoted value is not corrupted', () => {
+  const html = '<meta name="description" content="a>b"><meta name="generator" content="AI">tail';
+  const r = cleanHtml(html);
+  assert.ok(r.removed.includes('meta:generator'));
+  assert.ok(/content="a>b"/.test(r.cleaned));
+  assert.ok(/tail/.test(r.cleaned));
+  assert.ok(!/generator/.test(r.cleaned));
+});
+
+check('json-ld keeps a block that merely mentions an AI brand', () => {
+  const ok = '<script type="application/ld+json">{"headline":"OpenAI releases a model"}</script>';
+  const r = cleanHtml(ok);
+  assert.strictEqual(r.removed.length, 0);
+  assert.ok(/OpenAI releases/.test(r.cleaned));
+});
+
+check('json-ld removes a block with an explicit provenance field, quoted or not', () => {
+  assert.ok(cleanHtml('<script type="application/ld+json">{"aiGenerated":true}</script>').removed.includes('json-ld'));
+  assert.ok(cleanHtml('<script type=application/ld+json>{"digitalSourceType":"x"}</script>').removed.includes('json-ld'));
+});
+
+check('meta and yaml accept unquoted and quoted forms', () => {
+  assert.ok(cleanHtml('<meta name=generator content=x>').removed.includes('meta:generator'));
+  assert.ok(cleanHtml('<meta name=ai-model content=x>').removed.includes('meta:ai'));
+  assert.ok(cleanMarkdown('---\n"generator": ai\ntitle: t\n---\nb\n').removed.includes('generator'));
+});
+
+check('markdown starting with a non-fence --- line is untouched', () => {
+  const md = '---foo\ngenerator: not-frontmatter\n';
+  const r = cleanMarkdown(md);
+  assert.strictEqual(r.removed.length, 0);
+  assert.strictEqual(r.cleaned, md);
 });
 
 console.log(`\nPassed: ${passed}`);
