@@ -77,6 +77,20 @@ multilingual text, so ask first), `--no-dashes` (keep long dashes), `--json`
 
 Binary input is refused: the CLI will not treat a PNG, PDF, or zip as text.
 
+Rewrite (Layer B, statistical marks, best-effort): prints a rewrite prompt for
+you to run. There is no network and no bundled model, so you are the rewrite
+model; prefer a model from a different vendor than the one that wrote the text.
+
+```bash
+node "$CLI" rewrite path/to/file --strength paraphrase
+```
+
+Strengths: `paraphrase` (default), `humanize`, `code` (natural-language parts of
+source only), `backtranslate`, `structural`. Run the printed prompt, then clean
+the result again with `clean`. This reduces statistical marks and you can measure
+the divergence, but it never certifies a vendor detector will fail (see
+`references/rewrite-workflow.md`).
+
 ## Report honestly
 
 State what was verifiably removed (counts, by kind) and, if a rewrite was done,

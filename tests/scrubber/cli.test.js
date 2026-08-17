@@ -191,6 +191,37 @@ check('leaves an encrypted pdf untouched and exits 3', () => {
   assert.ok(!fs.existsSync(path.join(tmp, 'enc.cleaned.pdf')));
 });
 
+check('rewrite prints a Layer B prompt with the text embedded and the honest note', () => {
+  const file = tmpFile('draft.md', 'A short drafted paragraph about testing.');
+  const r = runCli(['rewrite', file]);
+  assert.strictEqual(r.code, 0);
+  assert.ok(r.out.includes('A short drafted paragraph about testing.'));
+  assert.ok(/Rewrite the following text/.test(r.out));
+  assert.ok(/best-effort/i.test(r.err) && /cannot certify/i.test(r.err));
+});
+
+check('rewrite honors --strength and rejects an unknown one', () => {
+  const file = tmpFile('draft2.md', 'Another paragraph.');
+  const human = runCli(['rewrite', file, '--strength', 'humanize']);
+  assert.strictEqual(human.code, 0);
+  assert.ok(/as if a human wrote it/.test(human.out));
+  const bad = runCli(['rewrite', file, '--strength', 'nope']);
+  assert.strictEqual(bad.code, 2);
+  assert.ok(/paraphrase/.test(bad.err));
+});
+
+check('rewrite refuses binary input', () => {
+  const png = tmpFile('x.png', Buffer.from('\x89PNG\r\n\x1a\n\x00\x00binary', 'latin1'));
+  const r = runCli(['rewrite', png]);
+  assert.strictEqual(r.code, 2);
+});
+
+check('usage lists the rewrite subcommand', () => {
+  const r = runCli([]);
+  assert.strictEqual(r.code, 2);
+  assert.ok(/rewrite/.test(r.err));
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(`\nPassed: ${passed}`);
