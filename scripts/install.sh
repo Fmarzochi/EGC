@@ -227,7 +227,7 @@ node scripts/egc.js doctor --repo-root "$ROOT_DIR" || true
 
 # Interactive ecosystem install (skipped in CI/headless environments)
 if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
-  printf "\n  Install prompt library? (61 agents, 231 skills, 77 commands) [Y/n] "
+  printf "\n  Install prompt library? (61 agents, 232 skills, 77 commands) [Y/n] "
   read -r _install_ans
   _install_ans="${_install_ans:-Y}"
   if [ "$_install_ans" = "Y" ] || [ "$_install_ans" = "y" ]; then

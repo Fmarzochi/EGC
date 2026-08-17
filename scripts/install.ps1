@@ -273,7 +273,7 @@ if ($hasInstallArgs) {
 # Interactive ecosystem install (skipped in headless/CI)
 $isInteractive = [Environment]::UserInteractive -and -not $env:CI -and -not [Console]::IsInputRedirected
 if ($isInteractive -and -not $DryRun) {
-    $ans = Read-Host "`n  Install prompt library? (61 agents, 231 skills, 77 commands) [Y/n]"
+    $ans = Read-Host "`n  Install prompt library? (61 agents, 232 skills, 77 commands) [Y/n]"
     if ([string]::IsNullOrEmpty($ans) -or $ans -eq 'Y' -or $ans -eq 'y') {
         if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".gemini"))) {
             Write-Host "  installing to Gemini / AGY..."
