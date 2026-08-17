@@ -7,7 +7,10 @@
 | Cross-script letter look-alikes | Replace (aggressive mode only) | Yes (counted) |
 | Long dashes | Turn into safe punctuation; ranges to ASCII hyphen | Yes (counted) |
 | AI co-authorship in commits | Strip AI trailers, keep human co-authors | Yes (line count) |
-| File metadata (C2PA/EXIF/XMP/props) | Re-serialize container without the block | Yes (re-inspect) |
+| Structured text metadata (Markdown frontmatter, HTML head, SVG) | Strip provenance keys and blocks | Yes (re-inspect) |
+| Image metadata (PNG, JPEG: EXIF/XMP/C2PA/text) | Drop metadata blocks, image data copied verbatim | Yes (re-inspect) |
+| PDF Document Info metadata | Same-length in-place redaction of the Info object | Partial (compressed streams and encrypted PDFs reported, not altered) |
+| Other containers (WebP/GIF/BMP/TIFF, zip: DOCX/EPUB) | Not implemented yet; the CLI reports them honestly | No |
 | Statistical token-sampling text | Rewrite (paraphrase / back-translate / structural) | No, best-effort |
 | Pixel / audio / video watermarks | Out of scope | No |
 | C2PA soft binding | Out of scope | No |

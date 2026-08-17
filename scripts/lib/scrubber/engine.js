@@ -56,10 +56,12 @@ function preservedSameScriptFiller(cp, prevKept) {
 // Returns true when a potential carrier is actually load-bearing in context and
 // must be kept. Delegates to small per-family checks to stay simple.
 function isPreserved(cp, prevKept, prevInput, nextInput, opts) {
-  if (opts.stripEmojiGlue) return false;
+  // stripEmojiGlue gates only the emoji-glue rule: every other contextual
+  // preservation (CJK/Mongolian variation selectors, complex-script joiners,
+  // flag tags, same-script fillers, orthographic Cf) stays active.
   return (
     preservedVariationSelector(cp, prevInput) ||
-    preservedEmojiGlue(cp, prevKept, prevInput, nextInput) ||
+    (!opts.stripEmojiGlue && preservedEmojiGlue(cp, prevKept, prevInput, nextInput)) ||
     preservedScriptJoiner(cp, prevInput, nextInput) ||
     (marks.isTagChar(cp) && opts.validFlagTag) ||
     preservedSameScriptFiller(cp, prevKept) ||

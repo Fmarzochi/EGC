@@ -15,7 +15,10 @@ const EM_DASH = String.fromCodePoint(0x2014);
 
 function test(name, fn) {
   try {
-    fn();
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      throw new Error('async test cases are not supported by this harness');
+    }
     console.log(`  PASS ${name}`);
     return true;
   } catch (err) {
