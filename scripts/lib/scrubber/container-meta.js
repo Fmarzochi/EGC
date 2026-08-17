@@ -63,18 +63,21 @@ function cleanMarkdown(text) {
   const kept = [];
   let dropping = false;
   for (const line of frontmatter) {
-    const isTopLevel = line.length > 0 && !/^\s/.test(line) && line.trim() !== '';
-    if (isTopLevel) {
-      const key = frontmatterKey(line);
-      if (key && AI_PROVENANCE_KEYS.has(key.toLowerCase())) {
-        removed.push(key);
+    // Only a real top-level key line (unindented `key:`) starts or ends a drop.
+    // Comments, unindented `-` sequence entries, blank lines, and indented
+    // values are continuations of whatever key precedes them.
+    const topLevelKey = /^\S/.test(line) ? frontmatterKey(line) : null;
+    if (topLevelKey !== null) {
+      if (AI_PROVENANCE_KEYS.has(topLevelKey.toLowerCase())) {
+        removed.push(topLevelKey);
         dropping = true;
         continue;
       }
       dropping = false;
+      kept.push(line);
+      continue;
     }
-    // Skip indented continuation lines (nested mapping / block scalar) of a
-    // dropped provenance key so no orphan value is left behind.
+    // Continuation line: drop it with its key, or keep it otherwise.
     if (dropping) continue;
     kept.push(line);
   }
@@ -107,7 +110,10 @@ function parseAttrs(tag) {
   const re = /(?:^|\s)([a-zA-Z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
   let m = re.exec(tag);
   while (m !== null) {
-    attrs[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[5] ?? '';
+    const key = m[1].toLowerCase();
+    // HTML honors the first occurrence of a repeated attribute; keep it so a
+    // benign duplicate cannot hide a provenance value.
+    if (!(key in attrs)) attrs[key] = m[3] ?? m[4] ?? m[5] ?? '';
     m = re.exec(tag);
   }
   return attrs;

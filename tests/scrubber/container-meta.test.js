@@ -62,10 +62,10 @@ check('markdown drops the whole frontmatter when only AI keys remain', () => {
 check('html removes generator meta and AI meta, keeps others', () => {
   const html = '<head><meta name="viewport" content="w"><meta name="generator" content="SomeAI 1.0"><meta name="ai-model" content="x"></head>';
   const r = cleanHtml(html);
-  assert.ok(r.removed.includes('meta:provenance'));
-  assert.ok(r.removed.includes('meta:provenance'));
+  assert.strictEqual(r.removed.filter(x => x === 'meta:provenance').length, 2);
   assert.ok(/viewport/.test(r.cleaned));
   assert.ok(!/generator/.test(r.cleaned));
+  assert.ok(!/ai-model/.test(r.cleaned));
 });
 
 check('html removes AI JSON-LD but keeps unrelated JSON-LD', () => {
@@ -181,6 +181,24 @@ check('an indented --- inside a block scalar is not treated as the fence', () =>
   assert.ok(r.removed.includes('generator'));
   assert.ok(/note:/.test(r.cleaned));
   assert.ok(/body/.test(r.cleaned));
+});
+
+check('markdown drops a provenance key with an unindented sequence value', () => {
+  const md = '---\ngenerator:\n- item1\n- item2\ntitle: t\n---\nbody\n';
+  const r = cleanMarkdown(md);
+  assert.ok(r.removed.includes('generator'));
+  assert.ok(!/item1/.test(r.cleaned));
+  assert.ok(!/item2/.test(r.cleaned));
+  assert.ok(/title: t/.test(r.cleaned));
+});
+
+check('markdown drops a comment that sits inside a dropped provenance block', () => {
+  const md = '---\ngenerator:\n# a comment\n  name: ai\ntitle: t\n---\nbody\n';
+  const r = cleanMarkdown(md);
+  assert.ok(r.removed.includes('generator'));
+  assert.ok(!/name: ai/.test(r.cleaned));
+  assert.ok(!/a comment/.test(r.cleaned));
+  assert.ok(/title: t/.test(r.cleaned));
 });
 
 console.log(`\nPassed: ${passed}`);
