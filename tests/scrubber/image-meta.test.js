@@ -49,6 +49,8 @@ function jpegSeg(marker, data) {
 
 const SOI = Buffer.from([0xff, 0xd8]);
 const EOI = Buffer.from([0xff, 0xd9]);
+// A minimal Start-of-Frame segment (marker only needs to be recognized).
+const SOF = jpegSeg(0xc0, Buffer.alloc(6));
 // A minimal Start-of-Scan segment plus entropy data with no 0xff bytes.
 const SOS = Buffer.concat([jpegSeg(0xda, Buffer.from([0x01, 0x00])), Buffer.from([0x00, 0x11, 0x22, 0x33])]);
 
@@ -122,6 +124,7 @@ check('jpeg drops APP1 (EXIF/XMP) and keeps the scan verbatim', () => {
     jpegSeg(0xe0, Buffer.from('JFIF\0', 'latin1')),
     jpegSeg(0xe1, Buffer.from('Exif\0\0secretdata', 'latin1')),
     jpegSeg(0xdb, Buffer.alloc(4)),
+    SOF,
     SOS,
     EOI,
   ]);
@@ -135,7 +138,7 @@ check('jpeg drops APP1 (EXIF/XMP) and keeps the scan verbatim', () => {
 });
 
 check('jpeg labels a COM segment as jpeg:com, not app14', () => {
-  const jpeg = Buffer.concat([SOI, jpegSeg(0xfe, Buffer.from('a comment', 'latin1')), SOS, EOI]);
+  const jpeg = Buffer.concat([SOI, jpegSeg(0xfe, Buffer.from('a comment', 'latin1')), SOF, SOS, EOI]);
   const r = cleanJpeg(jpeg);
   assert.strictEqual(r.valid, true);
   assert.ok(r.removed.includes('jpeg:com'));
@@ -143,7 +146,7 @@ check('jpeg labels a COM segment as jpeg:com, not app14', () => {
 });
 
 check('progressive jpeg drops metadata between two scans', () => {
-  const jpeg = Buffer.concat([SOI, jpegSeg(0xdb, Buffer.alloc(4)), SOS, jpegSeg(0xe1, Buffer.from('Exif\0\0between', 'latin1')), SOS, EOI]);
+  const jpeg = Buffer.concat([SOI, jpegSeg(0xdb, Buffer.alloc(4)), SOF, SOS, jpegSeg(0xe1, Buffer.from('Exif\0\0between', 'latin1')), SOS, EOI]);
   const r = cleanJpeg(jpeg);
   assert.strictEqual(r.valid, true);
   assert.ok(r.removed.includes('jpeg:app1'));
@@ -151,7 +154,7 @@ check('progressive jpeg drops metadata between two scans', () => {
 });
 
 check('jpeg with only baseline segments is unchanged', () => {
-  const jpeg = Buffer.concat([SOI, jpegSeg(0xe0, Buffer.from('JFIF\0', 'latin1')), SOS, EOI]);
+  const jpeg = Buffer.concat([SOI, jpegSeg(0xe0, Buffer.from('JFIF\0', 'latin1')), SOF, SOS, EOI]);
   const r = cleanJpeg(jpeg);
   assert.strictEqual(r.valid, true);
   assert.strictEqual(r.removed.length, 0);
@@ -182,7 +185,7 @@ check('cleanImage marks a recognized-but-unsupported format as not scrubbed', ()
 });
 
 check('cleanImage and inspectImage dispatch a valid png', () => {
-  const png = Buffer.concat([PNG_SIG, pngChunk('IHDR', Buffer.alloc(13)), pngChunk('iTXt', Buffer.from('k\0\0\0\0\0v', 'latin1')), pngChunk('IEND', Buffer.alloc(0))]);
+  const png = Buffer.concat([PNG_SIG, pngChunk('IHDR', Buffer.alloc(13)), pngChunk('iTXt', Buffer.from('k\0\0\0\0\0v', 'latin1')), pngChunk('IDAT', Buffer.from([1])), pngChunk('IEND', Buffer.alloc(0))]);
   const c = cleanImage(png);
   assert.strictEqual(c.format, 'png');
   assert.strictEqual(c.supported, true);
@@ -192,6 +195,39 @@ check('cleanImage and inspectImage dispatch a valid png', () => {
   assert.strictEqual(i.scanned, true);
   assert.strictEqual(i.suspicious, true);
   assert.strictEqual(inspectImage(Buffer.from('plain', 'latin1')).suspicious, false);
+});
+
+check('png keeps APNG animation chunks while dropping text', () => {
+  const png = Buffer.concat([
+    PNG_SIG,
+    pngChunk('IHDR', Buffer.alloc(13)),
+    pngChunk('acTL', Buffer.alloc(8)),
+    pngChunk('tEXt', Buffer.from('k\0v', 'latin1')),
+    pngChunk('fcTL', Buffer.alloc(26)),
+    pngChunk('IDAT', Buffer.from([1])),
+    pngChunk('fdAT', Buffer.from([2, 3])),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  const r = cleanPng(png);
+  assert.strictEqual(r.valid, true);
+  assert.ok(r.removed.includes('png:tEXt'));
+  assert.ok(r.cleaned.toString('latin1').includes('acTL'));
+  assert.ok(r.cleaned.toString('latin1').includes('fcTL'));
+  assert.ok(r.cleaned.toString('latin1').includes('fdAT'));
+});
+
+check('png without IDAT is not a valid image and is left untouched', () => {
+  const png = Buffer.concat([PNG_SIG, pngChunk('IHDR', Buffer.alloc(13)), pngChunk('tEXt', Buffer.from('k\0v', 'latin1')), pngChunk('IEND', Buffer.alloc(0))]);
+  const r = cleanPng(png);
+  assert.strictEqual(r.valid, false);
+  assert.ok(r.cleaned.equals(png));
+});
+
+check('jpeg with 0xff fill bytes before the scan marker is handled', () => {
+  const jpeg = Buffer.concat([SOI, jpegSeg(0xe1, Buffer.from('Exif\0\0z', 'latin1')), SOF, Buffer.from([0xff, 0xff]), SOS, EOI]);
+  const r = cleanJpeg(jpeg);
+  assert.strictEqual(r.valid, true);
+  assert.ok(r.removed.includes('jpeg:app1'));
 });
 
 console.log(`\nPassed: ${passed}`);

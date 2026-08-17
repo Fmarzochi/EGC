@@ -106,6 +106,7 @@ check('cleans an image file by stripping metadata chunks', () => {
     sig,
     chunk('IHDR', Buffer.alloc(13)),
     chunk('tEXt', Buffer.from('k\0SomeAI', 'latin1')),
+    chunk('IDAT', Buffer.from([1])),
     chunk('IEND', Buffer.alloc(0)),
   ]);
   const file = tmpFile('img.png', png);

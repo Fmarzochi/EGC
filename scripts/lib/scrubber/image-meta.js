@@ -32,6 +32,7 @@ function detectImageFormat(buf) {
 // chunks (uppercase first letter: IHDR, PLTE, IDAT, IEND, ...) are always kept.
 const PNG_KEEP_ANCILLARY = new Set([
   'tRNS', 'gAMA', 'cHRM', 'sRGB', 'iCCP', 'sBIT', 'bKGD', 'pHYs', 'sPLT', 'hIST',
+  'acTL', 'fcTL', 'fdAT', // APNG animation control and frame data (image data)
 ]);
 
 function keepPngChunk(type) {
@@ -43,22 +44,30 @@ function cleanPng(buf) {
   const removed = [];
   const out = [PNG_SIGNATURE];
   let offset = PNG_SIGNATURE.length;
+  let ihdrFirst = false;
+  let sawIdat = false;
   let sawIend = false;
+  let index = 0;
 
   while (offset + 8 <= buf.length) {
     const length = buf.readUInt32BE(offset);
     const type = buf.toString('latin1', offset + 4, offset + 8);
     const end = offset + 12 + length; // length(4) + type(4) + data + crc(4)
     if (length > buf.length || end > buf.length) return { cleaned: buf, removed: [], valid: false };
+    if (index === 0) ihdrFirst = type === 'IHDR';
+    if (type === 'IDAT') sawIdat = true;
     if (keepPngChunk(type)) out.push(buf.subarray(offset, end));
     else removed.push(`png:${type}`);
     offset = end;
+    index += 1;
     if (type === 'IEND') { sawIend = true; break; }
   }
 
-  // Only rewrite a signature + chunks that end exactly at IEND with no trailing
-  // bytes. Anything else is left untouched.
-  if (!sawIend || offset !== buf.length) return { cleaned: buf, removed: [], valid: false };
+  // Rewrite only a genuine PNG: IHDR first, at least one IDAT, IEND terminating,
+  // and no trailing bytes. Anything else is left untouched.
+  if (!ihdrFirst || !sawIdat || !sawIend || offset !== buf.length) {
+    return { cleaned: buf, removed: [], valid: false };
+  }
   if (removed.length === 0) return { cleaned: buf, removed, valid: true };
   return { cleaned: Buffer.concat(out), removed, valid: true };
 }
@@ -77,14 +86,21 @@ function jpegDropLabel(marker) {
   return `jpeg:app${marker - 0xe0}`; // 0xe1 -> app1, 0xeb -> app11, 0xed -> app13
 }
 
+// Start-of-frame markers (baseline/progressive/lossless), excluding DHT (0xc4),
+// JPG (0xc8), and DAC (0xcc), which are not frame headers.
+function isSofMarker(marker) {
+  return marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+}
+
 // From the start of entropy-coded data, find the next real marker: a 0xff not
-// followed by 0x00 (byte stuffing) and not a restart marker (0xd0-0xd7).
+// followed by 0x00 (byte stuffing), 0xff (fill byte), or a restart marker
+// (0xd0-0xd7). Returns the offset of the 0xff that begins the marker.
 function scanEntropyEnd(buf, from) {
   let p = from;
   while (p + 1 < buf.length) {
     if (buf[p] === 0xff) {
       const next = buf[p + 1];
-      if (next !== 0x00 && !(next >= 0xd0 && next <= 0xd7)) return p;
+      if (next !== 0x00 && next !== 0xff && !(next >= 0xd0 && next <= 0xd7)) return p;
     }
     p += 1;
   }
@@ -95,10 +111,18 @@ function cleanJpeg(buf) {
   const removed = [];
   const out = [];
   let offset = 0;
+  let sawSof = false;
+  let sawSos = false;
   let sawEoi = false;
 
   while (offset + 1 < buf.length) {
     if (buf[offset] !== 0xff) return { cleaned: buf, removed: [], valid: false };
+    // A marker may be preceded by 0xff fill bytes; preserve them and advance to
+    // the 0xff that actually begins the marker.
+    while (offset + 1 < buf.length && buf[offset + 1] === 0xff) {
+      out.push(buf.subarray(offset, offset + 1));
+      offset += 1;
+    }
     const marker = buf[offset + 1];
 
     if (marker === 0xd9) { // EOI
@@ -117,10 +141,13 @@ function cleanJpeg(buf) {
     const segEnd = offset + 2 + segLength;
     if (segLength < 2 || segEnd > buf.length) return { cleaned: buf, removed: [], valid: false };
 
+    if (isSofMarker(marker)) sawSof = true;
+
     if (marker === 0xda) {
       // Start of scan: header (segLength) then entropy data up to the next
       // marker. Copy both verbatim, then resume segment parsing (progressive
       // JPEGs have several scans with segments in between).
+      sawSos = true;
       const scanEnd = scanEntropyEnd(buf, segEnd);
       if (scanEnd < 0) return { cleaned: buf, removed: [], valid: false };
       out.push(buf.subarray(offset, scanEnd));
@@ -132,8 +159,10 @@ function cleanJpeg(buf) {
     offset = segEnd;
   }
 
-  // Require a clean EOI termination with no trailing bytes.
-  if (!sawEoi || offset !== buf.length) return { cleaned: buf, removed: [], valid: false };
+  // Require a real JPEG: a frame header and a scan, a clean EOI, no trailing.
+  if (!sawSof || !sawSos || !sawEoi || offset !== buf.length) {
+    return { cleaned: buf, removed: [], valid: false };
+  }
   if (removed.length === 0) return { cleaned: buf, removed, valid: true };
   return { cleaned: Buffer.concat(out), removed, valid: true };
 }

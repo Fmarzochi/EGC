@@ -119,7 +119,11 @@ function runClean(source, flags) {
     if (!img.supported) {
       // Recognized but not yet cleaned: never write an unchanged copy that
       // looks scrubbed. Report honestly and touch nothing.
-      process.stderr.write(`note: ${format} is a recognized image format the scrubber does not clean yet; nothing written\n`);
+      if (flags.json) {
+        process.stderr.write(`${JSON.stringify({ format, supported: false, scanned: false, removed: [] }, null, 2)}\n`);
+      } else {
+        process.stderr.write(`note: ${format} is a recognized image format the scrubber does not clean yet; nothing written\n`);
+      }
       return 3;
     }
     // A supported format whose structure is malformed falls through to the
