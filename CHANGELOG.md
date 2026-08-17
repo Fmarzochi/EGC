@@ -7,6 +7,7 @@ All notable changes to EGC are documented here.
 ### Added
 
 - **EGC Scrubber**: an automatic, deterministic hygiene pass that strips AI provenance marks from content you own. The guaranteed layer removes invisible Unicode carriers and long dashes and strips AI co-authorship from commit messages; an opt-in metadata pass cleans structured text (Markdown/HTML/SVG), PNG/JPEG images, and PDF Document Info dictionaries, fail-safe and honest about partial coverage; and a best-effort rewrite workflow ships as the `content-scrubber` skill and CLI. The Write/Edit hook is registered in the shared hooks runtime so content is cleaned before it reaches disk. Pure Node, additive with no install-engine changes, and fail-open (#1301, #1302, #1304, #1305, #1306, #1307).
+- **Scrubber Layer B rewrite**: the statistical-mark layer becomes a measured tool. A rewrite engine builds the reword instruction (paraphrase, humanize, code, back-translate, structural), scores lexical divergence, keeps the strongest candidate, escalates toward a target, and re-applies the deterministic layer; a `rewrite` subcommand on the scrubber CLI carries it in relay mode (no network, no bundled model). Best-effort and honest: it reduces statistical token-sampling marks and reports the divergence, never certifying a vendor detector will fail (#1312).
 
 ## [1.1.20] - 2026-08-16
 
