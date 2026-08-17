@@ -938,6 +938,21 @@ function runTests() {
     assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
   })) passed++; else failed++;
 
+  if (test('claude adapter plans the Scrubber write hook for Edit, Write, and MultiEdit', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [] });
+    const scrubberOps = plan.operations.filter(
+      operation => normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/scrubber-hook.js'
+    );
+    assert.strictEqual(scrubberOps.length, 3, 'Should plan the Scrubber hook for Edit, Write, and MultiEdit');
+    for (const op of scrubberOps) {
+      assert.strictEqual(op.hookEvent, 'PreToolUse');
+      assert.strictEqual(op.destinationPath, path.join(homeDir, '.claude', 'settings.json'));
+    }
+    assert.deepStrictEqual(scrubberOps.map(o => o.hookMatcher).sort(), ['Edit', 'MultiEdit', 'Write']);
+  })) passed++; else failed++;
+
   if (test('claude adapter copies egc-memory-save.js and its lib deps even with no modules selected (EGC-495)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

@@ -77,6 +77,8 @@ const BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/bash-hoo
 const BASH_DISPATCHER_HOOK_MODULE_ID = 'claude-bash-dispatcher-hook';
 const WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/pre-write-guardian-validate.js';
 const WRITE_VALIDATOR_HOOK_MODULE_ID = 'claude-write-validator-hook';
+const SCRUBBER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/scrubber-hook.js';
+const SCRUBBER_HOOK_MODULE_ID = 'claude-scrubber-hook';
 const ROUTER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/prompt-router.js';
 const ROUTER_HOOK_MODULE_ID = 'claude-prompt-router-hook';
 const GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/gateguard-fact-force.js';
@@ -613,6 +615,25 @@ function createPreToolUseWriteValidatorHookMergeOperation(targetRoot, matcher) {
     targetRoot,
     WRITE_VALIDATOR_HOOK_MODULE_ID,
     WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    matcher
+  );
+}
+
+// EGC Scrubber: registered as its own PreToolUse entry (alongside, not instead
+// of, the write validator above) so Edit/Write/MultiEdit content is cleaned of
+// invisible-Unicode carriers and long dashes before it reaches disk. Fail-open.
+// The script ships with the hooks runtime; see scripts/hooks/scrubber-hook.js.
+function resolveScrubberHookScriptDestination(targetRoot) {
+  return path.join(targetRoot, 'scripts', 'hooks', 'scrubber-hook.js');
+}
+
+function createPreToolUseScrubberHookMergeOperation(targetRoot, matcher) {
+  const hookScriptPath = resolveScrubberHookScriptDestination(targetRoot);
+  return buildPreToolUseMergeOperation(
+    targetRoot,
+    SCRUBBER_HOOK_MODULE_ID,
+    SCRUBBER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
     hookScriptPath,
     matcher
   );
@@ -1253,6 +1274,7 @@ module.exports = {
   ADAPTER_STDIN_JSON_SOURCE_RELATIVE_PATH,
   createAdapterStdinJsonCopyOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
+  createPreToolUseScrubberHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
   createUserPromptSubmitHookMergeOperation,

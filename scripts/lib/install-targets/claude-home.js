@@ -32,6 +32,7 @@ const {
   createUserPromptSubmitRouterHookMergeOperation,
   createPreToolUseBashDispatcherHookMergeOperation,
   createPreToolUseWriteValidatorHookMergeOperation,
+  createPreToolUseScrubberHookMergeOperation,
   createPreToolUseGateGuardHookMergeOperation,
   createPreCompactHookMergeOperation,
   createPostCompactHookMergeOperation,
@@ -110,6 +111,11 @@ function createSessionStateHookOperations(adapter, targetRoot) {
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Edit'),
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseWriteValidatorHookMergeOperation(targetRoot, 'MultiEdit'),
+    // EGC Scrubber: clean invisible-Unicode and long-dash marks from written
+    // content before it hits disk, alongside the write validator above.
+    createPreToolUseScrubberHookMergeOperation(targetRoot, 'Edit'),
+    createPreToolUseScrubberHookMergeOperation(targetRoot, 'Write'),
+    createPreToolUseScrubberHookMergeOperation(targetRoot, 'MultiEdit'),
     // GateGuard fact-forcing gate: Bash already gets this via
     // bash-hook-dispatcher.js above. Edit/Write/MultiEdit only had the
     // protected-path validator until now, so register GateGuard on them
