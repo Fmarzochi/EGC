@@ -48,6 +48,18 @@ function isFence(line) {
   return /^---[ \t]*\r?$/.test(line);
 }
 
+// A value that is fully contained on this one line: a bare scalar, or a quoted
+// scalar closed by its matching quote. A value that opens a quote or a flow
+// collection ([ or {) may continue on later lines, so it is not complete and
+// the key is left intact rather than removing only its first line.
+function isCompleteScalar(value) {
+  const first = value.charAt(0);
+  if (first === '"' || first === "'") {
+    return value.length >= 2 && value.charAt(value.length - 1) === first;
+  }
+  return first !== '[' && first !== '{';
+}
+
 function cleanMarkdown(text) {
   const removed = [];
   const lines = text.split('\n');
@@ -74,7 +86,7 @@ function cleanMarkdown(text) {
       const next = frontmatter[i + 1];
       const nextIndented = next !== undefined && /^\s/.test(next) && next.trim() !== '';
       const blockScalar = /^[|>]/.test(value);
-      if (value !== '' && !blockScalar && !nextIndented) {
+      if (value !== '' && !blockScalar && !nextIndented && isCompleteScalar(value)) {
         removed.push(key);
         continue;
       }

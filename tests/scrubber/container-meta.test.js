@@ -213,6 +213,15 @@ check('parseAttrs records a prototype-colliding attribute name correctly', () =>
   assert.strictEqual(attrs.constructor, 'x');
 });
 
+check('markdown leaves an unclosed quoted or flow scalar intact, removes a closed one', () => {
+  const multiline = '---\ngenerator: "start\n\nend"\ntitle: t\n---\nbody\n';
+  const r = cleanMarkdown(multiline);
+  assert.strictEqual(r.removed.length, 0);
+  assert.ok(/end"/.test(r.cleaned));
+  assert.strictEqual(cleanMarkdown('---\ngenerator: [a,\n b]\ntitle: t\n---\nb\n').removed.length, 0);
+  assert.ok(cleanMarkdown('---\ngenerator: "SomeAI"\ntitle: t\n---\nb\n').removed.includes('generator'));
+});
+
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
