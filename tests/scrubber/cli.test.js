@@ -210,6 +210,13 @@ check('rewrite honors --strength and rejects an unknown one', () => {
   assert.ok(/paraphrase/.test(bad.err));
 });
 
+check('rewrite rejects --strength with no value instead of silently defaulting', () => {
+  const file = tmpFile('draft-s.md', 'some text');
+  const r = runCli(['rewrite', file, '--strength']);
+  assert.strictEqual(r.code, 2);
+  assert.ok(/--strength requires a value/.test(r.err));
+});
+
 check('rewrite refuses binary input', () => {
   const png = tmpFile('x.png', Buffer.from('\x89PNG\r\n\x1a\n\x00\x00binary', 'latin1'));
   const r = runCli(['rewrite', png]);

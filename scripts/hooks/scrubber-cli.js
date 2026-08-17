@@ -170,9 +170,14 @@ function runClean(source, flags) {
   return 0;
 }
 
+// Absent --strength keeps the default; a present --strength with a missing
+// value or another flag next is an error, not a silent fallback.
 function parseStrength(args) {
   const i = args.indexOf('--strength');
-  return i >= 0 && args[i + 1] ? args[i + 1] : 'paraphrase';
+  if (i < 0) return 'paraphrase';
+  const value = args[i + 1];
+  if (!value || value.startsWith('--')) return null;
+  return value;
 }
 
 // Layer B: emit the rewrite instruction for the host agent to carry out (relay
@@ -201,7 +206,14 @@ function main(argv) {
 
   if (command === 'inspect') return runInspect(source);
   if (command === 'clean') return runClean(source, flags);
-  if (command === 'rewrite') return runRewrite(source, parseStrength(rest));
+  if (command === 'rewrite') {
+    const strength = parseStrength(rest);
+    if (strength === null) {
+      process.stderr.write('error: --strength requires a value\n');
+      return 2;
+    }
+    return runRewrite(source, strength);
+  }
 
   process.stderr.write('usage: scrubber-cli.js <inspect|clean|rewrite> <file|-> [-o OUT] [--in-place] [--aggressive] [--no-dashes] [--strength NAME] [--json]\n');
   return 2;

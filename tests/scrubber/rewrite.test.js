@@ -142,6 +142,20 @@ check('buildPrompt inserts dollar sequences literally, not as replacement patter
   assert.ok(prompt.includes(tricky), 'the $ sequences must survive verbatim');
 });
 
+check('tokenize splits space-less scripts so a small CJK edit is not full divergence', () => {
+  const a = '今日は良い天気ですね';
+  const b = '今日は良い天気だね';
+  assert.strictEqual(lexicalDivergence(a, a), 0);
+  const d = lexicalDivergence(a, b);
+  assert.ok(d < 0.6, `a one-word CJK change should not read as fully diverged (got ${d})`);
+});
+
+check('backtranslate prompt fills every language placeholder', () => {
+  const prompt = buildPrompt('backtranslate', 'hi', { lang: 'German', originalLang: 'Portuguese' });
+  assert.ok(!prompt.includes('{ORIGINAL_LANG}') && !prompt.includes('{LANG}'), 'no placeholder may survive');
+  assert.ok((prompt.match(/Portuguese/g) || []).length >= 2, 'both original-language slots must be filled');
+});
+
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);

@@ -53,9 +53,21 @@ const PROMPTS = {
 // outside the ladder: it is chosen per input kind, not reached by escalation.
 const STRENGTH_LADDER = ['paraphrase', 'humanize', 'backtranslate', 'structural'];
 
-// Unicode-aware so non-Latin scripts are tokenized fairly across the tools.
+// Unicode word segmentation so scripts without spaces (CJK, Thai) split into
+// real words instead of one giant token, where a one-character edit would read
+// as fully diverged. Falls back to a codepoint-class match if the runtime has
+// no Intl.Segmenter.
 function tokenize(text) {
-  return String(text).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  const lower = String(text).toLowerCase();
+  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+    const words = [];
+    for (const part of segmenter.segment(lower)) {
+      if (part.isWordLike) words.push(part.segment);
+    }
+    return words;
+  }
+  return lower.match(/[\p{L}\p{N}]+/gu) || [];
 }
 
 function bigrams(tokens) {
@@ -98,12 +110,14 @@ function buildPrompt(strength, text, options) {
   if (!template) {
     throw new Error(`unknown rewrite strength: ${strength}`);
   }
-  // Use replacement functions so a `$` sequence in the input (for example `$&`
-  // or `$1`) is inserted literally, not interpreted as a replacement pattern.
+  // replaceAll so every placeholder occurrence is filled (back-translate names
+  // the pivot language twice), and replacement functions so a `$` sequence in
+  // the input (for example `$&` or `$1`) is inserted literally rather than read
+  // as a replacement pattern.
   return template
-    .replace('{LANG}', () => opts.lang || 'French')
-    .replace('{ORIGINAL_LANG}', () => opts.originalLang || 'English')
-    .replace('{TEXT}', () => text);
+    .replaceAll('{LANG}', () => opts.lang || 'French')
+    .replaceAll('{ORIGINAL_LANG}', () => opts.originalLang || 'English')
+    .replaceAll('{TEXT}', () => text);
 }
 
 // Choose the candidate that moved furthest, with a small penalty for extreme
