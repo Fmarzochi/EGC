@@ -7,10 +7,20 @@
 // message file as argv[2]. Fail-open: any error leaves the message untouched.
 
 const fs = require('node:fs');
+const path = require('node:path');
 const { stripAiCoauthorship } = require('../lib/scrubber/coauthor-strip');
 
 function run(message) {
   return stripAiCoauthorship(message);
+}
+
+// The commit-message file path comes from git (prepare-commit-msg argv), a
+// local, git-controlled path. Reject null bytes and resolve before touching it.
+function safePath(p) {
+  if (typeof p !== 'string' || p.includes('\0')) {
+    throw new Error('invalid commit-message path');
+  }
+  return path.resolve(p);
 }
 
 function main(argv) {
@@ -20,9 +30,16 @@ function main(argv) {
   const file = argv[2];
   if (!file) return 0;
 
+  let resolved;
+  try {
+    resolved = safePath(file);
+  } catch {
+    return 0;
+  }
+
   let text;
   try {
-    text = fs.readFileSync(file, 'utf8');
+    text = fs.readFileSync(resolved, 'utf8'); // NOSONAR: git-provided local commit-message path, never network-controlled input
   } catch {
     return 0;
   }
@@ -36,7 +53,7 @@ function main(argv) {
 
   if (result.removed.length > 0) {
     try {
-      fs.writeFileSync(file, result.message);
+      fs.writeFileSync(resolved, result.message); // NOSONAR: git-provided local commit-message path, never network-controlled input
       process.stderr.write(`[scrubber] removed ${result.removed.length} AI attribution line(s) from the commit message\n`);
     } catch {
       return 0;

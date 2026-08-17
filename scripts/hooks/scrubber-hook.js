@@ -11,7 +11,6 @@
 const { clean } = require('../lib/scrubber/engine');
 const { looksBinary, hasTextExtension } = require('../lib/scrubber/binary-guard');
 
-const MAX_STDIN = 4 * 1024 * 1024;
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 function cleanField(text) {
@@ -91,18 +90,17 @@ function run(rawInput) {
 }
 
 function main() {
-  let raw = '';
+  // Accumulate the whole payload: truncating a tool_input would echo malformed
+  // JSON back and corrupt the write. Exit only after stdout has flushed, so a
+  // large updatedInput is never cut off mid-write.
+  const chunks = [];
   process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) raw += chunk.substring(0, MAX_STDIN - raw.length);
-  });
+  process.stdin.on('data', chunk => chunks.push(chunk));
   process.stdin.on('end', () => {
-    process.stdout.write(run(raw));
-    process.exit(0);
+    process.stdout.write(run(chunks.join('')), () => process.exit(0));
   });
   process.stdin.on('error', () => {
-    process.stdout.write(raw);
-    process.exit(0);
+    process.stdout.write(chunks.join(''), () => process.exit(0));
   });
 }
 

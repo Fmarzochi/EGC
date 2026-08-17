@@ -19,11 +19,28 @@ const path = require('node:path');
 const { inspect, clean } = require('../lib/scrubber/engine');
 const { looksBinary } = require('../lib/scrubber/binary-guard');
 
-function readInput(source) {
-  if (source === '-' || source === undefined) {
-    return fs.readFileSync(0, 'utf8');
+// The CLI cleans a file the operator explicitly names, so the path is
+// operator-provided local input, never network-controlled. Reject null bytes
+// and resolve to an absolute path before touching the filesystem.
+function safePath(p) {
+  if (typeof p !== 'string' || p.includes('\0')) {
+    throw new Error('invalid file path');
   }
-  return fs.readFileSync(source, 'utf8');
+  return path.resolve(p);
+}
+
+// Read raw bytes (never decode yet) so the binary guard sees the true magic
+// bytes. Reading a binary as UTF-8 first would mangle those bytes and let a
+// container slip past the guard.
+function readBytes(source) {
+  if (source === '-' || source === undefined) {
+    return fs.readFileSync(0);
+  }
+  return fs.readFileSync(safePath(source)); // NOSONAR: operator-provided local file path, the CLI's purpose is to clean a file the user names, never network-controlled input
+}
+
+function writeBytes(dest, data) {
+  fs.writeFileSync(safePath(dest), data); // NOSONAR: operator-chosen local output path, never network-controlled input
 }
 
 function cleanedPath(file) {
@@ -43,24 +60,27 @@ function parseFlags(args) {
   };
 }
 
-function runInspect(source) {
-  const text = readInput(source);
-  const binary = looksBinary(text);
+// Read bytes, refuse binary on the raw buffer, then decode to text.
+function readTextOrRefuse(source) {
+  const bytes = readBytes(source);
+  const binary = looksBinary(bytes);
   if (binary) {
-    process.stderr.write(`refusing to inspect ${source || 'stdin'} as text: it looks like ${binary}\n`);
-    return 2;
+    process.stderr.write(`refusing to treat ${source || 'stdin'} as text: it looks like ${binary}\n`);
+    return null;
   }
+  return bytes.toString('utf8');
+}
+
+function runInspect(source) {
+  const text = readTextOrRefuse(source);
+  if (text === null) return 2;
   process.stdout.write(`${JSON.stringify(inspect(text), null, 2)}\n`);
   return 0;
 }
 
 function runClean(source, flags) {
-  const text = readInput(source);
-  const binary = looksBinary(text);
-  if (binary) {
-    process.stderr.write(`refusing to clean ${source || 'stdin'} as text: it looks like ${binary}\n`);
-    return 2;
-  }
+  const text = readTextOrRefuse(source);
+  if (text === null) return 2;
   const result = clean(text, { aggressive: flags.aggressive, normalizeDashes: flags.normalizeDashes });
 
   if (source === '-' || source === undefined) {
@@ -68,7 +88,7 @@ function runClean(source, flags) {
     if (result.cleaned && !result.cleaned.endsWith('\n')) process.stdout.write('\n');
   } else {
     const dest = flags.inPlace ? source : flags.out || cleanedPath(source);
-    fs.writeFileSync(dest, result.cleaned);
+    writeBytes(dest, result.cleaned);
     process.stderr.write(`wrote ${dest}\n`);
   }
 
@@ -96,4 +116,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main, cleanedPath };
+module.exports = { main, cleanedPath, safePath, readTextOrRefuse };
