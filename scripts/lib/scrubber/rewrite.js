@@ -98,10 +98,12 @@ function buildPrompt(strength, text, options) {
   if (!template) {
     throw new Error(`unknown rewrite strength: ${strength}`);
   }
+  // Use replacement functions so a `$` sequence in the input (for example `$&`
+  // or `$1`) is inserted literally, not interpreted as a replacement pattern.
   return template
-    .replace('{LANG}', opts.lang || 'French')
-    .replace('{ORIGINAL_LANG}', opts.originalLang || 'English')
-    .replace('{TEXT}', text);
+    .replace('{LANG}', () => opts.lang || 'French')
+    .replace('{ORIGINAL_LANG}', () => opts.originalLang || 'English')
+    .replace('{TEXT}', () => text);
 }
 
 // Choose the candidate that moved furthest, with a small penalty for extreme

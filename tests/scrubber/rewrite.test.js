@@ -136,6 +136,12 @@ check('finalizeRewrite can skip Layer A when asked', () => {
   assert.strictEqual(r.layerA, null);
 });
 
+check('buildPrompt inserts dollar sequences literally, not as replacement patterns', () => {
+  const tricky = 'price is $5, and $& and $1 stay literal';
+  const prompt = buildPrompt('paraphrase', tricky);
+  assert.ok(prompt.includes(tricky), 'the $ sequences must survive verbatim');
+});
+
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
