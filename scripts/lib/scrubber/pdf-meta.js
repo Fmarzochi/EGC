@@ -74,39 +74,57 @@ function isEncrypted(buf) {
   return /\/Encrypt\s+\d+\s+\d+\s+R/.test(buf.toString('latin1'));
 }
 
-function isAlpha(byte) {
-  return (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a);
+// The (num, gen) targets of every `/Info N G R` trailer reference. Incremental
+// updates can carry more than one trailer, so all are collected.
+function infoTargets(buf) {
+  const targets = [];
+  const re = /\/Info\s+(\d+)\s+(\d+)\s+R/g;
+  const text = buf.toString('latin1');
+  let m = re.exec(text);
+  while (m !== null) {
+    targets.push([parseInt(m[1], 10), parseInt(m[2], 10)]);
+    m = re.exec(text);
+  }
+  return targets;
 }
 
-// Byte ranges [start, end) covered by `stream ... endstream` payloads. Metadata
-// is never blanked inside these: a stream holds binary (often Flate-compressed)
-// data, and editing it would corrupt the stream. The `stream` keyword ends a
-// line and is not the tail of `endstream`.
-function streamRegions(bytes) {
-  const streamKw = Buffer.from('stream', 'latin1');
-  const endKw = Buffer.from('endstream', 'latin1');
-  const regions = [];
+// The byte range [start, end) of `num gen obj ... endobj`, requiring a real
+// delimiter before the header so `1 0 obj` never matches inside `11 0 obj`.
+function findObject(bytes, num, gen) {
+  const header = Buffer.from(`${num} ${gen} obj`, 'latin1');
+  const endKw = Buffer.from('endobj', 'latin1');
   let from = 0;
   for (;;) {
-    const s = bytes.indexOf(streamKw, from);
-    if (s < 0) break;
-    const before = bytes[s - 1];
-    const after = bytes[s + streamKw.length];
-    const isKeyword = (after === 0x0a || after === 0x0d) && !isAlpha(before);
-    if (!isKeyword) { from = s + streamKw.length; continue; }
-    const e = bytes.indexOf(endKw, s + streamKw.length);
-    if (e < 0) break;
-    regions.push([s, e + endKw.length]);
-    from = e + endKw.length;
+    const start = bytes.indexOf(header, from);
+    if (start < 0) return null;
+    if (start === 0 || isWhitespace(bytes[start - 1])) {
+      const end = bytes.indexOf(endKw, start + header.length);
+      if (end < 0) return null;
+      return [start, end + endKw.length];
+    }
+    from = start + header.length;
   }
-  return regions;
 }
 
-function insideAny(regions, at) {
-  for (const [start, end] of regions) {
-    if (at >= start && at < end) return true;
+// Blank metadata string values found strictly inside [start, end). The Info
+// object is a plain dictionary object, never a stream, so this can never touch
+// stream bytes.
+function blankKeysInRegion(bytes, start, end, removedSet) {
+  for (const key of PDF_META_KEYS) {
+    const token = Buffer.from(`/${key}`, 'latin1');
+    let from = start;
+    for (;;) {
+      const at = bytes.indexOf(token, from);
+      if (at < 0 || at >= end) break;
+      const after = at + token.length;
+      // The next byte must delimit the key, so `/Creator` never matches inside
+      // `/CreatorTool`.
+      const next = bytes[after];
+      const delimited = next === undefined || isWhitespace(next) || next === LPAREN || next === LANGLE;
+      if (delimited && blankValueAfter(bytes, after)) removedSet.add(`pdf:${key}`);
+      from = after;
+    }
   }
-  return false;
 }
 
 function cleanPdf(buf) {
@@ -117,30 +135,19 @@ function cleanPdf(buf) {
     return { cleaned: buf, removed: [], partial: true, encrypted: true };
   }
 
-  const bytes = Buffer.from(buf); // never mutate the caller's buffer
-  const streams = streamRegions(bytes);
-  const removed = [];
-  for (const key of PDF_META_KEYS) {
-    const token = Buffer.from(`/${key}`, 'latin1');
-    let from = 0;
-    let blankedThisKey = false;
-    for (;;) {
-      const at = bytes.indexOf(token, from);
-      if (at < 0) break;
-      const after = at + token.length;
-      // The next byte must delimit the key name (whitespace or a value opener),
-      // so `/Creator` never matches inside `/CreatorTool`. Never touch a match
-      // inside a stream payload, which would corrupt it.
-      const next = bytes[after];
-      const delimited = next === undefined || isWhitespace(next) || next === LPAREN || next === LANGLE;
-      if (delimited && !insideAny(streams, at) && blankValueAfter(bytes, after)) {
-        blankedThisKey = true;
-      }
-      from = after;
-    }
-    if (blankedThisKey) removed.push(`pdf:${key}`);
-  }
+  // Redact only inside the Document Info object(s) named by the trailer. If the
+  // Info dictionary lives in a compressed object stream it is not reachable in
+  // the raw bytes, and nothing is blanked (honestly partial).
+  const targets = infoTargets(buf);
+  if (targets.length === 0) return { cleaned: buf, removed: [], partial: true, encrypted: false };
 
+  const bytes = Buffer.from(buf); // never mutate the caller's buffer
+  const removedSet = new Set();
+  for (const [num, gen] of targets) {
+    const region = findObject(bytes, num, gen);
+    if (region) blankKeysInRegion(bytes, region[0], region[1], removedSet);
+  }
+  const removed = [...removedSet];
   return { cleaned: removed.length > 0 ? bytes : buf, removed, partial: true, encrypted: false };
 }
 

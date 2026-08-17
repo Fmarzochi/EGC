@@ -169,7 +169,7 @@ check('a bare image magic-byte prefix with no valid structure is refused as bina
 });
 
 check('cleans a pdf by redacting Info metadata in place', () => {
-  const pdfBuf = Buffer.from('%PDF-1.4\n<< /Producer (SomeAI) >>\n%%EOF\n', 'latin1');
+  const pdfBuf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Producer (SomeAI) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n%%EOF\n', 'latin1');
   const file = tmpFile('doc.pdf', pdfBuf);
   const r = runCli(['clean', file, '--json']);
   assert.strictEqual(r.code, 0);
