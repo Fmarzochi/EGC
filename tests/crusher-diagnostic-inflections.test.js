@@ -53,7 +53,7 @@ run('preserves common English diagnostic inflections outside the summary tail', 
 
 run('does not treat diagnostic-looking identifier substrings as keep words', () => {
   const lines = [];
-  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} completed normally`);
+  for (let i = 0; i < 150; i++) lines.push(`  ok install line ${i} completed normally`);
 
   lines.push('panicRoom is a feature flag');
   lines.push('warningsCount=2');
@@ -61,11 +61,13 @@ run('does not treat diagnostic-looking identifier substrings as keep words', () 
   lines.push('errorCode=500');
   lines.push('failsafe enabled');
 
-  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} completed normally`);
+  for (let i = 150; i < 300; i++) lines.push(`  ok install line ${i} completed normally`);
   lines.push('done');
 
-  const result = crushOutput('cargo test', lines.join('\n'));
-  assert.ok(result, 'large cargo test output should be crushed');
+  // The package-manager crusher keeps only diagnostic lines plus its tail,
+  // so this isolates keep-word boundaries from test-runner summary matching.
+  const result = crushOutput('npm install', lines.join('\n'));
+  assert.ok(result, 'large install output should be crushed');
   assert.ok(!result.crushed.includes('panicRoom'), 'panicRoom is not a panic diagnostic');
   assert.ok(!result.crushed.includes('warningsCount'), 'warningsCount is not a warning diagnostic');
   assert.ok(!result.crushed.includes('failureMode'), 'failureMode is not a failure diagnostic');
