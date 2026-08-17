@@ -113,7 +113,9 @@ function runClean(source, flags) {
     if (img.supported && img.valid) {
       // A structurally valid PNG/JPEG: strip metadata blocks, write binary out.
       writeCleaned(source, flags, img.cleaned, false);
-      if (flags.json) process.stderr.write(`${JSON.stringify({ format: img.format, removed: img.removed }, null, 2)}\n`);
+      if (flags.json) {
+        process.stderr.write(`${JSON.stringify({ format: img.format, supported: true, scanned: true, removed: img.removed }, null, 2)}\n`);
+      }
       return 0;
     }
     if (!img.supported) {
