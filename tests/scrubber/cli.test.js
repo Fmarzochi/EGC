@@ -196,15 +196,15 @@ check('rewrite prints a Layer B prompt with the text embedded and the honest not
   const r = runCli(['rewrite', file]);
   assert.strictEqual(r.code, 0);
   assert.ok(r.out.includes('A short drafted paragraph about testing.'));
-  assert.ok(/Rewrite the following text/.test(r.out));
-  assert.ok(/best-effort/i.test(r.err) && /cannot certify/i.test(r.err));
+  assert.ok(/Restate the passage/.test(r.out));
+  assert.ok(/no proof/i.test(r.err) && /vendor detector/i.test(r.err));
 });
 
 check('rewrite honors --strength and rejects an unknown one', () => {
   const file = tmpFile('draft2.md', 'Another paragraph.');
   const human = runCli(['rewrite', file, '--strength', 'humanize']);
   assert.strictEqual(human.code, 0);
-  assert.ok(/as if a human wrote it/.test(human.out));
+  assert.ok(/a person would write it/.test(human.out));
   const bad = runCli(['rewrite', file, '--strength', 'nope']);
   assert.strictEqual(bad.code, 2);
   assert.ok(/paraphrase/.test(bad.err));

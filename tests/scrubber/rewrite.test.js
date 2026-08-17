@@ -101,9 +101,9 @@ check('nextStrength escalates and stops at the top of the ladder', () => {
   assert.strictEqual(nextStrength('code'), null);
 });
 
-check('buildRewrite returns a print-prompt with the honest note and no network fields', () => {
+check('buildRewrite returns a relay instruction with the honest note and no network fields', () => {
   const r = buildRewrite('some drafted paragraph', { strength: 'paraphrase' });
-  assert.strictEqual(r.mode, 'print-prompt');
+  assert.strictEqual(r.mode, 'relay');
   assert.strictEqual(r.strength, 'paraphrase');
   assert.ok(r.prompt.includes('some drafted paragraph'));
   assert.strictEqual(r.note, HONEST_NOTE);

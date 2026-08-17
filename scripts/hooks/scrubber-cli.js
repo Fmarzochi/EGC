@@ -175,9 +175,10 @@ function parseStrength(args) {
   return i >= 0 && args[i + 1] ? args[i + 1] : 'paraphrase';
 }
 
-// Layer B: emit the rewrite prompt for the host agent to execute (print-prompt,
-// no network, no bundled model). The statistical mark lives in word choice, so
-// the operator's own model does the rewrite; the honest note goes to stderr.
+// Layer B: emit the rewrite instruction for the host agent to carry out (relay
+// mode, no network, no bundled model). The statistical mark rides in word
+// choice, so the operator's own model does the rewrite; the honest note goes to
+// stderr.
 function runRewrite(source, strength) {
   const bytes = readBytes(source);
   const text = textFromBytes(bytes, source);

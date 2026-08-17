@@ -2,56 +2,55 @@
 
 // Layer B: best-effort rewrite for statistical (token-sampling) watermarks.
 //
-// Statistical marks live in the model's word choice, so the only lever that
-// touches them is rewriting the prose. This module never certifies removal
-// against a vendor detector: it builds the rewrite prompt, measures how far a
-// candidate diverged from the original, and re-applies the deterministic
-// Layer A. The agent hosting EGC is the rewrite model (the print-prompt mode
-// carries no network and no bundled model), so this works in every tool that
-// runs a skill. Keep this honest: strong measured rewrite is the best known
-// lever, not a guarantee that a vendor watermark is gone.
+// A statistical mark rides in the model's word choices, so the only handle on
+// it is to re-say the same content differently. This module never claims a
+// mark was cleared: it assembles the rewrite instruction, scores how far a
+// candidate moved from the source, and runs the deterministic pass again on
+// the result. In relay mode there is no network and no bundled model, so the
+// agent that already hosts EGC is what actually rewrites; that makes the layer
+// reach every tool that can run a skill. Honesty is the rule here: a strong,
+// measured rewrite is the best lever we have, not a promise that a vendor
+// detector is beaten.
 
 const { clean } = require('./engine');
 
 const HONEST_NOTE =
-  'Best-effort against statistical token-sampling watermarks: rewrites the prose ' +
-  'and measures lexical divergence. It cannot certify that a vendor watermark ' +
-  'detector will fail, and it is never proof of human authorship.';
+  'Reduces statistical token-sampling marks by rewording and reports how far the ' +
+  'text moved. It gives no proof that a vendor detector was defeated and is never ' +
+  'evidence that a human wrote the text.';
 
-// Rewrite instructions, ordered from lightest to strongest. The agent that
-// hosts EGC executes these; no model is bundled here.
+// Rewrite instructions, lightest to heaviest. The wording is our own; the host
+// agent is what carries them out. No model ships in this file.
 const PROMPTS = {
   paraphrase:
-    'Rewrite the following text so that it uses substantially different wording ' +
-    'at the token level. Change clause order, connectors, and transition words; ' +
-    'vary sentence boundaries and length; and replace both content words and ' +
-    'function words where meaning allows. Preserve all facts, numbers, names, and ' +
-    'technical identifiers. Do not add or remove claims. Output only the rewritten ' +
-    'text.\n\n---\n{TEXT}',
+    'Restate the passage below in your own words, changing as many word choices as ' +
+    'the meaning allows. Reorder clauses, swap the linking words, and move where ' +
+    'sentences begin and end. Keep every fact, figure, name, and identifier exactly ' +
+    'as written, and neither add nor drop any point. Return only the reworded ' +
+    'passage.\n\n===\n{TEXT}',
   humanize:
-    'Rewrite the following text so it reads as if a human wrote it from scratch. ' +
-    'Vary sentence rhythm and length, replace formulaic AI-style transitions and ' +
-    'filler with concrete natural phrasing, and use plain, varied wording. Preserve ' +
-    'all facts, numbers, names, and technical identifiers. Do not add or remove ' +
-    'claims. Output only the rewritten text.\n\n---\n{TEXT}',
+    'Redraft the passage below the way a person would write it from scratch. Vary ' +
+    'the length and cadence of sentences, and trade mechanical connective phrases ' +
+    'for plain, concrete wording. Hold every fact, figure, name, and identifier ' +
+    'steady, and change no point. Return only the redraft.\n\n===\n{TEXT}',
   code:
-    'Rewrite the natural-language parts of this code (comments, docstrings, and ' +
-    'string literals) using different wording. Rename local variables, function ' +
-    'parameters, and private helper names to semantically equivalent names. ' +
-    'Preserve program behavior, public API names, and all values that affect ' +
-    'output. Output only the rewritten code.\n\n---\n{TEXT}',
+    'In the source below, reword only the human-language parts: comments, ' +
+    'docstrings, and string literals. Rename local variables, parameters, and ' +
+    'private helpers to different but equivalent names. Behavior, exported names, ' +
+    'and any value that affects output must stay identical. Return only the ' +
+    'adjusted source.\n\n===\n{TEXT}',
   backtranslate:
-    'Translate the text to {LANG}, then translate that result back to ' +
-    '{ORIGINAL_LANG}. Preserve all facts, numbers, and names. Output only the ' +
-    'final {ORIGINAL_LANG} text.\n\n---\n{TEXT}',
+    'Render the passage below into {LANG}, then carry that version back into ' +
+    '{ORIGINAL_LANG}. Keep every fact, figure, and name unchanged. Return only the ' +
+    'final {ORIGINAL_LANG} passage.\n\n===\n{TEXT}',
   structural:
-    'First extract a bullet outline of all claims (no full sentences). Then write ' +
-    'a complete document from that outline in natural, varied human prose without ' +
-    'omitting any bullet. Output only the final document.\n\n---\n{TEXT}',
+    'List the claims and shape of the passage below as terse bullet points, with ' +
+    'no full sentences. Then compose a fresh, natural-reading document from those ' +
+    'bullets, leaving none out. Return only the finished document.\n\n===\n{TEXT}',
 };
 
-// Escalation order used when a rewrite does not reach the divergence target.
-// `code` is intentionally out of the ladder: it is opt-in per input kind.
+// Escalation order when a rewrite misses the divergence target. `code` sits
+// outside the ladder: it is chosen per input kind, not reached by escalation.
 const STRENGTH_LADDER = ['paraphrase', 'humanize', 'backtranslate', 'structural'];
 
 // Unicode-aware so non-Latin scripts are tokenized fairly across the tools.
@@ -77,9 +76,9 @@ function jaccard(a, b) {
   return union === 0 ? 0 : 1 - inter / union;
 }
 
-// Bigram-Jaccard distance: 0.0 identical wording, 1.0 fully diverged. Falls
-// back to token-set distance for one-word inputs that have no bigrams, so a
-// short rewrite is not scored as "identical" just for lacking pairs.
+// Bigram-Jaccard distance: 0.0 means identical wording, 1.0 fully moved. For a
+// one-word input that has no adjacent pairs, it falls back to a token-set
+// distance so a genuine change is not scored as "identical" for lack of pairs.
 function lexicalDivergence(original, candidate) {
   const a = tokenize(original);
   const b = tokenize(candidate);
@@ -105,8 +104,9 @@ function buildPrompt(strength, text, options) {
     .replace('{TEXT}', text);
 }
 
-// Pick the most diverged candidate, gently penalizing extreme length drift so
-// a rewrite that doubled or halved the text is not blindly preferred.
+// Choose the candidate that moved furthest, with a small penalty for extreme
+// length drift so a rewrite that doubled or halved the text is not blindly
+// preferred over one that stayed close in size.
 function selectCandidate(original, candidates) {
   if (!Array.isArray(candidates) || candidates.length === 0) {
     throw new Error('selectCandidate needs at least one candidate');
@@ -133,13 +133,13 @@ function nextStrength(current) {
   return STRENGTH_LADDER[index + 1];
 }
 
-// print-prompt mode: no network, no bundled model. Returns the instruction for
-// the host agent to execute, plus the honest note.
+// Relay mode: no network, no bundled model. Returns the instruction for the
+// host agent to carry out, plus the honest note.
 function buildRewrite(text, options) {
   const opts = options || {};
   const strength = opts.strength || 'paraphrase';
   return {
-    mode: 'print-prompt',
+    mode: 'relay',
     strength,
     prompt: buildPrompt(strength, text, opts),
     inputChars: String(text).length,
@@ -147,10 +147,10 @@ function buildRewrite(text, options) {
   };
 }
 
-// Given the model's candidate rewrites, pick the strongest, re-apply Layer A,
-// and report whether the measured divergence met the target. This is the
-// "measured guarantee": it proves how far the text moved, never that a vendor
-// detector was defeated.
+// Given the model's candidate rewrites, take the strongest, run the
+// deterministic pass again, and report whether the measured move met the
+// target. This is the measured guarantee: it proves how far the text moved,
+// never that a detector was defeated.
 function finalizeRewrite(original, candidates, options) {
   const opts = options || {};
   const minDivergence = typeof opts.minDivergence === 'number' ? opts.minDivergence : 0.35;
