@@ -84,6 +84,14 @@ check('detects NUL bytes as binary', () => {
   assert.ok(looksBinary(Buffer.from('abc\x00def', 'latin1')));
 });
 
+check('refuses a decoded-binary string via NUL and replacement chars', () => {
+  const nul = String.fromCodePoint(0);
+  const replacement = String.fromCodePoint(0xfffd);
+  assert.ok(looksBinary(`abc${nul}def`));
+  assert.ok(looksBinary(`${replacement.repeat(30)}x`));
+  assert.strictEqual(looksBinary('perfectly normal text'), null);
+});
+
 check('hasTextExtension recognizes text files and rejects binaries', () => {
   assert.ok(hasTextExtension('src/app.js'));
   assert.ok(hasTextExtension('README.MD'));
