@@ -85,7 +85,9 @@
     ".github/SECURITY.md",
     "!**/__pycache__",
     "!**/*.pyc",
-    "!**/.DS_Store"
+    "!**/*.pyo",
+    "!**/.DS_Store",
+    "!**/Thumbs.db"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.4.1",

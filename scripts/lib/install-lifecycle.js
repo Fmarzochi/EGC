@@ -836,9 +836,18 @@ function resolveDiscoveryAdapters(targets) {
 
   const adapters = [];
   for (const target of normalizeTargets(targets)) {
-    const adapter = getInstallTargetAdapter(target);
-    if (!adapters.includes(adapter)) {
-      adapters.push(adapter);
+    // Every adapter that answers to this target, not just the first one:
+    // an explicit --target kiro must cover kiro-home AND kiro-project, the
+    // same pair the no-argument default examines.
+    const matching = listInstallTargetAdapters().filter(adapter => adapter.supports(target));
+    if (matching.length === 0) {
+      // Unknown or retired ids keep their dedicated error messages.
+      getInstallTargetAdapter(target);
+    }
+    for (const adapter of matching) {
+      if (!adapters.includes(adapter)) {
+        adapters.push(adapter);
+      }
     }
   }
   return adapters;

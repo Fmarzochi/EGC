@@ -944,6 +944,12 @@ function runTests() {
         assert.ok(ids.includes(`${pairedId}-home`), `missing ${pairedId}-home`);
         assert.ok(ids.includes(`${pairedId}-project`), `missing ${pairedId}-project`);
       }
+
+      // An explicit target covers its whole home+project pair too, not just
+      // the first adapter that answers to the id.
+      const explicitIds = discoverInstalledStates({ homeDir, projectRoot, targets: ['kiro'] })
+        .map(record => record.adapter.id);
+      assert.deepStrictEqual(explicitIds, ['kiro-home', 'kiro-project']);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

@@ -89,7 +89,7 @@ function main() {
       }
     }],
     ["package files whitelist keeps the generated-artifact negations", () => {
-      for (const negation of ["!**/__pycache__", "!**/*.pyc", "!**/.DS_Store"]) {
+      for (const negation of ["!**/__pycache__", "!**/*.pyc", "!**/*.pyo", "!**/.DS_Store", "!**/Thumbs.db"]) {
         assert.ok(
           packageJson.files.includes(negation),
           `package.json files must keep ${negation}`
@@ -142,7 +142,9 @@ function main() {
       const artifacts = packagedPaths.filter((packagedPath) => (
         packagedPath.includes("__pycache__")
         || packagedPath.endsWith(".pyc")
+        || packagedPath.endsWith(".pyo")
         || packagedPath.endsWith(".DS_Store")
+        || packagedPath.endsWith("Thumbs.db")
       ))
       assert.deepStrictEqual(artifacts, [], "generated artifacts must never ship in the package")
     }],
