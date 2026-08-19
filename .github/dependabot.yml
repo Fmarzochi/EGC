@@ -31,3 +31,10 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      # One PR per weekly sweep: actions that must move in lockstep (the
+      # codeql-action init/analyze pair refuses mixed versions) otherwise
+      # arrive as separate PRs that each fail their own CI.
+      github-actions:
+        patterns:
+          - "*"
