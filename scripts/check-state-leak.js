@@ -32,7 +32,11 @@ const GIT_BIN = [
 ].find(p => fs.existsSync(p)) || 'git';
 
 function git(args, options) {
-  return execFileSync(GIT_BIN, args, { encoding: 'utf8', ...options });
+  // LC_ALL=C: git ships localized fatal messages via gettext, and the
+  // packaged-tree guard matches 'not a git repository' textually to decide
+  // between skipping and failing closed -- force the C locale so that
+  // decision is deterministic on non-English systems.
+  return execFileSync(GIT_BIN, args, { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' }, ...options });
 }
 
 // Every propagation target of egc-memory (propagate.ts) is scanned, not just
