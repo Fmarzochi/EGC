@@ -221,6 +221,16 @@ function promptYesNo(question) {
   return answer === 'y' || answer === 'yes';
 }
 
+// Strips already-surfaced not-detected issues from BOTH plan shapes: the
+// flattened warning strings printHumanPlan() renders, and the structured
+// validationIssues the --json output embeds verbatim. Missing either one
+// leaves the issue visible through the shape this call site does not touch.
+function silenceUndetectedIssues(plan, issues) {
+  const silenced = new Set(issues.map(issue => issue.message));
+  plan.warnings = (plan.warnings || []).filter(warning => !silenced.has(warning));
+  plan.validationIssues = (plan.validationIssues || []).filter(issue => !silenced.has(issue.message));
+}
+
 // The detection ladder for a target whose tool is absent from this machine:
 // --require-detected refuses outright (strict automation); --allow-undetected
 // installs silently (deliberate provisioning); a human at a real terminal is
@@ -237,8 +247,7 @@ function enforceTargetDetection(plan, options) {
   }
 
   if (options.allowUndetected) {
-    const silenced = new Set(issues.map(issue => issue.message));
-    plan.warnings = (plan.warnings || []).filter(warning => !silenced.has(warning));
+    silenceUndetectedIssues(plan, issues);
     return;
   }
 
@@ -248,6 +257,9 @@ function enforceTargetDetection(plan, options) {
       console.log('Aborted: the target tool was not detected and installation was declined.');
       process.exit(1);
     }
+    // Already shown above as part of the prompt: printHumanPlan() must not
+    // repeat it a second time under "Warnings:" once the user said yes.
+    silenceUndetectedIssues(plan, issues);
   }
 }
 

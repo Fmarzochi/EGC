@@ -179,6 +179,31 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('--allow-undetected --json omits the issue from machine-readable output too', () => {
+    const homeDir = createTempDir('clean-env-allow-json-');
+    const projectRoot = createTempDir('clean-env-allow-json-project-');
+
+    try {
+      const result = runWithSyntheticHome(
+        INSTALL_SCRIPT,
+        ['--target', 'kiro', '--profile', 'core', '--dry-run', '--json', '--allow-undetected'],
+        homeDir,
+        projectRoot
+      );
+
+      assert.strictEqual(result.code, 0, result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      const rawJson = JSON.stringify(parsed);
+      assert.ok(
+        !rawJson.includes('ide-not-detected') && !rawJson.includes('does not appear to be installed'),
+        `structured plan.validationIssues must be silenced too, not just the flattened warnings: ${rawJson}`
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('an explicit install for an absent tool warns instead of installing silently', () => {
     const homeDir = createTempDir('clean-env-absent-tool-');
     const projectRoot = createTempDir('clean-env-project-');
