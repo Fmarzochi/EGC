@@ -7,9 +7,10 @@
 // memory content may not.
 //
 // Modes:
-//   --staged        check staged blobs (pre-commit hook)
-//   --tree          check tracked markdown files on disk (CI guard)
-//   --clean <file>  rewrite files in place with the memory section zeroed
+//   --staged          check staged blobs (pre-commit hook)
+//   --tree            check tracked markdown files on disk (CI guard)
+//   --packaged-tree   check only tracked files the npm package ships (prepack guard)
+//   --clean <file>    rewrite files in place with the memory section zeroed
 
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -96,10 +97,9 @@ function checkStaged() {
   return leaks;
 }
 
-function checkTree() {
-  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(isGuardedPath);
+function scanDiskFiles(files) {
   const leaks = [];
-  for (const file of tracked) {
+  for (const file of files) {
     let content;
     try {
       content = fs.readFileSync(file, 'utf8');
@@ -109,6 +109,36 @@ function checkTree() {
     if (findLeak(content)) leaks.push(file);
   }
   return leaks;
+}
+
+function checkTree() {
+  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(isGuardedPath);
+  return scanDiskFiles(tracked);
+}
+
+// Local sessions legitimately keep propagation files like CLAUDE.md populated
+// on disk, and the git clean filter only protects COMMITS -- npm pack reads
+// the working tree directly. A populated propagation file inside the
+// package.json "files" set (e.g. .trae/rules/egc-context.md) would therefore
+// be published verbatim. This mode guards exactly that set, so prepack can
+// abort a leaking publish without blocking everyday local work.
+function loadPackagedPrefixes() {
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  return (Array.isArray(pkg.files) ? pkg.files : [])
+    .filter(entry => typeof entry === 'string' && !entry.startsWith('!'))
+    .map(entry => entry.replace(/\/+$/, ''));
+}
+
+function isPackagedPath(filePath, prefixes) {
+  return prefixes.some(prefix => filePath === prefix || filePath.startsWith(`${prefix}/`));
+}
+
+function checkPackagedTree() {
+  const prefixes = loadPackagedPrefixes();
+  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean)
+    .filter(file => isPackagedPath(file, prefixes))
+    .filter(isGuardedPath);
+  return scanDiskFiles(tracked);
 }
 
 function main() {
@@ -137,7 +167,14 @@ function main() {
     return;
   }
 
-  const leaks = mode === '--staged' ? checkStaged() : checkTree();
+  let leaks;
+  if (mode === '--staged') {
+    leaks = checkStaged();
+  } else if (mode === '--packaged-tree') {
+    leaks = checkPackagedTree();
+  } else {
+    leaks = checkTree();
+  }
   if (leaks.length === 0) {
     console.log('state-leak check: clean');
     return;

@@ -46,7 +46,7 @@
     "build:opencode": "node scripts/build-opencode.js",
     "build:mcp": "cd mcp/servers/egc-guardian && npm ci --silent && npm run build && cd ../egc-memory && npm ci --silent && npm run build",
     "prompt": "node scripts/gemini.js",
-    "prepack": "npm run build:opencode && npm run build:mcp"
+    "prepack": "node scripts/check-state-leak.js --packaged-tree && npm run build:opencode && npm run build:mcp"
   },
   "files": [
     "scripts/",
@@ -63,6 +63,7 @@
     "examples/",
     ".gemini-plugin/",
     ".codex-plugin/",
+    ".codex/",
     ".opencode/",
     ".codebuddy/",
     ".kiro/",
@@ -81,7 +82,10 @@
     "NOTICE",
     ".github/CONTRIBUTING.md",
     "docs/RULES.md",
-    ".github/SECURITY.md"
+    ".github/SECURITY.md",
+    "!**/__pycache__",
+    "!**/*.pyc",
+    "!**/.DS_Store"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.4.1",

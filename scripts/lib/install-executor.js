@@ -92,7 +92,26 @@ function validateLegacyTarget(target) {
 const IGNORED_DIRECTORY_NAMES = new Set([
   'node_modules',
   '.git',
+  '__pycache__',
 ]);
+
+// Machine-generated tooling artifacts must never become managed install
+// sources: they differ per machine, and npm never packs .gitignore at all,
+// so an install-state entry recorded for one of these can never be
+// satisfied from the published package again.
+const IGNORED_FILE_NAMES = new Set([
+  '.gitignore',
+  '.DS_Store',
+  'Thumbs.db',
+]);
+const IGNORED_FILE_SUFFIXES = ['.pyc', '.pyo'];
+
+function isIgnoredSourceFile(fileName) {
+  if (IGNORED_FILE_NAMES.has(fileName)) {
+    return true;
+  }
+  return IGNORED_FILE_SUFFIXES.some(suffix => fileName.endsWith(suffix));
+}
 
 function listFilesRecursive(dirPath) {
   if (!fs.existsSync(dirPath)) {
@@ -112,7 +131,7 @@ function listFilesRecursive(dirPath) {
       for (const childFile of childFiles) {
         files.push(path.join(entry.name, childFile));
       }
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !isIgnoredSourceFile(entry.name)) {
       files.push(entry.name);
     }
   }
@@ -816,5 +835,6 @@ module.exports = {
   createLegacyInstallPlan,
   getSourceRoot,
   listAvailableLanguages,
+  listFilesRecursive,
   parseInstallArgs,
 };

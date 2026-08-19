@@ -126,5 +126,29 @@ run('non-markdown staged files are ignored', () => {
   assert.strictEqual(res.status, 0, res.stderr);
 });
 
+run('packaged-tree mode flags only files the package ships', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+  fs.mkdirSync(path.join(dir, '.trae', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.trae', 'rules', 'egc-context.md'), POPULATED);
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), POPULATED);
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 1, `expected exit 1, got ${res.status}: ${res.stderr}`);
+  assert.ok(res.stderr.includes('.trae/rules/egc-context.md'));
+  assert.ok(!res.stderr.includes('CLAUDE.md'), 'unpackaged propagation files must not block a publish');
+});
+
+run('packaged-tree passes when only unpackaged files are populated', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), POPULATED);
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 0, res.stderr);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

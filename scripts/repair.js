@@ -26,6 +26,33 @@ function parseArgs(argv) {
   return parseTargetArgs(argv, { supportsDryRun: true });
 }
 
+// A pruned entry is healed, not broken: its source left the reference repo,
+// the stale install-state record was dropped, and the installed file stays
+// on disk (unmanaged from now on).
+function printPrunedEntries(entry, dryRun) {
+  const prunedEntries = dryRun ? entry.plannedPrunes : entry.prunedPaths;
+  if (!(prunedEntries?.length > 0)) {
+    return;
+  }
+  console.log(`  ${dryRun ? 'Planned prunes' : 'Pruned stale entries'}: ${prunedEntries.length}`);
+  for (const item of prunedEntries) {
+    console.log(`    - ${item}: source left the reference repo; entry removed, installed file kept`);
+  }
+}
+
+// Each item carries its own reason, because the two causes need different
+// actions: a renamed-away source means the install-state is stale, while an
+// execution failure usually means permissions.
+function printUnrepairableEntries(entry) {
+  if (!(entry.unrepairable?.length > 0)) {
+    return;
+  }
+  console.log(`  Unrepairable: ${entry.unrepairable.length}`);
+  for (const item of entry.unrepairable) {
+    console.log(`    - ${item.path}: ${item.reason}`);
+  }
+}
+
 function printHuman(result) {
   if (result.results.length === 0) {
     console.log('No EGC install-state files found for the current home/project context.');
@@ -48,22 +75,16 @@ function printHuman(result) {
 
     const paths = result.dryRun ? entry.plannedRepairs : entry.repairedPaths;
     console.log(`  ${result.dryRun ? 'Planned repairs' : 'Repaired paths'}: ${paths.length}`);
-
-    // Each item carries its own reason, because the two causes need
-    // different actions: a renamed-away source means the install-state is
-    // stale, while an execution failure usually means permissions.
-    if (entry.unrepairable?.length > 0) {
-      console.log(`  Unrepairable: ${entry.unrepairable.length}`);
-      for (const item of entry.unrepairable) {
-        console.log(`    - ${item.path}: ${item.reason}`);
-      }
-    }
+    printPrunedEntries(entry, result.dryRun);
+    printUnrepairableEntries(entry);
   }
 
+  const prunedCount = result.dryRun ? result.summary.plannedPruneCount : result.summary.prunedCount;
+  const pruned = prunedCount ? `, ${result.dryRun ? 'planned-prunes' : 'pruned'}=${prunedCount}` : '';
   const unrepairable = result.summary.unrepairableCount
     ? `, unrepairable=${result.summary.unrepairableCount}`
     : '';
-  console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'repaired'}=${result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount}, errors=${result.summary.errorCount}${unrepairable}`);
+  console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'repaired'}=${result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount}, errors=${result.summary.errorCount}${pruned}${unrepairable}`);
 }
 
 function executePluginRepairs(options) {
