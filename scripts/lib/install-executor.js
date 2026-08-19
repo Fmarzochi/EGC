@@ -12,6 +12,7 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
+const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('./warp-agents-merge');
@@ -89,30 +90,6 @@ function validateLegacyTarget(target) {
   }
 }
 
-const IGNORED_DIRECTORY_NAMES = new Set([
-  'node_modules',
-  '.git',
-  '__pycache__',
-]);
-
-// Machine-generated tooling artifacts must never become managed install
-// sources: they differ per machine, and npm never packs .gitignore at all,
-// so an install-state entry recorded for one of these can never be
-// satisfied from the published package again.
-const IGNORED_FILE_NAMES = new Set([
-  '.gitignore',
-  '.DS_Store',
-  'Thumbs.db',
-]);
-const IGNORED_FILE_SUFFIXES = ['.pyc', '.pyo'];
-
-function isIgnoredSourceFile(fileName) {
-  if (IGNORED_FILE_NAMES.has(fileName)) {
-    return true;
-  }
-  return IGNORED_FILE_SUFFIXES.some(suffix => fileName.endsWith(suffix));
-}
-
 function listFilesRecursive(dirPath) {
   if (!fs.existsSync(dirPath)) {
     return [];
@@ -124,7 +101,7 @@ function listFilesRecursive(dirPath) {
   for (const entry of entries) {
     const absolutePath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      if (IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+      if (isIgnoredSourceDirectory(entry.name)) {
         continue;
       }
       const childFiles = listFilesRecursive(absolutePath);

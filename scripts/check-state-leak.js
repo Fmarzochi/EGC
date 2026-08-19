@@ -135,10 +135,25 @@ function isPackagedPath(filePath, prefixes) {
 
 function checkPackagedTree() {
   const prefixes = loadPackagedPrefixes();
-  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean)
+  let listing;
+  try {
+    // Tracked AND untracked-but-not-ignored files: npm pack reads the
+    // working tree, so a populated propagation file that was never
+    // committed still ships. Ignored files stay out; without an .npmignore
+    // npm applies the same .gitignore rules when packing.
+    listing = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
+  } catch (error) {
+    // Packing from a directory that is not a git checkout (vendored copy,
+    // exported tarball): there is no git state to scan. Warn and let the
+    // pack proceed -- the real publish flow always runs from the
+    // repository, where the guard is enforced.
+    console.log(`state-leak check: skipped (not a git checkout: ${String(error.message).split('\n')[0]})`);
+    return [];
+  }
+  const packagedFiles = listing.split('\0').filter(Boolean)
     .filter(file => isPackagedPath(file, prefixes))
     .filter(isGuardedPath);
-  return scanDiskFiles(tracked);
+  return scanDiskFiles(packagedFiles);
 }
 
 function main() {

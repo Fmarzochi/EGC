@@ -145,6 +145,8 @@ function main() {
         || packagedPath.endsWith(".pyo")
         || packagedPath.endsWith(".DS_Store")
         || packagedPath.endsWith("Thumbs.db")
+        || packagedPath === ".gitignore"
+        || packagedPath.endsWith("/.gitignore")
       ))
       assert.deepStrictEqual(artifacts, [], "generated artifacts must never ship in the package")
     }],

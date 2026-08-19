@@ -49,7 +49,7 @@ function printUnrepairableEntries(entry) {
   }
   console.log(`  Unrepairable: ${entry.unrepairable.length}`);
   for (const item of entry.unrepairable) {
-    console.log(`    - ${item.path}: ${item.reason}`);
+    console.log(`    - ${item.path} [${item.cause}]: ${item.reason}`);
   }
 }
 
