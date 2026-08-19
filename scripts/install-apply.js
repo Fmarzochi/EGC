@@ -6,6 +6,7 @@
  * target-specific mutation logic into testable Node code.
  */
 
+const fs = require('node:fs');
 const os = require('node:os');
 
 
@@ -45,6 +46,12 @@ Options:
   --config <path>     Load install intent from egc-install.json
   --dry-run    Show the install plan without copying files
   --json       Emit machine-readable plan/result JSON
+  --require-detected
+               Fail instead of installing when the target tool is not
+               detected on this machine (strict automation)
+  --allow-undetected
+               Skip the not-detected warning and prompt entirely
+               (deliberate provisioning before the tool is installed)
   --help       Show this help text
 
 Available languages:
@@ -191,6 +198,59 @@ function regenerateTopologyCache() {
   }
 }
 
+const UNDETECTED_ISSUE_CODE = 'ide-not-detected';
+
+function undetectedTargetIssues(plan) {
+  return (plan.validationIssues || []).filter(issue => issue.code === UNDETECTED_ISSUE_CODE);
+}
+
+// Reads one line from the terminal, synchronously. The caller only reaches
+// this when stdin AND stdout are real TTYs, so this can never hang a pipe:
+// a prompt reading from a dead pipe is exactly the 1.1.17 doctor regression
+// this guard exists to never repeat.
+function promptYesNo(question) {
+  process.stdout.write(question);
+  const buffer = Buffer.alloc(256);
+  let bytesRead;
+  try {
+    bytesRead = fs.readSync(0, buffer, 0, buffer.length);
+  } catch (_error) { // NOSONAR: an unreadable stdin answers the safe default, no
+    return false;
+  }
+  const answer = buffer.toString('utf8', 0, bytesRead).trim().toLowerCase();
+  return answer === 'y' || answer === 'yes';
+}
+
+// The detection ladder for a target whose tool is absent from this machine:
+// --require-detected refuses outright (strict automation); --allow-undetected
+// installs silently (deliberate provisioning); a human at a real terminal is
+// asked once, defaulting to No; and a non-interactive run keeps the historic
+// behavior, warn and proceed, so no existing script changes behavior.
+function enforceTargetDetection(plan, options) {
+  const issues = undetectedTargetIssues(plan);
+  if (issues.length === 0) {
+    return;
+  }
+
+  if (options.requireDetected) {
+    throw new Error(`--require-detected: ${issues[0].message.split('\n')[0]}`);
+  }
+
+  if (options.allowUndetected) {
+    const silenced = new Set(issues.map(issue => issue.message));
+    plan.warnings = (plan.warnings || []).filter(warning => !silenced.has(warning));
+    return;
+  }
+
+  if (!options.dryRun && !options.json && process.stdin.isTTY && process.stdout.isTTY) {
+    console.log(`\n${issues[0].message}`);
+    if (!promptYesNo('Install anyway? [y/N] ')) {
+      console.log('Aborted: the target tool was not detected and installation was declined.');
+      process.exit(1);
+    }
+  }
+}
+
 function main() {
   try {
     const options = parseInstallArgs(process.argv);
@@ -220,6 +280,8 @@ function main() {
       homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
       claudeRulesDir: process.env.GEMINI_RULES_DIR || null,
     });
+
+    enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
       if (options.json) {

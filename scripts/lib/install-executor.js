@@ -695,6 +695,10 @@ function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
   return result;
 }
 
+function toValidationIssueArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function createManifestInstallPlan(options = {}) {
   const sourceRoot = options.sourceRoot || getSourceRoot();
   const projectRoot = options.projectRoot || process.cwd();
@@ -780,6 +784,10 @@ function createManifestInstallPlan(options = {}) {
     targetRoot: plan.targetRoot,
     installRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
+    // The structured issues ride along untouched: the CLI's detection gate
+    // needs the machine-readable code (ide-not-detected), not just the
+    // flattened warning strings below.
+    validationIssues: toValidationIssueArray(plan.validationIssues),
     warnings: [
       ...(Array.isArray(options.warnings) ? options.warnings : []),
       ...(Array.isArray(plan.validationIssues)

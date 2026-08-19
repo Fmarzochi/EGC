@@ -44,6 +44,8 @@ const ARG_HANDLERS = {
   '--without':  (parsed, args, i) => applyWithoutComponent(parsed, args, i),
   '--dry-run':  (parsed) => { parsed.dryRun = true; return 0; },
   '--json':     (parsed) => { parsed.json = true; return 0; },
+  '--require-detected': (parsed) => { parsed.requireDetected = true; return 0; },
+  '--allow-undetected': (parsed) => { parsed.allowUndetected = true; return 0; },
   '--help':     (parsed) => { parsed.help = true; return 0; },
   '-h':         (parsed) => { parsed.help = true; return 0; },
 };
@@ -55,6 +57,8 @@ function parseInstallArgs(argv) {
     dryRun: false,
     json: false,
     help: false,
+    requireDetected: false,
+    allowUndetected: false,
     configPath: null,
     profileId: null,
     moduleIds: [],
@@ -74,6 +78,10 @@ function parseInstallArgs(argv) {
     } else {
       parsed.languages.push(arg);
     }
+  }
+
+  if (parsed.requireDetected && parsed.allowUndetected) {
+    throw new Error('--require-detected and --allow-undetected are mutually exclusive');
   }
 
   return parsed;
