@@ -143,11 +143,20 @@ function checkPackagedTree() {
     // npm applies the same .gitignore rules when packing.
     listing = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
   } catch (error) {
-    // Packing from a directory that is not a git checkout (vendored copy,
-    // exported tarball): there is no git state to scan. Warn and let the
-    // pack proceed -- the real publish flow always runs from the
-    // repository, where the guard is enforced.
-    console.log(`state-leak check: skipped (not a git checkout: ${String(error.message).split('\n')[0]})`);
+    // Only two failures mean there is genuinely no git state to scan:
+    // packing a directory that is not a checkout (vendored copy, exported
+    // tarball), or a machine without the git binary. Those skip with a
+    // notice -- the real publish flow always runs from the repository.
+    // Anything else (corrupt metadata, permissions, lock contention) is a
+    // failure INSIDE a checkout: rethrow so prepack fails closed instead of
+    // silently shipping a populated memory file.
+    const detail = `${error.code || ''} ${error.message || ''} ${error.stderr || ''}`;
+    const notARepo = /not a git repository/i.test(detail);
+    const gitMissing = error.code === 'ENOENT';
+    if (!notARepo && !gitMissing) {
+      throw error;
+    }
+    console.log(`state-leak check: skipped (${notARepo ? 'not a git checkout' : 'git unavailable'}: ${String(error.message).split('\n')[0]})`);
     return [];
   }
   const packagedFiles = listing.split('\0').filter(Boolean)

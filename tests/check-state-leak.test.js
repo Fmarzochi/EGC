@@ -150,6 +150,20 @@ run('packaged-tree passes when only unpackaged files are populated', () => {
   assert.strictEqual(res.status, 0, res.stderr);
 });
 
+run('packaged-tree skips with a notice outside a git checkout', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-nogit-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.copyFileSync(SCRIPT, path.join(dir, 'scripts', 'check-state-leak.js'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+    const res = runScript(dir, '--packaged-tree');
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.ok(res.stdout.includes('skipped (not a git checkout'), res.stdout);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 run('packaged-tree flags an untracked populated file inside the packaged set', () => {
   const { dir, git } = makeRepo();
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));

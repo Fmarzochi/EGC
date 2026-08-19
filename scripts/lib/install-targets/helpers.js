@@ -257,7 +257,10 @@ function createFlatFileOperations({ // NOSONAR: directory walk building install 
     const namespace = entry.name;
     const entryPath = path.join(sourceRoot, entry.name);
 
-    if (entry.isDirectory()) {
+    // Same artifact exclusions as the nested listRelativeFiles walk: a
+    // top-level __pycache__ namespace or a stray .DS_Store directly under
+    // the source root must never become a managed install source either.
+    if (entry.isDirectory() && !isIgnoredSourceDirectory(entry.name)) {
       const relativeFiles = listRelativeFiles(entryPath);
       for (const relativeFile of relativeFiles) {
         const defaultFileName = `${namespace}-${normalizeRelativePath(relativeFile).replaceAll('/', '-')}`;
@@ -275,7 +278,7 @@ function createFlatFileOperations({ // NOSONAR: directory walk building install 
           strategy: 'flatten-copy',
         }));
       }
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !isIgnoredSourceFile(entry.name)) {
       const sourceRelativeFile = path.join(normalizedSourcePath, entry.name);
       const destinationFileName = typeof destinationNameTransform === 'function'
         ? destinationNameTransform(entry.name, sourceRelativeFile)
