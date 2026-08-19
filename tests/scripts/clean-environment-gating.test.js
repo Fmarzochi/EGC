@@ -127,6 +127,83 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('--require-detected fails fast for an absent tool and writes nothing', () => {
+    const homeDir = createTempDir('clean-env-require-');
+    const projectRoot = createTempDir('clean-env-require-project-');
+
+    try {
+      const result = runWithSyntheticHome(
+        INSTALL_SCRIPT,
+        ['--target', 'kiro', '--profile', 'core', '--require-detected'],
+        homeDir,
+        projectRoot
+      );
+
+      assert.strictEqual(result.code, 1, 'strict automation must refuse an undetected target');
+      assert.ok(
+        result.stderr.includes('--require-detected'),
+        `the refusal must name the flag: ${result.stderr}`
+      );
+      assert.deepStrictEqual(
+        listHomeEntries(homeDir),
+        [],
+        'a refused install must not write anything into the home'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('--allow-undetected proceeds without the detection warning', () => {
+    const homeDir = createTempDir('clean-env-allow-');
+    const projectRoot = createTempDir('clean-env-allow-project-');
+
+    try {
+      const result = runWithSyntheticHome(
+        INSTALL_SCRIPT,
+        ['--target', 'kiro', '--profile', 'core', '--dry-run', '--allow-undetected'],
+        homeDir,
+        projectRoot
+      );
+
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('Dry-run install plan'), 'the plan must still print');
+      assert.ok(
+        !result.stdout.includes('does not appear to be installed'),
+        'deliberate provisioning must not carry the detection warning'
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('--allow-undetected --json omits the issue from machine-readable output too', () => {
+    const homeDir = createTempDir('clean-env-allow-json-');
+    const projectRoot = createTempDir('clean-env-allow-json-project-');
+
+    try {
+      const result = runWithSyntheticHome(
+        INSTALL_SCRIPT,
+        ['--target', 'kiro', '--profile', 'core', '--dry-run', '--json', '--allow-undetected'],
+        homeDir,
+        projectRoot
+      );
+
+      assert.strictEqual(result.code, 0, result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      const rawJson = JSON.stringify(parsed);
+      assert.ok(
+        !rawJson.includes('ide-not-detected') && !rawJson.includes('does not appear to be installed'),
+        `structured plan.validationIssues must be silenced too, not just the flattened warnings: ${rawJson}`
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('an explicit install for an absent tool warns instead of installing silently', () => {
     const homeDir = createTempDir('clean-env-absent-tool-');
     const projectRoot = createTempDir('clean-env-project-');
