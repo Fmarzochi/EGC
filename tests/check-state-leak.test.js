@@ -126,5 +126,57 @@ run('non-markdown staged files are ignored', () => {
   assert.strictEqual(res.status, 0, res.stderr);
 });
 
+run('packaged-tree mode flags only files the package ships', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+  fs.mkdirSync(path.join(dir, '.trae', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.trae', 'rules', 'egc-context.md'), POPULATED);
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), POPULATED);
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 1, `expected exit 1, got ${res.status}: ${res.stderr}`);
+  assert.ok(res.stderr.includes('.trae/rules/egc-context.md'));
+  assert.ok(!res.stderr.includes('CLAUDE.md'), 'unpackaged propagation files must not block a publish');
+});
+
+run('packaged-tree passes when only unpackaged files are populated', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), POPULATED);
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 0, res.stderr);
+});
+
+run('packaged-tree skips with a notice outside a git checkout', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-nogit-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.copyFileSync(SCRIPT, path.join(dir, 'scripts', 'check-state-leak.js'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+    const res = runScript(dir, '--packaged-tree');
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.ok(res.stdout.includes('skipped (not a git checkout'), res.stdout);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+run('packaged-tree flags an untracked populated file inside the packaged set', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  // Written AFTER the commit: npm pack reads the working tree, so a
+  // never-committed propagation file ships all the same.
+  fs.mkdirSync(path.join(dir, '.trae', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.trae', 'rules', 'egc-context.md'), POPULATED);
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 1, `untracked packaged file must still be scanned: ${res.stderr}`);
+  assert.ok(res.stderr.includes('.trae/rules/egc-context.md'));
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

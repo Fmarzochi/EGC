@@ -1,6 +1,14 @@
 const { maybeSkipBaselineAbsent } = require('../lib/baseline-absent');
 /**
  * Tests for the npm publish surface contract.
+ *
+ * The contract is COVERAGE, not equality: every source path the install
+ * manifests reference must ship in the npm package (the package.json
+ * "files" whitelist). A path that installs fine from a dev checkout but is
+ * missing from the published tarball silently vanishes for every registry
+ * install and later surfaces as doctor missing-source-files errors on
+ * machines that did install it. KNOWN_UNPACKAGED documents the deliberate
+ * exceptions.
  */
 
 const assert = require("assert")
@@ -21,64 +29,34 @@ function runTest(name, fn) {
   }
 }
 
+const repoRoot = path.join(__dirname, "..", "..")
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")
+)
+const modules = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "manifests", "install-modules.json"), "utf8")
+).modules
+
+// Manifest sources that deliberately do NOT ship in the npm package today.
+// All three are local memory-propagation targets: packing them straight from
+// a working tree would risk publishing populated memory, so adding them to
+// "files" is a maintainer decision, not a mechanical fix. Registry installs
+// silently skip them (materializeScaffoldOperation drops missing sources).
+// Shrink this list, never grow it.
+const KNOWN_UNPACKAGED = new Set(["AGENTS.md", ".cursor", ".gemini"])
+
 function normalizePublishPath(value) {
   return String(value).replace(/\\/g, "/").replace(/\/$/, "")
 }
 
-function isCoveredByAncestor(target, roots) {
-  const parts = target.split("/")
-  for (let index = 1; index < parts.length; index += 1) {
-    const ancestor = parts.slice(0, index).join("/")
-    if (roots.has(ancestor)) {
-      return true
-    }
-  }
-  return false
-}
+const packagedPrefixes = packageJson.files
+  .filter((entry) => !entry.startsWith("!"))
+  .map(normalizePublishPath)
 
-function buildExpectedPublishPaths(repoRoot) {
-  const modules = JSON.parse(
-    fs.readFileSync(path.join(repoRoot, "manifests", "install-modules.json"), "utf8")
-  ).modules
-
-  const extraPaths = [
-    "manifests",
-    "scripts/egc.js",
-    "scripts/catalog.js",
-    "scripts/consult.js",
-    "scripts/claw.js",
-    "scripts/doctor.js",
-    "scripts/status.js",
-    "scripts/sessions-cli.js",
-    "scripts/install-apply.js",
-    "scripts/install-plan.js",
-    "scripts/list-installed.js",
-    "scripts/loop-status.js",
-    "scripts/skill-create-output.js",
-    "scripts/repair.js",
-    "scripts/harness-audit.js",
-    "scripts/session-inspect.js",
-    "scripts/uninstall.js",
-    "scripts/gemini-adapt-agents.js",
-    "scripts/codex/merge-codex-config.js",
-    "scripts/codex/merge-mcp-config.js",
-    ".codex-plugin",
-    ".mcp.json",
-    "install.sh",
-    "install.ps1",
-    "schemas",
-    "agent.yaml",
-    "mcp/servers/egc-guardian/package-lock.json",
-    "mcp/servers/egc-memory/package-lock.json",
-  ]
-
-  const combined = new Set(
-    [...modules.flatMap((module) => module.paths || []), ...extraPaths].map(normalizePublishPath)
+function isPackaged(relativePath) {
+  return packagedPrefixes.some(
+    (prefix) => relativePath === prefix || relativePath.startsWith(`${prefix}/`)
   )
-
-  return [...combined]
-    .filter((publishPath) => !isCoveredByAncestor(publishPath, combined))
-    .sort()
 }
 
 function main() {
@@ -87,56 +65,90 @@ function main() {
   let passed = 0
   let failed = 0
 
-  const repoRoot = path.join(__dirname, "..", "..")
-  const packageJson = JSON.parse(
-    fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")
-  )
-
-  const expectedPublishPaths = buildExpectedPublishPaths(repoRoot)
-  const actualPublishPaths = packageJson.files.map(normalizePublishPath).sort()
-
   const tests = [
-    ["package.json files align to the module graph and explicit runtime allowlist", () => {
-      assert.deepStrictEqual(actualPublishPaths, expectedPublishPaths)
+    ["every install-manifest source ships in the npm package files whitelist", () => {
+      for (const module of modules) {
+        for (const rawPath of module.paths || []) {
+          const sourcePath = normalizePublishPath(rawPath)
+          if (KNOWN_UNPACKAGED.has(sourcePath)) {
+            assert.ok(
+              !isPackaged(sourcePath),
+              `${sourcePath} is packaged now: remove it from KNOWN_UNPACKAGED`
+            )
+            continue
+          }
+          assert.ok(
+            fs.existsSync(path.join(repoRoot, sourcePath)),
+            `manifest module ${module.id} references a source missing from the repo: ${sourcePath}`
+          )
+          assert.ok(
+            isPackaged(sourcePath),
+            `manifest module ${module.id} references a source the npm package does not ship: ${sourcePath}`
+          )
+        }
+      }
     }],
-    ["npm pack publishes the reduced runtime surface", () => {
-      const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+    ["package files whitelist keeps the generated-artifact negations", () => {
+      for (const negation of ["!**/__pycache__", "!**/*.pyc", "!**/*.pyo", "!**/.DS_Store", "!**/Thumbs.db"]) {
+        assert.ok(
+          packageJson.files.includes(negation),
+          `package.json files must keep ${negation}`
+        )
+      }
+    }],
+    ["npm pack ships manifest sources and no generated artifacts", () => {
+      // --ignore-scripts: the contract under test is the files whitelist,
+      // not the prepack pipeline (which builds the MCP servers and refuses
+      // to pack while local propagation files hold populated memory).
+      const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
         cwd: repoRoot,
         encoding: "utf8",
         shell: process.platform === "win32",
+        maxBuffer: 64 * 1024 * 1024,
       })
       assert.strictEqual(result.status, 0, result.error?.message || result.stderr)
 
       const packOutput = JSON.parse(result.stdout)
-      const packagedPaths = new Set(packOutput[0]?.files?.map((file) => file.path) ?? [])
+      const packagedPaths = packOutput[0]?.files?.map((file) => file.path) ?? []
+      const packagedSet = new Set(packagedPaths)
 
       for (const requiredPath of [
-        "scripts/catalog.js",
-        "scripts/consult.js",
-        ".gemini/GEMINI.md",
+        ".codex/config.toml",
+        ".trae/rules/egc-context.md",
+        "scripts/hooks/scrubber-cli.js",
+        "scripts/lib/scrubber/engine.js",
+        "skills/security/content-scrubber/SKILL.md",
+        "manifests/install-modules.json",
         ".gemini-plugin/plugin.json",
-        ".codex-plugin/plugin.json",
         "schemas/install-state.schema.json",
-        "skills/backend/backend-patterns/SKILL.md",
       ]) {
         assert.ok(
-          packagedPaths.has(requiredPath),
+          packagedSet.has(requiredPath),
           `npm pack should include ${requiredPath}`
         )
       }
 
       for (const excludedPath of [
-        "contexts/dev.md",
-        "examples/GEMINI.md",
-        "plugins/README.md",
-        "scripts/ci/catalog.js",
-        "skills/general_part2/skill-comply/SKILL.md",
+        "AGENTS.md",
+        ".cursor/rules/egc-context.mdc",
+        "skills/general_part2/skill-comply/.gitignore",
       ]) {
         assert.ok(
-          !packagedPaths.has(excludedPath),
+          !packagedSet.has(excludedPath),
           `npm pack should not include ${excludedPath}`
         )
       }
+
+      const artifacts = packagedPaths.filter((packagedPath) => (
+        packagedPath.includes("__pycache__")
+        || packagedPath.endsWith(".pyc")
+        || packagedPath.endsWith(".pyo")
+        || packagedPath.endsWith(".DS_Store")
+        || packagedPath.endsWith("Thumbs.db")
+        || packagedPath === ".gitignore"
+        || packagedPath.endsWith("/.gitignore")
+      ))
+      assert.deepStrictEqual(artifacts, [], "generated artifacts must never ship in the package")
     }],
   ]
 

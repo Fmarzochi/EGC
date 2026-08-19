@@ -7,9 +7,10 @@
 // memory content may not.
 //
 // Modes:
-//   --staged        check staged blobs (pre-commit hook)
-//   --tree          check tracked markdown files on disk (CI guard)
-//   --clean <file>  rewrite files in place with the memory section zeroed
+//   --staged          check staged blobs (pre-commit hook)
+//   --tree            check tracked markdown files on disk (CI guard)
+//   --packaged-tree   check only tracked files the npm package ships (prepack guard)
+//   --clean <file>    rewrite files in place with the memory section zeroed
 
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -31,7 +32,11 @@ const GIT_BIN = [
 ].find(p => fs.existsSync(p)) || 'git';
 
 function git(args, options) {
-  return execFileSync(GIT_BIN, args, { encoding: 'utf8', ...options });
+  // LC_ALL=C: git ships localized fatal messages via gettext, and the
+  // packaged-tree guard matches 'not a git repository' textually to decide
+  // between skipping and failing closed -- force the C locale so that
+  // decision is deterministic on non-English systems.
+  return execFileSync(GIT_BIN, args, { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' }, ...options });
 }
 
 // Every propagation target of egc-memory (propagate.ts) is scanned, not just
@@ -96,10 +101,9 @@ function checkStaged() {
   return leaks;
 }
 
-function checkTree() {
-  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(isGuardedPath);
+function scanDiskFiles(files) {
   const leaks = [];
-  for (const file of tracked) {
+  for (const file of files) {
     let content;
     try {
       content = fs.readFileSync(file, 'utf8');
@@ -109,6 +113,60 @@ function checkTree() {
     if (findLeak(content)) leaks.push(file);
   }
   return leaks;
+}
+
+function checkTree() {
+  const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(isGuardedPath);
+  return scanDiskFiles(tracked);
+}
+
+// Local sessions legitimately keep propagation files like CLAUDE.md populated
+// on disk, and the git clean filter only protects COMMITS -- npm pack reads
+// the working tree directly. A populated propagation file inside the
+// package.json "files" set (e.g. .trae/rules/egc-context.md) would therefore
+// be published verbatim. This mode guards exactly that set, so prepack can
+// abort a leaking publish without blocking everyday local work.
+function loadPackagedPrefixes() {
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  return (Array.isArray(pkg.files) ? pkg.files : [])
+    .filter(entry => typeof entry === 'string' && !entry.startsWith('!'))
+    .map(entry => entry.replace(/\/+$/, ''));
+}
+
+function isPackagedPath(filePath, prefixes) {
+  return prefixes.some(prefix => filePath === prefix || filePath.startsWith(`${prefix}/`));
+}
+
+function checkPackagedTree() {
+  const prefixes = loadPackagedPrefixes();
+  let listing;
+  try {
+    // Tracked AND untracked-but-not-ignored files: npm pack reads the
+    // working tree, so a populated propagation file that was never
+    // committed still ships. Ignored files stay out; without an .npmignore
+    // npm applies the same .gitignore rules when packing.
+    listing = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
+  } catch (error) {
+    // Only two failures mean there is genuinely no git state to scan:
+    // packing a directory that is not a checkout (vendored copy, exported
+    // tarball), or a machine without the git binary. Those skip with a
+    // notice -- the real publish flow always runs from the repository.
+    // Anything else (corrupt metadata, permissions, lock contention) is a
+    // failure INSIDE a checkout: rethrow so prepack fails closed instead of
+    // silently shipping a populated memory file.
+    const detail = `${error.code || ''} ${error.message || ''} ${error.stderr || ''}`;
+    const notARepo = /not a git repository/i.test(detail);
+    const gitMissing = error.code === 'ENOENT';
+    if (!notARepo && !gitMissing) {
+      throw error;
+    }
+    console.log(`state-leak check: skipped (${notARepo ? 'not a git checkout' : 'git unavailable'}: ${String(error.message).split('\n')[0]})`);
+    return [];
+  }
+  const packagedFiles = listing.split('\0').filter(Boolean)
+    .filter(file => isPackagedPath(file, prefixes))
+    .filter(isGuardedPath);
+  return scanDiskFiles(packagedFiles);
 }
 
 function main() {
@@ -137,7 +195,14 @@ function main() {
     return;
   }
 
-  const leaks = mode === '--staged' ? checkStaged() : checkTree();
+  let leaks;
+  if (mode === '--staged') {
+    leaks = checkStaged();
+  } else if (mode === '--packaged-tree') {
+    leaks = checkPackagedTree();
+  } else {
+    leaks = checkTree();
+  }
   if (leaks.length === 0) {
     console.log('state-leak check: clean');
     return;

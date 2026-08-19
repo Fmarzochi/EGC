@@ -2,6 +2,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
+
 const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
   '.gemini-plugin': 'egc',
   '.codex': 'codex',
@@ -113,9 +115,15 @@ function listRelativeFiles(dirPath, prefix = '') {
     const entryPrefix = prefix ? path.join(prefix, entry.name) : entry.name;
     const absolutePath = path.join(dirPath, entry.name);
 
+    // Same artifact exclusions as install-executor.js's listFilesRecursive:
+    // adapter plans enumerate sources through this path too, and a local
+    // .DS_Store or __pycache__ must never become a managed install source.
     if (entry.isDirectory()) {
+      if (isIgnoredSourceDirectory(entry.name)) {
+        continue;
+      }
       files.push(...listRelativeFiles(absolutePath, entryPrefix));
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !isIgnoredSourceFile(entry.name)) {
       files.push(normalizeRelativePath(entryPrefix));
     }
   }
@@ -249,7 +257,10 @@ function createFlatFileOperations({ // NOSONAR: directory walk building install 
     const namespace = entry.name;
     const entryPath = path.join(sourceRoot, entry.name);
 
-    if (entry.isDirectory()) {
+    // Same artifact exclusions as the nested listRelativeFiles walk: a
+    // top-level __pycache__ namespace or a stray .DS_Store directly under
+    // the source root must never become a managed install source either.
+    if (entry.isDirectory() && !isIgnoredSourceDirectory(entry.name)) {
       const relativeFiles = listRelativeFiles(entryPath);
       for (const relativeFile of relativeFiles) {
         const defaultFileName = `${namespace}-${normalizeRelativePath(relativeFile).replaceAll('/', '-')}`;
@@ -267,7 +278,7 @@ function createFlatFileOperations({ // NOSONAR: directory walk building install 
           strategy: 'flatten-copy',
         }));
       }
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !isIgnoredSourceFile(entry.name)) {
       const sourceRelativeFile = path.join(normalizedSourcePath, entry.name);
       const destinationFileName = typeof destinationNameTransform === 'function'
         ? destinationNameTransform(entry.name, sourceRelativeFile)

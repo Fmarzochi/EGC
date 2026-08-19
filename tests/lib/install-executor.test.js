@@ -15,6 +15,7 @@ const {
   createLegacyInstallPlan,
   createManifestInstallPlan,
   listAvailableLanguages,
+  listFilesRecursive,
 } = require('../../scripts/lib/install-executor');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -512,6 +513,50 @@ function runTests() {
       const state = JSON.parse(fs.readFileSync(path.join(homeDir, '.gemini', 'egc', 'install-state.json'), 'utf8'));
       assert.strictEqual(state.request.profile, 'minimal');
       assert.deepStrictEqual(state.resolution.selectedModules, ['fixture-core']);
+    } finally {
+      cleanup(sourceRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('source enumeration and manifest plans skip generated artifacts and unpackable files', () => {
+    const sourceRoot = createTempDir('install-executor-source-');
+    const homeDir = createTempDir('install-executor-home-');
+
+    try {
+      writeManifestSourceFixture(sourceRoot);
+      writeFile(sourceRoot, path.join('skills', 'demo', '.gitignore'), '__pycache__\n');
+      writeFile(sourceRoot, path.join('skills', 'demo', '.DS_Store'), 'junk');
+      writeFile(sourceRoot, path.join('skills', 'demo', 'stray.pyc'), 'junk');
+      writeFile(sourceRoot, path.join('skills', 'demo', 'tests', '__pycache__', 'mod.cpython-313.pyc'), 'junk');
+      writeFile(sourceRoot, path.join('skills', 'demo', 'tests', 'test_demo.py'), 'def test(): pass\n');
+
+      assert.deepStrictEqual(
+        listFilesRecursive(path.join(sourceRoot, 'skills', 'demo')),
+        ['SKILL.md', path.join('tests', 'test_demo.py')]
+      );
+
+      const plan = createManifestInstallPlan({
+        sourceRoot,
+        homeDir,
+        target: 'egc',
+        profileId: 'minimal',
+      });
+      const copySources = plan.operations
+        .filter(operation => operation.kind === 'copy-file')
+        .map(operation => String(operation.sourceRelativePath).replaceAll('\\', '/'));
+
+      assert.ok(
+        copySources.includes('skills/demo/SKILL.md'),
+        'the real skill file must still be planned'
+      );
+      const offenders = copySources.filter(source => (
+        source.includes('__pycache__')
+        || source.endsWith('.pyc')
+        || source.endsWith('/.gitignore')
+        || source.endsWith('/.DS_Store')
+      ));
+      assert.deepStrictEqual(offenders, [], 'generated artifacts must never become managed sources');
     } finally {
       cleanup(sourceRoot);
       cleanup(homeDir);

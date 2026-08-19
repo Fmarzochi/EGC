@@ -51,7 +51,11 @@ function main() {
       assert.ok(fs.existsSync(distEntry), ".opencode/dist/index.js should exist after build")
     }],
     ["npm pack includes the compiled OpenCode dist payload", () => {
-      const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+      // --ignore-scripts: the assertion is about the files whitelist picking
+      // up an existing compiled dist, not about running the prepack pipeline
+      // (which refuses to pack while local propagation files hold populated
+      // memory).
+      const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
         cwd: repoRoot,
         encoding: "utf8",
         shell: process.platform === "win32",

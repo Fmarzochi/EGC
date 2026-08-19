@@ -12,6 +12,7 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
+const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('./warp-agents-merge');
@@ -89,11 +90,6 @@ function validateLegacyTarget(target) {
   }
 }
 
-const IGNORED_DIRECTORY_NAMES = new Set([
-  'node_modules',
-  '.git',
-]);
-
 function listFilesRecursive(dirPath) {
   if (!fs.existsSync(dirPath)) {
     return [];
@@ -105,14 +101,14 @@ function listFilesRecursive(dirPath) {
   for (const entry of entries) {
     const absolutePath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      if (IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+      if (isIgnoredSourceDirectory(entry.name)) {
         continue;
       }
       const childFiles = listFilesRecursive(absolutePath);
       for (const childFile of childFiles) {
         files.push(path.join(entry.name, childFile));
       }
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !isIgnoredSourceFile(entry.name)) {
       files.push(entry.name);
     }
   }
@@ -816,5 +812,6 @@ module.exports = {
   createLegacyInstallPlan,
   getSourceRoot,
   listAvailableLanguages,
+  listFilesRecursive,
   parseInstallArgs,
 };

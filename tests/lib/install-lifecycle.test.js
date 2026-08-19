@@ -728,7 +728,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('repair reports invalid states, missing sources, unsupported operations, and no-op refreshes', () => {
+  if (test('repair reports invalid states, prunes orphaned sources, rejects unsupported operations, and no-op refreshes', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const invalidProjectRoot = createTempDir('install-lifecycle-invalid-');
     const missingSourceProjectRoot = createTempDir('install-lifecycle-missing-source-');
@@ -752,7 +752,7 @@ function runTests() {
       const missingDestination = path.join(missingSourceProjectRoot, '.cursor', 'rules', 'missing.md');
       fs.mkdirSync(path.dirname(missingDestination), { recursive: true });
       fs.writeFileSync(missingDestination, 'managed\n');
-      writeCursorState(missingSourceProjectRoot, {
+      const missingSourceState = writeCursorState(missingSourceProjectRoot, {
         operations: [
           managedOperation('copy-file', missingDestination, {
             sourceRelativePath: 'missing/source.md',
@@ -766,8 +766,19 @@ function runTests() {
         projectRoot: missingSourceProjectRoot,
         targets: ['cursor'],
       });
-      assert.strictEqual(result.results[0].status, 'error');
-      assert.ok(result.results[0].error.includes('Missing source file(s)'));
+      // A recorded/legacy plan prunes the orphaned entry instead of failing
+      // forever: the rewritten install-state stops referencing the missing
+      // source and the installed file stays on disk, unmanaged.
+      assert.strictEqual(result.results[0].status, 'repaired');
+      assert.deepStrictEqual(result.results[0].prunedPaths, ['missing/source.md']);
+      assert.strictEqual(result.results[0].error, null);
+      assert.strictEqual(result.summary.prunedCount, 1);
+      assert.ok(fs.existsSync(missingDestination));
+      const rewrittenState = JSON.parse(fs.readFileSync(missingSourceState.installStatePath, 'utf8'));
+      assert.strictEqual(
+        rewrittenState.operations.filter(operation => operation.sourceRelativePath === 'missing/source.md').length,
+        0
+      );
 
       const unsupportedDestination = path.join(unsupportedProjectRoot, '.cursor', 'custom.txt');
       writeCursorState(unsupportedProjectRoot, {
@@ -821,6 +832,124 @@ function runTests() {
       assert.strictEqual(result.results[0].status, 'ok');
       assert.strictEqual(result.results[0].stateRefreshed, true);
       assert.deepStrictEqual(result.results[0].plannedRepairs, []);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair dry-run plans prunes for orphaned recorded sources without writing', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const destination = path.join(projectRoot, '.cursor', 'rules', 'orphan.md');
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, 'managed\n');
+      const written = writeCursorState(projectRoot, {
+        operations: [
+          managedOperation('copy-file', destination, {
+            sourceRelativePath: 'orphaned/source.md',
+            strategy: 'copy-file',
+          }),
+        ],
+      });
+      const stateBefore = fs.readFileSync(written.installStatePath, 'utf8');
+
+      const result = repairInstalledStates({
+        repoRoot: REPO_ROOT,
+        homeDir,
+        projectRoot,
+        targets: ['cursor'],
+        dryRun: true,
+      });
+
+      assert.strictEqual(result.results[0].status, 'planned');
+      assert.deepStrictEqual(result.results[0].plannedPrunes, ['orphaned/source.md']);
+      assert.deepStrictEqual(result.results[0].prunedPaths, []);
+      assert.strictEqual(result.summary.plannedPruneCount, 1);
+      assert.strictEqual(fs.readFileSync(written.installStatePath, 'utf8'), stateBefore);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair prunes the orphan, keeps healthy entries, and doctor converges to OK', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const healthyDestination = path.join(projectRoot, '.cursor', 'rules', 'healthy.json');
+      fs.mkdirSync(path.dirname(healthyDestination), { recursive: true });
+      fs.copyFileSync(path.join(REPO_ROOT, 'package.json'), healthyDestination);
+      const orphanDestination = path.join(projectRoot, '.cursor', 'rules', 'orphan.md');
+      fs.writeFileSync(orphanDestination, 'managed\n');
+
+      writeCursorState(projectRoot, {
+        operations: [
+          managedOperation('copy-file', healthyDestination, {
+            sourceRelativePath: 'package.json',
+            strategy: 'copy-file',
+          }),
+          managedOperation('copy-file', orphanDestination, {
+            sourceRelativePath: 'orphaned/source.md',
+            strategy: 'copy-file',
+          }),
+        ],
+      });
+
+      const before = buildDoctorReport({
+        repoRoot: REPO_ROOT,
+        homeDir,
+        projectRoot,
+        targets: ['cursor'],
+      });
+      assert.ok(before.results[0].issues.some(issue => issue.code === 'missing-source-files'));
+
+      const repair = repairInstalledStates({
+        repoRoot: REPO_ROOT,
+        homeDir,
+        projectRoot,
+        targets: ['cursor'],
+      });
+      assert.strictEqual(repair.results[0].status, 'repaired');
+      assert.deepStrictEqual(repair.results[0].prunedPaths, ['orphaned/source.md']);
+
+      const after = buildDoctorReport({
+        repoRoot: REPO_ROOT,
+        homeDir,
+        projectRoot,
+        targets: ['cursor'],
+      });
+      assert.ok(!after.results[0].issues.some(issue => issue.code === 'missing-source-files'));
+      assert.strictEqual(after.results[0].status, 'ok');
+      assert.ok(fs.existsSync(orphanDestination), 'the pruned entry must leave the installed file on disk');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('discovery enumerates each adapter once, including home+project pairs', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const records = discoverInstalledStates({ homeDir, projectRoot });
+      const ids = records.map(record => record.adapter.id);
+
+      assert.strictEqual(new Set(ids).size, ids.length, `duplicated adapter ids: ${ids.join(', ')}`);
+      for (const pairedId of ['kiro', 'junie', 'amp', 'windsurf', 'openhands']) {
+        assert.ok(ids.includes(`${pairedId}-home`), `missing ${pairedId}-home`);
+        assert.ok(ids.includes(`${pairedId}-project`), `missing ${pairedId}-project`);
+      }
+
+      // An explicit target covers its whole home+project pair too, not just
+      // the first adapter that answers to the id.
+      const explicitIds = discoverInstalledStates({ homeDir, projectRoot, targets: ['kiro'] })
+        .map(record => record.adapter.id);
+      assert.deepStrictEqual(explicitIds, ['kiro-home', 'kiro-project']);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

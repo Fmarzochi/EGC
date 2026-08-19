@@ -42,7 +42,17 @@ function readPackageVersion(repoRoot) {
 
 function normalizeTargets(targets) {
   if (!Array.isArray(targets) || targets.length === 0) {
-    return listInstallTargetAdapters().map(adapter => adapter.target);
+    // Five targets ship home+project adapter pairs under one target id
+    // (kiro, junie, amp, windsurf, openhands); mapping adapters straight to
+    // target ids repeated those ids and made doctor/repair examine the same
+    // home install-state twice per run.
+    const defaultTargets = [];
+    for (const adapter of listInstallTargetAdapters()) {
+      if (!defaultTargets.includes(adapter.target)) {
+        defaultTargets.push(adapter.target);
+      }
+    }
+    return defaultTargets;
   }
 
   const normalizedTargets = [];
@@ -79,6 +89,15 @@ function resolveOperationSourcePath(repoRoot, operation) {
   }
 
   return operation.sourcePath || null;
+}
+
+// Identity for matching a health inspection back to the operation entry in a
+// rewritten state preview: the two hold distinct object copies of the same
+// recorded operation, so matching is by content, not reference.
+function operationIdentityKey(operation) {
+  const source = String(operation?.sourceRelativePath || operation?.sourcePath || '').replaceAll('\\', '/');
+  const destination = String(operation?.destinationPath || '').replaceAll('\\', '/');
+  return `${operation?.kind}|${source}|${destination}`;
 }
 
 function areFilesEqual(leftPath, rightPath) {
@@ -805,17 +824,39 @@ function buildDiscoveryRecord(adapter, context) {
   }
 }
 
+// Discovery enumerates ADAPTERS, not target ids: five targets ship
+// home+project adapter pairs under one target id, and resolving those ids
+// through getInstallTargetAdapter() always lands on the first (home)
+// adapter -- which both duplicated the home record and left project
+// installs of those targets invisible to doctor, repair, and uninstall.
+function resolveDiscoveryAdapters(targets) {
+  if (!Array.isArray(targets) || targets.length === 0) {
+    return listInstallTargetAdapters();
+  }
+
+  const adapters = [];
+  for (const target of normalizeTargets(targets)) {
+    // normalizeTargets() already rejected unknown and retired ids with their
+    // dedicated errors, so every canonical target here answers to at least
+    // one adapter. Take every adapter that answers, not just the first: an
+    // explicit --target kiro must cover kiro-home AND kiro-project, the
+    // same pair the no-argument default examines.
+    for (const adapter of listInstallTargetAdapters().filter(candidate => candidate.supports(target))) {
+      if (!adapters.includes(adapter)) {
+        adapters.push(adapter);
+      }
+    }
+  }
+  return adapters;
+}
+
 function discoverInstalledStates(options = {}) {
   const context = {
     homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
   };
-  const targets = normalizeTargets(options.targets);
 
-  return targets.map(target => {
-    const adapter = getInstallTargetAdapter(target);
-    return buildDiscoveryRecord(adapter, context);
-  });
+  return resolveDiscoveryAdapters(options.targets).map(adapter => buildDiscoveryRecord(adapter, context));
 }
 
 function buildIssue(severity, code, message, extra = {}) {
@@ -908,7 +949,7 @@ function checkManagedOperationHealth(state, context) {
     issues.push(buildIssue(
       'error',
       'missing-source-files',
-      `${operationHealth.missingSource.length} source file(s) referenced by install-state are missing`,
+      `${operationHealth.missingSource.length} source file(s) referenced by install-state are missing (run 'egc repair' to prune orphaned entries)`,
       {
         paths: operationHealth.missingSource.map(entry => entry.sourcePath).filter(Boolean),
       }
@@ -1173,20 +1214,38 @@ function repairInstalledStates(options = {}) {
       const desiredPlan = createRepairPlanFromRecord(record, context);
       const operationHealth = summarizeManagedOperationHealth(context.repoRoot, desiredPlan.operations);
 
-      // A source file that no longer exists in the reference repo (renamed,
-      // dropped from the package, or synced from a different checkout) used
-      // to abort this target outright: everything else it managed stayed
-      // broken because of one orphan. The orphans are reported and the rest
-      // is repaired, which is what someone running `egc repair` on a damaged
-      // install actually needs.
+      // What a missing source means depends on where this plan came from.
+      // A RECORDED plan (legacy states, or states carrying non-copy-file
+      // operations) replays entries written by an older install, so a source
+      // this reference repo no longer has is an orphan it can never satisfy
+      // again (renamed away, dropped from the package, or synced from a
+      // different checkout): the entry is pruned from the rewritten
+      // install-state so doctor converges to OK, and the installed file is
+      // left on disk untouched -- deleting it could break live wiring, like
+      // a settings.json hook still pointing at that script. A MANIFEST plan
+      // is recomputed from the current manifests, so a missing source there
+      // means the manifest itself demands a file the package does not ship:
+      // pruning would hide a packaging bug, and those stay unrepairable.
       // The recorded relative path, not the resolved absolute one: it is
       // what the install-state holds, so both the JSON output and the
       // printed lines stay identical across machines.
-      const unrepairable = operationHealth.missingSource.map(entry => ({
+      const planIsRecorded = desiredPlan.mode === 'legacy' || desiredPlan.mode === 'recorded';
+      const orphanedInspections = planIsRecorded ? operationHealth.missingSource : [];
+      const prunedPaths = orphanedInspections.map(entry => (
+        entry.operation?.sourceRelativePath || entry.sourcePath
+      ));
+      const unrepairable = (planIsRecorded ? [] : operationHealth.missingSource).map(entry => ({
         path: entry.operation?.sourceRelativePath || entry.sourcePath,
         cause: 'missing-source',
         reason: 'source file is no longer in the reference repo',
       }));
+
+      if (orphanedInspections.length > 0) {
+        const orphanKeys = new Set(orphanedInspections.map(entry => operationIdentityKey(entry.operation)));
+        desiredPlan.statePreview.operations = desiredPlan.statePreview.operations.filter(
+          operation => !orphanKeys.has(operationIdentityKey(operation))
+        );
+      }
 
       const repairOperations = [
         ...operationHealth.missing.map(entry => ({ ...entry.operation })),
@@ -1195,12 +1254,14 @@ function repairInstalledStates(options = {}) {
       const plannedRepairs = repairOperations.map(operation => operation.destinationPath);
 
       if (options.dryRun) {
-        // An orphan is worth reporting whether or not anything is being
-        // written: a dry run that says 'planned' or 'ok' while a file can
-        // never be repaired is exactly the silence this change removes.
-        let dryRunStatus = plannedRepairs.length > 0 ? 'planned' : 'ok';
+        // Orphans and unfixable entries are worth reporting whether or not
+        // anything is being written: a dry run that says 'planned' or 'ok'
+        // while an entry can never be repaired is exactly the silence this
+        // reporting removes. Planned prunes count as planned work.
+        const hasPlannedWork = plannedRepairs.length > 0 || prunedPaths.length > 0;
+        let dryRunStatus = hasPlannedWork ? 'planned' : 'ok';
         if (unrepairable.length > 0) {
-          dryRunStatus = plannedRepairs.length > 0 ? 'partial' : 'error';
+          dryRunStatus = hasPlannedWork ? 'partial' : 'error';
         }
         return {
           adapter: record.adapter,
@@ -1208,6 +1269,8 @@ function repairInstalledStates(options = {}) {
           installStatePath: record.installStatePath,
           repairedPaths: [],
           plannedRepairs,
+          prunedPaths: [],
+          plannedPrunes: prunedPaths,
           unrepairable,
           stateRefreshed: plannedRepairs.length === 0,
           error: describeUnrepairable(unrepairable),
@@ -1245,11 +1308,14 @@ function repairInstalledStates(options = {}) {
         adapter: record.adapter,
         // 'partial' when real work was done but something is still
         // unfixable: neither a clean success nor a total failure, and the
-        // exit code keeps saying attention is needed.
-        status: resolveRepairStatus(repairedPaths.length, unrepairable.length),
+        // exit code keeps saying attention is needed. Pruning a stale entry
+        // is real work: the rewritten install-state is what heals doctor.
+        status: resolveRepairStatus(repairedPaths.length + prunedPaths.length, unrepairable.length),
         installStatePath: record.installStatePath,
         repairedPaths,
         plannedRepairs: [],
+        prunedPaths,
+        plannedPrunes: [],
         unrepairable,
         stateRefreshed: true,
         error: describeUnrepairable(unrepairable),
@@ -1279,12 +1345,16 @@ function repairInstalledStates(options = {}) {
       + (result.status === 'planned' || (dryRun && result.status === 'partial') ? 1 : 0),
     errorCount: accumulator.errorCount + (result.status === 'error' || result.status === 'partial' ? 1 : 0),
     unrepairableCount: accumulator.unrepairableCount + (result.unrepairable?.length || 0),
+    prunedCount: accumulator.prunedCount + (result.prunedPaths?.length || 0),
+    plannedPruneCount: accumulator.plannedPruneCount + (result.plannedPrunes?.length || 0),
   }), {
     checkedCount: 0,
     repairedCount: 0,
     plannedRepairCount: 0,
     errorCount: 0,
     unrepairableCount: 0,
+    prunedCount: 0,
+    plannedPruneCount: 0,
   });
 
   return {

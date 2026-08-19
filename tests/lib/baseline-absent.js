@@ -55,8 +55,6 @@ const BASELINE_ABSENT_ASSERTIONS = Object.freeze([
   // checkouts.
   '.opencode/dist',
   'compiled OpenCode dist payload',
-  'reduced runtime surface',
-  'package.json files align to the module graph',
 ]);
 
 // Test-name fragments that should be skipped because the surface they assert
@@ -67,7 +65,6 @@ const BASELINE_ABSENT_ASSERTIONS = Object.freeze([
 const BASELINE_ABSENT_TEST_NAMES = Object.freeze([
   'canonical marketplace plugin identifier',
   'compiled OpenCode dist payload',
-  'reduced runtime surface',
   'reports when no install-state files are present',
   'emits JSON for discovered install-state records',
   // README install/marketplace prose blocks that belong to the downstream
