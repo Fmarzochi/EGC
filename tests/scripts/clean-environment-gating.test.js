@@ -49,10 +49,18 @@ function runWithSyntheticHome(scriptPath, args, homeDir, cwd) {
       PATH: RESTRICTED_PATH,
     },
   });
+  // A timed-out subprocess has a null status and (usually) an empty stderr;
+  // folding that into a bare exit 1 would make the assertion failure mute,
+  // the exact failure shape that hid today's CI flake. Name the hang.
+  const timedOut = result.error?.code === 'ETIMEDOUT'
+    || (result.status === null && result.signal !== null);
+  const stderr = timedOut
+    ? `subprocess timed out after ${FULL_INSTALL_TIMEOUT_MS}ms (${result.signal || result.error?.code})\n${result.stderr || ''}`
+    : (result.stderr || '');
   return {
     code: result.status ?? 1,
     stdout: result.stdout || '',
-    stderr: result.stderr || '',
+    stderr,
   };
 }
 
