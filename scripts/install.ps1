@@ -194,21 +194,12 @@ if (-not $DryRun) {
         }
     }
 
-    # Verify native modules (better-sqlite3 requires Build Tools on Windows)
-    $nativeOk = $true
-    try {
-        node -e "require('better-sqlite3')" 2>$null
-    } catch {
-        $nativeOk = $false
-    }
-    if (-not $nativeOk) {
-        Write-Host ""
-        Write-Host "  WARNING: better-sqlite3 native module unavailable." -ForegroundColor Yellow
-        Write-Host "    SQLite CLI features (egc status, egc sessions) will be disabled." -ForegroundColor Yellow
-        Write-Host "    Core memory features via egc-memory MCP server are unaffected." -ForegroundColor Yellow
-        Write-Host "    To enable full SQLite, install Visual Studio Build Tools:" -ForegroundColor Yellow
-        Write-Host "    https://visualstudio.microsoft.com/visual-cpp-build-tools/" -ForegroundColor Yellow
-        Write-Host ""
+    # The native sqlite3 binary is a prebuilt download; when it cannot load
+    # here, EGC runs on its portable engine (full-text search degrades to
+    # substring matching), so this is a note rather than a warning.
+    node (Join-Path (Join-Path $RootDir "scripts") "check-native-sqlite.js") 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  note: native sqlite3 unavailable on this machine; EGC uses its portable engine (search falls back to substring matching)."
     }
 
     # egc-guardian

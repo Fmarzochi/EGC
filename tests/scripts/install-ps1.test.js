@@ -141,6 +141,16 @@ function runTests() {
     assert.ok(bashSource.includes('skipping the prompt-library step'), 'install.sh must announce the skip too');
   })) passed++; else failed++;
 
+  if (test('probes the native sqlite3 binary EGC actually depends on, as a note rather than a warning', () => {
+    assert.ok(!scriptSource.includes('better-sqlite3 native module unavailable'), 'install.ps1 must not warn about better-sqlite3, which EGC no longer uses');
+    assert.ok(!/require\('better-sqlite3'\)/.test(scriptSource), 'install.ps1 must not probe better-sqlite3');
+    assert.ok(scriptSource.includes('check-native-sqlite.js'), 'install.ps1 must probe sqlite3 through scripts/check-native-sqlite.js');
+    assert.ok(bashSource.includes('check-native-sqlite.js'), 'install.sh must run the same probe');
+    for (const source of [scriptSource, bashSource]) {
+      assert.ok(source.includes('native sqlite3 unavailable on this machine; EGC uses its portable engine'), 'both installers print the same portable-engine note');
+    }
+  })) passed++; else failed++;
+
   if (test('installs dependencies via a lockfile-aware helper matching install.sh exactly (no npm install fallback)', () => {
     assert.ok(scriptSource.includes('function Install-Deps'), 'should define the lockfile-aware helper');
     assert.ok(scriptSource.includes('Test-Path "package-lock.json"'));
