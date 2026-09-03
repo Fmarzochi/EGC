@@ -13,7 +13,7 @@ That's it. The installer detects which AI tools you have installed and configure
 
 > **Note:** If you use a Node.js version manager (mise, nvm, asdf, fnm), install EGC under your **default** Node version -- the one active outside any project directory. Installing it under multiple Node versions causes version conflicts. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for details.
 >
-> **Permissions:** if `npm install -g` fails with `EACCES` (typical when Node comes from your distro's package manager and the global npm prefix is root-owned, as on a stock Ubuntu with `apt` Node), run `sudo npm install -g @egchq/egc` and then `egc install` **without** sudo, so ownership stays clean. A user-writable prefix (mise, nvm, asdf, fnm) avoids sudo entirely. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#eacces-permission-denied-on-macos).
+> **Permissions:** if `npm install -g` fails with `EACCES` (typical when Node comes from your distro's package manager or a system-wide installer and the global npm prefix is root-owned, as on a stock Ubuntu with `apt` Node or a Homebrew Node on macOS), the clean fix is a user-writable prefix: a Node version manager (mise, nvm, asdf, fnm) or a custom npm global prefix under your home directory, as described in [TROUBLESHOOTING.md](TROUBLESHOOTING.md). If you would rather keep the system Node, `sudo npm install -g @egchq/egc` works as a one-off; run `egc install` and everything after it **without** sudo, so the files EGC writes under your home stay owned by you.
 
 The bare install prepares the runtime only. To have your AI tools restore project memory on their very first prompt, continue with [stage 2 below](#2-project-setup): `cd` into a project and run `egc init` once.
 
