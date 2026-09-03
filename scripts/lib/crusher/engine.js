@@ -131,11 +131,21 @@ function isAssertionDetail(line) {
 // whatever command package.json resolved to, with no shape of its own.
 // Recognized by position instead -- this banner can only ever be the first
 // two lines of the whole output.
-const NPM_SCRIPT_BANNER_RE = /^>\s+[^\s@]+@\S+\s/;
+const NPM_SCRIPT_BANNER_SPEC_RE = /^>\s+(\S+)\s/;
 const NPM_BANNER_CONTINUATION_RE = /^>\s+\S/;
 
+// "> <name>@<version> <script>": the spec token carries an "@" that is
+// neither its first nor its last character, which also admits scoped
+// packages ("@scope/pkg@1.0.0") whose name starts with "@".
+function isNpmScriptBannerLine(line) {
+  const m = NPM_SCRIPT_BANNER_SPEC_RE.exec(line);
+  if (!m) return false;
+  const at = m[1].lastIndexOf('@');
+  return at > 0 && at < m[1].length - 1;
+}
+
 function npmScriptBannerLineCount(lines) {
-  if (NPM_SCRIPT_BANNER_RE.test(lines[0] || '') && NPM_BANNER_CONTINUATION_RE.test(lines[1] || '')) {
+  if (isNpmScriptBannerLine(lines[0] || '') && NPM_BANNER_CONTINUATION_RE.test(lines[1] || '')) {
     return 2;
   }
   return 0;

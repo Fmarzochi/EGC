@@ -1,7 +1,18 @@
 #!/bin/bash
 # The documented entrypoint is `sh scripts/install.sh`; on systems where sh is
 # dash the script re-executes itself under bash, which everything below needs.
-case "${BASH_VERSION:-}" in '') exec bash "$0" "$@" ;; *) ;; esac
+# Without bash on the machine it stops here with a plain message instead of
+# failing later on the first bash-only construct.
+case "${BASH_VERSION:-}" in
+  '')
+    if command -v bash >/dev/null 2>&1; then
+      exec bash "$0" "$@"
+    fi
+    echo "Error: this installer requires bash; install bash or run it as 'bash scripts/install.sh'." >&2
+    exit 1
+    ;;
+  *) ;;
+esac
 set -e
 
 # Both of these resolve symlinks (pwd -P). Mixing logical and physical
