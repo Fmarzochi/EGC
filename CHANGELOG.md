@@ -9,6 +9,16 @@ All notable changes to EGC are documented here.
 - **EGC Scrubber**: an automatic, deterministic hygiene pass that strips AI provenance marks from content you own. The guaranteed layer removes invisible Unicode carriers and long dashes and strips AI co-authorship from commit messages; an opt-in metadata pass cleans structured text (Markdown/HTML/SVG), PNG/JPEG images, and PDF Document Info dictionaries, fail-safe and honest about partial coverage; and a best-effort rewrite workflow ships as the `content-scrubber` skill and CLI. The Write/Edit hook is registered in the shared hooks runtime so content is cleaned before it reaches disk. Pure Node, additive with no install-engine changes, and fail-open (#1301, #1302, #1304, #1305, #1306, #1307).
 - **Scrubber Layer B rewrite**: the statistical-mark layer becomes a measured tool. A rewrite engine builds the reword instruction (paraphrase, humanize, code, back-translate, structural), scores lexical divergence, keeps the strongest candidate, escalates toward a target, and re-applies the deterministic layer; a `rewrite` subcommand on the scrubber CLI carries it in relay mode (no network, no bundled model). Best-effort and honest: it reduces statistical token-sampling marks and reports the divergence, never certifying a vendor detector will fail (#1312).
 
+### Fixed
+
+- **Windsurf GateGuard and Guardian coexist on `pre_run_command`** (#1340): the flat hooks.json merge treated any EGC-owned entry as the stale version of the script being registered, so registering the Guardian displaced the GateGuard, `egc doctor` reported `hooks.json` as drifted on every healthy install, and `egc repair` only swapped the two entries back and forth. A stale entry now has to carry the same script basename before it is migrated in place.
+- **`egc doctor` prints the state-db consolidation hint as an absolute path** (#1341, reported by @Akisolu): the repo-relative `node scripts/maintenance/merge-fragmented-state-dbs.js` only worked from the package root, which a global npm install on Windows never is.
+- **The InsAIts monitor test uses the shared subprocess budget** (#1339): a cold Python start on a busy Windows runner overran the file's private 30s budget and surfaced as a mute `spawnSync ETIMEDOUT`.
+
+### Security
+
+- **Open advisories cleared in every lockfile** (#1338): browserslist 4.28.8, fast-uri 3.1.7 and qs 6.16.0 across the root, dashboard, egc-guardian and egc-memory lockfiles, plus pip 26.2 in the test requirements. The dashboard lockfile also drops the stale express tree it no longer declares.
+
 ## [1.1.20] - 2026-08-16
 
 ### Fixed
