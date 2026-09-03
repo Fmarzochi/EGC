@@ -115,8 +115,14 @@ function cleanMarkdown(text) {
 // unbalanced quote makes the tag unrecognizable (a safe miss) instead of
 // giving the engine an ambiguity to backtrack through.
 const TAG_BODY = `(?:"[^"]*"|'[^']*'|[^>"'])*`;
-const META_TAG = new RegExp(`<meta\\b${TAG_BODY}>\\s*`, 'gi');
-const SCRIPT_BLOCK = new RegExp(`<script\\b(${TAG_BODY})>([\\s\\S]*?)<\\/script>\\s*`, 'gi'); // NOSONAR: repo/local file content, never network-controlled input
+const META_TAG = new RegExp(String.raw`<meta\b${TAG_BODY}>\s*`, 'gi');
+// Only the opening tag is matched by pattern; the block body runs to the next
+// closing tag found by plain search, so no repetition ever competes with the
+// terminator.
+const SCRIPT_OPEN = new RegExp(String.raw`<script\b(${TAG_BODY})>`, 'gi');
+// Searched in the original text (not a lowercased copy, whose length can
+// differ for some Unicode characters), so every index stays aligned.
+const SCRIPT_CLOSE = /<\/script>/gi;
 const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
 // Explicit provenance FIELDS, not brand mentions: a JSON-LD block is only
 // stripped when it declares AI provenance, so a legitimate Article that merely
@@ -168,6 +174,34 @@ function isProvenanceMetaValue(value) {
   return v === 'generator' || /^ai[:-]/.test(v);
 }
 
+// Removes every <script type="application/ld+json"> block that declares AI
+// provenance, together with the whitespace that followed it; every other
+// script block is kept byte for byte.
+function stripProvenanceScripts(html, removed) {
+  let result = '';
+  let last = 0;
+  SCRIPT_OPEN.lastIndex = 0;
+  let m = SCRIPT_OPEN.exec(html);
+  while (m !== null) {
+    const bodyStart = m.index + m[0].length;
+    SCRIPT_CLOSE.lastIndex = bodyStart;
+    const closeMatch = SCRIPT_CLOSE.exec(html);
+    if (closeMatch === null) break;
+    const close = closeMatch.index;
+    let end = close + closeMatch[0].length;
+    const parsed = parseAttrs(m[1]);
+    if (parsed.type?.toLowerCase() === 'application/ld+json' && LD_PROVENANCE.test(html.slice(bodyStart, close))) {
+      removed.push('json-ld');
+      while (end < html.length && /\s/.test(html[end])) end += 1;
+      result += html.slice(last, m.index);
+      last = end;
+    }
+    SCRIPT_OPEN.lastIndex = end;
+    m = SCRIPT_OPEN.exec(html);
+  }
+  return result + html.slice(last);
+}
+
 function cleanHtml(text) {
   const removed = [];
   let out = text;
@@ -182,14 +216,7 @@ function cleanHtml(text) {
     return tag;
   });
 
-  out = out.replace(SCRIPT_BLOCK, (whole, attrs, body) => {
-    const parsed = parseAttrs(attrs);
-    if (parsed.type?.toLowerCase() === 'application/ld+json' && LD_PROVENANCE.test(body)) {
-      removed.push('json-ld');
-      return '';
-    }
-    return whole;
-  });
+  out = stripProvenanceScripts(out, removed);
 
   out = out.replace(DATA_AI_ATTR, () => { removed.push('attr:data-ai'); return ''; });
 
