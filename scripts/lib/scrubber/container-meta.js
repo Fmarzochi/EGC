@@ -123,7 +123,9 @@ const SCRIPT_OPEN = new RegExp(String.raw`<script\b(${TAG_BODY})>`, 'gi');
 // Searched in the original text (not a lowercased copy, whose length can
 // differ for some Unicode characters), so every index stays aligned.
 const SCRIPT_CLOSE = /<\/script>/gi;
-const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
+// The unquoted value branch excludes quote characters so it never overlaps
+// the quoted branches (an unbalanced quote is a safe miss, not a backtrack).
+const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>"'][^\s>]*)/gi;
 // Explicit provenance FIELDS, not brand mentions: a JSON-LD block is only
 // stripped when it declares AI provenance, so a legitimate Article that merely
 // names a model or company survives.
