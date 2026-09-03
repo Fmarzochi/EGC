@@ -49,14 +49,31 @@ function isEgcEntry(entry, command) {
   return isPlainObject(entry) && entry.command === command;
 }
 
+// The script a hook command runs: the last quoted argument of the
+// `"node" "script"` shape buildHookCommand emits, or the last bare token of
+// a hand-written command. Split on both separators so an entry written on
+// Windows still resolves when the same file is inspected under POSIX.
+function commandScriptBasename(command) {
+  const quoted = /"([^"]+)"\s*$/.exec(command);
+  const scriptPath = quoted ? quoted[1] : command.trim().split(/\s+/).pop();
+  return scriptPath.split(/[\\/]/).pop();
+}
+
 // isOwnBasename: (command: string) => boolean, lets each host decide which
 // basenames identify ITS OWN managed adapter scripts (Windsurf has two:
 // GateGuard + Guardian; Cursor has one: Guardian only).
+//
+// A stale entry is the SAME script registered at a different install path,
+// so the basename has to match as well. Treating any host-owned entry as
+// stale let the two Windsurf scripts that share pre_run_command migrate
+// each other away: whichever applied last replaced the other, every repair
+// swapped them back, and doctor reported hooks.json as drifted forever.
 function isStaleEgcEntry(entry, command, isOwnBasename) {
   if (!isPlainObject(entry) || typeof entry.command !== 'string' || entry.command === command) {
     return false;
   }
-  return isOwnBasename(entry.command);
+  const basename = commandScriptBasename(command);
+  return Boolean(basename) && isOwnBasename(entry.command) && entry.command.includes(basename);
 }
 
 // buildExtraTopLevel: (base: object) => object, merged into the result

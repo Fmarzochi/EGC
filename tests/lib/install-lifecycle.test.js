@@ -34,9 +34,11 @@ const {
   mergeSkillIndexEntry,
 } = require('../../scripts/lib/warp-agents-merge');
 const {
+  ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   PRE_RUN_COMMAND_EVENT,
   applyWindsurfGateGuardHookToFile,
+  resolveAdapterScriptDestination,
   resolveGuardianAdapterScriptDestination,
   resolveHooksJsonPath,
 } = require('../../scripts/lib/windsurf-gateguard-hooks');
@@ -181,6 +183,36 @@ function writeWindsurfGuardianHookState(homeDir, options = {}) {
   if (options.existingHooks) {
     fs.writeFileSync(hooksJsonPath, JSON.stringify(options.existingHooks, null, 2));
   }
+  // Mirrors the real adapter plan order: GateGuard registers on
+  // pre_run_command before the Guardian does.
+  const gateGuardOperations = [];
+  const gateGuardAdapterScriptPath = resolveAdapterScriptDestination(targetRoot);
+  if (options.withGateGuard) {
+    fs.copyFileSync(path.join(REPO_ROOT, ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH), gateGuardAdapterScriptPath);
+    applyWindsurfGateGuardHookToFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, gateGuardAdapterScriptPath);
+    gateGuardOperations.push(
+      {
+        kind: 'copy-file',
+        moduleId: 'claude-gateguard-fact-force-hook',
+        sourceRelativePath: ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+        destinationPath: gateGuardAdapterScriptPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      },
+      {
+        kind: 'merge-claude-settings-hooks',
+        moduleId: 'claude-gateguard-fact-force-hook',
+        sourceRelativePath: ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+        destinationPath: hooksJsonPath,
+        strategy: 'merge-claude-settings-hooks',
+        ownership: 'managed',
+        scaffoldOnly: false,
+        hookEvent: PRE_RUN_COMMAND_EVENT,
+        hookScriptPath: gateGuardAdapterScriptPath,
+      }
+    );
+  }
   applyWindsurfGateGuardHookToFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, guardianAdapterScriptPath);
 
   writeState(installStatePath, {
@@ -200,6 +232,7 @@ function writeWindsurfGuardianHookState(homeDir, options = {}) {
       skippedModules: [],
     },
     operations: [
+      ...gateGuardOperations,
       {
         kind: 'copy-file',
         moduleId: 'egc-bash-guardian-hook',
@@ -228,7 +261,7 @@ function writeWindsurfGuardianHookState(homeDir, options = {}) {
     },
   });
 
-  return { targetRoot, installStatePath, hooksJsonPath, guardianAdapterScriptPath };
+  return { targetRoot, installStatePath, hooksJsonPath, guardianAdapterScriptPath, gateGuardAdapterScriptPath };
 }
 
 function managedOperation(kind, destinationPath, overrides = {}) {
@@ -2202,6 +2235,65 @@ function runTests() {
       assert.strictEqual(hooksConfig.hooks.pre_run_command[0].command, 'echo third-party');
       assert.ok(hooksConfig.hooks.pre_run_command[1].command.includes(installed.guardianAdapterScriptPath));
       assert.strictEqual(hooksConfig.hooks.SessionStart, undefined, 'must never inject a Claude-schema SessionStart group into a Windsurf hooks.json');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  // GateGuard and Guardian both register on pre_run_command. Until
+  // flat-hooks-json-merge.js matched the script basename before migrating a
+  // stale entry, the Guardian merge replaced the GateGuard entry, so a fresh
+  // install reported hooks.json as drifted and repair only swapped the two
+  // entries back and forth without ever converging.
+  if (test('doctor accepts GateGuard and Guardian side by side on Windsurf pre_run_command and repair leaves them alone', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeWindsurfGuardianHookState(homeDir, { withGateGuard: true });
+
+      const commandsOf = () => JSON.parse(fs.readFileSync(installed.hooksJsonPath, 'utf8'))
+        .hooks[PRE_RUN_COMMAND_EVENT]
+        .map(entry => path.basename(entry.command.replaceAll('"', '')));
+      assert.deepStrictEqual(commandsOf(), ['windsurf-gateguard-adapter.js', 'windsurf-guardian-adapter.js']);
+
+      const report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(report.results[0].status, 'ok', JSON.stringify(report.results[0].issues));
+
+      const result = repairInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.notStrictEqual(result.results[0].status, 'repaired', 'a healthy dual registration must not be rewritten');
+      assert.deepStrictEqual(commandsOf(), ['windsurf-gateguard-adapter.js', 'windsurf-guardian-adapter.js']);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair restores a GateGuard pre_run_command entry that the Guardian merge had displaced', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const installed = writeWindsurfGuardianHookState(homeDir, { withGateGuard: true });
+      const guardianOnly = JSON.parse(fs.readFileSync(installed.hooksJsonPath, 'utf8'));
+      guardianOnly.hooks[PRE_RUN_COMMAND_EVENT] = guardianOnly.hooks[PRE_RUN_COMMAND_EVENT]
+        .filter(entry => !entry.command.includes('windsurf-gateguard-adapter.js'));
+      fs.writeFileSync(installed.hooksJsonPath, JSON.stringify(guardianOnly, null, 2));
+
+      let report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(report.results[0].status, 'warning', 'the displaced GateGuard entry must surface as drift');
+
+      const result = repairInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(result.results[0].status, 'repaired');
+
+      const commands = JSON.parse(fs.readFileSync(installed.hooksJsonPath, 'utf8'))
+        .hooks[PRE_RUN_COMMAND_EVENT]
+        .map(entry => path.basename(entry.command.replaceAll('"', '')));
+      assert.deepStrictEqual(commands.sort(), ['windsurf-gateguard-adapter.js', 'windsurf-guardian-adapter.js'], 'repair must add GateGuard back without dropping the Guardian');
+
+      report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
+      assert.strictEqual(report.results[0].status, 'ok', 'doctor must converge after one repair');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

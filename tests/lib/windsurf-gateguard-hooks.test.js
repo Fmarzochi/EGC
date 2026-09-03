@@ -18,6 +18,7 @@ const {
   PRE_WRITE_CODE_EVENT,
   addWindsurfHookEntry,
   applyWindsurfGateGuardHookToFile,
+  inspectWindsurfGateGuardHookFile,
   resolveAdapterScriptDestination,
   resolveHooksJsonPath,
 } = require('../../scripts/lib/windsurf-gateguard-hooks');
@@ -134,6 +135,79 @@ function runTests() {
       assert.deepStrictEqual(onDisk.hooks.pre_run_command, [{ command: 'bash /user/custom.sh', show_output: true }]);
       assert.strictEqual(onDisk.hooks[PRE_WRITE_CODE_EVENT].length, 1);
       assert.ok(onDisk.hooks[PRE_WRITE_CODE_EVENT][0].command.includes('adapter.js'));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  // Windsurf registers two adapter scripts on pre_run_command (GateGuard
+  // first, Guardian after). The stale-entry migration used to treat ANY
+  // host-owned entry as the one being re-registered, so the Guardian merge
+  // replaced the GateGuard entry, every repair swapped them back, and doctor
+  // reported hooks.json as drifted on a healthy install.
+  if (test('addWindsurfHookEntry keeps the GateGuard entry when the Guardian joins the same event', () => {
+    const gateguard = 'node /abs/scripts/hooks/windsurf-gateguard-adapter.js';
+    const guardian = 'node /abs/scripts/hooks/windsurf-guardian-adapter.js';
+    const first = addWindsurfHookEntry({}, PRE_RUN_COMMAND_EVENT, gateguard);
+    const second = addWindsurfHookEntry(first.config, PRE_RUN_COMMAND_EVENT, guardian);
+    assert.strictEqual(second.changed, true);
+    assert.deepStrictEqual(
+      second.config.hooks[PRE_RUN_COMMAND_EVENT].map(entry => entry.command),
+      [gateguard, guardian],
+      'both adapters must coexist on pre_run_command, in registration order'
+    );
+    const third = addWindsurfHookEntry(second.config, PRE_RUN_COMMAND_EVENT, gateguard);
+    assert.strictEqual(third.changed, false, 're-registering GateGuard with the Guardian present must be a no-op, not a swap');
+  })) passed++; else failed++;
+
+  if (test('addWindsurfHookEntry migrates only the stale GateGuard entry when the Guardian shares the event', () => {
+    const guardian = 'node /abs/scripts/hooks/windsurf-guardian-adapter.js';
+    const base = {
+      hooks: {
+        [PRE_RUN_COMMAND_EVENT]: [
+          { command: 'node /old/path/windsurf-gateguard-adapter.js' },
+          { command: guardian },
+        ],
+      },
+    };
+    const { config, changed } = addWindsurfHookEntry(base, PRE_RUN_COMMAND_EVENT, 'node /new/path/windsurf-gateguard-adapter.js');
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(
+      config.hooks[PRE_RUN_COMMAND_EVENT].map(entry => entry.command),
+      ['node /new/path/windsurf-gateguard-adapter.js', guardian]
+    );
+  })) passed++; else failed++;
+
+  if (test('addWindsurfHookEntry recognises a stale entry written with Windows paths and quoting', () => {
+    const base = {
+      hooks: {
+        [PRE_RUN_COMMAND_EVENT]: [
+          { command: '"C:\\node\\node.exe" "C:\\old\\windsurf-gateguard-adapter.js"' },
+          { command: '"C:\\node\\node.exe" "C:\\old\\windsurf-guardian-adapter.js"' },
+        ],
+      },
+    };
+    const next = '"C:\\node\\node.exe" "C:\\new\\windsurf-guardian-adapter.js"';
+    const { config, changed } = addWindsurfHookEntry(base, PRE_RUN_COMMAND_EVENT, next);
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(
+      config.hooks[PRE_RUN_COMMAND_EVENT].map(entry => entry.command),
+      ['"C:\\node\\node.exe" "C:\\old\\windsurf-gateguard-adapter.js"', next]
+    );
+  })) passed++; else failed++;
+
+  if (test('applyWindsurfGateGuardHookToFile leaves both adapters inspectable as ok on pre_run_command', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'windsurf-hooks-coexist-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    try {
+      applyWindsurfGateGuardHookToFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, '/abs/windsurf-gateguard-adapter.js');
+      applyWindsurfGateGuardHookToFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, '/abs/windsurf-guardian-adapter.js');
+      assert.strictEqual(inspectWindsurfGateGuardHookFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, '/abs/windsurf-gateguard-adapter.js'), 'ok');
+      assert.strictEqual(inspectWindsurfGateGuardHookFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, '/abs/windsurf-guardian-adapter.js'), 'ok');
+      const onDisk = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.strictEqual(onDisk.hooks[PRE_RUN_COMMAND_EVENT].length, 2);
+      const again = applyWindsurfGateGuardHookToFile(hooksJsonPath, PRE_RUN_COMMAND_EVENT, '/abs/windsurf-gateguard-adapter.js');
+      assert.strictEqual(again.changed, false, 'a repair pass over a healthy file must not rewrite it');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
