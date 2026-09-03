@@ -141,7 +141,7 @@ function aggregateWindow(timestampedEntries, startMs, endMs) {
  */
 function aggregateBreakdown(entries, options = {}) {
   const parsedNow = options.now instanceof Date
-    ? new Date(options.now.getTime())
+    ? new Date(options.now)
     : new Date(options.now ?? Date.now());
   const now = Number.isFinite(parsedNow.getTime()) ? parsedNow : new Date();
   const context = resolveMetricContext(options.context || {});
@@ -152,7 +152,7 @@ function aggregateBreakdown(entries, options = {}) {
     .map(entry => ({ entry, timestamp: timestampMs(entry) }))
     .filter(item => item.timestamp !== null);
   const nowMs = now.getTime();
-  const localDayStart = new Date(now.getTime());
+  const localDayStart = new Date(now);
   localDayStart.setHours(0, 0, 0, 0);
 
   const sinceInstall = aggregate(normalizedEntries);

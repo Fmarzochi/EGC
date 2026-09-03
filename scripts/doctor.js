@@ -143,6 +143,44 @@ function checkStateDb(homeDir) {
   return { missing, dbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
 }
 
+function printStateStoreReport(stateDb) {
+  console.log('\nState store:');
+  if (stateDb.missing) {
+    console.log('  WARNING: state.db not found at ' + stateDb.dbPath);
+    console.log('  Run: egc init  to create the state store');
+  }
+  if (stateDb.cliStoreMisplaced) {
+    console.log('  WARNING: the CLI event store landed in a harness directory:');
+    console.log(`    ${stateDb.dbPath}`);
+    console.log('  It belongs in the shared ~/.egc store; in a harness directory its');
+    console.log('  history is invisible to the rest of EGC. Consolidate it with:');
+    console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
+  }
+  if (stateDb.fragments.length > 0) {
+    const plural = stateDb.fragments.length === 1 ? 'copy' : 'copies';
+    console.log(`  WARNING: found ${stateDb.fragments.length} stray state.db ${plural} left behind by older versions:`);
+    for (const fragment of stateDb.fragments) {
+      console.log(`    ${fragment.path} (${fragment.sizeBytes} bytes, last write ${fragment.modifiedAt})`);
+    }
+    console.log('  Nothing is lost, but new sessions no longer write there. Consolidate');
+    console.log('  them into the main store (dry-run by default) with:');
+    console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
+  }
+  if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
+    // "Nothing to do." only when no warning printed above it in this
+    // block; a stray-fragment or misplacement warning followed by a
+    // blanket reassurance would contradict itself.
+    const blockIsClean = !stateDb.cliStoreMisplaced && stateDb.fragments.length === 0;
+    console.log('  OK: the MCP memory store appears after your first session saves state.');
+    console.log(`    It will live at ${stateDb.memoryDbPath}.${blockIsClean ? ' Nothing to do.' : ''}`);
+  }
+  if (!stateDb.hasHarnessDb && stateDb.hasMemoryDb) {
+    console.log('  Pending: the CLI event store has not been created yet at');
+    console.log(`    ${stateDb.dbPath}`);
+    console.log('  It is created by `egc init`.');
+  }
+}
+
 function main() {
   try {
     const options = parseArgs(process.argv);
@@ -168,43 +206,7 @@ function main() {
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman(report);
-      if (stateDb) {
-        console.log('\nState store:');
-        if (stateDb.missing) {
-          console.log('  WARNING: state.db not found at ' + stateDb.dbPath);
-          console.log('  Run: egc init  to create the state store');
-        }
-        if (stateDb.cliStoreMisplaced) {
-          console.log('  WARNING: the CLI event store landed in a harness directory:');
-          console.log(`    ${stateDb.dbPath}`);
-          console.log('  It belongs in the shared ~/.egc store; in a harness directory its');
-          console.log('  history is invisible to the rest of EGC. Consolidate it with:');
-          console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
-        }
-        if (stateDb.fragments.length > 0) {
-          const plural = stateDb.fragments.length === 1 ? 'copy' : 'copies';
-          console.log(`  WARNING: found ${stateDb.fragments.length} stray state.db ${plural} left behind by older versions:`);
-          for (const fragment of stateDb.fragments) {
-            console.log(`    ${fragment.path} (${fragment.sizeBytes} bytes, last write ${fragment.modifiedAt})`);
-          }
-          console.log('  Nothing is lost, but new sessions no longer write there. Consolidate');
-          console.log('  them into the main store (dry-run by default) with:');
-          console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
-        }
-        if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
-          // "Nothing to do." only when no warning printed above it in this
-          // block; a stray-fragment or misplacement warning followed by a
-          // blanket reassurance would contradict itself.
-          const blockIsClean = !stateDb.cliStoreMisplaced && stateDb.fragments.length === 0;
-          console.log('  OK: the MCP memory store appears after your first session saves state.');
-          console.log(`    It will live at ${stateDb.memoryDbPath}.${blockIsClean ? ' Nothing to do.' : ''}`);
-        }
-        if (!stateDb.hasHarnessDb && stateDb.hasMemoryDb) {
-          console.log('  Pending: the CLI event store has not been created yet at');
-          console.log(`    ${stateDb.dbPath}`);
-          console.log('  It is created by `egc init`.');
-        }
-      }
+      if (stateDb) printStateStoreReport(stateDb);
     }
 
     process.exitCode = hasFailures ? 1 : 0;

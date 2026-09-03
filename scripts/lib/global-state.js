@@ -69,7 +69,7 @@ function readGlobalAppendix(projectContent, stateCrypto) {
     } else {
       content = raw.toString('utf8');
     }
-    if (!content || !content.trim()) return null;
+    if (!content?.trim()) return null;
     return buildGlobalAppendix(parseStateDoc(content), projectContent);
   } catch (_) { // NOSONAR: global memory is additive; any failure must not break the session
     return null;

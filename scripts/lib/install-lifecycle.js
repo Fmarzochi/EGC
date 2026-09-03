@@ -1182,6 +1182,142 @@ function describeUnrepairable(unrepairable) {
   return parts.join('; ');
 }
 
+// Repairs one discovered install-state record; the summary over all records
+// is built by repairInstalledStates.
+function repairRecord(record, context, options) {
+  if (record.error) {
+    return {
+      adapter: record.adapter,
+      status: 'error',
+      installStatePath: record.installStatePath,
+      repairedPaths: [],
+      plannedRepairs: [],
+      error: record.error,
+    };
+  }
+
+  try {
+    const desiredPlan = createRepairPlanFromRecord(record, context);
+    const operationHealth = summarizeManagedOperationHealth(context.repoRoot, desiredPlan.operations);
+
+    // What a missing source means depends on where this plan came from.
+    // A RECORDED plan (legacy states, or states carrying non-copy-file
+    // operations) replays entries written by an older install, so a source
+    // this reference repo no longer has is an orphan it can never satisfy
+    // again (renamed away, dropped from the package, or synced from a
+    // different checkout): the entry is pruned from the rewritten
+    // install-state so doctor converges to OK, and the installed file is
+    // left on disk untouched -- deleting it could break live wiring, like
+    // a settings.json hook still pointing at that script. A MANIFEST plan
+    // is recomputed from the current manifests, so a missing source there
+    // means the manifest itself demands a file the package does not ship:
+    // pruning would hide a packaging bug, and those stay unrepairable.
+    // The recorded relative path, not the resolved absolute one: it is
+    // what the install-state holds, so both the JSON output and the
+    // printed lines stay identical across machines.
+    const planIsRecorded = desiredPlan.mode === 'legacy' || desiredPlan.mode === 'recorded';
+    const orphanedInspections = planIsRecorded ? operationHealth.missingSource : [];
+    const prunedPaths = orphanedInspections.map(entry => (
+      entry.operation?.sourceRelativePath || entry.sourcePath
+    ));
+    const unrepairable = (planIsRecorded ? [] : operationHealth.missingSource).map(entry => ({
+      path: entry.operation?.sourceRelativePath || entry.sourcePath,
+      cause: 'missing-source',
+      reason: 'source file is no longer in the reference repo',
+    }));
+
+    if (orphanedInspections.length > 0) {
+      const orphanKeys = new Set(orphanedInspections.map(entry => operationIdentityKey(entry.operation)));
+      desiredPlan.statePreview.operations = desiredPlan.statePreview.operations.filter(
+        operation => !orphanKeys.has(operationIdentityKey(operation))
+      );
+    }
+
+    const repairOperations = [
+      ...operationHealth.missing.map(entry => ({ ...entry.operation })),
+      ...operationHealth.drifted.map(entry => ({ ...entry.operation })),
+    ];
+    const plannedRepairs = repairOperations.map(operation => operation.destinationPath);
+
+    if (options.dryRun) {
+      // Orphans and unfixable entries are worth reporting whether or not
+      // anything is being written: a dry run that says 'planned' or 'ok'
+      // while an entry can never be repaired is exactly the silence this
+      // reporting removes. Planned prunes count as planned work.
+      const hasPlannedWork = plannedRepairs.length > 0 || prunedPaths.length > 0;
+      let dryRunStatus = hasPlannedWork ? 'planned' : 'ok';
+      if (unrepairable.length > 0) {
+        dryRunStatus = hasPlannedWork ? 'partial' : 'error';
+      }
+      return {
+        adapter: record.adapter,
+        status: dryRunStatus,
+        installStatePath: record.installStatePath,
+        repairedPaths: [],
+        plannedRepairs,
+        prunedPaths: [],
+        plannedPrunes: prunedPaths,
+        unrepairable,
+        stateRefreshed: plannedRepairs.length === 0,
+        error: describeUnrepairable(unrepairable),
+      };
+    }
+
+    // Each operation is executed on its own: one that cannot be carried
+    // out (its source was renamed away, or the destination is not
+    // writable) is recorded and the loop moves on, instead of throwing
+    // out to the catch below and leaving every other managed file broken.
+    const repairedPaths = [];
+    for (const operation of repairOperations) {
+      try {
+        executeRepairOperation(context.repoRoot, operation);
+        repairedPaths.push(operation.destinationPath);
+      } catch (operationError) {
+        // The destination, not the source: an execution failure is about
+        // the file being written (permissions, a directory in the way),
+        // and naming the source would point at a perfectly healthy file.
+        unrepairable.push({
+          path: operation.destinationPath,
+          cause: 'failed',
+          reason: operationError.message,
+        });
+      }
+    }
+
+    writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
+
+    syncInstallStateToStore(desiredPlan.statePreview, {
+      onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
+    });
+
+    return {
+      adapter: record.adapter,
+      // 'partial' when real work was done but something is still
+      // unfixable: neither a clean success nor a total failure, and the
+      // exit code keeps saying attention is needed. Pruning a stale entry
+      // is real work: the rewritten install-state is what heals doctor.
+      status: resolveRepairStatus(repairedPaths.length + prunedPaths.length, unrepairable.length),
+      installStatePath: record.installStatePath,
+      repairedPaths,
+      plannedRepairs: [],
+      prunedPaths,
+      plannedPrunes: [],
+      unrepairable,
+      stateRefreshed: true,
+      error: describeUnrepairable(unrepairable),
+    };
+  } catch (error) {
+    return {
+      adapter: record.adapter,
+      status: 'error',
+      installStatePath: record.installStatePath,
+      repairedPaths: [],
+      plannedRepairs: [],
+      error: error.message,
+    };
+  }
+}
+
 function repairInstalledStates(options = {}) {
   const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
   const manifests = loadInstallManifests({ repoRoot });
@@ -1198,139 +1334,7 @@ function repairInstalledStates(options = {}) {
     targets: options.targets,
   }).filter(record => record.exists);
 
-  const results = records.map(record => {
-    if (record.error) {
-      return {
-        adapter: record.adapter,
-        status: 'error',
-        installStatePath: record.installStatePath,
-        repairedPaths: [],
-        plannedRepairs: [],
-        error: record.error,
-      };
-    }
-
-    try {
-      const desiredPlan = createRepairPlanFromRecord(record, context);
-      const operationHealth = summarizeManagedOperationHealth(context.repoRoot, desiredPlan.operations);
-
-      // What a missing source means depends on where this plan came from.
-      // A RECORDED plan (legacy states, or states carrying non-copy-file
-      // operations) replays entries written by an older install, so a source
-      // this reference repo no longer has is an orphan it can never satisfy
-      // again (renamed away, dropped from the package, or synced from a
-      // different checkout): the entry is pruned from the rewritten
-      // install-state so doctor converges to OK, and the installed file is
-      // left on disk untouched -- deleting it could break live wiring, like
-      // a settings.json hook still pointing at that script. A MANIFEST plan
-      // is recomputed from the current manifests, so a missing source there
-      // means the manifest itself demands a file the package does not ship:
-      // pruning would hide a packaging bug, and those stay unrepairable.
-      // The recorded relative path, not the resolved absolute one: it is
-      // what the install-state holds, so both the JSON output and the
-      // printed lines stay identical across machines.
-      const planIsRecorded = desiredPlan.mode === 'legacy' || desiredPlan.mode === 'recorded';
-      const orphanedInspections = planIsRecorded ? operationHealth.missingSource : [];
-      const prunedPaths = orphanedInspections.map(entry => (
-        entry.operation?.sourceRelativePath || entry.sourcePath
-      ));
-      const unrepairable = (planIsRecorded ? [] : operationHealth.missingSource).map(entry => ({
-        path: entry.operation?.sourceRelativePath || entry.sourcePath,
-        cause: 'missing-source',
-        reason: 'source file is no longer in the reference repo',
-      }));
-
-      if (orphanedInspections.length > 0) {
-        const orphanKeys = new Set(orphanedInspections.map(entry => operationIdentityKey(entry.operation)));
-        desiredPlan.statePreview.operations = desiredPlan.statePreview.operations.filter(
-          operation => !orphanKeys.has(operationIdentityKey(operation))
-        );
-      }
-
-      const repairOperations = [
-        ...operationHealth.missing.map(entry => ({ ...entry.operation })),
-        ...operationHealth.drifted.map(entry => ({ ...entry.operation })),
-      ];
-      const plannedRepairs = repairOperations.map(operation => operation.destinationPath);
-
-      if (options.dryRun) {
-        // Orphans and unfixable entries are worth reporting whether or not
-        // anything is being written: a dry run that says 'planned' or 'ok'
-        // while an entry can never be repaired is exactly the silence this
-        // reporting removes. Planned prunes count as planned work.
-        const hasPlannedWork = plannedRepairs.length > 0 || prunedPaths.length > 0;
-        let dryRunStatus = hasPlannedWork ? 'planned' : 'ok';
-        if (unrepairable.length > 0) {
-          dryRunStatus = hasPlannedWork ? 'partial' : 'error';
-        }
-        return {
-          adapter: record.adapter,
-          status: dryRunStatus,
-          installStatePath: record.installStatePath,
-          repairedPaths: [],
-          plannedRepairs,
-          prunedPaths: [],
-          plannedPrunes: prunedPaths,
-          unrepairable,
-          stateRefreshed: plannedRepairs.length === 0,
-          error: describeUnrepairable(unrepairable),
-        };
-      }
-
-      // Each operation is executed on its own: one that cannot be carried
-      // out (its source was renamed away, or the destination is not
-      // writable) is recorded and the loop moves on, instead of throwing
-      // out to the catch below and leaving every other managed file broken.
-      const repairedPaths = [];
-      for (const operation of repairOperations) {
-        try {
-          executeRepairOperation(context.repoRoot, operation);
-          repairedPaths.push(operation.destinationPath);
-        } catch (operationError) {
-          // The destination, not the source: an execution failure is about
-          // the file being written (permissions, a directory in the way),
-          // and naming the source would point at a perfectly healthy file.
-          unrepairable.push({
-            path: operation.destinationPath,
-            cause: 'failed',
-            reason: operationError.message,
-          });
-        }
-      }
-
-      writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
-
-      syncInstallStateToStore(desiredPlan.statePreview, {
-        onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
-      });
-
-      return {
-        adapter: record.adapter,
-        // 'partial' when real work was done but something is still
-        // unfixable: neither a clean success nor a total failure, and the
-        // exit code keeps saying attention is needed. Pruning a stale entry
-        // is real work: the rewritten install-state is what heals doctor.
-        status: resolveRepairStatus(repairedPaths.length + prunedPaths.length, unrepairable.length),
-        installStatePath: record.installStatePath,
-        repairedPaths,
-        plannedRepairs: [],
-        prunedPaths,
-        plannedPrunes: [],
-        unrepairable,
-        stateRefreshed: true,
-        error: describeUnrepairable(unrepairable),
-      };
-    } catch (error) {
-      return {
-        adapter: record.adapter,
-        status: 'error',
-        installStatePath: record.installStatePath,
-        repairedPaths: [],
-        plannedRepairs: [],
-        error: error.message,
-      };
-    }
-  });
+  const results = records.map(record => repairRecord(record, context, options));
 
   // 'partial' means work plus something unfixable, so it counts in both the
   // work column and the error column. Which work column depends on the mode:

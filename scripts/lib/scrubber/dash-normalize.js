@@ -17,8 +17,8 @@
 const FIGURE_EN_DASHES = String.fromCodePoint(0x2012, 0x2013);
 const ALL_LONG_DASHES = String.fromCodePoint(0x2012, 0x2013, 0x2014, 0x2015);
 
-const NUMERIC_RANGE = new RegExp(`(\\d)\\s?[${FIGURE_EN_DASHES}]\\s?(\\d)`, 'g');
-const CLAUSE_DASH = new RegExp(`\\s*[${ALL_LONG_DASHES}]\\s*`, 'g');
+const NUMERIC_RANGE = new RegExp(String.raw`(\d)\s?[${FIGURE_EN_DASHES}]\s?(\d)`, 'g');
+const CLAUSE_DASH = new RegExp(String.raw`\s*[${ALL_LONG_DASHES}]\s*`, 'g');
 
 function normalizeDashes(text) {
   let count = 0;

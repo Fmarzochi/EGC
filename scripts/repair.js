@@ -31,7 +31,7 @@ function parseArgs(argv) {
 // on disk (unmanaged from now on).
 function printPrunedEntries(entry, dryRun) {
   const prunedEntries = dryRun ? entry.plannedPrunes : entry.prunedPaths;
-  if (!(prunedEntries?.length > 0)) {
+  if ((prunedEntries?.length ?? 0) === 0) {
     return;
   }
   console.log(`  ${dryRun ? 'Planned prunes' : 'Pruned stale entries'}: ${prunedEntries.length}`);
@@ -44,7 +44,7 @@ function printPrunedEntries(entry, dryRun) {
 // actions: a renamed-away source means the install-state is stale, while an
 // execution failure usually means permissions.
 function printUnrepairableEntries(entry) {
-  if (!(entry.unrepairable?.length > 0)) {
+  if ((entry.unrepairable?.length ?? 0) === 0) {
     return;
   }
   console.log(`  Unrepairable: ${entry.unrepairable.length}`);
@@ -61,30 +61,40 @@ function printHuman(result) {
 
   console.log('Repair summary:\n');
   for (const entry of result.results) {
-    console.log(`- ${entry.adapter.id}`);
-    console.log(`  Status: ${entry.status.toUpperCase()}`);
-    console.log(`  Install-state: ${entry.installStatePath}`);
+    printRepairEntry(entry, result.dryRun);
+  }
+  console.log(`\n${formatRepairSummary(result)}`);
+}
 
-    // An unreadable install-state entry says nothing about repairs, so it
-    // still reports only the error. An entry with orphaned sources is a
-    // different situation: work was done, and the count must not be hidden.
-    if (entry.error && !(entry.unrepairable?.length > 0)) {
-      console.log(`  Error: ${entry.error}`);
-      continue;
-    }
+function printRepairEntry(entry, dryRun) {
+  console.log(`- ${entry.adapter.id}`);
+  console.log(`  Status: ${entry.status.toUpperCase()}`);
+  console.log(`  Install-state: ${entry.installStatePath}`);
 
-    const paths = result.dryRun ? entry.plannedRepairs : entry.repairedPaths;
-    console.log(`  ${result.dryRun ? 'Planned repairs' : 'Repaired paths'}: ${paths.length}`);
-    printPrunedEntries(entry, result.dryRun);
-    printUnrepairableEntries(entry);
+  // An unreadable install-state entry says nothing about repairs, so it
+  // still reports only the error. An entry with orphaned sources is a
+  // different situation: work was done, and the count must not be hidden.
+  if (entry.error && (entry.unrepairable?.length ?? 0) === 0) {
+    console.log(`  Error: ${entry.error}`);
+    return;
   }
 
+  const paths = dryRun ? entry.plannedRepairs : entry.repairedPaths;
+  console.log(`  ${dryRun ? 'Planned repairs' : 'Repaired paths'}: ${paths.length}`);
+  printPrunedEntries(entry, dryRun);
+  printUnrepairableEntries(entry);
+}
+
+function formatRepairSummary(result) {
   const prunedCount = result.dryRun ? result.summary.plannedPruneCount : result.summary.prunedCount;
-  const pruned = prunedCount ? `, ${result.dryRun ? 'planned-prunes' : 'pruned'}=${prunedCount}` : '';
+  const pruneLabel = result.dryRun ? 'planned-prunes' : 'pruned';
+  const pruned = prunedCount ? `, ${pruneLabel}=${prunedCount}` : '';
   const unrepairable = result.summary.unrepairableCount
     ? `, unrepairable=${result.summary.unrepairableCount}`
     : '';
-  console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'repaired'}=${result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount}, errors=${result.summary.errorCount}${pruned}${unrepairable}`);
+  const repairLabel = result.dryRun ? 'planned' : 'repaired';
+  const repairCount = result.dryRun ? result.summary.plannedRepairCount : result.summary.repairedCount;
+  return `Summary: checked=${result.summary.checkedCount}, ${repairLabel}=${repairCount}, errors=${result.summary.errorCount}${pruned}${unrepairable}`;
 }
 
 function executePluginRepairs(options) {

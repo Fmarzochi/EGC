@@ -195,7 +195,7 @@ async function runTests() {
     assert.ok(sources.bash.includes(DASHBOARD_LAUNCHER_REF), 'install.sh must launch the dashboard through the shared CLI wrapper');
     assert.ok(sources.powerShell.includes(DASHBOARD_LAUNCHER_REF), 'install.ps1 must launch the dashboard through the shared CLI wrapper');
     assert.ok(sources.dashboardWrapper.includes('shouldAutoLaunch'), 'the wrapper owns the launch decision');
-    assert.ok(sources.bash.includes('if [ "$_has_install_args" = false ]; then'));
+    assert.ok(sources.bash.includes('if [[ "$_has_install_args" = false ]]; then'));
     assert.ok(sources.powerShell.includes('if (-not $hasInstallArgs)'));
   })) passed++; else failed++;
 

@@ -15,7 +15,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const _egcRaw = process.env.EGC_PORT;
-const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : NaN;
+const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : Number.NaN;
 const DASHBOARD_PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;
 
 const DEFAULT_INTERVAL_MINUTES = 30;

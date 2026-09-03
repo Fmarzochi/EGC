@@ -263,6 +263,26 @@ function enforceTargetDetection(plan, options) {
   }
 }
 
+function emitDryRunPlan(options, plan) {
+  if (options.json) {
+    console.log(JSON.stringify({ dryRun: true, plan }, null, 2)); // NOSONAR jssecurity:S8689
+    return;
+  }
+  printHumanPlan(plan, true);
+}
+
+function emitInstallResult(options, result) {
+  if (options.json) {
+    console.log(JSON.stringify({ dryRun: false, result }, null, 2)); // NOSONAR jssecurity:S8689
+    return;
+  }
+  printHumanPlan(result, false);
+  const { launchDashboard, shouldAutoLaunch } = require('./lib/dashboard-launch');
+  if (shouldAutoLaunch()) {
+    launchDashboard({ log: msg => console.log(`  ${msg}`) });
+  }
+}
+
 function main() {
   try {
     const options = parseInstallArgs(process.argv);
@@ -296,11 +316,7 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      if (options.json) {
-        console.log(JSON.stringify({ dryRun: true, plan }, null, 2)); // NOSONAR jssecurity:S8689
-      } else {
-        printHumanPlan(plan, true);
-      }
+      emitDryRunPlan(options, plan);
       return;
     }
 
@@ -318,16 +334,7 @@ function main() {
     );
 
     regenerateTopologyCache();
-
-    if (options.json) {
-      console.log(JSON.stringify({ dryRun: false, result }, null, 2)); // NOSONAR jssecurity:S8689
-    } else {
-      printHumanPlan(result, false);
-      const { launchDashboard, shouldAutoLaunch } = require('./lib/dashboard-launch');
-      if (shouldAutoLaunch()) {
-        launchDashboard({ log: msg => console.log(`  ${msg}`) });
-      }
-    }
+    emitInstallResult(options, result);
   } catch (error) {
     process.stderr.write(`Error: ${error.message}\n${getHelpText()}`);
     process.exit(1);

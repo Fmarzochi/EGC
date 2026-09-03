@@ -24,8 +24,10 @@ function extractFrontmatter(content) {
 
   const frontmatter = {};
   const lines = block.raw.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
+  let i = 0;
+  while (i < lines.length) {
     const line = lines[i];
+    i += 1;
     // Indented lines belong to a block scalar consumed below.
     if (/^\s/.test(line)) continue;
     const colonIdx = line.indexOf(':');
@@ -37,13 +39,13 @@ function extractFrontmatter(content) {
     // bare ">-" indicator that a plain split-on-colon parser would store.
     if (/^[>|][+-]?$/.test(value)) {
       const block = [];
-      let j = i + 1;
+      let j = i;
       while (j < lines.length && (/^\s+\S/.test(lines[j]) || lines[j].trim() === '')) {
         block.push(lines[j].trim());
         j++;
       }
-      value = block.join(' ').replace(/\s+/g, ' ').trim();
-      i = j - 1;
+      value = block.join(' ').replaceAll(/\s+/g, ' ').trim();
+      i = j;
     } else {
       value = value.replace(/^["']|["']$/g, '');
     }

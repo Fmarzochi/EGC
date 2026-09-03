@@ -131,7 +131,7 @@ function isAssertionDetail(line) {
 // whatever command package.json resolved to, with no shape of its own.
 // Recognized by position instead -- this banner can only ever be the first
 // two lines of the whole output.
-const NPM_SCRIPT_BANNER_RE = /^>\s+\S+@\S+\s/;
+const NPM_SCRIPT_BANNER_RE = /^>\s+[^\s@]+@\S+\s/;
 const NPM_BANNER_CONTINUATION_RE = /^>\s+\S/;
 
 function npmScriptBannerLineCount(lines) {
@@ -160,7 +160,7 @@ function shouldKeepLine(line) {
 // Terminal color codes glue onto words (ESC[31merror) and break the \b
 // word boundary, silently dropping colored error lines from the kept set.
 // Built via the constructor because eslint forbids control chars in literals.
-const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
+const ANSI_RE = new RegExp(String.raw`${String.fromCodePoint(27)}\[[0-9;]*[A-Za-z]`, 'g');
 function stripAnsi(line) {
   return line.replace(ANSI_RE, '');
 }

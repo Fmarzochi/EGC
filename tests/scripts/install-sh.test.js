@@ -119,8 +119,8 @@ function runTests() {
     // The published package ships build/ but not src/, so the TypeScript build
     // must be guarded by a src/ presence check.
     assert.ok(
-      /if\s+\[\s+-d\s+src\s+\]/.test(script),
-      'npm run build must be guarded by an "if [ -d src ]" check'
+      /if\s+\[\[\s+-d\s+src\s+\]\]/.test(script),
+      'npm run build must be guarded by an "if [[ -d src ]]" check'
     );
 
     // The sub-package lockfiles must be published so `npm ci` finds them post-install.

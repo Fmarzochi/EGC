@@ -28,7 +28,7 @@ const POPULATED_SIGNATURES = [
 const GIT_BIN = [
   '/usr/bin/git',
   '/usr/local/bin/git',
-  'C:\\Program Files\\Git\\cmd\\git.exe',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
 ].find(p => fs.existsSync(p)) || 'git';
 
 function git(args, options) {
@@ -42,19 +42,19 @@ function git(args, options) {
 // Every propagation target of egc-memory (propagate.ts) is scanned, not just
 // markdown: several targets (.rules, .clinerules, .cursorrules, llms.txt)
 // have no .md extension and would otherwise slip past the guard.
-const NON_MARKDOWN_TARGETS = [
+const NON_MARKDOWN_TARGETS = new Set([
   '.rules',
   '.clinerules',
   '.cursorrules',
   '.roorules',
   'CONVENTIONS.md',
   'llms.txt',
-];
+]);
 
 function isGuardedPath(p) {
   if (p.endsWith('.md') || p.endsWith('.mdc') || p.endsWith('.markdown')) return true;
   const base = p.split('/').pop();
-  return NON_MARKDOWN_TARGETS.includes(base);
+  return NON_MARKDOWN_TARGETS.has(base);
 }
 
 function findLeak(content) {
@@ -126,11 +126,17 @@ function checkTree() {
 // package.json "files" set (e.g. .trae/rules/egc-context.md) would therefore
 // be published verbatim. This mode guards exactly that set, so prepack can
 // abort a leaking publish without blocking everyday local work.
+function stripTrailingSlashes(entry) {
+  let end = entry.length;
+  while (end > 0 && entry[end - 1] === '/') end -= 1;
+  return entry.slice(0, end);
+}
+
 function loadPackagedPrefixes() {
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
   return (Array.isArray(pkg.files) ? pkg.files : [])
     .filter(entry => typeof entry === 'string' && !entry.startsWith('!'))
-    .map(entry => entry.replace(/\/+$/, ''));
+    .map(stripTrailingSlashes);
 }
 
 function isPackagedPath(filePath, prefixes) {

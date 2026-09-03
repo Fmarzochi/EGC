@@ -10,22 +10,40 @@ const { loadOrCreateIntegrityKey, writeHmac } = require('./state-integrity');
 // Cross-process lock, same file-name convention as withStateMergeLock() in
 // mcp/servers/egc-memory/src/index.ts, so this hook's direct write and the
 // MCP server's own update_state can never race on the same state file.
+// Removes a lock left behind by a process that no longer exists. Returns true
+// when the stale lock was cleared, false when it is held by a live process or
+// could not be inspected.
+function clearStaleLock(lockFile) {
+  try {
+    const storedPid = Number(fs.readFileSync(lockFile, 'utf-8').trim());
+    if (!Number.isInteger(storedPid)) return false;
+    try {
+      process.kill(storedPid, 0);
+      return false;
+    } catch {
+      fs.unlinkSync(lockFile);
+      return true;
+    }
+  } catch {
+    return false; // lock file unreadable or gone between check and read: retry
+  }
+}
+
+function sleepSync(ms) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) { /* busy-wait: this hook runs synchronously, no event loop to yield to */ }
+}
+
 function acquireLockSync(lockFile, retries = 50) {
   while (retries > 0) {
     try {
       fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
       return true;
     } catch (e) {
-      if (e && e.code !== 'EEXIST') throw e;
-      try {
-        const storedPid = Number(fs.readFileSync(lockFile, 'utf-8').trim());
-        if (Number.isInteger(storedPid)) {
-          try { process.kill(storedPid, 0); } catch { fs.unlinkSync(lockFile); continue; }
-        }
-      } catch { /* lock file unreadable or gone between check and read: retry */ }
+      if (e?.code !== 'EEXIST') throw e;
+      if (clearStaleLock(lockFile)) continue;
       retries -= 1;
-      const until = Date.now() + 100;
-      while (Date.now() < until) { /* busy-wait: this hook runs synchronously, no event loop to yield to */ }
+      sleepSync(100);
     }
   }
   return false;

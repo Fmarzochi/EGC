@@ -4,6 +4,15 @@
 // to each other (direct or broadcast) through a durable pub/sub table, with
 // a per-session read cursor so every session consumes each event once.
 
+// Text form of a column read from a bus row: rows arrive as loosely typed
+// records, so a value is rendered explicitly instead of relying on the
+// default object stringification.
+export function rowText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
+  return value == null ? '' : JSON.stringify(value);
+}
+
 export interface BusDb {
   run(sql: string, ...params: unknown[]): Promise<unknown>;
   get(sql: string, ...params: unknown[]): Promise<Record<string, unknown> | undefined>;
@@ -147,15 +156,15 @@ export async function claimPath(
     );
     if (changed(await tryInsert())) return { ok: true };
     const winner = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', input.path);
-    return { ok: false, holder: winner ? String(winner.session_id) : undefined };
+    return { ok: false, holder: winner ? rowText(winner.session_id) : undefined };
   }
 
-  return { ok: false, holder: String(holder.id), holderTerritory: holder.territory ? String(holder.territory) : undefined };
+  return { ok: false, holder: rowText(holder.id), holderTerritory: holder.territory ? rowText(holder.territory) : undefined };
 }
 
 export async function releasePath(db: BusDb, input: { sessionId: string; path: string }): Promise<boolean> {
   const existing = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', input.path);
-  if (!existing || existing.session_id !== input.sessionId) return false;
+  if (existing?.session_id !== input.sessionId) return false;
   await db.run('DELETE FROM bus_locks WHERE path = ?', input.path);
   return true;
 }
@@ -235,7 +244,7 @@ export async function readEvents(
   );
   if (events.length === 0 || input.peek) return events;
 
-  const maxId = Number(events[events.length - 1].id);
+  const maxId = Number(events.at(-1)?.id);
   const claim = cursor
     ? await db.run(
       `UPDATE bus_event_cursors

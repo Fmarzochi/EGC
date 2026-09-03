@@ -73,7 +73,7 @@ function loadOrCreateKeySync(keyPath) {
       try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort */ }
       return key;
     } catch (e) {
-      if (e && e.code === 'EEXIST') return loadKey(resolvedPath);
+      if (e?.code === 'EEXIST') return loadKey(resolvedPath);
       throw e;
     }
   } finally {

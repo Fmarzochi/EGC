@@ -26,8 +26,8 @@ function toPreToolUseOutput(originalRaw, finalRaw) {
     return finalRaw;
   }
 
-  const originalCommand = original && original.tool_input && original.tool_input.command;
-  const finalCommand = final && final.tool_input && final.tool_input.command;
+  const originalCommand = original?.tool_input?.command;
+  const finalCommand = final?.tool_input?.command;
 
   if (typeof finalCommand === 'string'
     && typeof originalCommand === 'string'

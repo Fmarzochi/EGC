@@ -69,7 +69,7 @@ function embeddedPathCandidate(arg: string): string | null {
 // quotes able to defeat every exact-match keyword check below. Path checks
 // elsewhere keep the raw argument.
 function bareToken(a: string): string {
-  return a.replace(/\\/g, '').replace(/["']/g, '').toLowerCase();
+  return a.replaceAll(/\\/g, '').replaceAll(/["']/g, '').toLowerCase();
 }
 
 // Same quote/backslash stripping as bareToken(), but case-preserving. Used
@@ -198,13 +198,12 @@ const DANGEROUS_ENV_VAR_EXACT = new Set([
   'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_EDITOR', 'GIT_PAGER',
 ]);
 const DANGEROUS_ENV_VAR_PATTERN = /^GIT_CONFIG_(KEY|VALUE)_\d+$/;
-const DANGEROUS_ENV_VAR_ALIAS_PATTERN = /^GIT_ALIAS_/;
 
 function isDangerousEnvVarName(varName: string): boolean {
   const upper = varName.toUpperCase();
   return DANGEROUS_ENV_VAR_EXACT.has(upper)
     || DANGEROUS_ENV_VAR_PATTERN.test(upper)
-    || DANGEROUS_ENV_VAR_ALIAS_PATTERN.test(upper);
+    || upper.startsWith('GIT_ALIAS_');
 }
 
 interface UnwrapResult {
@@ -430,30 +429,34 @@ function volumeValueIsHostMount(value: string): boolean {
 // named volume — the common stateful-dev-container pattern — does not
 // hard-block; every other spelling of a mount/privilege flag stays an
 // unconditional block, same as before.
+const DOCKER_UNCONDITIONAL_PRIVILEGE_FLAGS = new Set(['--privileged', '--mount', '--cap-add']);
+
+function isUnconditionalPrivilegeFlag(t: string): boolean {
+  return DOCKER_UNCONDITIONAL_PRIVILEGE_FLAGS.has(t) || t.startsWith('--mount=') || t.startsWith('--cap-add=');
+}
+
+// A volume flag carrying its value inline (--volume=..., -v/...) is judged on
+// that value. Bundled short flags (-itv, -dv...): the value's position inside
+// the bundle is ambiguous, so they stay unconditionally dangerous rather than
+// risk mis-parsing a host mount as a safe named volume.
+function inlineVolumeIsHostMount(t: string): boolean {
+  if (t.startsWith('--volume=')) return volumeValueIsHostMount(t.slice('--volume='.length));
+  if (t.startsWith('-v') && t.length > 2) return volumeValueIsHostMount(t.slice(2));
+  return !t.startsWith('--') && /^-[a-z]*v/.test(t);
+}
+
 function runWindowMountsOrPrivileges(tokens: string[], startIdx: number): boolean {
   for (let i = startIdx + 1; i < tokens.length; i++) {
     const t = tokens[i];
     if (!t.startsWith('-')) return false;
-    if (
-      t === '--privileged' || t === '--mount' || t === '--cap-add' ||
-      t.startsWith('--mount=') || t.startsWith('--cap-add=')
-    ) return true;
+    if (isUnconditionalPrivilegeFlag(t)) return true;
     if (t === '-v' || t === '--volume') {
       const value = tokens[i + 1];
       if (value === undefined || value.startsWith('-') || volumeValueIsHostMount(value)) return true;
       i++;
       continue;
     }
-    if (t.startsWith('--volume=')) {
-      if (volumeValueIsHostMount(t.slice('--volume='.length))) return true;
-    } else if (t.startsWith('-v') && t.length > 2) {
-      if (volumeValueIsHostMount(t.slice(2))) return true;
-    } else if (!t.startsWith('--') && /^-[a-z]*v/.test(t)) {
-      // Bundled short flags (-itv, -dv...): the value's position inside the
-      // bundle is ambiguous, so this stays unconditionally dangerous rather
-      // than risk mis-parsing a host mount as a safe named volume.
-      return true;
-    }
+    if (inlineVolumeIsHostMount(t)) return true;
     if (DOCKER_RUN_VALUE_FLAGS.has(t)) i++;
   }
   return false;
@@ -964,44 +967,56 @@ const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--d
 // reading or unsetting the same key is left untouched. Also hard-denies
 // --edit/-e outright, since an editor session's eventual changes cannot be
 // inspected the way a plain key/value pair can.
-function checkGitConfigWrite(args: string[]): ValidationResult | null {
-  const rest = args.slice(1);
+interface GitConfigArgScan {
+  readOnly: boolean;
+  positionals: string[];
+  editDenial: ValidationResult | null;
+}
+
+// Walks the arguments after 'config': collects the positionals (key, value),
+// notes read-only flags, skips the value of value-taking flags, and denies
+// --edit/-e outright.
+function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
   let readOnly = false;
   const positionals: string[] = [];
 
   for (let i = 0; i < rest.length; i++) {
-    const raw = rest[i];
-    if (bareToken(raw) === '--') { positionals.push(...rest.slice(i + 1).map(bareToken)); break; }
-    const flag = bareToken(raw);
-    if (flag.startsWith('-')) {
-      if (flag === '--edit' || flag === '-e') {
-        return {
-          allowed: false,
-          reason: `git config --edit opens an editable session over the config file and is forbidden`,
-          trust_level: 'DANGEROUS',
-        };
-      }
-      const eq = flag.indexOf('=');
-      const flagName = eq > 0 ? flag.slice(0, eq) : flag;
-      if (GIT_CONFIG_READONLY_FLAGS.has(flagName)) readOnly = true;
-      if (eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName)) i += 1;
-      continue;
+    const flag = bareToken(rest[i]);
+    if (flag === '--') { positionals.push(...rest.slice(i + 1).map(bareToken)); break; }
+    if (!flag.startsWith('-')) { positionals.push(flag); continue; }
+    if (flag === '--edit' || flag === '-e') {
+      const editDenial: ValidationResult = {
+        allowed: false,
+        reason: `git config --edit opens an editable session over the config file and is forbidden`,
+        trust_level: 'DANGEROUS',
+      };
+      return { readOnly, positionals, editDenial };
     }
-    positionals.push(flag);
+    const eq = flag.indexOf('=');
+    const flagName = eq > 0 ? flag.slice(0, eq) : flag;
+    if (GIT_CONFIG_READONLY_FLAGS.has(flagName)) readOnly = true;
+    if (eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName)) i += 1;
   }
 
-  if (readOnly || positionals.length < 2) return null;
+  return { readOnly, positionals, editDenial: null };
+}
 
-  const key = positionals[0];
-  const value = positionals[1];
-  const isDangerous = DANGEROUS_GIT_CONFIG_KEYS.has(key)
+function isDangerousGitConfigWrite(key: string, value: string): boolean {
+  return DANGEROUS_GIT_CONFIG_KEYS.has(key)
     || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(key)
     || GIT_CONFIG_FILTER_KEY_RE.test(key)
     || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(key)
     || GIT_CONFIG_INCLUDEIF_KEY_RE.test(key)
     || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && value.startsWith('!'));
+}
 
-  if (!isDangerous) return null;
+function checkGitConfigWrite(args: string[]): ValidationResult | null {
+  const scan = scanGitConfigArgs(args.slice(1));
+  if (scan.editDenial) return scan.editDenial;
+  if (scan.readOnly || scan.positionals.length < 2) return null;
+
+  const [key, value] = scan.positionals;
+  if (!isDangerousGitConfigWrite(key, value)) return null;
   return {
     allowed: false,
     reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
@@ -1056,45 +1071,67 @@ return { allowed: false, reason: 'git push with force flag is forbidden', trust_
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
 
-function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
-  const home = os.homedir();
+function grepIsRecursive(args: string[]): boolean {
+  // combined short flags: -rn, -Rn, -rl, etc.
+  return args.some(a => a === '-r' || a === '-R' || a === '--recursive' || /^-[a-zA-Z]*[rR]/.test(a));
+}
 
-  // Detect if any recursive flag is present
-  const isRecursive = args.some(
-a => a === '-r' || a === '-R' || a === '--recursive' ||
-     // combined short flags: -rn, -Rn, -rl, etc.
-     /^-[a-zA-Z]*[rR]/.test(a),
-  );
+// The FILE operand of a -f/--file flag: undefined when the argument is not a
+// file flag, null when it is one but the operand is missing, the operand
+// itself otherwise.
+function grepFileFlagValue(arg: string, next: string | undefined): string | null | undefined {
+  if (arg === '-f' || arg === '--file') return next ?? null;
+  if (arg.startsWith('--file=')) return arg.slice('--file='.length);
+  if (arg.startsWith('-f') && arg.length > 2) return arg.slice(2);
+  return undefined;
+}
 
-  // -f/--file makes grep read its patterns from a FILE, so that value is a
-  // real filesystem read target and must pass the protected-path check even
-  // though it is not positional. It also means the pattern did not consume
-  // the first positional slot.
+function isGrepPatternFlag(arg: string): boolean {
+  return arg === '-e' || arg === '--regexp' || arg.startsWith('--regexp=') || (arg.startsWith('-e') && arg.length > 2);
+}
+
+// -f/--file makes grep read its patterns from a FILE, so that value is a
+// real filesystem read target and must pass the protected-path check even
+// though it is not positional. It also means the pattern did not consume
+// the first positional slot (the same is true of -e/--regexp).
+function collectGrepPatternFlags(args: string[]): { fileFlagValues: string[]; patternViaFlag: boolean } {
   const fileFlagValues: string[] = [];
   let patternViaFlag = false;
   for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '-f' || a === '--file') {
-      if (i + 1 < args.length) fileFlagValues.push(args[i + 1]);
+    const fileValue = grepFileFlagValue(args[i], args[i + 1]);
+    if (fileValue !== undefined) {
+      if (fileValue !== null) fileFlagValues.push(fileValue);
       patternViaFlag = true;
-    } else if (a.startsWith('--file=')) {
-      fileFlagValues.push(a.slice('--file='.length));
-      patternViaFlag = true;
-    } else if (a.startsWith('-f') && a.length > 2) {
-      fileFlagValues.push(a.slice(2));
-      patternViaFlag = true;
-    } else if (a === '-e' || a === '--regexp' || a.startsWith('--regexp=') || (a.startsWith('-e') && a.length > 2)) {
+    } else if (isGrepPatternFlag(args[i])) {
       patternViaFlag = true;
     }
   }
-  for (const p of fileFlagValues) {
-    if (isReadDeniedPath(p, cwd)) {
-      return {
-        allowed: false,
-        reason: `grep pattern file '${p}' is a protected path`,
-        trust_level: 'SAFE_READONLY',
-      };
+  return { fileFlagValues, patternViaFlag };
+}
+
+function denyGrepTarget(reason: string): ValidationResult {
+  return { allowed: false, reason, trust_level: 'SAFE_READONLY' };
+}
+
+function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], cwd?: string): ValidationResult | null {
+  const home = os.homedir();
+  for (const p of pathArgs) {
+    if (p === '/' || p === home || isProtectedPath(p, cwd)) {
+      return denyGrepTarget(`grep recursive over protected path '${p}' is forbidden`);
     }
+  }
+  // If no explicit path args, grep defaults to '.', which is fine.
+  // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
+  if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
+    return denyGrepTarget(`grep over protected path '${positionalArgs[0]}' is forbidden`);
+  }
+  return null;
+}
+
+function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
+  const { fileFlagValues, patternViaFlag } = collectGrepPatternFlags(args);
+  for (const p of fileFlagValues) {
+    if (isReadDeniedPath(p, cwd)) return denyGrepTarget(`grep pattern file '${p}' is a protected path`);
   }
 
   // Non-flag, non-empty args are candidates for pattern or path.
@@ -1107,36 +1144,14 @@ a => a === '-r' || a === '-R' || a === '--recursive' ||
   // Paths are all positional args after the first one (the pattern).
   const pathArgs = patternViaFlag ? positionalArgs : positionalArgs.slice(1);
 
-  if (isRecursive) {
-for (const p of pathArgs) {
-  if (p === '/' || p === home || isProtectedPath(p, cwd)) {
-    return {
-      allowed: false,
-      reason: `grep recursive over protected path '${p}' is forbidden`,
-      trust_level: 'SAFE_READONLY',
-    };
-  }
-}
-// If no explicit path args, grep defaults to '.', which is fine.
-// But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
-  return {
-    allowed: false,
-    reason: `grep over protected path '${positionalArgs[0]}' is forbidden`,
-    trust_level: 'SAFE_READONLY',
-  };
-}
+  if (grepIsRecursive(args)) {
+    const recursiveDenial = checkRecursiveGrepPaths(pathArgs, positionalArgs, cwd);
+    if (recursiveDenial) return recursiveDenial;
   }
 
   // Even without -r, block explicit protected paths
   for (const p of pathArgs) {
-if (isReadDeniedPath(p, cwd)) {
-  return {
-    allowed: false,
-    reason: `grep over protected path '${p}' is forbidden`,
-    trust_level: 'SAFE_READONLY',
-  };
-}
+    if (isReadDeniedPath(p, cwd)) return denyGrepTarget(`grep over protected path '${p}' is forbidden`);
   }
 
   return { allowed: true, trust_level: 'SAFE_READONLY' };

@@ -104,7 +104,7 @@ function addFlatHookEntry(config, event, command, { isOwnBasename, buildExtraTop
   });
 
   if (!migrated) {
-    nextEntries.push({ ...(extraEntryFields || {}), command });
+    nextEntries.push({ ...extraEntryFields, command });
   }
 
   hooks[event] = nextEntries;

@@ -53,13 +53,18 @@ function listTranscripts(root) {
     }
   };
   walk(root);
-  return out.sort((a, b) => b.mtime - a.mtime).slice(0, MAX_FILES).map(f => f.full);
+  return out.toSorted((a, b) => b.mtime - a.mtime).slice(0, MAX_FILES).map(f => f.full);
+}
+
+function textOfBlock(block) {
+  if (typeof block === 'string') return block;
+  return block?.text ? block.text : '';
 }
 
 function textOfResult(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
-    return content.map(c => (typeof c === 'string' ? c : c && c.text ? c.text : '')).join('');
+    return content.map(textOfBlock).join('');
   }
   return '';
 }
@@ -81,7 +86,7 @@ function recordMissedOpportunity(cmd, output, opportunities) {
 }
 
 function processBlock(block, pending, opportunities) {
-  if (block.type === 'tool_use' && block.name === 'Bash' && block.input && block.input.command) {
+  if (block.type === 'tool_use' && block.name === 'Bash' && block.input?.command) {
     pending.set(block.id, block.input.command);
     return;
   }
@@ -108,7 +113,7 @@ function analyzeFile(file, opportunities) {
     } catch {
       continue;
     }
-    const content = obj && obj.message && obj.message.content;
+    const content = obj?.message?.content;
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       processBlock(block, pending, opportunities);

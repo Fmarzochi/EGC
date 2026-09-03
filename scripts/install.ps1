@@ -23,6 +23,42 @@ function Install-Deps {
     }
 }
 
+# The link target of a directory entry, or $null when the entry does not
+# exist or is not a link.
+function Get-DirectoryLinkTarget {
+    param([string]$Candidate)
+    try {
+        $item = Get-Item -LiteralPath $Candidate -Force -ErrorAction Stop
+    } catch {
+        return $null
+    }
+    if ($item -and $item.PSObject.Properties['Target'] -and $item.Target) {
+        return @($item.Target)[0]
+    }
+    return $null
+}
+
+# The non-empty path components of a relative tail, in order.
+function Split-PathSegments {
+    param([string]$Tail)
+    $segments = @()
+    foreach ($piece in ($Tail.Trim('\', '/') -split '[\\/]+')) {
+        if ($piece) { $segments += $piece }
+    }
+    return ,$segments
+}
+
+# Where a link target starts resolving from: a rooted target restarts from
+# its own root; a relative target is relative to the link's own directory,
+# which is exactly where the current resolution already points.
+function Split-LinkTarget {
+    param([string]$Target, [string]$Base)
+    if ([System.IO.Path]::IsPathRooted($Target)) {
+        $root = [System.IO.Path]::GetPathRoot($Target)
+        return @{ Root = $root; Tail = $Target.Substring($root.Length) }
+    }
+    return @{ Root = $Base; Tail = $Target }
+}
 # Two paths can name the same directory in several ways: different separators
 # (C:/repo vs C:\repo, routine when the installer is launched from Git Bash),
 # a trailing slash, or a symlink/junction anywhere along the path, including a
@@ -51,9 +87,7 @@ function Resolve-PhysicalDirectory {
     # cycles; it is never reached by a real directory tree.
     $pending = New-Object 'System.Collections.Generic.Queue[string]'
     $resolved = [System.IO.Path]::GetPathRoot($full)
-    foreach ($segment in ($full.Substring($resolved.Length).Trim('\', '/') -split '[\\/]+')) {
-        if ($segment) { $pending.Enqueue($segment) }
-    }
+    foreach ($segment in (Split-PathSegments ($full.Substring($resolved.Length)))) { $pending.Enqueue($segment) }
 
     $steps = 0
     while ($pending.Count -gt 0) {
@@ -70,17 +104,7 @@ function Resolve-PhysicalDirectory {
         }
 
         $candidate = Join-Path $resolved $segment
-        $item = $null
-        try {
-            $item = Get-Item -LiteralPath $candidate -Force -ErrorAction Stop
-        } catch {
-            $item = $null
-        }
-
-        $target = $null
-        if ($item -and $item.PSObject.Properties['Target'] -and $item.Target) {
-            $target = @($item.Target)[0]
-        }
+        $target = Get-DirectoryLinkTarget $candidate
         if (-not $target) {
             $resolved = $candidate
             continue
@@ -88,18 +112,9 @@ function Resolve-PhysicalDirectory {
 
         $remaining = @($pending.ToArray())
         $pending.Clear()
-        if ([System.IO.Path]::IsPathRooted($target)) {
-            $targetRoot = [System.IO.Path]::GetPathRoot($target)
-            $targetTail = $target.Substring($targetRoot.Length)
-            $resolved = $targetRoot
-        } else {
-            # A relative target is relative to the link's own directory, which
-            # is exactly where $resolved already points.
-            $targetTail = $target
-        }
-        foreach ($piece in ($targetTail.Trim('\', '/') -split '[\\/]+')) {
-            if ($piece) { $pending.Enqueue($piece) }
-        }
+        $parts = Split-LinkTarget $target $resolved
+        $resolved = $parts.Root
+        foreach ($piece in (Split-PathSegments $parts.Tail)) { $pending.Enqueue($piece) }
         foreach ($piece in $remaining) { $pending.Enqueue($piece) }
     }
 

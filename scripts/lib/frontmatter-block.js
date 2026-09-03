@@ -7,7 +7,7 @@
 // caller still parses its own contents (key:value pairs vs. syntax-only checks)
 // because their needs diverge past this point.
 
-const BOM = String.fromCharCode(0xFEFF);
+const BOM = String.fromCodePoint(0xFEFF);
 
 function extractFrontmatterBlock(content) {
   const cleanContent = content.startsWith(BOM) ? content.slice(BOM.length) : content;
