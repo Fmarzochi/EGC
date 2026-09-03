@@ -27,7 +27,7 @@ function wrappedRe() {
     .map(p => p.trim())
     .filter(p => /^[\w.-]+$/.test(p));
   const prefixes = ['egc', ...extra].join('|');
-  return new RegExp(`(?:^\\s*(?:${prefixes})\\s)|(?:--raw\\b)`);
+  return new RegExp(String.raw`(?:^\s*(?:${prefixes})\s)|(?:--raw\b)`);
 }
 // A command with none of these characters *active* runs through `egc run
 // <cmd>` with no shell. One that has active shell syntax keeps its exact
@@ -96,7 +96,7 @@ function hasComplexShellSyntax(cmd) {
 // redirection sends stdout elsewhere, leaving nothing to crush. Neither is ever
 // wrapped. A lone `&` (not part of `&&`) means backgrounding.
 function hasBackgrounding(cmd) {
-  return cmd.replace(/&&/g, '').includes('&');
+  return cmd.replaceAll('&&', '').includes('&');
 }
 
 function hasRedirection(cmd) {
@@ -105,8 +105,9 @@ function hasRedirection(cmd) {
 
 // POSIX single-quote escaping: wrap in single quotes and replace every embedded
 // single quote with '\'' so bash -c re-parses the exact original command.
+const SINGLE_QUOTE_ESCAPE = String.raw`'\''`;
 function shSingleQuote(cmd) {
-  return `'${cmd.replace(/'/g, `'\\''`)}'`;
+  return `'${cmd.replaceAll("'", SINGLE_QUOTE_ESCAPE)}'`;
 }
 
 let egcAvailable = null;

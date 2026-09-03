@@ -9,7 +9,7 @@ function loadIndexEntries(indexPath = INDEX_PATH) {
   try {
     const raw = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     return Array.isArray(raw.entries) ? raw.entries : [];
-  } catch (_) {
+  } catch {
     // Missing or corrupt index degrades to manifest-only search results.
     return [];
   }

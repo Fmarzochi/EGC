@@ -37,7 +37,7 @@ function readStdin() {
 }
 
 function parsePayload(raw) {
-  if (!raw || !raw.trim()) return {};
+  if (!raw?.trim()) return {};
   try { return JSON.parse(raw); } catch (_) { return {}; } // NOSONAR: malformed payload is treated as empty
 }
 

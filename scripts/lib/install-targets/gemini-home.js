@@ -114,13 +114,13 @@ function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRe
 // operation from another module). Only a source path that is an actual
 // descendant of one of these two known, hardcoded directories can ever be
 // redundant with them.
-const HOOKS_RUNTIME_DIRECTORY_SOURCES = ['scripts/hooks', 'scripts/lib'];
+const HOOKS_RUNTIME_DIRECTORY_SOURCES = new Set(['scripts/hooks', 'scripts/lib']);
 
 function dedupeCopyOperations(operations) {
   const presentDirectorySources = new Set(
     operations
       .filter(operation => (
-        operation.kind === 'copy-path' && HOOKS_RUNTIME_DIRECTORY_SOURCES.includes(operation.sourceRelativePath)
+        operation.kind === 'copy-path' && HOOKS_RUNTIME_DIRECTORY_SOURCES.has(operation.sourceRelativePath)
       ))
       .map(operation => operation.sourceRelativePath)
   );

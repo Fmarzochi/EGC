@@ -82,7 +82,7 @@ function infoTargets(buf) {
   const text = buf.toString('latin1');
   let m = re.exec(text);
   while (m !== null) {
-    targets.push([parseInt(m[1], 10), parseInt(m[2], 10)]);
+    targets.push([Number.parseInt(m[1], 10), Number.parseInt(m[2], 10)]);
     m = re.exec(text);
   }
   return targets;

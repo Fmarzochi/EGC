@@ -365,8 +365,8 @@ function syncEnglishReadme(content, catalog) {
   nextContent = replaceOrThrow(
     nextContent,
     /(access to\s+)(\d+)(\s+agents,\s+)(\d+)(\s+skills,\s+and\s+)(\d+)(\s+(?:commands|legacy command shims?),\s+plus\s+)(\d+)(\s+rules)/i,
-    (_, prefix, __, agentsSuffix, ___, skillsSuffix, ____, _____, ______, rulesSuffix) =>
-      `${prefix}${catalog.agents.count}${agentsSuffix}${catalog.skills.count}${skillsSuffix}${catalog.commands.count} legacy command shims, plus ${catalog.rules.count}${rulesSuffix}`,
+    (...groups) =>
+      `${groups[1]}${catalog.agents.count}${groups[3]}${catalog.skills.count}${groups[5]}${catalog.commands.count} legacy command shims, plus ${catalog.rules.count}${groups[9]}`,
     'README.md quick-start summary'
   );
   nextContent = replaceOrThrow(

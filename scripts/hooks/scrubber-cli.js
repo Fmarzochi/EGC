@@ -118,47 +118,54 @@ function runInspect(source) {
   return 0;
 }
 
+// Exit code for a recognized image, or null when a supported format turned
+// out to be malformed: that input falls through to the binary guard, which
+// refuses a bare magic-byte prefix as binary.
+function cleanImageSource(source, flags, bytes, format) {
+  const img = cleanImage(bytes);
+  if (img.supported && img.valid) {
+    // A structurally valid PNG/JPEG: strip metadata blocks, write binary out.
+    writeCleaned(source, flags, img.cleaned, false);
+    if (flags.json) {
+      process.stderr.write(`${JSON.stringify({ format: img.format, supported: true, scanned: true, removed: img.removed }, null, 2)}\n`);
+    }
+    return 0;
+  }
+  if (img.supported) return null;
+  // Recognized but not yet cleaned: never write an unchanged copy that
+  // looks scrubbed. Report honestly and touch nothing.
+  if (flags.json) {
+    process.stderr.write(`${JSON.stringify({ format, supported: false, scanned: false, removed: [] }, null, 2)}\n`);
+  } else {
+    process.stderr.write(`note: ${format} is a recognized image format the scrubber does not clean yet; nothing written\n`);
+  }
+  return 3;
+}
+
+function cleanPdfSource(source, flags, bytes) {
+  const doc = cleanPdf(bytes);
+  if (doc.encrypted) {
+    if (flags.json) process.stderr.write(`${JSON.stringify({ format: 'pdf', encrypted: true, partial: true, removed: [] }, null, 2)}\n`);
+    else process.stderr.write('note: encrypted PDF left untouched; nothing written\n');
+    return 3;
+  }
+  // Same-length redaction keeps offsets valid; write the binary out. The
+  // result is honestly partial: compressed-stream and XMP metadata are not
+  // reached.
+  writeCleaned(source, flags, doc.cleaned, false);
+  if (flags.json) process.stderr.write(`${JSON.stringify({ format: 'pdf', partial: true, removed: doc.removed }, null, 2)}\n`);
+  else process.stderr.write('note: PDF metadata cleaned (partial: compressed-stream and XMP metadata are not handled)\n');
+  return 0;
+}
+
 function runClean(source, flags) {
   const bytes = readBytes(source);
   const format = detectImageFormat(bytes);
   if (format) {
-    const img = cleanImage(bytes);
-    if (img.supported && img.valid) {
-      // A structurally valid PNG/JPEG: strip metadata blocks, write binary out.
-      writeCleaned(source, flags, img.cleaned, false);
-      if (flags.json) {
-        process.stderr.write(`${JSON.stringify({ format: img.format, supported: true, scanned: true, removed: img.removed }, null, 2)}\n`);
-      }
-      return 0;
-    }
-    if (!img.supported) {
-      // Recognized but not yet cleaned: never write an unchanged copy that
-      // looks scrubbed. Report honestly and touch nothing.
-      if (flags.json) {
-        process.stderr.write(`${JSON.stringify({ format, supported: false, scanned: false, removed: [] }, null, 2)}\n`);
-      } else {
-        process.stderr.write(`note: ${format} is a recognized image format the scrubber does not clean yet; nothing written\n`);
-      }
-      return 3;
-    }
-    // A supported format whose structure is malformed falls through to the
-    // binary guard below, which refuses a bare magic-byte prefix as binary.
+    const imageExit = cleanImageSource(source, flags, bytes, format);
+    if (imageExit !== null) return imageExit;
   }
-  if (detectPdf(bytes)) {
-    const doc = cleanPdf(bytes);
-    if (doc.encrypted) {
-      if (flags.json) process.stderr.write(`${JSON.stringify({ format: 'pdf', encrypted: true, partial: true, removed: [] }, null, 2)}\n`);
-      else process.stderr.write('note: encrypted PDF left untouched; nothing written\n');
-      return 3;
-    }
-    // Same-length redaction keeps offsets valid; write the binary out. The
-    // result is honestly partial: compressed-stream and XMP metadata are not
-    // reached.
-    writeCleaned(source, flags, doc.cleaned, false);
-    if (flags.json) process.stderr.write(`${JSON.stringify({ format: 'pdf', partial: true, removed: doc.removed }, null, 2)}\n`);
-    else process.stderr.write('note: PDF metadata cleaned (partial: compressed-stream and XMP metadata are not handled)\n');
-    return 0;
-  }
+  if (detectPdf(bytes)) return cleanPdfSource(source, flags, bytes);
   const text = textFromBytes(bytes, source);
   if (text === null) return 2;
   // Strip container metadata first (markdown/html/svg), then the Layer A pass.

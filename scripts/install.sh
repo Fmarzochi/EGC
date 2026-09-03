@@ -1,4 +1,18 @@
 #!/bin/bash
+# The documented entrypoint is `sh scripts/install.sh`; on systems where sh is
+# dash the script re-executes itself under bash, which everything below needs.
+# Without bash on the machine it stops here with a plain message instead of
+# failing later on the first bash-only construct.
+case "${BASH_VERSION:-}" in
+  '')
+    if command -v bash >/dev/null 2>&1; then
+      exec bash "$0" "$@"
+    fi
+    echo "Error: this installer requires bash; install bash or run it as 'bash scripts/install.sh'." >&2
+    exit 1
+    ;;
+  *) ;;
+esac
 set -e
 
 # Both of these resolve symlinks (pwd -P). Mixing logical and physical
@@ -33,7 +47,7 @@ esac
 # `npm install -g`). The sub-package lockfiles travel via package.json "files",
 # so run a pinned `npm ci` wherever a lockfile is present and skip otherwise.
 install_deps() {
-  if [ -f package-lock.json ]; then
+  if [[ -f package-lock.json ]]; then
     npm ci --silent
   fi
 }
@@ -134,7 +148,7 @@ if [ "$DRY_RUN" = false ]; then
   install_deps
   # The published package ships build/ but not src/, so only (re)build from a
   # git checkout where the TypeScript sources are present.
-  if [ -d src ]; then
+  if [[ -d src ]]; then
     npm run build
   fi
 
@@ -148,7 +162,7 @@ if [ "$DRY_RUN" = false ]; then
   cd "$MEMORY_DIR"
   install_deps
   # Published package ships build/ but not src/; only build from a checkout.
-  if [ -d src ]; then
+  if [[ -d src ]]; then
     npm run build
   fi
 
@@ -166,7 +180,7 @@ if [ "$DRY_RUN" = false ]; then
   # Skipped when delegating to install-apply.js below (--target/--profile/etc.
   # present): that path runs this same setup itself, so running it here too
   # would configure the filter twice (cubic review, PR #1122).
-  if [ "$_has_install_args" != true ]; then
+  if [[ "$_has_install_args" != true ]]; then
     node - "$ROOT_DIR" <<'NODEEOF' || echo "  note: commit-privacy filter setup failed (non-fatal)"
 const [, , rootDir] = process.argv;
 const { applyCommitPrivacyFilterCli } = require(rootDir + '/scripts/lib/memory-filters');
@@ -206,13 +220,13 @@ echo "  harness config written to .mcp.egc.json"
 
 # Verify MCP server builds exist
 if [ ! -f "$ROOT_DIR/mcp/servers/egc-guardian/build/index.js" ]; then
-  echo "Error: egc-guardian build missing: run 'cd mcp/servers/egc-guardian && npm run build'"
+  echo "Error: egc-guardian build missing: run 'cd mcp/servers/egc-guardian && npm run build'" >&2
   exit 1
 fi
 echo "  ✓ egc-guardian build verified"
 
 if [ ! -f "$ROOT_DIR/mcp/servers/egc-memory/build/index.js" ]; then
-  echo "Error: egc-memory build missing: run 'cd mcp/servers/egc-memory && npm run build'"
+  echo "Error: egc-memory build missing: run 'cd mcp/servers/egc-memory && npm run build'" >&2
   exit 1
 fi
 echo "  ✓ egc-memory build verified"
@@ -257,7 +271,7 @@ if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
       bash "$ROOT_DIR/.codebuddy/install.sh" ~
     fi
   fi
-elif [ "$DRY_RUN" = false ]; then
+elif [[ "$DRY_RUN" = false ]]; then
   # Mirrors install.ps1: a non-TTY stdin skips the prompt-library step.
   # Announce it instead of skipping silently.
   echo "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --target <tool> --profile full' to add it."
@@ -287,10 +301,10 @@ echo "  registering MCP servers..."
 set -e
 
 # Install git pre-commit hook (strips egc:state blocks before commits)
-if [ -d "$ROOT_DIR/.git" ] && [ "$DRY_RUN" = false ]; then
+if [[ -d "$ROOT_DIR/.git" && "$DRY_RUN" = false ]]; then
   GIT_HOOK="$ROOT_DIR/.git/hooks/pre-commit"
   STRIP_SCRIPT="$ROOT_DIR/scripts/hooks/git-pre-commit.sh"
-  if [ ! -f "$GIT_HOOK" ]; then
+  if [[ ! -f "$GIT_HOOK" ]]; then
     printf '#!/usr/bin/env bash\nROOT="$(git rev-parse --show-toplevel)"\nbash "$ROOT/scripts/hooks/git-pre-commit.sh"\n' > "$GIT_HOOK"
     chmod +x "$GIT_HOOK"
     echo "  ✓ git pre-commit hook installed"
@@ -315,7 +329,7 @@ fi
 
 echo ""
 echo "Installation complete."
-if [ "$_has_install_args" = false ]; then
+if [[ "$_has_install_args" = false ]]; then
   # The README promises a live dashboard right after installation. The
   # launch/skip decision lives in exactly one place, shouldAutoLaunch()
   # inside the wrapper, so the shell never second-guesses it; the wrapper

@@ -1,4 +1,4 @@
-const path = require('path');
+const path = require('node:path');
 const { applyCommitPrivacyFilterCli } = require('./memory-filters');
 
 // The repo root is fixed relative to this file (scripts/lib/ sits two levels

@@ -189,7 +189,7 @@ function runTests() {
   if (test('only builds egc-guardian/egc-memory when src/ is present (published tarball has none)', () => {
     const buildGuards = scriptSource.match(/if \(Test-Path "src"\)/g) || [];
     assert.strictEqual(buildGuards.length, 2, 'both guardian and memory builds should be guarded');
-    const bashGuards = bashSource.match(/if \[ -d src \]/g) || [];
+    const bashGuards = bashSource.match(/if \[\[ -d src \]\]/g) || [];
     assert.strictEqual(buildGuards.length, bashGuards.length, 'install.ps1 and install.sh should guard the same number of builds');
   })) passed++; else failed++;
 

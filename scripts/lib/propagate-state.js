@@ -312,7 +312,7 @@ function stripLegacyCursorContent(existing) {
   if (existing.includes(EGC_START)) return existing;
   // Normalize CRLF for the comparison only -- a file saved with Windows line
   // endings must still be recognized as the legacy auto-generated shape.
-  const normalized = existing.replace(/\r\n/g, '\n');
+  const normalized = existing.replaceAll('\r\n', '\n');
   if (!normalized.startsWith(LEGACY_CURSOR_FRONTMATTER)) return existing;
   const rest = normalized.slice(LEGACY_CURSOR_FRONTMATTER.length);
   return rest.trimStart().startsWith(LEGACY_BLOCK_HEADER) ? LEGACY_CURSOR_FRONTMATTER : existing;

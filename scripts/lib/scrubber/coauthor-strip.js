@@ -8,7 +8,12 @@
 // off github noreply emails, because human contributors use those too and their
 // co-authorship must be preserved.
 
-const AI_SIGNATURE = /(claude|anthropic|copilot|gemini|google[-\s]?labs|chatgpt|openai|\bgpt-?\d?\b|\bcursor\b|codeium|windsurf|\bdevin\b|tabnine|amazon\s+q|\bcody\b)/i;
+const AI_SIGNATURE_PATTERNS = [
+  'claude', 'anthropic', 'copilot', 'gemini', String.raw`google[-\s]?labs`, 'chatgpt', 'openai',
+  String.raw`\bgpt-?\d?\b`, String.raw`\bcursor\b`, 'codeium', 'windsurf', String.raw`\bdevin\b`, 'tabnine',
+  String.raw`amazon\s+q`, String.raw`\bcody\b`,
+];
+const AI_SIGNATURE = new RegExp(`(${AI_SIGNATURE_PATTERNS.join('|')})`, 'i');
 
 // Full lines that are AI attribution regardless of trailer key. A leading run
 // of non-word characters (a bullet or the robot emoji) is skipped with \W*, so
@@ -46,7 +51,7 @@ function stripAiCoauthorship(message) {
     return { message: text, removed };
   }
 
-  while (kept.length > 0 && kept[kept.length - 1].trim() === '') {
+  while (kept.length > 0 && kept.at(-1).trim() === '') {
     kept.pop();
   }
 

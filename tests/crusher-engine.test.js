@@ -234,6 +234,25 @@ run('crusher does not mistake the npm run-script banner for pytest assertion det
   assert.ok(!result.crushed.includes('> jest --ci'), 'npm script banner line 2 (resolved command) is not kept as assertion detail either');
 });
 
+run('crusher excludes the npm run-script banner of a scoped package too', () => {
+  // A scoped package name starts with "@" ("> @scope/pkg@1.0.0 test"), so
+  // the banner spec carries two "@" characters; the marker is the one
+  // before the version, never the leading one.
+  const lines = [];
+  lines.push('> @egchq/egc@1.1.20 test');
+  lines.push('> node tests/run-all.js');
+  lines.push('');
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('FAIL src/foo.test.js');
+  lines.push('  ● the thing fails');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(!result.crushed.includes('> @egchq/egc@1.1.20 test'), 'scoped npm script banner line 1 is not kept');
+  assert.ok(!result.crushed.includes('> node tests/run-all.js'), 'scoped npm script banner line 2 is not kept either');
+});
+
 run('mvn/gradle test detection stays scoped to the first line, ignoring "test" on later lines of a compound command (audit EGC-490)', () => {
   assert.strictEqual(commandKind('mvn clean\necho "just a test message, unrelated to mvn goals"'), 'generic');
   assert.strictEqual(commandKind('mvn clean test'), 'test-runner');

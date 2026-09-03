@@ -36,7 +36,7 @@ const PNG_KEEP_ANCILLARY = new Set([
 ]);
 
 function keepPngChunk(type) {
-  const isCritical = (type.charCodeAt(0) & 0x20) === 0; // uppercase first letter
+  const isCritical = (type.codePointAt(0) & 0x20) === 0; // uppercase first letter
   return isCritical || PNG_KEEP_ANCILLARY.has(type);
 }
 
@@ -107,6 +107,54 @@ function scanEntropyEnd(buf, from) {
   return -1; // no terminating marker: truncated scan
 }
 
+function invalidJpeg(buf) {
+  return { cleaned: buf, removed: [], valid: false };
+}
+
+// A marker may be preceded by 0xff fill bytes; preserve them and return the
+// offset of the 0xff that actually begins the marker.
+function skipJpegFill(buf, offset, out) {
+  let p = offset;
+  while (p + 1 < buf.length && buf[p + 1] === 0xff) {
+    out.push(buf.subarray(p, p + 1));
+    p += 1;
+  }
+  return p;
+}
+
+// End offset of the segment whose marker starts at offset, or -1 when its
+// length header is truncated or inconsistent with the buffer.
+function jpegSegmentEnd(buf, offset) {
+  if (offset + 4 > buf.length) return -1;
+  const segLength = buf.readUInt16BE(offset + 2);
+  const segEnd = offset + 2 + segLength;
+  return segLength < 2 || segEnd > buf.length ? -1 : segEnd;
+}
+
+// Copies one non-EOI marker starting at offset and returns the next offset,
+// or -1 when the segment is unreadable. Standalone markers carry no payload.
+// The start-of-scan marker copies its header and then the entropy data up to
+// the next real marker (progressive JPEGs have several scans with segments in
+// between). Metadata segments are dropped and recorded; everything else is
+// copied verbatim.
+function copyJpegSegment(buf, offset, marker, out, removed) {
+  if (JPEG_STANDALONE.has(marker) || isRstMarker(marker)) {
+    out.push(buf.subarray(offset, offset + 2));
+    return offset + 2;
+  }
+  const segEnd = jpegSegmentEnd(buf, offset);
+  if (segEnd < 0) return -1;
+  if (marker === 0xda) {
+    const scanEnd = scanEntropyEnd(buf, segEnd);
+    if (scanEnd < 0) return -1;
+    out.push(buf.subarray(offset, scanEnd));
+    return scanEnd;
+  }
+  if (JPEG_DROP_MARKERS.has(marker)) removed.push(jpegDropLabel(marker));
+  else out.push(buf.subarray(offset, segEnd));
+  return segEnd;
+}
+
 function cleanJpeg(buf) {
   const removed = [];
   const out = [];
@@ -116,13 +164,8 @@ function cleanJpeg(buf) {
   let sawEoi = false;
 
   while (offset + 1 < buf.length) {
-    if (buf[offset] !== 0xff) return { cleaned: buf, removed: [], valid: false };
-    // A marker may be preceded by 0xff fill bytes; preserve them and advance to
-    // the 0xff that actually begins the marker.
-    while (offset + 1 < buf.length && buf[offset + 1] === 0xff) {
-      out.push(buf.subarray(offset, offset + 1));
-      offset += 1;
-    }
+    if (buf[offset] !== 0xff) return invalidJpeg(buf);
+    offset = skipJpegFill(buf, offset, out);
     const marker = buf[offset + 1];
 
     if (marker === 0xd9) { // EOI
@@ -131,32 +174,11 @@ function cleanJpeg(buf) {
       sawEoi = true;
       break;
     }
-    if (JPEG_STANDALONE.has(marker) || isRstMarker(marker)) {
-      out.push(buf.subarray(offset, offset + 2));
-      offset += 2;
-      continue;
-    }
-    if (offset + 4 > buf.length) return { cleaned: buf, removed: [], valid: false };
-    const segLength = buf.readUInt16BE(offset + 2);
-    const segEnd = offset + 2 + segLength;
-    if (segLength < 2 || segEnd > buf.length) return { cleaned: buf, removed: [], valid: false };
-
     if (isSofMarker(marker)) sawSof = true;
-
-    if (marker === 0xda) {
-      // Start of scan: header (segLength) then entropy data up to the next
-      // marker. Copy both verbatim, then resume segment parsing (progressive
-      // JPEGs have several scans with segments in between).
-      sawSos = true;
-      const scanEnd = scanEntropyEnd(buf, segEnd);
-      if (scanEnd < 0) return { cleaned: buf, removed: [], valid: false };
-      out.push(buf.subarray(offset, scanEnd));
-      offset = scanEnd;
-      continue;
-    }
-    if (JPEG_DROP_MARKERS.has(marker)) removed.push(jpegDropLabel(marker));
-    else out.push(buf.subarray(offset, segEnd));
-    offset = segEnd;
+    if (marker === 0xda) sawSos = true;
+    const next = copyJpegSegment(buf, offset, marker, out, removed);
+    if (next < 0) return invalidJpeg(buf);
+    offset = next;
   }
 
   // Require a real JPEG: a frame header and a scan, a clean EOI, no trailing.

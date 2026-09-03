@@ -61,6 +61,13 @@ function isPlainObject(value) {
 // grammar without pulling in a parser dependency for this one call site.
 // Consumes one character starting at `text[i]` of the comment-stripping scan,
 // mutating `state` in place, and returns the index to resume from.
+function consumeStringChar(ch, next, i, state) {
+  state.out += ch;
+  if (ch === '\\') { state.out += next; return i + 2; }
+  if (ch === '"') state.inString = false;
+  return i + 1;
+}
+
 function consumeCommentStrippingChar(text, i, state) {
   const ch = text[i];
   const next = text[i + 1];
@@ -73,12 +80,7 @@ function consumeCommentStrippingChar(text, i, state) {
     if (ch === '*' && next === '/') { state.inBlockComment = false; return i + 2; }
     return i + 1;
   }
-  if (state.inString) {
-    state.out += ch;
-    if (ch === '\\') { state.out += next; return i + 2; }
-    if (ch === '"') state.inString = false;
-    return i + 1;
-  }
+  if (state.inString) return consumeStringChar(ch, next, i, state);
   if (ch === '"') { state.inString = true; state.out += ch; return i + 1; }
   if (ch === '/' && next === '/') { state.inLineComment = true; return i + 2; }
   if (ch === '/' && next === '*') { state.inBlockComment = true; return i + 2; }
@@ -179,10 +181,10 @@ function removeRoocodeDenylistEntries(settings) {
   // settings.json a repo can commit and share, so a stale or hand-edited
   // value must never be trusted to remove an entry outside the known
   // dangerous-commands set (cubic review, PR #1122).
-  const seeded = (Array.isArray(base[SEEDED_BY_EGC_KEY]) ? base[SEEDED_BY_EGC_KEY] : [])
-    .filter(cmd => DANGEROUS_COMMANDS.includes(cmd));
+  const seeded = new Set((Array.isArray(base[SEEDED_BY_EGC_KEY]) ? base[SEEDED_BY_EGC_KEY] : [])
+    .filter(cmd => DANGEROUS_COMMANDS.includes(cmd)));
   const hadSeededKey = SEEDED_BY_EGC_KEY in base;
-  const next = existing.filter(cmd => !seeded.includes(cmd));
+  const next = existing.filter(cmd => !seeded.has(cmd));
   if (next.length === existing.length && !hadSeededKey) {
     return { settings: base, changed: false };
   }

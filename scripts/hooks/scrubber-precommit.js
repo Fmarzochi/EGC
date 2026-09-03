@@ -23,32 +23,34 @@ function safePath(p) {
   return path.resolve(p);
 }
 
-function main(argv) {
+// Every exit is silent and non-blocking: a commit hook that cannot read,
+// scrub, or rewrite the message must never stop the commit.
+function runPrecommit(argv) {
   if (/^(1|true|yes)$/i.test(String(process.env.EGC_SKIP_PRECOMMIT || process.env.EGC_SKIP_GIT_HOOKS || ''))) {
-    return 0;
+    return;
   }
   const file = argv[2];
-  if (!file) return 0;
+  if (!file) return;
 
   let resolved;
   try {
     resolved = safePath(file);
   } catch {
-    return 0;
+    return;
   }
 
   let text;
   try {
     text = fs.readFileSync(resolved, 'utf8'); // NOSONAR: git-provided local commit-message path, never network-controlled input
   } catch {
-    return 0;
+    return;
   }
 
   let result;
   try {
     result = run(text);
   } catch {
-    return 0;
+    return;
   }
 
   if (result.removed.length > 0) {
@@ -56,9 +58,14 @@ function main(argv) {
       fs.writeFileSync(resolved, result.message); // NOSONAR: git-provided local commit-message path, never network-controlled input
       process.stderr.write(`[scrubber] removed ${result.removed.length} AI attribution line(s) from the commit message\n`);
     } catch {
-      return 0;
+      // The commit proceeds with the original message.
     }
   }
+}
+
+
+function main(argv) {
+  runPrecommit(argv);
   return 0;
 }
 

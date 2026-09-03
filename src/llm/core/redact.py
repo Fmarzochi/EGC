@@ -24,7 +24,7 @@ _SECRET_PATTERNS = [
     # Google API keys (Gemini et al.): AIza prefix, and the key= query
     # parameter the SDKs echo back in 4xx error bodies.
     re.compile(r'\b(AIza[0-9A-Za-z_-]{20,})\b'),
-    re.compile(r'(?i)([?&]key=)([A-Za-z0-9_-]{20,})'),
+    re.compile(r'(?i)([?&]key=)([a-z0-9_-]{20,})'),
 ]
 
 

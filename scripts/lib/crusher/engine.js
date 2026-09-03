@@ -131,11 +131,21 @@ function isAssertionDetail(line) {
 // whatever command package.json resolved to, with no shape of its own.
 // Recognized by position instead -- this banner can only ever be the first
 // two lines of the whole output.
-const NPM_SCRIPT_BANNER_RE = /^>\s+\S+@\S+\s/;
+const NPM_SCRIPT_BANNER_SPEC_RE = /^>\s+(\S+)\s/;
 const NPM_BANNER_CONTINUATION_RE = /^>\s+\S/;
 
+// "> <name>@<version> <script>": the spec token carries an "@" that is
+// neither its first nor its last character, which also admits scoped
+// packages ("@scope/pkg@1.0.0") whose name starts with "@".
+function isNpmScriptBannerLine(line) {
+  const m = NPM_SCRIPT_BANNER_SPEC_RE.exec(line);
+  if (!m) return false;
+  const at = m[1].lastIndexOf('@');
+  return at > 0 && at < m[1].length - 1;
+}
+
 function npmScriptBannerLineCount(lines) {
-  if (NPM_SCRIPT_BANNER_RE.test(lines[0] || '') && NPM_BANNER_CONTINUATION_RE.test(lines[1] || '')) {
+  if (isNpmScriptBannerLine(lines[0] || '') && NPM_BANNER_CONTINUATION_RE.test(lines[1] || '')) {
     return 2;
   }
   return 0;
@@ -160,7 +170,7 @@ function shouldKeepLine(line) {
 // Terminal color codes glue onto words (ESC[31merror) and break the \b
 // word boundary, silently dropping colored error lines from the kept set.
 // Built via the constructor because eslint forbids control chars in literals.
-const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
+const ANSI_RE = new RegExp(String.raw`${String.fromCodePoint(27)}\[[0-9;]*[A-Za-z]`, 'g');
 function stripAnsi(line) {
   return line.replace(ANSI_RE, '');
 }

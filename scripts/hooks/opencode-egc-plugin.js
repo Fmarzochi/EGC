@@ -189,7 +189,7 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
     'session.created': handleSessionCreated,
 
     'tool.execute.before': async (input, output) => {
-      if (!input || input.tool !== 'bash' || typeof output?.args?.command !== 'string') {
+      if (input?.tool !== 'bash' || typeof output?.args?.command !== 'string') {
         return;
       }
 

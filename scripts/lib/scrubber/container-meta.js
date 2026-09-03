@@ -18,14 +18,14 @@ const AI_PROVENANCE_KEYS = new Set([
 const BOM = 0xfeff;
 
 function stripBom(text) {
-  return text.charCodeAt(0) === BOM ? text.slice(1) : text;
+  return text.codePointAt(0) === BOM ? text.slice(1) : text;
 }
 
 function detectContainerFormat(name, text) {
   const lower = String(name || '').toLowerCase();
   if (/\.(md|markdown|mdx)$/.test(lower)) return 'markdown';
   if (/\.(html?|xhtml)$/.test(lower)) return 'html';
-  if (/\.svg$/.test(lower)) return 'svg';
+  if (lower.endsWith('.svg')) return 'svg';
   // Fall back to a light content sniff for extension-less input.
   const head = stripBom(String(text || '')).slice(0, 512).trimStart();
   if (head.startsWith('<svg') || head.includes('<svg ')) return 'svg';
@@ -60,6 +60,22 @@ function isCompleteScalar(value) {
   return first !== '[' && first !== '{';
 }
 
+// The provenance key a frontmatter line carries when it is safe to drop, or
+// null. Only a single-line scalar value is removable: `key: value` with a
+// non-empty, non-block-scalar value and no indented continuation next.
+// Anything with a nested / multiline value is left intact (a safe miss):
+// removing it reliably needs a full YAML parse and could drop unrelated
+// lines (comments, merge keys, sibling entries).
+function removableProvenanceKey(line, next) {
+  const key = /^\S/.test(line) ? frontmatterKey(line) : null;
+  if (key === null || !AI_PROVENANCE_KEYS.has(key.toLowerCase())) return null;
+  const value = line.slice(line.indexOf(':') + 1).trim();
+  const nextIndented = next !== undefined && /^\s/.test(next) && next.trim() !== '';
+  const blockScalar = /^[|>]/.test(value);
+  const removable = value !== '' && !blockScalar && !nextIndented && isCompleteScalar(value);
+  return removable ? key : null;
+}
+
 function cleanMarkdown(text) {
   const removed = [];
   const lines = text.split('\n');
@@ -75,23 +91,12 @@ function cleanMarkdown(text) {
   const kept = [];
   for (let i = 0; i < frontmatter.length; i += 1) {
     const line = frontmatter[i];
-    const key = /^\S/.test(line) ? frontmatterKey(line) : null;
-    if (key !== null && AI_PROVENANCE_KEYS.has(key.toLowerCase())) {
-      // Remove only a single-line scalar value: `key: value` with a non-empty,
-      // non-block-scalar value and no indented continuation next. Anything with
-      // a nested / multiline value is left intact (a safe miss): removing it
-      // reliably needs a full YAML parse and could drop unrelated lines
-      // (comments, merge keys, sibling entries).
-      const value = line.slice(line.indexOf(':') + 1).trim();
-      const next = frontmatter[i + 1];
-      const nextIndented = next !== undefined && /^\s/.test(next) && next.trim() !== '';
-      const blockScalar = /^[|>]/.test(value);
-      if (value !== '' && !blockScalar && !nextIndented && isCompleteScalar(value)) {
-        removed.push(key);
-        continue;
-      }
+    const key = removableProvenanceKey(line, frontmatter[i + 1]);
+    if (key === null) {
+      kept.push(line);
+    } else {
+      removed.push(key);
     }
-    kept.push(line);
   }
 
   if (removed.length === 0) return { cleaned: text, removed };
@@ -105,8 +110,11 @@ function cleanMarkdown(text) {
 // --- HTML -----------------------------------------------------------------
 
 // A tag body segment that consumes quoted attribute values whole, so a `>`
-// inside a quoted value does not end the scan early.
-const TAG_BODY = '(?:"[^"]*"|\'[^\']*\'|[^>])*';
+// inside a quoted value does not end the scan early. The unquoted branch
+// excludes quote characters so the three branches never overlap: an
+// unbalanced quote makes the tag unrecognizable (a safe miss) instead of
+// giving the engine an ambiguity to backtrack through.
+const TAG_BODY = `(?:"[^"]*"|'[^']*'|[^>"'])*`;
 const META_TAG = new RegExp(`<meta\\b${TAG_BODY}>\\s*`, 'gi');
 const SCRIPT_BLOCK = new RegExp(`<script\\b(${TAG_BODY})>([\\s\\S]*?)<\\/script>\\s*`, 'gi'); // NOSONAR: repo/local file content, never network-controlled input
 const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
@@ -129,17 +137,27 @@ function unquote(value) {
   return value;
 }
 
+// Sticky (y) so each token is matched exactly at the scan position: an
+// attribute first, then a bare quoted value to skip over whole; anything else
+// advances one character.
+const ATTR_TOKEN = /([a-zA-Z_:][\w:.-]*)\s*=\s*("[^"]*"|'[^']*'|[^\s>"'][^\s>]*)/y;
+const QUOTED_TOKEN = /"[^"]*"|'[^']*'/y;
+
 function parseAttrs(tag) {
   const attrs = Object.create(null);
-  const re = /([a-zA-Z_:][\w:.-]*)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)|"[^"]*"|'[^']*'|\S/g;
-  let m = re.exec(tag);
-  while (m !== null) {
-    if (m[1] !== undefined) {
-      const key = m[1].toLowerCase();
+  let i = 0;
+  while (i < tag.length) {
+    ATTR_TOKEN.lastIndex = i;
+    const attr = ATTR_TOKEN.exec(tag);
+    if (attr !== null) {
+      const key = attr[1].toLowerCase();
       // HTML honors the first occurrence of a repeated attribute.
-      if (!(key in attrs)) attrs[key] = unquote(m[2]);
+      if (!(key in attrs)) attrs[key] = unquote(attr[2]);
+      i = ATTR_TOKEN.lastIndex;
+      continue;
     }
-    m = re.exec(tag);
+    QUOTED_TOKEN.lastIndex = i;
+    i = QUOTED_TOKEN.exec(tag) === null ? i + 1 : QUOTED_TOKEN.lastIndex;
   }
   return attrs;
 }
@@ -166,7 +184,7 @@ function cleanHtml(text) {
 
   out = out.replace(SCRIPT_BLOCK, (whole, attrs, body) => {
     const parsed = parseAttrs(attrs);
-    if (parsed.type && parsed.type.toLowerCase() === 'application/ld+json' && LD_PROVENANCE.test(body)) {
+    if (parsed.type?.toLowerCase() === 'application/ld+json' && LD_PROVENANCE.test(body)) {
       removed.push('json-ld');
       return '';
     }
