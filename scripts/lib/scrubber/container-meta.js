@@ -123,9 +123,11 @@ const SCRIPT_OPEN = new RegExp(String.raw`<script\b(${TAG_BODY})>`, 'gi');
 // Searched in the original text (not a lowercased copy, whose length can
 // differ for some Unicode characters), so every index stays aligned.
 const SCRIPT_CLOSE = /<\/script>/gi;
-// The unquoted value branch excludes quote characters so it never overlaps
-// the quoted branches (an unbalanced quote is a safe miss, not a backtrack).
-const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>"'][^\s>]*)/gi;
+// Anchored on the literal attribute name; the whitespace that precedes it is
+// consumed by stripDataAiAttributes so no repetition sits in front of the
+// scan. The unquoted value branch excludes quote characters so it never
+// overlaps the quoted branches (an unbalanced quote is a safe miss).
+const DATA_AI_ATTR = /data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>"'][^\s>]*)/gi;
 // Explicit provenance FIELDS, not brand mentions: a JSON-LD block is only
 // stripped when it declares AI provenance, so a legitimate Article that merely
 // names a model or company survives.
@@ -204,6 +206,27 @@ function stripProvenanceScripts(html, removed) {
   return result + html.slice(last);
 }
 
+// Removes every data-ai-* attribute together with the whitespace run that
+// precedes it; a name not preceded by whitespace is not an attribute
+// boundary and is left alone.
+function stripDataAiAttributes(html, removed) {
+  let result = '';
+  let last = 0;
+  DATA_AI_ATTR.lastIndex = 0;
+  let m = DATA_AI_ATTR.exec(html);
+  while (m !== null) {
+    let start = m.index;
+    while (start > last && /\s/.test(html[start - 1])) start -= 1;
+    if (start < m.index) {
+      removed.push('attr:data-ai');
+      result += html.slice(last, start);
+      last = m.index + m[0].length;
+    }
+    m = DATA_AI_ATTR.exec(html);
+  }
+  return result + html.slice(last);
+}
+
 function cleanHtml(text) {
   const removed = [];
   let out = text;
@@ -220,7 +243,7 @@ function cleanHtml(text) {
 
   out = stripProvenanceScripts(out, removed);
 
-  out = out.replace(DATA_AI_ATTR, () => { removed.push('attr:data-ai'); return ''; });
+  out = stripDataAiAttributes(out, removed);
 
   return { cleaned: out, removed };
 }
