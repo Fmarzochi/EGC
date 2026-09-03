@@ -36,10 +36,6 @@ npm install -g @egchq/egc && egc install
   <img src="assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
-> **Permissions:** if the first command fails with `EACCES` (typical when Node comes from your distro's package manager and the global npm prefix is root-owned), run `sudo npm install -g @egchq/egc` and then `egc install` **without** sudo, or use a user-writable prefix (mise, nvm, asdf, fnm).
->
-> **Wake up the brain:** `cd` into any project and run `egc init` once. That is the step that plants the memory protocol, so your AI tool restores project state on its very first prompt.
-
 [Full installation guide](docs/installation.md)
 
 ---
