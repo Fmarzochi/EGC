@@ -53,7 +53,7 @@ install_deps() {
 }
 
 # Forward --help directly to the Node installer
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+if [[ "$1" = "--help" || "$1" = "-h" ]]; then
   node "$ROOT_DIR/scripts/install-apply.js" "$@"
   exit $?
 fi
@@ -63,7 +63,7 @@ echo "EGC install"
 # Detect --dry-run flag
 DRY_RUN=false
 for _arg in "$@"; do
-  [ "$_arg" = "--dry-run" ] && DRY_RUN=true && break
+  [[ "$_arg" = "--dry-run" ]] && DRY_RUN=true && break
 done
 
 # Detect whether we'll delegate to the Node installer below (install-apply.js
@@ -110,7 +110,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "  note: python3 not found: evalview MCP server requires it"
 fi
 
-if [ "$DRY_RUN" = false ]; then
+if [[ "$DRY_RUN" = false ]]; then
   # Root dependencies (better-sqlite3 etc.)
   echo "  installing root dependencies..."
   cd "$ROOT_DIR"
@@ -140,8 +140,8 @@ if [ "$DRY_RUN" = false ]; then
   # egc-guardian
   echo "  building egc-guardian..."
   GUARDIAN_DIR="$ROOT_DIR/mcp/servers/egc-guardian"
-  if [ ! -d "$GUARDIAN_DIR" ]; then
-    echo "Error: $GUARDIAN_DIR not found"
+  if [[ ! -d "$GUARDIAN_DIR" ]]; then
+    echo "Error: $GUARDIAN_DIR not found" >&2
     exit 1
   fi
   cd "$GUARDIAN_DIR"
@@ -155,8 +155,8 @@ if [ "$DRY_RUN" = false ]; then
   # egc-memory
   echo "  building egc-memory..."
   MEMORY_DIR="$ROOT_DIR/mcp/servers/egc-memory"
-  if [ ! -d "$MEMORY_DIR" ]; then
-    echo "Error: $MEMORY_DIR not found"
+  if [[ ! -d "$MEMORY_DIR" ]]; then
+    echo "Error: $MEMORY_DIR not found" >&2
     exit 1
   fi
   cd "$MEMORY_DIR"
@@ -195,11 +195,11 @@ fi
 
 # Delegate to Node installer only when install-relevant args are present
 cd "$ROOT_DIR"
-if [ "$_has_install_args" = true ]; then
+if [[ "$_has_install_args" = true ]]; then
   node scripts/install-apply.js "$@"
 fi
 
-[ "$DRY_RUN" = true ] && exit 0
+[[ "$DRY_RUN" = true ]] && exit 0
 
 # Write harness config template
 cat > "$ROOT_DIR/.mcp.egc.json" <<EOF
@@ -219,13 +219,13 @@ EOF
 echo "  harness config written to .mcp.egc.json"
 
 # Verify MCP server builds exist
-if [ ! -f "$ROOT_DIR/mcp/servers/egc-guardian/build/index.js" ]; then
+if [[ ! -f "$ROOT_DIR/mcp/servers/egc-guardian/build/index.js" ]]; then
   echo "Error: egc-guardian build missing: run 'cd mcp/servers/egc-guardian && npm run build'" >&2
   exit 1
 fi
 echo "  ✓ egc-guardian build verified"
 
-if [ ! -f "$ROOT_DIR/mcp/servers/egc-memory/build/index.js" ]; then
+if [[ ! -f "$ROOT_DIR/mcp/servers/egc-memory/build/index.js" ]]; then
   echo "Error: egc-memory build missing: run 'cd mcp/servers/egc-memory && npm run build'" >&2
   exit 1
 fi
@@ -240,33 +240,33 @@ echo "  ✓ egc-memory build verified"
 node scripts/egc.js doctor --repo-root "$ROOT_DIR" || true
 
 # Interactive ecosystem install (skipped in CI/headless environments)
-if [ -t 0 ] && [ "$DRY_RUN" = false ]; then
+if [[ -t 0 && "$DRY_RUN" = false ]]; then
   printf "\n  Install prompt library? (61 agents, 232 skills, 77 commands) [Y/n] "
   read -r _install_ans
   _install_ans="${_install_ans:-Y}"
-  if [ "$_install_ans" = "Y" ] || [ "$_install_ans" = "y" ]; then
-    if [ -d "$HOME/.gemini" ] || command -v gemini >/dev/null 2>&1 || command -v agy >/dev/null 2>&1; then
+  if [[ "$_install_ans" = "Y" || "$_install_ans" = "y" ]]; then
+    if [[ -d "$HOME/.gemini" ]] || command -v gemini >/dev/null 2>&1 || command -v agy >/dev/null 2>&1; then
       echo "  installing to Gemini / AGY..."
       node "$ROOT_DIR/scripts/install-apply.js" --target egc --profile full
     fi
-    if [ -d "$HOME/.codex" ] || command -v codex >/dev/null 2>&1; then
+    if [[ -d "$HOME/.codex" ]] || command -v codex >/dev/null 2>&1; then
       echo "  installing to Codex..."
       node "$ROOT_DIR/scripts/install-apply.js" --target codex --profile full
     fi
-    if [ -d "$HOME/.opencode" ] || command -v opencode >/dev/null 2>&1; then
+    if [[ -d "$HOME/.opencode" ]] || command -v opencode >/dev/null 2>&1; then
       echo "  installing to OpenCode..."
       node "$ROOT_DIR/scripts/install-apply.js" --target opencode --profile full
     fi
-    if [ -d "$HOME/.kiro" ] || command -v kiro >/dev/null 2>&1; then
+    if [[ -d "$HOME/.kiro" ]] || command -v kiro >/dev/null 2>&1; then
       echo "  installing to Kiro..."
       node "$ROOT_DIR/scripts/install-apply.js" --target kiro --profile full
       bash "$ROOT_DIR/.kiro/install.sh" ~
     fi
-    if [ -d "$HOME/.trae" ] || [ -d "$HOME/.trae-cn" ] || command -v trae >/dev/null 2>&1; then
+    if [[ -d "$HOME/.trae" || -d "$HOME/.trae-cn" ]] || command -v trae >/dev/null 2>&1; then
       echo "  installing to Trae..."
       bash "$ROOT_DIR/.trae/install.sh" ~
     fi
-    if [ -d "$HOME/.codebuddy" ] || command -v codebuddy >/dev/null 2>&1; then
+    if [[ -d "$HOME/.codebuddy" ]] || command -v codebuddy >/dev/null 2>&1; then
       echo "  installing to CodeBuddy..."
       bash "$ROOT_DIR/.codebuddy/install.sh" ~
     fi

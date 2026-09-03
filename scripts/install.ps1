@@ -214,7 +214,7 @@ if (-not $DryRun) {
     # egc-guardian
     Write-Host "  building egc-guardian..."
     $GuardianDir = Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-guardian"
-    if (-Not (Test-Path $GuardianDir)) {
+    if (-not (Test-Path $GuardianDir)) {
         Write-Error "Not found: $GuardianDir"
         exit 1
     }
@@ -229,7 +229,7 @@ if (-not $DryRun) {
     # egc-memory
     Write-Host "  building egc-memory..."
     $MemoryDir = Join-Path (Join-Path (Join-Path $RootDir "mcp") "servers") "egc-memory"
-    if (-Not (Test-Path $MemoryDir)) {
+    if (-not (Test-Path $MemoryDir)) {
         Write-Error "Not found: $MemoryDir"
         exit 1
     }
