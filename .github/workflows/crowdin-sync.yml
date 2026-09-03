@@ -29,7 +29,7 @@ jobs:
       # Crowdin cannot sentence-split (zh-CN) the whole paragraph lands on the
       # first segment, so the next export duplicates every sentence after it.
       - name: Upload sources to Crowdin
-        uses: crowdin/github-action@e4a6c1338b4063c77d46a81875265f9e8bd76f95 # v2
+        uses: crowdin/github-action@e4a6c1338b4063c77d46a81875265f9e8bd76f95 # v3.0.0
         with:
           upload_sources: true
           upload_translations: false
@@ -102,7 +102,7 @@ jobs:
           done
 
       - name: Download translations
-        uses: crowdin/github-action@e4a6c1338b4063c77d46a81875265f9e8bd76f95 # v2
+        uses: crowdin/github-action@e4a6c1338b4063c77d46a81875265f9e8bd76f95 # v3.0.0
         with:
           upload_sources: false
           upload_translations: false
