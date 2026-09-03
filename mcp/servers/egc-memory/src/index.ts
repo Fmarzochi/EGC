@@ -2,8 +2,8 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
+import { Database } from 'sqlite';
+import { openCompatDatabase } from './sqlite-compat';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -445,7 +445,7 @@ async function getDb(): Promise<Database> {
       hideEgcRootOnWindows();
       
       const dbPath = path.join(dbDir, 'state.db');
-      dbInstance = await open({ filename: dbPath, driver: sqlite3.Database });
+      dbInstance = await openCompatDatabase(dbPath, 'egc-memory');
       
       await dbInstance.exec('PRAGMA journal_mode = WAL;');
       await dbInstance.exec('PRAGMA synchronous = NORMAL;');
@@ -1578,7 +1578,7 @@ async function handleDetectPatterns(db: Database, toolArgs: unknown) {
       return [];
     }
 
-    const ssDb = await open({ filename: stateDbPath, driver: sqlite3.Database });
+    const ssDb = await openCompatDatabase(stateDbPath, 'egc-memory');
     try {
       await ssDb.exec('PRAGMA journal_mode = WAL;');
       await ssDb.exec('PRAGMA busy_timeout = 5000;');
