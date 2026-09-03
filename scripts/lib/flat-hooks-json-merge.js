@@ -73,7 +73,7 @@ function isStaleEgcEntry(entry, command, isOwnBasename) {
     return false;
   }
   const basename = commandScriptBasename(command);
-  return Boolean(basename) && isOwnBasename(entry.command) && entry.command.includes(basename);
+  return Boolean(basename) && isOwnBasename(entry.command) && commandScriptBasename(entry.command) === basename;
 }
 
 // buildExtraTopLevel: (base: object) => object, merged into the result
