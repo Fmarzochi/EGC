@@ -412,7 +412,28 @@ function handleReplCommand(line, state, rl) {
   return 'send';
 }
 
+function printUsage() {
+  console.log([
+    'Usage: egc claw',
+    '',
+    'NanoClaw: a persistent, session-aware agent REPL with Markdown history.',
+    'Sessions live in ~/.gemini/claw/<name>.md; type /help inside the REPL for',
+    'the session commands and exit to quit.',
+    '',
+    'Environment:',
+    '  CLAW_SESSION   session name to open (default: default)',
+    '  CLAW_MODEL     model passed to the backend (default: gemini-2.0-flash)',
+    '  CLAW_SKILLS    comma-separated skills loaded as context',
+  ].join('\n'));
+}
+
 function main() {
+  // `egc help claw` forwards --help; answer it instead of opening the REPL.
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printUsage();
+    return;
+  }
+
   const initialSessionName = process.env.CLAW_SESSION || 'default';
   if (!isValidSessionName(initialSessionName)) {
     console.error(`Error: Invalid session name "${initialSessionName}". Use alphanumeric characters and hyphens only.`);

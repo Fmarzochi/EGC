@@ -98,6 +98,13 @@ function inspectSkillLoopTarget(target, options = {}) {
 }
 
 function main() {
+  // `egc help session-inspect` forwards --help: print the usage and exit 0,
+  // unlike a missing target, which stays a usage error.
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    usage();
+    return;
+  }
+
   const { target, adapterId, targetType, writePath, listAdapters, skillId, amendmentId, observationsPath } = parseArgs(process.argv);
 
   if (listAdapters) {
