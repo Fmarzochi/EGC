@@ -1,0 +1,86 @@
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const { openCompatDatabase, isNativeLoadFailure, normalizeParams } = require('../../scripts/lib/state-store/sqlite-compat');
+
+async function test(name, fn) {
+  try {
+    await fn();
+    console.log(`  ✓ ${name}`);
+    return true;
+  } catch (error) {
+    console.log(`  ✗ ${name}`);
+    console.log(`    Error: ${error.message}`);
+    return false;
+  }
+}
+
+async function runTests() {
+  console.log('\n=== Testing sqlite-compat (shared engine chooser) ===\n');
+  let passed = 0;
+  let failed = 0;
+  const previous = process.env.EGC_SQLITE_ENGINE;
+
+  if (await test('classifies native load failures and nothing else', async () => {
+    assert.ok(isNativeLoadFailure(Object.assign(new Error('x'), { code: 'ERR_DLOPEN_FAILED' })));
+    assert.ok(isNativeLoadFailure(new Error("/lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.38' not found (required by node_sqlite3.node)")));
+    assert.ok(isNativeLoadFailure(new Error('Could not locate the bindings file. Tried:')));
+    assert.ok(!isNativeLoadFailure(new Error('SQLITE_BUSY: database is locked')));
+    assert.ok(!isNativeLoadFailure(null));
+  })) passed++; else failed++;
+
+  if (await test('normalizes the three parameter styles the sqlite package accepts', async () => {
+    assert.deepStrictEqual(normalizeParams([]), undefined);
+    assert.deepStrictEqual(normalizeParams([['a', undefined]]), ['a', null]);
+    assert.deepStrictEqual(normalizeParams(['a', 2]), ['a', 2]);
+    assert.deepStrictEqual(normalizeParams([{ id: 1, $name: 'n', ':x': undefined }]), { $id: 1, $name: 'n', ':x': null });
+    assert.deepStrictEqual(normalizeParams([7]), [7]);
+  })) passed++; else failed++;
+
+  if (await test('the portable engine answers run, get, all and exec and persists to the file', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'nested', 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)');
+      const first = await db.run('INSERT INTO items (name) VALUES (?)', ['alpha']);
+      assert.strictEqual(first.lastID, 1);
+      assert.strictEqual(first.changes, 1);
+      await db.run('INSERT INTO items (name) VALUES ($name)', { name: 'beta' });
+      const row = await db.get('SELECT name FROM items WHERE id = ?', 2);
+      assert.strictEqual(row.name, 'beta');
+      const rows = await db.all('SELECT name FROM items ORDER BY id');
+      assert.deepStrictEqual(rows.map(r => r.name), ['alpha', 'beta']);
+      await db.close();
+      assert.ok(fs.existsSync(file), 'the database file must be written');
+      const again = await openCompatDatabase(file, 'test');
+      const back = await again.all('SELECT name FROM items ORDER BY id');
+      assert.deepStrictEqual(back.map(r => r.name), ['alpha', 'beta']);
+      await again.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await test('the native engine is used by default when it loads', async () => {
+    delete process.env.EGC_SQLITE_ENGINE;
+    let native = true;
+    try { require('sqlite3'); } catch { native = false; }
+    const db = await openCompatDatabase(':memory:', 'test');
+    const row = await db.get('SELECT sqlite_version() AS v');
+    assert.ok(row.v);
+    assert.strictEqual(typeof db.configure === 'function', native, 'the sqlite package Database carries configure; the portable facade does not');
+    await db.close();
+  })) passed++; else failed++;
+
+  if (previous === undefined) delete process.env.EGC_SQLITE_ENGINE; else process.env.EGC_SQLITE_ENGINE = previous;
+  console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
+  process.exit(failed > 0 ? 1 : 0);
+}
+
+runTests();
