@@ -667,7 +667,8 @@ function runTests() {
       assert.ok(result.stdout.includes('State store:'));
       assert.ok(result.stdout.includes('1 stray state.db copy'));
       assert.ok(result.stdout.includes(strayPath));
-      assert.ok(result.stdout.includes('merge-fragmented-state-dbs.js'), 'must point at the consolidation script');
+      const consolidateScript = path.join(__dirname, '..', '..', 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js');
+      assert.ok(result.stdout.includes(`node "${consolidateScript}"`), 'must point at the consolidation script by absolute path, runnable from any cwd');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

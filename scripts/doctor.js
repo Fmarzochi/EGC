@@ -8,6 +8,11 @@ const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 
+// Printed as an absolute path: the hint is read from wherever the person ran
+// egc doctor (a project folder, a global npm install on Windows), and a
+// repo-relative command only works from the package root (#1292).
+const CONSOLIDATE_SCRIPT = path.join(__dirname, 'maintenance', 'merge-fragmented-state-dbs.js');
+
 function showHelp(exitCode = 0) {
   console.log(`
 Usage: node scripts/doctor.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--repo-root <path>] [--json]
@@ -174,7 +179,7 @@ function main() {
           console.log(`    ${stateDb.dbPath}`);
           console.log('  It belongs in the shared ~/.egc store; in a harness directory its');
           console.log('  history is invisible to the rest of EGC. Consolidate it with:');
-          console.log('    node scripts/maintenance/merge-fragmented-state-dbs.js');
+          console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
         }
         if (stateDb.fragments.length > 0) {
           const plural = stateDb.fragments.length === 1 ? 'copy' : 'copies';
@@ -184,7 +189,7 @@ function main() {
           }
           console.log('  Nothing is lost, but new sessions no longer write there. Consolidate');
           console.log('  them into the main store (dry-run by default) with:');
-          console.log('    node scripts/maintenance/merge-fragmented-state-dbs.js');
+          console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
         }
         if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
           // "Nothing to do." only when no warning printed above it in this
