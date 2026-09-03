@@ -10,13 +10,19 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'insaits-security-monitor.py');
-const MONITOR_TIMEOUT_MS = 30000;
+// A monitor run pays a cold interpreter start plus the SDK import; on a busy
+// Windows runner the first run overran a private 30s budget and surfaced as
+// spawnSync ETIMEDOUT (2026-09-03, PR #1334). Same doctrine as the shared
+// fixture: a timeout here is a hang detector, not a performance assertion,
+// so both budgets come from there instead of a platform split.
+const MONITOR_TIMEOUT_MS = FULL_INSTALL_TIMEOUT_MS;
 // Probing `python --version` pays the same cold interpreter start the monitor
-// itself does, which on Windows regularly costs more than a few seconds. A
-// budget too small here reports "no Python on this machine" and the suite
-// fails with spawnSync ETIMEDOUT instead of skipping or running.
-const PYTHON_PROBE_TIMEOUT_MS = process.platform === 'win32' ? 20000 : 5000;
+// itself does. A budget too small here reports "no Python on this machine"
+// and the suite fails with spawnSync ETIMEDOUT instead of skipping or running.
+const PYTHON_PROBE_TIMEOUT_MS = CLI_TIMEOUT_MS;
 
 function createTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'insaits-monitor-'));
