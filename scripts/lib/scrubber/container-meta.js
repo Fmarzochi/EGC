@@ -120,7 +120,9 @@ const META_TAG = new RegExp(String.raw`<meta\b${TAG_BODY}>\s*`, 'gi');
 // closing tag found by plain search, so no repetition ever competes with the
 // terminator.
 const SCRIPT_OPEN = new RegExp(String.raw`<script\b(${TAG_BODY})>`, 'gi');
-const SCRIPT_CLOSE = '</script>';
+// Searched in the original text (not a lowercased copy, whose length can
+// differ for some Unicode characters), so every index stays aligned.
+const SCRIPT_CLOSE = /<\/script>/gi;
 const DATA_AI_ATTR = /\s+data-ai-[\w-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
 // Explicit provenance FIELDS, not brand mentions: a JSON-LD block is only
 // stripped when it declares AI provenance, so a legitimate Article that merely
@@ -176,16 +178,17 @@ function isProvenanceMetaValue(value) {
 // provenance, together with the whitespace that followed it; every other
 // script block is kept byte for byte.
 function stripProvenanceScripts(html, removed) {
-  const lower = html.toLowerCase();
   let result = '';
   let last = 0;
   SCRIPT_OPEN.lastIndex = 0;
   let m = SCRIPT_OPEN.exec(html);
   while (m !== null) {
     const bodyStart = m.index + m[0].length;
-    const close = lower.indexOf(SCRIPT_CLOSE, bodyStart);
-    if (close < 0) break;
-    let end = close + SCRIPT_CLOSE.length;
+    SCRIPT_CLOSE.lastIndex = bodyStart;
+    const closeMatch = SCRIPT_CLOSE.exec(html);
+    if (closeMatch === null) break;
+    const close = closeMatch.index;
+    let end = close + closeMatch[0].length;
     const parsed = parseAttrs(m[1]);
     if (parsed.type?.toLowerCase() === 'application/ld+json' && LD_PROVENANCE.test(html.slice(bodyStart, close))) {
       removed.push('json-ld');
