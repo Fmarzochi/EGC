@@ -69,7 +69,7 @@ function embeddedPathCandidate(arg: string): string | null {
 // quotes able to defeat every exact-match keyword check below. Path checks
 // elsewhere keep the raw argument.
 function bareToken(a: string): string {
-  return a.replaceAll(/\\/g, '').replaceAll(/["']/g, '').toLowerCase();
+  return a.replaceAll('\\', '').replaceAll(/["']/g, '').toLowerCase();
 }
 
 // Same quote/backslash stripping as bareToken(), but case-preserving. Used

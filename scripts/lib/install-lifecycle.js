@@ -1182,6 +1182,64 @@ function describeUnrepairable(unrepairable) {
   return parts.join('; ');
 }
 
+// Drops the orphaned entries from the state that is about to be rewritten,
+// so doctor converges to OK; the installed files stay on disk.
+function pruneOrphanedOperations(desiredPlan, orphanedInspections) {
+  if (orphanedInspections.length === 0) return;
+  const orphanKeys = new Set(orphanedInspections.map(entry => operationIdentityKey(entry.operation)));
+  desiredPlan.statePreview.operations = desiredPlan.statePreview.operations.filter(
+    operation => !orphanKeys.has(operationIdentityKey(operation))
+  );
+}
+
+// Orphans and unfixable entries are worth reporting whether or not anything
+// is being written: a dry run that says 'planned' or 'ok' while an entry can
+// never be repaired is exactly the silence this reporting removes. Planned
+// prunes count as planned work.
+function buildDryRunRepairResult(record, { plannedRepairs, prunedPaths, unrepairable }) {
+  const hasPlannedWork = plannedRepairs.length > 0 || prunedPaths.length > 0;
+  let dryRunStatus = hasPlannedWork ? 'planned' : 'ok';
+  if (unrepairable.length > 0) {
+    dryRunStatus = hasPlannedWork ? 'partial' : 'error';
+  }
+  return {
+    adapter: record.adapter,
+    status: dryRunStatus,
+    installStatePath: record.installStatePath,
+    repairedPaths: [],
+    plannedRepairs,
+    prunedPaths: [],
+    plannedPrunes: prunedPaths,
+    unrepairable,
+    stateRefreshed: plannedRepairs.length === 0,
+    error: describeUnrepairable(unrepairable),
+  };
+}
+
+// Each operation is executed on its own: one that cannot be carried out (its
+// source was renamed away, or the destination is not writable) is recorded
+// in `unrepairable` and the loop moves on, instead of throwing out and
+// leaving every other managed file broken. Returns the repaired paths.
+function executeRepairOperations(repoRoot, repairOperations, unrepairable) {
+  const repairedPaths = [];
+  for (const operation of repairOperations) {
+    try {
+      executeRepairOperation(repoRoot, operation);
+      repairedPaths.push(operation.destinationPath);
+    } catch (operationError) {
+      // The destination, not the source: an execution failure is about the
+      // file being written (permissions, a directory in the way), and naming
+      // the source would point at a perfectly healthy file.
+      unrepairable.push({
+        path: operation.destinationPath,
+        cause: 'failed',
+        reason: operationError.message,
+      });
+    }
+  }
+  return repairedPaths;
+}
+
 // Repairs one discovered install-state record; the summary over all records
 // is built by repairInstalledStates.
 function repairRecord(record, context, options) {
@@ -1226,12 +1284,7 @@ function repairRecord(record, context, options) {
       reason: 'source file is no longer in the reference repo',
     }));
 
-    if (orphanedInspections.length > 0) {
-      const orphanKeys = new Set(orphanedInspections.map(entry => operationIdentityKey(entry.operation)));
-      desiredPlan.statePreview.operations = desiredPlan.statePreview.operations.filter(
-        operation => !orphanKeys.has(operationIdentityKey(operation))
-      );
-    }
+    pruneOrphanedOperations(desiredPlan, orphanedInspections);
 
     const repairOperations = [
       ...operationHealth.missing.map(entry => ({ ...entry.operation })),
@@ -1240,49 +1293,10 @@ function repairRecord(record, context, options) {
     const plannedRepairs = repairOperations.map(operation => operation.destinationPath);
 
     if (options.dryRun) {
-      // Orphans and unfixable entries are worth reporting whether or not
-      // anything is being written: a dry run that says 'planned' or 'ok'
-      // while an entry can never be repaired is exactly the silence this
-      // reporting removes. Planned prunes count as planned work.
-      const hasPlannedWork = plannedRepairs.length > 0 || prunedPaths.length > 0;
-      let dryRunStatus = hasPlannedWork ? 'planned' : 'ok';
-      if (unrepairable.length > 0) {
-        dryRunStatus = hasPlannedWork ? 'partial' : 'error';
-      }
-      return {
-        adapter: record.adapter,
-        status: dryRunStatus,
-        installStatePath: record.installStatePath,
-        repairedPaths: [],
-        plannedRepairs,
-        prunedPaths: [],
-        plannedPrunes: prunedPaths,
-        unrepairable,
-        stateRefreshed: plannedRepairs.length === 0,
-        error: describeUnrepairable(unrepairable),
-      };
+      return buildDryRunRepairResult(record, { plannedRepairs, prunedPaths, unrepairable });
     }
 
-    // Each operation is executed on its own: one that cannot be carried
-    // out (its source was renamed away, or the destination is not
-    // writable) is recorded and the loop moves on, instead of throwing
-    // out to the catch below and leaving every other managed file broken.
-    const repairedPaths = [];
-    for (const operation of repairOperations) {
-      try {
-        executeRepairOperation(context.repoRoot, operation);
-        repairedPaths.push(operation.destinationPath);
-      } catch (operationError) {
-        // The destination, not the source: an execution failure is about
-        // the file being written (permissions, a directory in the way),
-        // and naming the source would point at a perfectly healthy file.
-        unrepairable.push({
-          path: operation.destinationPath,
-          cause: 'failed',
-          reason: operationError.message,
-        });
-      }
-    }
+    const repairedPaths = executeRepairOperations(context.repoRoot, repairOperations, unrepairable);
 
     writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
 

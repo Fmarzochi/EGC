@@ -1,7 +1,7 @@
 #!/bin/bash
 # The documented entrypoint is `sh scripts/install.sh`; on systems where sh is
 # dash the script re-executes itself under bash, which everything below needs.
-case "${BASH_VERSION:-}" in '') exec bash "$0" "$@" ;; esac
+case "${BASH_VERSION:-}" in '') exec bash "$0" "$@" ;; *) ;; esac
 set -e
 
 # Both of these resolve symlinks (pwd -P). Mixing logical and physical

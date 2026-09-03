@@ -58,10 +58,9 @@ function runPrecommit(argv) {
       fs.writeFileSync(resolved, result.message); // NOSONAR: git-provided local commit-message path, never network-controlled input
       process.stderr.write(`[scrubber] removed ${result.removed.length} AI attribution line(s) from the commit message\n`);
     } catch {
-      return;
+      // The commit proceeds with the original message.
     }
   }
-  return;
 }
 
 
