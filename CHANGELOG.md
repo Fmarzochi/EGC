@@ -17,7 +17,7 @@ All notable changes to EGC are documented here.
 
 ### Security
 
-- **Open advisories cleared in every lockfile** (#1338): browserslist 4.28.8, fast-uri 3.1.7 and qs 6.16.0 across the root, dashboard, egc-guardian and egc-memory lockfiles, plus pip 26.2 in the test requirements. The dashboard lockfile also drops the stale express tree it no longer declares.
+- **Open advisories cleared in every lockfile** (#1338): browserslist 4.28.8 in the root lockfile, fast-uri 3.1.7 and qs 6.16.0 across the root, egc-guardian and egc-memory lockfiles, plus pip 26.2 in the test requirements. The dashboard lockfile clears its own qs advisory by dropping the stale express tree it no longer declares.
 
 ## [1.1.20] - 2026-08-16
 
