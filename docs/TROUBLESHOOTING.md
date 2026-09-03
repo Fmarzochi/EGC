@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## `EACCES: permission denied` on macOS
+## `EACCES: permission denied` on macOS or Linux
 
 **Symptom:** `npm install -g @egchq/egc` fails with:
 
@@ -11,7 +11,14 @@ npm error path /usr/local/lib/node_modules/@egchq
 npm error errno -13
 ```
 
-**Cause:** Node.js was installed system-wide (via the official installer or Homebrew) and npm cannot write to `/usr/local/lib/node_modules` without root access.
+**Cause:** Node.js was installed system-wide (the official installer or Homebrew on macOS, the distro package manager on Linux, e.g. `apt install nodejs` on Ubuntu) and npm cannot write to `/usr/local/lib/node_modules` without root access.
+
+**Quick fix (keeps your Node):** run only the package install as root, then everything else as yourself so ownership stays clean:
+
+```bash
+sudo npm install -g @egchq/egc
+egc install
+```
 
 **Fix:** Use a Node version manager so Node lives under your home directory and global installs work without `sudo`.
 
