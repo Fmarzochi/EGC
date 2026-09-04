@@ -60,6 +60,18 @@ function runTests() {
     assert.ok(out.startsWith('curl -H'), 'the command shape survives');
   })) passed++; else failed++;
 
+  if (test('sanitizeCommand keeps basic-auth users, covers API-key headers, secret aliases and quoted values', () => {
+    const cases = [
+      ['curl -u admin:hunter2 https://x', 'curl -u admin:<REDACTED> https://x'],
+      ['curl -H "X-API-Key: k-123" https://x', 'curl -H "X-API-Key: <REDACTED>" https://x'],
+      ['AUTH=abc CREDENTIAL=ghi ./run', 'AUTH=<REDACTED> CREDENTIAL=<REDACTED> ./run'],
+      ['x --token="abc def" --password=\'p w\' y', 'x --token=<REDACTED> --password=<REDACTED> y'],
+      ['git push -u origin main', 'git push -u origin main'],
+      ['git commit --author="Ann <a@x.tld>" -m x', 'git commit --author="Ann <a@x.tld>" -m x'],
+    ];
+    for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
+  })) passed++; else failed++;
+
   if (test('sanitizeCommand leaves ordinary commands untouched', () => {
     for (const cmd of ['git status', 'npm test -- --grep token', 'ls -la ~/.ssh', 'echo "read the password policy"', 'git checkout 4f054e08']) {
       assert.strictEqual(sanitizeCommand(cmd), cmd);

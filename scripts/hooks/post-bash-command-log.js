@@ -19,24 +19,26 @@ const MODE_CONFIG = {
   },
 };
 
-// Secrets embedded in a shell command: header and flag values, key=value
-// assignments, URL credentials, well-known token prefixes and JWTs. Each
-// pattern is anchored on a literal and consumes one run of non-space
-// characters, so none of them backtracks. Mirrors the Guardian's own audit
+// Secrets embedded in a shell command. A value is a quoted run or a bare
+// run of non-space characters; each pattern is anchored on a literal and
+// short enough to read on its own. Mirrors the Guardian's own audit
 // redaction (mcp/servers/egc-guardian/src/audit-log.ts).
+const VALUE = String.raw`(?:"[^"]*"|'[^']*'|[^\s"'&;]+)`;
 const SECRET_PATTERNS = [
-  /(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+/gi,
-  /(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth)(?:=|\s+))[^\s"']+/gi,
-  /(\b[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey)[a-z_]*\s*=\s*)[^\s"'&;]+/gi,
+  new RegExp(String.raw`(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+`, 'gi'),
+  new RegExp(String.raw`((?:x-)?(?:api[-_]?key|api[-_]?secret|auth[-_]?token|access[-_]?token|secret[-_]?key|private[-_]?token)\s*:\s*)[^\s"']+`, 'gi'),
+  new RegExp(String.raw`(--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:)[^\s"']+`, 'gi'),
+  new RegExp(String.raw`(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth|credentials?)(?:=|\s+))` + VALUE, 'gi'),
+  new RegExp(String.raw`\b((?:[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey|private[-_]?key|access[-_]?key)[a-z_]*|auth|authorization|credentials?)\s*=\s*)` + VALUE, 'gi'),
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
   /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
-  /\bsk-[A-Za-z0-9_-]{20,}\b/g,
+  /\bgithub_pat_\w{20,}\b/g,
+  /\bsk-[\w-]{20,}\b/g,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
   /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
-  /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
-  /\bAIza[0-9A-Za-z_-]{35}\b/g,
-  /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+  /\bglpat-[\w-]{20,}\b/g,
+  /\bAIza[\w-]{35}\b/g,
+  /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
 
 function sanitizeCommand(command) {
