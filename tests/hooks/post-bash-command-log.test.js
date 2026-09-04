@@ -126,9 +126,11 @@ function runTests() {
       ["echo $(echo \"`echo '\"'`\") ; curl -u user:pw https://x", "echo $(echo \"`echo '\"'`\") ; curl -u user:<REDACTED> https://x"],
 
       // A backslash escapes only where the platform's shell reads it so; on
-      // Windows the substitution after a literal backslash is active.
+      // Windows the substitution after a literal backslash is active, and an
+      // ANSI-C run opened after a literal backslash never closes, so the rest
+      // of the command is redacted with it.
       ["curl -u user\\$(x):pw https://x", process.platform === 'win32' ? 'curl -u user\\$(<REDACTED>):<REDACTED> https://x' : 'curl -u user\\$(x):<REDACTED> https://x'],
-      ["curl -u \\$'\\'$(y):pw https://x", process.platform === 'win32' ? "curl -u \\$'<REDACTED>' https://x" : "curl -u \\$'\\'$(<REDACTED>):<REDACTED> https://x"],
+      ["curl -u \\$'\\'$(y):pw https://x", process.platform === 'win32' ? "curl -u \\$'<REDACTED>'" : "curl -u \\$'\\'$(<REDACTED>):<REDACTED> https://x"],
 
 
 
