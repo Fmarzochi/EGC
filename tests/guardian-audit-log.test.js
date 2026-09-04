@@ -85,6 +85,8 @@ if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding
     ['cmd --api_secret abc --api-secret=def', 'cmd --api_secret [REDACTED] --api-secret=[REDACTED]'],
     ['AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP PRIVATEKEY=p API-KEY=q MY_ACCESS_KEY=r ./run', 'AWS_ACCESS_KEY_ID=[REDACTED] PRIVATEKEY=[REDACTED] API-KEY=[REDACTED] MY_ACCESS_KEY=[REDACTED] ./run'],
     ['tool --secret --other flag', 'tool --secret --other flag'],
+    ['tool --token=-hunter2 TOKEN=-hunter2 x', 'tool --token=[REDACTED] TOKEN=[REDACTED] x'],
+    ['curl -uadmin:hunter2 https://x', 'curl -uadmin:[REDACTED] https://x'],
   ];
   for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
 })) passed++; else failed++;
