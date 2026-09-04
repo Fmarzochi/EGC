@@ -23,8 +23,8 @@ function test(name, fn) {
   }
 }
 
-function runHook(filePath, env = {}, toolInput = null, toolName = 'Write') {
-  const rawInput = JSON.stringify({ tool_name: toolName, tool_input: toolInput || { file_path: filePath, content: 'x' } });
+function runHook(filePath, env = {}, toolInput = null, toolName = 'Write', cwd = null) {
+  const rawInput = JSON.stringify({ tool_name: toolName, tool_input: toolInput || { file_path: filePath, content: 'x' }, ...(cwd ? { cwd } : {}) });
   const result = spawnSync('node', [runner, 'pre:write-guardian-validate', 'scripts/hooks/pre-write-guardian-validate.js', 'minimal,standard,strict'], {
     input: rawInput,
     encoding: 'utf8',
@@ -154,6 +154,25 @@ function runTests() {
     for (const [file, content] of [['/tmp/notes.md', `${wipe} / is a dangerous command, never run it\n`], ['/tmp/clean.ps1', 'Remove-Item -Recurse -Force C:\\tmp\\x\n'], ['/tmp/tool.py', `import os\nos.system("${wipe} /tmp/x")\n`]]) {
       const result = runHook(file, {}, { file_path: file, content });
       assert.strictEqual(result.code, 0, `${file}: ${result.stderr}`);
+    }
+  })) passed++; else failed++;
+
+  if (test('resolves a relative Edit target against the hook cwd before judging the resulting script', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-write-cwd-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'deploy.sh'), `#!/bin/bash\necho start\n${wipe} /tmp/egc-victim\n`);
+      const result = runHook('deploy.sh', {}, { file_path: 'deploy.sh', old_string: 'echo start', new_string: 'echo begin' }, 'Edit', dir);
+      assert.strictEqual(result.code, 2, JSON.stringify(result));
+      assert.ok(result.stderr.includes('runs a denied command'), result.stderr);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('blocks a denied command carried by a function body or a case arm', () => {
+    for (const content of [`#!/bin/bash\nfunction f() { ${wipe} /tmp/egc-victim; }\nf\n`, `#!/bin/sh\ncase "$1" in start) ${wipe} /tmp/egc-victim;; esac\n`, `#!/bin/bash\ncoproc ${wipe} /tmp/egc-victim\n`]) {
+      const result = runHook('/tmp/egc-carrier.sh', {}, { file_path: '/tmp/egc-carrier.sh', content });
+      assert.strictEqual(result.code, 2, `${JSON.stringify(content)}: ${result.stderr}`);
     }
   })) passed++; else failed++;
 

@@ -485,6 +485,20 @@ async function runTests() {
     assert.ok(!String(result.reason || '').includes('inline code execution'), JSON.stringify(result));
   });
   run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
+  run('case arms, coprocesses and function bodies do not hide a denied command', () => {
+    for (const command of [
+      'case x in x) rm -rf /tmp/guarded;; esac',
+      'case "$1" in (start|restart) rm -rf /tmp/guarded ;; esac',
+      'coproc rm -rf /tmp/guarded',
+      'coproc worker { rm -rf /tmp/guarded; }',
+      'function f() { rm -rf /tmp/guarded; }; f',
+      'function f { rm -rf /tmp/guarded; }',
+      'f() { rm -rf /tmp/guarded; }',
+      'f () { rm -rf /tmp/guarded; }',
+    ]) {
+      assertHardBlocking(command);
+    }
+  });
 
   // audit 2026-08-17, H3 follow-up: a keyword or grouping opener in front of
   // the real command must not turn a denial into an allowlist miss.

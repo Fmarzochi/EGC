@@ -347,6 +347,15 @@ function shouldRepairFromRecordedOperations(state) {
   return getManagedOperations(state).some(operation => operation.kind !== 'copy-file');
 }
 
+// A destination created here takes the source's permission bits (an MCP
+// file may carry credentials and be mode-restricted); one that already
+// exists keeps the mode its owner chose.
+function writeKeepingSourceMode(destinationPath, text, sourcePath) {
+  const existed = fs.existsSync(destinationPath);
+  fs.writeFileSync(destinationPath, text);
+  if (!existed) fs.chmodSync(destinationPath, fs.statSync(sourcePath).mode & 0o777);
+}
+
 function repairCopyFile(repoRoot, operation) {
   const sourcePath = resolveOperationSourcePath(repoRoot, operation);
   if (!sourcePath || !fs.existsSync(sourcePath)) {
@@ -359,7 +368,7 @@ function repairCopyFile(repoRoot, operation) {
     // was validated is the text that lands.
     const text = fs.readFileSync(sourcePath, 'utf8');
     assertSafeMcpConfig(parseMcpConfigText(text, sourcePath), sourcePath);
-    fs.writeFileSync(operation.destinationPath, text);
+    writeKeepingSourceMode(operation.destinationPath, text, sourcePath);
     return;
   }
   fs.copyFileSync(sourcePath, operation.destinationPath);

@@ -102,11 +102,11 @@ function applyEdit(content, edit) {
 // whole; an Edit or MultiEdit is applied to the current file. When an edit
 // cannot be applied (file absent, anchor missing) the inserted text itself
 // is judged, so a denied command never slips through as a fragment.
-function resultingContent(tool, filePath) {
+function resultingContent(tool, filePath, readPath = filePath) {
   if (typeof tool?.content === 'string' && targetOf(tool) === filePath) return tool.content;
   const edits = editsFor(tool, filePath);
   if (edits.length === 0) return null;
-  let content = readExisting(filePath);
+  let content = readExisting(readPath);
   for (const edit of edits) {
     content = content === null ? null : applyEdit(content, edit);
   }
@@ -134,9 +134,16 @@ function scriptSegments(content) {
   return { segments };
 }
 
+// A relative target is what the tool will write relative to the hook's cwd,
+// not to the directory this process happens to run in.
+function resolveTarget(input, filePath) {
+  const cwd = typeof input?.cwd === 'string' ? input.cwd : process.cwd();
+  return path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+}
+
 function blockedScript(cli, input, filePath) {
   if (!bashGuardian) return null;
-  const content = resultingContent(input?.tool_input, filePath);
+  const content = resultingContent(input?.tool_input, filePath, resolveTarget(input, filePath));
   if (!content || !isShellScript(filePath, content)) return null;
   const { segments, error } = scriptSegments(content);
   if (error) return blocked(error);
@@ -154,7 +161,7 @@ function blockedScript(cli, input, filePath) {
 
 function firstBlocked(cli, input, targets) {
   for (const filePath of targets) {
-    const result = blockedPath(cli, filePath) || blockedScript(cli, input, filePath);
+    const result = blockedPath(cli, resolveTarget(input, filePath)) || blockedScript(cli, input, filePath);
     if (result) return result;
   }
   return null;

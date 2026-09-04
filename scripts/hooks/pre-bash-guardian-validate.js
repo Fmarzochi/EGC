@@ -48,40 +48,134 @@ const MAX_SUBSTITUTION_DEPTH = 5;
 // nothing were found.
 
 // A script an interpreter is asked to run (`bash deploy.sh`, `sh x.txt`,
-// `source env.sh`, `. env.sh`) is judged like typed commands: its own
-// segments join the same validation, so writing a denied command to a file
-// first, under any name, does not change the verdict.
+// `source env.sh`, `. env.sh`, `/bin/bash "my dir/x.sh"`, `sudo bash x.sh`)
+// is judged like typed commands: its own segments join the same validation,
+// recursively for the scripts it runs in turn, so writing a denied command
+// to a file first, under any name, does not change the verdict. A script
+// that cannot be inspected (unreadable, too large, nested too deep) fails
+// closed.
 const SHELL_INTERPRETERS = new Set(['bash', 'sh', 'zsh', 'ksh', 'dash', 'ash', 'source', '.']);
+const INTERPRETER_WRAPPERS = new Set(['sudo', 'doas', 'env', 'nice', 'nohup', 'time', 'command', 'exec', 'builtin']);
 const MAX_SCRIPT_BYTES = 512 * 1024;
+const MAX_SCRIPT_DEPTH = 8;
 
-function scriptOperandsOf(segment, cwd) {
-  const tokens = segment.trim().split(/\s+/);
-  if (!SHELL_INTERPRETERS.has(tokens[0])) return [];
-  return tokens.slice(1)
-    .filter(token => !token.startsWith('-'))
-    .map(token => path.resolve(cwd || process.cwd(), token.replace(/^["']|["']$/g, '')))
-    .filter(candidate => {
-      try {
-        const stat = fs.statSync(candidate);
-        return stat.isFile() && stat.size <= MAX_SCRIPT_BYTES;
-      } catch {
-        return false;
-      }
-    });
+function shellWordEnd(text, start) {
+  let quote = null;
+  let i = start;
+  while (i < text.length) {
+    const ch = text[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+    } else if (ch === '\\') {
+      i += 1;
+    } else if (quote === '"') {
+      if (ch === '"') quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (/\s/.test(ch)) {
+      break;
+    }
+    i += 1;
+  }
+  return Math.min(i, text.length);
 }
 
-// Segments of every script the command runs, or null when one of them
-// nests substitutions deeper than extractSegments can unwrap.
-function scriptSegmentsOf(segments, cwd) {
-  const collected = [];
-  for (const segment of segments) {
-    for (const file of scriptOperandsOf(segment, cwd)) {
-      const nested = extractSegments(fs.readFileSync(file, 'utf8'));
-      if (nested === null) return null;
-      collected.push(...nested);
+// The words of one segment as the shell would see them: quotes removed and
+// backslashes resolved, so a path with a space is one operand.
+function shellWords(segment) {
+  const words = [];
+  let i = 0;
+  while (i < segment.length) {
+    if (/\s/.test(segment[i])) {
+      i += 1;
+      continue;
+    }
+    const end = shellWordEnd(segment, i);
+    words.push(segment.slice(i, end).replace(/\\(.)/g, '$1').replace(/["']/g, ''));
+    i = end;
+  }
+  return words;
+}
+
+// The operands of the interpreter in a segment, after env assignments and
+// the usual wrappers (their own options included, plus the user of sudo -u).
+// A variable-expanded interpreter cannot be resolved, so its operands are
+// inspected as if it were a shell.
+function interpreterOperands(words) {
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index];
+    if (/^[A-Za-z_]\w*=/.test(word)) {
+      index += 1;
+    } else if (INTERPRETER_WRAPPERS.has(word)) {
+      index += 1;
+      while (index < words.length && words[index].startsWith('-')) {
+        index += (word === 'sudo' || word === 'doas') && words[index] === '-u' ? 2 : 1;
+      }
+    } else {
+      break;
     }
   }
-  return collected;
+  const head = words[index];
+  if (!head) return [];
+  const name = head.split(/[\\/]/).pop().toLowerCase();
+  if (!head.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return [];
+  return words.slice(index + 1).filter(word => !word.startsWith('-'));
+}
+
+// Existing files among the operands, resolved against the cwd; a file that
+// exists but cannot be read within the budget is reported so the caller
+// fails closed instead of skipping it.
+function scriptOperandsOf(segment, cwd) {
+  const files = [];
+  for (const operand of interpreterOperands(shellWords(segment))) {
+    const candidate = path.resolve(cwd || process.cwd(), operand);
+    let stat;
+    try {
+      stat = fs.statSync(candidate);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    if (stat.size > MAX_SCRIPT_BYTES) return { files, blocked: `script ${operand} is too large to analyze` };
+    files.push(candidate);
+  }
+  return { files, blocked: null };
+}
+
+// Segments of every script the command runs, following scripts that run
+// scripts; `blocked` names the reason when one of them cannot be inspected.
+function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
+  const collected = [];
+  for (const segment of segments) {
+    const operands = scriptOperandsOf(segment, cwd);
+    if (operands.blocked) return { segments: collected, blocked: operands.blocked };
+    for (const file of operands.files) {
+      let real;
+      try {
+        real = fs.realpathSync(file);
+      } catch {
+        return { segments: collected, blocked: `script ${file} cannot be read` };
+      }
+      if (seen.has(real)) continue;
+      seen.add(real);
+      if (depth >= MAX_SCRIPT_DEPTH) return { segments: collected, blocked: `scripts nest deeper than ${MAX_SCRIPT_DEPTH} levels` };
+      let nested;
+      try {
+        nested = extractSegments(fs.readFileSync(file, 'utf8'));
+      } catch {
+        return { segments: collected, blocked: `script ${file} cannot be read` };
+      }
+      if (nested === null) {
+        return { segments: collected, blocked: 'a script it runs nests command/process substitutions deeper than this validator can safely unwrap and analyze' };
+      }
+      collected.push(...nested);
+      const inner = scriptSegmentsOf(nested, cwd, depth + 1, seen);
+      collected.push(...inner.segments);
+      if (inner.blocked) return { segments: collected, blocked: inner.blocked };
+    }
+  }
+  return { segments: collected, blocked: null };
 }
 
 const ADVISORY_REASONS = [
@@ -143,6 +237,22 @@ function isAdvisory(verdict) {
   return ADVISORY_REASONS.some(marker => reason.includes(marker));
 }
 
+// The first verdict that denies for a hard reason, as the hook's answer.
+function firstHardBlock(verdicts, segments) {
+  for (let i = 0; i < verdicts.length; i++) {
+    const verdict = verdicts[i] || {};
+    if (verdict.allowed === false && !isAdvisory(verdict)) {
+      return {
+        exitCode: 2,
+        stderr:
+          `EGC Guardian BLOCKED this command: ${verdict.reason || 'denied by policy'} ` +
+          `(segment: ${segments[i]}). Adjust the command to comply with the project safety rules.`,
+      };
+    }
+  }
+  return null;
+}
+
 function run(inputOrRaw) {
   const input = parseInput(inputOrRaw);
   const command = input?.tool_input?.command;
@@ -173,16 +283,14 @@ function run(inputOrRaw) {
   }
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
-  const scriptSegments = scriptSegmentsOf(segments, cwd);
-  if (scriptSegments === null) {
+  const scripts = scriptSegmentsOf(segments, cwd);
+  if (scripts.blocked) {
     return {
       exitCode: 2,
-      stderr:
-        'EGC Guardian BLOCKED this command: a script it runs nests command/process ' +
-        'substitutions deeper than this validator can safely unwrap and analyze.',
+      stderr: `EGC Guardian BLOCKED this command: ${scripts.blocked}.`,
     };
   }
-  segments.push(...scriptSegments);
+  segments.push(...scripts.segments);
   const verdicts = callGuardian(
     cli,
     ['command-batch'],
@@ -190,18 +298,8 @@ function run(inputOrRaw) {
     VALIDATE_TIMEOUT_MS,
   );
   if (!Array.isArray(verdicts)) return { exitCode: 0 };
-
-  for (let i = 0; i < verdicts.length; i++) {
-    const verdict = verdicts[i] || {};
-    if (verdict.allowed === false && !isAdvisory(verdict)) {
-      return {
-        exitCode: 2,
-        stderr:
-          `EGC Guardian BLOCKED this command: ${verdict.reason || 'denied by policy'} ` +
-          `(segment: ${segments[i]}). Adjust the command to comply with the project safety rules.`,
-      };
-    }
-  }
+  const hardBlock = firstHardBlock(verdicts, segments);
+  if (hardBlock) return hardBlock;
 
   return { exitCode: 0 };
 }

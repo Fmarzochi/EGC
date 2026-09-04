@@ -187,12 +187,16 @@ function applyMcpCopyFileOperation(operation, disabledServers) {
   const text = fs.readFileSync(operation.sourcePath, 'utf8');
   const sourceConfig = parseMcpConfigText(text, operation.sourcePath);
   assertSafeMcpConfig(sourceConfig, operation.sourcePath);
+  const existed = fs.existsSync(operation.destinationPath);
   if (disabledServers.length === 0) {
     fs.writeFileSync(operation.destinationPath, text);
-    return;
+  } else {
+    const filteredConfig = filterMcpConfig(sourceConfig, disabledServers).config;
+    fs.writeFileSync(operation.destinationPath, formatJson(filteredConfig), 'utf8');
   }
-  const filteredConfig = filterMcpConfig(sourceConfig, disabledServers).config;
-  fs.writeFileSync(operation.destinationPath, formatJson(filteredConfig), 'utf8');
+  // A destination created here takes the source's permission bits: an MCP
+  // file may carry credentials and be mode-restricted.
+  if (!existed) fs.chmodSync(operation.destinationPath, fs.statSync(operation.sourcePath).mode & 0o777);
 }
 
 // apply.js's own location is always the real installed package: unlike
