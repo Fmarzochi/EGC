@@ -64,15 +64,34 @@ function secretValueEnd(text, start, attached) {
 }
 
 // curl's -u name:password, in any of its spellings (-u name:, -u=name:,
-// -uname:), judged one occurrence at a time so a second -u on the same
-// command is redacted too. -u is an ordinary flag for rsync, sudo and
-// others, so only occurrences inside a curl command segment count.
-const CURL_USER_RE = /(^|\s)-u(?:=|\s*)["']?[^\s:"']+:/g;
+// -uname:, -u :password), judged one occurrence at a time so a second -u on
+// the same command is redacted too. -u is an ordinary flag for rsync, sudo
+// and others, so only occurrences inside a curl command segment count.
+const CURL_USER_RE = /(^|\s)-u(?:=|\s*)["']?[^\s:"']*:/g;
+
+// Index just past the last unquoted, unescaped command separator (;, |, &,
+// newline) before `index`, so a separator inside a quoted argument does not
+// end the curl segment early.
+function segmentStart(text, index) {
+  let start = 0;
+  let quote = null;
+  for (let i = 0; i < index; i++) {
+    const ch = text[i];
+    if (ch === '\\') {
+      i++;
+    } else if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ';' || ch === '|' || ch === '&' || ch === '\n') {
+      start = i + 1;
+    }
+  }
+  return start;
+}
 
 function insideCurlSegment(text, index) {
-  const before = text.slice(0, index);
-  const boundary = Math.max(before.lastIndexOf(';'), before.lastIndexOf('|'), before.lastIndexOf('&'));
-  return /\bcurl\b/.test(before.slice(boundary + 1));
+  return /\bcurl\b/i.test(text.slice(segmentStart(text, index), index));
 }
 
 function redactCurlBasicAuth(text) {
