@@ -48,6 +48,10 @@ const SECRET_SHAPES = [
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
 const REDACTED = '<REDACTED>';
+// Command lines nest through substitutions and shell -c bodies; past this
+// many levels a body is replaced whole instead of being read.
+const MAX_NESTING = 64;
+
 
 function secretValueEnd(text, start, attached) {
   const quote = text[start];
@@ -145,21 +149,25 @@ function backtickEnd(text, at) {
 // text length when it never closes. Inside double quotes a nested
 // substitution ($( ) or backticks) is skipped whole: a quote in its body
 // belongs to it, not to this run.
-function quotedRunEnd(text, at) {
+function quotedRunEnd(text, at, level = 0) {
   const quote = text[at];
   let i = at + 1;
   while (i < text.length) {
     const ch = text[i];
     if (quote === '"' && ch === '\\') i += 2;
-    else if (quote === '"' && (ch === '`' || (ch === '$' && text[i + 1] === '('))) i = substitutionEnd(text, i);
+    else if (quote === '"' && (ch === '`' || (ch === '$' && text[i + 1] === '('))) i = substitutionEnd(text, i, level + 1);
+
     else if (ch === quote) return i + 1;
     else i += 1;
   }
   return text.length;
 }
 
-function substitutionEnd(text, at) {
+function substitutionEnd(text, at, level = 0) {
   if (text[at] === '`') return backtickEnd(text, at);
+  // Past the nesting bound the rest of the text is one unclosed unit.
+  if (level >= MAX_NESTING) return text.length;
+
   let depth = 0;
   let i = at + 1;
   while (i < text.length) {
@@ -167,7 +175,8 @@ function substitutionEnd(text, at) {
     if (ch === '\\') {
       i += 2;
     } else if (ch === "'" || ch === '"') {
-      i = quotedRunEnd(text, i);
+      i = quotedRunEnd(text, i, level);
+
     } else if (ch === '`') {
       // A nested backtick substitution is skipped whole: its own parentheses
       // do not close this one.
@@ -342,20 +351,36 @@ function redactCredential(raw, value) {
   return `${masked.slice(0, colon + 1)}${REDACTED}${credentialTail(masked, colon)}`;
 }
 
-// The quote state after the character `ch`, outside any substitution.
-function quoteAfter(quote, ch) {
-  if (quote === null && (ch === "'" || ch === '"')) return ch;
-  return quote === ch ? null : quote;
+// The quote state after the character at `at`, outside any substitution:
+// null, a plain quote, or 'ansi' inside $'...'.
+function quoteAfter(raw, at, quote) {
+  const ch = raw[at];
+  if (quote === null) {
+    if (ch === '"') return '"';
+    if (ch === "'") return raw[at - 1] === '$' ? 'ansi' : "'";
+    return null;
+  }
+  return ch === (quote === '"' ? '"' : "'") ? null : quote;
+}
+
+// How many characters the backslash at `at` consumes: the next one inside
+// double quotes and $'...' (an escape), or outside quotes where the shell
+// reads it so; one (a literal backslash) inside single quotes.
+function escapeLength(raw, at, quote) {
+  if (raw[at] !== '\\' || quote === "'") return 1;
+  if (quote === '"' || quote === 'ansi') return 2;
+  return BACKSLASH_ESCAPES ? 2 : 1;
 }
 
 // Whether the shell would run the substitution at `at` in the current quote
 // state: any opener outside quotes, $( and backticks inside double quotes,
-// nothing inside single quotes.
+// nothing inside single or ANSI-C quotes.
 function activeSubstitution(raw, at, quote) {
-  if (quote === "'") return false;
+  if (quote === "'" || quote === 'ansi') return false;
   if (quote === null) return isSubstitutionOpener(raw, at);
   return raw[at] === '`' || (raw[at] === '$' && raw[at + 1] === '(');
 }
+
 
 // The shape of a substitution with its body replaced.
 function maskedShape(inner) {
@@ -381,8 +406,9 @@ function maskSubstitutions(raw) {
       i = end;
       continue;
     }
-    const step = quote !== "'" && raw[i] === '\\' ? 2 : 1;
-    if (step === 1) quote = quoteAfter(quote, raw[i]);
+    const step = escapeLength(raw, i, quote);
+    if (step === 1) quote = quoteAfter(raw, i, quote);
+
     out += raw.slice(i, i + step);
     i += step;
   }
@@ -417,8 +443,22 @@ function freshCurlState() {
   return { sawCurl: false, sawShell: false, valueNext: false, bodyNext: false };
 }
 
+// Nested command lines recurse through this entry; the counter bounds them.
+let nesting = 0;
+
 function redactCurlBasicAuth(text) {
+  if (nesting >= MAX_NESTING) return REDACTED;
+  nesting += 1;
+  try {
+    return redactCommandLine(text);
+  } finally {
+    nesting -= 1;
+  }
+}
+
+function redactCommandLine(text) {
   let out = '';
+
   let i = 0;
   let state = freshCurlState();
   while (i < text.length) {
@@ -456,7 +496,12 @@ function sanitizeCommand(command) {
   // flattened only afterwards.
   let out = String(command || '');
   for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
-  out = redactCurlBasicAuth(out);
+  try {
+    out = redactCurlBasicAuth(out);
+  } catch { // NOSONAR: a command the reader cannot parse is logged whole as redacted, never dropped
+    return REDACTED;
+  }
+
   for (const shape of SECRET_SHAPES) out = out.replace(shape, (match, keep) => (typeof keep === 'string' ? `${keep}${REDACTED}` : REDACTED));
   return out.replaceAll('\n', ' ');
 }
