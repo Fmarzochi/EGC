@@ -3,6 +3,7 @@
 const assert = require('assert');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const DISPATCHER = path.join(REPO_ROOT, 'scripts', 'egc.js');
@@ -12,11 +13,15 @@ function runNode(args, options = {}) {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
-    timeout: 20000,
+    timeout: CLI_TIMEOUT_MS,
     input: options.input,
     env: { ...process.env, ...(options.env || {}) },
   });
   return { code: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
+}
+
+function hasMarker(output, marker) {
+  return (Array.isArray(marker) ? marker : [marker]).some(m => output.includes(m));
 }
 
 function test(name, fn) {
@@ -37,7 +42,9 @@ function test(name, fn) {
 const CASES = [
   { command: 'crusher-shim', script: 'crusher-shim.js', marker: 'Usage: egc crusher-shim' },
   { command: 'session-inspect', script: 'session-inspect.js', marker: 'Usage:' },
-  { command: 'prompt', script: 'gemini.js', marker: 'Usage: egc prompt' },
+  // With the Python virtualenv present, prompt --help is answered by the
+  // Python entry point (usage: prompt.py); without it, by the bridge itself.
+  { command: 'prompt', script: 'gemini.js', marker: ['Usage: egc prompt', 'usage: prompt.py'] },
   { command: 'claw', script: 'claw.js', marker: 'Usage: egc claw' },
 ];
 
@@ -51,14 +58,14 @@ function runTests() {
       for (const flag of ['--help', '-h']) {
         const result = runNode([path.join(REPO_ROOT, 'scripts', c.script), flag], { input: 'exit\n' });
         assert.strictEqual(result.code, 0, `${flag}: ${result.stderr}`);
-        assert.ok(result.stdout.includes(c.marker), `${flag}: expected "${c.marker}" in: ${result.stdout.slice(0, 200)}`);
+        assert.ok(hasMarker(result.stdout, c.marker), `${flag}: expected ${JSON.stringify(c.marker)} in: ${result.stdout.slice(0, 200)}`);
       }
     })) passed++; else failed++;
 
     if (test(`egc help ${c.command} exits 0 through the dispatcher`, () => {
       const result = runNode([DISPATCHER, 'help', c.command], { input: 'exit\n' });
       assert.strictEqual(result.code, 0, result.stderr);
-      assert.ok(result.stdout.includes(c.marker), result.stdout.slice(0, 200));
+      assert.ok(hasMarker(result.stdout, c.marker), result.stdout.slice(0, 200));
     })) passed++; else failed++;
   }
 
