@@ -62,21 +62,32 @@ const BACKSLASH_ESCAPES = process.platform !== 'win32';
 const LITERAL = '\u0001';
 const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\u0007', b: '\b', f: '\f', v: '\v', e: '\u001b', E: '\u001b', '\\': '\\', "'": "'", '"': '"', '?': '?' };
 
-// One ANSI-C escape starting at the backslash inside $'...': the named ones,
-// octal (\NNN), hex (\xHH), unicode (\uHHHH, \UHHHHHHHH) and control (\cX).
-function ansiEscape(text, at) {
+// Numeric ANSI-C escapes inside $'...': the introducing letter (none for
+// octal), the digit class, the longest run and the radix; `\cX` and the
+// named escapes follow. An unknown escape keeps its backslash, as Bash does.
+const ANSI_NUMERIC = [['x', /[0-9a-fA-F]/, 2, 16], ['u', /[0-9a-fA-F]/, 4, 16], ['U', /[0-9a-fA-F]/, 8, 16], ['', /[0-7]/, 3, 8]];
+
+function ansiNumeric(text, at) {
   const next = text[at + 1];
-  const digits = { x: [/^[0-9a-fA-F]{1,2}/, 16], u: [/^[0-9a-fA-F]{1,4}/, 16], U: [/^[0-9a-fA-F]{1,8}/, 16] }[next];
-  if (digits) {
-    const run = digits[0].exec(text.slice(at + 2));
-    if (run) return { value: String.fromCodePoint(Number.parseInt(run[0], digits[1])), end: at + 2 + run[0].length };
+  for (const [letter, digit, max, radix] of ANSI_NUMERIC) {
+    if (letter && next !== letter) continue;
+    let end = at + 1 + letter.length;
+    const from = end;
+    while (end < text.length && end - from < max && digit.test(text[end])) end += 1;
+    if (end > from) return { value: String.fromCodePoint(Number.parseInt(text.slice(from, end), radix)), end };
+    if (letter) return null;
   }
-  const octal = /^[0-7]{1,3}/.exec(text.slice(at + 1));
-  if (octal) return { value: String.fromCharCode(Number.parseInt(octal[0], 8)), end: at + 1 + octal[0].length };
-  if (next === 'c' && text[at + 2] !== undefined) return { value: String.fromCharCode(text[at + 2].toUpperCase().charCodeAt(0) ^ 0x40), end: at + 3 };
-  if (Object.hasOwn(ANSI_ESCAPES, next)) return { value: ANSI_ESCAPES[next], end: at + 2 };
-  return { value: `\\${next}`, end: at + 2 };
+  return null;
 }
+
+function ansiEscape(text, at) {
+  const numeric = ansiNumeric(text, at);
+  if (numeric) return numeric;
+  const next = text[at + 1];
+  if (next === 'c' && text[at + 2] !== undefined) return { value: String.fromCodePoint(text[at + 2].toUpperCase().codePointAt(0) ^ 0x40), end: at + 3 };
+  return { value: Object.hasOwn(ANSI_ESCAPES, next) ? ANSI_ESCAPES[next] : `\\${next}`, end: at + 2 };
+}
+
 
 
 function isQuoteOpener(text, at) {
@@ -88,6 +99,17 @@ function isQuoteOpener(text, at) {
 // $'...' and $"..."): single quotes are literal, double quotes keep their
 // escapes for \ " $ and ` and drop a backslash-newline, $'...' decodes the
 // ANSI-C escapes.
+// What a backslash inside a decoding quote stands for: nothing for a
+// dropped backslash-newline, an ANSI-C escape in $'...', one of \ " $ ` in
+// double quotes; null when the backslash is literal there.
+function decodedEscape(text, at, ansi) {
+  const next = text[at + 1];
+  if (next === undefined) return null;
+  if (next === '\n') return { value: '', end: at + 2 };
+  if (ansi) return ansiEscape(text, at);
+  return '"\\$`'.includes(next) ? { value: next, end: at + 2 } : null;
+}
+
 function readQuoted(text, start) {
   const ansi = text[start] === '$';
   const quote = ansi ? text[start + 1] : text[start];
@@ -95,29 +117,13 @@ function readQuoted(text, start) {
   let value = '';
   let i = start + (ansi ? 2 : 1);
   while (i < text.length && text[i] !== quote) {
-    const next = text[i + 1];
-    if (text[i] === '\\' && decodes && next !== undefined) {
-      if (next === '\n') {
-        i += 2;
-        continue;
-      }
-      if (quote === "'") {
-        const decoded = ansiEscape(text, i);
-        value += decoded.value;
-        i = decoded.end;
-        continue;
-      }
-      if ('"\\$`'.includes(next)) {
-        value += next;
-        i += 2;
-        continue;
-      }
-    }
-    value += text[i];
-    i += 1;
+    const escaped = text[i] === '\\' && decodes ? decodedEscape(text, i, quote === "'") : null;
+    value += escaped ? escaped.value : text[i];
+    i = escaped ? escaped.end : i + 1;
   }
   return { value, end: Math.min(i + 1, text.length) };
 }
+
 
 // One shell word as the shell would see it: a backslash-newline is a
 // continuation, a backslash outside quotes escapes the next character (on

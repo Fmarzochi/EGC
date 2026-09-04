@@ -187,17 +187,19 @@ function run(inputOrRaw) {
 module.exports = { run };
 
 if (require.main === module) {
-  let raw = '';
+  const chunks = [];
+  let received = 0;
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
-    }
+    if (received >= MAX_STDIN) return;
+    chunks.push(chunk.substring(0, MAX_STDIN - received));
+    received += chunk.length;
   });
   process.stdin.on('end', () => {
+    const raw = chunks.join('');
     const result = run(raw);
-    if (result.stderr) process.stderr.write(result.stderr + '\n');
-    if (result.exitCode === 2) process.exit(2);
+    if (result.stderr) process.stderr.write(`${result.stderr}\n`);
     process.stdout.write(raw);
+    process.exitCode = result.exitCode === 2 ? 2 : 0;
   });
 }
