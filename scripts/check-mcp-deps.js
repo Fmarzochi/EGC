@@ -31,8 +31,16 @@ function missingDependencies(serverDir) {
 // The check only makes sense for a server directory shipped inside this
 // package, so the CLI argument is confined to the package root before use.
 function resolveServerDir(argument) {
-  const packageRoot = path.resolve(__dirname, '..');
-  const serverDir = path.resolve(argument || process.cwd());
+  // Both sides are canonicalized so a symlink or junction planted under
+  // the package root cannot point the check at a directory outside it.
+  let packageRoot;
+  let serverDir;
+  try {
+    packageRoot = fs.realpathSync(path.resolve(__dirname, '..'));
+    serverDir = fs.realpathSync(path.resolve(argument || process.cwd()));
+  } catch {
+    return null;
+  }
   if (serverDir !== packageRoot && !serverDir.startsWith(packageRoot + path.sep)) {
     return null;
   }

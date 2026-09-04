@@ -89,6 +89,17 @@ function runTests() {
     assert.strictEqual(resolveServerDir(path.join(repoRoot, 'mcp', 'servers', 'egc-memory')), path.join(repoRoot, 'mcp', 'servers', 'egc-memory'));
     assert.strictEqual(resolveServerDir(repoRoot), repoRoot);
     assert.strictEqual(resolveServerDir(os.tmpdir()), null);
+    // A symlink under the package root that points outside it resolves to
+    // its real target and is rejected too.
+    const link = path.join(repoRoot, '.tmp-check-mcp-deps-link');
+    try { fs.unlinkSync(link); } catch { /* absent */ }
+    fs.symlinkSync(os.tmpdir(), link, 'dir');
+    try {
+      assert.strictEqual(resolveServerDir(link), null);
+    } finally {
+      fs.unlinkSync(link);
+    }
+    assert.strictEqual(resolveServerDir(path.join(repoRoot, 'does-not-exist')), null);
     const outside = spawnSync(process.execPath, [SCRIPT, os.tmpdir()], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
     assert.strictEqual(outside.status, 2);
     assert.ok(outside.stderr.includes('outside the package root'), outside.stderr);
