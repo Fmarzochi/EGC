@@ -2586,6 +2586,44 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  {
+    // The validator applies the loader's symlink check; skipped, not passed,
+    // where the platform cannot create links.
+    const testDir = createTestDir();
+    const outside = createTestDir();
+    let linked = false;
+    try {
+      fs.symlinkSync(outside, path.join(testDir, 'rules'), 'dir');
+      linked = true;
+    } catch (error) {
+      console.log(`  - skipped (symlink escape): cannot create symlinks here (${error.code})`);
+    }
+    if (linked) {
+      if (test('rejects a manifest path that escapes the repository through a symlink', () => {
+        writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+          version: 1,
+          modules: [{ id: 'rules-core', kind: 'rules', description: 'Rules', paths: ['rules'], targets: ['egc'], dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' }]
+        });
+        writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), { version: 1, profiles: Object.fromEntries(['minimal', 'core', 'developer', 'security', 'research', 'full'].map(name => [name, { description: name, modules: ['rules-core'] }])) });
+        writeJson(path.join(testDir, 'manifests', 'install-components.json'), { version: 1, components: [] });
+        const result = runValidatorWithDirs('validate-install-manifests', {
+          REPO_ROOT: testDir,
+          MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+          PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+          COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+          MODULES_SCHEMA_PATH: modulesSchemaPath,
+          PROFILES_SCHEMA_PATH: profilesSchemaPath,
+          COMPONENTS_SCHEMA_PATH: componentsSchemaPath,
+          env: { EGC_MANIFEST_STRICT: '0' },
+        });
+        assert.strictEqual(result.code, 1, 'a link escaping the repository must fail even in relaxed mode');
+        assert.ok(result.stderr.includes('through a link'), result.stderr);
+      })) passed++; else failed++;
+    }
+    cleanupTestDir(testDir);
+    cleanupTestDir(outside);
+  }
+
   if (test('fails when two install modules claim the same path', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {

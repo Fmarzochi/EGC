@@ -19,19 +19,22 @@ const MODE_CONFIG = {
   },
 };
 
-// Secrets embedded in a shell command. Each prefix pattern stops exactly
-// where the secret value starts; the value itself (quoted, or a bare run up
-// to whitespace) is consumed in code, which keeps every pattern short.
-// Mirrors the Guardian's own audit redaction
-// (mcp/servers/egc-guardian/src/audit-log.ts).
+// Secrets embedded inside free text such as a shell command. Each prefix
+// pattern stops exactly where the secret value starts; the value itself
+// (quoted, or a bare run up to whitespace) is consumed in code, which keeps
+// every pattern short. The Guardian audit log (mcp/servers/egc-guardian/
+// src/audit-log.ts) carries the same list: change both together.
 const SECRET_VALUE_PREFIXES = [
   /authorization\s*:\s*(?:bearer|basic|token)\s+/gi,
   /(?:x-)?(?:api|secret|access|private|auth)[-_]?(?:key|secret|token)\s*:\s*/gi,
-  /--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:/gi,
+  // basic auth: --user=name:password anywhere; -u name:password only inside
+  // a curl invocation, since -u is an ordinary flag for rsync, sudo and others
+  /--user(?:=|\s+)["']?[^\s:"']+:/gi,
+  /\bcurl\b[^;&|\n]*?\s-u(?:=|\s+)["']?[^\s:"']+:/gi,
   /--?(?:token|password|passwd|secret|auth|credentials?)(?:=|\s+)/gi,
-  /--?(?:api|access|private)[-_]?key(?:=|\s+)/gi,
-  /\b\w*(?:token|password|passwd|secret|apikey)\w*\s*=\s*/gi,
-  /\b(?:api|access|private)_key\w*\s*=\s*/gi,
+  /--?(?:api|access|private)[-_]?(?:key|secret)(?:=|\s+)/gi,
+  /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
+  /\b[\w-]*(?:api|access|private)[-_]?key[\w-]*\s*=\s*/gi,
   /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
 ];
 const SECRET_SHAPES = [
@@ -49,6 +52,8 @@ const REDACTED = '<REDACTED>';
 
 function secretValueEnd(text, start) {
   const quote = text[start];
+  // A bare run that starts with '-' is the next flag, not a value.
+  if (quote === '-') return start;
   if (quote === '"' || quote === "'") {
     const close = text.indexOf(quote, start + 1);
     return close === -1 ? text.length : close + 1;

@@ -72,6 +72,18 @@ function runTests() {
     for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
   })) passed++; else failed++;
 
+  if (test('sanitizeCommand keeps -u outside curl, covers key aliases and api secrets, and skips flags without a value', () => {
+    const cases = [
+      ['rsync -u user@host:src dest', 'rsync -u user@host:src dest'],
+      ['sudo -u root:wheel ls', 'sudo -u root:wheel ls'],
+      ['curl -sS -u admin:hunter2 https://x', 'curl -sS -u admin:<REDACTED> https://x'],
+      ['cmd --api_secret abc', 'cmd --api_secret <REDACTED>'],
+      ['AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP PRIVATEKEY=p API-KEY=q MY_ACCESS_KEY=r ./run', 'AWS_ACCESS_KEY_ID=<REDACTED> PRIVATEKEY=<REDACTED> API-KEY=<REDACTED> MY_ACCESS_KEY=<REDACTED> ./run'],
+      ['tool --secret --other flag', 'tool --secret --other flag'],
+    ];
+    for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
+  })) passed++; else failed++;
+
   if (test('sanitizeCommand leaves ordinary commands untouched', () => {
     for (const cmd of ['git status', 'npm test -- --grep token', 'ls -la ~/.ssh', 'echo "read the password policy"', 'git checkout 4f054e08']) {
       assert.strictEqual(sanitizeCommand(cmd), cmd);

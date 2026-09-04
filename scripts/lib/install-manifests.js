@@ -113,10 +113,16 @@ function isUnsafeManifestPath(relativePath) {
 // A lexically clean path can still leave the repository through a symlink;
 // when the entry exists, its real location must sit under the real root.
 function escapesRepoThroughLink(repoRoot, relativePath) {
-  const candidate = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(candidate)) return false;
+  // The leaf may not exist yet; the deepest existing ancestor is what a
+  // later write would follow, so that is what gets resolved.
+  let probe = path.join(repoRoot, relativePath);
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) return false;
+    probe = parent;
+  }
   const realRoot = fs.realpathSync(repoRoot);
-  const real = fs.realpathSync(candidate);
+  const real = fs.realpathSync(probe);
   return real !== realRoot && !real.startsWith(realRoot + path.sep);
 }
 
@@ -655,6 +661,7 @@ function resolveInstallPlan(options = {}) {
 
 module.exports = {
   DEFAULT_REPO_ROOT,
+  escapesRepoThroughLink,
   isUnsafeManifestPath,
   SUPPORTED_INSTALL_TARGETS,
   getManifestPaths,

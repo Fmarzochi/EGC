@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Ajv = require('ajv');
 const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
-const { isUnsafeManifestPath } = require('#lib/install-manifests');
+const { escapesRepoThroughLink, isUnsafeManifestPath } = require('#lib/install-manifests');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const MODULES_MANIFEST_PATH = path.join(REPO_ROOT, 'manifests/install-modules.json');
@@ -78,6 +78,13 @@ function validateModulePaths(module, claimedPaths) {
       continue;
     }
     const normalizedPath = normalizeRelativePath(relativePath);
+    // Same check the loader enforces at install time, so CI fails where
+    // egc install would.
+    if (escapesRepoThroughLink(REPO_ROOT, normalizedPath)) {
+      console.error(`ERROR: Module ${module.id} path '${relativePath}' resolves outside the repository through a link`);
+      hasErrors = true;
+      continue;
+    }
     if (reportMissingPath(module.id, normalizedPath)) hasErrors = true;
 
     if (claimedPaths.has(normalizedPath)) {
