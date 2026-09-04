@@ -119,6 +119,9 @@ function runTests() {
       ["curl -u $(printf u):pw https://x", 'curl -u $(<REDACTED>):<REDACTED> https://x'],
       ['curl -u "user:$(printf pw)" https://x', 'curl -u "user:<REDACTED>" https://x'],
       ["curl -u $(x `y)`):pw https://x", 'curl -u $(<REDACTED>):<REDACTED> https://x'],
+      ["curl -u 'user$(x)':pw https://x", "curl -u 'user$(x)':<REDACTED> https://x"],
+      ["curl -u user\\$(x):pw https://x", 'curl -u user\\$(x):<REDACTED> https://x'],
+
 
 
 
