@@ -48,6 +48,10 @@ const SECRET_SHAPES: RegExp[] = [
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
 const REDACTED = '[REDACTED]';
+// Command lines nest through substitutions and shell -c bodies; past this
+// many levels a body is replaced whole instead of being read.
+const MAX_NESTING = 64;
+
 
 function secretValueEnd(text: string, start: number, attached: boolean): number {
   const quote = text[start];
@@ -143,21 +147,25 @@ function backtickEnd(text: string, at: number): number {
 // text length when it never closes. Inside double quotes a nested
 // substitution ($( ) or backticks) is skipped whole: a quote in its body
 // belongs to it, not to this run.
-function quotedRunEnd(text: string, at: number): number {
+function quotedRunEnd(text: string, at: number, level = 0): number {
   const quote = text[at];
   let i = at + 1;
   while (i < text.length) {
     const ch = text[i];
     if (quote === '"' && ch === '\\') i += 2;
-    else if (quote === '"' && (ch === '`' || (ch === '$' && text[i + 1] === '('))) i = substitutionEnd(text, i);
+    else if (quote === '"' && (ch === '`' || (ch === '$' && text[i + 1] === '('))) i = substitutionEnd(text, i, level + 1);
+
     else if (ch === quote) return i + 1;
     else i += 1;
   }
   return text.length;
 }
 
-function substitutionEnd(text: string, at: number): number {
+function substitutionEnd(text: string, at: number, level = 0): number {
   if (text[at] === '`') return backtickEnd(text, at);
+  // Past the nesting bound the rest of the text is one unclosed unit.
+  if (level >= MAX_NESTING) return text.length;
+
   let depth = 0;
   let i = at + 1;
   while (i < text.length) {
@@ -165,7 +173,8 @@ function substitutionEnd(text: string, at: number): number {
     if (ch === '\\') {
       i += 2;
     } else if (ch === "'" || ch === '"') {
-      i = quotedRunEnd(text, i);
+      i = quotedRunEnd(text, i, level);
+
     } else if (ch === '`') {
       // A nested backtick substitution is skipped whole: its own parentheses
       // do not close this one.
@@ -315,7 +324,10 @@ function credentialTail(raw: string, colon: number): string {
 // The redaction of one command line, word by word, with the state of the
 // command being read: whether curl or a shell has been seen, and whether
 // the next word is a credential or a command string.
+let nesting = 0;
+
 class CurlRedactor {
+
   private sawCurl = false;
   private sawShell = false;
   private valueNext = false;
@@ -328,8 +340,20 @@ class CurlRedactor {
     this.bodyNext = false;
   }
 
+  // Nested command lines recurse through this entry; the counter bounds them.
   redact(text: string): string {
+    if (nesting >= MAX_NESTING) return REDACTED;
+    nesting += 1;
+    try {
+      return this.redactLine(text);
+    } finally {
+      nesting -= 1;
+    }
+  }
+
+  private redactLine(text: string): string {
     const nested = new CurlRedactor();
+
     let out = '';
     let i = 0;
     while (i < text.length) {
@@ -400,20 +424,36 @@ class CurlRedactor {
   }
 }
 
-// The quote state after the character `ch`, outside any substitution.
-function quoteAfter(quote: string | null, ch: string): string | null {
-  if (quote === null && (ch === "'" || ch === '"')) return ch;
-  return quote === ch ? null : quote;
+// The quote state after the character at `at`, outside any substitution:
+// null, a plain quote, or 'ansi' inside $'...'.
+function quoteAfter(raw: string, at: number, quote: string | null): string | null {
+  const ch = raw[at];
+  if (quote === null) {
+    if (ch === '"') return '"';
+    if (ch === "'") return raw[at - 1] === '$' ? 'ansi' : "'";
+    return null;
+  }
+  return ch === (quote === '"' ? '"' : "'") ? null : quote;
+}
+
+// How many characters the backslash at `at` consumes: the next one inside
+// double quotes and $'...' (an escape), or outside quotes where the shell
+// reads it so; one (a literal backslash) inside single quotes.
+function escapeLength(raw: string, at: number, quote: string | null): number {
+  if (raw[at] !== '\\' || quote === "'") return 1;
+  if (quote === '"' || quote === 'ansi') return 2;
+  return BACKSLASH_ESCAPES ? 2 : 1;
 }
 
 // Whether the shell would run the substitution at `at` in the current quote
 // state: any opener outside quotes, $( and backticks inside double quotes,
-// nothing inside single quotes.
+// nothing inside single or ANSI-C quotes.
 function activeSubstitution(raw: string, at: number, quote: string | null): boolean {
-  if (quote === "'") return false;
+  if (quote === "'" || quote === 'ansi') return false;
   if (quote === null) return isSubstitutionOpener(raw, at);
   return raw[at] === '`' || (raw[at] === '$' && raw[at + 1] === '(');
 }
+
 
 // The shape of a substitution with its body replaced.
 function maskedShape(inner: string): string {
@@ -439,8 +479,9 @@ function maskSubstitutions(raw: string): string {
       i = end;
       continue;
     }
-    const step = quote !== "'" && raw[i] === '\\' ? 2 : 1;
-    if (step === 1) quote = quoteAfter(quote, raw[i]);
+    const step = escapeLength(raw, i, quote);
+    if (step === 1) quote = quoteAfter(raw, i, quote);
+
     out += raw.slice(i, i + step);
     i += step;
   }
@@ -472,7 +513,12 @@ function redactValuesAfter(text: string, prefixPattern: RegExp): string {
 export function redactSecretsInText(text: string): string {
   let out = text;
   for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
-  out = redactCurlBasicAuth(out);
+  try {
+    out = redactCurlBasicAuth(out);
+  } catch { // NOSONAR: a command the reader cannot parse is logged whole as redacted, never dropped
+    return REDACTED;
+  }
+
   for (const shape of SECRET_SHAPES) out = out.replace(shape, (match, keep?: string) => (typeof keep === 'string' ? `${keep}${REDACTED}` : REDACTED));
   return out;
 }
