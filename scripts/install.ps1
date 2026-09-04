@@ -17,10 +17,45 @@ $MemoryBin     = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $RootDir 
 # so run a pinned `npm ci` wherever a lockfile is present and skip entirely
 # otherwise -- mirrors install.sh's install_deps exactly, including the lack
 # of an npm install fallback (a global install has already resolved deps).
-function Install-Deps {
-    if (Test-Path "package-lock.json") {
-        npm ci --silent
+function Test-DirectoryWritable {
+    param([string]$Directory)
+    $probe = Join-Path $Directory ([System.IO.Path]::GetRandomFileName())
+    try {
+        [System.IO.File]::WriteAllText($probe, "")
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        return $true
+    } catch {
+        return $false
     }
+}
+
+function Install-Deps {
+    if (-not (Test-Path "package-lock.json")) {
+        return
+    }
+    $here = (Get-Location).Path
+    if (Test-DirectoryWritable $here) {
+        npm ci --silent
+        if ($LASTEXITCODE -ne 0) {
+            $rc = $LASTEXITCODE
+            Write-Host "Error: npm ci failed in $here (exit $rc). Re-run with network access, or fix the directory ownership and try again." -ForegroundColor Red
+            exit $rc
+        }
+        return
+    }
+    # A read-only directory is a global npm prefix owned by another account
+    # (an elevated `npm install -g`, then `egc install` from a normal
+    # terminal). npm ci cannot write node_modules here, and with --silent its
+    # failure used to end the install without a message. The published
+    # package root already carries every dependency the MCP servers declare,
+    # one level up, so confirm that and carry on. Mirrors install.sh.
+    node (Join-Path (Join-Path $RootDir "scripts") "check-mcp-deps.js") $here
+    if ($LASTEXITCODE -eq 0) {
+        Write-Output "  dependencies provided by the package root ($here is read-only)"
+        return
+    }
+    Write-Host "Error: $here is not writable and its dependencies are not available from the package root. Re-run 'npm install -g @egchq/egc' as the user that owns the npm prefix, or fix the prefix ownership (see docs/installation.md, Permissions)." -ForegroundColor Red
+    exit 1
 }
 
 # The link target of a directory entry, or $null when the entry does not
@@ -262,8 +297,12 @@ if (-not $DryRun) {
             "egc-memory"   = @{ command = "node"; args = @($MemoryBin)   }
         }
     } | ConvertTo-Json -Depth 4
-    $mcpConfig | Set-Content -Path (Join-Path $RootDir ".mcp.egc.json") -Encoding UTF8
-    Write-Host "  harness config written to .mcp.egc.json"
+    if (Test-DirectoryWritable $RootDir) {
+        $mcpConfig | Set-Content -Path (Join-Path $RootDir ".mcp.egc.json") -Encoding UTF8
+        Write-Host "  harness config written to .mcp.egc.json"
+    } else {
+        Write-Host "  note: $RootDir is read-only; skipping the .mcp.egc.json convenience copy"
+    }
 }
 
 # Delegate to Node installer only when install-relevant args are present

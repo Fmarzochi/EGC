@@ -47,9 +47,31 @@ esac
 # `npm install -g`). The sub-package lockfiles travel via package.json "files",
 # so run a pinned `npm ci` wherever a lockfile is present and skip otherwise.
 install_deps() {
-  if [[ -f package-lock.json ]]; then
-    npm ci --silent
+  if [[ ! -f package-lock.json ]]; then
+    return 0
   fi
+  if [[ -w . ]]; then
+    # The pinned npm ci keeps its lifecycle scripts on purpose: sqlite3's
+    # install script is what fetches its prebuilt binary. Under set -e a
+    # failure ends the script, so the ERR trap names the directory first.
+    trap 'echo "Error: npm ci failed in $(pwd). Re-run with network access, or fix the directory ownership and try again." >&2' ERR
+    npm ci --silent
+    trap - ERR
+    return 0
+  fi
+  # A read-only directory is the root-owned global npm prefix: `sudo npm
+  # install -g @egchq/egc`, then `egc install` as the regular user (the
+  # documented Linux flow). npm ci cannot write node_modules here, and with
+  # --silent its EACCES used to kill the whole install with a bare exit 243.
+  # The published package root already carries every dependency the MCP
+  # servers declare, one level up, so confirm that and carry on.
+  if node "$ROOT_DIR/scripts/check-mcp-deps.js" "$(pwd)"; then
+    echo "  dependencies provided by the package root ($(pwd) is read-only)"
+    return 0
+  fi
+  echo "Error: $(pwd) is not writable and its dependencies are not available from the package root." >&2
+  echo "Re-run 'npm install -g @egchq/egc' as the user that owns the npm prefix, or fix the prefix ownership (see docs/installation.md, Permissions)." >&2
+  exit 1
 }
 
 # Forward --help directly to the Node installer
@@ -202,6 +224,10 @@ fi
 [[ "$DRY_RUN" = true ]] && exit 0
 
 # Write harness config template
+# The harness config is a convenience copy inside the package directory;
+# a read-only global prefix cannot take it and does not need it (egc init
+# registers the servers from the install-state), so skip with a note.
+if [[ -w "$ROOT_DIR" ]]; then
 cat > "$ROOT_DIR/.mcp.egc.json" <<EOF
 {
   "mcpServers": {
@@ -216,7 +242,10 @@ cat > "$ROOT_DIR/.mcp.egc.json" <<EOF
   }
 }
 EOF
-echo "  harness config written to .mcp.egc.json"
+  echo "  harness config written to .mcp.egc.json"
+else
+  echo "  note: $ROOT_DIR is read-only; skipping the .mcp.egc.json convenience copy"
+fi
 
 # Verify MCP server builds exist
 if [[ ! -f "$ROOT_DIR/mcp/servers/egc-guardian/build/index.js" ]]; then

@@ -190,6 +190,17 @@ function delegateToLegacyInstaller() {
 }
 
 function regenerateTopologyCache() {
+  // The cache lives next to the code (internal/registry). A root-owned
+  // global npm prefix cannot take it, and nothing in the install needs it
+  // (only the optional orchestration router reads it), so a read-only
+  // install directory is a note, not a warning.
+  const rootDir = require('node:path').join(__dirname, '..');
+  try {
+    fs.accessSync(rootDir, fs.constants.W_OK);
+  } catch {
+    console.log('  note: topology cache not regenerated (read-only install directory)');
+    return;
+  }
   try {
     const { discover } = require('./runtime/discovery');
     discover();
