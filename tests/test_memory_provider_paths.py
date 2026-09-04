@@ -91,8 +91,11 @@ class MemoryProviderPathTests(unittest.TestCase):
             self.assertEqual(other.read_text(encoding="utf-8"), "other")
             (provider.root / "Aliased-category").symlink_to(provider.root / "Traces", target_is_directory=True)
             self.assertFalse(provider.write_note(self.entry("note", "Aliased-category")), "a category that links another one is refused")
-            self.assertIsNone(provider.get_session_summary("abc/def"))
-            self.assertIsNone(provider.get_session_summary("../Governance/Decision"))
+            planted = provider.root / "Sessions" / "Session_abc_def_Summary.md"
+            planted.write_text("planted", encoding="utf-8")
+            self.assertIsNone(provider.get_session_summary("abc/def"), "a session id with a separator names no session, even when its mangled name exists")
+            self.assertEqual(provider.get_session_summary("abc_def"), "planted")
+
 
 
     def test_frontmatter_journal_and_summary(self):

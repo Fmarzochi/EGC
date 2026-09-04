@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from llm.memory.base import CognitiveMemoryProvider, MemoryEntry
-from llm.memory.paths import append_text_private, read_text_if_regular, resolve_inside, safe_segment, safe_title, write_text_atomic
+from llm.memory.paths import PrivateDirectory, resolve_inside, safe_segment, safe_title
+
 
 
 
@@ -40,9 +41,7 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             if target_dir is None:
                 return False
             target_dir.mkdir(exist_ok=True)
-            # The name as spelled, under a directory proven real: a link at the
-            # note's own name is replaced by the atomic write, never followed.
-            file_path = target_dir / f"{stem}.md"
+
 
             # Frontmatter (Standard YAML for Obsidian compatibility); every
             # value is a JSON scalar or list, which YAML reads as-is, so
@@ -52,8 +51,13 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             lines.extend(f"{json.dumps(str(k))}: {json.dumps(str(v))}" for k, v in entry.metadata.items())
             lines.append("---")
 
-            write_text_atomic(file_path, "\n".join(lines) + "\n\n" + entry.content)
+            # The name as spelled, inside the directory held by descriptor: a
+            # link at the note's own name is replaced by the atomic write,
+            # never followed.
+            with PrivateDirectory(target_dir) as directory:
+                directory.write_text_atomic(f"{stem}.md", "\n".join(lines) + "\n\n" + entry.content)
             return True
+
         except Exception:
             return False
 
@@ -64,7 +68,9 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             if target_dir is None or not target_dir.is_dir():
                 return False
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            return append_text_private(target_dir / "Journal.md", f"\n### {timestamp}\n\n{content}\n")
+            with PrivateDirectory(target_dir) as directory:
+                return directory.append_text("Journal.md", f"\n### {timestamp}\n\n{content}\n")
+
 
 
         except Exception:
@@ -83,12 +89,17 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             return None
         # The same naming as the note the session end writes ("Session <id>
         # Summary"), with the session start note as the fallback.
-        for title in (f"Session {session_id} Summary", f"Session {session_id}"):
-            stem = safe_title(title)
-            text = read_text_if_regular(sessions / f"{stem}.md") if stem else ""
-            if text:
-                return text
+        try:
+            with PrivateDirectory(sessions) as directory:
+                for title in (f"Session {session_id} Summary", f"Session {session_id}"):
+                    stem = safe_title(title)
+                    text = directory.read_text(f"{stem}.md") if stem else ""
+                    if text:
+                        return text
+        except OSError:
+            return None
         return None
+
 
     def _real_directory(self, segment: str) -> Optional[Path]:
         """The category directory as spelled, when it is inside the root and

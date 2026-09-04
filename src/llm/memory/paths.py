@@ -5,9 +5,10 @@ else.
 """
 import os
 import re
+import secrets
 import stat
-import tempfile
 from pathlib import Path
+
 
 
 from typing import Optional
@@ -38,90 +39,149 @@ def safe_title(value: object) -> Optional[str]:
 
 
 
-def _private_mode(target: Path) -> Optional[int]:
-    """The permission bits of an existing regular `target`, else None."""
-    try:
-        status = os.lstat(target)
-    except OSError:
-        return None
-    return stat.S_IMODE(status.st_mode) if stat.S_ISREG(status.st_mode) else None
-
-
-def write_text_atomic(target: Path, text: str) -> None:
-    """Replace `target` with `text` through a unique temporary sibling and a
-    rename, so a link (hard or symbolic) planted at the target is replaced,
-    never written through; the existing file's mode is kept and the
-    temporary never survives a failure."""
-    mode = _private_mode(target)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        if mode is not None:
-            os.chmod(temporary, mode)
-        os.replace(temporary, target)
-    except BaseException:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
-
-
 def _is_private_regular(status: os.stat_result) -> bool:
     """A regular file with a single name: not a link of any kind."""
     return stat.S_ISREG(status.st_mode) and status.st_nlink == 1
 
 
-def _open_private(target: Path, flags: int) -> Optional[int]:
-    """A descriptor on `target` when it is a regular file with a single name
-    that was not reached through a symbolic link. The checks are made on the
-    opened descriptor and on the name after the open, so a link swapped in
-    around the open is caught even where O_NOFOLLOW is unavailable."""
-    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-    try:
-        descriptor = os.open(target, flags, 0o600)
-    except OSError:
-        return None
-    try:
-        opened = os.fstat(descriptor)
-        named = os.lstat(target)
-        same = (named.st_ino, named.st_dev) == (opened.st_ino, opened.st_dev)
-        if _is_private_regular(opened) and not stat.S_ISLNK(named.st_mode) and same:
-            return descriptor
-    except OSError:
-        pass
-    os.close(descriptor)
-    return None
+def _write_all(descriptor: int, data: bytes) -> None:
+    """Write the whole buffer; a write that makes no progress is an error,
+    never a spin."""
+    view = memoryview(data)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:
+            raise OSError("write made no progress")
+        view = view[written:]
 
 
-def read_text_if_regular(target: Path) -> str:
-    """The text of `target` when it is a regular file with a single name
-    (neither a symbolic nor a hard link), read from the checked descriptor."""
-    descriptor = _open_private(target, os.O_RDONLY)
-    if descriptor is None:
-        return ""
-    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
-        return handle.read()
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_BINARY = getattr(os, "O_BINARY", 0)
+_DIRECTORY = getattr(os, "O_DIRECTORY", 0)
+# Directory descriptors bind every operation to the directory that was
+# checked; where the platform has none (Windows), operations use the path.
+_DIRECTORY_DESCRIPTORS = bool(_DIRECTORY) and all(
+    operation in os.supports_dir_fd for operation in (os.open, os.stat, os.replace, os.unlink)
+)
 
 
-def append_text_private(target: Path, text: str) -> bool:
-    """Append `text` to `target`, creating it when missing, never through a
-    link and never partially: the whole buffer is written on the checked
-    descriptor. Concurrent appends keep each other's lines."""
-    descriptor = _open_private(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
-    if descriptor is None:
-        return False
-    data = text.encode("utf-8")
-    try:
-        while data:
-            data = data[os.write(descriptor, data):]
-        return True
-    finally:
+class PrivateDirectory:
+    """A category directory the provider works in. Where the platform allows
+    it the directory is held open as a descriptor obtained without following
+    links, and every file operation is relative to that descriptor, so a
+    directory swapped for a link after the check can no longer redirect
+    anything. Elsewhere the operations use the directory path, with the same
+    per-file checks."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.descriptor: Optional[int] = None
+        if _DIRECTORY_DESCRIPTORS:
+            descriptor = os.open(path, os.O_RDONLY | _DIRECTORY | _NOFOLLOW)
+            if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                os.close(descriptor)
+                raise NotADirectoryError(str(path))
+            self.descriptor = descriptor
+
+    def __enter__(self) -> "PrivateDirectory":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self.descriptor is not None:
+            os.close(self.descriptor)
+            self.descriptor = None
+
+    def _where(self) -> dict:
+        return {"dir_fd": self.descriptor} if self.descriptor is not None else {}
+
+    def _target(self, name: str) -> str:
+        return name if self.descriptor is not None else str(self.path / name)
+
+    def _lstat(self, name: str) -> Optional[os.stat_result]:
+        try:
+            return os.lstat(self._target(name), **self._where())
+        except OSError:
+            return None
+
+    def _open_private(self, name: str, flags: int) -> Optional[int]:
+        """A descriptor on `name` when it is a regular file with a single
+        name that was not reached through a symbolic link. The name is
+        checked before the open (so, without O_NOFOLLOW, nothing is created
+        behind a dangling link) and the opened descriptor is compared with
+        the name after the open."""
+        named = self._lstat(name)
+        if named is not None and stat.S_ISLNK(named.st_mode):
+            return None
+        try:
+            descriptor = os.open(self._target(name), flags | _NOFOLLOW | _BINARY, 0o600, **self._where())
+        except OSError:
+            return None
+        try:
+            opened = os.fstat(descriptor)
+            named = os.lstat(self._target(name), **self._where())
+            same = (named.st_ino, named.st_dev) == (opened.st_ino, opened.st_dev)
+            if _is_private_regular(opened) and not stat.S_ISLNK(named.st_mode) and same:
+                return descriptor
+        except OSError:
+            pass
         os.close(descriptor)
+        return None
 
+    def read_text(self, name: str) -> str:
+        """The text of `name` when it is a regular file with a single name,
+        read from the checked descriptor; '' otherwise."""
+        descriptor = self._open_private(name, os.O_RDONLY)
+        if descriptor is None:
+            return ""
+        with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+            return handle.read()
 
+    def append_text(self, name: str, text: str) -> bool:
+        """Append `text` to `name`, creating it when missing, never through a
+        link and never partially. Concurrent appends keep each other's lines."""
+        descriptor = self._open_private(name, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+        if descriptor is None:
+            return False
+        try:
+            _write_all(descriptor, text.encode("utf-8"))
+            return True
+        finally:
+            os.close(descriptor)
 
+    def write_text_atomic(self, name: str, text: str) -> None:
+        """Replace `name` with `text` through a unique temporary sibling and a
+        rename, so a link (hard or symbolic) planted at the name is replaced,
+        never written through; the existing file's mode is kept and the
+        temporary never survives a failure."""
+        existing = self._lstat(name)
+        mode = stat.S_IMODE(existing.st_mode) if existing is not None and stat.S_ISREG(existing.st_mode) else None
+        temporary = f".{name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+        descriptor = os.open(self._target(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW | _BINARY, 0o600, **self._where())
+        try:
+            _write_all(descriptor, text.encode("utf-8"))
+            if mode is not None:
+                self._chmod(descriptor, temporary, mode)
+            os.close(descriptor)
+            descriptor = None
+            replace_where = {"src_dir_fd": self.descriptor, "dst_dir_fd": self.descriptor} if self.descriptor is not None else {}
+            os.replace(self._target(temporary), self._target(name), **replace_where)
+        except BaseException:
+            if descriptor is not None:
+                os.close(descriptor)
+            try:
+                os.unlink(self._target(temporary), **self._where())
+            except OSError:
+                pass
+            raise
+
+    def _chmod(self, descriptor: int, temporary: str, mode: int) -> None:
+        if os.chmod in os.supports_fd:
+            os.chmod(descriptor, mode)
+        else:
+            os.chmod(self._target(temporary), mode)
 
 
 def resolve_inside(root: Path, *parts: str) -> Optional[Path]:
