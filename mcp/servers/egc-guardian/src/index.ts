@@ -16,7 +16,7 @@ function hideEgcRootOnWindows(): void {
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
-import { writeAuditEntry } from './audit-log.js';
+import { redactPayload, writeAuditEntry } from './audit-log.js';
 import { scanVolatile } from './egc-volatile-scanner.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { classifyChunk } from './egc-chunk-router.js';
@@ -92,7 +92,9 @@ class PersistentLogger {
   }
 
   async log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', action: string, status?: string, meta: Record<string, unknown> = {}) {
-    const payload = JSON.stringify({ timestamp: new Date().toISOString(), level, type: 'AUDIT', action, status, ...meta });
+    // The raw command reaches this logger verbatim, credentials included;
+    // redact before anything is written to stderr or to disk.
+    const payload = JSON.stringify({ timestamp: new Date().toISOString(), level, type: 'AUDIT', action, status, ...redactPayload(meta) });
     console.error(payload); // MCP strict requirement
     try {
       try {

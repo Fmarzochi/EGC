@@ -32,9 +32,76 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { redactPayload, writeAuditEntry } = require(buildPath);
+const { redactPayload, writeAuditEntry, redactSecretsInText } = require(buildPath);
 
 console.log('\n=== Testing audit-log (egc-guardian) ===\n');
+
+// ── redactSecretsInText (audit 2026-08-17, F6/F7) ────────────────────────────
+
+if (test('redactSecretsInText: bearer headers, flag values and key=value assignments', () => {
+  const cmd = 'curl -H "Authorization: Bearer abc.def.ghi" --token=t0p-secret -u admin:hunter2 https://api.example.test?api_key=k123 && export GITHUB_TOKEN=ghp_' + 'A'.repeat(36);
+  const out = redactSecretsInText(cmd);
+  assert.ok(!out.includes('abc.def.ghi'), out);
+  assert.ok(!out.includes('t0p-secret'), out);
+  assert.ok(!out.includes('k123'), out);
+  assert.ok(!out.includes('ghp_' + 'A'.repeat(36)), out);
+  assert.ok(out.includes('Authorization: Bearer [REDACTED]'), out);
+  assert.ok(out.includes('--token=[REDACTED]'), out);
+  assert.ok(out.includes('curl -H'), 'the surrounding command text survives');
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: URL credentials, cloud and vendor token prefixes, JWTs', () => {
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.SomeSignatureHere1234567';
+  const text = `git clone https://user:pa55w0rd@github.com/x/y.git; aws --key AKIAABCDEFGHIJKLMNOP; sk-${'z'.repeat(24)} xoxb-1234567890-abc glpat-${'q'.repeat(20)} ${jwt}`;
+  const out = redactSecretsInText(text);
+  for (const leaked of ['pa55w0rd', 'AKIAABCDEFGHIJKLMNOP', 'sk-' + 'z'.repeat(24), 'xoxb-1234567890-abc', 'glpat-' + 'q'.repeat(20), jwt]) {
+    assert.ok(!out.includes(leaked), `${leaked} must not survive: ${out}`);
+  }
+  assert.ok(out.includes('https://user:[REDACTED]@github.com/x/y.git'), out);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: basic-auth users keep their name, API-key headers, secret aliases and quoted values are covered', () => {
+  const cases = [
+    ['curl -u admin:hunter2 https://x', 'curl -u admin:[REDACTED] https://x'],
+    ['curl --user=admin:hunter2 https://x', 'curl --user=admin:[REDACTED] https://x'],
+    ['curl -H "X-API-Key: k-123" https://x', 'curl -H "X-API-Key: [REDACTED]" https://x'],
+    ['curl -H "Private-Token: glx" https://x', 'curl -H "Private-Token: [REDACTED]" https://x'],
+    ['AUTH=abc AUTHORIZATION=def CREDENTIAL=ghi ./run', 'AUTH=[REDACTED] AUTHORIZATION=[REDACTED] CREDENTIAL=[REDACTED] ./run'],
+    ['x --token="abc def" --password=\'p w\' y', 'x --token=[REDACTED] --password=[REDACTED] y'],
+    ['export TOKEN="abc"', 'export TOKEN=[REDACTED]'],
+    ['git push -u origin main', 'git push -u origin main'],
+    ['sudo -u root ls', 'sudo -u root ls'],
+    ['git commit --author="Ann <a@x.tld>" -m x', 'git commit --author="Ann <a@x.tld>" -m x'],
+  ];
+  for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding names, api secrets, flags without a value', () => {
+  const cases = [
+    ['rsync -u user@host:src dest', 'rsync -u user@host:src dest'],
+    ['sudo -u root:wheel ls', 'sudo -u root:wheel ls'],
+    ['curl -sS -u admin:hunter2 https://x', 'curl -sS -u admin:[REDACTED] https://x'],
+    ['wget --user=admin --password=pw https://x', 'wget --user=admin --password=[REDACTED] https://x'],
+    ['cmd --api_secret abc --api-secret=def', 'cmd --api_secret [REDACTED] --api-secret=[REDACTED]'],
+    ['AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP PRIVATEKEY=p API-KEY=q MY_ACCESS_KEY=r ./run', 'AWS_ACCESS_KEY_ID=[REDACTED] PRIVATEKEY=[REDACTED] API-KEY=[REDACTED] MY_ACCESS_KEY=[REDACTED] ./run'],
+    ['tool --secret --other flag', 'tool --secret --other flag'],
+    ['tool --token=-hunter2 TOKEN=-hunter2 x', 'tool --token=[REDACTED] TOKEN=[REDACTED] x'],
+    ['curl -uadmin:hunter2 https://x', 'curl -uadmin:[REDACTED] https://x'],
+  ];
+  for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: ordinary commands are left alone', () => {
+  for (const cmd of ['git status', 'npm test -- --grep token', 'ls -la ~/.ssh', 'echo "the password policy doc"', 'git checkout 4f054e08']) {
+    assert.strictEqual(redactSecretsInText(cmd), cmd);
+  }
+})) passed++; else failed++;
+
+if (test('redactPayload: applies in-text redaction to string values and array items', () => {
+  const result = redactPayload({ command: 'curl -H "Authorization: Bearer abc.def.ghi" https://x', args: ['--password=pw', 'ok'] });
+  assert.strictEqual(result.command, 'curl -H "Authorization: Bearer [REDACTED]" https://x');
+  assert.deepStrictEqual(result.args, ['--password=[REDACTED]', 'ok']);
+})) passed++; else failed++;
 
 // ── redactPayload ────────────────────────────────────────────────────────────
 
