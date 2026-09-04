@@ -184,13 +184,23 @@ function redactSubstitution(inner) {
   const closed = backtick ? inner.endsWith('`') && inner.length > 1 : inner.endsWith(')');
   const opener = backtick ? '`' : inner.slice(0, 2);
   const body = inner.slice(opener.length, closed ? -1 : undefined);
-  return `${opener}${redactCurlBasicAuth(body)}${closed ? (backtick ? '`' : ')') : ''}`;
+  let closer = '';
+  if (closed) closer = backtick ? '`' : ')';
+  return `${opener}${redactCurlBasicAuth(body)}${closer}`;
+
 }
 
 // The body of a quoted run starting at its opening quote (or at the $ of
 // $'...' and $"..."): single quotes are literal, double quotes decode their
 // escapes and still run the substitutions inside them, $'...' decodes the
 // ANSI-C escapes. `raw` is the run as it will be logged.
+// A substitution at `at` as one literal unit, redacted inside.
+function substitutionPiece(text, at) {
+  const end = substitutionEnd(text, at);
+  const inner = text.slice(at, end);
+  return { value: inner, raw: redactSubstitution(inner), end };
+}
+
 function readQuoted(text, start) {
   const ansi = text[start] === '$';
   const quote = ansi ? text[start + 1] : text[start];
@@ -199,16 +209,11 @@ function readQuoted(text, start) {
   let raw = text.slice(start, start + (ansi ? 2 : 1));
   let i = start + (ansi ? 2 : 1);
   while (i < text.length && text[i] !== quote) {
-    if (quote === '"' && isSubstitutionOpener(text, i)) {
-      const end = substitutionEnd(text, i);
-      const inner = text.slice(i, end);
-      value += inner;
-      raw += redactSubstitution(inner);
-      i = end;
-      continue;
-    }
-    const escaped = text[i] === '\\' && decodes ? quotedEscape(text, i, quote === "'") : null;
-    const piece = escaped ?? { value: text[i], raw: text[i], end: i + 1 };
+    let piece = null;
+    if (quote === '"' && isSubstitutionOpener(text, i)) piece = substitutionPiece(text, i);
+    else if (text[i] === '\\' && decodes) piece = quotedEscape(text, i, quote === "'");
+    piece ??= { value: text[i], raw: text[i], end: i + 1 };
+
     value += piece.value;
     raw += piece.raw;
     i = piece.end;
@@ -225,10 +230,10 @@ function wordPiece(text, at) {
   const ch = text[at];
   if (ch === '\\' && text[at + 1] === '\n') return { value: '', code: '', raw: '', end: at + 2 };
   if (isSubstitutionOpener(text, at)) {
-    const end = substitutionEnd(text, at);
-    const inner = text.slice(at, end);
-    return { value: inner, code: LITERAL.repeat(inner.length), raw: redactSubstitution(inner), end };
+    const piece = substitutionPiece(text, at);
+    return { value: piece.value, code: LITERAL.repeat(piece.value.length), raw: piece.raw, end: piece.end };
   }
+
   if (isQuoteOpener(text, at)) {
     const quoted = readQuoted(text, at);
     return { value: quoted.value, code: LITERAL.repeat(quoted.value.length), raw: quoted.raw, end: quoted.end };
@@ -284,31 +289,51 @@ function isCommandStringFlag(value) {
 // A quoted word that a shell runs as a command line (the operand of sh -c,
 // bash -lc and the like) is redacted inside its quotes.
 function redactQuotedBody(raw) {
-  const prefix = raw[0] === '$' ? 2 : 1;
+  const prefix = raw.startsWith('$') ? 2 : 1;
   const quote = raw[prefix - 1];
   if ((quote !== '"' && quote !== "'") || raw.length < prefix + 1 || !raw.endsWith(quote)) return raw;
   return `${raw.slice(0, prefix)}${redactCurlBasicAuth(raw.slice(prefix, -1))}${quote}`;
 }
 
-// The credential as typed; when the colon only exists after decoding
-// (ANSI-C quoting), the whole spelling is replaced.
-function redactCredential(raw, value) {
-  // An ANSI-C quoted credential may hide or shift its separator behind
-  // escapes: the whole quoted body goes.
+// An ANSI-C quoted run may hide or shift the separator behind escapes:
+// everything after the first separator goes, or the whole run; null when
+// the credential has no such run.
+function ansiCredential(raw, colon) {
   const ansiAt = raw.indexOf("$'");
-  if (ansiAt !== -1) return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
-  const colon = raw.indexOf(':');
-  if (colon === -1) return value.includes(':') ? REDACTED : raw;
+  if (ansiAt === -1) return null;
+  if (colon !== -1 && colon < ansiAt) return `${raw.slice(0, colon + 1)}${REDACTED}`;
+  return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
+}
 
-  const quoteAt = raw[0] === '$' ? 1 : 0;
+// What follows the redacted password as typed: the closing quote of a
+// quoted credential, or the delimiters that closed a substitution.
+function credentialTail(raw, colon) {
+  const quoteAt = raw.startsWith('$') ? 1 : 0;
   const quote = raw[quoteAt] === '"' || raw[quoteAt] === "'" ? raw[quoteAt] : '';
-  let tail = quote && raw.length > quoteAt + 1 && raw.endsWith(quote) ? quote : '';
-  if (!tail) {
-    let keep = raw.length;
-    while (keep > colon + 1 && (raw[keep - 1] === ')' || raw[keep - 1] === '`')) keep -= 1;
-    tail = raw.slice(keep);
-  }
-  return `${raw.slice(0, colon + 1)}${REDACTED}${tail}`;
+  if (quote && raw.length > quoteAt + 1 && raw.endsWith(quote)) return quote;
+  let keep = raw.length;
+  while (keep > colon + 1 && (raw[keep - 1] === ')' || raw[keep - 1] === '`')) keep -= 1;
+  return raw.slice(keep);
+}
+
+// The credential as typed, with the password replaced.
+function redactCredential(raw, value) {
+  if (isSubstitutionOpener(raw, 0)) return redactedSubstitution(raw);
+  const colon = raw.indexOf(':');
+  const ansi = ansiCredential(raw, colon);
+  if (ansi !== null) return ansi;
+  if (colon === -1) return value.includes(':') ? REDACTED : raw;
+  return `${raw.slice(0, colon + 1)}${REDACTED}${credentialTail(raw, colon)}`;
+}
+
+// A credential produced by a substitution: its command line is secret, so
+// only the substitution's shape is kept.
+function redactedSubstitution(raw) {
+  const backtick = raw.startsWith('`');
+  const closed = backtick ? raw.length > 1 && raw.endsWith('`') : raw.endsWith(')');
+  let closer = '';
+  if (closed) closer = backtick ? '`' : ')';
+  return `${backtick ? '`' : raw.slice(0, 2)}${REDACTED}${closer}`;
 }
 
 // One word of a command, with the state of the command it belongs to.
