@@ -11,6 +11,23 @@
  *   (e.g. the server's MODEL_PRICES object).  When omitted all cost
  *   calculations return null.
  */
+const CAPABILITIES = {
+  claude:    { tokenUsage:true,  model:true,  cost:true,  session:true,  workspace:true  },
+  gemini:    { tokenUsage:true,  model:true,  cost:false, session:true,  workspace:false },
+  cursor:    { tokenUsage:false, model:false, cost:false, session:true,  workspace:true  },
+  codex:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
+  vscode:    { tokenUsage:false, model:false, cost:false, session:false, workspace:true  },
+  kiro:      { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
+  trae:      { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
+  opencode:  { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
+  codebuddy: { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
+  aider:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
+};
+
+// The ide values the dashboard knows how to render; the server refuses
+// events for anything else before they reach the panel.
+const KNOWN_IDES = Object.freeze(Object.keys(CAPABILITIES));
+
 function createAccumulator(externalPrices) {
   const providerState = {};
   const sessionHistory = [];
@@ -21,18 +38,6 @@ function createAccumulator(externalPrices) {
   // replayLog: Map<sessionId, { meta, events[] }>
   const replayLog = new Map();
 
-  const CAPABILITIES = {
-    claude:    { tokenUsage:true,  model:true,  cost:true,  session:true,  workspace:true  },
-    gemini:    { tokenUsage:true,  model:true,  cost:false, session:true,  workspace:false },
-    cursor:    { tokenUsage:false, model:false, cost:false, session:true,  workspace:true  },
-    codex:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-    vscode:    { tokenUsage:false, model:false, cost:false, session:false, workspace:true  },
-    kiro:      { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-    trae:      { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-    opencode:  { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-    codebuddy: { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-    aider:     { tokenUsage:false, model:false, cost:false, session:false, workspace:false },
-  };
 
   const IDE_PRICE_KEY = {
     claude:   '_default_claude',
@@ -190,4 +195,4 @@ function createAccumulator(externalPrices) {
   };
 }
 
-module.exports = { createAccumulator };
+module.exports = { KNOWN_IDES, createAccumulator };

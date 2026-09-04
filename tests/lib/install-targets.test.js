@@ -2693,6 +2693,34 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('trae and opencode ship the write validator next to the Bash guardian', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const homeDir = '/Users/example';
+    const traePlan = planInstallTargetScaffold({ target: 'trae', repoRoot, modules: [], projectRoot });
+    const traeHooks = path.join(projectRoot, '.trae', 'hooks.json');
+    const traeWriteScript = path.join(projectRoot, '.trae', 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+    const merges = traePlan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.destinationPath === traeHooks
+      && operation.hookScriptPath === traeWriteScript
+    ));
+    assert.strictEqual(merges.length, 1, 'trae registers the write validator once');
+    assert.strictEqual(merges[0].hookEvent, 'PreToolUse');
+    assert.strictEqual(merges[0].hookMatcher, 'Edit|Write');
+    assert.ok(traePlan.operations.some(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-write-guardian-validate.js'
+      && operation.destinationPath === traeWriteScript
+    )), 'trae scaffolds the write validator script');
+
+    const opencodePlan = planInstallTargetScaffold({ target: 'opencode', repoRoot, modules: [], homeDir });
+    const opencodeWriteScript = path.join(homeDir, '.config', 'opencode', 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+    assert.ok(opencodePlan.operations.some(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-write-guardian-validate.js'
+      && operation.destinationPath === opencodeWriteScript
+    )), 'opencode scaffolds the write validator script for its plugin');
+  })) passed++; else failed++;
+
   if (test('resolves trae adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('trae');
     const projectRoot = '/workspace/app';
@@ -2847,11 +2875,11 @@ function runTests() {
     });
 
     const mergeOperations = plan.operations.filter(operation => operation.destinationPath === hooksJsonPath);
-    assert.strictEqual(mergeOperations.length, 3, 'Guardian, Crusher, and mesh notice should each plan exactly one merge into .trae/hooks.json');
+    assert.strictEqual(mergeOperations.length, 4, 'Guardian, write validator, Crusher, and mesh notice should each plan exactly one merge into .trae/hooks.json');
     assert.ok(
       mergeOperations
         .filter(operation => operation.hookEvent === 'PreToolUse')
-        .every(operation => operation.hookMatcher === 'RunCommand'),
+        .every(operation => operation.hookMatcher === 'RunCommand' || operation.hookMatcher === 'Edit|Write'),
       'Tool merges must target PreToolUse with the RunCommand matcher (Trae\'s tool_name for shell, not Bash/Shell)'
     );
 
@@ -2913,8 +2941,8 @@ function runTests() {
     ));
     assert.strictEqual(
       hooksJsonOps.length,
-      3,
-      'Guardian, Crusher, and mesh notice should still be planned unconditionally when neither modules nor module is present'
+      4,
+      'Guardian, write validator, Crusher, and mesh notice should still be planned unconditionally when neither modules nor module is present'
     );
   })) passed++; else failed++;
 

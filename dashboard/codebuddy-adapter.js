@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
-const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { PORT } = require('./port');
+const { postEvent } = require('./telemetry-client');
 const WATCH_PATHS = [
   path.join(os.homedir(), '.codebuddy', 'logs'),
   path.join(os.homedir(), '.config', 'codebuddy', 'logs'),
@@ -15,16 +15,7 @@ const IGNORED_EXTENSIONS = new Set(['.tmp', '.swp', '.lock', '.bak', '.orig']);
 const DEBOUNCE_MS = 200;
 
 function post(ev) {
-  const body = JSON.stringify(ev);
-  const req = http.request(
-    { hostname:'127.0.0.1', port:PORT, path:'/event', method:'POST',
-      headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)},
-      timeout:300 },
-    ()=>{}
-  );
-  req.on('error', ()=>{});
-  req.on('timeout', ()=>req.destroy());
-  req.end(body);
+  postEvent(ev, { port: PORT });
 }
 
 function watchLogDir(dir) {
