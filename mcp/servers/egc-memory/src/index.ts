@@ -1543,7 +1543,9 @@ async function handleSessionSend(db: Database, toolArgs: unknown) {
   // The sender's heartbeat is refreshed whether or not the send goes out.
   const payloadCheck = sanitize(args.payload ?? '');
   const kindCheck = sanitize(args.kind);
-  const flagged = payloadCheck.flagged ? payloadCheck.reason : (kindCheck.flagged ? kindCheck.reason : null);
+  let flagged: string | null = null;
+  if (payloadCheck.flagged) flagged = payloadCheck.reason ?? 'suspicious payload';
+  else if (kindCheck.flagged) flagged = kindCheck.reason ?? 'suspicious kind';
   if (flagged) log('WARN', 'session_send: suspicious content blocked', { from: fromSession, reason: flagged });
   const result = await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
