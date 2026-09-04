@@ -63,49 +63,93 @@ function secretValueEnd(text, start, attached) {
   return end;
 }
 
-// curl's -u name:password, in any of its spellings (-u name:, -u=name:,
-// -uname:, -u :password), judged one occurrence at a time so a second -u on
-// the same command is redacted too. -u is an ordinary flag for rsync, sudo
-// and others, so only occurrences inside a curl command segment count.
-const CURL_USER_RE = /(^|\s)-u(?:=|\s*)["']?[^\s:"']*:/g;
+// curl's -u name:password in any spelling (-u name:pw, -uname:pw, -u=name:pw,
+// --user name:pw, --user=name:pw, -u ":pw", -u 'a b:c'), redacted in one
+// left-to-right pass over shell words: quotes and backslashes are read the
+// way the shell reads them, a separator (;, |, &, newline) starts a new
+// command, and a value is touched only after curl appeared in that command.
+// -u is an ordinary flag for rsync, sudo and others, so those keep theirs.
+const COMMAND_SEPARATORS = new Set([';', '|', '&', '\n']);
 
-// Index just past the last unquoted, unescaped command separator (;, |, &,
-// newline) before `index`, so a separator inside a quoted argument does not
-// end the curl segment early.
-function segmentStart(text, index) {
-  let start = 0;
+function shellWordEnd(text, start) {
   let quote = null;
-  for (let i = 0; i < index; i++) {
+  let i = start;
+  while (i < text.length) {
     const ch = text[i];
-    if (ch === '\\') {
-      i++;
-    } else if (quote) {
-      if (ch === quote) quote = null;
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+    } else if (ch === '\\') {
+      i += 1;
+    } else if (quote === '"') {
+      if (ch === '"') quote = null;
     } else if (ch === '"' || ch === "'") {
       quote = ch;
-    } else if (ch === ';' || ch === '|' || ch === '&' || ch === '\n') {
-      start = i + 1;
+    } else if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
+      break;
     }
+    i += 1;
   }
-  return start;
+  return Math.min(i, text.length);
 }
 
-function insideCurlSegment(text, index) {
-  return /\bcurl\b/i.test(text.slice(segmentStart(text, index), index));
+function bareWord(word) {
+  return word.replace(/\\(.)/g, '$1').replace(/["']/g, '');
+}
+
+function redactCredentialWord(word) {
+  const colon = word.indexOf(':');
+  if (colon === -1) return word;
+  const quote = word[0] === '"' || word[0] === "'" ? word[0] : '';
+  const closing = quote && word.length > 1 && word.endsWith(quote) ? quote : '';
+  return `${word.slice(0, colon + 1)}${REDACTED}${closing}`;
+}
+
+// The length of the flag glued in front of a credential (-u, -u=, --user=),
+// or 0 when the word is not such a flag.
+function gluedUserFlagLength(word) {
+  if (word.startsWith('--user=')) return '--user='.length;
+  if (word.startsWith('-u=')) return 3;
+  if (word.startsWith('-u') && word.length > 2) return 2;
+  return 0;
 }
 
 function redactCurlBasicAuth(text) {
   let out = '';
-  let last = 0;
-  for (const match of text.matchAll(CURL_USER_RE)) {
-    const start = match.index + match[0].length;
-    if (start < last || !insideCurlSegment(text, match.index)) continue;
-    const end = secretValueEnd(text, start, true);
-    if (end === start) continue;
-    out += `${text.slice(last, start)}${REDACTED}`;
-    last = end;
+  let i = 0;
+  let sawCurl = false;
+  let valueNext = false;
+  while (i < text.length) {
+    const ch = text[i];
+    if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
+      if (COMMAND_SEPARATORS.has(ch)) {
+        sawCurl = false;
+        valueNext = false;
+      }
+      out += ch;
+      i += 1;
+      continue;
+    }
+    const end = shellWordEnd(text, i);
+    const word = text.slice(i, end);
+    const bare = bareWord(word);
+    i = end;
+    if (valueNext) {
+      valueNext = false;
+      out += redactCredentialWord(word);
+    } else if (bare.split(/[\\/]/).pop().toLowerCase() === 'curl') {
+      sawCurl = true;
+      out += word;
+    } else if (!sawCurl) {
+      out += word;
+    } else if (bare === '-u' || bare === '--user') {
+      valueNext = true;
+      out += word;
+    } else {
+      const glued = gluedUserFlagLength(word);
+      out += glued ? `${word.slice(0, glued)}${redactCredentialWord(word.slice(glued))}` : word;
+    }
   }
-  return out + text.slice(last);
+  return out;
 }
 
 function redactValuesAfter(text, prefixPattern) {

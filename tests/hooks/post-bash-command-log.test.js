@@ -88,6 +88,12 @@ function runTests() {
       ['curl -u :hunter2 https://x', 'curl -u :<REDACTED> https://x'],
       ['curl -d "a;b|c&d" -u admin:pw https://x', 'curl -d "a;b|c&d" -u admin:<REDACTED> https://x'],
       ['curl https://x\nrsync -u user@host:src dest', 'curl https://x rsync -u user@host:src dest'],
+      ['curl -u ":hunter 2" https://x', 'curl -u ":<REDACTED>" https://x'],
+      ['curl -u ":" https://x', 'curl -u ":<REDACTED>" https://x'],
+      ["curl -d 'a\\' -u admin:pw https://x", "curl -d 'a\\' -u admin:<REDACTED> https://x"],
+      ['curl --user admin:pw https://x', 'curl --user admin:<REDACTED> https://x'],
+      ['echo curl\n-u user:pw', 'echo curl -u user:pw'],
+      [`curl ${'-u a:b '.repeat(400)}https://x`, `curl ${'-u a:<REDACTED> '.repeat(400)}https://x`],
     ];
     for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
   })) passed++; else failed++;
