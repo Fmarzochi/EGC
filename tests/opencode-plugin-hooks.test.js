@@ -11,6 +11,14 @@ const { pathToFileURL } = require("node:url")
 
 const { maybeSkipBaselineAbsent } = require("./lib/baseline-absent")
 
+const WIPE = ["rm", "-rf"].join(" ")
+const GUARDIAN_FILES = [
+  "scripts/hooks/pre-bash-guardian-validate.js",
+  "scripts/hooks/pre-write-guardian-validate.js",
+  "scripts/lib/guardian-bin.js",
+  "scripts/lib/shell-split.js",
+]
+
 function runTest(name, fn) {
   return Promise.resolve()
     .then(fn)
@@ -135,6 +143,36 @@ async function main() {
           client.logs.some((entry) => entry.message === "[EGC] Found GEMINI.md - loading project context"),
           "Expected GEMINI.md detection log"
         )
+      }),
+    ],
+    [
+      "tool.execute.before refuses a denied command and a protected write through the Guardian",
+      async () => withTempProject([], async (projectDir) => {
+        for (const rel of GUARDIAN_FILES) {
+          fs.mkdirSync(path.dirname(path.join(projectDir, rel)), { recursive: true })
+          fs.copyFileSync(path.join(__dirname, "..", rel), path.join(projectDir, rel))
+        }
+        const previous = { cli: process.env.EGC_GUARDIAN_CLI, disabled: process.env.EGC_DISABLED_HOOKS }
+        process.env.EGC_GUARDIAN_CLI = path.join(__dirname, "fixtures", "fake-guardian-cli.js")
+        process.env.EGC_DISABLED_HOOKS = "pre:gateguard:fact-force"
+        try {
+          const client = createClient()
+          const $ = createFailingShell()
+          const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+          await assert.rejects(
+            () => hooks["tool.execute.before"]({ tool: "bash", callID: "b1", args: { command: `${WIPE} /` } }),
+            /Guardian/
+          )
+          await assert.rejects(
+            () => hooks["tool.execute.before"]({ tool: "write", callID: "w1", args: { filePath: path.join(projectDir, ".ssh", "id_rsa"), content: "x" } }),
+            /Guardian/
+          )
+          await hooks["tool.execute.before"]({ tool: "bash", callID: "b2", args: { command: "git status" } })
+          await hooks["tool.execute.before"]({ tool: "write", callID: "w2", args: { filePath: path.join(projectDir, "notes.md"), content: "hi" } })
+        } finally {
+          if (previous.cli === undefined) delete process.env.EGC_GUARDIAN_CLI; else process.env.EGC_GUARDIAN_CLI = previous.cli
+          if (previous.disabled === undefined) delete process.env.EGC_DISABLED_HOOKS; else process.env.EGC_DISABLED_HOOKS = previous.disabled
+        }
       }),
     ],
     [

@@ -908,6 +908,35 @@ function createPreToolUseBashGuardianHookMergeOperation(targetRoot, matcher) {
 // Destination-driven variant, for hosts whose hooks.json path is not
 // derivable from targetRoot (Copilot ~/.copilot/hooks, Antigravity's
 // project/global split). Same Claude hooks.json schema.
+// Write validator (pre-write-guardian-validate.js) for hosts that read the
+// Claude-style hooks.json but are not Claude Code: the same shape as the
+// Bash guardian builders below, keyed on the write validator's module id.
+function createWriteValidatorHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: WRITE_VALIDATOR_HOOK_MODULE_ID,
+    sourceRelativePath: WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    destinationPath,
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: PRE_TOOL_USE_EVENT,
+    hookMatcher: matcher,
+    hookScriptPath,
+  };
+}
+
+// The write validator needs only guardian-bin.js, which the Bash guardian
+// copy operations already ship, so one copy is enough.
+function createWriteValidatorScriptCopyOperation(createRemappedOperation, targetRoot) {
+  return createRemappedOperation(
+    WRITE_VALIDATOR_HOOK_MODULE_ID,
+    WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    resolveWriteValidatorHookScriptDestination(targetRoot),
+    { strategy: 'preserve-relative-path' }
+  );
+}
+
 function createBashGuardianHookMergeOperationForDestination(destinationPath, hookScriptPath, matcher) {
   return {
     kind: HOOK_OPERATION_KIND,
@@ -1296,6 +1325,8 @@ module.exports = {
   createKiroMeshHookFileOperation,
   resolveMeshNoticeHookScriptDestination,
   createBashGuardianScriptCopyOperations,
+  createWriteValidatorHookMergeOperationForDestination,
+  createWriteValidatorScriptCopyOperation,
   createPreToolUseBashGuardianHookMergeOperation,
   createBashGuardianHookMergeOperationForDestination,
   resolveBashGuardianHookScriptDestination,

@@ -79,6 +79,48 @@ function runTests() {
     process.exit(0);
   }
 
+  if (test('installs the Guardian validators and a hooks.json wired to them, and uninstall removes them', () => {
+    const projectRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-hooks-'));
+    const homeDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-home-'));
+    try {
+      const stdout = runInstall({ cwd: projectRoot, homeDir });
+      assert.ok(stdout.includes('Hooks:'), stdout);
+      const root = path.join(projectRoot, '.trae');
+      const scripts = ['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/hooks/pre-write-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js'];
+      for (const rel of scripts) assert.ok(fs.existsSync(path.join(root, rel)), rel);
+      const hooks = JSON.parse(fs.readFileSync(path.join(root, 'hooks.json'), 'utf8'));
+      assert.deepStrictEqual(hooks.hooks.PreToolUse.map(group => group.matcher), ['RunCommand', 'Edit|Write']);
+      assert.ok(hooks.hooks.PreToolUse[0].hooks[0].command.includes('pre-bash-guardian-validate.js'));
+      assert.ok(hooks.hooks.PreToolUse[1].hooks[0].command.includes('pre-write-guardian-validate.js'));
+      const manifest = readManifestLines(projectRoot);
+      for (const entry of [...scripts, 'hooks.json']) assert.ok(manifest.includes(entry), `manifest carries ${entry}`);
+
+      runUninstall({ cwd: projectRoot, homeDir });
+      assert.ok(!fs.existsSync(path.join(root, 'hooks.json')), 'hooks.json removed');
+      for (const rel of scripts) assert.ok(!fs.existsSync(path.join(root, rel)), `${rel} removed`);
+    } finally {
+      cleanup(projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('leaves a preexisting hooks.json alone and points at egc install instead', () => {
+    const projectRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-hooks-'));
+    const homeDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-home-'));
+    try {
+      const root = path.join(projectRoot, '.trae');
+      fs.mkdirSync(root, { recursive: true });
+      fs.writeFileSync(path.join(root, 'hooks.json'), JSON.stringify({ hooks: { PreToolUse: [] } }));
+      const stdout = runInstall({ cwd: projectRoot, homeDir });
+      assert.ok(stdout.includes("Run 'egc install --target trae'"), stdout);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(root, 'hooks.json'), 'utf8')), { hooks: { PreToolUse: [] } });
+      assert.ok(!readManifestLines(projectRoot).includes('hooks.json'), 'a user file is never claimed');
+    } finally {
+      cleanup(projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (test('does not claim ownership of preexisting target files', () => {
     const homeDir = createTempDir('trae-home-');
     const projectRoot = createTempDir('trae-project-');
