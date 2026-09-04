@@ -114,9 +114,11 @@ function readShellWord(text, start) {
 }
 
 // curl by basename, with or without a Windows executable suffix, also when
-// the word opens a substitution ($(curl, `curl, {curl).
+// the word opens a substitution anywhere in it (`$(curl`, `pre$(curl`,
+// `x=$(curl`, `<(curl`, `\`curl`) or a group ({curl).
 function isCurlWord(value) {
-  return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(value.replace(/^[$(`{]+/, '').split(/[\\/]/).pop());
+  const command = value.replace(/^.*(?:\$\(|<\(|>\(|`)/, '').replace(/^[({]+/, '');
+  return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(command.split(/[\\/]/).pop());
 }
 
 // A quoted word that holds a whole command line (sh -c '...') is redacted
