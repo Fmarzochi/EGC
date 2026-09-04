@@ -139,26 +139,36 @@ function backtickEnd(text: string, at: number): number {
 // The end (exclusive) of a $(...), <(...), >(...) or `...` substitution
 // starting at `at`, balanced across nested substitutions and quotes; the
 // text length when it never closes.
+// The index just past the quoted run whose opening quote is at `at`; the
+// text length when it never closes.
+function quotedRunEnd(text: string, at: number): number {
+  const quote = text[at];
+  for (let i = at + 1; i < text.length; i += 1) {
+    if (text[i] === '\\' && quote === '"') i += 1;
+    else if (text[i] === quote) return i + 1;
+  }
+  return text.length;
+}
+
 function substitutionEnd(text: string, at: number): number {
   if (text[at] === '`') return backtickEnd(text, at);
-
-
   let depth = 0;
-  let quote: string | null = null;
-  for (let i = at + 1; i < text.length; i += 1) {
+  let i = at + 1;
+  while (i < text.length) {
     const ch = text[i];
-    if (quote) {
-      if (ch === '\\' && quote === '"') i += 1;
-      else if (ch === quote) quote = null;
-    } else if (ch === '\\') {
-      i += 1;
+    if (ch === '\\') {
+      i += 2;
     } else if (ch === "'" || ch === '"') {
-      quote = ch;
-    } else if (ch === '(') {
-      depth += 1;
-    } else if (ch === ')') {
-      depth -= 1;
-      if (depth === 0) return i + 1;
+      i = quotedRunEnd(text, i);
+    } else if (ch === '`') {
+      // A nested backtick substitution is skipped whole: its own parentheses
+      // do not close this one.
+      i = backtickEnd(text, i);
+    } else {
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      if (ch === ')' && depth === 0) return i + 1;
+      i += 1;
     }
   }
   return text.length;

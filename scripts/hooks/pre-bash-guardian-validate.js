@@ -235,6 +235,16 @@ function wrapperOption(word, wrapper, nextWord) {
   return { name: word, value: takesNext ? nextWord : undefined, takesNext };
 }
 
+// A chdir or chroot option moves where the operands are resolved; a
+// directory spelled with byte escapes cannot be resolved faithfully.
+function noteWrapperMove(option, wrapper, valueWord, state) {
+  if (option.value === undefined) return;
+  if (wrapper.chdirFlags.has(option.name)) state.cwd = option.value;
+  else if (wrapper.chrootFlags.has(option.name)) state.chroot = option.value;
+  else return;
+  state.unsure = state.unsure || Boolean(valueWord?.unsure);
+}
+
 function skipWrapperOptions(words, start, wrapper, state) {
   let index = start;
   while (index < words.length) {
@@ -245,17 +255,9 @@ function skipWrapperOptions(words, start, wrapper, state) {
     }
     if (!word.startsWith('-') || word === '-') break;
     const option = wrapperOption(word, wrapper, words[index + 1]?.value);
-    const moves = option.value !== undefined && (wrapper.chdirFlags.has(option.name) || wrapper.chrootFlags.has(option.name));
-    if (moves) {
-      if (wrapper.chdirFlags.has(option.name)) state.cwd = option.value;
-      else state.chroot = option.value;
-      // A directory spelled with byte escapes cannot be resolved faithfully.
-      const valueWord = option.takesNext ? words[index + 1] : words[index];
-      state.unsure = state.unsure || Boolean(valueWord?.unsure);
-    }
-
-
+    noteWrapperMove(option, wrapper, option.takesNext ? words[index + 1] : words[index], state);
     index += option.takesNext ? 2 : 1;
+
 
   }
   return index + wrapper.positionals;
