@@ -265,14 +265,24 @@ function isShellWord(word: ShellWord): boolean {
 // A quoted word that a shell runs as a command line (the operand of sh -c,
 // bash -lc and the like) is redacted inside its quotes.
 function redactQuotedBody(raw: string): string {
-  const quote = raw[0];
-  if ((quote !== '"' && quote !== "'") || raw.length < 2 || !raw.endsWith(quote)) return raw;
-  return `${quote}${redactCurlBasicAuth(raw.slice(1, -1))}${quote}`;
+  const prefix = raw[0] === '$' ? 2 : 1;
+  const quote = raw[prefix - 1];
+  if ((quote !== '"' && quote !== "'") || raw.length < prefix + 1 || !raw.endsWith(quote)) return raw;
+  return `${raw.slice(0, prefix)}${redactCurlBasicAuth(raw.slice(prefix, -1))}${quote}`;
+
+}
+
+// The credential as typed; when the colon only exists after decoding
+// (ANSI-C quoting), the whole spelling is replaced.
+function redactCredential(raw: string, value: string): string {
+  if (!raw.includes(':') && value.includes(':')) return REDACTED;
+  return redactCredentialWord(raw);
 }
 
 function redactCredentialWord(word: string): string {
   const colon = word.indexOf(':');
   if (colon === -1) return word;
+
   const quoteAt = word[0] === '$' ? 1 : 0;
   const quote = word[quoteAt] === '"' || word[quoteAt] === "'" ? word[quoteAt] : '';
   const closingQuote = quote && word.length > quoteAt + 1 && word.endsWith(quote) ? quote : '';
@@ -303,8 +313,9 @@ function redactWord(word: ShellWord, state: CurlState): string {
   }
   if (state.valueNext) {
     state.valueNext = false;
-    return redactCredentialWord(word.raw);
+    return redactCredential(word.raw, word.value);
   }
+
   if (isShellWord(word)) {
     state.sawShell = true;
   } else if (state.sawShell && /^-[a-z]*c[a-z]*$/i.test(word.value)) {
@@ -315,7 +326,8 @@ function redactWord(word: ShellWord, state: CurlState): string {
     state.valueNext = true;
   } else if (state.sawCurl) {
     const glued = gluedUserFlagLength(word.raw);
-    if (glued) return `${word.raw.slice(0, glued)}${redactCredentialWord(word.raw.slice(glued))}`;
+    if (glued) return `${word.raw.slice(0, glued)}${redactCredential(word.raw.slice(glued), word.value.slice(glued))}`;
+
   }
   return word.raw;
 }

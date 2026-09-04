@@ -177,7 +177,8 @@ function spec(valueFlags, extra = {}) {
 }
 
 const WRAPPER_SPECS = {
-  sudo: spec(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-D', '--chdir', '-U', '-T'], { chdirFlags: new Set(['-D', '--chdir']) }),
+  sudo: spec(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-D', '--chdir', '-R', '--chroot', '-U', '-T'], { chdirFlags: new Set(['-D', '--chdir', '-R', '--chroot']) }),
+
   doas: spec(['-u', '-C']),
   env: spec(['-u', '--unset', '-C', '--chdir', '-S', '--split-string'], { chdirFlags: new Set(['-C', '--chdir']) }),
   nohup: spec([]),
@@ -194,10 +195,22 @@ const WRAPPER_SPECS = {
   watch: spec(['-n', '--interval']),
   strace: spec(['-e', '-o', '--output', '-s', '-p', '-P', '-b', '-U']),
   parallel: spec(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']),
+  'systemd-run': spec(['-p', '--property', '-u', '--unit', '-E', '--setenv', '-d', '--description', '--on-active', '--on-boot', '--on-startup', '--on-unit-active', '--on-unit-inactive', '--on-calendar', '--timer-property', '--working-directory', '--uid', '--gid', '--nice', '-M', '--machine', '-H', '--host', '--slice', '--service-type'], { chdirFlags: new Set(['--working-directory']) }),
 };
 
 // Skips a wrapper's options and leading positionals; a chdir option's value
 // becomes the directory later operands are resolved against.
+// One wrapper option as typed: --name=value, -Xvalue (the short option with
+// its value attached) or the value in the next word.
+function wrapperOption(word, wrapper, nextWord) {
+  const equal = word.indexOf('=');
+  if (equal !== -1) return { name: word.slice(0, equal), value: word.slice(equal + 1), takesNext: false };
+  const attached = !word.startsWith('--') && word.length > 2 && wrapper.valueFlags.has(word.slice(0, 2));
+  if (attached) return { name: word.slice(0, 2), value: word.slice(2), takesNext: false };
+  const takesNext = wrapper.valueFlags.has(word);
+  return { name: word, value: takesNext ? nextWord : undefined, takesNext };
+}
+
 function skipWrapperOptions(words, start, wrapper, state) {
   let index = start;
   while (index < words.length) {
@@ -207,12 +220,10 @@ function skipWrapperOptions(words, start, wrapper, state) {
       break;
     }
     if (!word.startsWith('-') || word === '-') break;
-    const equal = word.indexOf('=');
-    const name = equal === -1 ? word : word.slice(0, equal);
-    const takesValue = equal === -1 && wrapper.valueFlags.has(name);
-    const value = equal === -1 ? words[index + 1]?.value : word.slice(equal + 1);
-    if (wrapper.chdirFlags.has(name) && value !== undefined) state.cwd = value;
-    index += takesValue ? 2 : 1;
+    const option = wrapperOption(word, wrapper, words[index + 1]?.value);
+    if (wrapper.chdirFlags.has(option.name) && option.value !== undefined) state.cwd = option.value;
+    index += option.takesNext ? 2 : 1;
+
   }
   return index + wrapper.positionals;
 }
@@ -257,10 +268,13 @@ function scriptOperandsOf(segment, cwd) {
   const files = [];
   const found = interpreterOperands(shellWords(segment));
   const base = found.cwd ? path.resolve(cwd || process.cwd(), found.cwd) : (cwd || process.cwd());
+  const outcome = (blocked) => ({ files, blocked, base });
+
   for (const operand of found.operands) {
     // The shell expands an unquoted wildcard to whatever matches at run time;
     // the literal name is not the file that runs.
-    if (operand.globbed) return { files, blocked: `wildcard operand ${operand.value} cannot be inspected before the shell expands it` };
+    if (operand.globbed) return outcome(`wildcard operand ${operand.value} cannot be inspected before the shell expands it`);
+
     const candidate = path.resolve(base, operand.value);
     let stat;
     try {
@@ -269,11 +283,12 @@ function scriptOperandsOf(segment, cwd) {
       continue;
     }
     if (!stat.isFile()) continue;
-    if (stat.size > MAX_SCRIPT_BYTES) return { files, blocked: `script ${operand.value} is too large to analyze` };
+    if (stat.size > MAX_SCRIPT_BYTES) return outcome(`script ${operand.value} is too large to analyze`);
     files.push(candidate);
   }
-  return { files, blocked: null };
+  return outcome(null);
 }
+
 // Segments of every script the command runs, following scripts that run
 // scripts; `blocked` names the reason when one of them cannot be inspected.
 function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
@@ -301,7 +316,9 @@ function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
         return { segments: collected, blocked: 'a script it runs nests command/process substitutions deeper than this validator can safely unwrap and analyze' };
       }
       collected.push(...nested);
-      const inner = scriptSegmentsOf(nested, cwd, depth + 1, seen);
+      // A script the wrapper moved into a directory runs its own children there.
+      const inner = scriptSegmentsOf(nested, operands.base, depth + 1, seen);
+
       collected.push(...inner.segments);
       if (inner.blocked) return { segments: collected, blocked: inner.blocked };
     }
@@ -340,9 +357,31 @@ function parseInput(inputOrRaw) {
 // to MAX_SUBSTITUTION_DEPTH): `echo $(rm -rf /)` must not slip through as
 // one benign-looking `echo` segment just because `$`/backtick are not
 // top-level separators.
+// A backslash-newline continues the line where the shell reads it that way:
+// outside single quotes; inside them it is two literal characters.
+function joinContinuations(text) {
+  let out = '';
+  let single = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (!single && ch === '\\' && text[i + 1] === '\n') {
+      i += 1;
+    } else if (!single && ch === '\\' && text[i + 1] === '\r' && text[i + 2] === '\n') {
+      i += 2;
+    } else if (!single && ch === '\\' && i + 1 < text.length) {
+      out += ch + text[i + 1];
+      i += 1;
+    } else {
+      if (ch === "'") single = !single;
+      out += ch;
+    }
+  }
+  return out;
+}
+
 function extractSegments(rawCommand, depth = 0) {
-  // A backslash-newline continues the line: the shell removes the pair.
-  const command = String(rawCommand).replace(/\\\r?\n/g, '');
+  const command = joinContinuations(String(rawCommand));
+
   const bodies = extractSubstitutionBodies(command);
   // There is at least one more level of substitution here that recursing
   // would need to unwrap, and depth is already at the cap: analysis cannot

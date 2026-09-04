@@ -69,7 +69,9 @@ function runTests() {
     if (test('chdir wrappers, executor wrappers with positionals, ANSI-C quoting and a line continuation still reach the file', () => {
       const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-elsewhere-'));
       try {
-        for (const command of [`env -C ${dir} bash notes.txt`, `env --chdir=${dir} bash notes.txt`, `sudo -D ${dir} bash notes.txt`, `sudo --chdir ${dir} bash notes.txt`, `timeout 5 bash ${denied}`, `timeout -s KILL 5 bash ${denied}`, `flock /tmp/egc-operand.lock bash ${denied}`, `stdbuf -oL bash ${denied}`, `ionice -c 3 bash ${denied}`, `bash $'${denied.replace(/\\/g, '\\\\')}'`, `bash \\\n${denied}`]) {
+        fs.writeFileSync(path.join(dir, 'outer-rel.sh'), 'echo outer\nbash inner-rel.sh\n');
+        fs.writeFileSync(path.join(dir, 'inner-rel.sh'), `${wipe} /tmp/egc-victim\n`);
+        for (const command of [`env -C ${dir} bash notes.txt`, `env -C${dir} bash notes.txt`, `env --chdir=${dir} bash notes.txt`, `sudo -D ${dir} bash notes.txt`, `sudo --chdir ${dir} bash notes.txt`, `systemd-run --working-directory=${dir} bash notes.txt`, `systemd-run -p MemoryMax=1G bash ${denied}`, `env -C ${dir} bash outer-rel.sh`, `timeout 5 bash ${denied}`, `timeout -s KILL 5 bash ${denied}`, `flock /tmp/egc-operand.lock bash ${denied}`, `stdbuf -oL bash ${denied}`, `ionice -c 3 bash ${denied}`, `bash $'${denied.replace(/\\/g, '\\\\')}'`, `bash \\\n${denied}`]) {
           const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
           assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         }

@@ -139,7 +139,8 @@ function scriptSegments(content) {
 // not to the directory this process happens to run in.
 function resolveTarget(input, filePath) {
   const cwd = typeof input?.cwd === 'string' ? input.cwd : process.cwd();
-  const home = filePath === '~' || filePath.startsWith('~/') || filePath.startsWith('~\\');
+  const home = filePath === '~' || filePath.startsWith('~/') || (process.platform === 'win32' && filePath.startsWith('~\\'));
+
   const expanded = home ? path.join(os.homedir(), filePath.slice(1)) : filePath;
   return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
 }
