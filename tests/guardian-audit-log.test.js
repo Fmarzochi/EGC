@@ -125,7 +125,11 @@ if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding
 
     ["echo $(echo \"`echo '\"'`\") ; curl -u user:pw https://x", "echo $(echo \"`echo '\"'`\") ; curl -u user:[REDACTED] https://x"],
 
-    ["curl -u user\\$(x):pw https://x", 'curl -u user\\$(x):[REDACTED] https://x'],
+    // A backslash escapes only where the platform's shell reads it so; on
+    // Windows the substitution after a literal backslash is active.
+    ["curl -u user\\$(x):pw https://x", process.platform === 'win32' ? 'curl -u user\\$([REDACTED]):[REDACTED] https://x' : 'curl -u user\\$(x):[REDACTED] https://x'],
+    ["curl -u \\$'\\'$(y):pw https://x", process.platform === 'win32' ? "curl -u \\$'[REDACTED]' https://x" : "curl -u \\$'\\'$([REDACTED]):[REDACTED] https://x"],
+
 
 
 
