@@ -98,6 +98,14 @@ egc install --target <target> --profile full
 
 Use `egc catalog` to inspect available targets, profiles, and components before installing.
 
+### Removing EGC
+
+`egc uninstall --target <target>` removes every managed file that target's install-state recorded (rules, skills, hooks, platform configuration); `egc uninstall` with no target does that for every install-state in the current context, and `--dry-run` lists the paths first. Two things stay on purpose: the shared state store in `~/.egc` (memory, savings ledger, sessions), and the cognitive protocol block the bare install writes into `~/.gemini/GEMINI.md`, which no install-state tracks. Delete those by hand for a clean slate, then remove the package itself:
+
+```bash
+npm uninstall -g @egchq/egc
+```
+
 > **Optional dependency:** `uv` is required only for the Jira and omega-memory MCP servers. Core EGC installation and all other targets are unaffected when `uv` is not installed.
 
 ---
@@ -336,6 +344,7 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 | `egc saved` | Accumulated Token Crusher savings, short summary |
 | `egc gain` | Full savings panel (--history for the run-by-run log) |
 | `egc discover` | Scan recent session transcripts for crushable output that skipped the crusher |
+| `egc crusher-shim` | Install, uninstall or check the PATH-level Token Crusher binary shim for tools without hook support |
 | `egc claw` | NanoClaw REPL: persistent session-aware agent loop with Markdown history |
 | `egc harness-audit` | Score the harness setup across tool coverage, quality gates, memory, and security |
 
