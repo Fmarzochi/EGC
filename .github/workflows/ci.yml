@@ -18,6 +18,14 @@ concurrency:
 permissions:
   contents: read
 
+# Every npm install here would otherwise end with an advisory request to
+# the registry; when that endpoint stalls, each lane waits out npm's fetch
+# timeout before running a single test. The dedicated security audit job
+# (reusable-security-audit.yml) is the one place that consults it.
+env:
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_FUND: "false"
+
 jobs:
   test:
     name: Test (${{ matrix.os }}, Node ${{ matrix.node }}, ${{ matrix.pm }})
@@ -261,7 +269,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -291,7 +299,7 @@ jobs:
   runtime-cli-smoke:
     name: Runtime CLI Smoke (informational)
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     continue-on-error: true
     permissions:
       contents: read
