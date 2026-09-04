@@ -45,6 +45,14 @@ async function runTests() {
   const otherKey = crypto.randomBytes(32);
   const personalKey = crypto.randomBytes(32);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-team-envelope-'));
+  const isLinkPath = (candidate) => {
+    try {
+      return fs.lstatSync(candidate).isSymbolicLink();
+    } catch {
+      return false;
+    }
+  };
+
   const syncDir = path.join(dir, 'sync');
   const localDir = path.join(dir, 'local');
   const doc = (updated, body) => `# Project State\nupdated: ${updated}\n\n${body}\n`;
@@ -107,6 +115,22 @@ async function runTests() {
         assert.strictEqual(viaLink.merged, 0, 'nothing is merged into a local tree that is a link');
         assert.ok(viaLink.rejected.some(entry => entry.includes('local tree is a link')), JSON.stringify(viaLink.rejected));
         assert.throws(() => teamSync.stageTeamState(linkedLocalRoot, syncDir, teamKey, personalKey), /local state tree is a link/);
+        const linkedLocalParent = path.join(dir, 'linked-parent-of-local', 'state');
+        fs.symlinkSync(path.join(dir, 'parent-target'), path.join(dir, 'linked-parent-of-local'), 'dir');
+        const viaParent = teamSync.mergeTeamStateFrom(syncDir, linkedLocalParent, teamKey, personalKey);
+        assert.strictEqual(viaParent.merged, 0, 'nothing is merged below a linked parent');
+        assert.throws(() => teamSync.stageTeamState(linkedLocalParent, syncDir, teamKey, personalKey), /local state tree is a link/);
+        fs.mkdirSync(path.join(dir, 'sync-target'), { recursive: true });
+        const linkedSyncRoot = path.join(dir, 'linked-sync-root');
+        fs.symlinkSync(path.join(dir, 'sync-target'), linkedSyncRoot, 'dir');
+        const viaSyncLink = teamSync.mergeTeamStateFrom(linkedSyncRoot, localDir, teamKey, personalKey);
+        assert.ok(viaSyncLink.rejected.some(entry => entry.includes('sync tree is a link')), JSON.stringify(viaSyncLink.rejected));
+        assert.ok(!fs.existsSync(linkedSyncRoot) && !isLinkPath(linkedSyncRoot), 'the linked sync tree is removed from the checkout');
+        assert.ok(fs.existsSync(path.join(dir, 'sync-target')), 'the target of the link is untouched');
+        fs.symlinkSync(path.join(dir, 'sync-target'), linkedSyncRoot, 'dir');
+        assert.throws(() => teamSync.stageTeamState(localDir, linkedSyncRoot, teamKey, personalKey), /sync state tree is a link/);
+        assert.strictEqual(fs.readdirSync(path.join(dir, 'sync-target')).length, 0, 'nothing is staged through the linked sync tree');
+
         assert.strictEqual(fs.readdirSync(path.join(dir, 'parent-target')).length, 0, 'nothing is written through the linked root');
         assert.ok(outcome.rejected.some(entry => entry.startsWith(path.join('linked-parent', 'note.md'))), 'a local parent that is a link is refused');
         assert.strictEqual(fs.readdirSync(path.join(dir, 'parent-target')).length, 0, 'nothing is written through the linked parent');

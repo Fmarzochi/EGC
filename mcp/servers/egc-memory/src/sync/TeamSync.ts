@@ -213,6 +213,27 @@ function hasLinkedAncestor(filePath: string, root: string): boolean {
   return false;
 }
 
+// The roots below which every directory of ours must be real: the home
+// directory and the temporary directory (where tests place their trees).
+// Above them the system's own layout (a linked /tmp, say) is not ours to judge.
+function trustedRoots(): string[] {
+  return [os.homedir(), os.tmpdir()].map(root => path.resolve(root));
+}
+
+// The first directory between a trusted root (exclusive) and `dir`
+// (inclusive) that is a link, or null when the whole chain is real.
+function linkedDirectoryTowards(dir: string): string | null {
+  const resolved = path.resolve(dir);
+  const root = trustedRoots().find(candidate => resolved.startsWith(candidate + path.sep));
+  if (!root) return isLink(resolved) ? resolved : null;
+  let probe = resolved;
+  while (probe !== root) {
+    if (isLink(probe)) return probe;
+    probe = path.dirname(probe);
+  }
+  return null;
+}
+
 function removeSyncFile(filePath: string): void {
   try {
     fs.rmSync(filePath, { force: true });
@@ -271,19 +292,22 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
   // The state tree of the repository must be a real directory: a link there
   // (dangling or not) would make the merge read, reject and remove whatever
   // it points at.
-  if (isLink(syncStateDir)) {
-    outcome.rejected.push('state (the sync tree is a link)');
-    removeSyncFile(syncStateDir);
+  const linkedSync = linkedDirectoryTowards(syncStateDir);
+  if (linkedSync) {
+    outcome.rejected.push(`state (the sync tree is a link at ${linkedSync})`);
+    if (linkedSync === path.resolve(syncStateDir)) removeSyncFile(syncStateDir);
     return outcome;
   }
   if (!fs.existsSync(syncStateDir)) return outcome;
-  // The local tree must be a real directory too, or the merge would write
-  // wherever the link points.
-  if (isLink(localStateDir)) {
-    outcome.rejected.push('local state (the local tree is a link)');
+  // The local tree and every directory above it must be real too, or the
+  // merge would write wherever a link points.
+  const linkedLocal = linkedDirectoryTowards(localStateDir);
+  if (linkedLocal) {
+    outcome.rejected.push(`local state (the local tree is a link at ${linkedLocal})`);
     return outcome;
   }
   fs.mkdirSync(localStateDir, { recursive: true });
+
 
   const entries = walkEntries(syncStateDir);
   // A link in the repository is refused and removed, so it is neither
@@ -304,9 +328,12 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
 // Local state leaves the machine only as sealed envelopes; a local file that
 // cannot be decrypted is left out rather than shipped opaque.
 export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer): number {
-  if (isLink(localStateDir)) throw new Error('the local state tree is a link and is not staged');
-  if (isLink(syncStateDir)) throw new Error('the sync state tree is a link and is not written');
+  const linkedLocal = linkedDirectoryTowards(localStateDir);
+  if (linkedLocal) throw new Error(`the local state tree is a link at ${linkedLocal} and is not staged`);
+  const linkedSync = linkedDirectoryTowards(syncStateDir);
+  if (linkedSync) throw new Error(`the sync state tree is a link at ${linkedSync} and is not written`);
   if (!fs.existsSync(localStateDir)) return 0;
+
 
   let staged = 0;
   for (const localFile of walkEntries(localStateDir).files) {
@@ -319,7 +346,9 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
     const relativePath = path.relative(localStateDir, localFile);
     const target = path.join(syncStateDir, relativePath);
     if (isLink(target)) removeSyncFile(target);
+    if (hasLinkedAncestor(target, syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${relativePath} and is not written`);
     fs.mkdirSync(path.dirname(target), { recursive: true });
+
     fs.writeFileSync(target, sealEnvelope(plaintext, teamKey, relativePath), 'utf-8');
     staged += 1;
   }
