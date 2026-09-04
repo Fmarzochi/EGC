@@ -140,12 +140,18 @@ function backtickEnd(text: string, at: number): number {
 // starting at `at`, balanced across nested substitutions and quotes; the
 // text length when it never closes.
 // The index just past the quoted run whose opening quote is at `at`; the
-// text length when it never closes.
+// text length when it never closes. Inside double quotes a nested
+// substitution ($( ) or backticks) is skipped whole: a quote in its body
+// belongs to it, not to this run.
 function quotedRunEnd(text: string, at: number): number {
   const quote = text[at];
-  for (let i = at + 1; i < text.length; i += 1) {
-    if (text[i] === '\\' && quote === '"') i += 1;
-    else if (text[i] === quote) return i + 1;
+  let i = at + 1;
+  while (i < text.length) {
+    const ch = text[i];
+    if (quote === '"' && ch === '\\') i += 2;
+    else if (quote === '"' && (ch === '`' || (ch === '$' && text[i + 1] === '('))) i = substitutionEnd(text, i);
+    else if (ch === quote) return i + 1;
+    else i += 1;
   }
   return text.length;
 }
