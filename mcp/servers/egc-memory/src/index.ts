@@ -45,7 +45,7 @@ import {
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { llmCompress, loadRawObservations, replaceObservation } from './compress.js';
-import { sanitize, sanitizeStrings } from './sanitize.js';
+import { sanitize, sanitizeStrings, sanitizeStateFields, scrubStateFields } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 
 function resolveStateStoreDbPath(): string {
@@ -1379,12 +1379,13 @@ function readExistingStateOrRecover(filePath: string, force: boolean | undefined
 
 async function handleUpdateState(db: Database, toolArgs: unknown) {
   const args = UpdateStateSchema.parse(toolArgs || {});
-  if (args.context) {
-    const check = sanitize(args.context);
-    if (check.flagged) {
-      log('WARN', 'update_state: suspicious content in context', { reason: check.reason });
-      return { content: [{ type: "text", text: `Blocked: ${check.reason}` }] };
-    }
+  // Every free-text field ends up in the instruction files each AI tool
+  // loads as trusted context (CLAUDE.md, AGENTS.md, GEMINI.md, ...), so all
+  // of them get the same scan context always had, not just context.
+  const check = sanitizeStateFields(args);
+  if (check.flagged) {
+    log('WARN', 'update_state: suspicious content blocked', { reasons: check.reasons });
+    return { content: [{ type: "text", text: `Blocked: ${check.reasons.join('; ')}` }] };
   }
   const projPath = resolveProjectPath(args.project_path);
   const branch = detectBranch(projPath);
@@ -1438,12 +1439,17 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   // context/decisions in every mirror file even though the state file
   // itself still has them merged in.
   const mergedForPropagation = readStateDoc(filePath);
-  const propagated = propagateStateToTools({
-    projectPath: projPath,
+  // The merged doc carries entries written before every field was scanned;
+  // scrub it too, so the instruction files only ever receive clean text.
+  const scrubbed = scrubStateFields({
     context: ((mergedForPropagation['Context'] as string[] | undefined) ?? []).join('\n') || undefined,
     decisions: ((mergedForPropagation['Active Decisions'] as string[]) || []).map(what => ({ what })),
     next: (mergedForPropagation['Next Session'] as string[]) || undefined,
   });
+  if (scrubbed.reasons.length > 0) {
+    log('WARN', 'update_state: suspicious stored entries withheld from propagation', { reasons: scrubbed.reasons });
+  }
+  const propagated = propagateStateToTools({ projectPath: projPath, ...scrubbed.fields });
   const propagatedTools = Object.entries(propagated)
     .filter(([, p]) => p !== null)
     .map(([tool]) => tool);
@@ -1465,9 +1471,16 @@ async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
   const args = SessionAnnounceSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(args.project_path);
   const sessionId = resolveBusSessionId(args.session_id);
+  // Presence is never refused, but a territory line that fails the scan is
+  // stored as the block marker instead of reaching every peer's context.
+  const territoryCheck = args.territory === undefined ? null : sanitize(args.territory);
+  if (territoryCheck?.flagged) {
+    log('WARN', 'session_announce: suspicious territory withheld', { session: sessionId, reason: territoryCheck.reason });
+  }
+  const territory = territoryCheck ? territoryCheck.value : args.territory;
   await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
-    await busAnnounce(db, { sessionId, projectPath: projPath, territory: args.territory });
+    await busAnnounce(db, { sessionId, projectPath: projPath, territory });
   });
   const peers = await busListPeers(db, projPath);
   const peerLines = peers
@@ -1477,9 +1490,10 @@ async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
   return { content: [{ type: "text", text: `Session ${sessionId} announced.\nLive peers in this project: ${peerLines.length === 0 ? 'none' : '\n' + peerLines.join('\n')}` }] };
 }
 
+// A territory stored before the scan existed is scrubbed on the way out too.
 function territoryNote(territory: unknown): string {
   const text = rowText(territory);
-  return text ? ` (territory: ${text})` : '';
+  return text ? ` (territory: ${sanitize(text).value})` : '';
 }
 
 function describePeer(p: Record<string, unknown>): string {
@@ -1524,9 +1538,19 @@ async function handleSessionSend(db: Database, toolArgs: unknown) {
   const args = SessionSendSchema.parse(toolArgs || {});
   const fromSession = resolveBusSessionId(args.session_id);
   const projPath = args.project_path ? resolveProjectPath(args.project_path) : undefined;
+  // A bus payload lands verbatim in another session's context: the same
+  // scan that guards project state runs here before anything is stored.
+  // The sender's heartbeat is refreshed whether or not the send goes out.
+  const payloadCheck = sanitize(args.payload ?? '');
+  const kindCheck = sanitize(args.kind);
+  let flagged: string | null = null;
+  if (payloadCheck.flagged) flagged = payloadCheck.reason ?? 'suspicious payload';
+  else if (kindCheck.flagged) flagged = kindCheck.reason ?? 'suspicious kind';
+  if (flagged) log('WARN', 'session_send: suspicious content blocked', { from: fromSession, reason: flagged });
   const result = await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
     await busAnnounce(db, { sessionId: fromSession, projectPath: projPath });
+    if (flagged) return { ok: false as const, reason: `blocked: ${flagged}` };
     return busSendEvent(db, {
       fromSession,
       toSession: args.to_session,
@@ -1567,8 +1591,9 @@ function formatDeliveredEvents(sessionId: string, events: Record<string, unknown
   // sender's session id (both arbitrary sender strings) would let a crafted
   // event forge headers and provenance. Everything the sender controls is
   // rendered on a single line; id and created_at are server-generated.
+  // Rows queued before the scan existed are scrubbed on delivery as well.
   const oneLine = (value: unknown): string =>
-    rowText(value).replaceAll(/\r?\n/g, String.raw`\n`);
+    sanitize(rowText(value)).value.replaceAll(/\r?\n/g, String.raw`\n`);
   const lines = events.map(e =>
     `- #${rowText(e.id)} [${oneLine(e.kind)}] from ${oneLine(e.from_session)}${e.to_session ? '' : ' (broadcast)'} at ${rowText(e.created_at)}\n  ${oneLine(e.payload || '(no payload)')}`
   );

@@ -29,11 +29,26 @@ export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir
 // Matches an eval flag given exactly, glued to its value (-e'code', -ccode),
 // or joined with = or : (--eval=code, -Command:code). Exact membership alone
 // misses every glued form, which the underlying interpreters all accept.
-function matchesEvalFlag(arg: string, flags: string[]): boolean {
+// Interpreters whose single-dash options are long words (-NonInteractive,
+// -Command): a letter inside one of those is not a combined short flag.
+const NO_SHORT_FLAG_CLUSTERS = new Set(['pwsh', 'powershell', 'powershell.exe']);
+const SHORT_FLAG_CLUSTER = /^-[A-Za-z]+$/;
+
+// `arg` is the lowercased token the exact and glued comparisons always used;
+// `casedArg` keeps the letter case, because inside a cluster -c and -C are
+// different options (bash -xC is noclobber, not eval), so the cluster check
+// must not inherit the lowercasing. Pass null to skip the cluster check.
+function matchesEvalFlag(arg: string, flags: string[], casedArg: string | null): boolean {
   for (const flag of flags) {
     if (arg === flag) return true;
     if (arg.startsWith(flag + '=') || arg.startsWith(flag + ':')) return true;
-    if (!flag.startsWith('--') && flag.length === 2 && arg.startsWith(flag) && arg.length > 2) return true;
+    if (flag.startsWith('--') || flag.length !== 2) continue;
+    if (arg.startsWith(flag) && arg.length > 2) return true;
+    // getopt-style interpreters accept combined short options, so the eval
+    // letter anywhere in a pure letter cluster (-xc, -lc, -Bc, -pe, -ne)
+    // still switches on eval. Matching only the exact token or the glued
+    // value form let `bash -xc "..."` through with no warning at all.
+    if (casedArg !== null && SHORT_FLAG_CLUSTER.test(casedArg) && casedArg.includes(flag[1])) return true;
   }
   return false;
 }
@@ -603,6 +618,10 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // tool's official docs, verified 2026-07-11 (see docs/architecture or the
 // PR that introduced this comment for the full per-tool research).
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
+  // EGC install-state: egc repair and uninstall replay what it records, so a
+  // planted entry would turn either into a write or delete of its choosing.
+  /(^|[\\/])egc[\\/][\w-]*install-state\.json$/,
+  /(^|[\\/])egc-install-state\.json$/,
   /\.env$/,
   // .env.example/.sample/.template are conventionally committed templates
   // with placeholder values, never real secrets — excluded so they're
@@ -1223,7 +1242,7 @@ function validateDevToolArgs(baseCommand: string, args: string[], cwd?: string):
   // validateCommand, but a defense-in-depth check here means this branch
   // is still safe even if it's ever reached directly.
   const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
-  if (evalFlags && args.some(a => matchesEvalFlag(a, evalFlags))) {
+  if (evalFlags && args.some(a => matchesEvalFlag(bareToken(a), evalFlags, stripQuotes(a)))) {
 return {
   allowed: false,
   reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
@@ -1333,9 +1352,13 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   // Args are bareToken()'d before matching so a quoted/glued flag (e.g.
   // "--eval=code" with the whole flag=value inside one pair of quotes)
   // can't dodge the exact/prefix comparisons in matchesEvalFlag.
-  const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand]
-    ?? INLINE_EVAL_COMMANDS[bareInterpreterName(baseCommand)];
-  if (evalFlagsForBase && args.map(bareToken).some(a => matchesEvalFlag(a, evalFlagsForBase))) {
+  // The name the eval table answers to (bare, or version-stripped) is also
+  // the name the cluster exclusion is keyed on, so `pwsh7 -NonInteractive`
+  // is judged as PowerShell just like `pwsh`.
+  const evalName = INLINE_EVAL_COMMANDS[baseCommand] ? baseCommand : bareInterpreterName(baseCommand);
+  const evalFlagsForBase = INLINE_EVAL_COMMANDS[evalName];
+  const clusters = !NO_SHORT_FLAG_CLUSTERS.has(evalName);
+  if (evalFlagsForBase && args.some(a => matchesEvalFlag(bareToken(a), evalFlagsForBase, clusters ? stripQuotes(a) : null))) {
     return {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
@@ -1352,14 +1375,20 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   const destructiveDenial = destructiveVerdict(baseCommand, args);
   if (destructiveDenial) return destructiveDenial;
 
-  // 6. Shell metacharacters: an advisory-only signal (see ADVISORY_REASONS
-  // in the enforcement hook), checked only after every hard check above has
-  // had a chance to run against the real, unwrapped base command. Checking
-  // this first (as before) let a stray $/`/pipe elsewhere in the command —
-  // routinely present in legitimate quoted arguments, e.g. `git commit -m
-  // "fix: a && b"` — short-circuit the function before DANGEROUS/inline-eval
-  // ever ran, silently downgrading a real hard-block into an advisory-only
-  // verdict the hook does not act on.
+  // 6. Per-command checks (protected paths, destructive git/find forms,
+  // dev-tool targets) and the allowlist verdict, always. They used to sit
+  // behind the metacharacter step below, so any `2>/dev/null`, pipe or `$`
+  // in the command made that advisory-only step return first and the
+  // protected-path denial for `cat ~/.ssh/id_rsa 2>/dev/null` never ran.
+  const verdict = validateAgainstAllowlist(baseCommand, args, cwd);
+  if (!verdict.allowed && !isAllowlistMissVerdict(verdict)) return verdict;
+
+  // 7. Shell metacharacters: an advisory-only signal (see ADVISORY_REASONS
+  // in the enforcement hook), reported only once every hard check above has
+  // had its say. Checking this first (as before) let a stray $/`/pipe
+  // elsewhere in the command — routinely present in legitimate quoted
+  // arguments, e.g. `git commit -m "fix: a && b"` — short-circuit the
+  // function before the real denials ever ran.
   if (SHELL_META_REGEX.test(command)) {
     return {
       allowed: false,
@@ -1368,52 +1397,79 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
     };
   }
 
-  // 7. Not in any allowlist: advisory-only at the hook layer (see
-  // ADVISORY_REASONS in pre-bash-guardian-validate.js) -- UNLESS the command
-  // targets a protected file, in which case it hard-blocks here instead
-  // (EGC-494). Catalogued commands (SAFE_READONLY/SAFE_DEV) already get
-  // their own protected-path checks per-command in validateCommandArgs
-  // below (step 8); this only runs for commands outside both lists (wget,
-  // curl, cp, sed -i, tee, ...), which previously had zero protected-path
-  // coverage since validateCommandArgs is never reached for them -- the
-  // generic "not in the allowlist" advisory swallowed every case, including
-  // `wget -O ~/.bashrc <url>`. Flag values (--output=path) are unwrapped so
-  // a protected target glued to its flag isn't skipped as a non-path arg.
-  if (!SAFE_READONLY.includes(baseCommand) && !SAFE_DEV.includes(baseCommand)) {
-    const candidatePaths = args.flatMap(rawArg => {
-      const arg = bareToken(rawArg);
-      if (!arg.startsWith('-')) {
-        // A URI operand (http://..., ftp://...) is a download/read target,
-        // not a local path -- passing it to isProtectedPath would resolve it
-        // relative to cwd and could false-positive hard-block a benign
-        // download whose URL happens to end in a protected-looking name.
-        return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [arg];
-      }
-      const eq = arg.indexOf('=');
-      if (eq > 0) return [arg.slice(eq + 1)];
-      // A short option's value can be glued directly to its flag with no
-      // separator (`-o~/.bashrc`, equivalent to `-o ~/.bashrc`) -- without
-      // this, that form never produces a candidate and stays advisory-only.
-      if (!arg.startsWith('--') && arg.length > 2) return [arg.slice(2)];
-      return [];
-    });
-    const protectedTarget = candidatePaths.find(arg => isProtectedPath(arg, cwd));
-    if (protectedTarget) {
-      return {
-        allowed: false,
-        reason: `'${baseCommand}' targets a protected file (${protectedTarget}) and is always denied, regardless of allowlist status`,
-        trust_level: 'DANGEROUS',
-      };
+  return verdict;
+}
+
+const ALLOWLIST_MISS_MARKER = 'is not in the allowlist';
+
+function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
+  return !verdict.allowed && String(verdict.reason ?? '').includes(ALLOWLIST_MISS_MARKER);
+}
+
+// Filesystem targets an argument can carry: a bare operand (URIs excluded,
+// they are download targets, not local paths), a --flag=value value, or a
+// value glued to a short flag (`-o~/.bashrc`).
+// file:///path and file://localhost/path name a local file, so the path
+// inside gets the same protected-path check as a bare operand would; every
+// other scheme is a download/read target with no local path in it.
+const FILE_URI_RE = /^file:\/\/(?:localhost)?(?=\/)/i;
+
+function unwrapFileUri(arg: string): string {
+  const match = FILE_URI_RE.exec(arg);
+  if (!match) return arg;
+  // A query or fragment is not part of the file a client opens.
+  const tail = arg.slice(match[0].length);
+  const cut = tail.search(/[?#]/);
+  const rest = cut === -1 ? tail : tail.slice(0, cut);
+  let decoded = rest;
+  try {
+    decoded = decodeURIComponent(rest);
+  } catch {
+    // A malformed escape keeps the raw text; the check still sees the path.
+  }
+  // file:///C:/Users/x carries a slash before the drive letter.
+  return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
+}
+
+function pathCandidatesOf(args: string[]): string[] {
+  return args.flatMap(rawArg => {
+    const arg = bareToken(rawArg);
+    const cased = stripQuotes(rawArg);
+    if (!arg.startsWith('-')) {
+      const unwrapped = unwrapFileUri(cased);
+      if (unwrapped !== cased) return [unwrapped];
+      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
     }
+    const eq = cased.indexOf('=');
+    if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
+    if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
+    return [];
+  });
+}
+
+// Catalogued commands (SAFE_READONLY/SAFE_DEV) get their own per-command
+// checks in validateCommandArgs. Everything else is advisory-only at the
+// hook layer (ADVISORY_REASONS in pre-bash-guardian-validate.js), UNLESS it
+// targets a protected file, which hard-blocks here (EGC-494): without this,
+// `wget -O ~/.bashrc <url>` had zero protected-path coverage because the
+// generic allowlist-miss advisory swallowed every case.
+function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: string): ValidationResult {
+  if (SAFE_READONLY.includes(baseCommand) || SAFE_DEV.includes(baseCommand)) {
+    return validateCommandArgs(baseCommand, args, cwd);
+  }
+  const protectedTarget = pathCandidatesOf(args).find(arg => isProtectedPath(arg, cwd));
+  if (protectedTarget) {
     return {
       allowed: false,
-      reason: `Command '${baseCommand}' is not in the allowlist`,
-      trust_level: 'BLOCKED',
+      reason: `'${baseCommand}' targets a protected file (${protectedTarget}) and is always denied, regardless of allowlist status`,
+      trust_level: 'DANGEROUS',
     };
   }
-
-  // 8. In allowlist: validate args
-  return validateCommandArgs(baseCommand, args, cwd);
+  return {
+    allowed: false,
+    reason: `Command '${baseCommand}' ${ALLOWLIST_MISS_MARKER}`,
+    trust_level: 'BLOCKED',
+  };
 }
 
 export function validateWrite(filepath: string): ValidationResult {

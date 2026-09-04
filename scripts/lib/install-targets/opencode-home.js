@@ -11,6 +11,7 @@ const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
   createBashGuardianScriptCopyOperations,
   createCrusherScriptCopyOperations,
+  createWriteValidatorScriptCopyOperation,
 } = require('../claude-settings-hooks');
 
 // OpenCode plugins run in-process, unlike hosts that spawn hooks.json
@@ -27,6 +28,7 @@ const OPENCODE_SESSION_CONTEXT_MODULE_ID = 'opencode-session-context-hook';
 // restoration on both hosts.
 const SESSION_CONTEXT_LIB_SOURCES = [
   'scripts/lib/session-start-adapter.js',
+  'scripts/lib/dashboard-token.js',
   'scripts/lib/session-context-loader.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/global-state.js',
@@ -78,6 +80,7 @@ function createOpenCodePluginOperations(adapter, targetRoot) {
 
   return [
     ...createBashGuardianScriptCopyOperations(remap, targetRoot),
+    createWriteValidatorScriptCopyOperation(remap, targetRoot),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
     ...createOpenCodeSessionContextOperations(remap, targetRoot),
     pluginCopyOperation,

@@ -44,6 +44,7 @@ const {
 
 const HOOK_LIB_SOURCES = [
   'scripts/lib/session-start-adapter.js',
+  'scripts/lib/dashboard-token.js',
   // Flattens next to the adapter; its require falls back from
   // ./crusher/session-marker to ./session-marker for exactly this layout.
   'scripts/lib/crusher/session-marker.js',

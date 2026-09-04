@@ -1,22 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-const http = require('http');
 const { PORT } = require('./port');
+const { postEvent } = require('./telemetry-client');
 
 const IDE = process.env.EGC_IDE || process.argv[2] || 'claude';
 
 function post(ev) {
-  const body = JSON.stringify(ev);
-  const req = http.request(
-    { hostname: '127.0.0.1', port: PORT, path: '/event', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      timeout: 300 },
-    () => {}
-  );
-  req.on('error', () => {});
-  req.on('timeout', () => req.destroy());
-  req.end(body);
+  postEvent(ev, { port: PORT });
 }
 
 function fileFrom(input) {

@@ -11,6 +11,14 @@ const { pathToFileURL } = require("node:url")
 
 const { maybeSkipBaselineAbsent } = require("./lib/baseline-absent")
 
+const WIPE = ["rm", "-rf"].join(" ")
+const GUARDIAN_FILES = [
+  "scripts/hooks/pre-bash-guardian-validate.js",
+  "scripts/hooks/pre-write-guardian-validate.js",
+  "scripts/lib/guardian-bin.js",
+  "scripts/lib/shell-split.js",
+]
+
 function runTest(name, fn) {
   return Promise.resolve()
     .then(fn)
@@ -43,6 +51,15 @@ async function loadPlugin() {
     path.join(repoRoot, ".opencode", "dist", "plugins", "egc-hooks.js")
   ).href
   return import(pluginUrl)
+}
+
+// The dist tree copied into the project, so the plugin file lives inside the
+// worktree it opens: only then may hook scripts come from that worktree.
+async function loadPluginInside(projectDir) {
+  const source = path.join(__dirname, "..", ".opencode", "dist")
+  const target = path.join(projectDir, ".opencode", "dist")
+  fs.cpSync(source, target, { recursive: true })
+  return import(pathToFileURL(path.join(target, "plugins", "egc-hooks.js")).href)
 }
 
 function createClient() {
@@ -138,8 +155,82 @@ async function main() {
       }),
     ],
     [
+      "tool.execute.before refuses a denied command and a protected write through the Guardian",
+      async () => withTempProject([], async (projectDir) => {
+        // The plugin runs from inside this worktree, so its scripts are trusted.
+        const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
+        for (const rel of GUARDIAN_FILES) {
+          fs.mkdirSync(path.dirname(path.join(projectDir, rel)), { recursive: true })
+          fs.copyFileSync(path.join(__dirname, "..", rel), path.join(projectDir, rel))
+        }
+        const previous = { cli: process.env.EGC_GUARDIAN_CLI, disabled: process.env.EGC_DISABLED_HOOKS }
+        process.env.EGC_GUARDIAN_CLI = path.join(__dirname, "fixtures", "fake-guardian-cli.js")
+        process.env.EGC_DISABLED_HOOKS = "pre:gateguard:fact-force"
+        try {
+          const client = createClient()
+          const $ = createFailingShell()
+          const hooks = await InsidePlugin({ client, $, directory: projectDir })
+          await assert.rejects(
+            () => hooks["tool.execute.before"]({ tool: "bash", callID: "b1", args: { command: `${WIPE} /` } }),
+            /Guardian/
+          )
+          await assert.rejects(
+            () => hooks["tool.execute.before"]({ tool: "write", callID: "w1", args: { filePath: path.join(projectDir, ".ssh", "id_rsa"), content: "x" } }),
+            /Guardian/
+          )
+          await hooks["tool.execute.before"]({ tool: "bash", callID: "b2", args: { command: "git status" } })
+          await hooks["tool.execute.before"]({ tool: "write", callID: "w2", args: { filePath: path.join(projectDir, "notes.md"), content: "hi" } })
+        } finally {
+          if (previous.cli === undefined) delete process.env.EGC_GUARDIAN_CLI; else process.env.EGC_GUARDIAN_CLI = previous.cli
+          if (previous.disabled === undefined) delete process.env.EGC_DISABLED_HOOKS; else process.env.EGC_DISABLED_HOOKS = previous.disabled
+        }
+      }),
+    ],
+    [
+      "tool.execute.before never loads hook scripts from a project the plugin does not live in",
+      async () => withTempProject([], async (projectDir) => {
+        // The repository's own plugin opens a foreign project that ships a hook
+        // script: the script must not even be required.
+        const marker = path.join(projectDir, "loaded.marker")
+        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
+        fs.writeFileSync(path.join(projectDir, "scripts", "hooks", "pre-bash-guardian-validate.js"), `require('fs').writeFileSync(${JSON.stringify(marker)}, '1')\nmodule.exports = { run: () => ({ exitCode: 0 }) }\n`)
+        const client = createClient()
+        const $ = createFailingShell()
+        const previous = process.env.EGC_DISABLED_HOOKS
+        process.env.EGC_DISABLED_HOOKS = "pre:gateguard:fact-force"
+        try {
+          const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+          await hooks["tool.execute.before"]({ tool: "bash", callID: "b1", args: { command: "git status" } })
+        } finally {
+          if (previous === undefined) delete process.env.EGC_DISABLED_HOOKS; else process.env.EGC_DISABLED_HOOKS = previous
+        }
+        assert.strictEqual(fs.existsSync(marker), false, "the foreign project's script was loaded")
+      }),
+    ],
+    [
+      "tool.execute.before loads hook scripts from the worktree only when the plugin lives inside it",
+      async () => withTempProject([], async (projectDir) => {
+        const marker = path.join(projectDir, "loaded.marker")
+        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
+        fs.writeFileSync(path.join(projectDir, "scripts", "hooks", "pre-bash-guardian-validate.js"), `require('fs').writeFileSync(${JSON.stringify(marker)}, '1')\nmodule.exports = { run: () => ({ exitCode: 0 }) }\n`)
+        const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
+        const client = createClient()
+        const $ = createFailingShell()
+        const previous = process.env.EGC_DISABLED_HOOKS
+        process.env.EGC_DISABLED_HOOKS = "pre:gateguard:fact-force"
+        try {
+          const hooks = await InsidePlugin({ client, $, directory: projectDir })
+          await hooks["tool.execute.before"]({ tool: "bash", callID: "b1", args: { command: "git status" } })
+        } finally {
+          if (previous === undefined) delete process.env.EGC_DISABLED_HOOKS; else process.env.EGC_DISABLED_HOOKS = previous
+        }
+        assert.strictEqual(fs.existsSync(marker), true, "the worktree's script was not loaded")
+      }),
+    ],
+    [
       "tool.execute.before blocks the first edit on a file with the GateGuard fact-forcing gate",
       async () => withTempProject([], async (projectDir) => {
+        const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
         fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
         fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
         fs.copyFileSync(
@@ -155,7 +246,7 @@ async function main() {
 
         const client = createClient()
         const $ = createFailingShell()
-        const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+        const hooks = await InsidePlugin({ client, $, directory: projectDir })
 
         await assert.rejects(
           () => hooks["tool.execute.before"]({ tool: "edit", callID: "call-1", args: { filePath: targetFile } }),
@@ -169,6 +260,7 @@ async function main() {
     [
       "tool.execute.before ignores unmapped tools and args-less calls without throwing",
       async () => withTempProject([], async (projectDir) => {
+        const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
         fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
         fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
         fs.copyFileSync(
@@ -182,7 +274,7 @@ async function main() {
 
         const client = createClient()
         const $ = createFailingShell()
-        const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+        const hooks = await InsidePlugin({ client, $, directory: projectDir })
 
         await hooks["tool.execute.before"]({ tool: "read", callID: "call-1", args: { filePath: "/tmp/whatever" } })
         await hooks["tool.execute.before"]({ tool: "edit", callID: "call-2", args: undefined })

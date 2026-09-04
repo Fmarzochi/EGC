@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { llmRoute, keywordRoute } from './llm-router.js';
+import { llmRoute, keywordRoute, llmRoutingEnabled, hasProviderKey } from './llm-router.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -16,7 +16,7 @@ function hideEgcRootOnWindows(): void {
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath } from './validator.js';
-import { writeAuditEntry } from './audit-log.js';
+import { redactPayload, writeAuditEntry } from './audit-log.js';
 import { scanVolatile } from './egc-volatile-scanner.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { classifyChunk } from './egc-chunk-router.js';
@@ -73,11 +73,29 @@ function runCompressionPipeline(chunks: string[]): PipelineResult {
 async function routeTask(prompt: string): Promise<{
   agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string;
 }> {
-  const llm = await llmRoute(prompt);
+  // The prompt leaves the machine only when the user opted in; a key alone
+  // keeps routing local.
+  const llm = llmRoutingEnabled() ? await llmRoute(prompt) : null;
   if (llm) {
     return { ...llm, scores: {}, rejected: [] };
   }
   return { ...keywordRoute(prompt), provider: 'keyword' };
+}
+
+function keywordRoutingHint(): string {
+  const enabled = llmRoutingEnabled();
+  const keyed = hasProviderKey();
+  const keys = 'ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY';
+  if (!enabled && !keyed) {
+    return `Semantic routing unavailable: set EGC_LLM_ROUTING=1 and a provider key (${keys}) to send the task prompt to that provider for LLM-based routing.`;
+  }
+  if (!enabled) {
+    return 'Semantic routing is off: a provider key is set, but the task prompt is only sent to that provider when EGC_LLM_ROUTING=1 is set as well.';
+  }
+  if (!keyed) {
+    return `Semantic routing is on but no provider key is set (${keys}); routing stayed local.`;
+  }
+  return 'Semantic routing fell back to local keyword scoring for this prompt.';
 }
 
 class PersistentLogger {
@@ -92,7 +110,9 @@ class PersistentLogger {
   }
 
   async log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', action: string, status?: string, meta: Record<string, unknown> = {}) {
-    const payload = JSON.stringify({ timestamp: new Date().toISOString(), level, type: 'AUDIT', action, status, ...meta });
+    // The raw command reaches this logger verbatim, credentials included;
+    // redact before anything is written to stderr or to disk.
+    const payload = JSON.stringify({ timestamp: new Date().toISOString(), level, type: 'AUDIT', action, status, ...redactPayload(meta) });
     console.error(payload); // MCP strict requirement
     try {
       try {
@@ -182,7 +202,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "orchestrate_task",
-        description: "Routes a prompt against the EGC catalog of skills, agents, and rules. Uses semantic LLM routing when a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY) and falls back to local keyword scoring otherwise. Also returns context-reduction metrics for any file payloads.",
+        description: "Routes a prompt against the EGC catalog of skills, agents, and rules. Routing is local keyword scoring by default; only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing. Also returns context-reduction metrics for any file payloads.",
         inputSchema: {
           type: "object",
           properties: {
@@ -411,9 +431,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
   const pipeline = runCompressionPipeline(rawPayloads);
   const routing = await routeTask(prompt);
 
-  const hint = routing.provider === 'keyword'
-    ? 'Semantic routing unavailable: set ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY to enable LLM-based routing.'
-    : undefined;
+  const hint = routing.provider === 'keyword' ? keywordRoutingHint() : undefined;
 
   return {
     content: [{

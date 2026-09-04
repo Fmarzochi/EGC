@@ -15,6 +15,7 @@
 
 import type { PluginInput } from "@opencode-ai/plugin"
 import * as fs from "fs"
+import * as os from "os"
 import * as path from "path"
 import { createRequire } from "module"
 import { fileURLToPath } from "url"
@@ -37,33 +38,107 @@ import changedFilesTool from "../tools/changed-files.js"
 // (dogfooding, two levels above the repo root) or an installed copy under
 // <opencode root>/plugins/ with gateguard-fact-force.js copied alongside at
 // <opencode root>/scripts/hooks/ (one level up). Try both.
-type GateGuardModule = { run: (rawInput: string) => unknown }
+type HookModule = { run: (input: unknown) => unknown }
 
-let gateguardModule: GateGuardModule | null | undefined
+// Keyed by the resolved file, so two worktrees served by one process each
+// load their own copy instead of sharing the first one's dependencies.
+const hookModules = new Map<string, HookModule>()
 
-function resolveGateGuardModulePath(pluginDir: string, worktreePath: string): string | null {
+// The worktree may supply hook scripts only when this plugin file itself
+// lives inside it (the EGC repository running its own plugin): a project
+// cannot forge where the installed plugin sits, so an installed plugin never
+// loads code from whatever project it opens.
+function pluginInsideWorktree(pluginDir: string, worktreePath: string): boolean {
+  try {
+    const plugin = fs.realpathSync(pluginDir)
+    const worktree = fs.realpathSync(worktreePath)
+    return plugin === worktree || plugin.startsWith(worktree + path.sep)
+  } catch {
+    return false
+  }
+}
+
+function resolveHookModulePath(pluginDir: string, worktreePath: string, fileName: string): string | null {
   const candidates = [
-    path.join(worktreePath, "scripts", "hooks", "gateguard-fact-force.js"),
-    path.join(pluginDir, "..", "scripts", "hooks", "gateguard-fact-force.js"),
-    path.join(pluginDir, "..", "..", "scripts", "hooks", "gateguard-fact-force.js"),
+    path.join(pluginDir, "..", "scripts", "hooks", fileName),
+    path.join(pluginDir, "..", "..", "scripts", "hooks", fileName),
   ]
+  if (pluginInsideWorktree(pluginDir, worktreePath)) candidates.push(path.join(worktreePath, "scripts", "hooks", fileName))
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
 }
 
-function loadGateGuard(pluginDir: string, worktreePath: string): GateGuardModule | null {
-  if (gateguardModule !== undefined) return gateguardModule
-  const modulePath = resolveGateGuardModulePath(pluginDir, worktreePath)
-  if (!modulePath) {
-    gateguardModule = null
+// Loads one of the hook scripts in-process; a script that is not there is
+// looked up again on the next call, so an install that lands mid-session is
+// picked up without a restart.
+function loadHookModule(pluginDir: string, worktreePath: string, fileName: string): HookModule | null {
+  const modulePath = resolveHookModulePath(pluginDir, worktreePath, fileName)
+  if (!modulePath) return null
+  const cached = hookModules.get(modulePath)
+  if (cached) return cached
+  try {
+    const loaded = createRequire(import.meta.url)(modulePath) as HookModule
+    hookModules.set(modulePath, loaded)
+    return loaded
+  } catch {
     return null
   }
-  try {
-    const req = createRequire(import.meta.url)
-    gateguardModule = req(modulePath) as GateGuardModule
-  } catch {
-    gateguardModule = null
+}
+
+function loadGateGuard(pluginDir: string, worktreePath: string): HookModule | null {
+  return loadHookModule(pluginDir, worktreePath, "gateguard-fact-force.js")
+}
+
+// EGC Guardian: the same validators Claude Code's hooks.json wires in,
+// called in-process. A blocking verdict (exit code 2) throws, which is how
+// an OpenCode plugin refuses a tool call.
+const GUARDIAN_WRITE_TOOLS: Record<string, string> = { write: "Write", edit: "Edit" }
+type GuardianVerdict = { exitCode?: number; stderr?: string }
+
+function guardianDenyReason(
+  pluginDir: string,
+  worktreePath: string,
+  tool: string,
+  args: Record<string, unknown> | undefined
+): string | null {
+  let verdict: GuardianVerdict | undefined
+  if (tool === "bash") {
+    const guardian = loadHookModule(pluginDir, worktreePath, "pre-bash-guardian-validate.js")
+    verdict = guardian?.run({
+      tool_name: "Bash",
+      tool_input: { command: String(args?.command ?? "") },
+      cwd: worktreePath,
+    }) as GuardianVerdict | undefined
+  } else if (GUARDIAN_WRITE_TOOLS[tool]) {
+    const guardian = loadHookModule(pluginDir, worktreePath, "pre-write-guardian-validate.js")
+    verdict = guardian?.run({
+      tool_name: GUARDIAN_WRITE_TOOLS[tool],
+      tool_input: {
+        file_path: args?.filePath ?? args?.file_path ?? args?.path,
+        content: args?.content,
+        new_string: args?.newString,
+      },
+      cwd: worktreePath,
+    }) as GuardianVerdict | undefined
   }
-  return gateguardModule
+  return verdict?.exitCode === 2 ? (verdict.stderr || "Blocked by the EGC Guardian.") : null
+}
+
+// The dashboard only accepts events that carry the token it minted at
+// startup (dashboard/ops.js); a missing token just means no telemetry. The
+// token changes only when the dashboard restarts, so a good read is kept
+// and the file is consulted again only while no token is known.
+let dashboardToken: string | null = null
+
+function readDashboardToken(): string | null {
+  if (dashboardToken) return dashboardToken
+  try {
+    const home = process.env.HOME || process.env.USERPROFILE || os.homedir()
+    const raw = fs.readFileSync(path.join(home, ".egc", "dashboard-token"), "utf8").trim()
+    dashboardToken = /^[0-9a-f]{64}$/i.test(raw) ? raw : null
+  } catch {
+    dashboardToken = null
+  }
+  return dashboardToken
 }
 
 const OPENCODE_TOOL_TO_GATEGUARD: Record<string, string> = {
@@ -297,10 +372,20 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
         const detail = (input.args?.filePath ?? input.args?.file_path ?? input.args?.path ?? input.args?.command ?? "") as string
         const tool = input.tool.charAt(0).toUpperCase() + input.tool.slice(1)
         const body = JSON.stringify({ ide:"opencode", event:"pre_tool", tool, agent:"main", detail, status:"running" })
-        const req = http.default.request({ hostname:"127.0.0.1", port:7890, path:"/event", method:"POST", headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(body)}, timeout:300 }, ()=>{})
+        const headers: Record<string, string | number> = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+        const token = readDashboardToken()
+        if (token) headers["x-egc-token"] = token
+        const req = http.default.request({ hostname:"127.0.0.1", port:7890, path:"/event", method:"POST", headers, timeout:300 }, ()=>{})
         req.on("error", ()=>{})
         req.end(body)
       } catch(_) {}
+
+      // EGC Guardian first: a denied command or a protected/denied write is
+      // refused before any other hook looks at the call.
+      const guardianReason = guardianDenyReason(pluginDir, worktreePath, input.tool, input.args)
+      if (guardianReason) {
+        throw new Error(guardianReason)
+      }
 
       // Fact-Forcing Gate: block the first Edit/Write/Bash per file (or per
       // session for Bash) and demand investigation before allowing it.

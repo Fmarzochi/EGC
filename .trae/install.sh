@@ -74,6 +74,27 @@ copy_managed_file() {
 }
 
 # Install function
+# hooks.json wired to the two Guardian validators, written only when the
+# target has no hooks.json of its own (a user's file is never merged here).
+# Serialized as JSON with the command paths shell-quoted, so a path with a
+# quote or a backslash still loads.
+write_guardian_hooks_json() {
+    local root="$1"
+    python3 - "$root" <<'PYEOF'
+import json, os, shlex, sys
+root = sys.argv[1]
+def hook(name):
+    return {"type": "command", "command": "node " + shlex.quote(os.path.join(root, "scripts", "hooks", name))}
+config = {"hooks": {"PreToolUse": [
+    {"matcher": "RunCommand", "hooks": [hook("pre-bash-guardian-validate.js")]},
+    {"matcher": "Edit|Write", "hooks": [hook("pre-write-guardian-validate.js")]},
+]}}
+with open(os.path.join(root, "hooks.json"), "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PYEOF
+}
+
 do_install() {
     local target_dir="$PWD"
     local trae_dir="$(get_trae_dir)"
@@ -158,6 +179,31 @@ do_install() {
         done < <(find "$REPO_ROOT/rules" -type f | sort)
     fi
 
+    # Guardian hooks: the same validators egc install --target trae registers,
+    # so a project set up through this script is not left without them.
+    hooks=0
+    mkdir -p "$trae_full_path/scripts/hooks" "$trae_full_path/scripts/lib"
+    GUARDIAN_FILES="scripts/hooks/pre-bash-guardian-validate.js scripts/hooks/pre-write-guardian-validate.js scripts/lib/guardian-bin.js scripts/lib/shell-split.js"
+    for hook_file in $GUARDIAN_FILES; do
+        if [ -f "$REPO_ROOT/$hook_file" ]; then
+            if copy_managed_file "$REPO_ROOT/$hook_file" "$trae_full_path/$hook_file" "$MANIFEST" "$hook_file"; then
+                hooks=$((hooks + 1))
+            fi
+        fi
+    done
+    if [ -L "$trae_full_path/hooks.json" ]; then
+        echo "Note: $trae_full_path/hooks.json is a symbolic link; this installer never writes through links."
+        echo "      Replace it with a regular file or run 'egc install --target trae'."
+        echo ""
+    elif [ ! -e "$trae_full_path/hooks.json" ]; then
+        write_guardian_hooks_json "$trae_full_path"
+        ensure_manifest_entry "$MANIFEST" "hooks.json"
+        hooks=$((hooks + 1))
+    elif ! grep -Fq "pre-bash-guardian-validate.js" "$trae_full_path/hooks.json" || ! grep -Fq "pre-write-guardian-validate.js" "$trae_full_path/hooks.json"; then
+        echo "Note: $trae_full_path/hooks.json already exists without both EGC Guardian validators (RunCommand and Edit|Write)."
+        echo "      Run 'egc install --target trae' to merge the Guardian hooks into it."
+        echo ""
+    fi
     for readme_file in "$SCRIPT_DIR/README.md" "$SCRIPT_DIR/README.zh-CN.md"; do
         if [ -f "$readme_file" ]; then
             local_name=$(basename "$readme_file")
@@ -187,6 +233,7 @@ do_install() {
     echo "  Commands:  $commands"
     echo "  Agents:    $agents"
     echo "  Rules:     $rules"
+    echo "  Hooks:     $hooks (Guardian validators for RunCommand and Edit|Write)"
     echo ""
     echo "Note: skills are not installed by this script anymore. Run"
     echo "  'egc install --target trae' to install skills from the full,"
