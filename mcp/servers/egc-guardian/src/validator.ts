@@ -1238,7 +1238,7 @@ function validateDevToolArgs(baseCommand: string, args: string[], cwd?: string):
   // validateCommand, but a defense-in-depth check here means this branch
   // is still safe even if it's ever reached directly.
   const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
-  if (evalFlags && args.some(a => matchesEvalFlag(a, evalFlags))) {
+  if (evalFlags && args.some(a => matchesEvalFlag(bareToken(a), evalFlags, stripQuotes(a)))) {
 return {
   allowed: false,
   reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
