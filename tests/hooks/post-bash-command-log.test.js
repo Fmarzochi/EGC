@@ -105,6 +105,11 @@ function runTests() {
       ["'x'$(curl -u user:pw https://x)", "'x'$(curl -u user:<REDACTED> https://x)"],
       ["$'\\143url' -u admin:pw https://x", "$'\\143url' -u admin:<REDACTED> https://x"],
       ["$'\\u0063url' -u admin:pw https://x", "$'\\u0063url' -u admin:<REDACTED> https://x"],
+      ["curl -u $'user\\x3apw' https://x", 'curl -u <REDACTED> https://x'],
+      ["sh -c $'curl -u user:pw https://x'", "sh -c $'curl -u user:<REDACTED> https://x'"],
+      ["echo $(sh -c 'curl -u user:pw https://x')", "echo $(sh -c 'curl -u user:<REDACTED> https://x')"],
+      ['echo "x"$(curl -u user:pw https://x)', 'echo "x"$(curl -u user:<REDACTED> https://x)'],
+
 
       ['echo "$(curl" -u user@host:src', 'echo "$(curl" -u user@host:src'],
       ["echo 'pre$(curl -u' -u user@host:src", "echo 'pre$(curl -u' -u user@host:src"],
