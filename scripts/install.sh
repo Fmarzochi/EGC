@@ -133,10 +133,15 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 if [[ "$DRY_RUN" = false ]]; then
-  # Root dependencies (better-sqlite3 etc.)
+  # Root dependencies (sqlite3 etc.)
   echo "  installing root dependencies..."
   cd "$ROOT_DIR"
   install_deps
+  # The native sqlite3 binary is a prebuilt download; when it cannot load
+  # here, EGC runs on its portable engine, so say so once and carry on.
+  if ! node "$ROOT_DIR/scripts/check-native-sqlite.js" 2>/dev/null; then
+    echo "  note: native sqlite3 unavailable on this machine; EGC uses its portable engine (search falls back to substring matching)."
+  fi
 
   # Point the "egc" command at this checkout, so the "egc doctor" the message
   # at the end of this script tells the user to run (and anything else they
