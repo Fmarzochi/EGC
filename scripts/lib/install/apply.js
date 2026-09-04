@@ -296,7 +296,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     );
   }
 
+  refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
   writeInstallState(plan.installStatePath, plan.statePreview);
+
   writeGuardianCliMarker(onWarning, homeDir);
 
   // Capture the async promise so callers (e.g. install() in the operations

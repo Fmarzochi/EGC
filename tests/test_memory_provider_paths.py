@@ -46,6 +46,8 @@ class MemoryProviderPathTests(unittest.TestCase):
         for bad in ["../etc", "a/b", "..", ".", "", "a\\b", ".hidden", None]:
             self.assertIsNone(safe_segment(bad), bad)
         self.assertEqual(safe_title("My note / v2"), "My_note___v2")
+        self.assertEqual(safe_title("Réunion été"), "Réunion_été")
+
         self.assertIsNone(safe_title("../../"))
         self.assertIsNone(safe_title(""))
         root = self.base / "r"
@@ -64,6 +66,24 @@ class MemoryProviderPathTests(unittest.TestCase):
             self.assertFalse(provider.append_journal("Nowhere", "x"))
             self.assertIsNone(provider.get_session_summary("../../etc/passwd"))
         self.assertEqual(self.files_outside([provider.root for provider in providers]), [])
+
+    def test_links_never_redirect_a_write(self):
+        outside = self.base / "outside"
+        outside.mkdir()
+        victim = outside / "victim.md"
+        victim.write_text("outside content", encoding="utf-8")
+        for provider in self.providers():
+            try:
+                (provider.root / "Linked").symlink_to(outside, target_is_directory=True)
+                (provider.root / "Governance" / "Aliased.md").hardlink_to(victim)
+            except (OSError, NotImplementedError, AttributeError) as error:
+                self.skipTest(f"links are not available here: {error}")
+            self.assertFalse(provider.write_note(self.entry("note", "Linked")), "a linked category resolves outside the root")
+            self.assertFalse(provider.append_journal("Linked", "x"))
+            self.assertTrue(provider.write_note(self.entry("Aliased", "Governance")))
+            self.assertEqual(victim.read_text(encoding="utf-8"), "outside content", "the hard link is replaced, not written through")
+            self.assertIn("body", (provider.root / "Governance" / "Aliased.md").read_text(encoding="utf-8"))
+            self.assertEqual([p for p in outside.iterdir()], [victim])
 
     def test_plain_names_work(self):
         for provider in self.providers():
