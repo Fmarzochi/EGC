@@ -245,8 +245,15 @@ function skipWrapperOptions(words, start, wrapper, state) {
     }
     if (!word.startsWith('-') || word === '-') break;
     const option = wrapperOption(word, wrapper, words[index + 1]?.value);
-    if (wrapper.chdirFlags.has(option.name) && option.value !== undefined) state.cwd = option.value;
-    if (wrapper.chrootFlags.has(option.name) && option.value !== undefined) state.chroot = option.value;
+    const moves = option.value !== undefined && (wrapper.chdirFlags.has(option.name) || wrapper.chrootFlags.has(option.name));
+    if (moves) {
+      if (wrapper.chdirFlags.has(option.name)) state.cwd = option.value;
+      else state.chroot = option.value;
+      // A directory spelled with byte escapes cannot be resolved faithfully.
+      const valueWord = option.takesNext ? words[index + 1] : words[index];
+      state.unsure = state.unsure || Boolean(valueWord?.unsure);
+    }
+
 
     index += option.takesNext ? 2 : 1;
 
@@ -259,7 +266,9 @@ function skipWrapperOptions(words, start, wrapper, state) {
 // variable-expanded interpreter cannot be resolved, so its operands are
 // inspected as if it were a shell. After `--` every word is an operand.
 function interpreterOperands(words) {
-  const state = { cwd: null, chroot: null };
+  const state = { cwd: null, chroot: null, unsure: false };
+  const found = (operands) => ({ operands, cwd: state.cwd, chroot: state.chroot, unsure: state.unsure });
+
 
   let index = 0;
   while (index < words.length) {
@@ -273,10 +282,12 @@ function interpreterOperands(words) {
     index = skipWrapperOptions(words, index + 1, wrapper, state);
   }
   const head = words[index];
-  if (!head) return { operands: [], cwd: state.cwd, chroot: state.chroot };
+  if (!head) return found([]);
+
 
   const name = head.value.split(/[\\/]/).pop().toLowerCase();
-  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return { operands: [], cwd: state.cwd, chroot: state.chroot };
+  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return found([]);
+
 
   const operands = [];
   let literal = false;
@@ -287,9 +298,26 @@ function interpreterOperands(words) {
       operands.push(word);
     }
   }
-  return { operands, cwd: state.cwd, chroot: state.chroot };
+  return found(operands);
 }
 
+
+
+// Where a script operand is resolved: inside a chroot the absolute path is
+// relative to the new root and a relative one starts at that root (or the
+// chdir inside it); otherwise at the chdir or the current directory.
+function operandBases(found, here) {
+  const root = found.chroot ? path.resolve(here, found.chroot) : null;
+  if (root) return { root, base: found.cwd ? path.join(root, found.cwd) : root };
+  return { root, base: found.cwd ? path.resolve(here, found.cwd) : here };
+}
+
+// The file an operand names, or null when the name leaves the chroot.
+function operandPath(name, root, base) {
+  const candidate = root && path.isAbsolute(name) ? path.join(root, name) : path.resolve(base, name);
+  if (root && candidate !== root && !candidate.startsWith(root + path.sep)) return null;
+  return candidate;
+}
 
 // Existing files among the operands, resolved against the cwd; a file that
 // exists but cannot be read within the budget is reported so the caller
@@ -297,20 +325,16 @@ function interpreterOperands(words) {
 function scriptOperandsOf(segment, cwd) {
   const files = [];
   const found = interpreterOperands(shellWords(segment));
-  const here = cwd || process.cwd();
-  // Inside a chroot the script's absolute path is relative to the new root,
-  // and relative paths start at that root unless a chdir option says where.
-  const root = found.chroot ? path.resolve(here, found.chroot) : null;
-  let base = found.cwd ? path.resolve(here, found.cwd) : here;
-  if (root) base = found.cwd ? path.join(root, found.cwd) : root;
+  const { root, base } = operandBases(found, cwd || process.cwd());
   const outcome = (blocked) => ({ files, blocked, base });
+  if (found.unsure) return outcome('a wrapper path uses byte escapes that cannot be resolved faithfully');
   for (const operand of found.operands) {
     // The shell expands an unquoted wildcard to whatever matches at run time;
     // the literal name is not the file that runs.
     if (operand.globbed) return outcome(`wildcard operand ${operand.value} cannot be inspected before the shell expands it`);
     if (operand.unsure) return outcome(`operand ${operand.value} uses byte escapes that cannot be resolved faithfully`);
-    const candidate = root && path.isAbsolute(operand.value) ? path.join(root, operand.value) : path.resolve(base, operand.value);
-
+    const candidate = operandPath(operand.value, root, base);
+    if (candidate === null) return outcome(`operand ${operand.value} leaves the chroot`);
     let stat;
     try {
       stat = fs.statSync(candidate);
@@ -324,6 +348,31 @@ function scriptOperandsOf(segment, cwd) {
   return outcome(null);
 }
 
+// The segments of one script file: its real path is remembered so a script
+// that runs itself (or is reached twice) is read once; `blocked` names the
+// reason when it cannot be inspected, `segments` is null when it was seen.
+function nestedSegmentsOf(file, depth, seen) {
+  let real;
+  try {
+    real = fs.realpathSync(file);
+  } catch {
+    return { blocked: `script ${file} cannot be read` };
+  }
+  if (seen.has(real)) return { segments: null };
+  seen.add(real);
+  if (depth >= MAX_SCRIPT_DEPTH) return { blocked: `scripts nest deeper than ${MAX_SCRIPT_DEPTH} levels` };
+  let nested;
+  try {
+    nested = extractSegments(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return { blocked: `script ${file} cannot be read` };
+  }
+  if (nested === null) {
+    return { blocked: 'a script it runs nests command/process substitutions deeper than this validator can safely unwrap and analyze' };
+  }
+  return { segments: nested };
+}
+
 // Segments of every script the command runs, following scripts that run
 // scripts; `blocked` names the reason when one of them cannot be inspected.
 function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
@@ -332,28 +381,12 @@ function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
     const operands = scriptOperandsOf(segment, cwd);
     if (operands.blocked) return { segments: collected, blocked: operands.blocked };
     for (const file of operands.files) {
-      let real;
-      try {
-        real = fs.realpathSync(file);
-      } catch {
-        return { segments: collected, blocked: `script ${file} cannot be read` };
-      }
-      if (seen.has(real)) continue;
-      seen.add(real);
-      if (depth >= MAX_SCRIPT_DEPTH) return { segments: collected, blocked: `scripts nest deeper than ${MAX_SCRIPT_DEPTH} levels` };
-      let nested;
-      try {
-        nested = extractSegments(fs.readFileSync(file, 'utf8'));
-      } catch {
-        return { segments: collected, blocked: `script ${file} cannot be read` };
-      }
-      if (nested === null) {
-        return { segments: collected, blocked: 'a script it runs nests command/process substitutions deeper than this validator can safely unwrap and analyze' };
-      }
-      collected.push(...nested);
+      const nested = nestedSegmentsOf(file, depth, seen);
+      if (nested.blocked) return { segments: collected, blocked: nested.blocked };
+      if (nested.segments === null) continue;
+      collected.push(...nested.segments);
       // A script the wrapper moved into a directory runs its own children there.
-      const inner = scriptSegmentsOf(nested, operands.base, depth + 1, seen);
-
+      const inner = scriptSegmentsOf(nested.segments, operands.base, depth + 1, seen);
       collected.push(...inner.segments);
       if (inner.blocked) return { segments: collected, blocked: inner.blocked };
     }

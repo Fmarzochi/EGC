@@ -95,6 +95,13 @@ function runTests() {
         assert.ok(bytes.stderr.includes('byte escapes'), bytes.stderr);
         const beyond = run({ tool_name: 'Bash', tool_input: { command: `bash $'\\U00110000notes.txt'` }, cwd: dir });
         assert.strictEqual(beyond.exitCode, 2, JSON.stringify(beyond));
+        const escapingRoot = run({ tool_name: 'Bash', tool_input: { command: `sudo -R ${root} bash ../../${path.relative(path.dirname(path.dirname(root)), denied)}` }, cwd: elsewhere });
+        assert.strictEqual(escapingRoot.exitCode, 2, JSON.stringify(escapingRoot));
+        assert.ok(escapingRoot.stderr.includes('leaves the chroot'), escapingRoot.stderr);
+        const escapedRoot = run({ tool_name: 'Bash', tool_input: { command: `sudo -R $'${root}\\377' bash /opt/run.sh` }, cwd: elsewhere });
+        assert.strictEqual(escapedRoot.exitCode, 2, JSON.stringify(escapedRoot));
+        assert.ok(escapedRoot.stderr.includes('byte escapes'), escapedRoot.stderr);
+
       } finally {
         fs.rmSync(root, { recursive: true, force: true });
         fs.rmSync(elsewhere, { recursive: true, force: true });

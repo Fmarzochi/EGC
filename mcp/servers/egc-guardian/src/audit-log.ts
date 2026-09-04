@@ -182,13 +182,23 @@ function redactSubstitution(inner: string, redactor: CurlRedactor): string {
   const closed = backtick ? inner.endsWith('`') && inner.length > 1 : inner.endsWith(')');
   const opener = backtick ? '`' : inner.slice(0, 2);
   const body = inner.slice(opener.length, closed ? -1 : undefined);
-  return `${opener}${redactor.redact(body)}${closed ? (backtick ? '`' : ')') : ''}`;
+  let closer = '';
+  if (closed) closer = backtick ? '`' : ')';
+  return `${opener}${redactor.redact(body)}${closer}`;
+
 }
 
 // The body of a quoted run starting at its opening quote (or at the $ of
 // $'...' and $"..."): single quotes are literal, double quotes decode their
 // escapes and still run the substitutions inside them, $'...' decodes the
 // ANSI-C escapes. `raw` is the run as it will be logged.
+// A substitution at `at` as one literal unit, redacted inside.
+function substitutionPiece(text: string, at: number, redactor: CurlRedactor): Piece {
+  const end = substitutionEnd(text, at);
+  const inner = text.slice(at, end);
+  return { value: inner, raw: redactSubstitution(inner, redactor), end };
+}
+
 function readQuoted(text: string, start: number, redactor: CurlRedactor): Piece {
   const ansi = text[start] === '$';
   const quote = ansi ? text[start + 1] : text[start];
@@ -197,16 +207,11 @@ function readQuoted(text: string, start: number, redactor: CurlRedactor): Piece 
   let raw = text.slice(start, start + (ansi ? 2 : 1));
   let i = start + (ansi ? 2 : 1);
   while (i < text.length && text[i] !== quote) {
-    if (quote === '"' && isSubstitutionOpener(text, i)) {
-      const end = substitutionEnd(text, i);
-      const inner = text.slice(i, end);
-      value += inner;
-      raw += redactSubstitution(inner, redactor);
-      i = end;
-      continue;
-    }
-    const escaped = text[i] === '\\' && decodes ? quotedEscape(text, i, quote === "'") : null;
-    const piece = escaped ?? { value: text[i], raw: text[i], end: i + 1 };
+    let piece: Piece | null = null;
+    if (quote === '"' && isSubstitutionOpener(text, i)) piece = substitutionPiece(text, i, redactor);
+    else if (text[i] === '\\' && decodes) piece = quotedEscape(text, i, quote === "'");
+    piece ??= { value: text[i], raw: text[i], end: i + 1 };
+
     value += piece.value;
     raw += piece.raw;
     i = piece.end;
@@ -223,10 +228,10 @@ function wordPiece(text: string, at: number, redactor: CurlRedactor): { value: s
   const ch = text[at];
   if (ch === '\\' && text[at + 1] === '\n') return { value: '', code: '', raw: '', end: at + 2 };
   if (isSubstitutionOpener(text, at)) {
-    const end = substitutionEnd(text, at);
-    const inner = text.slice(at, end);
-    return { value: inner, code: LITERAL.repeat(inner.length), raw: redactSubstitution(inner, redactor), end };
+    const piece = substitutionPiece(text, at, redactor);
+    return { value: piece.value, code: LITERAL.repeat(piece.value.length), raw: piece.raw, end: piece.end };
   }
+
   if (isQuoteOpener(text, at)) {
     const quoted = readQuoted(text, at, redactor);
     return { value: quoted.value, code: LITERAL.repeat(quoted.value.length), raw: quoted.raw, end: quoted.end };
@@ -268,6 +273,27 @@ function isCommandStringFlag(value: string): boolean {
   if (!value.startsWith('-') || value.length < 2) return false;
   const letters = value.slice(1);
   return letters.toLowerCase().includes('c') && [...letters].every(ch => /[a-z]/i.test(ch));
+}
+
+// An ANSI-C quoted run may hide or shift the separator behind escapes:
+// everything after the first separator goes, or the whole run; null when
+// the credential has no such run.
+function ansiCredential(raw: string, colon: number): string | null {
+  const ansiAt = raw.indexOf("$'");
+  if (ansiAt === -1) return null;
+  if (colon !== -1 && colon < ansiAt) return `${raw.slice(0, colon + 1)}${REDACTED}`;
+  return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
+}
+
+// What follows the redacted password as typed: the closing quote of a
+// quoted credential, or the delimiters that closed a substitution.
+function credentialTail(raw: string, colon: number): string {
+  const quoteAt = raw.startsWith('$') ? 1 : 0;
+  const quote = raw[quoteAt] === '"' || raw[quoteAt] === "'" ? raw[quoteAt] : '';
+  if (quote && raw.length > quoteAt + 1 && raw.endsWith(quote)) return quote;
+  let keep = raw.length;
+  while (keep > colon + 1 && (raw[keep - 1] === ')' || raw[keep - 1] === '`')) keep -= 1;
+  return raw.slice(keep);
 }
 
 // The redaction of one command line, word by word, with the state of the
@@ -341,32 +367,31 @@ class CurlRedactor {
   // A quoted word that a shell runs as a command line (the operand of sh -c,
   // bash -lc and the like) is redacted inside its quotes.
   private quotedBody(raw: string): string {
-    const prefix = raw[0] === '$' ? 2 : 1;
+    const prefix = raw.startsWith('$') ? 2 : 1;
     const quote = raw[prefix - 1];
     if ((quote !== '"' && quote !== "'") || raw.length < prefix + 1 || !raw.endsWith(quote)) return raw;
     return `${raw.slice(0, prefix)}${this.redact(raw.slice(prefix, -1))}${quote}`;
   }
 
-  // The credential as typed; when the colon only exists after decoding
-  // (ANSI-C quoting), the whole spelling is replaced.
+  // The credential as typed, with the password replaced.
   private credential(raw: string, value: string): string {
-    // An ANSI-C quoted credential may hide or shift its separator behind
-    // escapes: the whole quoted body goes.
-    const ansiAt = raw.indexOf("$'");
-    if (ansiAt !== -1) return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
+    if (isSubstitutionOpener(raw, 0)) return redactedSubstitution(raw);
     const colon = raw.indexOf(':');
+    const ansi = ansiCredential(raw, colon);
+    if (ansi !== null) return ansi;
     if (colon === -1) return value.includes(':') ? REDACTED : raw;
-
-    const quoteAt = raw[0] === '$' ? 1 : 0;
-    const quote = raw[quoteAt] === '"' || raw[quoteAt] === "'" ? raw[quoteAt] : '';
-    let tail = quote && raw.length > quoteAt + 1 && raw.endsWith(quote) ? quote : '';
-    if (!tail) {
-      let keep = raw.length;
-      while (keep > colon + 1 && (raw[keep - 1] === ')' || raw[keep - 1] === '`')) keep -= 1;
-      tail = raw.slice(keep);
-    }
-    return `${raw.slice(0, colon + 1)}${REDACTED}${tail}`;
+    return `${raw.slice(0, colon + 1)}${REDACTED}${credentialTail(raw, colon)}`;
   }
+}
+
+// A credential produced by a substitution: its command line is secret, so
+// only the substitution's shape is kept.
+function redactedSubstitution(raw: string): string {
+  const backtick = raw.startsWith('`');
+  const closed = backtick ? raw.length > 1 && raw.endsWith('`') : raw.endsWith(')');
+  let closer = '';
+  if (closed) closer = backtick ? '`' : ')';
+  return `${backtick ? '`' : raw.slice(0, 2)}${REDACTED}${closer}`;
 }
 
 function redactCurlBasicAuth(text: string): string {
