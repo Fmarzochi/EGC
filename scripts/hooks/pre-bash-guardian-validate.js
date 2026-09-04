@@ -59,17 +59,25 @@ const MAX_SCRIPT_BYTES = 512 * 1024;
 const MAX_SCRIPT_DEPTH = 8;
 
 const BACKSLASH_ESCAPES = process.platform !== 'win32';
-const LITERAL = '';
-const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '', b: '\b', f: '\f', v: '\v', e: '', '\\': '\\', "'": "'", '"': '"' };
+const LITERAL = '\u0001';
+const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\u0007', b: '\b', f: '\f', v: '\v', e: '\u001b', E: '\u001b', '\\': '\\', "'": "'", '"': '"', '?': '?' };
 
+// One ANSI-C escape starting at the backslash inside $'...': the named ones,
+// octal (\NNN), hex (\xHH), unicode (\uHHHH, \UHHHHHHHH) and control (\cX).
 function ansiEscape(text, at) {
   const next = text[at + 1];
-  if (next === 'x') {
-    const hex = /^[0-9a-fA-F]{1,2}/.exec(text.slice(at + 2));
-    if (hex) return { value: String.fromCharCode(Number.parseInt(hex[0], 16)), end: at + 2 + hex[0].length };
+  const digits = { x: [/^[0-9a-fA-F]{1,2}/, 16], u: [/^[0-9a-fA-F]{1,4}/, 16], U: [/^[0-9a-fA-F]{1,8}/, 16] }[next];
+  if (digits) {
+    const run = digits[0].exec(text.slice(at + 2));
+    if (run) return { value: String.fromCodePoint(Number.parseInt(run[0], digits[1])), end: at + 2 + run[0].length };
   }
-  return { value: Object.hasOwn(ANSI_ESCAPES, next) ? ANSI_ESCAPES[next] : next, end: at + 2 };
+  const octal = /^[0-7]{1,3}/.exec(text.slice(at + 1));
+  if (octal) return { value: String.fromCharCode(Number.parseInt(octal[0], 8)), end: at + 1 + octal[0].length };
+  if (next === 'c' && text[at + 2] !== undefined) return { value: String.fromCharCode(text[at + 2].toUpperCase().charCodeAt(0) ^ 0x40), end: at + 3 };
+  if (Object.hasOwn(ANSI_ESCAPES, next)) return { value: ANSI_ESCAPES[next], end: at + 2 };
+  return { value: `\\${next}`, end: at + 2 };
 }
+
 
 function isQuoteOpener(text, at) {
   const ch = text[at];
