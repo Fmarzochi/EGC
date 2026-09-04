@@ -8,6 +8,7 @@
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { run: runGuardian } = require('../scripts/hooks/pre-bash-guardian-validate');
+const { run: runWriteGuardian } = require('../scripts/hooks/pre-write-guardian-validate');
 const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-rewrite');
 
 const SESSION_CONTEXT_SCRIPT = path.join(
@@ -18,6 +19,30 @@ const SESSION_CONTEXT_SCRIPT = path.join(
   'opencode-session-start.js'
 );
 const DEFAULT_SESSION_CONTEXT_TIMEOUT_MS = 3000;
+
+// OpenCode's file tools and the Claude-style names the write validator
+// expects; OpenCode passes filePath/content/newString in the tool args.
+const GUARDIAN_WRITE_TOOLS = { write: 'Write', edit: 'Edit' };
+
+function writeToolInput(args) {
+  return {
+    file_path: args.filePath ?? args.file_path ?? args.path,
+    content: typeof args.content === 'string' ? args.content : undefined,
+    new_string: typeof args.newString === 'string' ? args.newString : undefined,
+  };
+}
+
+// The Guardian's refusal for a write, edit or bash call, or null to proceed.
+function guardianDenial(tool, args, directory) {
+  const writeTool = GUARDIAN_WRITE_TOOLS[tool];
+  let verdict = null;
+  if (writeTool) {
+    verdict = runWriteGuardian({ tool_name: writeTool, tool_input: writeToolInput(args), cwd: directory });
+  } else if (tool === 'bash' && typeof args.command === 'string') {
+    verdict = runGuardian({ tool_name: 'Bash', tool_input: { command: args.command }, cwd: directory });
+  }
+  return verdict?.exitCode === 2 ? (verdict.stderr || 'Blocked by the EGC Guardian.') : null;
+}
 const DEFAULT_MAX_SESSION_CONTEXT_BYTES = 1024 * 1024;
 
 function positiveIntegerEnv(name, fallback) {
@@ -189,22 +214,13 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
     'session.created': handleSessionCreated,
 
     'tool.execute.before': async (input, output) => {
-      if (input?.tool !== 'bash' || typeof output?.args?.command !== 'string') {
-        return;
-      }
+      const args = output?.args;
+      if (!args || typeof args !== 'object') return;
+      const denial = guardianDenial(input?.tool, args, directory);
+      if (denial) throw new Error(denial);
+      if (input?.tool !== 'bash' || typeof args.command !== 'string') return;
 
-      const command = output.args.command;
-
-      const guardianResult = runGuardian({
-        tool_name: 'Bash',
-        tool_input: { command },
-        cwd: directory,
-      });
-      if (guardianResult.exitCode === 2) {
-        throw new Error(guardianResult.stderr || 'Blocked by the EGC Guardian.');
-      }
-
-      const rewritten = JSON.parse(runCrusherRewrite({ tool_input: { command } }));
+      const rewritten = JSON.parse(runCrusherRewrite({ tool_input: { command: args.command } }));
       if (typeof rewritten?.tool_input?.command === 'string') {
         output.args.command = rewritten.tool_input.command;
       }

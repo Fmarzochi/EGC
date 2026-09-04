@@ -11,6 +11,7 @@ const {
   BASH_GUARDIAN_HOOK_MODULE_ID,
   createBashGuardianScriptCopyOperations,
   createCrusherScriptCopyOperations,
+  createWriteValidatorScriptCopyOperation,
 } = require('../claude-settings-hooks');
 
 // OpenCode plugins run in-process, unlike hosts that spawn hooks.json
@@ -79,6 +80,7 @@ function createOpenCodePluginOperations(adapter, targetRoot) {
 
   return [
     ...createBashGuardianScriptCopyOperations(remap, targetRoot),
+    createWriteValidatorScriptCopyOperation(remap, targetRoot),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
     ...createOpenCodeSessionContextOperations(remap, targetRoot),
     pluginCopyOperation,

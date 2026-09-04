@@ -9,6 +9,8 @@ const {
 const {
   createBashGuardianHookMergeOperationForDestination,
   createBashGuardianScriptCopyOperations,
+  createWriteValidatorHookMergeOperationForDestination,
+  createWriteValidatorScriptCopyOperation,
   createCrusherHookMergeOperationForDestination,
   createCrusherScriptCopyOperations,
   MESH_NOTICE_HOOK_MODULE_ID,
@@ -41,21 +43,31 @@ function resolveTraeHooksJsonPath(traeRoot) {
 // uses for its own security hooks, so a minimal install is never silently
 // unprotected.
 function createTraeGuardianOperations(adapter, traeRoot) {
-  const hookScriptPath = path.join(traeRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
-  const copyOperations = createBashGuardianScriptCopyOperations(
-    (moduleId, sourceRelativePath, destinationPath, options) => (
-      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-    ),
-    traeRoot
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
-
+  const hooksJsonPath = resolveTraeHooksJsonPath(traeRoot);
+  const hookScriptPath = path.join(traeRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+  const copyOperations = createBashGuardianScriptCopyOperations(remap, traeRoot);
   const mergeOperation = createBashGuardianHookMergeOperationForDestination(
-    resolveTraeHooksJsonPath(traeRoot),
+    hooksJsonPath,
     hookScriptPath,
     'RunCommand'
   );
 
-  return [...copyOperations, mergeOperation];
+  // File writes go through the same validator Claude Code registers. Trae's
+  // standardized tool names for file changes are Write and Edit, and its
+  // matcher takes a regular expression (docs.trae.ai/ide/hook-configuration-
+  // reference lists "Edit|Write" as the example), so one entry covers both.
+  const writeScriptPath = path.join(traeRoot, 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+  const writeCopyOperation = createWriteValidatorScriptCopyOperation(remap, traeRoot);
+  const writeMergeOperation = createWriteValidatorHookMergeOperationForDestination(
+    hooksJsonPath,
+    writeScriptPath,
+    'Edit|Write'
+  );
+
+  return [...copyOperations, mergeOperation, writeCopyOperation, writeMergeOperation];
 }
 
 // Token Crusher for Trae: same PreToolUse/updatedInput rewrite mechanism as
