@@ -1418,7 +1418,9 @@ function unwrapFileUri(arg: string): string {
   const match = FILE_URI_RE.exec(arg);
   if (!match) return arg;
   // A query or fragment is not part of the file a client opens.
-  const rest = arg.slice(match[0].length).replace(/[?#].*$/, '');
+  const tail = arg.slice(match[0].length);
+  const cut = tail.search(/[?#]/);
+  const rest = cut === -1 ? tail : tail.slice(0, cut);
   let decoded = rest;
   try {
     decoded = decodeURIComponent(rest);
