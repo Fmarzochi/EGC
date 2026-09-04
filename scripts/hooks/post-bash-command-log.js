@@ -65,26 +65,34 @@ function secretValueEnd(text, start, attached) {
 
 // curl's -u name:password in any spelling (-u name:pw, -uname:pw, -u=name:pw,
 // --user name:pw, --user=name:pw, -u ":pw", -u 'a b:c', $(curl -u ...),
-// sh -c 'curl -u ...'), redacted in one left-to-right pass over shell words
-// read the way the shell reads them; a separator (;, |, &, newline) starts a
-// new command, and a value is touched only after curl appeared in that
+// "$(curl -u ...)", sh -c 'curl -u ...'), redacted in one left-to-right pass
+// over shell words read the way the shell reads them; a separator (;, |, &,
+// newline) starts a new command, a substitution is redacted as a command
+// line of its own, and a value is touched only after curl appeared in that
 // command. -u is an ordinary flag for rsync, sudo and others, so those keep
 // theirs.
 const COMMAND_SEPARATORS = new Set([';', '|', '&', '\n']);
 const BACKSLASH_ESCAPES = process.platform !== 'win32';
 
-// A character that came from a quoted run or an escape: literal text the
-// shell would never treat as syntax.
-const LITERAL = '';
-const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '', b: '\b', f: '\f', v: '\v', e: '', '\\': '\\', "'": "'", '"': '"' };
+// A character that came from a quoted run, an escape or a substitution:
+// literal text the outer command never treats as syntax.
+const LITERAL = '\u0001';
+const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\u0007', b: '\b', f: '\f', v: '\v', e: '\u001b', E: '\u001b', '\\': '\\', "'": "'", '"': '"', '?': '?' };
 
+// One ANSI-C escape starting at the backslash inside $'...': the named ones,
+// octal (\NNN), hex (\xHH), unicode (\uHHHH, \UHHHHHHHH) and control (\cX).
 function ansiEscape(text, at) {
   const next = text[at + 1];
-  if (next === 'x') {
-    const hex = /^[0-9a-fA-F]{1,2}/.exec(text.slice(at + 2));
-    if (hex) return { value: String.fromCharCode(Number.parseInt(hex[0], 16)), end: at + 2 + hex[0].length };
+  const digits = { x: [/^[0-9a-fA-F]{1,2}/, 16], u: [/^[0-9a-fA-F]{1,4}/, 16], U: [/^[0-9a-fA-F]{1,8}/, 16] }[next];
+  if (digits) {
+    const run = digits[0].exec(text.slice(at + 2));
+    if (run) return { value: String.fromCodePoint(Number.parseInt(run[0], digits[1])), end: at + 2 + run[0].length };
   }
-  return { value: Object.hasOwn(ANSI_ESCAPES, next) ? ANSI_ESCAPES[next] : next, end: at + 2 };
+  const octal = /^[0-7]{1,3}/.exec(text.slice(at + 1));
+  if (octal) return { value: String.fromCharCode(Number.parseInt(octal[0], 8)), end: at + 1 + octal[0].length };
+  if (next === 'c' && text[at + 2] !== undefined) return { value: String.fromCharCode(text[at + 2].toUpperCase().charCodeAt(0) ^ 0x40), end: at + 3 };
+  if (Object.hasOwn(ANSI_ESCAPES, next)) return { value: ANSI_ESCAPES[next], end: at + 2 };
+  return { value: `\\${next}`, end: at + 2 };
 }
 
 function isQuoteOpener(text, at) {
@@ -92,18 +100,63 @@ function isQuoteOpener(text, at) {
   return ch === '"' || ch === "'" || (ch === '$' && (text[at + 1] === '"' || text[at + 1] === "'"));
 }
 
+function isSubstitutionOpener(text, at) {
+  return text[at] === '`' || ((text[at] === '$' || text[at] === '<' || text[at] === '>') && text[at + 1] === '(');
+}
+
+// The end (exclusive) of a $(...), <(...), >(...) or `...` substitution starting at `at`,
+// balanced across nested substitutions and quotes; the text length when it
+// never closes.
+function substitutionEnd(text, at) {
+  if (text[at] === '`') {
+    const close = text.indexOf('`', at + 1);
+    return close === -1 ? text.length : close + 1;
+  }
+  let depth = 0;
+  let quote = null;
+  let i = at + 1;
+  while (i < text.length) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\' && quote === '"') i += 1;
+      else if (ch === quote) quote = null;
+    } else if (ch === '\\') {
+      i += 1;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+    } else if (ch === '(') {
+      depth += 1;
+    } else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+    i += 1;
+  }
+  return text.length;
+}
+
 // The body of a quoted run starting at its opening quote (or at the $ of
 // $'...' and $"..."): single quotes are literal, double quotes keep their
-// escapes for \ " $ and ` and drop a backslash-newline, $'...' decodes the
-// ANSI-C escapes.
+// escapes for \ " $ and `, drop a backslash-newline and still run the
+// substitutions inside them, $'...' decodes the ANSI-C escapes. `raw` is
+// the run as it will be logged, with any substitution inside redacted.
 function readQuoted(text, start) {
   const ansi = text[start] === '$';
   const quote = ansi ? text[start + 1] : text[start];
   const decodes = quote === '"' || ansi;
   let value = '';
+  let raw = text.slice(start, start + (ansi ? 2 : 1));
   let i = start + (ansi ? 2 : 1);
   while (i < text.length && text[i] !== quote) {
     const next = text[i + 1];
+    if (quote === '"' && isSubstitutionOpener(text, i)) {
+      const end = substitutionEnd(text, i);
+      const inner = text.slice(i, end);
+      value += inner;
+      raw += redactSubstitution(inner);
+      i = end;
+      continue;
+    }
     if (text[i] === '\\' && decodes && next !== undefined) {
       if (next === '\n') {
         i += 2;
@@ -112,63 +165,91 @@ function readQuoted(text, start) {
       if (quote === "'") {
         const decoded = ansiEscape(text, i);
         value += decoded.value;
+        raw += text.slice(i, decoded.end);
         i = decoded.end;
         continue;
       }
       if ('"\\$`'.includes(next)) {
         value += next;
+        raw += text.slice(i, i + 2);
         i += 2;
         continue;
       }
     }
     value += text[i];
+    raw += text[i];
     i += 1;
   }
-  return { value, end: Math.min(i + 1, text.length) };
+  const end = Math.min(i + 1, text.length);
+  raw += text.slice(i, end);
+  return { value, raw, end };
+}
+
+// A substitution is a command line of its own: its inside is redacted on
+// its own terms and the outer command never sees it as syntax.
+function redactSubstitution(inner) {
+  if (inner.startsWith('`')) {
+    const closed = inner.endsWith('`') && inner.length > 1;
+    const body = closed ? inner.slice(1, -1) : inner.slice(1);
+    return `\`${redactCurlBasicAuth(body)}${closed ? '`' : ''}`;
+  }
+  const closed = inner.endsWith(')');
+  const body = inner.slice(2, closed ? -1 : undefined);
+  return `${inner.slice(0, 2)}${redactCurlBasicAuth(body)}${closed ? ')' : ''}`;
 }
 
 // One shell word starting at `start`, read the way the shell reads it: a
 // backslash-newline is a continuation, a backslash outside quotes escapes
-// the next character (on Windows it is a path separator instead). `raw` is
-// the text as typed, `value` the word the program receives, `code` the same
-// word with every literal character masked, so shell syntax is only looked
-// for where the shell would see it.
+// the next character (on Windows it is a path separator instead), a
+// substitution is one literal unit. `raw` is the word as it will be logged,
+// `value` the word the program receives, `code` the same word with every
+// literal character masked so syntax is only looked for where the shell
+// would see it.
 function readShellWord(text, start) {
   let value = '';
   let code = '';
+  let raw = '';
   let i = start;
   while (i < text.length) {
     const ch = text[i];
     if (ch === '\\' && text[i + 1] === '\n') {
       i += 2;
+    } else if (isSubstitutionOpener(text, i)) {
+      const end = substitutionEnd(text, i);
+      const inner = text.slice(i, end);
+      value += inner;
+      code += LITERAL.repeat(inner.length);
+      raw += redactSubstitution(inner);
+      i = end;
     } else if (isQuoteOpener(text, i)) {
       const quoted = readQuoted(text, i);
       value += quoted.value;
       code += LITERAL.repeat(quoted.value.length);
+      raw += quoted.raw;
       i = quoted.end;
     } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
       value += text[i + 1];
       code += LITERAL;
+      raw += text.slice(i, i + 2);
       i += 2;
     } else if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
       break;
     } else {
       value += ch;
       code += ch;
+      raw += ch;
       i += 1;
     }
   }
-  return { raw: text.slice(start, i), value, code, end: i };
+  return { raw, value, code, end: i };
 }
 
-// curl by basename, with or without a Windows executable suffix, also after
-// a substitution opener ($(, <(, >(, backtick) or a group opener that the
-// shell would execute: openers inside quotes or behind an escape are text.
+// curl by basename, with or without a Windows executable suffix, also
+// behind a group opener the shell would execute ({curl, (curl); a
+// substitution is a unit of its own and never names the outer command.
 function isCurlWord(word) {
-  const opener = /.*(?:\$\(|<\(|>\(|`)/.exec(word.code);
-  const start = opener ? opener[0].length : 0;
-  const group = /^[({]+/.exec(word.code.slice(start));
-  const command = word.value.slice(start + (group ? group[0].length : 0));
+  const group = /^[({]+/.exec(word.code);
+  const command = word.value.slice(group ? group[0].length : 0);
   return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(command.split(/[\\/]/).pop());
 }
 
