@@ -342,13 +342,28 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
 // off the front of a token list until the real command is reached, looping
 // so stacked wrappers (`sudo timeout 5 xargs rm -rf`) all get unwrapped
 // rather than just the outermost one.
+// Shell keywords and grouping openers that stand in front of the command
+// actually run: `if rm ...; then`, `then rm ...`, `(rm ...)`, `{ rm ...; }`,
+// `! rm ...`. Judged as "the command", the keyword would read as a mere
+// allowlist miss and let whatever follows it pass.
+const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
+
+function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
+  const head = bareToken(current[0]);
+  if (SHELL_KEYWORDS.has(head)) return { remaining: current.slice(1) };
+  if ((head.startsWith('(') || head.startsWith('{')) && head.length > 1) {
+    return { remaining: [stripQuotes(current[0]).slice(1), ...current.slice(1)] };
+  }
+  return null;
+}
+
 function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
   let current = tokens;
   let changed = true;
   while (changed && current.length > 0) {
     changed = false;
 
-    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current);
+    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
     if (step) {
       if (step.blocked) return { tokens: [], blocked: step.blocked };
       current = step.remaining as string[];
@@ -1397,41 +1412,6 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
 }
 
 const ALLOWLIST_MISS_MARKER = 'is not in the allowlist';
-
-// Verdicts the hooks only warn about; everything else blocks. The Bash hook
-// keeps its own copy of this list because it is installed on its own.
-export const ADVISORY_REASON_MARKERS = ['Shell chaining/metacharacters are forbidden', ALLOWLIST_MISS_MARKER];
-
-export function isAdvisoryVerdict(verdict: ValidationResult): boolean {
-  const reason = verdict.reason ?? '';
-  return ADVISORY_REASON_MARKERS.some(marker => reason.includes(marker));
-}
-
-// Splits one script line into the commands a shell would run: unquoted
-// ;, |, || and && boundaries. Quotes are honored; nothing else is parsed.
-export function splitShellLine(line: string): string[] {
-  const segments: string[] = [];
-  let current = '';
-  let quote: string | null = null;
-  for (const ch of line) {
-    if (quote) {
-      current += ch;
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-    } else if (ch === ';' || ch === '|' || ch === '&') {
-      if (current.trim()) segments.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  if (current.trim()) segments.push(current.trim());
-  return segments;
-}
 
 function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
   return !verdict.allowed && String(verdict.reason ?? '').includes(ALLOWLIST_MISS_MARKER);

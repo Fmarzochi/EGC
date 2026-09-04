@@ -9,7 +9,14 @@ const path = require('node:path');
 // install-state replay or a hand-edited source.
 const MCP_COMMAND_ALLOWLIST = new Set(['node', 'npx', 'npm', 'uv', 'uvx', 'python', 'python3']);
 const SHELL_META_RE = /[;&|<>`$\r\n]/;
-const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ENV_KEY_RE = /^[A-Za-z_]\w*$/;
+// Environment names that change what a runner executes or loads, whatever
+// the command: a merged entry must not reach them.
+const ENV_NAME_DENYLIST = new Set([
+  'PATH', 'PATHEXT', 'NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH', 'PYTHONSTARTUP', 'PYTHONHOME', 'PYTHONUSERBASE',
+  'BASH_ENV', 'ENV', 'PROMPT_COMMAND', 'SHELLOPTS', 'BASHOPTS', 'PERL5OPT', 'PERL5LIB', 'RUBYOPT', 'GCONV_PATH', 'IFS',
+]);
+const ENV_PREFIX_DENYLIST_RE = /^(?:LD_|DYLD_|PIP_|NPM_CONFIG_|UV_)/i;
 const MAX_ARG_LENGTH = 512;
 
 function isMcpConfigPath(filePath) {
@@ -35,9 +42,27 @@ function describeUnsafeEnv(server) {
   if (!server.env || typeof server.env !== 'object' || Array.isArray(server.env)) return 'has env that is not an object';
   for (const [key, value] of Object.entries(server.env)) {
     if (!ENV_KEY_RE.test(key)) return `has an invalid env name ${JSON.stringify(key)}`;
-    if (typeof value !== 'string' || /[\r\n]/.test(value)) return `has an env value for ${key} that is not a single-line string`;
+    if (ENV_NAME_DENYLIST.has(key.toUpperCase()) || ENV_PREFIX_DENYLIST_RE.test(key)) {
+      return `sets ${key}, which changes what the runner executes or loads`;
+    }
+    if (typeof value !== 'string' || SHELL_META_RE.test(value)) return `has an env value for ${key} with shell metacharacters or an invalid shape`;
   }
   return null;
+}
+
+// Parses MCP config text into the object the allowlist judges; the caller
+// keeps the text so what was validated is exactly what gets written.
+function parseMcpConfigText(text, label) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${label}: MCP config is not valid JSON: ${error.message}`, { cause: error });
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label}: MCP config must be a JSON object`);
+  }
+  return parsed;
 }
 
 function describeUnsafeUrl(server) {
@@ -133,4 +158,5 @@ module.exports = {
   filterMcpConfig,
   isMcpConfigPath,
   parseDisabledMcpServers,
+  parseMcpConfigText,
 };

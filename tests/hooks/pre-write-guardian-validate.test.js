@@ -23,8 +23,8 @@ function test(name, fn) {
   }
 }
 
-function runHook(filePath, env = {}, toolInput = null) {
-  const rawInput = JSON.stringify({ tool_name: 'Write', tool_input: toolInput || { file_path: filePath, content: 'x' } });
+function runHook(filePath, env = {}, toolInput = null, toolName = 'Write') {
+  const rawInput = JSON.stringify({ tool_name: toolName, tool_input: toolInput || { file_path: filePath, content: 'x' } });
   const result = spawnSync('node', [runner, 'pre:write-guardian-validate', 'scripts/hooks/pre-write-guardian-validate.js', 'minimal,standard,strict'], {
     input: rawInput,
     encoding: 'utf8',
@@ -104,25 +104,57 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Script content (security audit 2026-08-17, H3): judged with the Bash
+  // hook's own segmentation and the same validator, through the fake CLI.
+  const wipe = ['rm', '-rf'].join(' ');
+
   if (test('blocks writing a shell script whose line runs a denied command', () => {
-    const result = runHook('/tmp/egc-script.sh', {}, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\nset -e\necho start\nrm -rf /tmp/egc-victim\n' });
+    const result = runHook('/tmp/egc-script.sh', {}, { file_path: '/tmp/egc-script.sh', content: `#!/bin/bash\nset -e\necho start\n${wipe} /tmp/egc-victim\n` });
     assert.strictEqual(result.code, 2, result.stderr);
-    assert.ok(result.stderr.includes('line 4'), result.stderr);
+    assert.ok(result.stderr.includes('segment:'), result.stderr);
   })) passed++; else failed++;
 
-  if (test('blocks an edit that inserts a denied command into a script', () => {
-    const result = runHook('/tmp/deploy.sh', {}, { file_path: '/tmp/deploy.sh', old_string: 'echo ok', new_string: 'echo ok && mv /etc/hosts /tmp/hosts' });
+  if (test('blocks an Edit that inserts a denied command into an existing script', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-write-hook-'));
+    const script = path.join(dir, 'deploy.sh');
+    try {
+      fs.writeFileSync(script, '#!/bin/bash\necho ok\n');
+      const result = runHook(script, {}, { file_path: script, old_string: 'echo ok', new_string: `echo ok && ${wipe} /tmp/egc-victim` }, 'Edit');
+      assert.strictEqual(result.code, 2, result.stderr);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('blocks a MultiEdit whose edit targets a second script path', () => {
+    const result = runHook('/tmp/notes.md', {}, {
+      file_path: '/tmp/notes.md',
+      edits: [
+        { old_string: 'a', new_string: 'b' },
+        { file_path: '/tmp/other.sh', old_string: 'echo ok', new_string: `${wipe} /tmp/egc-victim` },
+      ],
+    }, 'MultiEdit');
     assert.strictEqual(result.code, 2, result.stderr);
   })) passed++; else failed++;
 
-  if (test('allows a script whose lines are benign or merely outside the allowlist', () => {
-    const result = runHook('/tmp/build.sh', {}, { file_path: '/tmp/build.sh', content: '#!/usr/bin/env bash\ncargo build --release\nnpm test\necho done\n' });
+  if (test('blocks a denied command hidden in a substitution or behind a shell keyword', () => {
+    for (const content of [`#!/bin/sh\necho $(${wipe} /tmp/egc-victim)\n`, `#!/bin/sh\nif true; then ${wipe} /tmp/egc-victim; fi\n`, `#!/bin/sh\n(${wipe} /tmp/egc-victim)\n`]) {
+      const result = runHook('/tmp/x.sh', {}, { file_path: '/tmp/x.sh', content });
+      assert.strictEqual(result.code, 2, `${JSON.stringify(content)}: ${result.stderr}`);
+    }
+  })) passed++; else failed++;
+
+  if (test('allows a script whose lines are benign, quoted, commented or merely outside the allowlist', () => {
+    const content = `#!/usr/bin/env bash\n# ${wipe} / in a comment is not a command\ncargo build --release\necho "a; b | c && ${wipe} /"\nnpm test 2>&1\necho done\n`;
+    const result = runHook('/tmp/build.sh', {}, { file_path: '/tmp/build.sh', content });
     assert.strictEqual(result.code, 0, result.stderr);
   })) passed++; else failed++;
 
-  if (test('does not treat non-script content as commands', () => {
-    const result = runHook('/tmp/notes.md', {}, { file_path: '/tmp/notes.md', content: 'rm -rf / is a dangerous command, never run it\n' });
-    assert.strictEqual(result.code, 0, result.stderr);
+  if (test('does not judge non-shell content as commands', () => {
+    for (const [file, content] of [['/tmp/notes.md', `${wipe} / is a dangerous command, never run it\n`], ['/tmp/clean.ps1', 'Remove-Item -Recurse -Force C:\\tmp\\x\n'], ['/tmp/tool.py', `import os\nos.system("${wipe} /tmp/x")\n`]]) {
+      const result = runHook(file, {}, { file_path: file, content });
+      assert.strictEqual(result.code, 0, `${file}: ${result.stderr}`);
+    }
   })) passed++; else failed++;
 
   if (test('passes through input without a file path', () => {

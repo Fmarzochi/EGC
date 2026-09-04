@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
-const { assertSafeMcpConfig, isMcpConfigPath } = require('./mcp-config');
+const { assertSafeMcpConfig, isMcpConfigPath, parseMcpConfigText } = require('./mcp-config');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
@@ -354,6 +354,14 @@ function repairCopyFile(repoRoot, operation) {
   }
 
   ensureParentDir(operation.destinationPath);
+  if (isMcpConfigPath(operation.destinationPath)) {
+    // A replayed MCP copy answers to the allowlist too, and the text that
+    // was validated is the text that lands.
+    const text = fs.readFileSync(sourcePath, 'utf8');
+    assertSafeMcpConfig(parseMcpConfigText(text, sourcePath), sourcePath);
+    fs.writeFileSync(operation.destinationPath, text);
+    return;
+  }
   fs.copyFileSync(sourcePath, operation.destinationPath);
 }
 

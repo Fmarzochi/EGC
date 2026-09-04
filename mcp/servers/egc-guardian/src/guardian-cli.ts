@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import { isAdvisoryVerdict, splitShellLine, validateCommand, validateWrite } from './validator.js';
+import { validateCommand, validateWrite } from './validator.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { llmRoute, keywordRoute } from './llm-router.js';
 import { detectIntent, digestTranscript, mineTranscript } from './intuition.js';
@@ -76,27 +76,8 @@ async function learn(payload: string): Promise<unknown> {
   }
 }
 
-// A script about to be written to disk is judged line by line with the same
-// validator the Bash hook uses; only a verdict that hook would block counts,
-// so a script cannot carry a denied command past an advisory `bash x.sh`.
-function scriptVerdict(payload: string): unknown {
-  const lines = payload.split(/\r?\n/);
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index].trim();
-    if (!line || line.startsWith('#')) continue;
-    for (const segment of splitShellLine(line)) {
-      const verdict = validateCommand(segment);
-      if (!verdict.allowed && !isAdvisoryVerdict(verdict)) {
-        return { allowed: false, reason: verdict.reason, trust_level: verdict.trust_level, line: index + 1 };
-      }
-    }
-  }
-  return { allowed: true };
-}
-
 const MODES: Record<string, (payload: string) => unknown> = {
   'command': payload => validateCommand(payload),
-  'script': scriptVerdict,
   'command-batch': commandBatch,
   'write': payload => validateWrite(payload),
   'content': payload => scanForInjection(payload),

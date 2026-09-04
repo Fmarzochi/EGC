@@ -21,6 +21,8 @@
 
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 
@@ -44,6 +46,43 @@ const MAX_SUBSTITUTION_DEPTH = 5;
 // safe. run() below hard-blocks on a null return instead, so a command too
 // deep to fully analyze fails CLOSED rather than being treated as if
 // nothing were found.
+
+// A script an interpreter is asked to run (`bash deploy.sh`, `sh x.txt`,
+// `source env.sh`, `. env.sh`) is judged like typed commands: its own
+// segments join the same validation, so writing a denied command to a file
+// first, under any name, does not change the verdict.
+const SHELL_INTERPRETERS = new Set(['bash', 'sh', 'zsh', 'ksh', 'dash', 'ash', 'source', '.']);
+const MAX_SCRIPT_BYTES = 512 * 1024;
+
+function scriptOperandsOf(segment, cwd) {
+  const tokens = segment.trim().split(/\s+/);
+  if (!SHELL_INTERPRETERS.has(tokens[0])) return [];
+  return tokens.slice(1)
+    .filter(token => !token.startsWith('-'))
+    .map(token => path.resolve(cwd || process.cwd(), token.replace(/^["']|["']$/g, '')))
+    .filter(candidate => {
+      try {
+        const stat = fs.statSync(candidate);
+        return stat.isFile() && stat.size <= MAX_SCRIPT_BYTES;
+      } catch {
+        return false;
+      }
+    });
+}
+
+// Segments of every script the command runs, or null when one of them
+// nests substitutions deeper than extractSegments can unwrap.
+function scriptSegmentsOf(segments, cwd) {
+  const collected = [];
+  for (const segment of segments) {
+    for (const file of scriptOperandsOf(segment, cwd)) {
+      const nested = extractSegments(fs.readFileSync(file, 'utf8'));
+      if (nested === null) return null;
+      collected.push(...nested);
+    }
+  }
+  return collected;
+}
 
 const ADVISORY_REASONS = [
   'Shell chaining/metacharacters are forbidden',
@@ -134,6 +173,16 @@ function run(inputOrRaw) {
   }
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
+  const scriptSegments = scriptSegmentsOf(segments, cwd);
+  if (scriptSegments === null) {
+    return {
+      exitCode: 2,
+      stderr:
+        'EGC Guardian BLOCKED this command: a script it runs nests command/process ' +
+        'substitutions deeper than this validator can safely unwrap and analyze.',
+    };
+  }
+  segments.push(...scriptSegments);
   const verdicts = callGuardian(
     cli,
     ['command-batch'],
@@ -157,7 +206,7 @@ function run(inputOrRaw) {
   return { exitCode: 0 };
 }
 
-module.exports = { run, extractSegments };
+module.exports = { run, extractSegments, isAdvisory };
 
 if (require.main === module) {
   let raw = '';

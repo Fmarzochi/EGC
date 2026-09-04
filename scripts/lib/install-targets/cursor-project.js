@@ -188,11 +188,6 @@ function createJsonMergeOperation({ moduleId, repoRoot, sourceRelativePath, dest
     return null;
   }
 
-  const mergePayload = readJsonObject(sourcePath, sourceRelativePath);
-  if (isMcpConfigPath(destinationPath)) {
-    assertSafeMcpConfig(mergePayload, sourceRelativePath);
-  }
-
   return createManagedOperation({
     kind: 'merge-json',
     moduleId,
@@ -201,8 +196,17 @@ function createJsonMergeOperation({ moduleId, repoRoot, sourceRelativePath, dest
     strategy: 'merge-json',
     ownership: 'managed',
     scaffoldOnly: false,
-    mergePayload,
+    mergePayload: readJsonObject(sourcePath, sourceRelativePath),
   });
+}
+
+// Judged only on the branches that emit it, so an install that selects
+// rules alone is not refused over an MCP payload it never writes.
+function guardMcpOperation(operation) {
+  if (isMcpConfigPath(operation.destinationPath)) {
+    assertSafeMcpConfig(operation.mergePayload, operation.sourceRelativePath);
+  }
+  return operation;
 }
 
 // Cursor treats nested AGENTS.md files as directory context; do not install
@@ -257,7 +261,7 @@ function planCursorDirOperations({ module, repoRoot, targetRoot, cursorMcpOperat
 
   return takeUniqueOperations([
     ...childOperations,
-    ...(cursorMcpOperation ? [cursorMcpOperation] : []),
+    ...(cursorMcpOperation ? [guardMcpOperation(cursorMcpOperation)] : []),
     ...ruleOperations,
   ]);
 }
@@ -269,7 +273,7 @@ function planMcpConfigsOperations({
     adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
   ];
   if (cursorMcpOperation) {
-    operations.push(cursorMcpOperation);
+    operations.push(guardMcpOperation(cursorMcpOperation));
   }
   return takeUniqueOperations(operations);
 }

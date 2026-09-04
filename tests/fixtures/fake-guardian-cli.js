@@ -18,11 +18,12 @@ const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
 // only needs to mirror that for the wrappers the hook tests actually assert
 // on (e.g. "blocks a destructive command behind sudo"), not the full unwrap
 // logic — that sophistication is covered by the real guardian tests.
-const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command', 'doas', 'exec']);
+const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command', 'doas', 'exec', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
 
 function verdictForCommand(segment) {
   let tokens = segment.trim().split(/\s+/).filter(Boolean);
   while (tokens.length > 0 && LEADING_WRAPPERS.has(tokens[0])) tokens = tokens.slice(1);
+  if (tokens[0] && /^[({]./.test(tokens[0])) tokens[0] = tokens[0].slice(1);
   const base = tokens[0] || '';
   if (base === 'rm' || base === 'mv') {
     return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS' };
@@ -49,19 +50,6 @@ if (mode === 'command') {
     ? parsed
     : Array.isArray(parsed && parsed.commands) ? parsed.commands : [];
   process.stdout.write(JSON.stringify(segments.map(verdictForCommand)));
-} else if (mode === 'script') {
-  let verdict = { allowed: true };
-  payload.split(/\r?\n/).forEach((line, index) => {
-    if (verdict.allowed === false || !line.trim() || line.trim().startsWith('#')) return;
-    for (const segment of line.split(/\s*(?:&&|\|\||;|\|)\s*/)) {
-      const v = verdictForCommand(segment);
-      if (v.allowed === false && (v.trust_level === 'DANGEROUS' || /protected/.test(v.reason))) {
-        verdict = { ...v, line: index + 1 };
-        return;
-      }
-    }
-  });
-  process.stdout.write(JSON.stringify(verdict));
 } else if (mode === 'write') {
   if (PROTECTED_RE.test(payload)) {
     process.stdout.write(JSON.stringify({ allowed: false, reason: `Path '${payload}' is protected`, trust_level: 'BLOCKED' }));

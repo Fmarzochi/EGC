@@ -486,6 +486,23 @@ async function runTests() {
   });
   run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
 
+  // audit 2026-08-17, H3 follow-up: a keyword or grouping opener in front of
+  // the real command must not turn a denial into an allowlist miss.
+  run('a denied command behind if/then/else/do is still hard-blocking', () => {
+    for (const command of [`if rm -rf /tmp/x; then`, `then rm -rf /tmp/x`, `else rm -rf /tmp/x`, `do rm -rf /tmp/x`, `while rm -rf /tmp/x`, `! rm -rf /tmp/x`]) {
+      assertHardBlocking(command);
+    }
+  });
+  run('a denied command inside a subshell or group is still hard-blocking', () => {
+    for (const command of [`(rm -rf /tmp/x)`, `( rm -rf /tmp/x )`, `{ rm -rf /tmp/x; }`]) {
+      assertHardBlocking(command);
+    }
+  });
+  run('a benign command behind a keyword stays benign', () => {
+    const result = validateCommand('if git status; then');
+    assert.ok(!String(result.reason || '').includes('destructive'), JSON.stringify(result));
+  });
+
   // ── Summary ───────────────────────────────────────────────────────────────
 
   console.log(`\n${'─'.repeat(50)}`);

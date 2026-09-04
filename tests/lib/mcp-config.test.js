@@ -4,7 +4,7 @@ const assert = require('assert');
 
 const fs = require('fs');
 const path = require('path');
-const { assertSafeMcpConfig, describeUnsafeMcpServer, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers } = require('../../scripts/lib/mcp-config');
+const { assertSafeMcpConfig, describeUnsafeMcpServer, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../../scripts/lib/mcp-config');
 
 function test(name, fn) {
   try {
@@ -38,7 +38,12 @@ function runTests() {
     assert.match(describeUnsafeMcpServer({ command: 'npx', args: ['pkg; rm -rf ~'] }), /metacharacters/);
     assert.match(describeUnsafeMcpServer({ command: 'npx', args: ['$(id)'] }), /metacharacters/);
     assert.match(describeUnsafeMcpServer({ command: 'node', env: { 'PATH;x': 'y' } }), /env name/);
-    assert.match(describeUnsafeMcpServer({ command: 'node', env: { KEY: 'a\nb' } }), /single-line/);
+    assert.match(describeUnsafeMcpServer({ command: 'node', env: { KEY: 'a\nb' } }), /metacharacters/);
+    assert.match(describeUnsafeMcpServer({ command: 'node', env: { KEY: 'x; rm -rf ~' } }), /metacharacters/);
+    for (const name of ['PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'NODE_OPTIONS', 'PYTHONPATH', 'NPM_CONFIG_REGISTRY', 'pip_index_url', 'UV_INDEX']) {
+      assert.match(describeUnsafeMcpServer({ command: 'node', env: { [name]: 'x' } }), /changes what the runner/, name);
+    }
+    assert.strictEqual(describeUnsafeMcpServer({ command: 'node', env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'YOUR_TOKEN_HERE' } }), null);
     assert.match(describeUnsafeMcpServer({ url: 'http://evil.tld/mcp' }), /neither https nor loopback/);
     assert.match(describeUnsafeMcpServer({}), /neither command nor url/);
     assert.match(describeUnsafeMcpServer('npx'), /not an object/);
@@ -50,6 +55,12 @@ function runTests() {
     assert.strictEqual(isMcpConfigPath('/repo/.cursor/mcp.json'), true);
     assert.strictEqual(isMcpConfigPath('/repo/.mcp.json'), true);
     assert.strictEqual(isMcpConfigPath('/repo/.cursor/hooks.json'), false);
+  })) passed++; else failed++;
+
+  if (test('parseMcpConfigText returns the object or names the file that is not one', () => {
+    assert.deepStrictEqual(parseMcpConfigText('{"mcpServers":{}}', 'x.json'), { mcpServers: {} });
+    assert.throws(() => parseMcpConfigText('[1]', 'x.json'), /x\.json: MCP config must be a JSON object/);
+    assert.throws(() => parseMcpConfigText('{oops', 'x.json'), /not valid JSON/);
   })) passed++; else failed++;
 
   if (test('parseDisabledMcpServers dedupes and trims values', () => {
