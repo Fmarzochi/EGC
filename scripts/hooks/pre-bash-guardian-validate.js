@@ -55,33 +55,52 @@ const MAX_SUBSTITUTION_DEPTH = 5;
 // that cannot be inspected (unreadable, too large, nested too deep) fails
 // closed.
 const SHELL_INTERPRETERS = new Set(['bash', 'sh', 'zsh', 'ksh', 'dash', 'ash', 'source', '.']);
-const INTERPRETER_WRAPPERS = new Set(['sudo', 'doas', 'env', 'nice', 'nohup', 'time', 'command', 'exec', 'builtin']);
 const MAX_SCRIPT_BYTES = 512 * 1024;
 const MAX_SCRIPT_DEPTH = 8;
 
-function shellWordEnd(text, start) {
-  let quote = null;
+const BACKSLASH_ESCAPES = process.platform !== 'win32';
+
+// The body of a quoted run starting at its opening quote: single quotes are
+// literal, double quotes keep their escapes for \ " $ and `.
+function readQuoted(text, start) {
+  const quote = text[start];
+  let value = '';
+  let i = start + 1;
+  while (i < text.length && text[i] !== quote) {
+    if (quote === '"' && text[i] === '\\' && i + 1 < text.length && '"\\$`'.includes(text[i + 1])) i += 1;
+    value += text[i];
+    i += 1;
+  }
+  return { value, end: Math.min(i + 1, text.length) };
+}
+
+// One shell word as the shell would see it: a backslash outside quotes
+// escapes the next character (on Windows it is a path separator instead).
+// An unquoted wildcard is remembered: the shell would expand it.
+function readShellWord(text, start) {
+  let value = '';
+  let globbed = false;
   let i = start;
   while (i < text.length) {
     const ch = text[i];
-    if (quote === "'") {
-      if (ch === "'") quote = null;
-    } else if (ch === '\\') {
-      i += 1;
-    } else if (quote === '"') {
-      if (ch === '"') quote = null;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
+    if (ch === '"' || ch === "'") {
+      const quoted = readQuoted(text, i);
+      value += quoted.value;
+      i = quoted.end;
+    } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
+      value += text[i + 1];
+      i += 2;
     } else if (/\s/.test(ch)) {
       break;
+    } else {
+      if (ch === '*' || ch === '?' || ch === '[') globbed = true;
+      value += ch;
+      i += 1;
     }
-    i += 1;
   }
-  return Math.min(i, text.length);
+  return { value, globbed, end: i };
 }
 
-// The words of one segment as the shell would see them: quotes removed and
-// backslashes resolved, so a path with a space is one operand.
 function shellWords(segment) {
   const words = [];
   let i = 0;
@@ -90,37 +109,70 @@ function shellWords(segment) {
       i += 1;
       continue;
     }
-    const end = shellWordEnd(segment, i);
-    words.push(segment.slice(i, end).replace(/\\(.)/g, '$1').replace(/["']/g, ''));
-    i = end;
+    const word = readShellWord(segment, i);
+    words.push(word);
+    i = word.end;
   }
   return words;
 }
 
+// Wrappers that end up running the interpreter, with the options of each
+// that take a value of their own (so `sudo --user root bash x.sh` still
+// reaches bash).
+const WRAPPER_OPTIONS = {
+  sudo: { '-u': 1, '--user': 1, '-g': 1, '--group': 1, '-C': 1, '-D': 1, '--chdir': 1, '-p': 1, '--prompt': 1, '-r': 1, '-t': 1, '-U': 1, '-T': 1 },
+  doas: { '-u': 1, '-C': 1 },
+  env: { '-u': 1, '--unset': 1, '-C': 1, '--chdir': 1, '-S': 1, '--split-string': 1 },
+  nice: { '-n': 1, '--adjustment': 1 },
+  nohup: {},
+  time: { '-f': 1, '--format': 1, '-o': 1, '--output': 1 },
+  command: {},
+  exec: { '-a': 1 },
+  builtin: {},
+  xargs: { '-n': 1, '--max-args': 1, '-I': 1, '-i': 1, '--replace': 1, '-L': 1, '-l': 1, '--max-lines': 1, '-P': 1, '--max-procs': 1, '-d': 1, '--delimiter': 1, '-s': 1, '--max-chars': 1, '-E': 1, '--eof': 1, '-a': 1, '--arg-file': 1 },
+};
+
+function skipWrapperOptions(words, start, table) {
+  let index = start;
+  while (index < words.length) {
+    const word = words[index].value;
+    if (word === '--') return index + 1;
+    if (!word.startsWith('-') || word === '-') return index;
+    index += 1 + (word.includes('=') ? 0 : (table[word] || 0));
+  }
+  return index;
+}
+
 // The operands of the interpreter in a segment, after env assignments and
-// the usual wrappers (their own options included, plus the user of sudo -u).
-// A variable-expanded interpreter cannot be resolved, so its operands are
-// inspected as if it were a shell.
+// the wrappers above. A variable-expanded interpreter cannot be resolved, so
+// its operands are inspected as if it were a shell. After `--` every word is
+// an operand, whatever it starts with.
 function interpreterOperands(words) {
   let index = 0;
   while (index < words.length) {
-    const word = words[index];
+    const word = words[index].value;
     if (/^[A-Za-z_]\w*=/.test(word)) {
       index += 1;
-    } else if (INTERPRETER_WRAPPERS.has(word)) {
-      index += 1;
-      while (index < words.length && words[index].startsWith('-')) {
-        index += (word === 'sudo' || word === 'doas') && words[index] === '-u' ? 2 : 1;
-      }
-    } else {
-      break;
+      continue;
     }
+    const table = WRAPPER_OPTIONS[word];
+    if (!table) break;
+    index = skipWrapperOptions(words, index + 1, table);
   }
   const head = words[index];
   if (!head) return [];
-  const name = head.split(/[\\/]/).pop().toLowerCase();
-  if (!head.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return [];
-  return words.slice(index + 1).filter(word => !word.startsWith('-'));
+  const name = head.value.split(/[\\/]/).pop().toLowerCase();
+  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return [];
+  const operands = [];
+  let literal = false;
+  for (const word of words.slice(index + 1)) {
+    if (!literal && word.value === '--') {
+      literal = true;
+    } else if (literal || !word.value.startsWith('-')) {
+      operands.push(word);
+    }
+  }
+  return operands;
 }
 
 // Existing files among the operands, resolved against the cwd; a file that
@@ -129,15 +181,16 @@ function interpreterOperands(words) {
 function scriptOperandsOf(segment, cwd) {
   const files = [];
   for (const operand of interpreterOperands(shellWords(segment))) {
-    const candidate = path.resolve(cwd || process.cwd(), operand);
+    const candidate = path.resolve(cwd || process.cwd(), operand.value);
     let stat;
     try {
       stat = fs.statSync(candidate);
     } catch {
+      if (operand.globbed) return { files, blocked: `wildcard operand ${operand.value} cannot be inspected before the shell expands it` };
       continue;
     }
     if (!stat.isFile()) continue;
-    if (stat.size > MAX_SCRIPT_BYTES) return { files, blocked: `script ${operand} is too large to analyze` };
+    if (stat.size > MAX_SCRIPT_BYTES) return { files, blocked: `script ${operand.value} is too large to analyze` };
     files.push(candidate);
   }
   return { files, blocked: null };

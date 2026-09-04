@@ -30,8 +30,9 @@ function unwrapCarriers(input) {
     tokens = tokens.slice(at === -1 ? 1 : at + 1);
     if (tokens[0] && tokens[0].endsWith(')')) tokens = tokens.slice(1);
   }
-  if (tokens[0] === 'coproc' || tokens[0] === 'function') tokens = tokens.slice(tokens[0] === 'function' ? 2 : 1);
-  if (tokens[0] && tokens[0].endsWith('()')) tokens = tokens.slice(1);
+  if (tokens[0] === 'coproc') tokens = tokens.slice(tokens[2] && /^[{(]/.test(tokens[2]) ? 2 : 1);
+  if (tokens[0] === 'function') tokens = tokens.slice(2);
+  if (tokens[0] && tokens[0].endsWith(')')) tokens = tokens.slice(1);
   while (tokens.length > 0 && LEADING_WRAPPERS.has(tokens[0])) tokens = tokens.slice(1);
   return tokens;
 }

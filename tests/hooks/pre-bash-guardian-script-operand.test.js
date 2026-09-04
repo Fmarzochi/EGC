@@ -58,9 +58,22 @@ function runTests() {
       fs.mkdirSync(spaced, { recursive: true });
       const inSpaced = path.join(spaced, 'notes.txt');
       fs.writeFileSync(inSpaced, `${wipe} /tmp/egc-victim\n`);
-      for (const command of [`bash "${inSpaced}"`, `bash 'my dir/notes.txt'`, `bash my\\ dir/notes.txt`, `/bin/bash ${denied}`, `sudo bash ${denied}`, `sudo -u root bash ${denied}`, `env FOO=1 bash ${denied}`, `FOO=1 bash ${denied}`, `$SHELL ${denied}`]) {
+      fs.writeFileSync(path.join(dir, '-payload.sh'), `${wipe} /tmp/egc-victim\n`);
+      const posixOnly = process.platform === 'win32' ? [] : [`bash my\\ dir/notes.txt`];
+      for (const command of [`bash "${inSpaced}"`, `bash 'my dir/notes.txt'`, ...posixOnly, `/bin/bash ${denied}`, `sudo bash ${denied}`, `sudo -u root bash ${denied}`, `sudo --user root bash ${denied}`, `env FOO=1 bash ${denied}`, `FOO=1 bash ${denied}`, `$SHELL ${denied}`, `xargs bash ${denied}`, `xargs -n 1 bash ${denied}`, `bash -- -payload.sh`]) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+    })) passed++; else failed++;
+
+    if (test('a wildcard operand fails closed, and a quoted backslash stays part of the path', () => {
+      const glob = run({ tool_name: 'Bash', tool_input: { command: 'bash *.txt' }, cwd: dir });
+      assert.strictEqual(glob.exitCode, 2, JSON.stringify(glob));
+      assert.ok(glob.stderr.includes('wildcard'), glob.stderr);
+      if (process.platform !== 'win32') {
+        fs.writeFileSync(path.join(dir, 'payload\\evil.sh'), `${wipe} /tmp/egc-victim\n`);
+        const quoted = run({ tool_name: 'Bash', tool_input: { command: "bash 'payload\\evil.sh'" }, cwd: dir });
+        assert.strictEqual(quoted.exitCode, 2, JSON.stringify(quoted));
       }
     })) passed++; else failed++;
 

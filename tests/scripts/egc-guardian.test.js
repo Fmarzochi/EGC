@@ -489,6 +489,9 @@ async function runTests() {
     for (const command of [
       'case x in x) rm -rf /tmp/guarded;; esac',
       'case "$1" in (start|restart) rm -rf /tmp/guarded ;; esac',
+      'b) rm -rf /tmp/guarded',
+      '(b) rm -rf /tmp/guarded',
+      'stop|halt) rm -rf /tmp/guarded',
       'coproc rm -rf /tmp/guarded',
       'coproc worker { rm -rf /tmp/guarded; }',
       'function f() { rm -rf /tmp/guarded; }; f',

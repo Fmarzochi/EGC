@@ -19,6 +19,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
 
@@ -138,7 +139,8 @@ function scriptSegments(content) {
 // not to the directory this process happens to run in.
 function resolveTarget(input, filePath) {
   const cwd = typeof input?.cwd === 'string' ? input.cwd : process.cwd();
-  return path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+  const expanded = filePath === '~' || filePath.startsWith('~/') ? path.join(os.homedir(), filePath.slice(1)) : filePath;
+  return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
 }
 
 function blockedScript(cli, input, filePath) {

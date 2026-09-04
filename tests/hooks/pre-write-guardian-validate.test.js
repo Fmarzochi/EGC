@@ -169,8 +169,15 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('expands a home-relative target before the path check', () => {
+    const target = ['~', '.ssh', 'id_rsa'].join('/');
+    const result = runHook(target, {}, { file_path: target, content: 'x' }, 'Write', os.tmpdir());
+    assert.strictEqual(result.code, 2, JSON.stringify(result));
+    assert.ok(!result.stderr.includes('/~/'), result.stderr);
+  })) passed++; else failed++;
+
   if (test('blocks a denied command carried by a function body or a case arm', () => {
-    for (const content of [`#!/bin/bash\nfunction f() { ${wipe} /tmp/egc-victim; }\nf\n`, `#!/bin/sh\ncase "$1" in start) ${wipe} /tmp/egc-victim;; esac\n`, `#!/bin/bash\ncoproc ${wipe} /tmp/egc-victim\n`]) {
+    for (const content of [`#!/bin/bash\nfunction f() { ${wipe} /tmp/egc-victim; }\nf\n`, `#!/bin/sh\ncase "$1" in start) ${wipe} /tmp/egc-victim;; esac\n`, `#!/bin/sh\ncase "$1" in start) echo hi;; stop) ${wipe} /tmp/egc-victim;; esac\n`, `#!/bin/bash\ncoproc ${wipe} /tmp/egc-victim\n`, `#!/bin/bash\ncoproc worker { ${wipe} /tmp/egc-victim; }\n`]) {
       const result = runHook('/tmp/egc-carrier.sh', {}, { file_path: '/tmp/egc-carrier.sh', content });
       assert.strictEqual(result.code, 2, `${JSON.stringify(content)}: ${result.stderr}`);
     }
