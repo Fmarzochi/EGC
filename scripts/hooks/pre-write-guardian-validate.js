@@ -54,17 +54,19 @@ function parseInput(inputOrRaw) {
   return inputOrRaw && typeof inputOrRaw === 'object' ? inputOrRaw : {};
 }
 
+// Harnesses name the write target differently: file_path (Claude Code),
+// path (Gemini CLI), TargetFile (Antigravity). Cover them all so a protected
+// path is validated regardless of which harness issued the write.
+function writeTargetOf(input) {
+  const tool = input?.tool_input || {};
+  const filePath = tool.file_path || tool.file || tool.path || tool.TargetFile || '';
+  return typeof filePath === 'string' ? filePath : '';
+}
+
 function run(inputOrRaw) {
   const input = parseInput(inputOrRaw);
-  // Harnesses name the write target differently: file_path (Claude Code),
-  // path (Gemini CLI), TargetFile (Antigravity). Cover them all so a protected
-  // path is validated regardless of which harness issued the write.
-  const filePath = input?.tool_input?.file_path
-    || input?.tool_input?.file
-    || input?.tool_input?.path
-    || input?.tool_input?.TargetFile
-    || '';
-  if (!filePath || typeof filePath !== 'string') return { exitCode: 0 };
+  const filePath = writeTargetOf(input);
+  if (!filePath) return { exitCode: 0 };
 
   const cli = resolveGuardianCli();
   if (!cli) {
