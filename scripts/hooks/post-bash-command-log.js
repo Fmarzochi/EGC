@@ -182,13 +182,17 @@ function substitutionEnd(text, at, level = 0) {
       // do not close this one.
       i = backtickEnd(text, i);
     } else {
-      if (ch === '(') depth += 1;
-      else if (ch === ')') depth -= 1;
+      depth += parenthesisDelta(ch);
       if (ch === ')' && depth === 0) return i + 1;
       i += 1;
     }
   }
   return text.length;
+}
+
+function parenthesisDelta(ch) {
+  if (ch === '(') return 1;
+  return ch === ')' ? -1 : 0;
 }
 
 // The escape at a backslash inside a decoding quote: a dropped
@@ -323,9 +327,29 @@ function redactQuotedBody(raw) {
 // An ANSI-C quoted run may hide or shift the separator behind escapes:
 // everything after the first separator goes, or the whole run; null when
 // the credential has no such run.
+// The index of the dollar of an unescaped $'...' opener outside quotes,
+// read with the same escape and quote rules as the mask; -1 when none.
+function ansiOpenerIndex(raw) {
+  let quote = null;
+  let dollarBefore = false;
+  let i = 0;
+  while (i < raw.length) {
+    const step = escapeLength(raw, i, quote);
+    if (step === 1) {
+      const next = quoteAfter(raw, i, quote, dollarBefore);
+      if (next === 'ansi') return i - 1;
+      quote = next;
+    }
+    dollarBefore = step === 1 && raw[i] === '$';
+    i += step;
+  }
+  return -1;
+}
+
 function ansiCredential(raw, colon) {
-  const ansiAt = raw.indexOf("$'");
+  const ansiAt = ansiOpenerIndex(raw);
   if (ansiAt === -1) return null;
+
   if (colon !== -1 && colon < ansiAt) return `${raw.slice(0, colon + 1)}${REDACTED}`;
   return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
 }
@@ -352,15 +376,17 @@ function redactCredential(raw, value) {
 }
 
 // The quote state after the character at `at`, outside any substitution:
-// null, a plain quote, or 'ansi' inside $'...'.
-function quoteAfter(raw, at, quote) {
+// null, a plain quote, or 'ansi' inside $'...' (an apostrophe right after
+// an unescaped dollar; `dollarBefore` says whether that dollar was one).
+function quoteAfter(raw, at, quote, dollarBefore) {
   const ch = raw[at];
   if (quote === null) {
     if (ch === '"') return '"';
-    if (ch === "'") return raw[at - 1] === '$' ? 'ansi' : "'";
+    if (ch === "'") return dollarBefore ? 'ansi' : "'";
     return null;
   }
-  return ch === (quote === '"' ? '"' : "'") ? null : quote;
+  const closer = quote === '"' ? '"' : "'";
+  return ch === closer ? null : quote;
 }
 
 // How many characters the backslash at `at` consumes: the next one inside
@@ -398,17 +424,20 @@ function maskedShape(inner) {
 function maskSubstitutions(raw) {
   let out = '';
   let quote = null;
+  // Whether the previous character was an unescaped dollar (a $' opener).
+  let dollarBefore = false;
   let i = 0;
   while (i < raw.length) {
     if (activeSubstitution(raw, i, quote)) {
       const end = substitutionEnd(raw, i);
       out += maskedShape(raw.slice(i, end));
       i = end;
+      dollarBefore = false;
       continue;
     }
     const step = escapeLength(raw, i, quote);
-    if (step === 1) quote = quoteAfter(raw, i, quote);
-
+    if (step === 1) quote = quoteAfter(raw, i, quote, dollarBefore);
+    dollarBefore = step === 1 && raw[i] === '$';
     out += raw.slice(i, i + step);
     i += step;
   }
