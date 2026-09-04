@@ -31,8 +31,10 @@ try {
 
 async function runTests() {
   let mod;
+  let routerModule;
   try {
     mod = await import(VALIDATOR_PATH);
+    routerModule = await import(path.join(__dirname, '../../mcp/servers/egc-guardian/build/llm-router.js'));
   } catch (e) {
     console.error(
       `[SKIP] Could not import ${VALIDATOR_PATH}. Run 'npm run build' in mcp/servers/egc-guardian first.`
@@ -485,6 +487,23 @@ async function runTests() {
     assert.ok(!String(result.reason || '').includes('inline code execution'), JSON.stringify(result));
   });
   run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
+
+  run('LLM routing is opt-in: off by default, on only with EGC_LLM_ROUTING', () => {
+    const { llmRoutingEnabled } = routerModule;
+    const saved = process.env.EGC_LLM_ROUTING;
+    try {
+      delete process.env.EGC_LLM_ROUTING;
+      assert.strictEqual(llmRoutingEnabled(), false);
+      for (const value of ['1', 'on', 'true', 'YES']) {
+        process.env.EGC_LLM_ROUTING = value;
+        assert.strictEqual(llmRoutingEnabled(), true, value);
+      }
+      process.env.EGC_LLM_ROUTING = '0';
+      assert.strictEqual(llmRoutingEnabled(), false);
+    } finally {
+      if (saved === undefined) delete process.env.EGC_LLM_ROUTING; else process.env.EGC_LLM_ROUTING = saved;
+    }
+  });
 
   // ── Summary ───────────────────────────────────────────────────────────────
 

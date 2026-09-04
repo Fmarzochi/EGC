@@ -258,6 +258,8 @@ Validation does not depend on the AI choosing to cooperate. EGC installs harness
 
 With a provider API key (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY`), EGC also understands session intent semantically, in any language, with no predefined phrases: say you are done for the night and your state is saved before the AI even answers; greet it the next morning and your next steps are already in context. At session end a memory miner distills the session's decisions and lessons into your project state. Without a key these LLM features honestly do nothing, and the lifecycle hooks still guarantee your state is saved. The end-of-reply save reminder is throttled to once per project every 30 minutes (`EGC_STOP_SAVE_INTERVAL_MINUTES` tunes it; `0` prompts on every stop), so memory stays fresh without interrupting the work.
 
+Task routing through `orchestrate_task` stays on your machine by default: keyword scoring against the local catalog. It sends the task prompt to a provider for semantic routing only when you opt in with `EGC_LLM_ROUTING=1` in addition to a provider key; without the opt-in a configured key changes nothing about routing.
+
 ---
 
 ## Global memory and parallel sessions
