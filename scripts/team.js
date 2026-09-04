@@ -39,7 +39,7 @@ function showHelp() {
 EGC Team Memory — Sync state across teammates
 
 Usage:
-  egc team init --backend <backend> --remote <url> [--branch <branch>]
+  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>]
   egc team sync
   egc team status
 
@@ -51,6 +51,7 @@ Commands:
 Options:
   --backend   Sync backend type (default: git)
   --remote    Remote URL for the sync storage
+  --key       Team key (64 hex) shared by the member who initialized the team; omit to create a new team
   --branch    Git branch to use (default: main)
 
 Examples:
@@ -148,21 +149,26 @@ function callMcpTool(toolName, args) {
   return parseMcpResponse(result.stdout);
 }
 
+function optionValue(args, name, fallback) {
+  const index = args.indexOf(name);
+  return index === -1 ? fallback : args[index + 1];
+}
+
 function handleInit(args) {
-  const backendIdx = args.indexOf('--backend');
-  const remoteIdx = args.indexOf('--remote');
-  const branchIdx = args.indexOf('--branch');
-
-  const backend = backendIdx !== -1 ? args[backendIdx + 1] : 'git';
-  const remote = remoteIdx !== -1 ? args[remoteIdx + 1] : null;
-  const branch = branchIdx !== -1 ? args[branchIdx + 1] : 'main';
-
+  const backend = optionValue(args, '--backend', 'git');
+  const remote = optionValue(args, '--remote', null);
+  const branch = optionValue(args, '--branch', 'main');
+  const teamKey = optionValue(args, '--key', undefined);
+  if (teamKey !== undefined && !/^[0-9a-f]{64}$/i.test(teamKey)) {
+    console.error('Error: --key must be 64 hexadecimal characters (the key shared by the member who initialized the team)');
+    process.exit(1);
+  }
   if (!remote) {
     console.error('Error: --remote is required for team init');
     process.exit(1);
   }
 
-  const config = { backend, remote, branch };
+  const config = teamKey ? { backend, remote, branch, teamKey } : { backend, remote, branch };
   fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
   console.log(`Team initialized:
   Backend: ${backend}
@@ -172,9 +178,13 @@ function handleInit(args) {
 
   // Now try to connect and set up via MCP tool.
   try {
-    const result = callMcpTool('team_init', { backend, remote, branch });
+    const result = callMcpTool('team_init', teamKey ? { backend, remote, branch, team_key: teamKey } : { backend, remote, branch });
     if (result) {
       console.log('Sync backend configured successfully.');
+      const generated = result && typeof result === 'object' && typeof result.teamKey === 'string' ? result.teamKey : null;
+      if (generated && !teamKey) {
+        console.log(`Team key (share it out of band; teammates join with --key):\n  ${generated}`);
+      }
     }
   } catch (err) {
     console.log(`Note: Memory server setup returned: ${err.message}`);

@@ -900,7 +900,8 @@ const CompressObservationsSchema = z.object({
 const TeamInitSchema = z.object({
   backend: z.string().min(1).default('git'),
   remote: z.string().min(1),
-  branch: z.string().min(1).default('main')
+  branch: z.string().min(1).default('main'),
+  team_key: z.string().regex(/^[0-9a-f]{64}$/i, 'team_key must be 64 hexadecimal characters').optional()
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -1144,7 +1145,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             backend: { type: "string", description: "Sync backend type. Currently only 'git' is supported.", default: "git" },
             remote: { type: "string", description: "Remote URL for the sync storage (e.g. git@github.com:org/egc-memory)." },
-            branch: { type: "string", description: "Git branch to use for syncing. Defaults to 'main'.", default: "main" }
+            branch: { type: "string", description: "Git branch to use for syncing. Defaults to 'main'.", default: "main" },
+            team_key: { type: "string", description: "64 hexadecimal characters: the team key shared out of band by the member who initialized the team. Omit to generate a new key (first member)." }
           },
           required: ["remote"]
         }
@@ -1901,10 +1903,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "compress_observations": return await handleCompressObservations(db, request.params.arguments);
 
       case "team_init": {
-        const { backend, remote, branch } = TeamInitSchema.parse(request.params.arguments || {});
-        const config = await teamInit(backend, remote, branch);
-        log('INFO', 'Team sync initialized', { backend, remote, branch });
-        return { content: [{ type: "text", text: JSON.stringify({ success: true, config }, null, 2) }] };
+        const { backend, remote, branch, team_key } = TeamInitSchema.parse(request.params.arguments || {});
+        const config = await teamInit(backend, remote, branch, team_key);
+        log('INFO', 'Team sync initialized', { backend, remote, branch, joined: team_key !== undefined });
+        const { teamKey, ...shown } = config;
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, config: shown, teamKey, note: 'State travels sealed with this team key (AES-256-GCM plus HMAC). Share it out of band; teammates join with team_init and the same team_key.' }, null, 2) }] };
       }
 
       case "team_sync": {

@@ -77,14 +77,8 @@ export class GitBackend extends SyncBackend {
   async push(): Promise<boolean> {
     if (!this.config) throw new Error('GitBackend not initialized. Call init() first.');
 
-    // Copy the current state files into the sync repo.
-    const stateDir = path.join(os.homedir(), '.egc', 'state');
-    const syncStateDir = path.join(this.repoDir, 'state');
-
-    if (fs.existsSync(stateDir)) {
-      this.mirrorCopy(stateDir, syncStateDir);
-    }
-
+    // State files are staged by TeamSync as sealed team envelopes before
+    // push() runs; the raw (personally encrypted) files never enter the repo.
     // Also copy lessons/decisions from the memory DB as JSON.
     const memoryDir = path.join(os.homedir(), '.egc', 'memory');
     const syncMemoryDir = path.join(this.repoDir, 'memory');

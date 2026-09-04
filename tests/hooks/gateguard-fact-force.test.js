@@ -489,7 +489,7 @@ function runTests() {
     const output = parseOutput(result.stdout);
 
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
-    assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('EGC_GATEGUARD=off'),
+    assert.ok(!output.hookSpecificOutput.permissionDecisionReason.includes('GATEGUARD=off'),
       'denial reason should show the canonical direct recovery env toggle');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('EGC_DISABLED_HOOKS'),
       'denial reason should mention the canonical hook-id disable control');
@@ -497,6 +497,68 @@ function runTests() {
 
   // --- Test 14: routine Bash denial messages show the Bash hook escape hatch ---
   clearState();
+  if (test('a destructive retry is accepted only when the facts message names a rollback and the command', () => {
+    const transcript = path.join(stateDir, 'destructive-transcript.jsonl');
+    const session = 'facts-destructive-' + Date.now();
+    const call = { tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/egc-facts-target' }, transcript_path: transcript };
+    const first = runBashHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(JSON.parse(first.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Retrying now.' }] } }),
+    ].join('\n') + '\n');
+    const bare = runBashHook(call, { EGC_SESSION_ID: session });
+    const bareOut = JSON.parse(bare.stdout);
+    assert.strictEqual(bareOut.hookSpecificOutput.permissionDecision, 'deny', bare.stdout);
+    assert.ok(bareOut.hookSpecificOutput.permissionDecisionReason.includes('does not present'), bare.stdout);
+    assert.ok(!bareOut.hookSpecificOutput.permissionDecisionReason.includes('GATEGUARD=off'));
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Facts: this removes the scratch directory only. Rollback: recreate it from git. Instruction: "clean it up". The command is rm.' }] } }),
+    ].join('\n') + '\n');
+    const withFacts = runBashHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(withFacts.code, 0, withFacts.stderr);
+    assert.ok(!withFacts.stdout.includes('"deny"'), withFacts.stdout);
+  })) passed++; else failed++;
+
+  if (test('an edit retry is accepted only when the facts message names the file, and later edits stay free', () => {
+    const transcript = path.join(stateDir, 'edit-transcript.jsonl');
+    const session = 'facts-edit-' + Date.now();
+    const target = path.join(stateDir, 'src', 'billing.js');
+    const call = { tool_name: 'Edit', tool_input: { file_path: target, old_string: 'a', new_string: 'b' }, transcript_path: transcript };
+    const first = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(JSON.parse(first.stdout).hookSpecificOutput.permissionDecision, 'deny');
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Here are some facts about nothing in particular.' }] } }),
+    ].join('\n') + '\n');
+    const bare = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(JSON.parse(bare.stdout).hookSpecificOutput.permissionDecision, 'deny', bare.stdout);
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'billing.js is imported by checkout.js; it exposes charge(); no data files.' }] } }),
+    ].join('\n') + '\n');
+    const withFacts = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(withFacts.code, 0, withFacts.stderr);
+    assert.ok(!withFacts.stdout.includes('"deny"'), withFacts.stdout);
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'next' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Continuing.' }] } }),
+    ].join('\n') + '\n');
+    const later = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(later.code, 0, later.stderr);
+    assert.ok(!later.stdout.includes('"deny"'), later.stdout);
+  })) passed++; else failed++;
+
+  if (test('a retry without a readable transcript keeps the identical-retry rule', () => {
+    const session = 'facts-none-' + Date.now();
+    const call = { tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/egc-facts-none' }, transcript_path: path.join(stateDir, 'missing.jsonl') };
+    runBashHook(call, { EGC_SESSION_ID: session });
+    const retry = runBashHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(retry.code, 0, retry.stderr);
+    assert.ok(!retry.stdout.includes('"deny"'), retry.stdout);
+  })) passed++; else failed++;
+
   if (test('routine Bash denials include Bash hook disable id', () => {
     const input = {
       tool_name: 'Bash',
