@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const INSTALL_SCRIPT = path.join(REPO_ROOT, '.trae', 'install.sh');
@@ -29,7 +30,7 @@ function runInstall(options = {}) {
     },
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
-    timeout: 60000,
+    timeout: FULL_INSTALL_TIMEOUT_MS,
   });
 }
 
@@ -43,7 +44,7 @@ function runUninstall(options = {}) {
     encoding: 'utf8',
     input: options.input || 'y\n',
     stdio: ['pipe', 'pipe', 'pipe'],
-    timeout: 60000,
+    timeout: FULL_INSTALL_TIMEOUT_MS,
   });
 }
 
@@ -115,6 +116,32 @@ function runTests() {
       assert.ok(stdout.includes("Run 'egc install --target trae'"), stdout);
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(root, 'hooks.json'), 'utf8')), { hooks: { PreToolUse: [] } });
       assert.ok(!readManifestLines(projectRoot).includes('hooks.json'), 'a user file is never claimed');
+    } finally {
+      cleanup(projectRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a hooks.json that carries only the Bash validator is reported, and a symlinked one is never written through', () => {
+    const projectRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-hooks-'));
+    const homeDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-home-'));
+    try {
+      const root = path.join(projectRoot, '.trae');
+      fs.mkdirSync(root, { recursive: true });
+      fs.writeFileSync(path.join(root, 'hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'RunCommand', hooks: [{ type: 'command', command: 'node /x/pre-bash-guardian-validate.js' }] }] } }));
+      const partial = runInstall({ cwd: projectRoot, homeDir });
+      assert.ok(partial.includes('without both EGC Guardian validators'), partial);
+      assert.ok(!readManifestLines(projectRoot).includes('hooks.json'));
+
+      const linkedRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-link-'));
+      const linkedTrae = path.join(linkedRoot, '.trae');
+      fs.mkdirSync(linkedTrae, { recursive: true });
+      const target = path.join(linkedRoot, 'elsewhere.json');
+      fs.symlinkSync(target, path.join(linkedTrae, 'hooks.json'));
+      const linked = runInstall({ cwd: linkedRoot, homeDir });
+      assert.ok(linked.includes('symbolic link'), linked);
+      assert.ok(!fs.existsSync(target), 'nothing is written through the link');
+      fs.rmSync(linkedRoot, { recursive: true, force: true });
     } finally {
       cleanup(projectRoot);
       cleanup(homeDir);

@@ -76,26 +76,23 @@ copy_managed_file() {
 # Install function
 # hooks.json wired to the two Guardian validators, written only when the
 # target has no hooks.json of its own (a user's file is never merged here).
+# Serialized as JSON with the command paths shell-quoted, so a path with a
+# quote or a backslash still loads.
 write_guardian_hooks_json() {
     local root="$1"
-    local bash_hook="$root/scripts/hooks/pre-bash-guardian-validate.js"
-    local write_hook="$root/scripts/hooks/pre-write-guardian-validate.js"
-    cat > "$root/hooks.json" <<EOF
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "RunCommand",
-        "hooks": [{ "type": "command", "command": "node \\"$bash_hook\\"" }]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "node \\"$write_hook\\"" }]
-      }
-    ]
-  }
-}
-EOF
+    python3 - "$root" <<'PYEOF'
+import json, os, shlex, sys
+root = sys.argv[1]
+def hook(name):
+    return {"type": "command", "command": "node " + shlex.quote(os.path.join(root, "scripts", "hooks", name))}
+config = {"hooks": {"PreToolUse": [
+    {"matcher": "RunCommand", "hooks": [hook("pre-bash-guardian-validate.js")]},
+    {"matcher": "Edit|Write", "hooks": [hook("pre-write-guardian-validate.js")]},
+]}}
+with open(os.path.join(root, "hooks.json"), "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PYEOF
 }
 
 do_install() {
@@ -194,12 +191,16 @@ do_install() {
             fi
         fi
     done
-    if [ ! -f "$trae_full_path/hooks.json" ]; then
+    if [ -L "$trae_full_path/hooks.json" ]; then
+        echo "Note: $trae_full_path/hooks.json is a symbolic link; this installer never writes through links."
+        echo "      Replace it with a regular file or run 'egc install --target trae'."
+        echo ""
+    elif [ ! -e "$trae_full_path/hooks.json" ]; then
         write_guardian_hooks_json "$trae_full_path"
         ensure_manifest_entry "$MANIFEST" "hooks.json"
         hooks=$((hooks + 1))
-    elif ! grep -Fq "pre-bash-guardian-validate.js" "$trae_full_path/hooks.json"; then
-        echo "Note: $trae_full_path/hooks.json already exists without the EGC Guardian."
+    elif ! grep -Fq "pre-bash-guardian-validate.js" "$trae_full_path/hooks.json" || ! grep -Fq "pre-write-guardian-validate.js" "$trae_full_path/hooks.json"; then
+        echo "Note: $trae_full_path/hooks.json already exists without both EGC Guardian validators (RunCommand and Edit|Write)."
         echo "      Run 'egc install --target trae' to merge the Guardian hooks into it."
         echo ""
     fi

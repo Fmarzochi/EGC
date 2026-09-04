@@ -40,28 +40,41 @@ import changedFilesTool from "../tools/changed-files.js"
 // <opencode root>/scripts/hooks/ (one level up). Try both.
 type HookModule = { run: (input: unknown) => unknown }
 
+// Keyed by the resolved file, so two worktrees served by one process each
+// load their own copy instead of sharing the first one's dependencies.
 const hookModules = new Map<string, HookModule>()
+
+// Only a worktree that is the EGC repository itself may supply hook scripts:
+// an installed plugin must never load code from whatever project it opens.
+function isEgcRepository(worktreePath: string): boolean {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(worktreePath, "package.json"), "utf8")) as { name?: unknown }
+    return manifest.name === "@egchq/egc"
+  } catch {
+    return false
+  }
+}
 
 function resolveHookModulePath(pluginDir: string, worktreePath: string, fileName: string): string | null {
   const candidates = [
-    path.join(worktreePath, "scripts", "hooks", fileName),
     path.join(pluginDir, "..", "scripts", "hooks", fileName),
     path.join(pluginDir, "..", "..", "scripts", "hooks", fileName),
   ]
+  if (isEgcRepository(worktreePath)) candidates.push(path.join(worktreePath, "scripts", "hooks", fileName))
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
 }
 
-// Loads one of the repository's hook scripts in-process; a script that is
-// not there is looked up again on the next call, so an install that lands
-// mid-session is picked up without a restart.
+// Loads one of the hook scripts in-process; a script that is not there is
+// looked up again on the next call, so an install that lands mid-session is
+// picked up without a restart.
 function loadHookModule(pluginDir: string, worktreePath: string, fileName: string): HookModule | null {
-  const cached = hookModules.get(fileName)
-  if (cached) return cached
   const modulePath = resolveHookModulePath(pluginDir, worktreePath, fileName)
   if (!modulePath) return null
+  const cached = hookModules.get(modulePath)
+  if (cached) return cached
   try {
     const loaded = createRequire(import.meta.url)(modulePath) as HookModule
-    hookModules.set(fileName, loaded)
+    hookModules.set(modulePath, loaded)
     return loaded
   } catch {
     return null
@@ -108,15 +121,21 @@ function guardianDenyReason(
 }
 
 // The dashboard only accepts events that carry the token it minted at
-// startup (dashboard/ops.js); a missing token just means no telemetry.
+// startup (dashboard/ops.js); a missing token just means no telemetry. The
+// token changes only when the dashboard restarts, so a good read is kept
+// and the file is consulted again only while no token is known.
+let dashboardToken: string | null = null
+
 function readDashboardToken(): string | null {
+  if (dashboardToken) return dashboardToken
   try {
     const home = process.env.HOME || process.env.USERPROFILE || os.homedir()
     const raw = fs.readFileSync(path.join(home, ".egc", "dashboard-token"), "utf8").trim()
-    return /^[0-9a-f]{64}$/i.test(raw) ? raw : null
+    dashboardToken = /^[0-9a-f]{64}$/i.test(raw) ? raw : null
   } catch {
-    return null
+    dashboardToken = null
   }
+  return dashboardToken
 }
 
 const OPENCODE_TOOL_TO_GATEGUARD: Record<string, string> = {
