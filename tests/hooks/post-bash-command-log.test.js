@@ -92,6 +92,8 @@ function runTests() {
       ['curl -u ":" https://x', 'curl -u ":<REDACTED>" https://x'],
       ["curl -d 'a\\' -u admin:pw https://x", "curl -d 'a\\' -u admin:<REDACTED> https://x"],
       ['curl --user admin:pw https://x', 'curl --user admin:<REDACTED> https://x'],
+      ['curl.exe -u admin:pw https://x', 'curl.exe -u admin:<REDACTED> https://x'],
+      ['C:\\tools\\CURL.EXE -u admin:pw https://x', 'C:\\tools\\CURL.EXE -u admin:<REDACTED> https://x'],
       ['echo curl\n-u user:pw', 'echo curl -u user:pw'],
       [`curl ${'-u a:b '.repeat(400)}https://x`, `curl ${'-u a:<REDACTED> '.repeat(400)}https://x`],
     ];

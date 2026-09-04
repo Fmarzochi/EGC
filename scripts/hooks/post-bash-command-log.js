@@ -113,6 +113,13 @@ function gluedUserFlagLength(word) {
   return 0;
 }
 
+// curl by basename, with or without a Windows executable suffix; the raw
+// word is split so a backslash in a Windows path is a separator, not an
+// escape.
+function isCurlWord(word) {
+  return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(word.replace(/["']/g, '').split(/[\\/]/).pop());
+}
+
 function redactCurlBasicAuth(text) {
   let out = '';
   let i = 0;
@@ -136,7 +143,7 @@ function redactCurlBasicAuth(text) {
     if (valueNext) {
       valueNext = false;
       out += redactCredentialWord(word);
-    } else if (bare.split(/[\\/]/).pop().toLowerCase() === 'curl') {
+    } else if (isCurlWord(word)) {
       sawCurl = true;
       out += word;
     } else if (!sawCurl) {
