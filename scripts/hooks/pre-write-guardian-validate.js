@@ -119,7 +119,7 @@ function blocked(reason) {
 
 function blockedPath(cli, filePath) {
   const verdict = callGuardian(cli, ['write'], filePath, VALIDATE_TIMEOUT_MS);
-  if (!verdict || verdict.allowed !== false) return null;
+  if (verdict?.allowed !== false) return null;
   return blocked(`${verdict.reason || 'denied by policy'}. Writes to protected paths are not permitted.`);
 }
 
