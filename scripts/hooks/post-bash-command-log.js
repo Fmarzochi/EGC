@@ -30,7 +30,7 @@ const SECRET_VALUE_PREFIXES = [
   // basic auth: --user=name:password anywhere; -u name:password only inside
   // a curl invocation, since -u is an ordinary flag for rsync, sudo and others
   /--user(?:=|\s+)["']?[^\s:"']+:/gi,
-  /\bcurl\b[^;&|\n]*?\s-u(?:=|\s+)["']?[^\s:"']+:/gi,
+  /\bcurl\b[^;&|\n]*?\s-u(?:=|\s*)["']?[^\s:"']+:/gi,
   /--?(?:token|password|passwd|secret|auth|credentials?)(?:=|\s+)/gi,
   /--?(?:api|access|private)[-_]?(?:key|secret)(?:=|\s+)/gi,
   /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
@@ -50,10 +50,11 @@ const SECRET_SHAPES = [
 ];
 const REDACTED = '<REDACTED>';
 
-function secretValueEnd(text, start) {
+function secretValueEnd(text, start, attached) {
   const quote = text[start];
-  // A bare run that starts with '-' is the next flag, not a value.
-  if (quote === '-') return start;
+  // After a space-separated option a bare run that starts with '-' is the
+  // next flag, not a value; a value attached with '=' or ':' is taken as is.
+  if (!attached && quote === '-') return start;
   if (quote === '"' || quote === "'") {
     const close = text.indexOf(quote, start + 1);
     return close === -1 ? text.length : close + 1;
@@ -69,7 +70,7 @@ function redactValuesAfter(text, prefixPattern) {
   for (const match of text.matchAll(prefixPattern)) {
     const start = match.index + match[0].length;
     if (start < last) continue;
-    const end = secretValueEnd(text, start);
+    const end = secretValueEnd(text, start, /[=:]$/.test(match[0]));
     if (end === start) continue;
     out += `${text.slice(last, start)}${REDACTED}`;
     last = end;

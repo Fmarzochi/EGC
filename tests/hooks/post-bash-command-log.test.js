@@ -80,6 +80,8 @@ function runTests() {
       ['cmd --api_secret abc', 'cmd --api_secret <REDACTED>'],
       ['AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP PRIVATEKEY=p API-KEY=q MY_ACCESS_KEY=r ./run', 'AWS_ACCESS_KEY_ID=<REDACTED> PRIVATEKEY=<REDACTED> API-KEY=<REDACTED> MY_ACCESS_KEY=<REDACTED> ./run'],
       ['tool --secret --other flag', 'tool --secret --other flag'],
+    ['tool --token=-hunter2 TOKEN=-hunter2 x', 'tool --token=<REDACTED> TOKEN=<REDACTED> x'],
+    ['curl -uadmin:hunter2 https://x', 'curl -uadmin:<REDACTED> https://x'],
     ];
     for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
   })) passed++; else failed++;
