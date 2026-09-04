@@ -1471,9 +1471,16 @@ async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
   const args = SessionAnnounceSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(args.project_path);
   const sessionId = resolveBusSessionId(args.session_id);
+  // Presence is never refused, but a territory line that fails the scan is
+  // stored as the block marker instead of reaching every peer's context.
+  const territoryCheck = args.territory === undefined ? null : sanitize(args.territory);
+  if (territoryCheck?.flagged) {
+    log('WARN', 'session_announce: suspicious territory withheld', { session: sessionId, reason: territoryCheck.reason });
+  }
+  const territory = territoryCheck ? territoryCheck.value : args.territory;
   await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
-    await busAnnounce(db, { sessionId, projectPath: projPath, territory: args.territory });
+    await busAnnounce(db, { sessionId, projectPath: projPath, territory });
   });
   const peers = await busListPeers(db, projPath);
   const peerLines = peers
@@ -1529,6 +1536,15 @@ async function handleSessionPeers(db: Database, toolArgs: unknown) {
 async function handleSessionSend(db: Database, toolArgs: unknown) {
   const args = SessionSendSchema.parse(toolArgs || {});
   const fromSession = resolveBusSessionId(args.session_id);
+  // A bus payload lands verbatim in another session's context: the same
+  // scan that guards project state runs here before anything is stored.
+  const payloadCheck = sanitize(args.payload ?? '');
+  const kindCheck = sanitize(args.kind);
+  if (payloadCheck.flagged || kindCheck.flagged) {
+    const reason = payloadCheck.flagged ? payloadCheck.reason : kindCheck.reason;
+    log('WARN', 'session_send: suspicious content blocked', { from: fromSession, reason });
+    return { content: [{ type: "text", text: `Event NOT sent: blocked: ${reason}` }] };
+  }
   const projPath = args.project_path ? resolveProjectPath(args.project_path) : undefined;
   const result = await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
