@@ -77,7 +77,8 @@ function main() {
 
   if (count === 0) {
     console.log('[egc watch] No EGC-managed tool config files found in this project.');
-    console.log('            Run egc install --target <tool> to set up a target first.');
+    console.log('            They are written the first time a session saves state here');
+    console.log('            (update_state from any tool after egc init); run egc watch again then.');
     process.exit(0);
   }
 
