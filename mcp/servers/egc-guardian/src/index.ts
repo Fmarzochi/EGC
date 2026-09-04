@@ -83,11 +83,17 @@ async function routeTask(prompt: string): Promise<{
 }
 
 function keywordRoutingHint(): string {
-  if (!hasProviderKey()) {
-    return 'Semantic routing unavailable: set EGC_LLM_ROUTING=1 and a provider key (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY) to send the task prompt to that provider for LLM-based routing.';
+  const enabled = llmRoutingEnabled();
+  const keyed = hasProviderKey();
+  const keys = 'ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY';
+  if (!enabled && !keyed) {
+    return `Semantic routing unavailable: set EGC_LLM_ROUTING=1 and a provider key (${keys}) to send the task prompt to that provider for LLM-based routing.`;
   }
-  if (!llmRoutingEnabled()) {
+  if (!enabled) {
     return 'Semantic routing is off: a provider key is set, but the task prompt is only sent to that provider when EGC_LLM_ROUTING=1 is set as well.';
+  }
+  if (!keyed) {
+    return `Semantic routing is on but no provider key is set (${keys}); routing stayed local.`;
   }
   return 'Semantic routing fell back to local keyword scoring for this prompt.';
 }
@@ -196,7 +202,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "orchestrate_task",
-        description: "Routes a prompt against the EGC catalog of skills, agents, and rules. Routing is local keyword scoring by default; only when EGC_LLM_ROUTING=1 is set and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing. Also returns context-reduction metrics for any file payloads.",
+        description: "Routes a prompt against the EGC catalog of skills, agents, and rules. Routing is local keyword scoring by default; only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing. Also returns context-reduction metrics for any file payloads.",
         inputSchema: {
           type: "object",
           properties: {

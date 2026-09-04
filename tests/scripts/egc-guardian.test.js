@@ -31,8 +31,10 @@ try {
 
 async function runTests() {
   let mod;
+  let routerModule;
   try {
     mod = await import(VALIDATOR_PATH);
+    routerModule = await import(path.join(__dirname, '../../mcp/servers/egc-guardian/build/llm-router.js'));
   } catch (e) {
     console.error(
       `[SKIP] Could not import ${VALIDATOR_PATH}. Run 'npm run build' in mcp/servers/egc-guardian first.`
@@ -487,7 +489,7 @@ async function runTests() {
   run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
 
   run('LLM routing is opt-in: off by default, on only with EGC_LLM_ROUTING', () => {
-    const { llmRoutingEnabled } = require(path.join(__dirname, '../../mcp/servers/egc-guardian/build/llm-router.js'));
+    const { llmRoutingEnabled } = routerModule;
     const saved = process.env.EGC_LLM_ROUTING;
     try {
       delete process.env.EGC_LLM_ROUTING;
