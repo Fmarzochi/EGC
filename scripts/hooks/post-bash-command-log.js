@@ -123,11 +123,14 @@ function redactValuesAfter(text, prefixPattern) {
 }
 
 function sanitizeCommand(command) {
-  let out = String(command || '').replaceAll('\n', ' ');
+  // Redaction runs on the original text so a newline still separates
+  // commands (curl on one line, rsync -u on the next); the log line is
+  // flattened only afterwards.
+  let out = String(command || '');
   for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
   out = redactCurlBasicAuth(out);
   for (const shape of SECRET_SHAPES) out = out.replace(shape, (match, keep) => (typeof keep === 'string' ? `${keep}${REDACTED}` : REDACTED));
-  return out;
+  return out.replaceAll('\n', ' ');
 }
 
 // The log holds every command the agent ran; it is created private to the
