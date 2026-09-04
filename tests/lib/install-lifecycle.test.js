@@ -2446,6 +2446,27 @@ function runTests() {
       console.log(`  - skipped (source link): cannot create symlinks here (${error.code})`);
     }
     if (linked) {
+      if (test('a refused manifest is an error even when no install-state exists', () => {
+        const realRepo = path.join(__dirname, '..', '..');
+        fs.mkdirSync(path.join(repoRoot, 'manifests'), { recursive: true });
+        for (const name of fs.readdirSync(path.join(realRepo, 'manifests'))) {
+          fs.copyFileSync(path.join(realRepo, 'manifests', name), path.join(repoRoot, 'manifests', name));
+        }
+        fs.writeFileSync(path.join(repoRoot, 'package.json'), JSON.stringify({ name: 'egc-test', version: CURRENT_PACKAGE_VERSION }));
+        const emptyProject = createTempDir('lifecycle-empty-project-');
+        try {
+          const repair = repairInstalledStates({ homeDir, projectRoot: emptyProject, targets: ['cursor'], repoRoot });
+          assert.strictEqual(repair.results.length, 0);
+          assert.strictEqual(repair.summary.errorCount, 1, JSON.stringify(repair.summary));
+          assert.ok(String(repair.manifestError).includes('through a link'), String(repair.manifestError));
+          const report = buildDoctorReport({ homeDir, projectRoot: emptyProject, targets: ['cursor'], repoRoot });
+          assert.strictEqual(report.summary.errorCount, 1, JSON.stringify(report.summary));
+          assert.ok(String(report.manifestError).includes('through a link'), String(report.manifestError));
+        } finally {
+          cleanup(emptyProject);
+        }
+      })) passed++; else failed++;
+
       if (test('repair refuses a source that leaves the repository through a link', () => {
         const realRepo = path.join(__dirname, '..', '..');
         fs.mkdirSync(path.join(repoRoot, 'manifests'), { recursive: true });

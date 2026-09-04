@@ -1176,7 +1176,8 @@ function buildDoctorReport(options = {}) {
   }, {
     checkedCount: 0,
     okCount: 0,
-    errorCount: 0,
+    // A refused manifest with no record to carry it is still an error.
+    errorCount: loaded.error && records.length === 0 ? 1 : 0,
     warningCount: 0,
   });
 
@@ -1184,6 +1185,7 @@ function buildDoctorReport(options = {}) {
     generatedAt: new Date().toISOString(),
     packageVersion: context.packageVersion,
     manifestVersion: context.manifestVersion,
+    manifestError: loaded.error,
     results,
     summary,
   };
@@ -1453,7 +1455,8 @@ function repairInstalledStates(options = {}) {
     checkedCount: 0,
     repairedCount: 0,
     plannedRepairCount: 0,
-    errorCount: 0,
+    // A refused manifest with no record to carry it is still an error.
+    errorCount: loaded.error && results.length === 0 ? 1 : 0,
     unrepairableCount: 0,
     prunedCount: 0,
     plannedPruneCount: 0,
@@ -1462,6 +1465,7 @@ function repairInstalledStates(options = {}) {
   return {
     dryRun: Boolean(options.dryRun),
     generatedAt: new Date().toISOString(),
+    manifestError: loaded.error,
     results,
     summary,
   };
