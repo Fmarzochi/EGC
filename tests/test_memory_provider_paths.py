@@ -84,6 +84,16 @@ class MemoryProviderPathTests(unittest.TestCase):
             self.assertEqual(victim.read_text(encoding="utf-8"), "outside content", "the hard link is replaced, not written through")
             self.assertIn("body", (provider.root / "Governance" / "Aliased.md").read_text(encoding="utf-8"))
             self.assertEqual([p for p in outside.iterdir()], [victim])
+            other = provider.root / "Traces" / "Journal.md"
+            other.write_text("other", encoding="utf-8")
+            (provider.root / "Archaeology" / "Journal.md").symlink_to(other)
+            self.assertFalse(provider.append_journal("Archaeology", "x"), "a journal that is a link is not appended")
+            self.assertEqual(other.read_text(encoding="utf-8"), "other")
+            (provider.root / "Aliased-category").symlink_to(provider.root / "Traces", target_is_directory=True)
+            self.assertFalse(provider.write_note(self.entry("note", "Aliased-category")), "a category that links another one is refused")
+            self.assertIsNone(provider.get_session_summary("abc/def"))
+            self.assertIsNone(provider.get_session_summary("../Governance/Decision"))
+
 
     def test_frontmatter_journal_and_summary(self):
         for provider in self.providers():

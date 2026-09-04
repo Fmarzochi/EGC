@@ -265,10 +265,13 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
-  // Every destination is checked before the first write, the state file
-  // included, so a planted link fails the install before it changes anything.
+  // Every destination is checked before the first write, the state file and
+  // the hooks file included, so a planted link fails the install before it
+  // changes anything.
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
+  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
+
     refuseLinkedDestination(operation.destinationPath, plan.targetRoot);
 
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });

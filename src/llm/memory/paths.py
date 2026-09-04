@@ -73,36 +73,53 @@ def _is_private_regular(status: os.stat_result) -> bool:
     return stat.S_ISREG(status.st_mode) and status.st_nlink == 1
 
 
+def _open_private(target: Path, flags: int) -> Optional[int]:
+    """A descriptor on `target` when it is a regular file with a single name
+    that was not reached through a symbolic link. The checks are made on the
+    opened descriptor and on the name after the open, so a link swapped in
+    around the open is caught even where O_NOFOLLOW is unavailable."""
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    try:
+        descriptor = os.open(target, flags, 0o600)
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        named = os.lstat(target)
+        same = (named.st_ino, named.st_dev) == (opened.st_ino, opened.st_dev)
+        if _is_private_regular(opened) and not stat.S_ISLNK(named.st_mode) and same:
+            return descriptor
+    except OSError:
+        pass
+    os.close(descriptor)
+    return None
+
+
 def read_text_if_regular(target: Path) -> str:
     """The text of `target` when it is a regular file with a single name
-    (neither a symbolic nor a hard link), else ''."""
-    try:
-        status = os.lstat(target)
-    except OSError:
+    (neither a symbolic nor a hard link), read from the checked descriptor."""
+    descriptor = _open_private(target, os.O_RDONLY)
+    if descriptor is None:
         return ""
-    if not _is_private_regular(status):
-        return ""
-    with open(target, "r", encoding="utf-8") as handle:
+    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
         return handle.read()
 
 
 def append_text_private(target: Path, text: str) -> bool:
-    """Append `text` to `target` in one write, creating it when missing, and
-    never through a link: the file is opened without following symbolic
-    links and refused when it has more than one name. Concurrent appends
-    keep each other's lines."""
-    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(target, flags, 0o600)
-    except OSError:
+    """Append `text` to `target`, creating it when missing, never through a
+    link and never partially: the whole buffer is written on the checked
+    descriptor. Concurrent appends keep each other's lines."""
+    descriptor = _open_private(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+    if descriptor is None:
         return False
+    data = text.encode("utf-8")
     try:
-        if not _is_private_regular(os.fstat(descriptor)):
-            return False
-        os.write(descriptor, text.encode("utf-8"))
+        while data:
+            data = data[os.write(descriptor, data):]
         return True
     finally:
         os.close(descriptor)
+
 
 
 

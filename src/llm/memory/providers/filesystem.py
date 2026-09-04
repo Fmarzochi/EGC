@@ -36,11 +36,14 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             stem = safe_title(entry.title)
             if category is None or stem is None:
                 return False
-            target_dir = resolve_inside(self.root, category)
-            file_path = resolve_inside(self.root, category, f"{stem}.md")
-            if target_dir is None or file_path is None:
+            target_dir = self._real_directory(category)
+            if target_dir is None:
                 return False
             target_dir.mkdir(exist_ok=True)
+            # The name as spelled, under a directory proven real: a link at the
+            # note's own name is replaced by the atomic write, never followed.
+            file_path = target_dir / f"{stem}.md"
+
             # Frontmatter (Standard YAML for Obsidian compatibility); every
             # value is a JSON scalar or list, which YAML reads as-is, so
             # quotes and newlines in a title or a metadata value stay data.
@@ -57,11 +60,12 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
     def append_journal(self, category: str, content: str) -> bool:
         try:
             segment = safe_segment(category)
-            journal_path = resolve_inside(self.root, segment, "Journal.md") if segment else None
-            if journal_path is None or not journal_path.parent.is_dir():
+            target_dir = self._real_directory(segment) if segment else None
+            if target_dir is None or not target_dir.is_dir():
                 return False
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            return append_text_private(journal_path, f"\n### {timestamp}\n\n{content}\n")
+            return append_text_private(target_dir / "Journal.md", f"\n### {timestamp}\n\n{content}\n")
+
 
         except Exception:
             return False
@@ -71,14 +75,28 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
         return []
 
     def get_session_summary(self, session_id: str) -> Optional[str]:
+        # A session id is one path segment; anything else names no session.
+        if safe_segment(session_id) != session_id:
+            return None
+        sessions = self._real_directory("Sessions")
+        if sessions is None:
+            return None
         # The same naming as the note the session end writes ("Session <id>
         # Summary"), with the session start note as the fallback.
         for title in (f"Session {session_id} Summary", f"Session {session_id}"):
             stem = safe_title(title)
-            summary_path = resolve_inside(self.root, "Sessions", f"{stem}.md") if stem else None
-            if summary_path is not None:
-                text = read_text_if_regular(summary_path)
-                if text:
-                    return text
+            text = read_text_if_regular(sessions / f"{stem}.md") if stem else ""
+            if text:
+                return text
         return None
+
+    def _real_directory(self, segment: str) -> Optional[Path]:
+        """The category directory as spelled, when it is inside the root and
+        neither it nor the root is a symbolic link (a link inside the root
+        would alias another category)."""
+        lexical = self.root / segment
+        if self.root.is_symlink() or lexical.is_symlink() or resolve_inside(self.root, segment) is None:
+            return None
+        return lexical
+
 
