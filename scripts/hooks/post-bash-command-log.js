@@ -95,13 +95,21 @@ function digitRun(text, from, max, digit) {
 
 // One ANSI-C escape starting at the backslash inside $'...'; an unknown
 // escape keeps its backslash, as Bash does.
+// A decoded code point, or the escape kept as typed when it is beyond what a
+// string can hold (Bash would reject it; the log must not fail open).
+function codePointPiece(point, text, at, end) {
+  const raw = text.slice(at, end);
+  return { value: point > 0x10ffff ? raw : String.fromCodePoint(point), raw, end };
+}
+
 function ansiEscape(text, at) {
   const next = text[at + 1];
   for (const [letter, digit, max, radix] of ANSI_NUMERIC) {
     if (letter && next !== letter) continue;
     const from = at + 1 + letter.length;
     const run = digitRun(text, from, max, digit);
-    if (run) return { value: String.fromCodePoint(Number.parseInt(run, radix)), raw: text.slice(at, from + run.length), end: from + run.length };
+    if (run) return codePointPiece(Number.parseInt(run, radix), text, at, from + run.length);
+
     if (letter) break;
   }
   if (next === 'c' && text[at + 2] !== undefined) {
@@ -120,14 +128,23 @@ function isSubstitutionOpener(text, at) {
   return text[at] === '`' || ((text[at] === '$' || text[at] === '<' || text[at] === '>') && text[at + 1] === '(');
 }
 
+// The end (exclusive) of a `...` substitution: an escaped backtick does
+// not close it; the text length when it never closes.
+function backtickEnd(text, at) {
+  for (let i = at + 1; i < text.length; i += 1) {
+    if (text[i] === '\\') i += 1;
+    else if (text[i] === '`') return i + 1;
+  }
+  return text.length;
+}
+
 // The end (exclusive) of a $(...), <(...), >(...) or `...` substitution
 // starting at `at`, balanced across nested substitutions and quotes; the
 // text length when it never closes.
 function substitutionEnd(text, at) {
-  if (text[at] === '`') {
-    const close = text.indexOf('`', at + 1);
-    return close === -1 ? text.length : close + 1;
-  }
+  if (text[at] === '`') return backtickEnd(text, at);
+
+
   let depth = 0;
   let quote = null;
   for (let i = at + 1; i < text.length; i += 1) {
@@ -276,8 +293,13 @@ function redactQuotedBody(raw) {
 // The credential as typed; when the colon only exists after decoding
 // (ANSI-C quoting), the whole spelling is replaced.
 function redactCredential(raw, value) {
+  // An ANSI-C quoted credential may hide or shift its separator behind
+  // escapes: the whole quoted body goes.
+  const ansiAt = raw.indexOf("$'");
+  if (ansiAt !== -1) return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
   const colon = raw.indexOf(':');
   if (colon === -1) return value.includes(':') ? REDACTED : raw;
+
   const quoteAt = raw[0] === '$' ? 1 : 0;
   const quote = raw[quoteAt] === '"' || raw[quoteAt] === "'" ? raw[quoteAt] : '';
   let tail = quote && raw.length > quoteAt + 1 && raw.endsWith(quote) ? quote : '';
