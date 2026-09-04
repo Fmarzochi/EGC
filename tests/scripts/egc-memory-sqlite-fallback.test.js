@@ -165,6 +165,25 @@ async function runTests() {
       }
     })) passed++; else failed++;
 
+    if (await test('the substring search treats wildcards as text, keeps the FTS row shape and honours min_score', async () => {
+      const server = startServer(home, projectDir, 'wasm');
+      try {
+        await initialize(server);
+        await callTool(server, 'store_decision', { project_path: projectDir, context: 'metrics', decision: 'coverage stays at 100% or the gate fails' });
+        const hit = JSON.parse(await callTool(server, 'search_history', { query: '100%' }));
+        assert.strictEqual(hit.results.length, 1, JSON.stringify(hit).slice(0, 300));
+        assert.ok(hit.results[0].content.includes('100%'));
+        assert.ok('date' in hit.results[0] && 'score' in hit.results[0], 'same row shape as the FTS path');
+        const miss = JSON.parse(await callTool(server, 'search_history', { query: '1__%' }));
+        assert.strictEqual(miss.results.length, 0, 'wildcards must not match');
+        const filtered = JSON.parse(await callTool(server, 'search_history', { query: '100%', min_score: 1 }));
+        assert.strictEqual(filtered.results.length, 1, 'every substring match scores 1, so the top of the min_score range keeps it');
+        assert.strictEqual(filtered.results[0].score, 1);
+      } finally {
+        await server.stop();
+      }
+    })) passed++; else failed++;
+
     if (await test('back on the native engine, the FTS5 index is rebuilt and finds the decision stored on the portable engine', async () => {
       let native = true;
       try { require('sqlite3'); } catch { native = false; }

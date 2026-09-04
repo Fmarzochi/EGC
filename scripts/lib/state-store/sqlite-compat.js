@@ -16,7 +16,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const SKIPPED_PRAGMAS = /^\s*PRAGMA\s+(journal_mode|busy_timeout|synchronous)\b[^;]*;?/gim;
-const READ_ONLY_STATEMENT = /^\s*(SELECT|PRAGMA|EXPLAIN|WITH)\b/i;
+// Anything that can change the file persists it; a read that merely
+// mentions one of these words in a literal costs one harmless extra write.
+const MUTATING_KEYWORD = /\b(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|REPLACE|VACUUM|REINDEX)\b/i;
 const NATIVE_FAILURE_MESSAGE = /GLIBC|dlopen|bindings file|\.node'?:|invalid ELF header|not a valid Win32 application|Symbol not found/i;
 
 let sqlJsPromise = null;
@@ -75,7 +77,7 @@ class WasmDatabase {
     this.db.run(sql, normalizeParams(params));
     const changes = this.db.getRowsModified();
     const row = await this.get('SELECT last_insert_rowid() AS id');
-    if (!READ_ONLY_STATEMENT.test(sql)) this.schedulePersist();
+    if (MUTATING_KEYWORD.test(sql)) this.schedulePersist();
     return { lastID: Number(row?.id ?? 0), changes };
   }
 
@@ -104,7 +106,7 @@ class WasmDatabase {
   async exec(sql) {
     const text = sql.replace(SKIPPED_PRAGMAS, '');
     if (text.trim()) this.db.exec(text);
-    if (!READ_ONLY_STATEMENT.test(sql)) this.schedulePersist();
+    if (MUTATING_KEYWORD.test(sql)) this.schedulePersist();
   }
 
   async close() {
@@ -118,7 +120,13 @@ class WasmDatabase {
     if (this.persistTimer) return;
     this.persistTimer = setTimeout(() => {
       this.persistTimer = null;
-      this.persistNow();
+      // A failed background write must not take the server down; the next
+      // mutation retries, and close() surfaces the error to its caller.
+      try {
+        this.persistNow();
+      } catch (error) {
+        process.stderr.write(`[sqlite-compat] could not persist ${this.filename}: ${errorMessage(error)}\n`);
+      }
     }, 25);
     this.persistTimer.unref();
   }
@@ -136,7 +144,26 @@ class WasmDatabase {
   }
 }
 
+// A write-ahead log left behind by a native engine (a crash, or a
+// connection still open elsewhere) holds committed rows that only the
+// native engine can fold back into the main file; reading the main file
+// alone would silently drop them.
+function assertNoPendingWal(filename) {
+  if (filename === ':memory:') return;
+  const wal = `${filename}-wal`;
+  let size;
+  try {
+    size = fs.statSync(wal).size;
+  } catch {
+    return;
+  }
+  if (size > 0) {
+    throw new Error(`${wal} holds ${size} bytes of write-ahead data that the portable engine cannot read; open the database once with a working native sqlite3 so it is checkpointed, or restore a clean copy, before using the portable engine.`);
+  }
+}
+
 async function openWasmDatabase(filename) {
+  assertNoPendingWal(filename);
   const SQL = await loadSqlJs();
   const data = filename !== ':memory:' && fs.existsSync(filename)
     ? new Uint8Array(fs.readFileSync(filename))

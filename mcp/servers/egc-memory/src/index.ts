@@ -164,16 +164,20 @@ async function dropFtsTriggers(db: Database, prefix: string): Promise<void> {
 
 // Substring search over decisions for SQLite builds without FTS5: every
 // whitespace-separated term must appear in the context or the decision.
-async function searchDecisionsBySubstring(db: Database, query: string, limit: number): Promise<Array<{ id: number; context: string; decision: string; timestamp: string; score: number }>> {
+// Same row shape as searchDecisions (id, content, context, date, score) so
+// callers cannot tell the engines apart; every match scores 1.
+async function searchDecisionsBySubstring(db: Database, query: string, limit: number): Promise<Array<{ id: number; content: string; context: string; date: string; score: number }>> {
   const terms = query.split(/\s+/).map(t => t.trim().toLowerCase()).filter(Boolean);
   if (terms.length === 0) return [];
-  const where = terms.map(() => "(LOWER(context) LIKE ? OR LOWER(decision) LIKE ?)").join(' AND ');
-  const params = terms.flatMap(t => [`%${t}%`, `%${t}%`]);
+  // The term is data, never a pattern: escape LIKE's wildcards.
+  const escaped = terms.map(t => t.replace(/[\\%_]/g, m => `\\${m}`));
+  const where = escaped.map(() => "(LOWER(context) LIKE ? ESCAPE '\\' OR LOWER(decision) LIKE ? ESCAPE '\\')").join(' AND ');
+  const params = escaped.flatMap(t => [`%${t}%`, `%${t}%`]);
   const rows: Array<{ id: number; context: string; decision: string; timestamp: string }> = await db.all(
     `SELECT id, context, decision, timestamp FROM decisions WHERE ${where} ORDER BY timestamp DESC LIMIT ?`,
     [...params, limit]
   );
-  return rows.map(r => ({ ...r, score: 1 }));
+  return rows.map(r => ({ id: r.id, content: r.decision, context: r.context, date: r.timestamp, score: 1 }));
 }
 let lessonsSearchIndexReady = false;
 
@@ -1810,7 +1814,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           // No FTS5 on this SQLite build (the portable engine, or a native
           // build without the extension): the same substring matching
           // lesson_recall already falls back to, so the tool keeps answering.
-          const results = await searchDecisionsBySubstring(db, query, limit);
+          const results = (await searchDecisionsBySubstring(db, query, limit)).filter(r => r.score >= (min_score ?? 0));
           log('INFO', 'Decision history searched by substring (no FTS5)', { results: results.length });
           return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score, count: results.length, mode: 'substring' } }, null, 2) }] };
         }

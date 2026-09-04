@@ -93,6 +93,68 @@ async function runTests() {
     await db.close();
   })) passed++; else failed++;
 
+  if (await test('writes that follow a pragma or start with a CTE are persisted', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('PRAGMA foreign_keys = ON; CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)');
+      await db.exec("PRAGMA foreign_keys = ON; INSERT INTO items (name) VALUES ('after-pragma')");
+      await db.run("WITH seed(name) AS (SELECT 'from-cte') INSERT INTO items (name) SELECT name FROM seed");
+      await db.close();
+      const again = await openCompatDatabase(file, 'test');
+      const rows = await again.all('SELECT name FROM items ORDER BY id');
+      assert.deepStrictEqual(rows.map(r => r.name), ['after-pragma', 'from-cte']);
+      await again.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await test('refuses a file whose write-ahead log still holds data the portable engine cannot read', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+      await db.close();
+      fs.writeFileSync(`${file}-wal`, Buffer.alloc(64, 1));
+      await assert.rejects(() => openCompatDatabase(file, 'test'), /write-ahead data/);
+      fs.writeFileSync(`${file}-wal`, '');
+      const empty = await openCompatDatabase(file, 'test');
+      await empty.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await test('a failed background persist is reported, not thrown', async () => {
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+      console.log('    - skipped: root ignores directory permissions');
+      return;
+    }
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+      await new Promise(r => setTimeout(r, 60));
+      fs.chmodSync(dir, 0o555);
+      await db.run('INSERT INTO items DEFAULT VALUES');
+      await new Promise(r => setTimeout(r, 80));
+      const rows = await db.all('SELECT COUNT(*) AS n FROM items');
+      assert.strictEqual(rows[0].n, 1, 'the in-memory database keeps working');
+      fs.chmodSync(dir, 0o755);
+      await db.close();
+    } finally {
+      try { fs.chmodSync(dir, 0o755); } catch { /* already writable */ }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (await test('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;
