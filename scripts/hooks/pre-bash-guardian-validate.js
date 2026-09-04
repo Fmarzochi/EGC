@@ -394,27 +394,33 @@ function parseInput(inputOrRaw) {
 // top-level separators.
 // A backslash-newline continues the line where the shell reads it that way:
 // outside single quotes; inside them it is two literal characters.
+// The length of a backslash-newline pair at `at` (2, or 3 with a carriage
+// return), 0 when the backslash starts something else.
+function continuationLength(text, at) {
+  if (text[at + 1] === '\n') return 2;
+  return text[at + 1] === '\r' && text[at + 2] === '\n' ? 3 : 0;
+}
+
 function joinContinuations(text) {
   let out = '';
   let single = false;
   let double = false;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
-    if (!single && ch === '\\' && text[i + 1] === '\n') {
-      i += 1;
-    } else if (!single && ch === '\\' && text[i + 1] === '\r' && text[i + 2] === '\n') {
-      i += 2;
-    } else if (!single && ch === '\\' && i + 1 < text.length) {
-      out += ch + text[i + 1];
-      i += 1;
-    } else {
-      if (ch === '"' && !single) double = !double;
-      if (ch === "'" && !double) single = !single;
-      out += ch;
+    if (ch === '\\' && !single) {
+      // A continuation is dropped; any other escape is kept with its character.
+      const skip = continuationLength(text, i);
+      if (skip === 0) out += text.slice(i, i + 2);
+      i += skip === 0 ? 1 : skip - 1;
+      continue;
     }
+    if (ch === '"' && !single) double = !double;
+    else if (ch === "'" && !double) single = !single;
+    out += ch;
   }
   return out;
 }
+
 
 
 function extractSegments(rawCommand, depth = 0) {

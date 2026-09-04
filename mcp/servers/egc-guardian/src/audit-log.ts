@@ -126,18 +126,22 @@ function isSubstitutionOpener(text: string, at: number): boolean {
   return text[at] === '`' || ((text[at] === '$' || text[at] === '<' || text[at] === '>') && text[at + 1] === '(');
 }
 
+// The end (exclusive) of a `...` substitution: an escaped backtick does
+// not close it; the text length when it never closes.
+function backtickEnd(text: string, at: number): number {
+  for (let i = at + 1; i < text.length; i += 1) {
+    if (text[i] === '\\') i += 1;
+    else if (text[i] === '`') return i + 1;
+  }
+  return text.length;
+}
+
 // The end (exclusive) of a $(...), <(...), >(...) or `...` substitution
 // starting at `at`, balanced across nested substitutions and quotes; the
 // text length when it never closes.
 function substitutionEnd(text: string, at: number): number {
-  if (text[at] === '`') {
-    // An escaped backtick does not close the substitution.
-    for (let i = at + 1; i < text.length; i += 1) {
-      if (text[i] === '\\') i += 1;
-      else if (text[i] === '`') return i + 1;
-    }
-    return text.length;
-  }
+  if (text[at] === '`') return backtickEnd(text, at);
+
 
   let depth = 0;
   let quote: string | null = null;
