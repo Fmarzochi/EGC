@@ -32,9 +32,45 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { redactPayload, writeAuditEntry } = require(buildPath);
+const { redactPayload, writeAuditEntry, redactSecretsInText } = require(buildPath);
 
 console.log('\n=== Testing audit-log (egc-guardian) ===\n');
+
+// ── redactSecretsInText (audit 2026-08-17, F6/F7) ────────────────────────────
+
+if (test('redactSecretsInText: bearer headers, flag values and key=value assignments', () => {
+  const cmd = 'curl -H "Authorization: Bearer abc.def.ghi" --token=t0p-secret -u admin:hunter2 https://api.example.test?api_key=k123 && export GITHUB_TOKEN=ghp_' + 'A'.repeat(36);
+  const out = redactSecretsInText(cmd);
+  assert.ok(!out.includes('abc.def.ghi'), out);
+  assert.ok(!out.includes('t0p-secret'), out);
+  assert.ok(!out.includes('k123'), out);
+  assert.ok(!out.includes('ghp_' + 'A'.repeat(36)), out);
+  assert.ok(out.includes('Authorization: Bearer [REDACTED]'), out);
+  assert.ok(out.includes('--token=[REDACTED]'), out);
+  assert.ok(out.includes('curl -H'), 'the surrounding command text survives');
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: URL credentials, cloud and vendor token prefixes, JWTs', () => {
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.SomeSignatureHere1234567';
+  const text = `git clone https://user:pa55w0rd@github.com/x/y.git; aws --key AKIAABCDEFGHIJKLMNOP; sk-${'z'.repeat(24)} xoxb-1234567890-abc glpat-${'q'.repeat(20)} ${jwt}`;
+  const out = redactSecretsInText(text);
+  for (const leaked of ['pa55w0rd', 'AKIAABCDEFGHIJKLMNOP', 'sk-' + 'z'.repeat(24), 'xoxb-1234567890-abc', 'glpat-' + 'q'.repeat(20), jwt]) {
+    assert.ok(!out.includes(leaked), `${leaked} must not survive: ${out}`);
+  }
+  assert.ok(out.includes('https://user:[REDACTED]@github.com/x/y.git'), out);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: ordinary commands are left alone', () => {
+  for (const cmd of ['git status', 'npm test -- --grep token', 'ls -la ~/.ssh', 'echo "the password policy doc"', 'git checkout 4f054e08']) {
+    assert.strictEqual(redactSecretsInText(cmd), cmd);
+  }
+})) passed++; else failed++;
+
+if (test('redactPayload: applies in-text redaction to string values and array items', () => {
+  const result = redactPayload({ command: 'curl -H "Authorization: Bearer abc.def.ghi" https://x', args: ['--password=pw', 'ok'] });
+  assert.strictEqual(result.command, 'curl -H "Authorization: Bearer [REDACTED]" https://x');
+  assert.deepStrictEqual(result.args, ['--password=[REDACTED]', 'ok']);
+})) passed++; else failed++;
 
 // ── redactPayload ────────────────────────────────────────────────────────────
 

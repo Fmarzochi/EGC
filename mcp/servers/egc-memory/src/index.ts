@@ -45,7 +45,7 @@ import {
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { llmCompress, loadRawObservations, replaceObservation } from './compress.js';
-import { sanitize, sanitizeStrings } from './sanitize.js';
+import { sanitize, sanitizeStrings, sanitizeStateFields } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 
 function resolveStateStoreDbPath(): string {
@@ -1379,12 +1379,13 @@ function readExistingStateOrRecover(filePath: string, force: boolean | undefined
 
 async function handleUpdateState(db: Database, toolArgs: unknown) {
   const args = UpdateStateSchema.parse(toolArgs || {});
-  if (args.context) {
-    const check = sanitize(args.context);
-    if (check.flagged) {
-      log('WARN', 'update_state: suspicious content in context', { reason: check.reason });
-      return { content: [{ type: "text", text: `Blocked: ${check.reason}` }] };
-    }
+  // Every free-text field ends up in the instruction files each AI tool
+  // loads as trusted context (CLAUDE.md, AGENTS.md, GEMINI.md, ...), so all
+  // of them get the same scan context always had, not just context.
+  const check = sanitizeStateFields(args);
+  if (check.flagged) {
+    log('WARN', 'update_state: suspicious content blocked', { reasons: check.reasons });
+    return { content: [{ type: "text", text: `Blocked: ${check.reasons.join('; ')}` }] };
   }
   const projPath = resolveProjectPath(args.project_path);
   const branch = detectBranch(projPath);
