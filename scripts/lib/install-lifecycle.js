@@ -433,7 +433,7 @@ function repairMergeJson(operation) {
   const mergedValue = deepMergeJson(currentValue, payload);
 
   ensureParentDir(operation.destinationPath);
-  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, formatJson(mergedValue)));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, formatJson(mergedValue)));
 }
 
 function repairRemove(operation) {
@@ -461,7 +461,7 @@ function repairMergeYamlReadList(operation) {
     );
   }
   ensureParentDir(operation.destinationPath);
-  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
 }
 
 function repairMergeMarkdownIndex(operation) {
@@ -474,7 +474,7 @@ function repairMergeMarkdownIndex(operation) {
     relativePath: operation.relativePath,
   });
   ensureParentDir(operation.destinationPath);
-  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
 }
 
 function executeRepairOperation(repoRoot, operation) {
@@ -499,14 +499,14 @@ function restorePreviousContent(operation) {
   const previousContent = getOperationPreviousContent(operation);
   if (previousContent !== null) {
     ensureParentDir(operation.destinationPath);
-    replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, previousContent));
+    replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, previousContent));
     return { removedPaths: [], cleanupTargets: [] };
   }
 
   const previousJson = getOperationPreviousJson(operation);
   if (previousJson !== undefined) {
     ensureParentDir(operation.destinationPath);
-    replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, formatJson(previousJson)));
+    replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, formatJson(previousJson)));
     return { removedPaths: [], cleanupTargets: [] };
   }
 
@@ -548,7 +548,7 @@ function uninstallMergeJson(operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, formatJson(nextValue)));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, formatJson(nextValue)));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -577,7 +577,7 @@ function uninstallAiderConfigReadList(operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -593,7 +593,7 @@ function uninstallWarpAgentsIndexEntry(operation) {
   const existingContent = fs.readFileSync(operation.destinationPath, 'utf8');
   const nextContent = removeSkillIndexEntry(existingContent, operation.skillName);
   ensureParentDir(operation.destinationPath);
-  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
