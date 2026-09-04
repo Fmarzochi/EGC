@@ -5,8 +5,8 @@
 
 ## Decisions
 
-- **rule 1** - `egc-guardian`: `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task` _(source: CLAUDE.md)_
-- **rule 2** - `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`, `session_announce`, `session_peers`, `claim_path`, `release_path` _(source: CLAUDE.md)_
+- `egc-guardian`: `validate_command`, `validate_write`, `reduce_context`, `orchestrate_task` _(source: CLAUDE.md)_
+- `egc-memory`: `get_state`, `update_state`, `store_decision`, `query_history`, `search_history`, `session_announce`, `session_peers`, `claim_path`, `release_path` _(source: CLAUDE.md)_
 
 ## Being worked on right now
 
