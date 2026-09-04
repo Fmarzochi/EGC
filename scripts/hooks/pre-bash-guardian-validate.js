@@ -67,6 +67,9 @@ const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\u0007', b: '\b', f: '\f',
 // named escapes follow. An unknown escape keeps its backslash, as Bash does.
 const ANSI_NUMERIC = [['x', /[0-9a-fA-F]/, 2, 16], ['u', /[0-9a-fA-F]/, 4, 16], ['U', /[0-9a-fA-F]/, 8, 16], ['', /[0-7]/, 3, 8]];
 
+// A byte escape above 0x7F (\xHH, octal) names a raw byte the shell passes
+// through; a string cannot carry it faithfully, so the word is marked as one
+// this hook cannot resolve. A code point beyond Unicode is kept as typed.
 function ansiNumeric(text, at) {
   const next = text[at + 1];
   for (const [letter, digit, max, radix] of ANSI_NUMERIC) {
@@ -74,11 +77,15 @@ function ansiNumeric(text, at) {
     let end = at + 1 + letter.length;
     const from = end;
     while (end < text.length && end - from < max && digit.test(text[end])) end += 1;
-    if (end > from) return { value: String.fromCodePoint(Number.parseInt(text.slice(from, end), radix)), end };
-    if (letter) return null;
+    if (end === from) return null;
+    const point = Number.parseInt(text.slice(from, end), radix);
+    if (point > 0x10ffff) return { value: text.slice(at, end), end, unsure: true };
+    const byteEscape = (letter === 'x' || letter === '') && point > 0x7f;
+    return { value: String.fromCodePoint(point), end, unsure: byteEscape };
   }
   return null;
 }
+
 
 function ansiEscape(text, at) {
   const numeric = ansiNumeric(text, at);
@@ -116,13 +123,16 @@ function readQuoted(text, start) {
   const decodes = quote === '"' || ansi;
   let value = '';
   let i = start + (ansi ? 2 : 1);
+  let unsure = false;
   while (i < text.length && text[i] !== quote) {
     const escaped = text[i] === '\\' && decodes ? decodedEscape(text, i, quote === "'") : null;
     value += escaped ? escaped.value : text[i];
+    unsure = unsure || Boolean(escaped?.unsure);
     i = escaped ? escaped.end : i + 1;
   }
-  return { value, end: Math.min(i + 1, text.length) };
+  return { value, unsure, end: Math.min(i + 1, text.length) };
 }
+
 
 
 // One shell word as the shell would see it: a backslash-newline is a
@@ -133,7 +143,9 @@ function readQuoted(text, start) {
 function readShellWord(text, start) {
   let value = '';
   let code = '';
+  let unsure = false;
   let i = start;
+
   while (i < text.length) {
     const ch = text[i];
     if (ch === '\\' && text[i + 1] === '\n') {
@@ -142,7 +154,9 @@ function readShellWord(text, start) {
       const quoted = readQuoted(text, i);
       value += quoted.value;
       code += LITERAL.repeat(quoted.value.length);
+      unsure = unsure || quoted.unsure;
       i = quoted.end;
+
     } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
       value += text[i + 1];
       code += LITERAL;
@@ -155,7 +169,8 @@ function readShellWord(text, start) {
       i += 1;
     }
   }
-  return { value, globbed: /[*?[]/.test(code), end: i };
+  return { value, globbed: /[*?[]/.test(code), unsure, end: i };
+
 }
 
 function shellWords(segment) {
@@ -179,11 +194,13 @@ function shellWords(segment) {
 // and the options that change the working directory the script is resolved
 // against.
 function spec(valueFlags, extra = {}) {
-  return { valueFlags: new Set(valueFlags), positionals: 0, chdirFlags: new Set(), ...extra };
+  return { valueFlags: new Set(valueFlags), positionals: 0, chdirFlags: new Set(), chrootFlags: new Set(), ...extra };
+
 }
 
 const WRAPPER_SPECS = {
-  sudo: spec(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-D', '--chdir', '-R', '--chroot', '-U', '-T'], { chdirFlags: new Set(['-D', '--chdir', '-R', '--chroot']) }),
+  sudo: spec(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-D', '--chdir', '-R', '--chroot', '-U', '-T'], { chdirFlags: new Set(['-D', '--chdir']), chrootFlags: new Set(['-R', '--chroot']) }),
+
 
   doas: spec(['-u', '-C']),
   env: spec(['-u', '--unset', '-C', '--chdir', '-S', '--split-string'], { chdirFlags: new Set(['-C', '--chdir']) }),
@@ -209,10 +226,11 @@ const WRAPPER_SPECS = {
 // One wrapper option as typed: --name=value, -Xvalue (the short option with
 // its value attached) or the value in the next word.
 function wrapperOption(word, wrapper, nextWord) {
-  const equal = word.indexOf('=');
-  if (equal !== -1) return { name: word.slice(0, equal), value: word.slice(equal + 1), takesNext: false };
   const attached = !word.startsWith('--') && word.length > 2 && wrapper.valueFlags.has(word.slice(0, 2));
   if (attached) return { name: word.slice(0, 2), value: word.slice(2), takesNext: false };
+  const equal = word.indexOf('=');
+  if (equal !== -1) return { name: word.slice(0, equal), value: word.slice(equal + 1), takesNext: false };
+
   const takesNext = wrapper.valueFlags.has(word);
   return { name: word, value: takesNext ? nextWord : undefined, takesNext };
 }
@@ -228,6 +246,8 @@ function skipWrapperOptions(words, start, wrapper, state) {
     if (!word.startsWith('-') || word === '-') break;
     const option = wrapperOption(word, wrapper, words[index + 1]?.value);
     if (wrapper.chdirFlags.has(option.name) && option.value !== undefined) state.cwd = option.value;
+    if (wrapper.chrootFlags.has(option.name) && option.value !== undefined) state.chroot = option.value;
+
     index += option.takesNext ? 2 : 1;
 
   }
@@ -239,7 +259,8 @@ function skipWrapperOptions(words, start, wrapper, state) {
 // variable-expanded interpreter cannot be resolved, so its operands are
 // inspected as if it were a shell. After `--` every word is an operand.
 function interpreterOperands(words) {
-  const state = { cwd: null };
+  const state = { cwd: null, chroot: null };
+
   let index = 0;
   while (index < words.length) {
     const word = words[index].value;
@@ -252,9 +273,11 @@ function interpreterOperands(words) {
     index = skipWrapperOptions(words, index + 1, wrapper, state);
   }
   const head = words[index];
-  if (!head) return { operands: [], cwd: state.cwd };
+  if (!head) return { operands: [], cwd: state.cwd, chroot: state.chroot };
+
   const name = head.value.split(/[\\/]/).pop().toLowerCase();
-  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return { operands: [], cwd: state.cwd };
+  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return { operands: [], cwd: state.cwd, chroot: state.chroot };
+
   const operands = [];
   let literal = false;
   for (const word of words.slice(index + 1)) {
@@ -264,8 +287,9 @@ function interpreterOperands(words) {
       operands.push(word);
     }
   }
-  return { operands, cwd: state.cwd };
+  return { operands, cwd: state.cwd, chroot: state.chroot };
 }
+
 
 // Existing files among the operands, resolved against the cwd; a file that
 // exists but cannot be read within the budget is reported so the caller
@@ -273,15 +297,20 @@ function interpreterOperands(words) {
 function scriptOperandsOf(segment, cwd) {
   const files = [];
   const found = interpreterOperands(shellWords(segment));
-  const base = found.cwd ? path.resolve(cwd || process.cwd(), found.cwd) : (cwd || process.cwd());
+  const here = cwd || process.cwd();
+  // Inside a chroot the script's absolute path is relative to the new root,
+  // and relative paths start at that root unless a chdir option says where.
+  const root = found.chroot ? path.resolve(here, found.chroot) : null;
+  let base = found.cwd ? path.resolve(here, found.cwd) : here;
+  if (root) base = found.cwd ? path.join(root, found.cwd) : root;
   const outcome = (blocked) => ({ files, blocked, base });
-
   for (const operand of found.operands) {
     // The shell expands an unquoted wildcard to whatever matches at run time;
     // the literal name is not the file that runs.
     if (operand.globbed) return outcome(`wildcard operand ${operand.value} cannot be inspected before the shell expands it`);
+    if (operand.unsure) return outcome(`operand ${operand.value} uses byte escapes that cannot be resolved faithfully`);
+    const candidate = root && path.isAbsolute(operand.value) ? path.join(root, operand.value) : path.resolve(base, operand.value);
 
-    const candidate = path.resolve(base, operand.value);
     let stat;
     try {
       stat = fs.statSync(candidate);
@@ -368,6 +397,7 @@ function parseInput(inputOrRaw) {
 function joinContinuations(text) {
   let out = '';
   let single = false;
+  let double = false;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     if (!single && ch === '\\' && text[i + 1] === '\n') {
@@ -378,12 +408,14 @@ function joinContinuations(text) {
       out += ch + text[i + 1];
       i += 1;
     } else {
-      if (ch === "'") single = !single;
+      if (ch === '"' && !single) double = !double;
+      if (ch === "'" && !double) single = !single;
       out += ch;
     }
   }
   return out;
 }
+
 
 function extractSegments(rawCommand, depth = 0) {
   const command = joinContinuations(String(rawCommand));

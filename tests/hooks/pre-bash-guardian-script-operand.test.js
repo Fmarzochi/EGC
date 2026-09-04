@@ -80,6 +80,27 @@ function runTests() {
       }
     })) passed++; else failed++;
 
+    if (test('a chroot maps the script, byte escapes fail closed, and an apostrophe in double quotes keeps a continuation', () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-chroot-'));
+      const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-elsewhere-'));
+      try {
+        fs.mkdirSync(path.join(root, 'opt'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'opt', 'run.sh'), `${wipe} /tmp/egc-victim\n`);
+        for (const command of [`sudo -R ${root} bash /opt/run.sh`, `sudo -R${root} bash /opt/run.sh`, `sudo --chroot=${root} -D /opt bash run.sh`, `echo "it's" \\\n${denied.replace('notes.txt', '')}notes.txt; bash \\\n${denied}`]) {
+          const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
+          assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        }
+        const bytes = run({ tool_name: 'Bash', tool_input: { command: `bash $'\\377notes.txt'` }, cwd: dir });
+        assert.strictEqual(bytes.exitCode, 2, JSON.stringify(bytes));
+        assert.ok(bytes.stderr.includes('byte escapes'), bytes.stderr);
+        const beyond = run({ tool_name: 'Bash', tool_input: { command: `bash $'\\U00110000notes.txt'` }, cwd: dir });
+        assert.strictEqual(beyond.exitCode, 2, JSON.stringify(beyond));
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(elsewhere, { recursive: true, force: true });
+      }
+    })) passed++; else failed++;
+
     if (test('a wildcard operand fails closed even when it also names an existing file', () => {
       const literal = run({ tool_name: 'Bash', tool_input: { command: 'bash notes.*' }, cwd: dir });
       assert.strictEqual(literal.exitCode, 2, JSON.stringify(literal));

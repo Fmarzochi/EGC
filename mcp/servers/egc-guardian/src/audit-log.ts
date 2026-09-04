@@ -91,17 +91,27 @@ function digitRun(text: string, from: number, max: number, digit: RegExp): strin
 // One ANSI-C escape starting at the backslash inside $'...': hex (\xHH),
 // unicode (\uHHHH, \UHHHHHHHH), control (\cX), octal (\NNN) and the named
 // ones; an unknown escape keeps its backslash, as Bash does.
+// A decoded code point, or the escape kept as typed when it is beyond what a
+// string can hold (Bash would reject it; the log must not fail open).
+function codePointPiece(point: number, text: string, at: number, end: number): Piece {
+  const raw = text.slice(at, end);
+  return { value: point > 0x10ffff ? raw : String.fromCodePoint(point), raw, end };
+}
+
 function ansiEscape(text: string, at: number): Piece {
+
   const next = text[at + 1];
   const hexWidth = { x: 2, u: 4, U: 8 }[next as 'x' | 'u' | 'U'];
   if (hexWidth) {
     const run = digitRun(text, at + 2, hexWidth, /[0-9a-fA-F]/);
-    if (run) return { value: String.fromCodePoint(Number.parseInt(run, 16)), raw: text.slice(at, at + 2 + run.length), end: at + 2 + run.length };
+    if (run) return codePointPiece(Number.parseInt(run, 16), text, at, at + 2 + run.length);
+
   } else if (next === 'c' && text[at + 2] !== undefined) {
     return { value: String.fromCodePoint((text[at + 2].toUpperCase().codePointAt(0) ?? 0) ^ 0x40), raw: text.slice(at, at + 3), end: at + 3 };
   } else {
     const run = digitRun(text, at + 1, 3, /[0-7]/);
-    if (run) return { value: String.fromCodePoint(Number.parseInt(run, 8)), raw: text.slice(at, at + 1 + run.length), end: at + 1 + run.length };
+    if (run) return codePointPiece(Number.parseInt(run, 8), text, at, at + 1 + run.length);
+
   }
   const value = Object.hasOwn(ANSI_NAMED, next) ? ANSI_NAMED[next] : `\\${next}`;
   return { value, raw: text.slice(at, at + 2), end: at + 2 };
@@ -121,9 +131,14 @@ function isSubstitutionOpener(text: string, at: number): boolean {
 // text length when it never closes.
 function substitutionEnd(text: string, at: number): number {
   if (text[at] === '`') {
-    const close = text.indexOf('`', at + 1);
-    return close === -1 ? text.length : close + 1;
+    // An escaped backtick does not close the substitution.
+    for (let i = at + 1; i < text.length; i += 1) {
+      if (text[i] === '\\') i += 1;
+      else if (text[i] === '`') return i + 1;
+    }
+    return text.length;
   }
+
   let depth = 0;
   let quote: string | null = null;
   for (let i = at + 1; i < text.length; i += 1) {
@@ -331,8 +346,13 @@ class CurlRedactor {
   // The credential as typed; when the colon only exists after decoding
   // (ANSI-C quoting), the whole spelling is replaced.
   private credential(raw: string, value: string): string {
+    // An ANSI-C quoted credential may hide or shift its separator behind
+    // escapes: the whole quoted body goes.
+    const ansiAt = raw.indexOf("$'");
+    if (ansiAt !== -1) return `${raw.slice(0, ansiAt)}$'${REDACTED}'`;
     const colon = raw.indexOf(':');
     if (colon === -1) return value.includes(':') ? REDACTED : raw;
+
     const quoteAt = raw[0] === '$' ? 1 : 0;
     const quote = raw[quoteAt] === '"' || raw[quoteAt] === "'" ? raw[quoteAt] : '';
     let tail = quote && raw.length > quoteAt + 1 && raw.endsWith(quote) ? quote : '';
