@@ -11,7 +11,7 @@ function main() {
   try {
     require('sqlite3');
   } catch (error) {
-    const reason = String(error && error.message ? error.message : error).split('\n')[0];
+    const reason = String(error?.message ?? error).split('\n')[0];
     console.error(reason);
     process.exit(1);
   }

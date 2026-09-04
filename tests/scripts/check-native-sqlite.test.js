@@ -3,6 +3,7 @@
 const assert = require('assert');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'check-native-sqlite.js');
 
@@ -26,7 +27,7 @@ function runTests() {
   if (test('exits 0 quietly when the native sqlite3 binary loads', () => {
     let native = true;
     try { require('sqlite3'); } catch { native = false; }
-    const result = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
+    const result = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
     if (native) {
       assert.strictEqual(result.status, 0, result.stderr);
       assert.strictEqual(result.stdout, '');
@@ -46,7 +47,7 @@ function runTests() {
     try {
       const copy = path.join(dir, 'check-native-sqlite.js');
       fs.copyFileSync(SCRIPT, copy);
-      const result = spawnSync(process.execPath, [copy], { encoding: 'utf8', env: { ...process.env, NODE_PATH: '' } });
+      const result = spawnSync(process.execPath, [copy], { encoding: 'utf8', env: { ...process.env, NODE_PATH: '' }, timeout: CLI_TIMEOUT_MS });
       assert.strictEqual(result.status, 1);
       assert.ok(result.stderr.includes("Cannot find module 'sqlite3'"), result.stderr);
     } finally {
