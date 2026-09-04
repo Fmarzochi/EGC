@@ -38,7 +38,7 @@ export function openEnvelope(text: string, teamKey: Buffer): string | null {
   } catch {
     return null;
   }
-  if (!parsed || parsed.egcTeamEnvelope !== TEAM_ENVELOPE_VERSION) return null;
+  if (parsed?.egcTeamEnvelope !== TEAM_ENVELOPE_VERSION) return null;
   if (typeof parsed.data !== 'string' || typeof parsed.mac !== 'string' || !TEAM_KEY_HEX_RE.test(parsed.mac)) return null;
   const data = Buffer.from(parsed.data, 'base64');
   const expected = signature(teamKey, data);

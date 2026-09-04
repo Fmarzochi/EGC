@@ -27,6 +27,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('os');
 
 // Session state: scoped per session to avoid cross-session races.
 const STATE_DIR = process.env.GATEGUARD_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.gateguard');
@@ -60,6 +61,17 @@ function presentedKey(key) {
 // harness transcript when one is named in the hook input: that is the
 // message that precedes a retried tool call. Null when no transcript can be
 // read, so a harness without transcripts keeps the identical-retry rule.
+// A transcript named by the hook input is read only when it is an absolute
+// .jsonl file under the home directory or the temporary directory, with no
+// parent segments: the harness writes transcripts there and nowhere else.
+function allowedTranscriptPath(candidate) {
+  if (typeof candidate !== 'string' || !candidate.endsWith('.jsonl') || !path.isAbsolute(candidate)) return null;
+  if (candidate.split(/[\\/]/).includes('..')) return null;
+  const resolved = path.resolve(candidate);
+  const roots = [os.homedir(), os.tmpdir()].map(root => path.resolve(root));
+  return roots.some(root => resolved === root || resolved.startsWith(root + path.sep)) ? resolved : null;
+}
+
 function readTranscriptTail(transcriptPath) {
   try {
     const descriptor = fs.openSync(transcriptPath, 'r');
@@ -88,12 +100,12 @@ function parseTranscriptLine(line) {
 
 function assistantTextBlocks(entry) {
   const content = entry.message && Array.isArray(entry.message.content) ? entry.message.content : [];
-  return content.filter(block => block && block.type === 'text' && typeof block.text === 'string').map(block => block.text);
+  return content.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text);
 }
 
 function recentAssistantText(data) {
-  const transcriptPath = data && (data.transcript_path || data.transcriptPath);
-  if (!transcriptPath || typeof transcriptPath !== 'string') return null;
+  const transcriptPath = allowedTranscriptPath(data?.transcript_path || data?.transcriptPath);
+  if (!transcriptPath) return null;
   const tail = readTranscriptTail(transcriptPath);
   if (tail === null) return null;
   let texts = [];
