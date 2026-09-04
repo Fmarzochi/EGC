@@ -604,7 +604,10 @@ module.exports = {
   TOKEN_FILE_NAME,
   TOKEN_HEADER,
   createOpsHandler,
+  isPanelOrigin,
   listOpsOperations,
   loadOrCreateOpsToken,
+  panelOrigins,
   resolveTokenPath,
+  tokensMatch,
 };

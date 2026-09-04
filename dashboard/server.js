@@ -6,8 +6,9 @@ const path    = require('path');
 const fs      = require('fs');
 const os      = require('os');
 const { execSync, execFileSync } = require('child_process');
-const { createAccumulator } = require('./accumulator');
-const { createOpsHandler, loadOrCreateOpsToken } = require('./ops');
+const { KNOWN_IDES, createAccumulator } = require('./accumulator');
+const { TOKEN_HEADER, createOpsHandler, isPanelOrigin, loadOrCreateOpsToken, tokensMatch } = require('./ops');
+const { SUPPORTED_INSTALL_TARGETS } = require('../scripts/lib/install-manifests');
 const { PORT } = require('./port');
 const PUBLIC = path.join(__dirname, 'public');
 const CFG    = path.join(__dirname, 'config.json');
@@ -16,6 +17,38 @@ const CFG    = path.join(__dirname, 'config.json');
 // not present it, and the panel receives it the same way it receives the port.
 const OPS = loadOrCreateOpsToken();
 const OPS_TOKEN = OPS.token;
+
+// Every ide an event may name: what the panel renders plus every install
+// target a hook can announce itself as. Anything else is refused server-side.
+const ACCEPTED_IDES = new Set([...KNOWN_IDES, ...SUPPORTED_INSTALL_TARGETS]);
+const IDE_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+function isAcceptedIde(value) {
+  return typeof value === 'string' && IDE_ID_RE.test(value) && ACCEPTED_IDES.has(value);
+}
+
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(payload));
+}
+
+// POST /event is for the local senders only: they present the dashboard
+// token, send JSON, and never carry a browser Origin other than the panel's.
+function rejectEventRequest(req, res, reqOrigin) {
+  const presented = req.headers[TOKEN_HEADER];
+  if (!tokensMatch(typeof presented === 'string' ? presented : '', OPS_TOKEN)) {
+    sendJson(res, 401, { error: 'Missing or invalid dashboard token' });
+    return true;
+  }
+  if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) {
+    sendJson(res, 415, { error: 'Content-Type must be application/json' });
+    return true;
+  }
+  if (reqOrigin && !isPanelOrigin(reqOrigin, PORT)) {
+    sendJson(res, 403, { error: 'Origin not allowed' });
+    return true;
+  }
+  return false;
+}
 const handleOps = createOpsHandler({ token: OPS_TOKEN, port: PORT });
 
 const MIME = {
@@ -161,15 +194,21 @@ const server = http.createServer((req, res) => {
   // permissive any-loopback-port ones the telemetry routes below carry.
   if (handleOps(req, res)) return;
 
+  // CORS is pinned to the panel's own origin: another local web origin gets
+  // the canonical origin back, never its own reflected.
   const reqOrigin = req.headers.origin || '';
   res.setHeader('Access-Control-Allow-Origin',
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin) ? reqOrigin : `http://localhost:${PORT}`);
+    isPanelOrigin(reqOrigin, PORT) ? reqOrigin : `http://localhost:${PORT}`);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
+    if (rejectEventRequest(req, res, reqOrigin)) {
+      req.resume();
+      return;
+    }
     const chunks = [];
     let currentSize = 0;
     const MAX_SIZE = 256 * 1024; // 256 KB cap
@@ -201,6 +240,11 @@ const server = http.createServer((req, res) => {
       } catch (_) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        return;
+      }
+
+      if (!isAcceptedIde(ev?.ide)) {
+        sendJson(res, 400, { error: 'Unknown ide' });
         return;
       }
 
@@ -474,7 +518,10 @@ const grandTotal = Object.values(byIde).reduce(
 // ── WebSocket ────────────────────────────────────────────────
 try {
   const { WebSocketServer } = require('ws');
-  const wss = new WebSocketServer({ server });
+  // Only the panel this server serves may join the live broadcast: the
+  // upgrade must carry the panel's own origin, so a page elsewhere in the
+  // same browser cannot read commands, paths and URLs off the stream.
+  const wss = new WebSocketServer({ server, verifyClient: info => isPanelOrigin(info.origin, PORT) });
   wss.on('connection', ws => {
     clients.add(ws);
     ws.on('close', () => clients.delete(ws));

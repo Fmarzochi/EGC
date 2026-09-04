@@ -1948,7 +1948,7 @@ const costStr =
     : `<strong style="color:${col}">${fmtCost(v.totalCost)}</strong>`;
           return `<div class="cost-bar-row">
             <div class="cost-bar-head">
-              <span class="cost-bar-ide" style="color:${col}">${ide}</span>
+              <span class="cost-bar-ide" style="color:${col}">${esc(ide)}</span>
              <span class="cost-bar-meta">
   ${inpTok}↑ ${outTok}↓ ·
   ${totalTok} total ·
@@ -1972,7 +1972,7 @@ const costStr =
       sessEl.innerHTML = data.recentSessions.map(s => {
         const col = IDE_COLORS[s.ide] || '#8b949e';
         return `<div class="cost-sess-row">
-          <span class="cost-sess-ide" style="color:${col}">${s.ide}</span>
+          <span class="cost-sess-ide" style="color:${col}">${esc(s.ide)}</span>
           <span class="cost-sess-tok">${fmtTokens(s.input_tokens || 0)}↑ ${fmtTokens(s.output_tokens || 0)}↓</span>
           <span class="cost-sess-cost">${fmtCost(s.cost)}</span>
           <span class="cost-sess-time">${fmtTimeAgo(s.timestamp)}</span>

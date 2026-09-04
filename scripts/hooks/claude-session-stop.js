@@ -61,12 +61,25 @@ function shouldPromptSave(input, nowMs) {
   return true;
 }
 
+// The dashboard keeps a private token next to its state (dashboard/ops.js);
+// presenting it is what separates a local sender from a web page.
+function readDashboardToken() {
+  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  try {
+    const raw = fs.readFileSync(path.join(home, '.egc', 'dashboard-token'), 'utf8').trim();
+    return /^[0-9a-f]{32,}$/i.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 function post(ev, done) {
   const body = JSON.stringify(ev);
+  const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+  const token = readDashboardToken();
+  if (token) headers['x-egc-token'] = token;
   const req = http.request(
-    { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      timeout: 300 },
+    { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST', headers, timeout: 300 },
     () => done()
   );
   req.on('error', () => done());

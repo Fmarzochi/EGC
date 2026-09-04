@@ -6,6 +6,8 @@
 
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 
 const DEFAULT_DASHBOARD_PORT = 7890;
 const DASHBOARD_TIMEOUT_MS = 200;
@@ -49,18 +51,30 @@ function resolveDashboardPort() {
     : DEFAULT_DASHBOARD_PORT;
 }
 
+// The dashboard keeps a private token next to its state (dashboard/ops.js);
+// presenting it is what separates a local sender from a web page.
+function readDashboardToken() {
+  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  try {
+    const raw = fs.readFileSync(path.join(home, '.egc', 'dashboard-token'), 'utf8').trim();
+    return /^[0-9a-f]{32,}$/i.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 function postSessionStart(host, sessionId) {
   const body = JSON.stringify({ ide: host, event: 'session_start', session_id: sessionId });
+  const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+  const token = readDashboardToken();
+  if (token) headers['x-egc-token'] = token;
   const request = http.request(
     {
       hostname: '127.0.0.1',
       port: resolveDashboardPort(),
       path: '/event',
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
+      headers,
       timeout: DASHBOARD_TIMEOUT_MS,
     },
     response => response.resume()
