@@ -88,18 +88,32 @@ export interface StateTextFields {
 // Runs sanitize() over every free-text field update_state accepts and names
 // the offending field (decisions[2].why, next[0], ...) in each reason.
 export function sanitizeStateFields(fields: StateTextFields): { flagged: boolean; reasons: string[] } {
-  const reasons: string[] = [];
-  const check = (label: string, value: string | undefined) => {
-    if (value === undefined) return;
-    const result = sanitize(value);
-    if (result.flagged) reasons.push(`${label}: ${result.reason}`);
-  };
-  check('context', fields.context);
-  fields.decisions?.forEach((d, i) => { check(`decisions[${i}].what`, d.what); check(`decisions[${i}].why`, d.why); });
-  fields.avoid?.forEach((d, i) => { check(`avoid[${i}].what`, d.what); check(`avoid[${i}].why`, d.why); });
-  fields.preferences?.forEach((p, i) => check(`preferences[${i}]`, p));
-  fields.next?.forEach((n, i) => check(`next[${i}]`, n));
+  const { reasons } = scrubStateFields(fields);
   return { flagged: reasons.length > 0, reasons };
+}
+
+type StateEntry = { what: string; why?: string };
+type TextVisitor = (label: string, value: string) => string;
+
+function mapEntries(name: string, entries: StateEntry[] | undefined, visit: TextVisitor): StateEntry[] | undefined {
+  return entries?.map((entry, i) => ({
+    what: visit(`${name}[${i}].what`, entry.what),
+    ...(entry.why === undefined ? {} : { why: visit(`${name}[${i}].why`, entry.why) }),
+  }));
+}
+
+// One walk over every free-text field, shared by the scan and the scrub so
+// the two cannot drift when a field is added or renamed.
+function mapStateFields(fields: StateTextFields, visit: TextVisitor): StateTextFields {
+  const out: StateTextFields = {};
+  if (fields.context !== undefined) out.context = visit('context', fields.context);
+  const decisions = mapEntries('decisions', fields.decisions, visit);
+  if (decisions) out.decisions = decisions;
+  const avoid = mapEntries('avoid', fields.avoid, visit);
+  if (avoid) out.avoid = avoid;
+  if (fields.preferences) out.preferences = fields.preferences.map((v, i) => visit(`preferences[${i}]`, v));
+  if (fields.next) out.next = fields.next.map((v, i) => visit(`next[${i}]`, v));
+  return out;
 }
 
 // Returns a copy of the fields with every flagged string replaced by the
@@ -108,16 +122,10 @@ export function sanitizeStateFields(fields: StateTextFields): { flagged: boolean
 // field must not reach the instruction files either.
 export function scrubStateFields(fields: StateTextFields): { fields: StateTextFields; reasons: string[] } {
   const reasons: string[] = [];
-  const clean = (label: string, value: string): string => {
+  const scrubbed = mapStateFields(fields, (label, value) => {
     const result = sanitize(value);
     if (result.flagged) reasons.push(`${label}: ${result.reason}`);
     return result.value;
-  };
-  const out: StateTextFields = {};
-  if (fields.context !== undefined) out.context = clean('context', fields.context);
-  if (fields.decisions) out.decisions = fields.decisions.map((d, i) => ({ what: clean(`decisions[${i}].what`, d.what), ...(d.why === undefined ? {} : { why: clean(`decisions[${i}].why`, d.why) }) }));
-  if (fields.avoid) out.avoid = fields.avoid.map((d, i) => ({ what: clean(`avoid[${i}].what`, d.what), ...(d.why === undefined ? {} : { why: clean(`avoid[${i}].why`, d.why) }) }));
-  if (fields.preferences) out.preferences = fields.preferences.map((v, i) => clean(`preferences[${i}]`, v));
-  if (fields.next) out.next = fields.next.map((v, i) => clean(`next[${i}]`, v));
-  return { fields: out, reasons };
+  });
+  return { fields: scrubbed, reasons };
 }
