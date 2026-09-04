@@ -19,24 +19,22 @@ const REDACTED_KEYS = new Set([
   'authorization', 'auth', 'credential', 'private_key', 'privatekey',
 ]);
 
-// Secrets embedded inside free text such as a shell command. A value is a
-// quoted run or a bare run of non-space characters; each pattern is
-// anchored on a literal and short enough to read on its own.
-const VALUE = String.raw`(?:"[^"]*"|'[^']*'|[^\s"'&;]+)`;
-const IN_TEXT_SECRET_PATTERNS: RegExp[] = [
-  // Authorization: Bearer|Basic|Token <value>
-  new RegExp(String.raw`(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+`, 'gi'),
-  // X-API-Key: <value>, Private-Token: <value>, X-Auth-Token: <value>, ...
-  new RegExp(String.raw`((?:x-)?(?:api[-_]?key|api[-_]?secret|auth[-_]?token|access[-_]?token|secret[-_]?key|private[-_]?token)\s*:\s*)[^\s"']+`, 'gi'),
-  // curl -u user:password, --user=user:password: the user stays, the password goes
-  new RegExp(String.raw`(--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:)[^\s"']+`, 'gi'),
-  // --token <value>, --password=<value>, -p<value> style flags
-  new RegExp(String.raw`(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth|credentials?)(?:=|\s+))` + VALUE, 'gi'),
-  // KEY=value assignments whose name says it holds a secret
-  new RegExp(String.raw`\b((?:[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey|private[-_]?key|access[-_]?key)[a-z_]*|auth|authorization|credentials?)\s*=\s*)` + VALUE, 'gi'),
-  // scheme://user:password@host
+// Secrets embedded inside free text such as a shell command. Each prefix
+// pattern stops exactly where the secret value starts; the value itself
+// (quoted, or a bare run up to whitespace) is consumed in code, which keeps
+// every pattern short. Mirrored by scripts/hooks/post-bash-command-log.js.
+const SECRET_VALUE_PREFIXES: RegExp[] = [
+  /authorization\s*:\s*(?:bearer|basic|token)\s+/gi,
+  /(?:x-)?(?:api|secret|access|private|auth)[-_]?(?:key|secret|token)\s*:\s*/gi,
+  /--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:/gi,
+  /--?(?:token|password|passwd|secret|auth|credentials?)(?:=|\s+)/gi,
+  /--?(?:api|access|private)[-_]?key(?:=|\s+)/gi,
+  /\b\w*(?:token|password|passwd|secret|apikey)\w*\s*=\s*/gi,
+  /\b(?:api|access|private)_key\w*\s*=\s*/gi,
+  /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
+];
+const SECRET_SHAPES: RegExp[] = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
-  // well-known token prefixes
   /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b/g,
   /\bgithub_pat_\w{20,}\b/g,
   /\bsk-[\w-]{20,}\b/g,
@@ -44,9 +42,34 @@ const IN_TEXT_SECRET_PATTERNS: RegExp[] = [
   /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
   /\bglpat-[\w-]{20,}\b/g,
   /\bAIza[\w-]{35}\b/g,
-  // JWT
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
+const REDACTED = '[REDACTED]';
+
+function secretValueEnd(text: string, start: number): number {
+  const quote = text[start];
+  if (quote === '"' || quote === "'") {
+    const close = text.indexOf(quote, start + 1);
+    return close === -1 ? text.length : close + 1;
+  }
+  let end = start;
+  while (end < text.length && !/[\s"'&;]/.test(text[end])) end += 1;
+  return end;
+}
+
+function redactValuesAfter(text: string, prefixPattern: RegExp): string {
+  let out = '';
+  let last = 0;
+  for (const match of text.matchAll(prefixPattern)) {
+    const start = (match.index ?? 0) + match[0].length;
+    if (start < last) continue;
+    const end = secretValueEnd(text, start);
+    if (end === start) continue;
+    out += `${text.slice(last, start)}${REDACTED}`;
+    last = end;
+  }
+  return out + text.slice(last);
+}
 
 /**
  * Replaces secret-looking runs inside free text (a shell command, a URL, a
@@ -55,9 +78,8 @@ const IN_TEXT_SECRET_PATTERNS: RegExp[] = [
  */
 export function redactSecretsInText(text: string): string {
   let out = text;
-  for (const pattern of IN_TEXT_SECRET_PATTERNS) {
-    out = out.replace(pattern, (match, prefix?: string) => (typeof prefix === 'string' ? `${prefix}[REDACTED]` : '[REDACTED]'));
-  }
+  for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
+  for (const shape of SECRET_SHAPES) out = out.replace(shape, (match, keep?: string) => (typeof keep === 'string' ? `${keep}${REDACTED}` : REDACTED));
   return out;
 }
 
