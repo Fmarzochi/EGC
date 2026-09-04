@@ -315,8 +315,9 @@ function operandBases(found, here) {
 // The file an operand names, or null when the name leaves the chroot.
 function operandPath(name, root, base) {
   const candidate = root && path.isAbsolute(name) ? path.join(root, name) : path.resolve(base, name);
-  if (root && candidate !== root && !candidate.startsWith(root + path.sep)) return null;
-  return candidate;
+  if (!root) return candidate;
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+  return candidate === root || candidate.startsWith(prefix) ? candidate : null;
 }
 
 // Existing files among the operands, resolved against the cwd; a file that

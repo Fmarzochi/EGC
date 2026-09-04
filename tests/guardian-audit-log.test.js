@@ -115,6 +115,10 @@ if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding
     ["curl -u user:pw$'\\x21' https://x", 'curl -u user:[REDACTED] https://x'],
     ["curl -u $(printf $'a:b') https://x", 'curl -u $([REDACTED]) https://x'],
     ['curl -u `printf a:b` https://x', 'curl -u `[REDACTED]` https://x'],
+    ["curl -u user$(printf x):pw https://x", 'curl -u user$([REDACTED]):[REDACTED] https://x'],
+    ["curl -u $(printf u):pw https://x", 'curl -u $([REDACTED]):[REDACTED] https://x'],
+    ['curl -u "user:$(printf pw)" https://x', 'curl -u "user:[REDACTED]" https://x'],
+
 
 
 

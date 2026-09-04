@@ -86,7 +86,7 @@ function runTests() {
       try {
         fs.mkdirSync(path.join(root, 'opt'), { recursive: true });
         fs.writeFileSync(path.join(root, 'opt', 'run.sh'), `${wipe} /tmp/egc-victim\n`);
-        for (const command of [`sudo -R ${root} bash /opt/run.sh`, `sudo -R${root} bash /opt/run.sh`, `sudo --chroot=${root} -D /opt bash run.sh`, `echo "it's" \\\n${denied.replace('notes.txt', '')}notes.txt; bash \\\n${denied}`]) {
+        for (const command of [`sudo -R ${root} bash /opt/run.sh`, `sudo -R${root} bash /opt/run.sh`, `sudo -R / bash ${denied}`, `sudo --chroot=${root} -D /opt bash run.sh`, `echo "it's" \\\n${denied.replace('notes.txt', '')}notes.txt; bash \\\n${denied}`]) {
           const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
           assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         }

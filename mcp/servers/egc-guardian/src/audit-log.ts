@@ -375,24 +375,38 @@ class CurlRedactor {
 
   // The credential as typed, with the password replaced.
   private credential(raw: string, value: string): string {
-    if (isSubstitutionOpener(raw, 0)) return redactedSubstitution(raw);
-    const colon = raw.indexOf(':');
-    const ansi = ansiCredential(raw, colon);
+    const masked = maskSubstitutions(raw);
+    const colon = masked.indexOf(':');
+    const ansi = ansiCredential(masked, colon);
     if (ansi !== null) return ansi;
-    if (colon === -1) return value.includes(':') ? REDACTED : raw;
-    return `${raw.slice(0, colon + 1)}${REDACTED}${credentialTail(raw, colon)}`;
+    if (colon === -1) return masked === raw && value.includes(':') ? REDACTED : masked;
+    return `${masked.slice(0, colon + 1)}${REDACTED}${credentialTail(masked, colon)}`;
   }
 }
 
-// A credential produced by a substitution: its command line is secret, so
-// only the substitution's shape is kept.
-function redactedSubstitution(raw: string): string {
-  const backtick = raw.startsWith('`');
-  const closed = backtick ? raw.length > 1 && raw.endsWith('`') : raw.endsWith(')');
-  let closer = '';
-  if (closed) closer = backtick ? '`' : ')';
-  return `${backtick ? '`' : raw.slice(0, 2)}${REDACTED}${closer}`;
+// Every substitution in a credential with its body replaced: the command
+// line that produces a credential is a secret in its own right.
+function maskSubstitutions(raw: string): string {
+  let out = '';
+  let i = 0;
+  while (i < raw.length) {
+    if (!isSubstitutionOpener(raw, i)) {
+      out += raw[i];
+      i += 1;
+      continue;
+    }
+    const end = substitutionEnd(raw, i);
+    const inner = raw.slice(i, end);
+    const backtick = inner.startsWith('`');
+    const closed = backtick ? inner.length > 1 && inner.endsWith('`') : inner.endsWith(')');
+    let closer = '';
+    if (closed) closer = backtick ? '`' : ')';
+    out += `${backtick ? '`' : inner.slice(0, 2)}${REDACTED}${closer}`;
+    i = end;
+  }
+  return out;
 }
+
 
 function redactCurlBasicAuth(text: string): string {
   return new CurlRedactor().redact(text);
