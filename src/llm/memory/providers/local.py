@@ -8,6 +8,8 @@ from pathlib import Path
 from datetime import datetime
 
 from llm.memory.base import CognitiveMemoryProvider, MemoryEntry
+from llm.memory.paths import resolve_inside, safe_segment, safe_title
+
 
 class LocalFileProvider(CognitiveMemoryProvider):
     def __init__(self, workspace_root: str, namespace: str = "EGC"):
@@ -25,12 +27,16 @@ class LocalFileProvider(CognitiveMemoryProvider):
 
     def write_note(self, entry: MemoryEntry) -> bool:
         try:
-            target_dir = self.root / entry.category
+            category = safe_segment(entry.category)
+            stem = safe_title(entry.title)
+            if category is None or stem is None:
+                return False
+            target_dir = resolve_inside(self.root, category)
+            file_path = resolve_inside(self.root, category, f"{stem}.md")
+            if target_dir is None or file_path is None:
+                return False
             target_dir.mkdir(exist_ok=True)
-            
-            # Sanitize title for filename
-            safe_title = entry.title.replace(" ", "_").replace("/", "-")
-            file_path = target_dir / f"{safe_title}.md"
+
             
             with open(file_path, "w", encoding="utf-8") as f:
                 # Frontmatter
@@ -49,7 +55,11 @@ class LocalFileProvider(CognitiveMemoryProvider):
 
     def append_journal(self, category: str, content: str) -> bool:
         try:
-            journal_path = self.root / category / "Journal.md"
+            segment = safe_segment(category)
+            journal_path = resolve_inside(self.root, segment, "Journal.md") if segment else None
+            if journal_path is None or not journal_path.parent.is_dir():
+                return False
+
             with open(journal_path, "a", encoding="utf-8") as f:
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 f.write(f"\n### {timestamp}\n\n{content}\n")
@@ -63,8 +73,10 @@ class LocalFileProvider(CognitiveMemoryProvider):
 
     def get_session_summary(self, session_id: str) -> Optional[str]:
         # Retrieve from Sessions dir
-        summary_path = self.root / "Sessions" / f"session_{session_id}.md"
-        if summary_path.exists():
+        segment = safe_segment(session_id)
+        summary_path = resolve_inside(self.root, "Sessions", f"session_{segment}.md") if segment else None
+        if summary_path is not None and summary_path.exists():
+
             with open(summary_path, "r", encoding="utf-8") as f:
                 return f.read()
         return None

@@ -236,12 +236,39 @@ function writeGuardianCliMarker(onWarning, homeDir) {
   }
 }
 
+// The installer never writes through a link: a destination that is a
+// symbolic link, or that sits under a linked directory strictly inside the
+// target root, is refused before anything is created. The root itself may be
+// a link the user made (a dotfiles manager, say); what lies below it is what
+// the installer owns.
+function refuseLinkedDestination(destinationPath, targetRoot) {
+  const root = targetRoot ? path.resolve(targetRoot) : null;
+  let probe = path.resolve(destinationPath);
+  for (;;) {
+    let stat;
+    try {
+      stat = fs.lstatSync(probe);
+    } catch {
+      stat = null;
+    }
+    if (stat?.isSymbolicLink()) {
+      throw new Error(`Refusing to write through a symbolic link at ${probe}`);
+    }
+    const parent = path.dirname(probe);
+    if (!root || parent === probe || parent === root || !parent.startsWith(root + path.sep)) break;
+    probe = parent;
+  }
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
+
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
   for (const operation of plan.operations) {
+    refuseLinkedDestination(operation.destinationPath, plan.targetRoot);
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
+
 
     if (operation.kind === HOOK_OPERATION_KIND) {
       applyManagedHookOperation(operation);
@@ -259,7 +286,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   }
 
   if (resolvedClaudeHooksPlan) {
+    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
     fs.mkdirSync(path.dirname(resolvedClaudeHooksPlan.hooksDestinationPath), { recursive: true });
+
     fs.writeFileSync(
       resolvedClaudeHooksPlan.hooksDestinationPath,
       JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2) + '\n',
@@ -300,4 +329,5 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
 module.exports = {
   applyInstallPlan,
+  refuseLinkedDestination,
 };
