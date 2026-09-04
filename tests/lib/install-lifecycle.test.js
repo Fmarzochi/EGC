@@ -2326,6 +2326,79 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // audit 2026-08-17, C5: a state file is data, not authority. A recorded
+  // destination outside the roots the adapter derives today is refused
+  // before anything is written or removed.
+  if (test('uninstall refuses a target whose recorded operation escapes the managed roots', () => {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
+    try {
+      const planted = path.join(homeDir, 'planted-by-attacker.txt');
+      fs.writeFileSync(planted, 'keep me');
+      const managed = path.join(projectRoot, '.cursor', 'rules', 'managed.md');
+      fs.mkdirSync(path.dirname(managed), { recursive: true });
+      fs.writeFileSync(managed, 'managed');
+      const { installStatePath } = writeCursorState(projectRoot, {
+        operations: [
+          { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/managed.md', destinationPath: managed, strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/managed.md', destinationPath: planted, strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+        ],
+      });
+      const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['cursor'] });
+      const outcome = (result.results || result)[0];
+      assert.strictEqual(outcome.status, 'error', JSON.stringify(outcome));
+      assert.ok(outcome.error.includes('escapes the managed roots'), outcome.error);
+      assert.ok(fs.existsSync(planted), 'the planted path must survive');
+      assert.ok(fs.existsSync(managed), 'nothing is removed when one entry escapes');
+      assert.ok(fs.existsSync(installStatePath), 'the state file stays for inspection');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('repair refuses a recorded plan whose operation escapes the managed roots', () => {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
+    try {
+      const planted = path.join(homeDir, '.bashrc');
+      writeCursorState(projectRoot, {
+        operations: [
+          { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/typescript.md', destinationPath: planted, strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+        ],
+      });
+      const result = repairInstalledStates({ homeDir, projectRoot, targets: ['cursor'] });
+      const outcome = result.results[0];
+      assert.strictEqual(outcome.status, 'error', JSON.stringify(outcome));
+      assert.ok(String(outcome.error).includes('escapes the managed roots'), String(outcome.error));
+      assert.ok(!fs.existsSync(planted), 'nothing is written outside the roots');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('a stored absolute sourcePath is never replayed: only the manifest-relative path counts', () => {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
+    try {
+      const destination = path.join(projectRoot, '.cursor', 'rules', 'x.md');
+      writeCursorState(projectRoot, {
+        operations: [
+          { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/does-not-exist.md', sourcePath: path.join(homeDir, 'secret.txt'), destinationPath: destination, strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+        ],
+      });
+      fs.writeFileSync(path.join(homeDir, 'secret.txt'), 'private');
+      const result = repairInstalledStates({ homeDir, projectRoot, targets: ['cursor'] });
+      const outcome = result.results[0];
+      assert.notStrictEqual(outcome.status, 'repaired', JSON.stringify(outcome));
+      assert.ok(!fs.existsSync(destination), 'the stored absolute source must not be copied');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

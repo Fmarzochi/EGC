@@ -185,6 +185,41 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('rejects operations whose paths climb or are not anchored where they must be', () => {
+    const base = {
+      adapter: { id: 'cursor-project' },
+      targetRoot: '/repo/.cursor',
+      installStatePath: '/repo/.cursor/egc-install-state.json',
+      request: { profile: null, modules: [], includeComponents: [], excludeComponents: [], legacyLanguages: [], legacyMode: false },
+      resolution: { selectedModules: [], skippedModules: [] },
+      source: { repoVersion: '1.0.0', repoCommit: 'abc', manifestVersion: 1 },
+    };
+    const operation = { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/x.md', destinationPath: '/repo/.cursor/rules/x.md', strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false };
+    const testDir = createTestDir();
+    const statePath = path.join(testDir, 'egc-install-state.json');
+    try {
+      for (const tampered of [
+        { sourceRelativePath: '../../home/user/.ssh/id_rsa' },
+        { sourceRelativePath: '/etc/passwd' },
+        { destinationPath: '/repo/.cursor/../../home/user/.bashrc' },
+        { destinationPath: 'relative/path' },
+      ]) {
+        // createInstallState validates on creation, so the tampered operation
+        // never even becomes a state object; a hand-written file is refused on read.
+        assert.throws(() => createInstallState({ ...base, operations: [{ ...operation, ...tampered }] }), /Invalid install-state/, JSON.stringify(tampered));
+        const clean = createInstallState({ ...base, operations: [operation] });
+        const handWritten = { ...clean, operations: [{ ...clean.operations[0], ...tampered }] };
+        fs.writeFileSync(statePath, JSON.stringify(handWritten, null, 2));
+        assert.throws(() => readInstallState(statePath), /Invalid install-state/, JSON.stringify(tampered));
+      }
+      const clean = createInstallState({ ...base, operations: [operation] });
+      fs.writeFileSync(statePath, JSON.stringify(clean, null, 2));
+      assert.strictEqual(readInstallState(statePath).operations.length, 1);
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
   if (test('rejects unexpected properties and missing required request fields', () => {
     const testDir = createTestDir();
     const statePath = path.join(testDir, 'egc-install-state.json');

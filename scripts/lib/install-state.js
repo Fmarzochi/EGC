@@ -142,12 +142,30 @@ const OPERATION_STRING_FIELDS = [
   'ownership',
 ];
 
+function hasParentSegment(value) {
+  return String(value).split(/[\\/]/).includes('..');
+}
+
+// A recorded destination is replayed verbatim by repair and uninstall, and
+// the source is joined onto the reference repository: neither may climb.
+function validateOperationPaths(operation, instancePath, pushError) {
+  const destination = operation.destinationPath;
+  if (isNonEmptyString(destination) && (!path.isAbsolute(destination) || hasParentSegment(destination))) {
+    pushError(`${instancePath}/destinationPath`, 'must be an absolute path without ".." segments');
+  }
+  const source = operation.sourceRelativePath;
+  if (isNonEmptyString(source) && (path.isAbsolute(source) || hasParentSegment(source))) {
+    pushError(`${instancePath}/sourceRelativePath`, 'must be a relative path without ".." segments');
+  }
+}
+
 function validateOperation(operation, instancePath, pushError) {
   for (const field of OPERATION_STRING_FIELDS) {
     if (!isNonEmptyString(operation[field])) {
       pushError(`${instancePath}/${field}`, 'must be non-empty string');
     }
   }
+  validateOperationPaths(operation, instancePath, pushError);
   if (typeof operation.scaffoldOnly !== 'boolean') {
     pushError(`${instancePath}/scaffoldOnly`, 'must be boolean');
   }
