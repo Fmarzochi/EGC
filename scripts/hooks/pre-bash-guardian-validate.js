@@ -59,46 +59,89 @@ const MAX_SCRIPT_BYTES = 512 * 1024;
 const MAX_SCRIPT_DEPTH = 8;
 
 const BACKSLASH_ESCAPES = process.platform !== 'win32';
+const LITERAL = '';
+const ANSI_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '', b: '\b', f: '\f', v: '\v', e: '', '\\': '\\', "'": "'", '"': '"' };
 
-// The body of a quoted run starting at its opening quote: single quotes are
-// literal, double quotes keep their escapes for \ " $ and `.
+function ansiEscape(text, at) {
+  const next = text[at + 1];
+  if (next === 'x') {
+    const hex = /^[0-9a-fA-F]{1,2}/.exec(text.slice(at + 2));
+    if (hex) return { value: String.fromCharCode(Number.parseInt(hex[0], 16)), end: at + 2 + hex[0].length };
+  }
+  return { value: Object.hasOwn(ANSI_ESCAPES, next) ? ANSI_ESCAPES[next] : next, end: at + 2 };
+}
+
+function isQuoteOpener(text, at) {
+  const ch = text[at];
+  return ch === '"' || ch === "'" || (ch === '$' && (text[at + 1] === '"' || text[at + 1] === "'"));
+}
+
+// The body of a quoted run starting at its opening quote (or at the $ of
+// $'...' and $"..."): single quotes are literal, double quotes keep their
+// escapes for \ " $ and ` and drop a backslash-newline, $'...' decodes the
+// ANSI-C escapes.
 function readQuoted(text, start) {
-  const quote = text[start];
+  const ansi = text[start] === '$';
+  const quote = ansi ? text[start + 1] : text[start];
+  const decodes = quote === '"' || ansi;
   let value = '';
-  let i = start + 1;
+  let i = start + (ansi ? 2 : 1);
   while (i < text.length && text[i] !== quote) {
-    if (quote === '"' && text[i] === '\\' && i + 1 < text.length && '"\\$`'.includes(text[i + 1])) i += 1;
+    const next = text[i + 1];
+    if (text[i] === '\\' && decodes && next !== undefined) {
+      if (next === '\n') {
+        i += 2;
+        continue;
+      }
+      if (quote === "'") {
+        const decoded = ansiEscape(text, i);
+        value += decoded.value;
+        i = decoded.end;
+        continue;
+      }
+      if ('"\\$`'.includes(next)) {
+        value += next;
+        i += 2;
+        continue;
+      }
+    }
     value += text[i];
     i += 1;
   }
   return { value, end: Math.min(i + 1, text.length) };
 }
 
-// One shell word as the shell would see it: a backslash outside quotes
-// escapes the next character (on Windows it is a path separator instead).
-// An unquoted wildcard is remembered: the shell would expand it.
+// One shell word as the shell would see it: a backslash-newline is a
+// continuation, a backslash outside quotes escapes the next character (on
+// Windows it is a path separator instead). `code` masks every literal
+// character, so an unquoted wildcard (which the shell would expand) is told
+// apart from a quoted one.
 function readShellWord(text, start) {
   let value = '';
-  let globbed = false;
+  let code = '';
   let i = start;
   while (i < text.length) {
     const ch = text[i];
-    if (ch === '"' || ch === "'") {
+    if (ch === '\\' && text[i + 1] === '\n') {
+      i += 2;
+    } else if (isQuoteOpener(text, i)) {
       const quoted = readQuoted(text, i);
       value += quoted.value;
+      code += LITERAL.repeat(quoted.value.length);
       i = quoted.end;
     } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
       value += text[i + 1];
+      code += LITERAL;
       i += 2;
     } else if (/\s/.test(ch)) {
       break;
     } else {
-      if (ch === '*' || ch === '?' || ch === '[') globbed = true;
       value += ch;
+      code += ch;
       i += 1;
     }
   }
-  return { value, globbed, end: i };
+  return { value, globbed: /[*?[]/.test(code), end: i };
 }
 
 function shellWords(segment) {
@@ -116,38 +159,62 @@ function shellWords(segment) {
   return words;
 }
 
-// Wrappers that end up running the interpreter, with the options of each
-// that take a value of their own (so `sudo --user root bash x.sh` still
-// reaches bash).
-const WRAPPER_OPTIONS = {
-  sudo: { '-u': 1, '--user': 1, '-g': 1, '--group': 1, '-C': 1, '-D': 1, '--chdir': 1, '-p': 1, '--prompt': 1, '-r': 1, '-t': 1, '-U': 1, '-T': 1 },
-  doas: { '-u': 1, '-C': 1 },
-  env: { '-u': 1, '--unset': 1, '-C': 1, '--chdir': 1, '-S': 1, '--split-string': 1 },
-  nice: { '-n': 1, '--adjustment': 1 },
-  nohup: {},
-  time: { '-f': 1, '--format': 1, '-o': 1, '--output': 1 },
-  command: {},
-  exec: { '-a': 1 },
-  builtin: {},
-  xargs: { '-n': 1, '--max-args': 1, '-I': 1, '-i': 1, '--replace': 1, '-L': 1, '-l': 1, '--max-lines': 1, '-P': 1, '--max-procs': 1, '-d': 1, '--delimiter': 1, '-s': 1, '--max-chars': 1, '-E': 1, '--eof': 1, '-a': 1, '--arg-file': 1 },
+// Wrappers that end up running the interpreter, mirrored from the
+// validator's wrapper table: the options of each that take a value, the
+// leading positional operands some take (timeout's duration, flock's file),
+// and the options that change the working directory the script is resolved
+// against.
+function spec(valueFlags, extra = {}) {
+  return { valueFlags: new Set(valueFlags), positionals: 0, chdirFlags: new Set(), ...extra };
+}
+
+const WRAPPER_SPECS = {
+  sudo: spec(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-D', '--chdir', '-U', '-T'], { chdirFlags: new Set(['-D', '--chdir']) }),
+  doas: spec(['-u', '-C']),
+  env: spec(['-u', '--unset', '-C', '--chdir', '-S', '--split-string'], { chdirFlags: new Set(['-C', '--chdir']) }),
+  nohup: spec([]),
+  time: spec(['-o', '--output', '-f', '--format']),
+  command: spec([]),
+  exec: spec(['-a']),
+  builtin: spec([]),
+  nice: spec(['-n', '--adjustment']),
+  ionice: spec(['-c', '--class', '-n', '--classdata', '-p', '--pid', '-P', '--pgid']),
+  timeout: spec(['-s', '--signal', '-k', '--kill-after'], { positionals: 1 }),
+  stdbuf: spec(['-i', '--input', '-o', '--output', '-e', '--error']),
+  xargs: spec(['-a', '--arg-file', '-d', '--delimiter', '-E', '--eof', '-I', '-i', '--replace', '-L', '-l', '--max-lines', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']),
+  flock: spec(['-w', '--timeout', '-E', '--conflict-exit-code'], { positionals: 1 }),
+  watch: spec(['-n', '--interval']),
+  strace: spec(['-e', '-o', '--output', '-s', '-p', '-P', '-b', '-U']),
+  parallel: spec(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']),
 };
 
-function skipWrapperOptions(words, start, table) {
+// Skips a wrapper's options and leading positionals; a chdir option's value
+// becomes the directory later operands are resolved against.
+function skipWrapperOptions(words, start, wrapper, state) {
   let index = start;
   while (index < words.length) {
     const word = words[index].value;
-    if (word === '--') return index + 1;
-    if (!word.startsWith('-') || word === '-') return index;
-    index += 1 + (word.includes('=') ? 0 : (table[word] || 0));
+    if (word === '--') {
+      index += 1;
+      break;
+    }
+    if (!word.startsWith('-') || word === '-') break;
+    const equal = word.indexOf('=');
+    const name = equal === -1 ? word : word.slice(0, equal);
+    const takesValue = equal === -1 && wrapper.valueFlags.has(name);
+    const value = equal === -1 ? words[index + 1]?.value : word.slice(equal + 1);
+    if (wrapper.chdirFlags.has(name) && value !== undefined) state.cwd = value;
+    index += takesValue ? 2 : 1;
   }
-  return index;
+  return index + wrapper.positionals;
 }
 
 // The operands of the interpreter in a segment, after env assignments and
-// the wrappers above. A variable-expanded interpreter cannot be resolved, so
-// its operands are inspected as if it were a shell. After `--` every word is
-// an operand, whatever it starts with.
+// the wrappers above, with the directory they are resolved against. A
+// variable-expanded interpreter cannot be resolved, so its operands are
+// inspected as if it were a shell. After `--` every word is an operand.
 function interpreterOperands(words) {
+  const state = { cwd: null };
   let index = 0;
   while (index < words.length) {
     const word = words[index].value;
@@ -155,14 +222,14 @@ function interpreterOperands(words) {
       index += 1;
       continue;
     }
-    const table = WRAPPER_OPTIONS[word];
-    if (!table) break;
-    index = skipWrapperOptions(words, index + 1, table);
+    const wrapper = WRAPPER_SPECS[word.split(/[\\/]/).pop()];
+    if (!wrapper) break;
+    index = skipWrapperOptions(words, index + 1, wrapper, state);
   }
   const head = words[index];
-  if (!head) return [];
+  if (!head) return { operands: [], cwd: state.cwd };
   const name = head.value.split(/[\\/]/).pop().toLowerCase();
-  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return [];
+  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return { operands: [], cwd: state.cwd };
   const operands = [];
   let literal = false;
   for (const word of words.slice(index + 1)) {
@@ -172,7 +239,7 @@ function interpreterOperands(words) {
       operands.push(word);
     }
   }
-  return operands;
+  return { operands, cwd: state.cwd };
 }
 
 // Existing files among the operands, resolved against the cwd; a file that
@@ -180,13 +247,17 @@ function interpreterOperands(words) {
 // fails closed instead of skipping it.
 function scriptOperandsOf(segment, cwd) {
   const files = [];
-  for (const operand of interpreterOperands(shellWords(segment))) {
-    const candidate = path.resolve(cwd || process.cwd(), operand.value);
+  const found = interpreterOperands(shellWords(segment));
+  const base = found.cwd ? path.resolve(cwd || process.cwd(), found.cwd) : (cwd || process.cwd());
+  for (const operand of found.operands) {
+    // The shell expands an unquoted wildcard to whatever matches at run time;
+    // the literal name is not the file that runs.
+    if (operand.globbed) return { files, blocked: `wildcard operand ${operand.value} cannot be inspected before the shell expands it` };
+    const candidate = path.resolve(base, operand.value);
     let stat;
     try {
       stat = fs.statSync(candidate);
     } catch {
-      if (operand.globbed) return { files, blocked: `wildcard operand ${operand.value} cannot be inspected before the shell expands it` };
       continue;
     }
     if (!stat.isFile()) continue;
@@ -195,7 +266,6 @@ function scriptOperandsOf(segment, cwd) {
   }
   return { files, blocked: null };
 }
-
 // Segments of every script the command runs, following scripts that run
 // scripts; `blocked` names the reason when one of them cannot be inspected.
 function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
@@ -262,9 +332,10 @@ function parseInput(inputOrRaw) {
 // to MAX_SUBSTITUTION_DEPTH): `echo $(rm -rf /)` must not slip through as
 // one benign-looking `echo` segment just because `$`/backtick are not
 // top-level separators.
-function extractSegments(command, depth = 0) {
+function extractSegments(rawCommand, depth = 0) {
+  // A backslash-newline continues the line: the shell removes the pair.
+  const command = String(rawCommand).replace(/\\\r?\n/g, '');
   const bodies = extractSubstitutionBodies(command);
-
   // There is at least one more level of substitution here that recursing
   // would need to unwrap, and depth is already at the cap: analysis cannot
   // continue safely. Return null rather than the partial topLevel result so

@@ -66,6 +66,26 @@ function runTests() {
       }
     })) passed++; else failed++;
 
+    if (test('chdir wrappers, executor wrappers with positionals, ANSI-C quoting and a line continuation still reach the file', () => {
+      const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-elsewhere-'));
+      try {
+        for (const command of [`env -C ${dir} bash notes.txt`, `env --chdir=${dir} bash notes.txt`, `sudo -D ${dir} bash notes.txt`, `sudo --chdir ${dir} bash notes.txt`, `timeout 5 bash ${denied}`, `timeout -s KILL 5 bash ${denied}`, `flock /tmp/egc-operand.lock bash ${denied}`, `stdbuf -oL bash ${denied}`, `ionice -c 3 bash ${denied}`, `bash $'${denied.replace(/\\/g, '\\\\')}'`, `bash \\\n${denied}`]) {
+          const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
+          assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        }
+      } finally {
+        fs.rmSync(elsewhere, { recursive: true, force: true });
+      }
+    })) passed++; else failed++;
+
+    if (test('a wildcard operand fails closed even when it also names an existing file', () => {
+      const literal = run({ tool_name: 'Bash', tool_input: { command: 'bash notes.*' }, cwd: dir });
+      assert.strictEqual(literal.exitCode, 2, JSON.stringify(literal));
+      assert.ok(literal.stderr.includes('wildcard'), literal.stderr);
+      const quoted = run({ tool_name: 'Bash', tool_input: { command: `bash 'build.sh'` }, cwd: dir });
+      assert.strictEqual(quoted.exitCode, 0, JSON.stringify(quoted));
+    })) passed++; else failed++;
+
     if (test('a wildcard operand fails closed, and a quoted backslash stays part of the path', () => {
       const glob = run({ tool_name: 'Bash', tool_input: { command: 'bash *.txt' }, cwd: dir });
       assert.strictEqual(glob.exitCode, 2, JSON.stringify(glob));

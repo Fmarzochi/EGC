@@ -369,8 +369,9 @@ function tryUnwrapCommandCarrier(current: string[]): UnwrapStep | null {
   if (head === 'coproc') return { remaining: current.slice(isBlockOpener(current[2]) ? 2 : 1) };
   if (head === 'function') return { remaining: current.slice(2) };
   if (head.endsWith('()')) return { remaining: current.slice(1) };
-  // A later arm of a case (`b) command`) starts its own segment after ;;.
+  // A later arm of a case (`b) command`, `b ) command`) starts its own segment after ;;.
   if (head.endsWith(')')) return { remaining: current.slice(1) };
+  if (current.length > 1 && bareToken(current[1]) === ')') return { remaining: current.slice(2) };
   if (current.length > 1 && bareToken(current[1]) === '()') return { remaining: current.slice(2) };
   return null;
 }

@@ -73,70 +73,127 @@ function secretValueEnd(text: string, start: number, attached: boolean): number 
 const COMMAND_SEPARATORS = new Set([';', '|', '&', '\n']);
 const BACKSLASH_ESCAPES = process.platform !== 'win32';
 
-type ShellWord = { raw: string; value: string; end: number };
+type ShellWord = { raw: string; value: string; code: string; end: number };
 
-// The body of a quoted run starting at its opening quote: single quotes are
-// literal, double quotes keep their escapes for \ " $ and `.
+// A character that came from a quoted run or an escape: literal text the
+// shell would never treat as syntax.
+const LITERAL = '';
+const ANSI_ESCAPES: Record<string, string> = { n: '\n', t: '\t', r: '\r', a: '', b: '\b', f: '\f', v: '\v', e: '', '\\': '\\', "'": "'", '"': '"' };
+
+function ansiEscape(text: string, at: number): { value: string; end: number } {
+  const next = text[at + 1];
+  if (next === 'x') {
+    const hex = /^[0-9a-fA-F]{1,2}/.exec(text.slice(at + 2));
+    if (hex) return { value: String.fromCharCode(Number.parseInt(hex[0], 16)), end: at + 2 + hex[0].length };
+  }
+  return { value: Object.hasOwn(ANSI_ESCAPES, next) ? ANSI_ESCAPES[next] : next, end: at + 2 };
+}
+
+function isQuoteOpener(text: string, at: number): boolean {
+  const ch = text[at];
+  return ch === '"' || ch === "'" || (ch === '$' && (text[at + 1] === '"' || text[at + 1] === "'"));
+}
+
+// The body of a quoted run starting at its opening quote (or at the $ of
+// $'...' and $"..."): single quotes are literal, double quotes keep their
+// escapes for \ " $ and ` and drop a backslash-newline, $'...' decodes the
+// ANSI-C escapes.
 function readQuoted(text: string, start: number): { value: string; end: number } {
-  const quote = text[start];
+  const ansi = text[start] === '$';
+  const quote = ansi ? text[start + 1] : text[start];
+  const decodes = quote === '"' || ansi;
   let value = '';
-  let i = start + 1;
+  let i = start + (ansi ? 2 : 1);
   while (i < text.length && text[i] !== quote) {
-    if (quote === '"' && text[i] === '\\' && i + 1 < text.length && '"\\$`'.includes(text[i + 1])) i += 1;
+    const next = text[i + 1];
+    if (text[i] === '\\' && decodes && next !== undefined) {
+      if (next === '\n') {
+        i += 2;
+        continue;
+      }
+      if (quote === "'") {
+        const decoded = ansiEscape(text, i);
+        value += decoded.value;
+        i = decoded.end;
+        continue;
+      }
+      if ('"\\$`'.includes(next)) {
+        value += next;
+        i += 2;
+        continue;
+      }
+    }
     value += text[i];
     i += 1;
   }
   return { value, end: Math.min(i + 1, text.length) };
 }
 
-// One shell word starting at `start`, read the way the shell reads it; a
-// backslash outside quotes escapes the next character (on Windows it is a
-// path separator instead). `raw` is the text as typed, `value` the word the
-// program receives.
+// One shell word starting at `start`, read the way the shell reads it: a
+// backslash-newline is a continuation, a backslash outside quotes escapes
+// the next character (on Windows it is a path separator instead). `raw` is
+// the text as typed, `value` the word the program receives, `code` the same
+// word with every literal character masked, so shell syntax is only looked
+// for where the shell would see it.
 function readShellWord(text: string, start: number): ShellWord {
   let value = '';
+  let code = '';
   let i = start;
   while (i < text.length) {
     const ch = text[i];
-    if (ch === '"' || ch === "'") {
+    if (ch === '\\' && text[i + 1] === '\n') {
+      i += 2;
+    } else if (isQuoteOpener(text, i)) {
       const quoted = readQuoted(text, i);
       value += quoted.value;
+      code += LITERAL.repeat(quoted.value.length);
       i = quoted.end;
     } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
       value += text[i + 1];
+      code += LITERAL;
       i += 2;
     } else if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
       break;
     } else {
       value += ch;
+      code += ch;
       i += 1;
     }
   }
-  return { raw: text.slice(start, i), value, end: i };
+  return { raw: text.slice(start, i), value, code, end: i };
 }
 
-// curl by basename, with or without a Windows executable suffix, also when
-// the word opens a substitution anywhere in it (`$(curl`, `pre$(curl`,
-// `x=$(curl`, `<(curl`, `\`curl`) or a group ({curl).
-function isCurlWord(value: string): boolean {
-  const command = value.replace(/^.*(?:\$\(|<\(|>\(|`)/, '').replace(/^[({]+/, '');
+// curl by basename, with or without a Windows executable suffix, also after
+// a substitution opener ($(, <(, >(, backtick) or a group opener that the
+// shell would execute: openers inside quotes or behind an escape are text.
+function isCurlWord(word: ShellWord): boolean {
+  const opener = /.*(?:\$\(|<\(|>\(|`)/.exec(word.code);
+  const start = opener ? opener[0].length : 0;
+  const group = /^[({]+/.exec(word.code.slice(start));
+  const command = word.value.slice(start + (group ? group[0].length : 0));
   return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(command.split(/[\\/]/).pop() ?? '');
 }
 
-// A quoted word that holds a whole command line (sh -c '...') is redacted
-// inside its quotes.
-function redactQuotedBody(raw: string): string | null {
+const SHELL_NAMES = new Set(['sh', 'bash', 'zsh', 'ksh', 'dash', 'ash']);
+
+function isShellWord(word: ShellWord): boolean {
+  return SHELL_NAMES.has((word.value.split(/[\\/]/).pop() ?? '').toLowerCase());
+}
+
+// A quoted word that a shell runs as a command line (the operand of sh -c,
+// bash -lc and the like) is redacted inside its quotes.
+function redactQuotedBody(raw: string): string {
   const quote = raw[0];
-  if ((quote !== '"' && quote !== "'") || raw.length < 2 || !raw.endsWith(quote)) return null;
-  const body = raw.slice(1, -1);
-  return /\s/.test(body) ? `${quote}${redactCurlBasicAuth(body)}${quote}` : null;
+  if ((quote !== '"' && quote !== "'") || raw.length < 2 || !raw.endsWith(quote)) return raw;
+  return `${quote}${redactCurlBasicAuth(raw.slice(1, -1))}${quote}`;
 }
 
 function redactCredentialWord(word: string): string {
   const colon = word.indexOf(':');
   if (colon === -1) return word;
-  const quote = word[0] === '"' || word[0] === "'" ? word[0] : '';
-  const closingQuote = quote && word.length > 1 && word.endsWith(quote) ? quote : '';
+  const quoteAt = word[0] === '$' ? 1 : 0;
+  const quote = word[quoteAt] === '"' || word[quoteAt] === "'" ? word[quoteAt] : '';
+  const closingQuote = quote && word.length > quoteAt + 1 && word.endsWith(quote) ? quote : '';
   const tail = closingQuote || (/[)`]+$/.exec(word) ?? [''])[0];
   return `${word.slice(0, colon + 1)}${REDACTED}${tail}`;
 }
@@ -150,42 +207,52 @@ function gluedUserFlagLength(word: string): number {
   return 0;
 }
 
+type CurlState = { sawCurl: boolean; sawShell: boolean; valueNext: boolean; bodyNext: boolean };
+
+function freshCurlState(): CurlState {
+  return { sawCurl: false, sawShell: false, valueNext: false, bodyNext: false };
+}
+
+// One word of a command, with the state of the command it belongs to.
+function redactWord(word: ShellWord, state: CurlState): string {
+  if (state.bodyNext) {
+    state.bodyNext = false;
+    return redactQuotedBody(word.raw);
+  }
+  if (state.valueNext) {
+    state.valueNext = false;
+    return redactCredentialWord(word.raw);
+  }
+  if (isShellWord(word)) {
+    state.sawShell = true;
+  } else if (state.sawShell && /^-[a-z]*c[a-z]*$/i.test(word.value)) {
+    state.bodyNext = true;
+  } else if (isCurlWord(word)) {
+    state.sawCurl = true;
+  } else if (state.sawCurl && (word.value === '-u' || word.value === '--user')) {
+    state.valueNext = true;
+  } else if (state.sawCurl) {
+    const glued = gluedUserFlagLength(word.raw);
+    if (glued) return `${word.raw.slice(0, glued)}${redactCredentialWord(word.raw.slice(glued))}`;
+  }
+  return word.raw;
+}
+
 function redactCurlBasicAuth(text: string): string {
   let out = '';
   let i = 0;
-  let sawCurl = false;
-  let valueNext = false;
+  let state = freshCurlState();
   while (i < text.length) {
     const ch = text[i];
     if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
-      if (COMMAND_SEPARATORS.has(ch)) {
-        sawCurl = false;
-        valueNext = false;
-      }
+      if (COMMAND_SEPARATORS.has(ch)) state = freshCurlState();
       out += ch;
       i += 1;
       continue;
     }
     const word = readShellWord(text, i);
     i = word.end;
-    const nested = valueNext ? null : redactQuotedBody(word.raw);
-    if (nested !== null) {
-      out += nested;
-    } else if (valueNext) {
-      valueNext = false;
-      out += redactCredentialWord(word.raw);
-    } else if (isCurlWord(word.value)) {
-      sawCurl = true;
-      out += word.raw;
-    } else if (!sawCurl) {
-      out += word.raw;
-    } else if (word.value === '-u' || word.value === '--user') {
-      valueNext = true;
-      out += word.raw;
-    } else {
-      const glued = gluedUserFlagLength(word.raw);
-      out += glued ? `${word.raw.slice(0, glued)}${redactCredentialWord(word.raw.slice(glued))}` : word.raw;
-    }
+    out += redactWord(word, state);
   }
   return out;
 }

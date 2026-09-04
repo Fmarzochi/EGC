@@ -492,6 +492,8 @@ async function runTests() {
       'b) rm -rf /tmp/guarded',
       '(b) rm -rf /tmp/guarded',
       'stop|halt) rm -rf /tmp/guarded',
+      'b ) rm -rf /tmp/guarded',
+      '(b ) rm -rf /tmp/guarded',
       'coproc rm -rf /tmp/guarded',
       'coproc worker { rm -rf /tmp/guarded; }',
       'function f() { rm -rf /tmp/guarded; }; f',

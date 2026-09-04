@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
-const { writeTextKeepingMode } = require('./install/preserving-write');
+const { copyFileKeepingMode, writeTextKeepingMode } = require('./install/preserving-write');
 const { assertSafeMcpConfig, isMcpConfigPath, parseMcpConfigText } = require('./mcp-config');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
@@ -363,9 +363,8 @@ function repairCopyFile(repoRoot, operation) {
     writeTextKeepingMode(operation.destinationPath, text, sourcePath);
     return;
   }
-  fs.copyFileSync(sourcePath, operation.destinationPath);
+  copyFileKeepingMode(sourcePath, operation.destinationPath);
 }
-
 function repairMergeJson(operation) {
   const payload = getOperationJsonPayload(operation);
   if (payload === undefined) {

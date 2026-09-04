@@ -169,13 +169,22 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('expands a home-relative target before the path check', () => {
-    const target = ['~', '.ssh', 'id_rsa'].join('/');
-    const result = runHook(target, {}, { file_path: target, content: 'x' }, 'Write', os.tmpdir());
-    assert.strictEqual(result.code, 2, JSON.stringify(result));
-    assert.ok(!result.stderr.includes('/~/'), result.stderr);
+  if (test('expands a home-relative target against the home directory before judging the resulting script', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-write-home-'));
+    const wipe = ['rm', '-rf'].join(' ');
+    try {
+      fs.writeFileSync(path.join(home, 'deploy.sh'), `#!/bin/bash\necho start\n${wipe} /tmp/egc-victim\n`);
+      const env = { HOME: home, USERPROFILE: home };
+      const edit = { file_path: '~/deploy.sh', old_string: 'echo start', new_string: 'echo begin' };
+      const result = runHook('~/deploy.sh', env, edit, 'Edit', os.tmpdir());
+      assert.strictEqual(result.code, 2, JSON.stringify(result));
+      assert.ok(result.stderr.includes('runs a denied command'), result.stderr);
+      const elsewhere = runHook('~/notes.txt', env, { file_path: '~/notes.txt', content: 'plain notes' }, 'Write', os.tmpdir());
+      assert.strictEqual(elsewhere.code, 0, JSON.stringify(elsewhere));
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
-
   if (test('blocks a denied command carried by a function body or a case arm', () => {
     for (const content of [`#!/bin/bash\nfunction f() { ${wipe} /tmp/egc-victim; }\nf\n`, `#!/bin/sh\ncase "$1" in start) ${wipe} /tmp/egc-victim;; esac\n`, `#!/bin/sh\ncase "$1" in start) echo hi;; stop) ${wipe} /tmp/egc-victim;; esac\n`, `#!/bin/bash\ncoproc ${wipe} /tmp/egc-victim\n`, `#!/bin/bash\ncoproc worker { ${wipe} /tmp/egc-victim; }\n`]) {
       const result = runHook('/tmp/egc-carrier.sh', {}, { file_path: '/tmp/egc-carrier.sh', content });
