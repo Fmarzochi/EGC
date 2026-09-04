@@ -31,7 +31,7 @@ function realizePath(target) {
     tail.unshift(path.basename(probe));
     probe = parent;
   }
-  let real = probe;
+  let real;
   try {
     real = fs.realpathSync(probe);
   } catch {
