@@ -486,6 +486,23 @@ async function runTests() {
   });
   run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
 
+  run('LLM routing is opt-in: off by default, on only with EGC_LLM_ROUTING', () => {
+    const { llmRoutingEnabled } = require(path.join(__dirname, '../../mcp/servers/egc-guardian/build/llm-router.js'));
+    const saved = process.env.EGC_LLM_ROUTING;
+    try {
+      delete process.env.EGC_LLM_ROUTING;
+      assert.strictEqual(llmRoutingEnabled(), false);
+      for (const value of ['1', 'on', 'true', 'YES']) {
+        process.env.EGC_LLM_ROUTING = value;
+        assert.strictEqual(llmRoutingEnabled(), true, value);
+      }
+      process.env.EGC_LLM_ROUTING = '0';
+      assert.strictEqual(llmRoutingEnabled(), false);
+    } finally {
+      if (saved === undefined) delete process.env.EGC_LLM_ROUTING; else process.env.EGC_LLM_ROUTING = saved;
+    }
+  });
+
   // ── Summary ───────────────────────────────────────────────────────────────
 
   console.log(`\n${'─'.repeat(50)}`);
