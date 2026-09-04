@@ -2,12 +2,15 @@
 or a session id supplied by a caller cannot climb out (security audit
 2026-08-17, day 11)."""
 
+import os
 import tempfile
 import unittest
+
 from pathlib import Path
 
 from llm.memory.base import MemoryEntry
-from llm.memory.paths import resolve_inside, safe_segment, safe_title
+from llm.memory.paths import PrivateDirectory, resolve_inside, safe_segment, safe_title
+
 from llm.memory.providers.local import LocalFileProvider
 from llm.memory.providers.obsidian import ObsidianVaultProvider
 
@@ -115,6 +118,15 @@ class MemoryProviderPathTests(unittest.TestCase):
             self.assertTrue(provider.write_note(self.entry("Session s1 Summary", "Sessions")))
             self.assertIn("body", provider.get_session_summary("s1") or "")
             self.assertEqual([p.name for p in provider.root.joinpath("Governance").iterdir() if p.name.endswith(".tmp")], [])
+
+    def test_directory_is_held_by_descriptor_where_supported(self):
+        if not hasattr(os, "O_DIRECTORY"):
+            self.skipTest("no directory descriptors on this platform")
+        with PrivateDirectory(self.base) as directory:
+            self.assertIsNotNone(directory.descriptor, "POSIX must bind the directory by descriptor")
+            directory.write_text_atomic("held.md", "held")
+            self.assertTrue(directory.append_text("held.md", " more"))
+            self.assertEqual(directory.read_text("held.md"), "held more")
 
     def test_plain_names_work(self):
         for provider in self.providers():

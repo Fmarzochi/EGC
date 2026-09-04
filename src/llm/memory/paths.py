@@ -60,9 +60,12 @@ _BINARY = getattr(os, "O_BINARY", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
 # Directory descriptors bind every operation to the directory that was
 # checked; where the platform has none (Windows), operations use the path.
+# os.replace shares os.rename's implementation and is not listed on its own,
+# so rename is the operation probed for it.
 _DIRECTORY_DESCRIPTORS = bool(_DIRECTORY) and all(
-    operation in os.supports_dir_fd for operation in (os.open, os.stat, os.replace, os.unlink)
+    operation in os.supports_dir_fd for operation in (os.open, os.stat, os.rename, os.unlink)
 )
+
 
 
 class PrivateDirectory:
