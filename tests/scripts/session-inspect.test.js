@@ -70,6 +70,14 @@ function runTests() {
     assert.ok(result.stdout.includes('Usage:'));
   })) passed++; else failed++;
 
+  if (test('answers --help with the usage and exit 0', () => {
+    for (const flag of ['--help', '-h']) {
+      const result = run([flag]);
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('Usage:'));
+    }
+  })) passed++; else failed++;
+
   if (test('lists registered adapters', () => {
     const result = run(['--list-adapters']);
     assert.strictEqual(result.code, 0, result.stderr);

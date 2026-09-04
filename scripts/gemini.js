@@ -9,8 +9,20 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+
+function bridgeUsage(pythonBin) {
+  return [
+    'Usage: egc prompt [-p <text>] [options]',
+    '',
+    'Runs the Python LLM bridge (src/llm/cli/prompt.py) with the package\'s own',
+    `virtualenv (${pythonBin}). That virtualenv is not present on this machine, so`,
+    'the backend options are unavailable; with it in place, egc prompt --help',
+    'prints the full option list from the Python entry point.',
+  ].join('\n');
+}
 
 function main() {
   const pluginRoot = path.resolve(__dirname, '..');
@@ -22,7 +34,21 @@ function main() {
     : path.join(venvPath, 'bin', 'python3');
 
   const args = process.argv.slice(2);
-  
+  const helpRequested = args.includes('--help') || args.includes('-h');
+
+  // The bridge needs the package's own virtualenv. Without it, `egc help
+  // prompt` used to die with a spawn ENOENT: answer the help request from
+  // here, and make the missing-venv failure say what is missing.
+  if (!fs.existsSync(pythonBin)) {
+    if (helpRequested) {
+      console.log(bridgeUsage(pythonBin));
+      return;
+    }
+    console.error(`Error: Python bridge not available: ${pythonBin} is missing.`);
+    console.error('egc prompt runs src/llm/cli/prompt.py through the package\'s .venv; create that virtualenv with the backend dependencies (src/llm) before using it.');
+    process.exit(1);
+  }
+
   // Session propagation (MANDATORY per directive)
   const env = { ...process.env };
   const sessionId = env.EGC_SESSION_ID || env.ECC_SESSION_ID || `egc-session-${Date.now()}`;

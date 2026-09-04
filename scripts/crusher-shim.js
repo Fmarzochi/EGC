@@ -62,7 +62,10 @@ function main() {
   console.log('\nInstalls a PATH-level binary shim (git, npm, pip, gh, ...) that compresses');
   console.log('noisy output for any tool that shells out to run them, independent of any');
   console.log('AI harness\'s hook support. Requires a new shell session after install.');
-  process.exit(action ? 1 : 0);
+  // `egc help crusher-shim` arrives here as --help: asking for the usage is
+  // not a usage error.
+  const helpRequested = action === '--help' || action === '-h';
+  process.exit(action && !helpRequested ? 1 : 0);
 }
 
 main();
