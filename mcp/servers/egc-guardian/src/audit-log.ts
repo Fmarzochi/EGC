@@ -394,30 +394,52 @@ class CurlRedactor {
   }
 }
 
-// Every substitution in a credential with its body replaced: the command
-// line that produces a credential is a secret in its own right.
+// The quote state after the character `ch`, outside any substitution.
+function quoteAfter(quote: string | null, ch: string): string | null {
+  if (quote === null && (ch === "'" || ch === '"')) return ch;
+  return quote === ch ? null : quote;
+}
+
+// Whether the shell would run the substitution at `at` in the current quote
+// state: any opener outside quotes, $( and backticks inside double quotes,
+// nothing inside single quotes.
+function activeSubstitution(raw: string, at: number, quote: string | null): boolean {
+  if (quote === "'") return false;
+  if (quote === null) return isSubstitutionOpener(raw, at);
+  return raw[at] === '`' || (raw[at] === '$' && raw[at + 1] === '(');
+}
+
+// The shape of a substitution with its body replaced.
+function maskedShape(inner: string): string {
+  const backtick = inner.startsWith('`');
+  const closed = backtick ? inner.length > 1 && inner.endsWith('`') : inner.endsWith(')');
+  let closer = '';
+  if (closed) closer = backtick ? '`' : ')';
+  return `${backtick ? '`' : inner.slice(0, 2)}${REDACTED}${closer}`;
+}
+
+// Every substitution the shell would run inside a credential, with its body
+// replaced: the command line that produces a credential is a secret in its
+// own right. A $( ) spelled inside single quotes or behind a backslash is
+// plain text and stays.
 function maskSubstitutions(raw: string): string {
   let out = '';
+  let quote: string | null = null;
   let i = 0;
   while (i < raw.length) {
-    if (!isSubstitutionOpener(raw, i)) {
-      out += raw[i];
-      i += 1;
+    if (activeSubstitution(raw, i, quote)) {
+      const end = substitutionEnd(raw, i);
+      out += maskedShape(raw.slice(i, end));
+      i = end;
       continue;
     }
-    const end = substitutionEnd(raw, i);
-    const inner = raw.slice(i, end);
-    const backtick = inner.startsWith('`');
-    const closed = backtick ? inner.length > 1 && inner.endsWith('`') : inner.endsWith(')');
-    let closer = '';
-    if (closed) closer = backtick ? '`' : ')';
-    out += `${backtick ? '`' : inner.slice(0, 2)}${REDACTED}${closer}`;
-    i = end;
+    const step = quote !== "'" && raw[i] === '\\' ? 2 : 1;
+    if (step === 1) quote = quoteAfter(quote, raw[i]);
+    out += raw.slice(i, i + step);
+    i += step;
   }
   return out;
 }
-
-
 function redactCurlBasicAuth(text: string): string {
   return new CurlRedactor().redact(text);
 }
