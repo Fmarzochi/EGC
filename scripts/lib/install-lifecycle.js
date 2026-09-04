@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
+const { assertSafeMcpConfig, isMcpConfigPath } = require('./mcp-config');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
@@ -360,6 +361,11 @@ function repairMergeJson(operation) {
   const payload = getOperationJsonPayload(operation);
   if (payload === undefined) {
     throw new Error(`Missing merge payload for repair: ${operation.destinationPath}`);
+  }
+  // A replayed payload is data from the state file, not a decision: it
+  // answers to the same allowlist as a fresh install.
+  if (isMcpConfigPath(operation.destinationPath)) {
+    assertSafeMcpConfig(payload, `repair of ${operation.destinationPath}`);
   }
 
   const currentValue = fs.existsSync(operation.destinationPath)

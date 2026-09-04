@@ -30,7 +30,6 @@ const SECRET_VALUE_PREFIXES: RegExp[] = [
   // basic auth: --user=name:password anywhere; -u name:password only inside
   // a curl invocation, since -u is an ordinary flag for rsync, sudo and others
   /--user(?:=|\s+)["']?[^\s:"']+:/gi,
-  /\bcurl\b[^;&|\n]*?\s-u(?:=|\s*)["']?[^\s:"']+:/gi,
   /--?(?:token|password|passwd|secret|auth|credentials?)(?:=|\s+)/gi,
   /--?(?:api|access|private)[-_]?(?:key|secret)(?:=|\s+)/gi,
   /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
@@ -64,6 +63,33 @@ function secretValueEnd(text: string, start: number, attached: boolean): number 
   return end;
 }
 
+// curl's -u name:password, in any of its spellings (-u name:, -u=name:,
+// -uname:), judged one occurrence at a time so a second -u on the same
+// command is redacted too. -u is an ordinary flag for rsync, sudo and
+// others, so only occurrences inside a curl command segment count.
+const CURL_USER_RE = /(^|\s)-u(?:=|\s*)["']?[^\s:"']+:/g;
+
+function insideCurlSegment(text: string, index: number): boolean {
+  const before = text.slice(0, index);
+  const boundary = Math.max(before.lastIndexOf(';'), before.lastIndexOf('|'), before.lastIndexOf('&'));
+  return /\bcurl\b/.test(before.slice(boundary + 1));
+}
+
+function redactCurlBasicAuth(text: string): string {
+  let out = '';
+  let last = 0;
+  for (const match of text.matchAll(CURL_USER_RE)) {
+    const index = match.index ?? 0;
+    const start = index + match[0].length;
+    if (start < last || !insideCurlSegment(text, index)) continue;
+    const end = secretValueEnd(text, start, true);
+    if (end === start) continue;
+    out += `${text.slice(last, start)}${REDACTED}`;
+    last = end;
+  }
+  return out + text.slice(last);
+}
+
 function redactValuesAfter(text: string, prefixPattern: RegExp): string {
   let out = '';
   let last = 0;
@@ -86,6 +112,7 @@ function redactValuesAfter(text: string, prefixPattern: RegExp): string {
 export function redactSecretsInText(text: string): string {
   let out = text;
   for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
+  out = redactCurlBasicAuth(out);
   for (const shape of SECRET_SHAPES) out = out.replace(shape, (match, keep?: string) => (typeof keep === 'string' ? `${keep}${REDACTED}` : REDACTED));
   return out;
 }

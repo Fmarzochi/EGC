@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { toCursorAgentFileName } = require('../cursor-agent-names');
+const { assertSafeMcpConfig, isMcpConfigPath } = require('../mcp-config');
 const {
   createFlatFileOperations,
   createFlatRuleOperations,
@@ -187,6 +188,11 @@ function createJsonMergeOperation({ moduleId, repoRoot, sourceRelativePath, dest
     return null;
   }
 
+  const mergePayload = readJsonObject(sourcePath, sourceRelativePath);
+  if (isMcpConfigPath(destinationPath)) {
+    assertSafeMcpConfig(mergePayload, sourceRelativePath);
+  }
+
   return createManagedOperation({
     kind: 'merge-json',
     moduleId,
@@ -195,7 +201,7 @@ function createJsonMergeOperation({ moduleId, repoRoot, sourceRelativePath, dest
     strategy: 'merge-json',
     ownership: 'managed',
     scaffoldOnly: false,
-    mergePayload: readJsonObject(sourcePath, sourceRelativePath),
+    mergePayload,
   });
 }
 

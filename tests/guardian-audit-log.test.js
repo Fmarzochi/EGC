@@ -87,6 +87,8 @@ if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding
     ['tool --secret --other flag', 'tool --secret --other flag'],
     ['tool --token=-hunter2 TOKEN=-hunter2 x', 'tool --token=[REDACTED] TOKEN=[REDACTED] x'],
     ['curl -uadmin:hunter2 https://x', 'curl -uadmin:[REDACTED] https://x'],
+    ['curl -uadmin:pw1 -u root:pw2 -u=ops:pw3 https://x', 'curl -uadmin:[REDACTED] -u root:[REDACTED] -u=ops:[REDACTED] https://x'],
+    ['sudo -u root:wheel curl -u admin:pw https://x', 'sudo -u root:wheel curl -u admin:[REDACTED] https://x'],
   ];
   for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
 })) passed++; else failed++;

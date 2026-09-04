@@ -49,6 +49,19 @@ if (mode === 'command') {
     ? parsed
     : Array.isArray(parsed && parsed.commands) ? parsed.commands : [];
   process.stdout.write(JSON.stringify(segments.map(verdictForCommand)));
+} else if (mode === 'script') {
+  let verdict = { allowed: true };
+  payload.split(/\r?\n/).forEach((line, index) => {
+    if (verdict.allowed === false || !line.trim() || line.trim().startsWith('#')) return;
+    for (const segment of line.split(/\s*(?:&&|\|\||;|\|)\s*/)) {
+      const v = verdictForCommand(segment);
+      if (v.allowed === false && (v.trust_level === 'DANGEROUS' || /protected/.test(v.reason))) {
+        verdict = { ...v, line: index + 1 };
+        return;
+      }
+    }
+  });
+  process.stdout.write(JSON.stringify(verdict));
 } else if (mode === 'write') {
   if (PROTECTED_RE.test(payload)) {
     process.stdout.write(JSON.stringify({ allowed: false, reason: `Path '${payload}' is protected`, trust_level: 'BLOCKED' }));

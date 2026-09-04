@@ -16,7 +16,29 @@
 
 'use strict';
 
+const path = require('node:path');
 const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
+
+// Script content is judged with the validator the Bash hook uses, so a
+// script cannot be written with a command that hook would refuse and then
+// started through an advisory-only `bash script.sh`.
+const SHELL_EXTENSIONS = new Set(['.sh', '.bash', '.zsh', '.ksh', '.ps1', '.bat', '.cmd']);
+
+function scriptContentOf(input, filePath) {
+  const tool = input?.tool_input || {};
+  const pieces = [];
+  if (typeof tool.content === 'string') pieces.push(tool.content);
+  if (typeof tool.new_string === 'string') pieces.push(tool.new_string);
+  if (Array.isArray(tool.edits)) {
+    for (const edit of tool.edits) {
+      if (typeof edit?.new_string === 'string') pieces.push(edit.new_string);
+    }
+  }
+  const content = pieces.join('\n');
+  if (!content) return null;
+  const isScript = content.startsWith('#!') || SHELL_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+  return isScript ? content : null;
+}
 
 const MAX_STDIN = 1024 * 1024;
 const VALIDATE_TIMEOUT_MS = 4000;
@@ -61,7 +83,20 @@ function run(inputOrRaw) {
     };
   }
 
-  return { exitCode: 0 };
+  return blockedScriptWrite(cli, input, filePath) || { exitCode: 0 };
+}
+
+function blockedScriptWrite(cli, input, filePath) {
+  const script = scriptContentOf(input, filePath);
+  if (!script) return null;
+  const verdict = callGuardian(cli, ['script'], script, VALIDATE_TIMEOUT_MS);
+  if (!verdict || verdict.allowed !== false) return null;
+  return {
+    exitCode: 2,
+    stderr:
+      `EGC Guardian BLOCKED this write: line ${verdict.line || '?'} of the script runs a denied command ` +
+      `(${verdict.reason || 'denied by policy'}). Writing a script that runs a denied command is not permitted.`,
+  };
 }
 
 module.exports = { run };

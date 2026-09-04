@@ -63,7 +63,7 @@ function writeLegacySourceFixture(root) {
   writeFile(root, path.join('.cursor', 'commands', 'plan.md'), '# Plan\n');
   writeFile(root, path.join('.cursor', 'hooks', 'hook.js'), 'process.exit(0);\n');
   writeJson(root, path.join('.cursor', 'hooks.json'), { version: 1, hooks: {} });
-  writeJson(root, '.mcp.json', { mcpServers: { github: { command: 'github-mcp' } } });
+  writeJson(root, '.mcp.json', { mcpServers: { github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] } } });
 
   writeFile(root, path.join('commands', 'plan.md'), '# Plan\n');
   writeFile(root, path.join('agents', 'architect.md'), '# Architect\n');
@@ -344,7 +344,7 @@ function runTests() {
       assert.ok(operationFor(plan, path.join('.cursor', 'hooks.json')));
       const mergeOperation = plan.operations.find(operation => operation.kind === 'merge-json');
       assert.ok(mergeOperation, 'Should merge shared MCP config into Cursor');
-      assert.deepStrictEqual(mergeOperation.mergePayload.mcpServers.github.command, 'github-mcp');
+      assert.deepStrictEqual(mergeOperation.mergePayload.mcpServers.github.command, 'npx');
       assert.ok(plan.warnings.some(warning => warning.includes("No Cursor rules for 'ruby'")));
       assert.ok(plan.warnings.some(warning => warning.includes("Invalid language name 'bad/name'")));
       assert.strictEqual(plan.statePreview.target.id, 'cursor-project');

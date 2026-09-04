@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const { writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
-const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
+const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers } = require('../mcp-config');
 const {
   HOOK_OPERATION_KIND,
   applyManagedHookOperation,
@@ -97,11 +97,6 @@ function findHooksSourcePath(plan, hooksDestinationPath) {
   return operation ? operation.sourcePath : null;
 }
 
-function isMcpConfigPath(filePath) {
-  const basename = path.basename(String(filePath || ''));
-  return basename === '.mcp.json' || basename === 'mcp.json';
-}
-
 function buildResolvedClaudeHooks(plan) {
   if (plan.adapter?.target !== 'egc') {
     return null;
@@ -133,6 +128,9 @@ function applyMergeJsonOperation(operation, disabledServers) {
   const payload = cloneJsonValue(operation.mergePayload);
   if (payload === undefined) {
     throw new Error(`Missing merge payload for ${operation.destinationPath}`);
+  }
+  if (isMcpConfigPath(operation.destinationPath)) {
+    assertSafeMcpConfig(payload, `merge into ${operation.destinationPath}`);
   }
 
   const filteredPayload = (
@@ -251,8 +249,14 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
       applyMergeYamlReadListOperation(operation);
     } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
       applyMergeMarkdownIndexOperation(operation);
-    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath) && disabledServers.length > 0) {
-      applyMcpCopyFileOperation(operation, disabledServers);
+    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
+      // An MCP config copied whole answers to the same allowlist as a merge.
+      assertSafeMcpConfig(readJsonObject(operation.sourcePath, operation.sourcePath), operation.sourcePath);
+      if (disabledServers.length > 0) {
+        applyMcpCopyFileOperation(operation, disabledServers);
+      } else {
+        fs.copyFileSync(operation.sourcePath, operation.destinationPath);
+      }
     } else {
       fs.copyFileSync(operation.sourcePath, operation.destinationPath);
     }

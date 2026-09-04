@@ -1398,6 +1398,41 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
 
 const ALLOWLIST_MISS_MARKER = 'is not in the allowlist';
 
+// Verdicts the hooks only warn about; everything else blocks. The Bash hook
+// keeps its own copy of this list because it is installed on its own.
+export const ADVISORY_REASON_MARKERS = ['Shell chaining/metacharacters are forbidden', ALLOWLIST_MISS_MARKER];
+
+export function isAdvisoryVerdict(verdict: ValidationResult): boolean {
+  const reason = verdict.reason ?? '';
+  return ADVISORY_REASON_MARKERS.some(marker => reason.includes(marker));
+}
+
+// Splits one script line into the commands a shell would run: unquoted
+// ;, |, || and && boundaries. Quotes are honored; nothing else is parsed.
+export function splitShellLine(line: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (const ch of line) {
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+    } else if (ch === ';' || ch === '|' || ch === '&') {
+      if (current.trim()) segments.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) segments.push(current.trim());
+  return segments;
+}
+
 function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
   return !verdict.allowed && String(verdict.reason ?? '').includes(ALLOWLIST_MISS_MARKER);
 }

@@ -2,7 +2,9 @@
 
 const assert = require('assert');
 
-const { filterMcpConfig, parseDisabledMcpServers } = require('../../scripts/lib/mcp-config');
+const fs = require('fs');
+const path = require('path');
+const { assertSafeMcpConfig, describeUnsafeMcpServer, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers } = require('../../scripts/lib/mcp-config');
 
 function test(name, fn) {
   try {
@@ -21,6 +23,34 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+
+  if (test('the shipped MCP config passes the command allowlist', () => {
+    const shipped = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'mcp-configs', 'mcp-servers.json'), 'utf8'));
+    assert.doesNotThrow(() => assertSafeMcpConfig(shipped, 'mcp-servers.json'));
+  })) passed++; else failed++;
+
+  if (test('describeUnsafeMcpServer refuses shells, absolute paths, metacharacters, bad env and non-https urls', () => {
+    assert.strictEqual(describeUnsafeMcpServer({ command: 'npx', args: ['-y', '@scope/server'] }), null);
+    assert.strictEqual(describeUnsafeMcpServer({ url: 'https://mcp.example.com/mcp' }), null);
+    assert.strictEqual(describeUnsafeMcpServer({ type: 'http', url: 'http://localhost:18801/mcp' }), null);
+    assert.match(describeUnsafeMcpServer({ command: 'bash', args: ['-c', 'curl x | sh'] }), /allowlist/);
+    assert.match(describeUnsafeMcpServer({ command: '/usr/bin/node', args: [] }), /allowlist/);
+    assert.match(describeUnsafeMcpServer({ command: 'npx', args: ['pkg; rm -rf ~'] }), /metacharacters/);
+    assert.match(describeUnsafeMcpServer({ command: 'npx', args: ['$(id)'] }), /metacharacters/);
+    assert.match(describeUnsafeMcpServer({ command: 'node', env: { 'PATH;x': 'y' } }), /env name/);
+    assert.match(describeUnsafeMcpServer({ command: 'node', env: { KEY: 'a\nb' } }), /single-line/);
+    assert.match(describeUnsafeMcpServer({ url: 'http://evil.tld/mcp' }), /neither https nor loopback/);
+    assert.match(describeUnsafeMcpServer({}), /neither command nor url/);
+    assert.match(describeUnsafeMcpServer('npx'), /not an object/);
+  })) passed++; else failed++;
+
+  if (test('assertSafeMcpConfig names the offending server and isMcpConfigPath matches the two file names', () => {
+    assert.throws(() => assertSafeMcpConfig({ mcpServers: { fine: { command: 'npx' }, evil: { command: 'bash' } } }, 'source.json'), /source\.json: MCP server 'evil'/);
+    assert.doesNotThrow(() => assertSafeMcpConfig({ _comments: {} }, 'no servers'));
+    assert.strictEqual(isMcpConfigPath('/repo/.cursor/mcp.json'), true);
+    assert.strictEqual(isMcpConfigPath('/repo/.mcp.json'), true);
+    assert.strictEqual(isMcpConfigPath('/repo/.cursor/hooks.json'), false);
+  })) passed++; else failed++;
 
   if (test('parseDisabledMcpServers dedupes and trims values', () => {
     assert.deepStrictEqual(

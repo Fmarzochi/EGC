@@ -23,8 +23,8 @@ function test(name, fn) {
   }
 }
 
-function runHook(filePath, env = {}) {
-  const rawInput = JSON.stringify({ tool_name: 'Write', tool_input: { file_path: filePath, content: 'x' } });
+function runHook(filePath, env = {}, toolInput = null) {
+  const rawInput = JSON.stringify({ tool_name: 'Write', tool_input: toolInput || { file_path: filePath, content: 'x' } });
   const result = spawnSync('node', [runner, 'pre:write-guardian-validate', 'scripts/hooks/pre-write-guardian-validate.js', 'minimal,standard,strict'], {
     input: rawInput,
     encoding: 'utf8',
@@ -102,6 +102,27 @@ function runTests() {
     } finally {
       try { fs.rmSync(brokenCli, { force: true }); } catch { /* best-effort cleanup */ }
     }
+  })) passed++; else failed++;
+
+  if (test('blocks writing a shell script whose line runs a denied command', () => {
+    const result = runHook('/tmp/egc-script.sh', {}, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\nset -e\necho start\nrm -rf /tmp/egc-victim\n' });
+    assert.strictEqual(result.code, 2, result.stderr);
+    assert.ok(result.stderr.includes('line 4'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks an edit that inserts a denied command into a script', () => {
+    const result = runHook('/tmp/deploy.sh', {}, { file_path: '/tmp/deploy.sh', old_string: 'echo ok', new_string: 'echo ok && mv /etc/hosts /tmp/hosts' });
+    assert.strictEqual(result.code, 2, result.stderr);
+  })) passed++; else failed++;
+
+  if (test('allows a script whose lines are benign or merely outside the allowlist', () => {
+    const result = runHook('/tmp/build.sh', {}, { file_path: '/tmp/build.sh', content: '#!/usr/bin/env bash\ncargo build --release\nnpm test\necho done\n' });
+    assert.strictEqual(result.code, 0, result.stderr);
+  })) passed++; else failed++;
+
+  if (test('does not treat non-script content as commands', () => {
+    const result = runHook('/tmp/notes.md', {}, { file_path: '/tmp/notes.md', content: 'rm -rf / is a dangerous command, never run it\n' });
+    assert.strictEqual(result.code, 0, result.stderr);
   })) passed++; else failed++;
 
   if (test('passes through input without a file path', () => {
