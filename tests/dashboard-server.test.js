@@ -18,6 +18,13 @@ const path = require('path');
 const SANDBOX_HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-home-')));
 process.env.HOME = SANDBOX_HOME;
 process.env.USERPROFILE = SANDBOX_HOME;
+process.on('exit', () => {
+  try {
+    fs.rmSync(SANDBOX_HOME, { recursive: true, force: true });
+  } catch {
+    // best effort: a leftover scratch directory is not a test failure
+  }
+});
 
 const { createAccumulator } = require('../dashboard/accumulator');
 const { TOKEN_HEADER, resolveTokenPath } = require('../dashboard/ops');
@@ -185,7 +192,11 @@ function runWithDashboardServer(testFn, done) {
   }
 
   const testServer = http.createServer(serverHandler);
-  for (const [event, listener] of serverListeners) testServer.on(event, listener);
+  // Only the WebSocket upgrade is replayed: the server's own 'error'
+  // listener exits the process, which would hide a failing test.
+  for (const [event, listener] of serverListeners) {
+    if (event === 'upgrade') testServer.on(event, listener);
+  }
   let finished = false;
 
   const cleanup = (err) => {
@@ -589,4 +600,23 @@ test('WebSocket upgrade is refused without the panel origin and accepted with it
   assert.equal(none.opened, false, 'an upgrade without an origin must not join either');
   const panel = await connectWebSocket(port, `http://localhost:${PANEL_PORT}`);
   assert.equal(panel.opened, true, 'the panel itself must connect');
+}));
+
+test('postEvent reports completion once even when a timeout also raises an error', () => new Promise((resolve, reject) => {
+  const { postEvent } = require('../dashboard/telemetry-client');
+  const net = require('net');
+  const silent = net.createServer(() => {});
+  silent.listen(0, '127.0.0.1', () => {
+    let calls = 0;
+    postEvent({ ide: 'claude', event: 'pre_tool' }, { port: silent.address().port, timeout: 50, onDone: () => { calls += 1; } });
+    setTimeout(() => {
+      silent.close();
+      try {
+        assert.equal(calls, 1);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    }, 400);
+  });
 }));

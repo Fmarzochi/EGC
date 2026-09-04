@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const { readDashboardToken } = require('../lib/dashboard-token');
 const _egcRaw = process.env.EGC_PORT;
 const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : Number.NaN;
 const DASHBOARD_PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;
@@ -59,18 +60,6 @@ function shouldPromptSave(input, nowMs) {
     // Marker is best-effort; still prompt.
   }
   return true;
-}
-
-// The dashboard keeps a private token next to its state (dashboard/ops.js);
-// presenting it is what separates a local sender from a web page.
-function readDashboardToken() {
-  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-  try {
-    const raw = fs.readFileSync(path.join(home, '.egc', 'dashboard-token'), 'utf8').trim();
-    return /^[0-9a-f]{32,}$/i.test(raw) ? raw : null;
-  } catch {
-    return null;
-  }
 }
 
 function post(ev, done) {

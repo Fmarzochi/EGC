@@ -6,8 +6,7 @@
 
 const fs = require('node:fs');
 const http = require('node:http');
-const os = require('node:os');
-const path = require('node:path');
+const { readDashboardToken } = require('./dashboard-token');
 
 const DEFAULT_DASHBOARD_PORT = 7890;
 const DASHBOARD_TIMEOUT_MS = 200;
@@ -49,18 +48,6 @@ function resolveDashboardPort() {
   return Number.isInteger(port) && port >= 1 && port <= 65535
     ? port
     : DEFAULT_DASHBOARD_PORT;
-}
-
-// The dashboard keeps a private token next to its state (dashboard/ops.js);
-// presenting it is what separates a local sender from a web page.
-function readDashboardToken() {
-  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-  try {
-    const raw = fs.readFileSync(path.join(home, '.egc', 'dashboard-token'), 'utf8').trim();
-    return /^[0-9a-f]{32,}$/i.test(raw) ? raw : null;
-  } catch {
-    return null;
-  }
 }
 
 function postSessionStart(host, sessionId) {
