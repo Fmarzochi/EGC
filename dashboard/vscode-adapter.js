@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const { readFileDelta } = require('./read-file-delta');
 const { PORT } = require('./port');
+const { postEvent } = require('./telemetry-client');
 
 const LOG_PATHS = [
   path.join(os.homedir(), '.vscode', 'logs'),
@@ -14,16 +14,7 @@ const LOG_PATHS = [
 ];
 
 function post(ev) {
-  const body = JSON.stringify(ev);
-  const req = http.request(
-    { hostname:'127.0.0.1', port:PORT, path:'/event', method:'POST',
-      headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)},
-      timeout:300 },
-    ()=>{}
-  );
-  req.on('error', ()=>{});
-  req.on('timeout', ()=>req.destroy());
-  req.end(body);
+  postEvent(ev, { port: PORT });
 }
 
 function findCopilotLog(dir) {

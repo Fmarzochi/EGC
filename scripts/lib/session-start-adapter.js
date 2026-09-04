@@ -6,6 +6,16 @@
 
 const fs = require('node:fs');
 const http = require('node:http');
+// The token reader ships with the hooks runtime; an install recorded before
+// it existed has no copy until egc repair refreshes it, and then the event
+// goes out without a token instead of the hook failing to load.
+let readDashboardToken = () => null;
+try {
+  const loaded = require('./dashboard-token');
+  if (typeof loaded.readDashboardToken === 'function') readDashboardToken = loaded.readDashboardToken;
+} catch {
+  // an older install without the helper: no token, no crash
+}
 
 const DEFAULT_DASHBOARD_PORT = 7890;
 const DASHBOARD_TIMEOUT_MS = 200;
@@ -51,16 +61,16 @@ function resolveDashboardPort() {
 
 function postSessionStart(host, sessionId) {
   const body = JSON.stringify({ ide: host, event: 'session_start', session_id: sessionId });
+  const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+  const token = readDashboardToken();
+  if (token) headers['x-egc-token'] = token;
   const request = http.request(
     {
       hostname: '127.0.0.1',
       port: resolveDashboardPort(),
       path: '/event',
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
+      headers,
       timeout: DASHBOARD_TIMEOUT_MS,
     },
     response => response.resume()

@@ -3,10 +3,10 @@
 
 const fs   = require('fs');
 const path = require('path');
-const http = require('http');
 const os   = require('os');
 const { readFileDelta } = require('./read-file-delta');
 const { PORT } = require('./port');
+const { postEvent } = require('./telemetry-client');
 
 const WATCH_PATHS = [
   path.join(os.homedir(), '.aider.chat.history.md'),
@@ -17,16 +17,7 @@ const WATCH_PATHS = [
 let lastSizes = {};
 
 function post(ev) {
-  const body = JSON.stringify(ev);
-  const req = http.request(
-    { hostname:'127.0.0.1', port:PORT, path:'/event', method:'POST',
-      headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)},
-      timeout:300 },
-    ()=>{}
-  );
-  req.on('error', ()=>{});
-  req.on('timeout', ()=>req.destroy());
-  req.end(body);
+  postEvent(ev, { port: PORT });
 }
 
 function watchFile(filePath) {

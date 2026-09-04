@@ -10,8 +10,30 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+
+// Point HOME at a scratch directory before the server resolves it, so the
+// dashboard token it mints never touches the real ~/.egc.
+const SANDBOX_HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-dashboard-home-')));
+process.env.HOME = SANDBOX_HOME;
+process.env.USERPROFILE = SANDBOX_HOME;
+process.on('exit', () => {
+  try {
+    fs.rmSync(SANDBOX_HOME, { recursive: true, force: true });
+  } catch {
+    // best effort: a leftover scratch directory is not a test failure
+  }
+});
+
 const { createAccumulator } = require('../dashboard/accumulator');
+const { TOKEN_HEADER, resolveTokenPath } = require('../dashboard/ops');
+const { PORT: PANEL_PORT } = require('../dashboard/port');
+const WebSocket = require(require.resolve('ws', { paths: [path.join(__dirname, '..', 'dashboard')] }));
+
+function dashboardToken() {
+  return fs.readFileSync(resolveTokenPath(), 'utf8').trim();
+}
 
 // ---------------------------------------------------------------------------
 // Tests — every scenario that should be caught by the guard clause
@@ -122,9 +144,12 @@ function runWithDashboardServer(testFn, done) {
   const activeIntervals = [];
   const watchedFiles = [];
 
+  // Listeners the server attaches to its http.Server (the WebSocket upgrade
+  // among them) are replayed onto the real test server below.
+  const serverListeners = [];
   http.createServer = (handler) => {
     serverHandler = handler;
-    return { listen: () => {}, on: () => {} };
+    return { listen: () => {}, on: (event, listener) => { serverListeners.push([event, listener]); } };
   };
 
   global.setInterval = (cb, ms) => {
@@ -167,6 +192,11 @@ function runWithDashboardServer(testFn, done) {
   }
 
   const testServer = http.createServer(serverHandler);
+  // Only the WebSocket upgrade is replayed: the server's own 'error'
+  // listener exits the process, which would hide a failing test.
+  for (const [event, listener] of serverListeners) {
+    if (event === 'upgrade') testServer.on(event, listener);
+  }
   let finished = false;
 
   const cleanup = (err) => {
@@ -208,7 +238,8 @@ test('POST /event rejects payloads larger than 256 KB with 413 status code', (t,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(largePayload)
+        'Content-Length': Buffer.byteLength(largePayload),
+        [TOKEN_HEADER]: dashboardToken()
       }
     };
 
@@ -252,7 +283,8 @@ test('POST /event rejects malformed JSON with 400 status code', (t, done) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(malformedPayload)
+        'Content-Length': Buffer.byteLength(malformedPayload),
+        [TOKEN_HEADER]: dashboardToken()
       }
     };
 
@@ -293,7 +325,8 @@ test('POST /event still accepts valid JSON with 200 status code', (t, done) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(validPayload)
+        'Content-Length': Buffer.byteLength(validPayload),
+        [TOKEN_HEADER]: dashboardToken()
       }
     };
 
@@ -341,7 +374,8 @@ test('POST /event handles multi-byte UTF-8 character split across TCP chunks', (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': buf.length
+        'Content-Length': buf.length,
+        [TOKEN_HEADER]: dashboardToken()
       }
     };
 
@@ -465,3 +499,124 @@ test('debounce: burst of misses triggers at most one rebuild per interval (EGC#9
     })();
   }, done);
 });
+
+// ---------------------------------------------------------------------------
+// POST /event authentication, ide allowlist, CORS pin, WebSocket origin
+// (security audit 2026-08-17, F1/F4/F9/F10)
+// ---------------------------------------------------------------------------
+
+function requestDashboard(port, { body, headers = {}, method = 'POST', path: reqPath = '/event' } = {}) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? '' : body;
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port,
+      path: reqPath,
+      method,
+      headers: { 'Content-Length': Buffer.byteLength(payload), ...headers },
+    }, res => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+    });
+    req.on('error', reject);
+    req.end(payload);
+  });
+}
+
+function withDashboardServer(fn) {
+  return new Promise((resolve, reject) => {
+    runWithDashboardServer((port, cleanup) => {
+      fn(port).then(() => cleanup(), err => cleanup(err));
+    }, err => (err ? reject(err) : resolve()));
+  });
+}
+
+function eventHeaders(extra = {}) {
+  return { 'Content-Type': 'application/json', [TOKEN_HEADER]: dashboardToken(), ...extra };
+}
+
+const EVENT = JSON.stringify({ ide: 'claude', event: 'pre_tool', tool: 'Bash', detail: 'git status' });
+
+test('POST /event without the dashboard token is refused with 401', () => withDashboardServer(async port => {
+  const res = await requestDashboard(port, { body: EVENT, headers: { 'Content-Type': 'application/json' } });
+  assert.equal(res.status, 401);
+  assert.match(JSON.parse(res.body).error, /token/i);
+}));
+
+test('POST /event with a wrong token is refused with 401', () => withDashboardServer(async port => {
+  const res = await requestDashboard(port, { body: EVENT, headers: eventHeaders({ [TOKEN_HEADER]: 'f'.repeat(64) }) });
+  assert.equal(res.status, 401);
+}));
+
+test('POST /event with a non-JSON Content-Type is refused with 415', () => withDashboardServer(async port => {
+  const res = await requestDashboard(port, { body: EVENT, headers: eventHeaders({ 'Content-Type': 'text/plain' }) });
+  assert.equal(res.status, 415);
+}));
+
+test('POST /event carrying a browser Origin other than the panel is refused with 403', () => withDashboardServer(async port => {
+  const res = await requestDashboard(port, { body: EVENT, headers: eventHeaders({ Origin: 'http://localhost:9999' }) });
+  assert.equal(res.status, 403);
+}));
+
+test('POST /event with the token, JSON and the panel origin (or none) is accepted', () => withDashboardServer(async port => {
+  const plain = await requestDashboard(port, { body: EVENT, headers: eventHeaders() });
+  assert.equal(plain.status, 200);
+  assert.equal(JSON.parse(plain.body).ok, true);
+  const panel = await requestDashboard(port, { body: EVENT, headers: eventHeaders({ Origin: `http://localhost:${PANEL_PORT}` }) });
+  assert.equal(panel.status, 200);
+}));
+
+test('POST /event refuses an ide the dashboard does not know, including markup', () => withDashboardServer(async port => {
+  for (const ide of ['<img src=x onerror=alert(1)>', 'not-a-real-tool', 'CLAUDE', '']) {
+    const res = await requestDashboard(port, { body: JSON.stringify({ ide, event: 'pre_tool' }), headers: eventHeaders() });
+    assert.equal(res.status, 400, `ide ${JSON.stringify(ide)} must be refused`);
+    assert.equal(JSON.parse(res.body).error, 'Unknown ide');
+  }
+}));
+
+test('CORS is pinned to the panel origin instead of reflecting any localhost origin', () => withDashboardServer(async port => {
+  const foreign = await requestDashboard(port, { method: 'GET', path: '/ping', headers: { Origin: 'http://localhost:9999' } });
+  assert.equal(foreign.headers['access-control-allow-origin'], `http://localhost:${PANEL_PORT}`);
+  const panel = await requestDashboard(port, { method: 'GET', path: '/ping', headers: { Origin: `http://127.0.0.1:${PANEL_PORT}` } });
+  assert.equal(panel.headers['access-control-allow-origin'], `http://127.0.0.1:${PANEL_PORT}`);
+}));
+
+function connectWebSocket(port, origin) {
+  return new Promise(resolve => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin });
+    ws.on('open', () => { ws.close(); resolve({ opened: true }); });
+    ws.on('unexpected-response', (req, res) => { req.destroy(); resolve({ opened: false, status: res.statusCode }); });
+    ws.on('error', error => resolve({ opened: false, error: error.message }));
+  });
+}
+
+test('WebSocket upgrade is refused without the panel origin and accepted with it', () => withDashboardServer(async port => {
+  const foreign = await connectWebSocket(port, 'http://localhost:9999');
+  assert.equal(foreign.opened, false, 'a foreign origin must not join the broadcast');
+  assert.equal(foreign.status, 401);
+  const none = await connectWebSocket(port, undefined);
+  assert.equal(none.opened, false, 'an upgrade without an origin must not join either');
+  const panel = await connectWebSocket(port, `http://localhost:${PANEL_PORT}`);
+  assert.equal(panel.opened, true, 'the panel itself must connect');
+}));
+
+test('postEvent reports completion once even when a timeout also raises an error', () => new Promise((resolve, reject) => {
+  const { postEvent } = require('../dashboard/telemetry-client');
+  const net = require('net');
+  const silent = net.createServer(() => {});
+  silent.listen(0, '127.0.0.1', () => {
+    let calls = 0;
+    postEvent({ ide: 'claude', event: 'pre_tool' }, { port: silent.address().port, timeout: 50, onDone: () => { calls += 1; } });
+    setTimeout(() => {
+      silent.close();
+      try {
+        assert.equal(calls, 1);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    }, 400);
+  });
+}));
