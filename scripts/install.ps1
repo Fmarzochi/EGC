@@ -38,7 +38,7 @@ function Install-Deps {
         npm ci --silent
         if ($LASTEXITCODE -ne 0) {
             $rc = $LASTEXITCODE
-            Write-Host "Error: npm ci failed in $here (exit $rc). Re-run with network access, or fix the directory ownership and try again." -ForegroundColor Red
+            [Console]::Error.WriteLine("Error: npm ci failed in $here (exit $rc). Re-run with network access, or fix the directory ownership and try again.")
             exit $rc
         }
         return
@@ -54,7 +54,7 @@ function Install-Deps {
         Write-Output "  dependencies provided by the package root ($here is read-only)"
         return
     }
-    Write-Host "Error: $here is not writable and its dependencies are not available from the package root. Re-run 'npm install -g @egchq/egc' as the user that owns the npm prefix, or fix the prefix ownership (see docs/installation.md, Permissions)." -ForegroundColor Red
+    [Console]::Error.WriteLine("Error: $here is not writable and its dependencies are not available from the package root. Re-run 'npm install -g @egchq/egc' as the user that owns the npm prefix, or fix the prefix ownership (see docs/installation.md, Permissions).")
     exit 1
 }
 
