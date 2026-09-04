@@ -3,12 +3,15 @@ Shared filesystem implementation of the Cognitive Memory Provider: notes live
 under one root, and every name a caller supplies (category, title, session
 id) is bound to that root before anything is read or written.
 """
+import json
 from datetime import datetime
+
 from pathlib import Path
 from typing import List, Optional
 
 from llm.memory.base import CognitiveMemoryProvider, MemoryEntry
-from llm.memory.paths import read_text_if_regular, resolve_inside, safe_segment, safe_title, write_text_atomic
+from llm.memory.paths import append_text_private, read_text_if_regular, resolve_inside, safe_segment, safe_title, write_text_atomic
+
 
 
 class FilesystemMemoryProvider(CognitiveMemoryProvider):
@@ -38,11 +41,14 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             if target_dir is None or file_path is None:
                 return False
             target_dir.mkdir(exist_ok=True)
-            # Frontmatter (Standard YAML for Obsidian compatibility)
-            lines = ["---", f"title: \"{entry.title}\"", f"category: {entry.category}",
-                     f"tags: [egc, {', '.join(entry.tags)}]", f"timestamp: {entry.timestamp.isoformat()}"]
-            lines.extend(f"{k}: \"{v}\"" for k, v in entry.metadata.items())
+            # Frontmatter (Standard YAML for Obsidian compatibility); every
+            # value is a JSON scalar or list, which YAML reads as-is, so
+            # quotes and newlines in a title or a metadata value stay data.
+            lines = ["---", f"title: {json.dumps(str(entry.title))}", f"category: {json.dumps(str(entry.category))}",
+                     f"tags: {json.dumps(['egc', *map(str, entry.tags)])}", f"timestamp: {entry.timestamp.isoformat()}"]
+            lines.extend(f"{json.dumps(str(k))}: {json.dumps(str(v))}" for k, v in entry.metadata.items())
             lines.append("---")
+
             write_text_atomic(file_path, "\n".join(lines) + "\n\n" + entry.content)
             return True
         except Exception:
@@ -55,8 +61,8 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
             if journal_path is None or not journal_path.parent.is_dir():
                 return False
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            write_text_atomic(journal_path, read_text_if_regular(journal_path) + f"\n### {timestamp}\n\n{content}\n")
-            return True
+            return append_text_private(journal_path, f"\n### {timestamp}\n\n{content}\n")
+
         except Exception:
             return False
 
@@ -65,9 +71,14 @@ class FilesystemMemoryProvider(CognitiveMemoryProvider):
         return []
 
     def get_session_summary(self, session_id: str) -> Optional[str]:
-        segment = safe_segment(session_id)
-        summary_path = resolve_inside(self.root, "Sessions", f"session_{segment}.md") if segment else None
-        if summary_path is not None and summary_path.exists():
-            with open(summary_path, "r", encoding="utf-8") as f:
-                return f.read()
+        # The same naming as the note the session end writes ("Session <id>
+        # Summary"), with the session start note as the fallback.
+        for title in (f"Session {session_id} Summary", f"Session {session_id}"):
+            stem = safe_title(title)
+            summary_path = resolve_inside(self.root, "Sessions", f"{stem}.md") if stem else None
+            if summary_path is not None:
+                text = read_text_if_regular(summary_path)
+                if text:
+                    return text
         return None
+

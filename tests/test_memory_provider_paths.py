@@ -85,13 +85,31 @@ class MemoryProviderPathTests(unittest.TestCase):
             self.assertIn("body", (provider.root / "Governance" / "Aliased.md").read_text(encoding="utf-8"))
             self.assertEqual([p for p in outside.iterdir()], [victim])
 
+    def test_frontmatter_journal_and_summary(self):
+        for provider in self.providers():
+            tricky = MemoryEntry(title='Quote " and\nnewline', content="body", category="Governance",
+                                 tags=["a, b"], metadata={"k": 'v"\n---\nevil: yes'})
+            self.assertTrue(provider.write_note(tricky))
+            note = next(provider.root.joinpath("Governance").glob("Quote_*.md")).read_text(encoding="utf-8")
+            self.assertIn('title: "Quote \\" and\\nnewline"', note)
+            self.assertNotIn("\nevil:", note)
+            self.assertTrue(provider.append_journal("Governance", "first"))
+            self.assertTrue(provider.append_journal("Governance", "second"))
+            journal = (provider.root / "Governance" / "Journal.md").read_text(encoding="utf-8")
+            self.assertIn("first", journal)
+            self.assertIn("second", journal)
+            self.assertIsNone(provider.get_session_summary("s1"))
+            self.assertTrue(provider.write_note(self.entry("Session s1 Summary", "Sessions")))
+            self.assertIn("body", provider.get_session_summary("s1") or "")
+            self.assertEqual([p.name for p in provider.root.joinpath("Governance").iterdir() if p.name.endswith(".tmp")], [])
+
     def test_plain_names_work(self):
         for provider in self.providers():
             self.assertTrue(provider.write_note(self.entry("Decision one", "Governance")))
             self.assertTrue((provider.root / "Governance" / "Decision_one.md").exists())
             self.assertTrue(provider.append_journal("Sessions", "note"))
             self.assertTrue((provider.root / "Sessions" / "Journal.md").exists())
-            (provider.root / "Sessions" / "session_abc-1.md").write_text("summary", encoding="utf-8")
+            (provider.root / "Sessions" / "Session_abc-1_Summary.md").write_text("summary", encoding="utf-8")
             self.assertEqual(provider.get_session_summary("abc-1"), "summary")
             self.assertIsNone(provider.get_session_summary("missing"))
 
