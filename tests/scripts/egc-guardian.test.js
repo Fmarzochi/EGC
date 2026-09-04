@@ -475,6 +475,16 @@ async function runTests() {
     assert.ok(!String(result.reason || '').includes('inline code execution'), JSON.stringify(result));
   });
   run('pwsh -c is still hard-blocking', () => assertHardBlocking(`pwsh -c "Get-Process"`));
+  run('bash -xC script.sh (uppercase C is noclobber, not eval)', () => {
+    const result = validateCommand('bash -xC script.sh');
+    assert.ok(!String(result.reason || '').includes('inline code execution'), JSON.stringify(result));
+  });
+  run('perl -nE (uppercase E is eval) is hard-blocking', () => assertHardBlocking(`perl -nE "say 1" file.txt`));
+  run('pwsh7 -NonInteractive resolves as PowerShell and is not a cluster', () => {
+    const result = validateCommand('pwsh7 -NonInteractive -File build.ps1');
+    assert.ok(!String(result.reason || '').includes('inline code execution'), JSON.stringify(result));
+  });
+  run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
 
   // ── Summary ───────────────────────────────────────────────────────────────
 

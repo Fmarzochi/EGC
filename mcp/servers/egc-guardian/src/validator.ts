@@ -34,7 +34,11 @@ export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir
 const NO_SHORT_FLAG_CLUSTERS = new Set(['pwsh', 'powershell', 'powershell.exe']);
 const SHORT_FLAG_CLUSTER = /^-[A-Za-z]+$/;
 
-function matchesEvalFlag(arg: string, flags: string[], clusters = true): boolean {
+// `arg` is the lowercased token the exact and glued comparisons always used;
+// `casedArg` keeps the letter case, because inside a cluster -c and -C are
+// different options (bash -xC is noclobber, not eval), so the cluster check
+// must not inherit the lowercasing. Pass null to skip the cluster check.
+function matchesEvalFlag(arg: string, flags: string[], casedArg: string | null): boolean {
   for (const flag of flags) {
     if (arg === flag) return true;
     if (arg.startsWith(flag + '=') || arg.startsWith(flag + ':')) return true;
@@ -44,7 +48,7 @@ function matchesEvalFlag(arg: string, flags: string[], clusters = true): boolean
     // letter anywhere in a pure letter cluster (-xc, -lc, -Bc, -pe, -ne)
     // still switches on eval. Matching only the exact token or the glued
     // value form let `bash -xc "..."` through with no warning at all.
-    if (clusters && SHORT_FLAG_CLUSTER.test(arg) && arg.includes(flag[1])) return true;
+    if (casedArg !== null && SHORT_FLAG_CLUSTER.test(casedArg) && casedArg.includes(flag[1])) return true;
   }
   return false;
 }
@@ -1344,10 +1348,13 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   // Args are bareToken()'d before matching so a quoted/glued flag (e.g.
   // "--eval=code" with the whole flag=value inside one pair of quotes)
   // can't dodge the exact/prefix comparisons in matchesEvalFlag.
-  const evalFlagsForBase = INLINE_EVAL_COMMANDS[baseCommand]
-    ?? INLINE_EVAL_COMMANDS[bareInterpreterName(baseCommand)];
-  const clusters = !NO_SHORT_FLAG_CLUSTERS.has(baseCommand);
-  if (evalFlagsForBase && args.map(bareToken).some(a => matchesEvalFlag(a, evalFlagsForBase, clusters))) {
+  // The name the eval table answers to (bare, or version-stripped) is also
+  // the name the cluster exclusion is keyed on, so `pwsh7 -NonInteractive`
+  // is judged as PowerShell just like `pwsh`.
+  const evalName = INLINE_EVAL_COMMANDS[baseCommand] ? baseCommand : bareInterpreterName(baseCommand);
+  const evalFlagsForBase = INLINE_EVAL_COMMANDS[evalName];
+  const clusters = !NO_SHORT_FLAG_CLUSTERS.has(evalName);
+  if (evalFlagsForBase && args.some(a => matchesEvalFlag(bareToken(a), evalFlagsForBase, clusters ? stripQuotes(a) : null))) {
     return {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
