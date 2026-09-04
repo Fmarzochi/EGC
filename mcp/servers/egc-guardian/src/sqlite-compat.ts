@@ -7,6 +7,7 @@ import type { Database } from 'sqlite';
 
 interface CompatModule {
   openCompatDatabase(filename: string, serverName: string): Promise<Database>;
+  selectedEngine(): 'native' | 'wasm';
 }
 
 const load = createRequire(import.meta.url);
@@ -14,3 +15,5 @@ const compat = load('../../../../scripts/lib/state-store/sqlite-compat.js') as C
 
 export const openCompatDatabase = (filename: string, serverName: string): Promise<Database> =>
   compat.openCompatDatabase(filename, serverName);
+
+export const selectedEngine = (): 'native' | 'wasm' => compat.selectedEngine();

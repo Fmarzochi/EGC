@@ -67,6 +67,32 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('exec keeps trigger bodies intact and stops at the first failing statement', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const db = await openCompatDatabase(':memory:', 'test');
+    await db.exec(`
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+      CREATE TABLE audit (item_id INTEGER, note TEXT);
+      CREATE TRIGGER IF NOT EXISTS items_after_insert AFTER INSERT ON items BEGIN
+        INSERT INTO audit(item_id, note) VALUES (new.id, 'inserted');
+      END;
+    `);
+    await db.run('INSERT INTO items (name) VALUES (?)', ['alpha']);
+    const audit = await db.all('SELECT note FROM audit');
+    assert.deepStrictEqual(audit.map(r => r.note), ['inserted']);
+    let failed = false;
+    try {
+      await db.exec('CREATE VIRTUAL TABLE nope USING fts5(x); CREATE TABLE never_created (id INTEGER);');
+    } catch {
+      failed = true;
+    }
+    assert.ok(failed, 'a statement the engine cannot run must throw');
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE name = 'never_created'");
+    assert.strictEqual(tables.length, 0, 'statements after the failing one must not run');
+    await db.close();
+  })) passed++; else failed++;
+
   if (await test('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;

@@ -3,7 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { Database } from 'sqlite';
-import { openCompatDatabase } from './sqlite-compat';
+import { openCompatDatabase, selectedEngine } from './sqlite-compat';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -143,6 +143,38 @@ function log(level: 'INFO'|'WARN'|'ERROR'|'AUDIT'|'DEBUG', msg: string, meta: Re
 
 let dbInstance: Database | null = null;
 let searchIndexReady = false;
+
+// FTS5 sync triggers written by an FTS5-capable engine (decisions_fts_after_*,
+// lessons_fts_after_*) reference the virtual table on every write, so a
+// build without FTS5 has to remove them to keep inserting at all.
+async function countFtsTriggers(db: Database, prefix: string): Promise<number> {
+  const row = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'trigger' AND name LIKE ?", [`${prefix}%`]);
+  return Number(row?.n ?? 0);
+}
+
+async function dropFtsTriggers(db: Database, prefix: string): Promise<void> {
+  for (const suffix of ['insert', 'delete', 'update']) {
+    try {
+      await db.exec(`DROP TRIGGER IF EXISTS ${prefix}${suffix}`);
+    } catch (error) {
+      log('WARN', 'Could not drop an FTS5 sync trigger', { trigger: `${prefix}${suffix}`, error: String(error) });
+    }
+  }
+}
+
+// Substring search over decisions for SQLite builds without FTS5: every
+// whitespace-separated term must appear in the context or the decision.
+async function searchDecisionsBySubstring(db: Database, query: string, limit: number): Promise<Array<{ id: number; context: string; decision: string; timestamp: string; score: number }>> {
+  const terms = query.split(/\s+/).map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (terms.length === 0) return [];
+  const where = terms.map(() => "(LOWER(context) LIKE ? OR LOWER(decision) LIKE ?)").join(' AND ');
+  const params = terms.flatMap(t => [`%${t}%`, `%${t}%`]);
+  const rows: Array<{ id: number; context: string; decision: string; timestamp: string }> = await db.all(
+    `SELECT id, context, decision, timestamp FROM decisions WHERE ${where} ORDER BY timestamp DESC LIMIT ?`,
+    [...params, limit]
+  );
+  return rows.map(r => ({ ...r, score: 1 }));
+}
 let lessonsSearchIndexReady = false;
 
 // ============================================================================
@@ -302,16 +334,28 @@ async function runMigrations(db: Database, dbDir: string) {
     // one-time rebuild backfills rows stored before this migration existed.
     const hasV2 = await db.get('SELECT version FROM schema_migrations WHERE version = 2');
     try {
-      if (!hasV2) {
-        await createSearchIndex(db);
+      // The index statements are idempotent, so they run on every start: a
+      // build without FTS5 drops the sync triggers (below) and the next
+      // FTS5-capable start has to put them back and backfill the index.
+      const decisionTriggers = await countFtsTriggers(db, 'decisions_fts_after_');
+      await createSearchIndex(db);
+      // IF NOT EXISTS leaves an existing index untouched without loading the
+      // module, so touch the virtual table to learn whether FTS5 is here.
+      await db.get('SELECT 1 FROM decisions_fts LIMIT 1');
+      if (!hasV2 || decisionTriggers < 3) {
         await rebuildSearchIndex(db);
+      }
+      if (!hasV2) {
         await db.run('INSERT INTO schema_migrations (version) VALUES (2)');
       }
       searchIndexReady = true;
     } catch (e) {
-      // SQLite builds without FTS5 keep working; only search_history is disabled.
+      // SQLite builds without FTS5 keep working: search_history answers by
+      // substring, and the triggers a previous FTS5-capable engine left in
+      // the file are removed so plain writes to decisions keep succeeding.
       searchIndexReady = false;
-      log('WARN', 'FTS5 unavailable, search_history disabled', { error: String(e) });
+      await dropFtsTriggers(db, 'decisions_fts_after_');
+      log('WARN', 'FTS5 unavailable, search_history falls back to substring matching', { error: String(e) });
     }
 
     // Migration 3: working_memory table for transient, TTL-bounded entries.
@@ -349,13 +393,18 @@ async function runMigrations(db: Database, dbDir: string) {
     // every write and a one-time rebuild backfills lessons from Migration 4.
     const hasV5 = await db.get('SELECT version FROM schema_migrations WHERE version = 5');
     try {
-      if (!hasV5) {
-        await createLessonsSearchIndex(db);
+      const lessonTriggers = await countFtsTriggers(db, 'lessons_fts_after_');
+      await createLessonsSearchIndex(db);
+      await db.get('SELECT 1 FROM lessons_fts LIMIT 1');
+      if (!hasV5 || lessonTriggers < 3) {
         await rebuildLessonsSearchIndex(db);
+      }
+      if (!hasV5) {
         await db.run('INSERT INTO schema_migrations (version) VALUES (5)');
       }
       lessonsSearchIndexReady = true;
     } catch (e) {
+      await dropFtsTriggers(db, 'lessons_fts_after_');
       lessonsSearchIndexReady = false;
       log('WARN', 'FTS5 unavailable for lessons, lesson_recall falls back to substring matching', { error: String(e) });
     }
@@ -831,7 +880,7 @@ const TeamInitSchema = z.object({
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      { name: "get_project_state", description: "Returns server health metadata for the active project: storage engine (sqlite-wal) and write arbitration mode (MessageQueue). Use this to verify the egc-memory server is running and responsive before calling get_state or update_state.", inputSchema: { type: "object", properties: {} } },
+      { name: "get_project_state", description: "Returns server health metadata for the active project: storage engine (sqlite-wal, or sqlite-wasm when the portable engine is in use) and write arbitration mode (MessageQueue). Use this to verify the egc-memory server is running and responsive before calling get_state or update_state.", inputSchema: { type: "object", properties: {} } },
       { name: "store_decision", description: "Persist a single decision to the SQLite store with write-lock arbitration to prevent concurrent conflicts. Provide a short context label and the decision text. Decisions stored here are queryable via query_history and surfaced in get_state.", inputSchema: { type: "object", properties: { context: { type: "string", description: "Short label for the decision context, e.g. 'architecture' or 'dependencies'." }, decision: { type: "string", description: "The decision text to persist." } }, required: ["context", "decision"] } },
       { name: "query_history", description: "Return a paginated list of past decisions stored in the SQLite state. Each entry includes the decision text, context label, and timestamp. Use limit and offset for pagination. Useful for auditing what was decided without loading the full project state.", inputSchema: { type: "object", properties: { limit: { type: "number", description: "Maximum number of decisions to return. Defaults to 20." }, offset: { type: "number", description: "Number of decisions to skip for pagination. Defaults to 0." } } } },
       { name: "search_history", description: "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Each result includes the decision content, context label, timestamp, and a score normalized to [0, 1] where 1 is the best match in the result set. Use this to find past decisions by topic instead of paging through query_history.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Keywords to search for, e.g. 'authentication jwt'." }, limit: { type: "number", description: "Maximum number of results to return. Defaults to 10." }, min_score: { type: "number", description: "Minimum normalized relevance score between 0 and 1. Defaults to 0." } }, required: ["query"] } },
@@ -1758,14 +1807,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "search_history": {
         const { query, limit, min_score } = SearchHistorySchema.parse(request.params.arguments);
         if (!searchIndexReady) {
-          throw new McpError(ErrorCode.InvalidRequest, 'search_history is unavailable: this SQLite build has no FTS5 support.');
+          // No FTS5 on this SQLite build (the portable engine, or a native
+          // build without the extension): the same substring matching
+          // lesson_recall already falls back to, so the tool keeps answering.
+          const results = await searchDecisionsBySubstring(db, query, limit);
+          log('INFO', 'Decision history searched by substring (no FTS5)', { results: results.length });
+          return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score, count: results.length, mode: 'substring' } }, null, 2) }] };
         }
         const results = await searchDecisions(db, query, { limit, minScore: min_score });
         log('INFO', 'Decision history searched', { results: results.length });
         return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score, count: results.length } }, null, 2) }] };
       }
       case "get_project_state": {
-        return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: "sqlite-wal", arbitration: "MessageQueue" }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: selectedEngine() === 'wasm' ? 'sqlite-wasm' : 'sqlite-wal', arbitration: "MessageQueue" }) }] };
       }
       case "get_state": return await handleGetState(db, request.params.arguments);
 

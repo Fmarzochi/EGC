@@ -47,6 +47,8 @@ function startServer(home, projectDir, engine) {
     }
   });
   child.stderr.on('data', chunk => { stderr += chunk; });
+  let exited = false;
+  child.once('exit', () => { exited = true; });
   let nextId = 1;
   const request = (method, params) => new Promise((resolve, reject) => {
     const id = nextId++;
@@ -55,7 +57,12 @@ function startServer(home, projectDir, engine) {
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const notify = (method, params) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
-  const stop = () => new Promise(resolve => { child.once('exit', () => resolve()); child.stdin.end(); child.kill(); });
+  const stop = () => new Promise(resolve => {
+    if (exited) { resolve(); return; }
+    child.once('exit', () => resolve());
+    child.stdin.end();
+    child.kill();
+  });
   return { request, notify, stop, stderr: () => stderr };
 }
 
@@ -126,10 +133,51 @@ async function runTests() {
     })) passed++; else failed++;
 
     if (await test('the native engine is still the default when it loads', async () => {
+      let native = true;
+      try { require('sqlite3'); } catch { native = false; }
       const server = startServer(home, projectDir, '');
       try {
         await initialize(server);
-        assert.ok(!server.stderr().includes('using the portable sql.js engine'), server.stderr().slice(-400));
+        const fellBack = server.stderr().includes('using the portable sql.js engine');
+        assert.strictEqual(fellBack, !native, server.stderr().slice(-400));
+        const state = await server.request('tools/call', { name: 'get_project_state', arguments: {} });
+        const text = (state.result.content || []).map(c => c.text || '').join('');
+        assert.ok(text.includes(native ? 'sqlite-wal' : 'sqlite-wasm'), text);
+      } finally {
+        await server.stop();
+      }
+    })) passed++; else failed++;
+
+    // The previous test ran the native engine on this same state.db, so an
+    // FTS5-capable engine has already written its virtual tables and sync
+    // triggers into the file: exactly what a machine hits when the native
+    // binary stops loading after an OS change.
+    if (await test('a file written by the native engine still accepts decisions on the portable engine, and search_history answers by substring', async () => {
+      const server = startServer(home, projectDir, 'wasm');
+      try {
+        await initialize(server);
+        await callTool(server, 'store_decision', { project_path: projectDir, context: 'database engine', decision: 'portable engine keeps search alive' });
+        const text = await callTool(server, 'search_history', { query: 'portable search' });
+        assert.ok(text.includes('portable engine keeps search alive'), text.slice(0, 400));
+        assert.ok(text.includes('"mode": "substring"'), text.slice(0, 400));
+      } finally {
+        await server.stop();
+      }
+    })) passed++; else failed++;
+
+    if (await test('back on the native engine, the FTS5 index is rebuilt and finds the decision stored on the portable engine', async () => {
+      let native = true;
+      try { require('sqlite3'); } catch { native = false; }
+      if (!native) {
+        console.log('    - native sqlite3 does not load here; the rebuild path is not exercised');
+        return;
+      }
+      const server = startServer(home, projectDir, '');
+      try {
+        await initialize(server);
+        const text = await callTool(server, 'search_history', { query: 'portable' });
+        assert.ok(text.includes('portable engine keeps search alive'), text.slice(0, 400));
+        assert.ok(!text.includes('"mode": "substring"'), 'the FTS5 path must answer, not the substring fallback');
       } finally {
         await server.stop();
       }

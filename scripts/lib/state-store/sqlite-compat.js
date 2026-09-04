@@ -15,12 +15,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SKIPPED_PRAGMAS = /^PRAGMA\s+(journal_mode|busy_timeout|synchronous)\b/i;
+const SKIPPED_PRAGMAS = /^\s*PRAGMA\s+(journal_mode|busy_timeout|synchronous)\b[^;]*;?/gim;
 const READ_ONLY_STATEMENT = /^\s*(SELECT|PRAGMA|EXPLAIN|WITH)\b/i;
 const NATIVE_FAILURE_MESSAGE = /GLIBC|dlopen|bindings file|\.node'?:|invalid ELF header|not a valid Win32 application|Symbol not found/i;
 
 let sqlJsPromise = null;
 let fallbackAnnounced = false;
+let selected = 'native';
 
 function errorMessage(error) {
   if (error instanceof Error) return error.message.split('\n')[0];
@@ -96,13 +97,13 @@ class WasmDatabase {
     }
   }
 
-  // sql.js has no WAL and no busy timeout; those pragmas only mean
-  // something to the native engine, so they are skipped rather than failed.
+  // sql.js runs a multi-statement string itself (so trigger bodies with
+  // BEGIN ... END stay intact) and stops at the first error, like the native
+  // driver. WAL, busy timeout and synchronous pragmas only mean something to
+  // the native engine, so they are dropped from the text rather than failed.
   async exec(sql) {
-    const statements = sql.split(';').map(s => s.trim()).filter(Boolean);
-    for (const statement of statements) {
-      if (!SKIPPED_PRAGMAS.test(statement)) this.db.exec(statement);
-    }
+    const text = sql.replace(SKIPPED_PRAGMAS, '');
+    if (text.trim()) this.db.exec(text);
     if (!READ_ONLY_STATEMENT.test(sql)) this.schedulePersist();
   }
 
@@ -157,13 +158,21 @@ async function openCompatDatabase(filename, serverName) {
     try {
       const sqlite3 = require('sqlite3');
       const { open } = require('sqlite');
-      return await open({ filename, driver: sqlite3.Database });
+      const db = await open({ filename, driver: sqlite3.Database });
+      selected = 'native';
+      return db;
     } catch (error) {
       if (engine === 'native' || !isNativeLoadFailure(error)) throw error;
       announceFallback(serverName, error);
     }
   }
+  selected = 'wasm';
   return openWasmDatabase(filename);
 }
 
-module.exports = { openCompatDatabase, isNativeLoadFailure, normalizeParams, WasmDatabase };
+// The engine the last openCompatDatabase call settled on: 'native' or 'wasm'.
+function selectedEngine() {
+  return selected;
+}
+
+module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, WasmDatabase };

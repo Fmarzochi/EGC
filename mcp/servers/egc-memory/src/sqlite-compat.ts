@@ -5,11 +5,18 @@
 import { createRequire } from 'node:module';
 import type { Database } from 'sqlite';
 
-type CompatModule = { openCompatDatabase(filename: string, serverName: string): Promise<Database> };
+type CompatModule = {
+  openCompatDatabase(filename: string, serverName: string): Promise<Database>;
+  selectedEngine(): 'native' | 'wasm';
+};
 
 const load = createRequire(__filename);
 const compat = load('../../../../scripts/lib/state-store/sqlite-compat.js') as CompatModule;
 
 export function openCompatDatabase(filename: string, serverName: string): Promise<Database> {
   return compat.openCompatDatabase(filename, serverName);
+}
+
+export function selectedEngine(): 'native' | 'wasm' {
+  return compat.selectedEngine();
 }
