@@ -44,12 +44,15 @@ type HookModule = { run: (input: unknown) => unknown }
 // load their own copy instead of sharing the first one's dependencies.
 const hookModules = new Map<string, HookModule>()
 
-// Only a worktree that is the EGC repository itself may supply hook scripts:
-// an installed plugin must never load code from whatever project it opens.
-function isEgcRepository(worktreePath: string): boolean {
+// The worktree may supply hook scripts only when this plugin file itself
+// lives inside it (the EGC repository running its own plugin): a project
+// cannot forge where the installed plugin sits, so an installed plugin never
+// loads code from whatever project it opens.
+function pluginInsideWorktree(pluginDir: string, worktreePath: string): boolean {
   try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(worktreePath, "package.json"), "utf8")) as { name?: unknown }
-    return manifest.name === "@egchq/egc"
+    const plugin = fs.realpathSync(pluginDir)
+    const worktree = fs.realpathSync(worktreePath)
+    return plugin === worktree || plugin.startsWith(worktree + path.sep)
   } catch {
     return false
   }
@@ -60,7 +63,7 @@ function resolveHookModulePath(pluginDir: string, worktreePath: string, fileName
     path.join(pluginDir, "..", "scripts", "hooks", fileName),
     path.join(pluginDir, "..", "..", "scripts", "hooks", fileName),
   ]
-  if (isEgcRepository(worktreePath)) candidates.push(path.join(worktreePath, "scripts", "hooks", fileName))
+  if (pluginInsideWorktree(pluginDir, worktreePath)) candidates.push(path.join(worktreePath, "scripts", "hooks", fileName))
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
 }
 

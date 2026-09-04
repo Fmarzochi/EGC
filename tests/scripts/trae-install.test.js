@@ -125,6 +125,7 @@ function runTests() {
   if (test('a hooks.json that carries only the Bash validator is reported, and a symlinked one is never written through', () => {
     const projectRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-hooks-'));
     const homeDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-home-'));
+    const linkedRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-link-'));
     try {
       const root = path.join(projectRoot, '.trae');
       fs.mkdirSync(root, { recursive: true });
@@ -133,7 +134,6 @@ function runTests() {
       assert.ok(partial.includes('without both EGC Guardian validators'), partial);
       assert.ok(!readManifestLines(projectRoot).includes('hooks.json'));
 
-      const linkedRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trae-install-link-'));
       const linkedTrae = path.join(linkedRoot, '.trae');
       fs.mkdirSync(linkedTrae, { recursive: true });
       const target = path.join(linkedRoot, 'elsewhere.json');
@@ -141,10 +141,10 @@ function runTests() {
       const linked = runInstall({ cwd: linkedRoot, homeDir });
       assert.ok(linked.includes('symbolic link'), linked);
       assert.ok(!fs.existsSync(target), 'nothing is written through the link');
-      fs.rmSync(linkedRoot, { recursive: true, force: true });
     } finally {
       cleanup(projectRoot);
       cleanup(homeDir);
+      fs.rmSync(linkedRoot, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 
