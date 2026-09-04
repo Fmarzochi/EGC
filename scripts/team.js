@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 const path = require('node:path');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
+
 const os = require('node:os');
 const { spawnSync, execFileSync } = require('node:child_process');
 
@@ -158,33 +160,42 @@ function handleInit(args) {
   const backend = optionValue(args, '--backend', 'git');
   const remote = optionValue(args, '--remote', null);
   const branch = optionValue(args, '--branch', 'main');
-  const teamKey = optionValue(args, '--key', undefined);
-  if (teamKey !== undefined && !/^[0-9a-f]{64}$/i.test(teamKey)) {
-    console.error('Error: --key must be 64 hexadecimal characters (the key shared by the member who initialized the team)');
+  const keyIndex = args.indexOf('--key');
+  const provided = keyIndex === -1 ? undefined : args[keyIndex + 1];
+  if (keyIndex !== -1 && (provided === undefined || provided.startsWith('--') || !/^[0-9a-f]{64}$/i.test(provided))) {
+    console.error('Error: --key must be followed by 64 hexadecimal characters (the key shared by the member who initialized the team)');
     process.exit(1);
   }
+  // The first member's key is made here, so the config is complete even
+  // when the memory server cannot be reached right now.
+  const teamKey = provided ?? crypto.randomBytes(32).toString('hex');
   if (!remote) {
     console.error('Error: --remote is required for team init');
     process.exit(1);
   }
 
-  const config = teamKey ? { backend, remote, branch, teamKey } : { backend, remote, branch };
-  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  const config = { backend, remote, branch, teamKey };
+  fs.mkdirSync(path.dirname(TEAM_CONFIG_PATH), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  try {
+    fs.chmodSync(TEAM_CONFIG_PATH, 0o600);
+  } catch {
+    // modes are not supported on this filesystem
+  }
   console.log(`Team initialized:
   Backend: ${backend}
   Remote:  ${remote}
   Branch:  ${branch}
   Config:  ${TEAM_CONFIG_PATH}`);
+  if (provided === undefined) {
+    console.log(`Team key (share it out of band; teammates join with --key):\n  ${teamKey}`);
+  }
 
   // Now try to connect and set up via MCP tool.
   try {
-    const result = callMcpTool('team_init', teamKey ? { backend, remote, branch, team_key: teamKey } : { backend, remote, branch });
+    const result = callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
     if (result) {
       console.log('Sync backend configured successfully.');
-      const generated = result && typeof result === 'object' && typeof result.teamKey === 'string' ? result.teamKey : null;
-      if (generated && !teamKey) {
-        console.log(`Team key (share it out of band; teammates join with --key):\n  ${generated}`);
-      }
     }
   } catch (err) {
     console.log(`Note: Memory server setup returned: ${err.message}`);
@@ -212,10 +223,10 @@ async function handleSync() {
       console.log(`  Errors: ${result.errors.join(', ')}`);
     }
   } catch (err) {
-    // Fallback: use direct git operations.
-    console.log(`MCP tool failed: ${err.message}`);
-    console.log('Falling back to direct sync...');
-    await directSync(config);
+    // State leaves this machine only sealed by the memory server; the old
+    // direct git fallback pushed the state directory in the clear.
+    console.error(`Error: team sync needs the memory server (${err.message}). Run "egc doctor" and try again.`);
+    process.exit(1);
   }
 }
 
@@ -283,105 +294,6 @@ async function main() {
       showHelp();
       process.exit(1);
   }
-}
-
-function ensureRemote(syncDir, remoteUrl) {
-  try {
-    const current = safeGit(['remote', 'get-url', 'origin'], syncDir);
-    if (current !== remoteUrl) {
-      safeGit(['remote', 'set-url', 'origin', remoteUrl], syncDir);
-    }
-  } catch {
-    safeGit(['remote', 'add', 'origin', remoteUrl], syncDir);
-  }
-}
-
-function mirrorCopy(src, dest) {
-  if (fs.existsSync(dest)) {
-    fs.rmSync(dest, { recursive: true, force: true });
-  }
-  fs.mkdirSync(dest, { recursive: true });
-  fs.cpSync(src, dest, { recursive: true });
-}
-
-function initializeSyncRepo(syncDir, config) {
-  const isRepo = fs.existsSync(path.join(syncDir, '.git'));
-  if (!isRepo) {
-    safeGit(['init'], syncDir);
-    safeGit(['remote', 'add', 'origin', config.remote], syncDir);
-  } else {
-    ensureRemote(syncDir, config.remote);
-  }
-}
-
-function pullRemoteChanges(syncDir, config) {
-  try {
-    safeGit(['pull', 'origin', config.branch, '--allow-unrelated-histories', '--no-rebase'], syncDir);
-    console.log('  Pulled remote changes.');
-  } catch (err) {
-    const msg = err.stderr ? err.stderr.toString().trim() : err.message;
-    console.log(`  Pull: ${msg.includes('no upstream') ? 'first sync, no upstream yet' : msg}`);
-  }
-}
-
-function commitAndPushChanges(syncDir, config) {
-  safeGit(['add', '-A'], syncDir);
-  try {
-    safeGit(['config', 'user.email', `${process.env.USER || process.env.USERNAME || 'egc'}@egc.local`], syncDir);
-    safeGit(['config', 'user.name', process.env.USER || process.env.USERNAME || 'egc'], syncDir);
-  } catch {
-    // identity may already be configured
-  }
-  try {
-    const staged = safeGit(['diff', '--cached', '--name-only'], syncDir);
-    if (!staged.trim()) {
-      console.log('  Nothing new to push.');
-      return false;
-    }
-    const author = process.env.USER || process.env.USERNAME || 'unknown';
-    safeGit(['commit', '-m', `sync: team memory update from ${author}`], syncDir);
-    safeGit(['push', 'origin', config.branch], syncDir);
-    console.log('  Pushed local changes.');
-    return true;
-  } catch (err) {
-    const msg = err.stderr ? err.stderr.toString() : err.message;
-    if (msg.includes('nothing to commit')) {
-      console.log('  Nothing new to push.');
-    } else {
-      console.log(`  Push: ${msg.trim().split('\n').pop() || 'unknown error'}`);
-    }
-    return false;
-  }
-}
-
-async function directSync(config) {
-  const syncDir = path.join(os.homedir(), '.egc', 'team-sync');
-  const stateDir = path.join(os.homedir(), '.egc', 'state');
-
-  if (!fs.existsSync(syncDir)) {
-    fs.mkdirSync(syncDir, { recursive: true });
-  }
-
-  initializeSyncRepo(syncDir, config);
-
-  // Discard uncommitted sync-repo changes before pull.
-  try {
-    safeGit(['reset', '--hard'], syncDir);
-  } catch {
-    // empty repo on first sync
-  }
-
-  pullRemoteChanges(syncDir, config);
-
-  // Copy state files into sync repo (mirror to avoid resurrecting deleted files).
-  const syncStateDir = path.join(syncDir, 'state');
-  if (fs.existsSync(stateDir)) {
-    mirrorCopy(stateDir, syncStateDir);
-  }
-
-  commitAndPushChanges(syncDir, config);
-
-  console.log('Sync complete.');
 }
 
 main().catch(err => {

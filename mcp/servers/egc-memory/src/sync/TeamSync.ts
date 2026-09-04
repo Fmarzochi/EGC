@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import { SyncBackend } from './SyncBackend';
 import { GitBackend } from './GitBackend';
 import type { SyncConfig, SyncStatus, SyncResult } from './SyncBackend';
-import { loadOrCreateEncKey, readStateFile, writeStateFile } from '../encryption';
+import { isEncrypted, loadOrCreateEncKey, readStateFile, writeStateFile } from '../encryption';
 import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
+
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
 
 const BACKEND_REGISTRY: Record<string, new () => SyncBackend> = {
@@ -22,12 +23,18 @@ export function getTeamConfig(): SyncConfig | null {
   }
 }
 
+// The config carries the team key, so it is private to the user.
 export function writeTeamConfig(config: SyncConfig): void {
   const egcDir = path.join(os.homedir(), '.egc');
   if (!fs.existsSync(egcDir)) {
-    fs.mkdirSync(egcDir, { recursive: true });
+    fs.mkdirSync(egcDir, { recursive: true, mode: 0o700 });
   }
-  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  try {
+    fs.chmodSync(TEAM_CONFIG_PATH, 0o600);
+  } catch {
+    // modes are not supported on this filesystem
+  }
 }
 
 export async function teamInit(backend: string, remote: string, branch: string = 'main', teamKey?: string): Promise<SyncConfig> {
@@ -99,7 +106,10 @@ export async function teamSync(): Promise<SyncResult> {
     const merge = mergeTeamStateFrom(SYNC_STATE_DIR, LOCAL_STATE_DIR, teamKey, personalKey);
     result.rejectedCount = merge.rejected.length;
     for (const rejected of merge.rejected) {
-      result.errors.push(`Rejected sync file (not a verified team envelope): ${rejected}`);
+      result.errors.push(`Rejected sync file (not a verified team envelope for its path): ${rejected}`);
+    }
+    for (const unreadable of merge.unreadable) {
+      result.errors.push(`Local state file could not be decrypted and was left untouched: ${unreadable}`);
     }
     // Step 3: Stage local state as sealed envelopes and push.
     try {
@@ -152,6 +162,42 @@ const LOCAL_STATE_DIR = path.join(os.homedir(), '.egc', 'state');
 export interface TeamMergeOutcome {
   merged: number;
   rejected: string[];
+  unreadable: string[];
+}
+
+// Regular files and links under a directory, links kept apart: a link in
+// the shared repository or at a local state path is never followed.
+function walkEntries(dir: string): { files: string[]; links: string[] } {
+  const found: { files: string[]; links: string[] } = { files: [], links: [] };
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      found.links.push(fullPath);
+    } else if (entry.isDirectory()) {
+      const nested = walkEntries(fullPath);
+      found.files.push(...nested.files);
+      found.links.push(...nested.links);
+    } else if (entry.isFile()) {
+      found.files.push(fullPath);
+    }
+  }
+  return found;
+}
+
+function isLink(filePath: string): boolean {
+  try {
+    return fs.lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function removeSyncFile(filePath: string): void {
+  try {
+    fs.rmSync(filePath, { force: true });
+  } catch {
+    // a file that cannot be removed is still refused for local state
+  }
 }
 
 // Every sync file must open as a team envelope (right key, intact signature)
@@ -159,29 +205,49 @@ export interface TeamMergeOutcome {
 // Local files are read and written through the personal key, so the merge
 // compares plaintext timestamps and the result stays encrypted at rest.
 export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, teamKey: Buffer, personalKey: Buffer): TeamMergeOutcome {
-  const outcome: TeamMergeOutcome = { merged: 0, rejected: [] };
+  const outcome: TeamMergeOutcome = { merged: 0, rejected: [], unreadable: [] };
   if (!fs.existsSync(syncStateDir)) return outcome;
   if (!fs.existsSync(localStateDir)) {
     fs.mkdirSync(localStateDir, { recursive: true });
   }
-  for (const syncFile of getAllFiles(syncStateDir)) {
+  const entries = walkEntries(syncStateDir);
+  // A link in the repository is refused and removed, so it is neither
+  // followed here nor pushed back to the team.
+  for (const link of entries.links) {
+    outcome.rejected.push(path.relative(syncStateDir, link));
+    removeSyncFile(link);
+  }
+  for (const syncFile of entries.files) {
     const relativePath = path.relative(syncStateDir, syncFile);
-    const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), teamKey);
+    const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), teamKey, relativePath);
     if (remoteContent === null) {
+      // Refused for local state and removed from the working tree, so the
+      // next push does not carry it back into the shared repository.
       outcome.rejected.push(relativePath);
+      removeSyncFile(syncFile);
       continue;
     }
     const localFile = path.join(localStateDir, relativePath);
+    if (isLink(localFile)) {
+      outcome.rejected.push(`${relativePath} (local path is a link)`);
+      continue;
+    }
     let localContent = '';
+    let legacyPlaintext = false;
     if (fs.existsSync(localFile)) {
       try {
+        const raw = fs.readFileSync(localFile);
+        legacyPlaintext = !isEncrypted(raw);
         localContent = readStateFile(localFile, personalKey);
       } catch {
-        localContent = '';
+        // A local file that does not open with the personal key (rotated
+        // key, damaged bytes) is left exactly as it is.
+        outcome.unreadable.push(relativePath);
+        continue;
       }
     }
     const merged = localContent ? mergeStateDocs(localContent, remoteContent) : remoteContent;
-    if (merged === localContent) continue;
+    if (merged === localContent && !legacyPlaintext) continue;
     fs.mkdirSync(path.dirname(localFile), { recursive: true });
     writeStateFile(localFile, merged, personalKey);
     outcome.merged += 1;
@@ -198,34 +264,23 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
 export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer): number {
   if (!fs.existsSync(localStateDir)) return 0;
   let staged = 0;
-  for (const localFile of getAllFiles(localStateDir)) {
+  for (const localFile of walkEntries(localStateDir).files) {
     let plaintext: string;
     try {
       plaintext = readStateFile(localFile, personalKey);
     } catch {
       continue;
     }
-    const target = path.join(syncStateDir, path.relative(localStateDir, localFile));
+    const relativePath = path.relative(localStateDir, localFile);
+    const target = path.join(syncStateDir, relativePath);
+    if (isLink(target)) removeSyncFile(target);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, sealEnvelope(plaintext, teamKey), 'utf-8');
+    fs.writeFileSync(target, sealEnvelope(plaintext, teamKey, relativePath), 'utf-8');
     staged += 1;
   }
   return staged;
 }
 
-function getAllFiles(dir: string): string[] {
-  const results: string[] = [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...getAllFiles(fullPath));
-    } else if (entry.isFile()) {
-      results.push(fullPath);
-    }
-  }
-  return results;
-}
 
 function mergeStateDocs(localContent: string, remoteContent: string): string {
   const localUpdated = extractTimestamp(localContent);

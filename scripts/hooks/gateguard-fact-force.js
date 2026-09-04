@@ -27,7 +27,8 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('os');
+const os = require('node:os');
+
 
 // Session state: scoped per session to avoid cross-session races.
 const STATE_DIR = process.env.GATEGUARD_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.gateguard');
@@ -64,17 +65,14 @@ function presentedKey(key) {
 // A transcript named by the hook input is read only when it is an absolute
 // .jsonl file under the home directory or the temporary directory, with no
 // parent segments: the harness writes transcripts there and nowhere else.
-function allowedTranscriptPath(candidate) {
+function readTranscriptTail(candidate) {
   if (typeof candidate !== 'string' || !candidate.endsWith('.jsonl') || !path.isAbsolute(candidate)) return null;
   if (candidate.split(/[\\/]/).includes('..')) return null;
   const resolved = path.resolve(candidate);
   const roots = [os.homedir(), os.tmpdir()].map(root => path.resolve(root));
-  return roots.some(root => resolved === root || resolved.startsWith(root + path.sep)) ? resolved : null;
-}
-
-function readTranscriptTail(transcriptPath) {
+  if (!roots.some(root => resolved === root || resolved.startsWith(root + path.sep))) return null;
   try {
-    const descriptor = fs.openSync(transcriptPath, 'r');
+    const descriptor = fs.openSync(resolved, 'r');
     try {
       const size = fs.fstatSync(descriptor).size;
       const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
@@ -104,9 +102,7 @@ function assistantTextBlocks(entry) {
 }
 
 function recentAssistantText(data) {
-  const transcriptPath = allowedTranscriptPath(data?.transcript_path || data?.transcriptPath);
-  if (!transcriptPath) return null;
-  const tail = readTranscriptTail(transcriptPath);
+  const tail = readTranscriptTail(data?.transcript_path || data?.transcriptPath);
   if (tail === null) return null;
   let texts = [];
   for (const line of tail.split('\n')) {

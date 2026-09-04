@@ -490,7 +490,7 @@ function runTests() {
 
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(!output.hookSpecificOutput.permissionDecisionReason.includes('GATEGUARD=off'),
-      'denial reason should show the canonical direct recovery env toggle');
+      'denial reason should no longer advertise the GATEGUARD=off recovery toggle');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('EGC_DISABLED_HOOKS'),
       'denial reason should mention the canonical hook-id disable control');
   })) passed++; else failed++;

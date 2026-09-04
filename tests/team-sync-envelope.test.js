@@ -50,31 +50,55 @@ async function runTests() {
   const doc = (updated, body) => `# Project State\nupdated: ${updated}\n\n${body}\n`;
   try {
     if (test('an envelope opens with the team key and with nothing else', () => {
-      const sealed = envelope.sealEnvelope('hello team', teamKey);
-      assert.strictEqual(envelope.openEnvelope(sealed, teamKey), 'hello team');
-      assert.strictEqual(envelope.openEnvelope(sealed, otherKey), null);
+      const sealed = envelope.sealEnvelope('hello team', teamKey, 'proj/main.md');
+      assert.strictEqual(envelope.openEnvelope(sealed, teamKey, 'proj/main.md'), 'hello team');
+      assert.strictEqual(envelope.openEnvelope(sealed, teamKey, path.join('proj', 'main.md')), 'hello team', 'the platform separator is normalized');
+      assert.strictEqual(envelope.openEnvelope(sealed, otherKey, 'proj/main.md'), null);
+      assert.strictEqual(envelope.openEnvelope(sealed, teamKey, 'other/main.md'), null, 'an envelope copied to another path is refused');
       const parsed = JSON.parse(sealed);
+      assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, path: 'other/main.md' }), teamKey, 'other/main.md'), null, 'a rewritten path breaks the signature');
       const flipped = Buffer.from(parsed.data, 'base64');
       flipped[flipped.length - 1] ^= 0x01;
-      assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, data: flipped.toString('base64') }), teamKey), null);
-      assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, mac: parsed.mac.replace(/^./, c => (c === 'a' ? 'b' : 'a')) }), teamKey), null);
-      assert.strictEqual(envelope.openEnvelope('# Project State\nupdated: 2026-01-01\n', teamKey), null);
-      assert.strictEqual(envelope.openEnvelope('{"egcTeamEnvelope":1}', teamKey), null);
+      assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, data: flipped.toString('base64') }), teamKey, 'proj/main.md'), null);
+      assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, mac: parsed.mac.replace(/^./, c => (c === 'a' ? 'b' : 'a')) }), teamKey, 'proj/main.md'), null);
+      assert.strictEqual(envelope.openEnvelope('# Project State\nupdated: 2026-01-01\n', teamKey, 'proj/main.md'), null);
+      assert.strictEqual(envelope.openEnvelope('{"egcTeamEnvelope":1}', teamKey, 'proj/main.md'), null);
     })) passed++; else failed++;
 
     if (test('the merge takes a newer verified envelope, keeps newer local state, and rejects everything else', () => {
       fs.mkdirSync(path.join(syncDir, 'proj'), { recursive: true });
       fs.mkdirSync(path.join(localDir, 'proj'), { recursive: true });
-      fs.writeFileSync(path.join(syncDir, 'proj', 'newer.md'), envelope.sealEnvelope(doc('2026-09-04T12:00:00.000Z', 'remote wins'), teamKey));
+      fs.writeFileSync(path.join(syncDir, 'proj', 'newer.md'), envelope.sealEnvelope(doc('2026-09-04T12:00:00.000Z', 'remote wins'), teamKey, 'proj/newer.md'));
       encryption.writeStateFile(path.join(localDir, 'proj', 'newer.md'), doc('2026-09-01T12:00:00.000Z', 'local old'), personalKey);
-      fs.writeFileSync(path.join(syncDir, 'proj', 'older.md'), envelope.sealEnvelope(doc('2026-08-01T12:00:00.000Z', 'remote old'), teamKey));
+      fs.writeFileSync(path.join(syncDir, 'proj', 'older.md'), envelope.sealEnvelope(doc('2026-08-01T12:00:00.000Z', 'remote old'), teamKey, 'proj/older.md'));
       encryption.writeStateFile(path.join(localDir, 'proj', 'older.md'), doc('2026-09-03T12:00:00.000Z', 'local wins'), personalKey);
-      fs.writeFileSync(path.join(syncDir, 'proj', 'fresh.md'), envelope.sealEnvelope(doc('2026-09-02T12:00:00.000Z', 'brand new'), teamKey));
+      fs.writeFileSync(path.join(syncDir, 'proj', 'fresh.md'), envelope.sealEnvelope(doc('2026-09-02T12:00:00.000Z', 'brand new'), teamKey, 'proj/fresh.md'));
       fs.writeFileSync(path.join(syncDir, 'proj', 'plain.md'), doc('2026-09-09T12:00:00.000Z', 'injected in the clear'));
-      fs.writeFileSync(path.join(syncDir, 'proj', 'foreign.md'), envelope.sealEnvelope(doc('2026-09-09T12:00:00.000Z', 'sealed with another key'), otherKey));
+      fs.writeFileSync(path.join(syncDir, 'proj', 'foreign.md'), envelope.sealEnvelope(doc('2026-09-09T12:00:00.000Z', 'sealed with another key'), otherKey, 'proj/foreign.md'));
+      fs.writeFileSync(path.join(syncDir, 'proj', 'moved.md'), envelope.sealEnvelope(doc('2026-09-09T12:00:00.000Z', 'copied from elsewhere'), teamKey, 'proj/newer.md'));
+      fs.writeFileSync(path.join(localDir, 'proj', 'legacy.md'), doc('2026-09-08T12:00:00.000Z', 'legacy plaintext, newer than the team'));
+      fs.writeFileSync(path.join(syncDir, 'proj', 'legacy.md'), envelope.sealEnvelope(doc('2026-08-08T12:00:00.000Z', 'older remote'), teamKey, 'proj/legacy.md'));
+      encryption.writeStateFile(path.join(localDir, 'proj', 'locked.md'), doc('2026-01-01T12:00:00.000Z', 'sealed under a rotated key'), otherKey);
+      fs.writeFileSync(path.join(syncDir, 'proj', 'locked.md'), envelope.sealEnvelope(doc('2026-09-09T12:00:00.000Z', 'would replace it'), teamKey, 'proj/locked.md'));
+      let linked;
+      try {
+        fs.symlinkSync(path.join(dir, 'elsewhere.md'), path.join(syncDir, 'proj', 'link.md'));
+        linked = true;
+      } catch {
+        linked = false;
+      }
       const outcome = teamSync.mergeTeamStateFrom(syncDir, localDir, teamKey, personalKey);
-      assert.deepStrictEqual(outcome.rejected.sort(), ['proj/foreign.md', 'proj/plain.md'].map(p => p.split('/').join(path.sep)));
-      assert.strictEqual(outcome.merged, 2);
+      const expectedRejected = ['proj/foreign.md', 'proj/moved.md', 'proj/plain.md'].concat(linked ? ['proj/link.md'] : []).map(p => p.split('/').join(path.sep)).sort();
+      assert.deepStrictEqual(outcome.rejected.sort(), expectedRejected);
+      assert.deepStrictEqual(outcome.unreadable, [path.join('proj', 'locked.md')]);
+      assert.strictEqual(outcome.merged, 3, 'newer, fresh and the legacy plaintext rewrite');
+      for (const name of ['foreign.md', 'moved.md', 'plain.md'].concat(linked ? ['link.md'] : [])) {
+        assert.ok(!fs.existsSync(path.join(syncDir, 'proj', name)), `${name} is removed from the sync tree`);
+      }
+      assert.ok(fs.existsSync(path.join(syncDir, 'proj', 'locked.md')), 'a verified envelope stays in the sync tree');
+      assert.ok(encryption.isEncrypted(fs.readFileSync(path.join(localDir, 'proj', 'legacy.md'))), 'legacy plaintext is rewritten encrypted');
+      assert.ok(encryption.readStateFile(path.join(localDir, 'proj', 'legacy.md'), personalKey).includes('legacy plaintext'));
+      assert.ok(encryption.readStateFile(path.join(localDir, 'proj', 'locked.md'), otherKey).includes('rotated key'), 'the unreadable local file is untouched');
       assert.ok(encryption.readStateFile(path.join(localDir, 'proj', 'newer.md'), personalKey).includes('remote wins'));
       assert.ok(encryption.readStateFile(path.join(localDir, 'proj', 'older.md'), personalKey).includes('local wins'));
       assert.ok(encryption.readStateFile(path.join(localDir, 'proj', 'fresh.md'), personalKey).includes('brand new'));
@@ -86,13 +110,14 @@ async function runTests() {
     if (test('staging seals every local file with the team key and nothing leaves in the clear', () => {
       const stagedDir = path.join(dir, 'staged');
       const count = teamSync.stageTeamState(localDir, stagedDir, teamKey, personalKey);
-      assert.strictEqual(count, 3);
-      for (const name of ['newer.md', 'older.md', 'fresh.md']) {
+      assert.strictEqual(count, 4, 'newer, older, fresh and the rewritten legacy file; the unreadable one is left out');
+      for (const name of ['newer.md', 'older.md', 'fresh.md', 'legacy.md']) {
         const raw = fs.readFileSync(path.join(stagedDir, 'proj', name), 'utf8');
         assert.ok(!raw.includes('Project State'), `${name} is not in the clear`);
-        assert.ok(envelope.openEnvelope(raw, teamKey).includes('Project State'), `${name} opens with the team key`);
-        assert.strictEqual(envelope.openEnvelope(raw, otherKey), null);
+        assert.ok(envelope.openEnvelope(raw, teamKey, `proj/${name}`).includes('Project State'), `${name} opens with the team key at its path`);
+        assert.strictEqual(envelope.openEnvelope(raw, otherKey, `proj/${name}`), null);
       }
+      assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'locked.md')), 'an undecryptable local file is not staged');
     })) passed++; else failed++;
 
     if (test('the team key is validated and generated as 64 hex characters', () => {
