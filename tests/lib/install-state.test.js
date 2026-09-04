@@ -215,6 +215,11 @@ function runTests() {
       const clean = createInstallState({ ...base, operations: [operation] });
       fs.writeFileSync(statePath, JSON.stringify(clean, null, 2));
       assert.strictEqual(readInstallState(statePath).operations.length, 1);
+      // Anchored on the other platform family is still anchored: a state file
+      // written on Windows validates the same way on POSIX and the reverse.
+      for (const destinationPath of ['C:\\repo\\.cursor\\x.md', '\\\\server\\share\\x.md']) {
+        assert.doesNotThrow(() => createInstallState({ ...base, operations: [{ ...operation, destinationPath }] }), destinationPath);
+      }
     } finally {
       cleanupTestDir(testDir);
     }

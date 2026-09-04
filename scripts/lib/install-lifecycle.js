@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
+const { hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
@@ -83,24 +84,17 @@ function getManagedOperations(state) {
     : [];
 }
 
-function hasParentSegment(value) {
-  return String(value).split(/[\\/]/).includes('..');
-}
-
 // Only the manifest-relative path recorded at install time is joined onto
 // the reference repository; the absolute sourcePath stored next to it is
-// never replayed, so a planted entry cannot make repair copy from anywhere.
+// never replayed, so a planted entry cannot make repair copy from anywhere,
+// and a source that leaves the repository through a link is refused too.
 function resolveOperationSourcePath(repoRoot, operation) {
   const relative = operation.sourceRelativePath;
-  if (typeof relative !== 'string' || relative.trim() === '' || path.isAbsolute(relative) || hasParentSegment(relative)) {
+  if (typeof relative !== 'string' || relative.trim() === '' || isAnchoredPath(relative) || hasParentSegment(relative)) {
     return null;
   }
-  return path.join(repoRoot, relative);
-}
-
-function isPathInside(candidate, root) {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  const joined = path.join(repoRoot, relative);
+  return isInsideReal(joined, repoRoot) ? joined : null;
 }
 
 // Destinations this adapter would produce today, derived from the current
@@ -124,8 +118,8 @@ function collectPlannedDestinations(record, context) {
       });
       const operations = Array.isArray(plan.operations) ? plan.operations : [];
       return {
-        files: new Set(operations.map(operation => path.resolve(operation.destinationPath))),
-        dirs: new Set(operations.filter(operation => operation.kind === 'copy-path').map(operation => path.resolve(operation.destinationPath))),
+        files: new Set(operations.map(operation => realizePath(operation.destinationPath))),
+        dirs: new Set(operations.filter(operation => operation.kind === 'copy-path').map(operation => realizePath(operation.destinationPath))),
       };
     } catch (_error) { // NOSONAR: a request the current manifest cannot plan falls through to the next attempt
       continue;
@@ -136,18 +130,20 @@ function collectPlannedDestinations(record, context) {
 
 // A recorded operation may only touch the derived target root, a file the
 // current manifest plans for this adapter, or a directory that plan copies.
+// Every comparison is made on real locations (links followed, missing tails
+// kept), so a link inside the root cannot point the replay outside it.
 function operationEscapes(operation, root, planned) {
   const destination = operation.destinationPath;
-  if (typeof destination !== 'string' || !path.isAbsolute(destination) || hasParentSegment(destination)) return true;
-  const resolved = path.resolve(destination);
+  if (typeof destination !== 'string' || !isAnchoredPath(destination) || hasParentSegment(destination)) return true;
+  const resolved = realizePath(destination);
   if (operation.kind === 'remove' && resolved === root) return true;
-  if (isPathInside(resolved, root)) return false;
+  if (isInsideReal(resolved, root)) return false;
   if (planned.files.has(resolved)) return false;
-  return ![...planned.dirs].some(dir => isPathInside(resolved, dir));
+  return ![...planned.dirs].some(dir => isInsideReal(resolved, dir));
 }
 
 function findEscapingOperation(operations, record, context) {
-  const root = path.resolve(record.targetRoot);
+  const root = realizePath(record.targetRoot);
   const planned = collectPlannedDestinations(record, context);
   return operations.find(operation => operationEscapes(operation, root, planned)) || null;
 }

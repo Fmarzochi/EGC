@@ -490,6 +490,10 @@ async function runTests() {
   const userHome = require('os').homedir();
   run('curl file:///~/.ssh/id_rsa is hard-blocking (file URI unwrapped)', () => assertHardBlocking(`curl file://${userHome}/.ssh/id_rsa`));
   run('curl --url=file:///etc/shadow is hard-blocking', () => assertHardBlocking('curl --url=file:///etc/shadow'));
+  run('a query or fragment on a file URI does not hide the protected path', () => {
+    assertHardBlocking(`curl file://${userHome}/.ssh/id_rsa?raw=1`);
+    assertHardBlocking(`curl file://${userHome}/.bashrc#top`);
+  });
   run('wget -O out file://localhost/etc/passwd is hard-blocking', () => assertHardBlocking('wget -O out file://localhost/etc/passwd'));
   run('curl file:///tmp/notes.txt is not a protected-path denial', () => {
     const result = validateCommand('curl file:///tmp/notes.txt');

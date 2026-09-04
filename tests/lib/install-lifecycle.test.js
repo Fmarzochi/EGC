@@ -2399,6 +2399,79 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // Containment follows links: a directory inside the root that points
+  // outside, or a source that leaves the repository through a link, is refused.
+  {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
+    const outside = createTempDir('lifecycle-outside-');
+    let linked = false;
+    try {
+      fs.mkdirSync(path.join(projectRoot, '.cursor'), { recursive: true });
+      fs.symlinkSync(outside, path.join(projectRoot, '.cursor', 'escape'), 'dir');
+      linked = true;
+    } catch (error) {
+      console.log(`  - skipped (link containment): cannot create symlinks here (${error.code})`);
+    }
+    if (linked) {
+      if (test('uninstall refuses a destination that leaves the root through a linked directory', () => {
+        const victim = path.join(outside, 'keep.txt');
+        fs.writeFileSync(victim, 'keep me');
+        writeCursorState(projectRoot, {
+          operations: [
+            { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/x.md', destinationPath: path.join(projectRoot, '.cursor', 'escape', 'keep.txt'), strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+          ],
+        });
+        const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['cursor'] });
+        const outcome = (result.results || result)[0];
+        assert.strictEqual(outcome.status, 'error', JSON.stringify(outcome));
+        assert.ok(fs.existsSync(victim), 'the file outside the root must survive');
+      })) passed++; else failed++;
+    }
+    cleanup(homeDir);
+    cleanup(projectRoot);
+    cleanup(outside);
+  }
+
+  {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
+    const repoRoot = createTempDir('lifecycle-repo-');
+    const outside = createTempDir('lifecycle-outside-');
+    let linked = false;
+    try {
+      fs.symlinkSync(outside, path.join(repoRoot, 'rules'), 'dir');
+      linked = true;
+    } catch (error) {
+      console.log(`  - skipped (source link): cannot create symlinks here (${error.code})`);
+    }
+    if (linked) {
+      if (test('repair refuses a source that leaves the repository through a link', () => {
+        const realRepo = path.join(__dirname, '..', '..');
+        fs.mkdirSync(path.join(repoRoot, 'manifests'), { recursive: true });
+        for (const name of fs.readdirSync(path.join(realRepo, 'manifests'))) {
+          fs.copyFileSync(path.join(realRepo, 'manifests', name), path.join(repoRoot, 'manifests', name));
+        }
+        fs.writeFileSync(path.join(repoRoot, 'package.json'), JSON.stringify({ name: 'egc-test', version: CURRENT_PACKAGE_VERSION }));
+        fs.writeFileSync(path.join(outside, 'secret.md'), 'private');
+        const destination = path.join(projectRoot, '.cursor', 'rules', 'secret.md');
+        writeCursorState(projectRoot, {
+          operations: [
+            { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/secret.md', destinationPath: destination, strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+          ],
+        });
+        const result = repairInstalledStates({ homeDir, projectRoot, targets: ['cursor'], repoRoot });
+        const outcome = result.results[0];
+        assert.notStrictEqual(outcome.status, 'repaired', JSON.stringify(outcome));
+        assert.ok(!fs.existsSync(destination), 'nothing is copied from outside the repository');
+      })) passed++; else failed++;
+    }
+    cleanup(homeDir);
+    cleanup(projectRoot);
+    cleanup(repoRoot);
+    cleanup(outside);
+  }
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

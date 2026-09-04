@@ -1417,7 +1417,8 @@ const FILE_URI_RE = /^file:\/\/(?:localhost)?(?=\/)/i;
 function unwrapFileUri(arg: string): string {
   const match = FILE_URI_RE.exec(arg);
   if (!match) return arg;
-  const rest = arg.slice(match[0].length);
+  // A query or fragment is not part of the file a client opens.
+  const rest = arg.slice(match[0].length).replace(/[?#].*$/, '');
   let decoded = rest;
   try {
     decoded = decodeURIComponent(rest);

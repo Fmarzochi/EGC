@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { hasParentSegment, isAnchoredPath } = require('./path-safety');
 
 let Ajv = null;
 try {
@@ -142,19 +143,17 @@ const OPERATION_STRING_FIELDS = [
   'ownership',
 ];
 
-function hasParentSegment(value) {
-  return String(value).split(/[\\/]/).includes('..');
-}
-
-// A recorded destination is replayed verbatim by repair and uninstall, and
-// the source is joined onto the reference repository: neither may climb.
+// A recorded destination is replayed by repair and uninstall, and the source
+// is joined onto the reference repository: neither may climb. "Absolute"
+// means anchored on either platform family, the same rule the JSON schema
+// applies, so both validators agree whatever host wrote the file.
 function validateOperationPaths(operation, instancePath, pushError) {
   const destination = operation.destinationPath;
-  if (isNonEmptyString(destination) && (!path.isAbsolute(destination) || hasParentSegment(destination))) {
+  if (isNonEmptyString(destination) && (!isAnchoredPath(destination) || hasParentSegment(destination))) {
     pushError(`${instancePath}/destinationPath`, 'must be an absolute path without ".." segments');
   }
   const source = operation.sourceRelativePath;
-  if (isNonEmptyString(source) && (path.isAbsolute(source) || hasParentSegment(source))) {
+  if (isNonEmptyString(source) && (isAnchoredPath(source) || hasParentSegment(source))) {
     pushError(`${instancePath}/sourceRelativePath`, 'must be a relative path without ".." segments');
   }
 }
