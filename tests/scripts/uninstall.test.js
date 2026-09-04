@@ -133,7 +133,9 @@ function runTests() {
       });
       const hooksFile = path.join(fs.realpathSync(homeDir), '.copilot', 'hooks', 'hooks.json');
       assert.ok(fs.existsSync(hooksFile), 'the install must have written outside the target root');
-      assert.ok(fs.readFileSync(hooksFile, 'utf8').includes('scripts/hooks'), 'the merged file carries the EGC hook entries');
+      // Windows writes these paths with backslashes (escaped once more in JSON).
+      const carriesEgcHooks = content => /scripts[\\/]+hooks/.test(content);
+      assert.ok(carriesEgcHooks(fs.readFileSync(hooksFile, 'utf8')), 'the merged file carries the EGC hook entries');
 
       // The recorded entries live outside ~/.github; they are still accepted
       // because the current manifest plans them, so the merge is reversed
@@ -142,7 +144,7 @@ function runTests() {
       assert.strictEqual(uninstallResult.code, 0, uninstallResult.stderr);
       assert.ok(uninstallResult.stdout.includes('Status: UNINSTALLED'), uninstallResult.stdout);
       assert.ok(uninstallResult.stdout.includes('errors=0'), uninstallResult.stdout);
-      assert.ok(!fs.readFileSync(hooksFile, 'utf8').includes('scripts/hooks'), 'the EGC hook entries are reversed out of the merged file');
+      assert.ok(!carriesEgcHooks(fs.readFileSync(hooksFile, 'utf8')), 'the EGC hook entries are reversed out of the merged file');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
