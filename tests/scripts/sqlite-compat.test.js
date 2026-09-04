@@ -112,6 +112,52 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('ANALYZE and value-setting pragmas are persisted; SELECT and reporting pragmas are not treated as writes', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+      await db.close();
+      const again = await openCompatDatabase(file, 'test');
+      await again.exec('PRAGMA user_version = 7');
+      await again.exec('ANALYZE');
+      await again.close();
+      const third = await openCompatDatabase(file, 'test');
+      const version = await third.get('PRAGMA user_version');
+      assert.strictEqual(Number(Object.values(version)[0]), 7, 'a value-setting pragma must reach the file');
+      const stat = await third.all("SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'");
+      assert.strictEqual(stat.length, 1, 'ANALYZE output must reach the file');
+      await third.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await test('a permission error on the write-ahead log is surfaced, not mistaken for an absent log', async () => {
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+      console.log('    - skipped: root ignores directory permissions');
+      return;
+    }
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const inner = path.join(dir, 'locked');
+    fs.mkdirSync(inner);
+    const file = path.join(inner, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+      await db.close();
+      fs.writeFileSync(`${file}-wal`, Buffer.alloc(8, 1));
+      fs.chmodSync(inner, 0o000);
+      await assert.rejects(() => openCompatDatabase(file, 'test'), err => err.code === 'EACCES');
+    } finally {
+      try { fs.chmodSync(inner, 0o755); } catch { /* already writable */ }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (await test('refuses a file whose write-ahead log still holds data the portable engine cannot read', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
@@ -143,8 +189,16 @@ async function runTests() {
       await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
       await new Promise(r => setTimeout(r, 60));
       fs.chmodSync(dir, 0o555);
-      await db.run('INSERT INTO items DEFAULT VALUES');
-      await new Promise(r => setTimeout(r, 80));
+      const captured = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk, ...rest) => { captured.push(String(chunk)); return originalWrite.call(process.stderr, chunk, ...rest); };
+      try {
+        await db.run('INSERT INTO items DEFAULT VALUES');
+        await new Promise(r => setTimeout(r, 80));
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      assert.ok(captured.some(line => line.includes('[sqlite-compat] could not persist')), `expected the persist failure on stderr, got: ${captured.join('|').slice(0, 200)}`);
       const rows = await db.all('SELECT COUNT(*) AS n FROM items');
       assert.strictEqual(rows[0].n, 1, 'the in-memory database keeps working');
       fs.chmodSync(dir, 0o755);

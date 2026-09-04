@@ -147,6 +147,41 @@ let searchIndexReady = false;
 // FTS5 sync triggers written by an FTS5-capable engine (decisions_fts_after_*,
 // lessons_fts_after_*) reference the virtual table on every write, so a
 // build without FTS5 has to remove them to keep inserting at all.
+interface FtsIndexSpec {
+  version: number;
+  triggerPrefix: string;
+  table: string;
+  create: (db: Database) => Promise<void>;
+  rebuild: (db: Database) => Promise<void>;
+  fallbackNote: string;
+}
+
+// Creates or repairs one FTS5 index and reports whether it is usable. The
+// statements are idempotent, so they run on every start: a build without
+// FTS5 drops the sync triggers (they would break every write) and the next
+// FTS5-capable start puts them back and backfills the index.
+async function ensureFtsIndex(db: Database, spec: FtsIndexSpec): Promise<boolean> {
+  const recorded = await db.get('SELECT version FROM schema_migrations WHERE version = ?', [spec.version]);
+  try {
+    const triggers = await countFtsTriggers(db, spec.triggerPrefix);
+    await spec.create(db);
+    // IF NOT EXISTS leaves an existing index untouched without loading the
+    // module, so touch the virtual table to learn whether FTS5 is here.
+    await db.get(`SELECT 1 FROM ${spec.table} LIMIT 1`);
+    if (!recorded || triggers < 3) {
+      await spec.rebuild(db);
+    }
+    if (!recorded) {
+      await db.run('INSERT INTO schema_migrations (version) VALUES (?)', [spec.version]);
+    }
+    return true;
+  } catch (e) {
+    await dropFtsTriggers(db, spec.triggerPrefix);
+    log('WARN', spec.fallbackNote, { error: String(e) });
+    return false;
+  }
+}
+
 async function countFtsTriggers(db: Database, prefix: string): Promise<number> {
   const row = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'trigger' AND name LIKE ?", [`${prefix}%`]);
   return Number(row?.n ?? 0);
@@ -164,6 +199,19 @@ async function dropFtsTriggers(db: Database, prefix: string): Promise<void> {
 
 // Substring search over decisions for SQLite builds without FTS5: every
 // whitespace-separated term must appear in the context or the decision.
+// FTS5 when the index is usable; otherwise the same substring matching
+// lesson_recall already falls back to, so the tool keeps answering.
+async function handleSearchHistory(db: Database, query: string, limit: number, minScore: number | undefined) {
+  if (!searchIndexReady) {
+    const results = (await searchDecisionsBySubstring(db, query, limit)).filter(r => r.score >= (minScore ?? 0));
+    log('INFO', 'Decision history searched by substring (no FTS5)', { results: results.length });
+    return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score: minScore, count: results.length, mode: 'substring' } }, null, 2) }] };
+  }
+  const results = await searchDecisions(db, query, { limit, minScore });
+  log('INFO', 'Decision history searched', { results: results.length });
+  return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score: minScore, count: results.length } }, null, 2) }] };
+}
+
 // Same row shape as searchDecisions (id, content, context, date, score) so
 // callers cannot tell the engines apart; every match scores 1.
 async function searchDecisionsBySubstring(db: Database, query: string, limit: number): Promise<Array<{ id: number; content: string; context: string; date: string; score: number }>> {
@@ -171,7 +219,7 @@ async function searchDecisionsBySubstring(db: Database, query: string, limit: nu
   if (terms.length === 0) return [];
   // The term is data, never a pattern: escape LIKE's wildcards.
   const escaped = terms.map(t => t.replace(/[\\%_]/g, m => `\\${m}`));
-  const where = escaped.map(() => "(LOWER(context) LIKE ? ESCAPE '\\' OR LOWER(decision) LIKE ? ESCAPE '\\')").join(' AND ');
+  const where = escaped.map(() => String.raw`(LOWER(context) LIKE ? ESCAPE '\' OR LOWER(decision) LIKE ? ESCAPE '\')`).join(' AND ');
   const params = escaped.flatMap(t => [`%${t}%`, `%${t}%`]);
   const rows: Array<{ id: number; context: string; decision: string; timestamp: string }> = await db.all(
     `SELECT id, context, decision, timestamp FROM decisions WHERE ${where} ORDER BY timestamp DESC LIMIT ?`,
@@ -336,31 +384,14 @@ async function runMigrations(db: Database, dbDir: string) {
     // Migration 2: FTS5 index over decisions for BM25 keyword search.
     // Triggers keep the index in sync incrementally on every write; the
     // one-time rebuild backfills rows stored before this migration existed.
-    const hasV2 = await db.get('SELECT version FROM schema_migrations WHERE version = 2');
-    try {
-      // The index statements are idempotent, so they run on every start: a
-      // build without FTS5 drops the sync triggers (below) and the next
-      // FTS5-capable start has to put them back and backfill the index.
-      const decisionTriggers = await countFtsTriggers(db, 'decisions_fts_after_');
-      await createSearchIndex(db);
-      // IF NOT EXISTS leaves an existing index untouched without loading the
-      // module, so touch the virtual table to learn whether FTS5 is here.
-      await db.get('SELECT 1 FROM decisions_fts LIMIT 1');
-      if (!hasV2 || decisionTriggers < 3) {
-        await rebuildSearchIndex(db);
-      }
-      if (!hasV2) {
-        await db.run('INSERT INTO schema_migrations (version) VALUES (2)');
-      }
-      searchIndexReady = true;
-    } catch (e) {
-      // SQLite builds without FTS5 keep working: search_history answers by
-      // substring, and the triggers a previous FTS5-capable engine left in
-      // the file are removed so plain writes to decisions keep succeeding.
-      searchIndexReady = false;
-      await dropFtsTriggers(db, 'decisions_fts_after_');
-      log('WARN', 'FTS5 unavailable, search_history falls back to substring matching', { error: String(e) });
-    }
+    searchIndexReady = await ensureFtsIndex(db, {
+      version: 2,
+      triggerPrefix: 'decisions_fts_after_',
+      table: 'decisions_fts',
+      create: createSearchIndex,
+      rebuild: rebuildSearchIndex,
+      fallbackNote: 'FTS5 unavailable, search_history falls back to substring matching',
+    });
 
     // Migration 3: working_memory table for transient, TTL-bounded entries.
     const hasV3 = await db.get('SELECT version FROM schema_migrations WHERE version = 3');
@@ -395,23 +426,14 @@ async function runMigrations(db: Database, dbDir: string) {
     // Migration 5: FTS5 index over lessons for BM25 keyword search.
     // Mirrors the decisions_fts pattern; triggers keep the index in sync on
     // every write and a one-time rebuild backfills lessons from Migration 4.
-    const hasV5 = await db.get('SELECT version FROM schema_migrations WHERE version = 5');
-    try {
-      const lessonTriggers = await countFtsTriggers(db, 'lessons_fts_after_');
-      await createLessonsSearchIndex(db);
-      await db.get('SELECT 1 FROM lessons_fts LIMIT 1');
-      if (!hasV5 || lessonTriggers < 3) {
-        await rebuildLessonsSearchIndex(db);
-      }
-      if (!hasV5) {
-        await db.run('INSERT INTO schema_migrations (version) VALUES (5)');
-      }
-      lessonsSearchIndexReady = true;
-    } catch (e) {
-      await dropFtsTriggers(db, 'lessons_fts_after_');
-      lessonsSearchIndexReady = false;
-      log('WARN', 'FTS5 unavailable for lessons, lesson_recall falls back to substring matching', { error: String(e) });
-    }
+    lessonsSearchIndexReady = await ensureFtsIndex(db, {
+      version: 5,
+      triggerPrefix: 'lessons_fts_after_',
+      table: 'lessons_fts',
+      create: createLessonsSearchIndex,
+      rebuild: rebuildLessonsSearchIndex,
+      fallbackNote: 'FTS5 unavailable for lessons, lesson_recall falls back to substring matching',
+    });
 
     // Migration 6: project_path column in lessons for per-project lesson scoping.
     const hasV6 = await db.get('SELECT version FROM schema_migrations WHERE version = 6');
@@ -1810,17 +1832,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case "search_history": {
         const { query, limit, min_score } = SearchHistorySchema.parse(request.params.arguments);
-        if (!searchIndexReady) {
-          // No FTS5 on this SQLite build (the portable engine, or a native
-          // build without the extension): the same substring matching
-          // lesson_recall already falls back to, so the tool keeps answering.
-          const results = (await searchDecisionsBySubstring(db, query, limit)).filter(r => r.score >= (min_score ?? 0));
-          log('INFO', 'Decision history searched by substring (no FTS5)', { results: results.length });
-          return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score, count: results.length, mode: 'substring' } }, null, 2) }] };
-        }
-        const results = await searchDecisions(db, query, { limit, minScore: min_score });
-        log('INFO', 'Decision history searched', { results: results.length });
-        return { content: [{ type: "text", text: JSON.stringify({ results, meta: { query, limit, min_score, count: results.length } }, null, 2) }] };
+        return await handleSearchHistory(db, query, limit, min_score);
       }
       case "get_project_state": {
         return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: selectedEngine() === 'wasm' ? 'sqlite-wasm' : 'sqlite-wal', arbitration: "MessageQueue" }) }] };

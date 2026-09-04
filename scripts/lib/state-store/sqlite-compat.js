@@ -15,10 +15,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SKIPPED_PRAGMAS = /^\s*PRAGMA\s+(journal_mode|busy_timeout|synchronous)\b[^;]*;?/gim;
-// Anything that can change the file persists it; a read that merely
-// mentions one of these words in a literal costs one harmless extra write.
-const MUTATING_KEYWORD = /\b(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|REPLACE|VACUUM|REINDEX)\b/i;
+// Each skipped pragma runs to its terminator on the same line; no anchor
+// and no whitespace class that can span lines, so nothing backtracks.
+const SKIPPED_PRAGMA = /\bPRAGMA[ \t]+(?:journal_mode|busy_timeout|synchronous)\b[^;\n]*;?/gi;
+// A trimmed statement counts as a plain read only when it is a SELECT, an
+// EXPLAIN, or a pragma that merely reports a value. Everything else (writes,
+// DDL, ANALYZE, VACUUM, value-setting pragmas, any CTE) reaches the file; a
+// read misclassified as a write costs one extra save and nothing more.
+const READ_ONLY_STATEMENT = /^(?:SELECT\b|EXPLAIN\b|PRAGMA[ \t]+[a-z_]+$)/i;
 const NATIVE_FAILURE_MESSAGE = /GLIBC|dlopen|bindings file|\.node'?:|invalid ELF header|not a valid Win32 application|Symbol not found/i;
 
 let sqlJsPromise = null;
@@ -42,6 +46,11 @@ function isNativeLoadFailure(error) {
   if (!error || typeof error !== 'object') return false;
   if (error.code === 'ERR_DLOPEN_FAILED' || error.code === 'MODULE_NOT_FOUND') return true;
   return NATIVE_FAILURE_MESSAGE.test(errorMessage(error));
+}
+
+function mutates(sql) {
+  const statements = sql.split(';').map(part => part.trim()).filter(Boolean);
+  return statements.some(statement => !READ_ONLY_STATEMENT.test(statement));
 }
 
 function namedKey(key) {
@@ -77,7 +86,7 @@ class WasmDatabase {
     this.db.run(sql, normalizeParams(params));
     const changes = this.db.getRowsModified();
     const row = await this.get('SELECT last_insert_rowid() AS id');
-    if (MUTATING_KEYWORD.test(sql)) this.schedulePersist();
+    if (mutates(sql)) this.schedulePersist();
     return { lastID: Number(row?.id ?? 0), changes };
   }
 
@@ -104,9 +113,9 @@ class WasmDatabase {
   // driver. WAL, busy timeout and synchronous pragmas only mean something to
   // the native engine, so they are dropped from the text rather than failed.
   async exec(sql) {
-    const text = sql.replace(SKIPPED_PRAGMAS, '');
+    const text = sql.replace(SKIPPED_PRAGMA, '');
     if (text.trim()) this.db.exec(text);
-    if (MUTATING_KEYWORD.test(sql)) this.schedulePersist();
+    if (mutates(sql)) this.schedulePersist();
   }
 
   async close() {
@@ -154,8 +163,11 @@ function assertNoPendingWal(filename) {
   let size;
   try {
     size = fs.statSync(wal).size;
-  } catch {
-    return;
+  } catch (error) {
+    // Only a missing sidecar means there is nothing to fold back; a
+    // permission or I/O error must not be mistaken for that.
+    if (error && error.code === 'ENOENT') return;
+    throw error;
   }
   if (size > 0) {
     throw new Error(`${wal} holds ${size} bytes of write-ahead data that the portable engine cannot read; open the database once with a working native sqlite3 so it is checkpointed, or restore a clean copy, before using the portable engine.`);
