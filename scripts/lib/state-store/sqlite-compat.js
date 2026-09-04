@@ -47,7 +47,7 @@ function namedKey(key) {
 }
 
 function nullForUndefined(value) {
-  return value === undefined ? null : value;
+  return value ?? null;
 }
 
 // The `sqlite` package accepts (sql, a, b), (sql, [a, b]) and (sql, {name}).
