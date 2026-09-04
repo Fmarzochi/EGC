@@ -53,7 +53,13 @@ function copyThroughDescriptor(sourcePath, descriptor) {
     for (;;) {
       const read = fs.readSync(source, buffer, 0, buffer.length, null);
       if (read === 0) break;
-      fs.writeSync(descriptor, buffer, 0, read);
+      let offset = 0;
+      while (offset < read) {
+        const written = fs.writeSync(descriptor, buffer, offset, read - offset);
+        if (written <= 0) throw new Error(`Short write while copying ${sourcePath}`);
+        offset += written;
+      }
+
     }
   } finally {
     fs.closeSync(source);
