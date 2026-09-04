@@ -14,7 +14,15 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { readDashboardToken } = require('../lib/dashboard-token');
+// The token reader ships with the hooks runtime; an install recorded before
+// it existed has no copy until egc repair refreshes it, and then the event
+// goes out without a token instead of the hook failing to load.
+let readDashboardToken = () => null;
+try {
+  ({ readDashboardToken } = require('../lib/dashboard-token'));
+} catch {
+  // an older install without the helper: no token, no crash
+}
 const _egcRaw = process.env.EGC_PORT;
 const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : Number.NaN;
 const DASHBOARD_PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;

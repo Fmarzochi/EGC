@@ -6,7 +6,15 @@
 
 const fs = require('node:fs');
 const http = require('node:http');
-const { readDashboardToken } = require('./dashboard-token');
+// The token reader ships with the hooks runtime; an install recorded before
+// it existed has no copy until egc repair refreshes it, and then the event
+// goes out without a token instead of the hook failing to load.
+let readDashboardToken = () => null;
+try {
+  ({ readDashboardToken } = require('./dashboard-token'));
+} catch {
+  // an older install without the helper: no token, no crash
+}
 
 const DEFAULT_DASHBOARD_PORT = 7890;
 const DASHBOARD_TIMEOUT_MS = 200;
