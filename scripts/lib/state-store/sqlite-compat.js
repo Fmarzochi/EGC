@@ -15,14 +15,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Each skipped pragma runs to its terminator on the same line; no anchor
-// and no whitespace class that can span lines, so nothing backtracks.
-const SKIPPED_PRAGMA = /\bPRAGMA[ \t]+(?:journal_mode|busy_timeout|synchronous)\b[^;\n]*;?/gi;
+// Pragmas that only mean something to the native engine (WAL, busy
+// timeout, synchronous) are dropped from the text before sql.js sees it.
+const SKIPPED_PRAGMA = /^PRAGMA[ \t]+(?:journal_mode|busy_timeout|synchronous)\b/i;
 // A trimmed statement counts as a plain read only when it is a SELECT, an
-// EXPLAIN, or a pragma that merely reports a value. Everything else (writes,
-// DDL, ANALYZE, VACUUM, value-setting pragmas, any CTE) reaches the file; a
+// EXPLAIN, or a bare pragma from the allowlist of value-reporting pragmas.
+// Everything else (writes, DDL, ANALYZE, VACUUM, value-setting pragmas,
+// PRAGMA optimize, any CTE, any pragma not on the list) reaches the file; a
 // read misclassified as a write costs one extra save and nothing more.
-const READ_ONLY_STATEMENT = /^(?:SELECT\b|EXPLAIN\b|PRAGMA[ \t]+[a-z_]+$)/i;
+const REPORTING_PRAGMA = /^PRAGMA[ \t]+(?:user_version|schema_version|application_id|journal_mode|synchronous|foreign_keys|busy_timeout|page_size|page_count|freelist_count|integrity_check|quick_check|compile_options|database_list|table_list|collation_list|encoding)$/i;
+const READ_ONLY_STATEMENT = /^(?:SELECT\b|EXPLAIN\b)/i;
 const NATIVE_FAILURE_MESSAGE = /GLIBC|dlopen|bindings file|\.node'?:|invalid ELF header|not a valid Win32 application|Symbol not found/i;
 
 let sqlJsPromise = null;
@@ -48,9 +50,41 @@ function isNativeLoadFailure(error) {
   return NATIVE_FAILURE_MESSAGE.test(errorMessage(error));
 }
 
+// Splits SQL text into statements on the semicolons that sit outside
+// single- and double-quoted literals, so a literal such as
+// 'PRAGMA synchronous = NORMAL;' stays part of its SELECT. Joining the
+// pieces back with ';' reproduces the original text exactly, trigger
+// bodies included.
+function splitStatements(sql) {
+  const pieces = [];
+  let start = 0;
+  let quote = null;
+  for (let i = 0; i < sql.length; i += 1) {
+    const ch = sql[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+    } else if (ch === ';') {
+      pieces.push(sql.slice(start, i));
+      start = i + 1;
+    }
+  }
+  pieces.push(sql.slice(start));
+  return pieces;
+}
+
+function isReadOnly(statement) {
+  const trimmed = statement.trim();
+  return trimmed === '' || READ_ONLY_STATEMENT.test(trimmed) || REPORTING_PRAGMA.test(trimmed);
+}
+
 function mutates(sql) {
-  const statements = sql.split(';').map(part => part.trim()).filter(Boolean);
-  return statements.some(statement => !READ_ONLY_STATEMENT.test(statement));
+  return splitStatements(sql).some(statement => !isReadOnly(statement));
+}
+
+function withoutSkippedPragmas(sql) {
+  return splitStatements(sql).filter(statement => !SKIPPED_PRAGMA.test(statement.trim())).join(';');
 }
 
 function namedKey(key) {
@@ -113,7 +147,7 @@ class WasmDatabase {
   // driver. WAL, busy timeout and synchronous pragmas only mean something to
   // the native engine, so they are dropped from the text rather than failed.
   async exec(sql) {
-    const text = sql.replace(SKIPPED_PRAGMA, '');
+    const text = withoutSkippedPragmas(sql);
     if (text.trim()) this.db.exec(text);
     if (mutates(sql)) this.schedulePersist();
   }
@@ -166,7 +200,7 @@ function assertNoPendingWal(filename) {
   } catch (error) {
     // Only a missing sidecar means there is nothing to fold back; a
     // permission or I/O error must not be mistaken for that.
-    if (error && error.code === 'ENOENT') return;
+    if (error?.code === 'ENOENT') return;
     throw error;
   }
   if (size > 0) {
@@ -214,4 +248,4 @@ function selectedEngine() {
   return selected;
 }
 
-module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, WasmDatabase };
+module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase };

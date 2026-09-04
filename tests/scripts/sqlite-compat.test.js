@@ -5,7 +5,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { openCompatDatabase, isNativeLoadFailure, normalizeParams } = require('../../scripts/lib/state-store/sqlite-compat');
+const { openCompatDatabase, isNativeLoadFailure, normalizeParams, mutates, splitStatements } = require('../../scripts/lib/state-store/sqlite-compat');
+
+// chmod-based cases need a filesystem that enforces directory permission
+// bits for the current user: not Windows, and not root.
+function permissionBitsEnforced() {
+  if (process.platform === 'win32') return false;
+  return !(typeof process.getuid === 'function' && process.getuid() === 0);
+}
 
 async function test(name, fn) {
   try {
@@ -39,6 +46,27 @@ async function runTests() {
     assert.deepStrictEqual(normalizeParams(['a', 2]), ['a', 2]);
     assert.deepStrictEqual(normalizeParams([{ id: 1, $name: 'n', ':x': undefined }]), { $id: 1, $name: 'n', ':x': null });
     assert.deepStrictEqual(normalizeParams([7]), [7]);
+  })) passed++; else failed++;
+
+  if (await test('statements are split on semicolons outside quoted literals and classified conservatively', async () => {
+    assert.deepStrictEqual(splitStatements("SELECT 'a;b'; SELECT \"c;d\""), ["SELECT 'a;b'", " SELECT \"c;d\""]);
+    assert.strictEqual(mutates("SELECT 'PRAGMA user_version = 3'"), false);
+    assert.strictEqual(mutates('PRAGMA user_version'), false);
+    assert.strictEqual(mutates('EXPLAIN SELECT 1'), false);
+    assert.strictEqual(mutates('PRAGMA optimize'), true);
+    assert.strictEqual(mutates('PRAGMA user_version = 7'), true);
+    assert.strictEqual(mutates('ANALYZE'), true);
+    assert.strictEqual(mutates('WITH s(x) AS (SELECT 1) INSERT INTO t SELECT x FROM s'), true);
+    assert.strictEqual(mutates('SELECT 1; UPDATE t SET x = 1'), true);
+  })) passed++; else failed++;
+
+  if (await test('a pragma inside a string literal is executed as data, not stripped', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const db = await openCompatDatabase(':memory:', 'test');
+    await db.exec("CREATE TABLE notes (body TEXT); INSERT INTO notes VALUES ('PRAGMA synchronous = NORMAL; keep me')");
+    const row = await db.get('SELECT body FROM notes');
+    assert.strictEqual(row.body, 'PRAGMA synchronous = NORMAL; keep me');
+    await db.close();
   })) passed++; else failed++;
 
   if (await test('the portable engine answers run, get, all and exec and persists to the file', async () => {
@@ -136,8 +164,8 @@ async function runTests() {
   })) passed++; else failed++;
 
   if (await test('a permission error on the write-ahead log is surfaced, not mistaken for an absent log', async () => {
-    if (typeof process.getuid === 'function' && process.getuid() === 0) {
-      console.log('    - skipped: root ignores directory permissions');
+    if (!permissionBitsEnforced()) {
+      console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
     }
     process.env.EGC_SQLITE_ENGINE = 'wasm';
@@ -177,8 +205,8 @@ async function runTests() {
   })) passed++; else failed++;
 
   if (await test('a failed background persist is reported, not thrown', async () => {
-    if (typeof process.getuid === 'function' && process.getuid() === 0) {
-      console.log('    - skipped: root ignores directory permissions');
+    if (!permissionBitsEnforced()) {
+      console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
     }
     process.env.EGC_SQLITE_ENGINE = 'wasm';
