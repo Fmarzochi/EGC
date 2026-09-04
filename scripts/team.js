@@ -176,6 +176,12 @@ function handleInit(args) {
 
   const config = { backend, remote, branch, teamKey };
   fs.mkdirSync(path.dirname(TEAM_CONFIG_PATH), { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(path.dirname(TEAM_CONFIG_PATH), 0o700);
+  } catch {
+    // modes are not supported on this filesystem
+  }
+
   fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
   try {
     fs.chmodSync(TEAM_CONFIG_PATH, 0o600);

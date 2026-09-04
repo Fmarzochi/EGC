@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
+
 import { decryptState, encryptState } from '../encryption';
 
 // State that leaves the machine travels sealed with the team key: the
@@ -19,9 +21,11 @@ export function generateTeamKey(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// The repository path of a state file, the same on every platform.
+// The repository path of a state file: the host's separator becomes the
+// repository's, and nothing else is rewritten, so two distinct local names
+// never share one authenticated path.
 export function envelopePath(relativePath: string): string {
-  return relativePath.split('\\').join('/');
+  return path.sep === '/' ? relativePath : relativePath.replaceAll(path.sep, '/');
 }
 
 function derivedKey(teamKey: Buffer, purpose: 'encrypt' | 'sign'): Buffer {

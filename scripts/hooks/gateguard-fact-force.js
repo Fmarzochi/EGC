@@ -68,11 +68,24 @@ function presentedKey(key) {
 function readTranscriptTail(candidate) {
   if (typeof candidate !== 'string' || !candidate.endsWith('.jsonl') || !path.isAbsolute(candidate)) return null;
   if (candidate.split(/[\\/]/).includes('..')) return null;
-  const resolved = path.resolve(candidate);
-  const roots = [os.homedir(), os.tmpdir()].map(root => path.resolve(root));
-  if (!roots.some(root => resolved === root || resolved.startsWith(root + path.sep))) return null;
+  // The real location is what is read: a link under an allowed root that
+  // points elsewhere is refused.
+  let real;
   try {
-    const descriptor = fs.openSync(resolved, 'r');
+    real = fs.realpathSync(path.resolve(candidate));
+  } catch (_) { // NOSONAR: a transcript that cannot be resolved is not read
+    return null;
+  }
+  const roots = [os.homedir(), os.tmpdir()].map(root => {
+    try {
+      return fs.realpathSync(root);
+    } catch (_) { // NOSONAR: a root that cannot be resolved admits nothing
+      return null;
+    }
+  }).filter(Boolean);
+  if (!roots.some(root => real === root || real.startsWith(root + path.sep))) return null;
+  try {
+    const descriptor = fs.openSync(real, 'r');
     try {
       const size = fs.fstatSync(descriptor).size;
       const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);

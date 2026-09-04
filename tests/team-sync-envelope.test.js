@@ -55,6 +55,8 @@ async function runTests() {
       assert.strictEqual(envelope.openEnvelope(sealed, teamKey, path.join('proj', 'main.md')), 'hello team', 'the platform separator is normalized');
       assert.strictEqual(envelope.openEnvelope(sealed, otherKey, 'proj/main.md'), null);
       assert.strictEqual(envelope.openEnvelope(sealed, teamKey, 'other/main.md'), null, 'an envelope copied to another path is refused');
+      if (path.sep === '/') assert.strictEqual(envelope.openEnvelope(envelope.sealEnvelope('x', teamKey, 'a\\b.md'), teamKey, 'a/b.md'), null, 'a backslash in a POSIX name is not a separator');
+
       const parsed = JSON.parse(sealed);
       assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, path: 'other/main.md' }), teamKey, 'other/main.md'), null, 'a rewritten path breaks the signature');
       const flipped = Buffer.from(parsed.data, 'base64');
@@ -87,7 +89,22 @@ async function runTests() {
       } catch {
         linked = false;
       }
+      let linkedParent;
+      try {
+        fs.mkdirSync(path.join(dir, 'parent-target'), { recursive: true });
+        fs.symlinkSync(path.join(dir, 'parent-target'), path.join(localDir, 'linked-parent'), 'dir');
+        fs.mkdirSync(path.join(syncDir, 'linked-parent'), { recursive: true });
+        fs.writeFileSync(path.join(syncDir, 'linked-parent', 'note.md'), envelope.sealEnvelope(doc('2026-09-09T12:00:00.000Z', 'through a linked parent'), teamKey, 'linked-parent/note.md'));
+        linkedParent = true;
+      } catch {
+        linkedParent = false;
+      }
       const outcome = teamSync.mergeTeamStateFrom(syncDir, localDir, teamKey, personalKey);
+      if (linkedParent) {
+        assert.ok(outcome.rejected.some(entry => entry.startsWith(path.join('linked-parent', 'note.md'))), 'a local parent that is a link is refused');
+        assert.strictEqual(fs.readdirSync(path.join(dir, 'parent-target')).length, 0, 'nothing is written through the linked parent');
+        outcome.rejected = outcome.rejected.filter(entry => !entry.startsWith(path.join('linked-parent', 'note.md')));
+      }
       const expectedRejected = ['proj/foreign.md', 'proj/moved.md', 'proj/plain.md'].concat(linked ? ['proj/link.md'] : []).map(p => p.split('/').join(path.sep)).sort();
       assert.deepStrictEqual(outcome.rejected.sort(), expectedRejected);
       assert.deepStrictEqual(outcome.unreadable, [path.join('proj', 'locked.md')]);

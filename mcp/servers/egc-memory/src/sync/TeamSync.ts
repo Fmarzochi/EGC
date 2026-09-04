@@ -1,4 +1,6 @@
+import crypto from 'node:crypto';
 import path from 'node:path';
+
 import os from 'node:os';
 import fs from 'node:fs';
 import { SyncBackend } from './SyncBackend';
@@ -26,15 +28,22 @@ export function getTeamConfig(): SyncConfig | null {
 // The config carries the team key, so it is private to the user.
 export function writeTeamConfig(config: SyncConfig): void {
   const egcDir = path.join(os.homedir(), '.egc');
-  if (!fs.existsSync(egcDir)) {
-    fs.mkdirSync(egcDir, { recursive: true, mode: 0o700 });
-  }
-  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  fs.mkdirSync(egcDir, { recursive: true, mode: 0o700 });
   try {
-    fs.chmodSync(TEAM_CONFIG_PATH, 0o600);
+    fs.chmodSync(egcDir, 0o700);
   } catch {
     // modes are not supported on this filesystem
   }
+  // Written next to its place and renamed over it, so an interrupted write
+  // never leaves a truncated config that would look like a missing team.
+  const temporary = `${TEAM_CONFIG_PATH}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  try {
+    fs.chmodSync(temporary, 0o600);
+  } catch {
+    // modes are not supported on this filesystem
+  }
+  fs.renameSync(temporary, TEAM_CONFIG_PATH);
 }
 
 export async function teamInit(backend: string, remote: string, branch: string = 'main', teamKey?: string): Promise<SyncConfig> {
@@ -192,6 +201,18 @@ function isLink(filePath: string): boolean {
   }
 }
 
+// Whether any directory between `root` (exclusive) and `filePath`
+// (exclusive) is a link: a write there would land elsewhere.
+function hasLinkedAncestor(filePath: string, root: string): boolean {
+  let probe = path.dirname(filePath);
+  const top = path.resolve(root);
+  while (probe !== top && probe.startsWith(top + path.sep)) {
+    if (isLink(probe)) return true;
+    probe = path.dirname(probe);
+  }
+  return false;
+}
+
 function removeSyncFile(filePath: string): void {
   try {
     fs.rmSync(filePath, { force: true });
@@ -204,12 +225,58 @@ function removeSyncFile(filePath: string): void {
 // before it can touch local state; anything else is reported and skipped.
 // Local files are read and written through the personal key, so the merge
 // compares plaintext timestamps and the result stays encrypted at rest.
+type MergeContext = { syncStateDir: string; localStateDir: string; teamKey: Buffer; personalKey: Buffer; outcome: TeamMergeOutcome };
+
+// The local document as it stands, or null when it must not be touched
+// (a link, or a file that does not open with the personal key).
+function currentLocal(localFile: string, relativePath: string, context: MergeContext): { content: string; legacyPlaintext: boolean } | null {
+  if (isLink(localFile) || hasLinkedAncestor(localFile, context.localStateDir)) {
+    context.outcome.rejected.push(`${relativePath} (local path goes through a link)`);
+    return null;
+  }
+  if (!fs.existsSync(localFile)) return { content: '', legacyPlaintext: false };
+  try {
+    const raw = fs.readFileSync(localFile);
+    return { content: readStateFile(localFile, context.personalKey), legacyPlaintext: !isEncrypted(raw) };
+  } catch {
+    // A local file that does not open with the personal key (rotated key,
+    // damaged bytes) is left exactly as it is.
+    context.outcome.unreadable.push(relativePath);
+    return null;
+  }
+}
+
+function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
+  const relativePath = path.relative(context.syncStateDir, syncFile);
+  const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), context.teamKey, relativePath);
+  if (remoteContent === null) {
+    // Refused for local state and removed from the working tree, so the
+    // next push does not carry it back into the shared repository.
+    context.outcome.rejected.push(relativePath);
+    removeSyncFile(syncFile);
+    return;
+  }
+  const localFile = path.join(context.localStateDir, relativePath);
+  const local = currentLocal(localFile, relativePath, context);
+  if (local === null) return;
+  const merged = local.content ? mergeStateDocs(local.content, remoteContent) : remoteContent;
+  if (merged === local.content && !local.legacyPlaintext) return;
+  fs.mkdirSync(path.dirname(localFile), { recursive: true });
+  writeStateFile(localFile, merged, context.personalKey);
+  context.outcome.merged += 1;
+}
+
 export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, teamKey: Buffer, personalKey: Buffer): TeamMergeOutcome {
   const outcome: TeamMergeOutcome = { merged: 0, rejected: [], unreadable: [] };
   if (!fs.existsSync(syncStateDir)) return outcome;
-  if (!fs.existsSync(localStateDir)) {
-    fs.mkdirSync(localStateDir, { recursive: true });
+  // The state tree of the repository must be a real directory: a link there
+  // would make the merge read, reject and remove whatever it points at.
+  if (isLink(syncStateDir)) {
+    outcome.rejected.push('state (the sync tree is a link)');
+    removeSyncFile(syncStateDir);
+    return outcome;
   }
+  fs.mkdirSync(localStateDir, { recursive: true });
   const entries = walkEntries(syncStateDir);
   // A link in the repository is refused and removed, so it is neither
   // followed here nor pushed back to the team.
@@ -217,41 +284,8 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
     outcome.rejected.push(path.relative(syncStateDir, link));
     removeSyncFile(link);
   }
-  for (const syncFile of entries.files) {
-    const relativePath = path.relative(syncStateDir, syncFile);
-    const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), teamKey, relativePath);
-    if (remoteContent === null) {
-      // Refused for local state and removed from the working tree, so the
-      // next push does not carry it back into the shared repository.
-      outcome.rejected.push(relativePath);
-      removeSyncFile(syncFile);
-      continue;
-    }
-    const localFile = path.join(localStateDir, relativePath);
-    if (isLink(localFile)) {
-      outcome.rejected.push(`${relativePath} (local path is a link)`);
-      continue;
-    }
-    let localContent = '';
-    let legacyPlaintext = false;
-    if (fs.existsSync(localFile)) {
-      try {
-        const raw = fs.readFileSync(localFile);
-        legacyPlaintext = !isEncrypted(raw);
-        localContent = readStateFile(localFile, personalKey);
-      } catch {
-        // A local file that does not open with the personal key (rotated
-        // key, damaged bytes) is left exactly as it is.
-        outcome.unreadable.push(relativePath);
-        continue;
-      }
-    }
-    const merged = localContent ? mergeStateDocs(localContent, remoteContent) : remoteContent;
-    if (merged === localContent && !legacyPlaintext) continue;
-    fs.mkdirSync(path.dirname(localFile), { recursive: true });
-    writeStateFile(localFile, merged, personalKey);
-    outcome.merged += 1;
-  }
+  const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, outcome };
+  for (const syncFile of entries.files) mergeOneSyncFile(syncFile, context);
   // A team sync never removes local state files: a file absent from the sync
   // repo may be one this machine created and has not pushed yet, and deleting
   // it would be silent, unrecoverable memory loss. Remote deletions therefore
