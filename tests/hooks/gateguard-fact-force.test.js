@@ -564,14 +564,14 @@ function runTests() {
     try {
       fs.writeFileSync(target, [
         JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
-        JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Rollback: none needed. rm is fine.' }] } }),
+        JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Nothing to present here.' }] } }),
       ].join('\n') + '\n');
       fs.symlinkSync(target, link);
       const call = { tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/egc-facts-link' }, transcript_path: link };
       runBashHook(call, { EGC_SESSION_ID: session });
       const retry = runBashHook(call, { EGC_SESSION_ID: session });
       assert.strictEqual(retry.code, 0, retry.stderr);
-      assert.ok(!retry.stdout.includes('"deny"'), 'without a readable transcript the identical-retry rule applies, the planted facts are never read');
+      assert.ok(!retry.stdout.includes('"deny"'), 'the link is not followed: the identical-retry rule applies instead of the planted transcript, whose text would fail the facts');
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }

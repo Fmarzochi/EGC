@@ -101,6 +101,13 @@ async function runTests() {
       }
       const outcome = teamSync.mergeTeamStateFrom(syncDir, localDir, teamKey, personalKey);
       if (linkedParent) {
+        const linkedLocalRoot = path.join(dir, 'linked-local-root');
+        fs.symlinkSync(path.join(dir, 'parent-target'), linkedLocalRoot, 'dir');
+        const viaLink = teamSync.mergeTeamStateFrom(syncDir, linkedLocalRoot, teamKey, personalKey);
+        assert.strictEqual(viaLink.merged, 0, 'nothing is merged into a local tree that is a link');
+        assert.ok(viaLink.rejected.some(entry => entry.includes('local tree is a link')), JSON.stringify(viaLink.rejected));
+        assert.throws(() => teamSync.stageTeamState(linkedLocalRoot, syncDir, teamKey, personalKey), /local state tree is a link/);
+        assert.strictEqual(fs.readdirSync(path.join(dir, 'parent-target')).length, 0, 'nothing is written through the linked root');
         assert.ok(outcome.rejected.some(entry => entry.startsWith(path.join('linked-parent', 'note.md'))), 'a local parent that is a link is refused');
         assert.strictEqual(fs.readdirSync(path.join(dir, 'parent-target')).length, 0, 'nothing is written through the linked parent');
         outcome.rejected = outcome.rejected.filter(entry => !entry.startsWith(path.join('linked-parent', 'note.md')));

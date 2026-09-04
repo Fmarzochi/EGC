@@ -268,15 +268,23 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
 
 export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, teamKey: Buffer, personalKey: Buffer): TeamMergeOutcome {
   const outcome: TeamMergeOutcome = { merged: 0, rejected: [], unreadable: [] };
-  if (!fs.existsSync(syncStateDir)) return outcome;
   // The state tree of the repository must be a real directory: a link there
-  // would make the merge read, reject and remove whatever it points at.
+  // (dangling or not) would make the merge read, reject and remove whatever
+  // it points at.
   if (isLink(syncStateDir)) {
     outcome.rejected.push('state (the sync tree is a link)');
     removeSyncFile(syncStateDir);
     return outcome;
   }
+  if (!fs.existsSync(syncStateDir)) return outcome;
+  // The local tree must be a real directory too, or the merge would write
+  // wherever the link points.
+  if (isLink(localStateDir)) {
+    outcome.rejected.push('local state (the local tree is a link)');
+    return outcome;
+  }
   fs.mkdirSync(localStateDir, { recursive: true });
+
   const entries = walkEntries(syncStateDir);
   // A link in the repository is refused and removed, so it is neither
   // followed here nor pushed back to the team.
@@ -296,7 +304,10 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
 // Local state leaves the machine only as sealed envelopes; a local file that
 // cannot be decrypted is left out rather than shipped opaque.
 export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer): number {
+  if (isLink(localStateDir)) throw new Error('the local state tree is a link and is not staged');
+  if (isLink(syncStateDir)) throw new Error('the sync state tree is a link and is not written');
   if (!fs.existsSync(localStateDir)) return 0;
+
   let staged = 0;
   for (const localFile of walkEntries(localStateDir).files) {
     let plaintext: string;

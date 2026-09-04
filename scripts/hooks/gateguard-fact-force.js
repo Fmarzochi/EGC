@@ -65,6 +65,16 @@ function presentedKey(key) {
 // A transcript named by the hook input is read only when it is an absolute
 // .jsonl file under the home directory or the temporary directory, with no
 // parent segments: the harness writes transcripts there and nowhere else.
+// A root as the filesystem knows it; a root that cannot be resolved admits
+// nothing (the sentinel never prefixes a real path).
+function realRoot(root) {
+  try {
+    return fs.realpathSync(root);
+  } catch (_) { // NOSONAR: see above
+    return '\0';
+  }
+}
+
 function readTranscriptTail(candidate) {
   if (typeof candidate !== 'string' || !candidate.endsWith('.jsonl') || !path.isAbsolute(candidate)) return null;
   if (candidate.split(/[\\/]/).includes('..')) return null;
@@ -76,16 +86,12 @@ function readTranscriptTail(candidate) {
   } catch (_) { // NOSONAR: a transcript that cannot be resolved is not read
     return null;
   }
-  const roots = [os.homedir(), os.tmpdir()].map(root => {
-    try {
-      return fs.realpathSync(root);
-    } catch (_) { // NOSONAR: a root that cannot be resolved admits nothing
-      return null;
-    }
-  }).filter(Boolean);
-  if (!roots.some(root => real === root || real.startsWith(root + path.sep))) return null;
+  const home = realRoot(os.homedir());
+  const temporary = realRoot(os.tmpdir());
+  const transcriptPath = path.resolve(real);
+  if (!transcriptPath.startsWith(home + path.sep) && !transcriptPath.startsWith(temporary + path.sep)) return null;
   try {
-    const descriptor = fs.openSync(real, 'r');
+    const descriptor = fs.openSync(transcriptPath, 'r');
     try {
       const size = fs.fstatSync(descriptor).size;
       const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
