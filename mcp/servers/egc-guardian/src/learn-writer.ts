@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import { openCompatDatabase } from './sqlite-compat.js';
 
 const MARKER_START = '<!-- egc:learn:start -->';
 const MARKER_END   = '<!-- egc:learn:end -->';
@@ -46,7 +45,7 @@ async function loadRecentFailures(projectRoot: string, limit: number): Promise<F
   const dbPath = resolveStateDb();
   if (!fs.existsSync(dbPath)) return [];
 
-  const db = await open({ filename: dbPath, driver: sqlite3.Database });
+  const db = await openCompatDatabase(dbPath, 'egc-guardian');
   try {
     const rows: { tool: string; payload: string }[] = await db.all(`
       SELECT e.payload

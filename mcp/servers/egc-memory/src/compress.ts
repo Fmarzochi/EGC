@@ -2,12 +2,11 @@
 // Observation compression logic for issue #142
 
 import crypto from "node:crypto";
+import { openCompatDatabase } from './sqlite-compat';
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -151,10 +150,7 @@ async function loadRawObservationsFromStateDb(
     return [];
   }
 
-  const db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database,
-  });
+  const db = await openCompatDatabase(dbPath, 'egc-memory');
 
   try {
     try {
@@ -280,10 +276,7 @@ export async function replaceObservation(projectPath: string, id: string, compre
   const dbPath = resolveStateStoreDbPath();
 
   if (fs.existsSync(dbPath)) {
-    const db = await open({
-      filename: dbPath,
-      driver: sqlite3.Database,
-    });
+    const db = await openCompatDatabase(dbPath, 'egc-memory');
 
     try {
       try {
