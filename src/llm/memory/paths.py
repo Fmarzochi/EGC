@@ -68,7 +68,13 @@ _DIRECTORY_DESCRIPTORS = bool(_DIRECTORY) and all(
 
 
 
+def supports_directory_descriptors() -> bool:
+    """Whether this platform binds a directory by descriptor (see above)."""
+    return _DIRECTORY_DESCRIPTORS
+
+
 class PrivateDirectory:
+
     """A category directory the provider works in. Where the platform allows
     it the directory is held open as a descriptor obtained without following
     links, and every file operation is relative to that descriptor, so a
