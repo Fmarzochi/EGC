@@ -27,6 +27,8 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
+
 
 // Session state: scoped per session to avoid cross-session races.
 const STATE_DIR = process.env.GATEGUARD_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.gateguard');
@@ -43,6 +45,131 @@ const ROUTINE_BASH_SESSION_KEY = '__bash_session__';
 const EDIT_WRITE_HOOK_ID = 'pre:edit-write:gateguard-fact-force';
 const BASH_HOOK_ID = 'pre:bash:gateguard-fact-force';
 const EGC_DISABLE_VALUES = new Set(['0', 'false', 'off', 'disabled', 'disable']);
+const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
+
+// The hook input of the current call, kept for the transcript lookup.
+let hookInput = null;
+
+function pendingKey(key) {
+  return `pending:${key}`;
+}
+
+function presentedKey(key) {
+  return `presented:${key}`;
+}
+
+// The assistant text written since the last user turn, read from the
+// harness transcript when one is named in the hook input: that is the
+// message that precedes a retried tool call. Null when no transcript can be
+// read, so a harness without transcripts keeps the identical-retry rule.
+// A transcript named by the hook input is read only when it is an absolute
+// .jsonl file under the home directory or the temporary directory, with no
+// parent segments: the harness writes transcripts there and nowhere else.
+// A root as the filesystem knows it; a root that cannot be resolved admits
+// nothing (the sentinel never prefixes a real path).
+function realRoot(root) {
+  try {
+    return fs.realpathSync(root);
+  } catch (_) { // NOSONAR: see above
+    return '\0';
+  }
+}
+
+function readTranscriptTail(candidate) {
+  if (typeof candidate !== 'string' || !candidate.endsWith('.jsonl') || !path.isAbsolute(candidate)) return null;
+  if (candidate.split(/[\\/]/).includes('..')) return null;
+  // The real location is what is read: a link under an allowed root that
+  // points elsewhere is refused.
+  let real;
+  try {
+    real = fs.realpathSync(path.resolve(candidate));
+  } catch (_) { // NOSONAR: a transcript that cannot be resolved is not read
+    return null;
+  }
+  const home = realRoot(os.homedir());
+  const temporary = realRoot(os.tmpdir());
+  const transcriptPath = path.resolve(real);
+  if (!transcriptPath.startsWith(home + path.sep) && !transcriptPath.startsWith(temporary + path.sep)) return null;
+  try {
+    const descriptor = fs.openSync(transcriptPath, 'r');
+    try {
+      const size = fs.fstatSync(descriptor).size;
+      const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
+      const buffer = Buffer.alloc(size - start);
+      fs.readSync(descriptor, buffer, 0, buffer.length, start);
+      return buffer.toString('utf8');
+    } finally {
+      fs.closeSync(descriptor);
+    }
+  } catch (_) { // NOSONAR: an unreadable transcript keeps the identical-retry rule
+    return null;
+  }
+}
+
+function parseTranscriptLine(line) {
+  try {
+    const entry = JSON.parse(line);
+    return entry && typeof entry === 'object' ? entry : null;
+  } catch (_) { // NOSONAR: a partial first line or a non-JSON line is skipped
+    return null;
+  }
+}
+
+function assistantTextBlocks(entry) {
+  const content = entry.message && Array.isArray(entry.message.content) ? entry.message.content : [];
+  return content.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text);
+}
+
+function recentAssistantText(data) {
+  const tail = readTranscriptTail(data?.transcript_path || data?.transcriptPath);
+  if (tail === null) return null;
+  let texts = [];
+  for (const line of tail.split('\n')) {
+    const entry = parseTranscriptLine(line);
+    if (!entry) continue;
+    if (entry.type === 'user') texts = [];
+    else if (entry.type === 'assistant') texts.push(...assistantTextBlocks(entry));
+  }
+  return texts.join('\n');
+}
+
+function missingFacts(text, required) {
+  const lower = text.toLowerCase();
+  return required.filter(term => term && !lower.includes(term.toLowerCase()));
+}
+
+function factsMissingMsg(missing) {
+  return [
+    '[Fact-Forcing Gate]',
+    '',
+    `The retry was refused: the message before it does not present the required facts (missing: ${missing.join(', ')}).`,
+    'Write the facts in your reply, then retry the same operation.'
+  ].join('\n');
+}
+
+function commandWord(command) {
+  const first = String(command || '').trim().split(/\s+/)[0] || '';
+  return first.split(/[\\/]/).pop();
+}
+
+// The first retry after a denial is accepted only when the message before
+// it presents the facts (when a transcript is there to read); later
+// operations on the same target stay free, as before.
+function refuseUnpresentedFacts(key, required, traceMeta) {
+  if (!isChecked(pendingKey(key)) || isChecked(presentedKey(key))) return null;
+  const text = recentAssistantText(hookInput);
+  if (text === null) {
+    markChecked(presentedKey(key));
+    return null;
+  }
+  const missing = missingFacts(text, required);
+  if (missing.length === 0) {
+    markChecked(presentedKey(key));
+    return null;
+  }
+  trace('governance:denied:facts_missing', { ...traceMeta, missing });
+  return denyResult(factsMissingMsg(missing), { includeRecoveryHint: false });
+}
 
 // One pattern per destructive command; each keeps the same word boundaries
 // the former single alternation applied around the matched command.
@@ -369,7 +496,7 @@ function withRecoveryHint(message, hookIds = [EDIT_WRITE_HOOK_ID]) {
   return [
     message,
     '',
-    `Recovery: if GateGuard is blocking setup or repair work, run this session with \`EGC_GATEGUARD=off\` or add ${disableTargets} to \`EGC_DISABLED_HOOKS\`.`
+    `Recovery: a human doing setup or repair work can lift this gate by adding ${disableTargets} to \`EGC_DISABLED_HOOKS\`.`
   ].join('\n');
 }
 
@@ -417,14 +544,15 @@ function handleEditWrite(rawInput, toolName, toolInput) {
   }
 
   if (!isChecked(filePath)) {
-    if (!markChecked(filePath)) {
+    if (!markChecked(filePath) || !markChecked(pendingKey(filePath))) {
       trace('governance:allowed:state_error', { toolName, filePath });
       return allowWithStateWarning();
     }
     trace('governance:denied:fact_force', { toolName, filePath });
     return denyResult(toolName === 'Edit' ? editGateMsg(filePath) : writeGateMsg(filePath));
   }
-
+  const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath });
+  if (refused) return refused;
   trace('governance:allowed:checked', { toolName, filePath });
   return rawInput;
 }
@@ -441,14 +569,17 @@ function handleMultiEdit(rawInput, toolName, toolInput) {
   const edits = toolInput.edits || [];
   for (const edit of edits) {
     const filePath = edit.file_path || '';
-    if (filePath && !isClaudeSettingsPath(filePath) && !isChecked(filePath)) {
-      if (!markChecked(filePath)) {
+    if (!filePath || isClaudeSettingsPath(filePath)) continue;
+    if (!isChecked(filePath)) {
+      if (!markChecked(filePath) || !markChecked(pendingKey(filePath))) {
         trace('governance:allowed:state_error', { toolName, filePath });
         return allowWithStateWarning();
       }
       trace('governance:denied:fact_force', { toolName, filePath });
       return denyResult(editGateMsg(filePath));
     }
+    const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath });
+    if (refused) return refused;
   }
   trace('governance:allowed:multiedit');
   return rawInput;
@@ -499,7 +630,7 @@ function handleApplyPatch(rawInput, rawPatchInput) {
     if (isClaudeSettingsPath(filePath) || isChecked(filePath)) {
       continue;
     }
-    if (!markChecked(filePath)) {
+    if (!markChecked(filePath) || !markChecked(pendingKey(filePath))) {
       trace('governance:allowed:state_error', { toolName: 'apply_patch', filePath });
       return allowWithStateWarning();
     }
@@ -529,13 +660,15 @@ function handleBash(rawInput, toolName, toolInput) {
   if (isDestructiveBash(command)) {
     const key = '__destructive__' + crypto.createHash('sha256').update(command).digest('hex').slice(0, 16);
     if (!isChecked(key)) {
-      if (!markChecked(key)) {
+      if (!markChecked(key) || !markChecked(pendingKey(key))) {
         trace('governance:allowed:state_error', { toolName, command });
         return allowWithStateWarning();
       }
       trace('governance:denied:destructive', { command });
       return denyResult(destructiveBashMsg(), { includeRecoveryHint: false });
     }
+    const refused = refuseUnpresentedFacts(key, ['rollback', commandWord(command)], { command });
+    if (refused) return refused;
     trace('governance:allowed:destructive_retry', { command });
     return rawInput;
   }
@@ -569,6 +702,7 @@ function run(rawInput) {
   }
 
   activeStateFile = null;
+  hookInput = data;
   getStateFile(data);
 
   const rawToolName = data.tool_name || '';

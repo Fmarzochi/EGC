@@ -262,8 +262,11 @@ Task routing through `orchestrate_task` stays on your machine by default: keywor
 
 ---
 
-## Global memory and parallel sessions
+## Team sync
 
+`egc team init --backend git --remote <url>` creates the team and prints a team key (64 hexadecimal characters); every other member joins with `egc team init ... --key <that key>`. State never enters the shared repository in the clear or under a personal key: each file is sealed with the team key (AES-256-GCM plus an HMAC-SHA256 signature) before it is pushed, and `egc team sync` merges only files that open with that key and an intact signature. A file that was altered in the repository, or written without the key, is reported as rejected and leaves local state untouched.
+
+## Global memory and parallel sessions
 Since v1.1.12 memory has two scopes. Project scope works exactly as before (one state per project branch). The new user-wide global scope is shared across every project: save transversal preferences and lessons once with `update_state` and `scope: "global"`, and every `get_state` in every project appends a deduplicated `Global Memory` section after the project state. Project and branch entries always take precedence, and global memory is only ever written by an explicit global call, never derived from project data.
 
 Parallel sessions coordinate through the session bus. A session announces itself with `session_announce` (presence plus an optional territory, doubling as heartbeat), inspects who else is active with `session_peers`, and takes cooperative locks with `claim_path` before editing shared files. Claims are fail-fast: a conflicting live lock is refused with the holder's identity instead of queued. Sessions silent for 10 minutes are swept and their locks released, so a crashed session never blocks the others.
