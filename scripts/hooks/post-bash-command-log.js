@@ -64,44 +64,77 @@ function secretValueEnd(text, start, attached) {
 }
 
 // curl's -u name:password in any spelling (-u name:pw, -uname:pw, -u=name:pw,
-// --user name:pw, --user=name:pw, -u ":pw", -u 'a b:c'), redacted in one
-// left-to-right pass over shell words: quotes and backslashes are read the
-// way the shell reads them, a separator (;, |, &, newline) starts a new
-// command, and a value is touched only after curl appeared in that command.
-// -u is an ordinary flag for rsync, sudo and others, so those keep theirs.
+// --user name:pw, --user=name:pw, -u ":pw", -u 'a b:c', $(curl -u ...),
+// sh -c 'curl -u ...'), redacted in one left-to-right pass over shell words
+// read the way the shell reads them; a separator (;, |, &, newline) starts a
+// new command, and a value is touched only after curl appeared in that
+// command. -u is an ordinary flag for rsync, sudo and others, so those keep
+// theirs.
 const COMMAND_SEPARATORS = new Set([';', '|', '&', '\n']);
+const BACKSLASH_ESCAPES = process.platform !== 'win32';
 
-function shellWordEnd(text, start) {
-  let quote = null;
+// The body of a quoted run starting at its opening quote: single quotes are
+// literal, double quotes keep their escapes for \ " $ and `.
+function readQuoted(text, start) {
+  const quote = text[start];
+  let value = '';
+  let i = start + 1;
+  while (i < text.length && text[i] !== quote) {
+    if (quote === '"' && text[i] === '\\' && i + 1 < text.length && '"\\$`'.includes(text[i + 1])) i += 1;
+    value += text[i];
+    i += 1;
+  }
+  return { value, end: Math.min(i + 1, text.length) };
+}
+
+// One shell word starting at `start`, read the way the shell reads it; a
+// backslash outside quotes escapes the next character (on Windows it is a
+// path separator instead). `raw` is the text as typed, `value` the word the
+// program receives.
+function readShellWord(text, start) {
+  let value = '';
   let i = start;
   while (i < text.length) {
     const ch = text[i];
-    if (quote === "'") {
-      if (ch === "'") quote = null;
-    } else if (ch === '\\') {
-      i += 1;
-    } else if (quote === '"') {
-      if (ch === '"') quote = null;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
+    if (ch === '"' || ch === "'") {
+      const quoted = readQuoted(text, i);
+      value += quoted.value;
+      i = quoted.end;
+    } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
+      value += text[i + 1];
+      i += 2;
     } else if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
       break;
+    } else {
+      value += ch;
+      i += 1;
     }
-    i += 1;
   }
-  return Math.min(i, text.length);
+  return { raw: text.slice(start, i), value, end: i };
 }
 
-function bareWord(word) {
-  return word.replace(/\\(.)/g, '$1').replace(/["']/g, '');
+// curl by basename, with or without a Windows executable suffix, also when
+// the word opens a substitution ($(curl, `curl, {curl).
+function isCurlWord(value) {
+  return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(value.replace(/^[$(`{]+/, '').split(/[\\/]/).pop());
+}
+
+// A quoted word that holds a whole command line (sh -c '...') is redacted
+// inside its quotes.
+function redactQuotedBody(raw) {
+  const quote = raw[0];
+  if ((quote !== '"' && quote !== "'") || raw.length < 2 || !raw.endsWith(quote)) return null;
+  const body = raw.slice(1, -1);
+  return /\s/.test(body) ? `${quote}${redactCurlBasicAuth(body)}${quote}` : null;
 }
 
 function redactCredentialWord(word) {
   const colon = word.indexOf(':');
   if (colon === -1) return word;
   const quote = word[0] === '"' || word[0] === "'" ? word[0] : '';
-  const closing = quote && word.length > 1 && word.endsWith(quote) ? quote : '';
-  return `${word.slice(0, colon + 1)}${REDACTED}${closing}`;
+  const closingQuote = quote && word.length > 1 && word.endsWith(quote) ? quote : '';
+  const tail = closingQuote || (/[)`]+$/.exec(word) || [''])[0];
+  return `${word.slice(0, colon + 1)}${REDACTED}${tail}`;
 }
 
 // The length of the flag glued in front of a credential (-u, -u=, --user=),
@@ -111,13 +144,6 @@ function gluedUserFlagLength(word) {
   if (word.startsWith('-u=')) return 3;
   if (word.startsWith('-u') && word.length > 2) return 2;
   return 0;
-}
-
-// curl by basename, with or without a Windows executable suffix; the raw
-// word is split so a backslash in a Windows path is a separator, not an
-// escape.
-function isCurlWord(word) {
-  return /^curl(?:\.exe|\.cmd|\.bat)?$/i.test(word.replace(/["']/g, '').split(/[\\/]/).pop());
 }
 
 function redactCurlBasicAuth(text) {
@@ -136,24 +162,25 @@ function redactCurlBasicAuth(text) {
       i += 1;
       continue;
     }
-    const end = shellWordEnd(text, i);
-    const word = text.slice(i, end);
-    const bare = bareWord(word);
-    i = end;
-    if (valueNext) {
+    const word = readShellWord(text, i);
+    i = word.end;
+    const nested = valueNext ? null : redactQuotedBody(word.raw);
+    if (nested !== null) {
+      out += nested;
+    } else if (valueNext) {
       valueNext = false;
-      out += redactCredentialWord(word);
-    } else if (isCurlWord(word)) {
+      out += redactCredentialWord(word.raw);
+    } else if (isCurlWord(word.value)) {
       sawCurl = true;
-      out += word;
+      out += word.raw;
     } else if (!sawCurl) {
-      out += word;
-    } else if (bare === '-u' || bare === '--user') {
+      out += word.raw;
+    } else if (word.value === '-u' || word.value === '--user') {
       valueNext = true;
-      out += word;
+      out += word.raw;
     } else {
-      const glued = gluedUserFlagLength(word);
-      out += glued ? `${word.slice(0, glued)}${redactCredentialWord(word.slice(glued))}` : word;
+      const glued = gluedUserFlagLength(word.raw);
+      out += glued ? `${word.raw.slice(0, glued)}${redactCredentialWord(word.raw.slice(glued))}` : word.raw;
     }
   }
   return out;
