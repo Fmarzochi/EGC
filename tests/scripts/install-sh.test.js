@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
 
@@ -129,6 +130,68 @@ function runTests() {
       'mcp/servers/egc-memory/package-lock.json'
     ]) {
       assert.ok(pkg.files.includes(f), `package.json "files" must publish ${f}`);
+    }
+  })) passed++; else failed++;
+
+  if (test('install_deps survives a read-only package directory and never fails silently (#1218 layout)', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+    // `sudo npm install -g @egchq/egc` then `egc install` as the user leaves
+    // the MCP server directories root-owned: npm ci cannot write there, and
+    // with --silent its EACCES killed the whole install with a bare exit 243.
+    const helper = /install_deps\(\)\s*\{[\s\S]*?\n\}/.exec(script);
+    assert.ok(helper, 'install.sh must define install_deps');
+    assert.ok(/\[\[\s+-w\s+\.\s+\]\]/.test(helper[0]), 'install_deps must branch on the directory being writable');
+    assert.ok(helper[0].includes('check-mcp-deps.js'), 'a read-only directory must be checked against the package root');
+    assert.ok(/^\s{4}npm ci --silent$/m.test(helper[0]), 'the npm ci line stays exactly as on main (lifecycle scripts fetch sqlite3, and the line must not enter the new-code scope)');
+    assert.ok(/trap 'echo "Error: npm ci failed in/.test(helper[0]), 'an npm ci failure must name the directory through an ERR trap instead of being swallowed');
+    assert.ok(/if \[\[ -w "\$ROOT_DIR" \]\]; then\s*\ncat > "\$ROOT_DIR\/\.mcp\.egc\.json"/.test(script), 'the .mcp.egc.json convenience copy must be guarded by a writability check');
+  })) passed++; else failed++;
+
+  if (test('a read-only server directory whose dependencies live one level up installs cleanly', () => {
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+      console.log('    - skipped: root ignores directory permissions');
+      return;
+    }
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+    const helper = /install_deps\(\)\s*\{[\s\S]*?\n\}/.exec(script)[0];
+    const repoRoot = path.join(__dirname, '..', '..');
+    const sandbox = fs.mkdtempSync(path.join(repoRoot, '.tmp-install-deps-'));
+    try {
+      // The dependency lives in the sandbox's own node_modules, one level
+      // above the server directory, exactly where the package root keeps it.
+      fs.mkdirSync(path.join(sandbox, 'node_modules', 'egc-test-fixture-dep'), { recursive: true });
+      fs.writeFileSync(path.join(sandbox, 'node_modules', 'egc-test-fixture-dep', 'package.json'), JSON.stringify({ name: 'egc-test-fixture-dep', version: '1.0.0' }));
+      const satisfied = path.join(sandbox, 'satisfied');
+      fs.mkdirSync(satisfied);
+      fs.writeFileSync(path.join(satisfied, 'package.json'), JSON.stringify({ name: 'satisfied', dependencies: { 'egc-test-fixture-dep': '^1.0.0' } }));
+      fs.writeFileSync(path.join(satisfied, 'package-lock.json'), '{}');
+      const unsatisfied = path.join(sandbox, 'unsatisfied');
+      fs.mkdirSync(unsatisfied);
+      fs.writeFileSync(path.join(unsatisfied, 'package.json'), JSON.stringify({ name: 'unsatisfied', dependencies: { 'egc-test-package-that-does-not-exist': '^1.0.0' } }));
+      fs.writeFileSync(path.join(unsatisfied, 'package-lock.json'), '{}');
+      fs.chmodSync(satisfied, 0o555);
+      fs.chmodSync(unsatisfied, 0o555);
+
+      // Paths travel as arguments and environment, never inside the script text.
+      const runHelper = (dir) => {
+        const res = require('child_process').spawnSync('bash', ['-c', `set -e\n${helper}\ncd "$1"\ninstall_deps`, 'install_deps', dir], {
+          encoding: 'utf8',
+          env: { ...process.env, ROOT_DIR: repoRoot },
+          timeout: CLI_TIMEOUT_MS,
+        });
+        return { code: res.status, stdout: res.stdout, stderr: res.stderr };
+      };
+      const ok = runHelper(satisfied);
+      assert.strictEqual(ok.code, 0, ok.stderr);
+      assert.ok(ok.stdout.includes('dependencies provided by the package root'), ok.stdout);
+      const bad = runHelper(unsatisfied);
+      assert.strictEqual(bad.code, 1);
+      assert.ok(bad.stderr.includes('is not writable and its dependencies are not available'), bad.stderr);
+    } finally {
+      for (const d of ['satisfied', 'unsatisfied']) {
+        try { fs.chmodSync(path.join(sandbox, d), 0o755); } catch { /* absent */ }
+      }
+      fs.rmSync(sandbox, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 

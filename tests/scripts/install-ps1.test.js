@@ -155,6 +155,18 @@ function runTests() {
     assert.strictEqual(helperCalls.length, 3, 'root, egc-guardian and egc-memory should each call Install-Deps');
   })) passed++; else failed++;
 
+  if (test('handles a read-only package directory the way install.sh does (dependency check, loud npm ci failure, guarded convenience copy)', () => {
+    assert.ok(scriptSource.includes('function Test-DirectoryWritable'), 'install.ps1 must probe directory writability');
+    assert.ok(scriptSource.includes('check-mcp-deps.js'), 'a read-only directory must be checked against the package root');
+    assert.ok(bashSource.includes('check-mcp-deps.js'), 'install.sh must run the same check');
+    assert.ok(/npm ci --silent\s*\n\s*if \(\$LASTEXITCODE -ne 0\)/.test(scriptSource), 'an npm ci failure must be reported, not swallowed');
+    assert.ok(scriptSource.includes('dependencies provided by the package root'), 'the read-only note must match install.sh');
+    assert.ok(bashSource.includes('dependencies provided by the package root'));
+    assert.ok(/if \(Test-DirectoryWritable \$RootDir\) \{\s*\n\s*\$mcpConfig \| Set-Content/.test(scriptSource), 'the .mcp.egc.json copy must be guarded by a writability check');
+    assert.ok(scriptSource.includes('skipping the .mcp.egc.json convenience copy'));
+    assert.ok(bashSource.includes('skipping the .mcp.egc.json convenience copy'));
+  })) passed++; else failed++;
+
   if (test('skips (never overwrites) an existing MCP config that fails to parse as JSON', () => {
     // A pre-existing config with invalid JSON must be left untouched: the
     // default $obj = @{ mcpServers = @{} } falling through to the merge/
