@@ -148,6 +148,8 @@ async function main() {
     [
       "tool.execute.before refuses a denied command and a protected write through the Guardian",
       async () => withTempProject([], async (projectDir) => {
+        // Only the EGC repository itself may supply hook scripts from the worktree.
+        fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "@egchq/egc", private: true }))
         for (const rel of GUARDIAN_FILES) {
           fs.mkdirSync(path.dirname(path.join(projectDir, rel)), { recursive: true })
           fs.copyFileSync(path.join(__dirname, "..", rel), path.join(projectDir, rel))
@@ -176,8 +178,27 @@ async function main() {
       }),
     ],
     [
+      "tool.execute.before never loads hook scripts from a project that is not the EGC repository",
+      async () => withTempProject([], async (projectDir) => {
+        fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "some-other-project" }))
+        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
+        fs.writeFileSync(path.join(projectDir, "scripts", "hooks", "pre-bash-guardian-validate.js"), "module.exports = { run: () => { throw new Error('project script executed') } }\n")
+        const client = createClient()
+        const $ = createFailingShell()
+        const previous = process.env.EGC_DISABLED_HOOKS
+        process.env.EGC_DISABLED_HOOKS = "pre:gateguard:fact-force"
+        try {
+          const hooks = await EGCHooksPlugin({ client, $, directory: projectDir })
+          await hooks["tool.execute.before"]({ tool: "bash", callID: "b1", args: { command: "git status" } })
+        } finally {
+          if (previous === undefined) delete process.env.EGC_DISABLED_HOOKS; else process.env.EGC_DISABLED_HOOKS = previous
+        }
+      }),
+    ],
+    [
       "tool.execute.before blocks the first edit on a file with the GateGuard fact-forcing gate",
       async () => withTempProject([], async (projectDir) => {
+        fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "@egchq/egc", private: true }))
         fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
         fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
         fs.copyFileSync(
@@ -207,6 +228,7 @@ async function main() {
     [
       "tool.execute.before ignores unmapped tools and args-less calls without throwing",
       async () => withTempProject([], async (projectDir) => {
+        fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "@egchq/egc", private: true }))
         fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
         fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
         fs.copyFileSync(
