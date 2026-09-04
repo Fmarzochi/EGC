@@ -220,11 +220,19 @@ function trustedRoots(): string[] {
   return [os.homedir(), os.tmpdir()].map(root => path.resolve(root));
 }
 
+// The prefix every descendant of `root` starts with; a root that is the
+// filesystem root already ends with the separator.
+function descendantPrefix(root: string): string {
+  return root.endsWith(path.sep) ? root : root + path.sep;
+}
+
+
 // The first directory between a trusted root (exclusive) and `dir`
 // (inclusive) that is a link, or null when the whole chain is real.
 function linkedDirectoryTowards(dir: string): string | null {
   const resolved = path.resolve(dir);
-  const root = trustedRoots().find(candidate => resolved.startsWith(candidate + path.sep));
+  const root = trustedRoots().find(candidate => resolved.startsWith(descendantPrefix(candidate)));
+
   if (!root) return isLink(resolved) ? resolved : null;
   let probe = resolved;
   while (probe !== root) {
