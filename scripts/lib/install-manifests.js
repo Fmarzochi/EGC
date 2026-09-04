@@ -103,17 +103,31 @@ function readOptionalStringOption(options, key) {
 // or the uninstaller removes is derived from these entries, so an entry that
 // escaped the root would turn a manifest edit into an arbitrary file write.
 function isUnsafeManifestPath(relativePath) {
-  const text = String(relativePath);
+  if (typeof relativePath !== 'string') return true;
+  const text = relativePath;
   if (text.trim() === '') return true;
   if (text.startsWith('/') || text.startsWith('\\') || /^[A-Za-z]:/.test(text)) return true;
   return text.split(/[\\/]/).includes('..');
 }
 
-function assertSafeModulePaths(module) {
+// A lexically clean path can still leave the repository through a symlink;
+// when the entry exists, its real location must sit under the real root.
+function escapesRepoThroughLink(repoRoot, relativePath) {
+  const candidate = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(candidate)) return false;
+  const realRoot = fs.realpathSync(repoRoot);
+  const real = fs.realpathSync(candidate);
+  return real !== realRoot && !real.startsWith(realRoot + path.sep);
+}
+
+function assertSafeModulePaths(module, repoRoot) {
   const paths = Array.isArray(module.paths) ? module.paths : [];
   for (const relativePath of paths) {
     if (isUnsafeManifestPath(relativePath)) {
       throw new Error(`Install module ${module.id} has an unsafe path '${relativePath}': manifest paths must be relative to the repository root and must not contain '..'`);
+    }
+    if (escapesRepoThroughLink(repoRoot, relativePath)) {
+      throw new Error(`Install module ${module.id} path '${relativePath}' resolves outside the repository through a link`);
     }
   }
 }
@@ -195,7 +209,7 @@ function loadInstallManifests(options = {}) {
   const components = Array.isArray(componentsData.components) ? componentsData.components : [];
 
   for (const module of modules) {
-    assertSafeModulePaths(module);
+    assertSafeModulePaths(module, repoRoot);
     readModuleTargetsOrThrow(module);
   }
 

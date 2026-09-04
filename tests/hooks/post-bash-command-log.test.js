@@ -96,6 +96,7 @@ function runTests() {
         return;
       }
       assert.strictEqual(fs.statSync(logFile).mode & 0o777, 0o600, 'fresh log must be 0600');
+      assert.strictEqual(fs.statSync(path.dirname(logFile)).mode & 0o777, 0o700, 'a directory the hook created must be 0700');
       fs.chmodSync(logFile, 0o644);
       const result = runHook(home, 'git status');
       assert.strictEqual(result.status, 0, result.stderr);

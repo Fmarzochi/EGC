@@ -40,7 +40,7 @@
               "type": "string",
               "minLength": 1,
               "description": "A location inside the repository: relative, and never containing a '..' segment.",
-              "pattern": "^(?![/\\\\]|[A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).+$"
+              "pattern": "^(?![/\\\\]|[A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).*\\S.*$"
             }
           },
           "targets": {

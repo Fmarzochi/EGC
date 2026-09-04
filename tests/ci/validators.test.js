@@ -2552,7 +2552,9 @@ function runTests() {
       PROFILES_SCHEMA_PATH: profilesSchemaPath,
       COMPONENTS_SCHEMA_PATH: componentsSchemaPath,
     };
-    const strictByDefault = runValidatorWithDirs('validate-install-manifests', { ...dirs, env: {} });
+    // The child inherits process.env, so the default case pins the variable to
+    // empty (anything but '0' is strict) instead of trusting the parent.
+    const strictByDefault = runValidatorWithDirs('validate-install-manifests', { ...dirs, env: { EGC_MANIFEST_STRICT: '' } });
     assert.strictEqual(strictByDefault.code, 1, 'missing path must fail without any env');
     const relaxed = runValidatorWithDirs('validate-install-manifests', { ...dirs, env: { EGC_MANIFEST_STRICT: '0' } });
     assert.strictEqual(relaxed.code, 0, `EGC_MANIFEST_STRICT=0 relaxes the missing path to a warning: ${relaxed.stderr}`);

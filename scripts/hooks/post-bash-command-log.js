@@ -19,17 +19,22 @@ const MODE_CONFIG = {
   },
 };
 
-// Secrets embedded in a shell command. A value is a quoted run or a bare
-// run of non-space characters; each pattern is anchored on a literal and
-// short enough to read on its own. Mirrors the Guardian's own audit
-// redaction (mcp/servers/egc-guardian/src/audit-log.ts).
-const VALUE = String.raw`(?:"[^"]*"|'[^']*'|[^\s"'&;]+)`;
-const SECRET_PATTERNS = [
-  new RegExp(String.raw`(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+`, 'gi'),
-  new RegExp(String.raw`((?:x-)?(?:api[-_]?key|api[-_]?secret|auth[-_]?token|access[-_]?token|secret[-_]?key|private[-_]?token)\s*:\s*)[^\s"']+`, 'gi'),
-  new RegExp(String.raw`(--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:)[^\s"']+`, 'gi'),
-  new RegExp(String.raw`(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth|credentials?)(?:=|\s+))` + VALUE, 'gi'),
-  new RegExp(String.raw`\b((?:[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey|private[-_]?key|access[-_]?key)[a-z_]*|auth|authorization|credentials?)\s*=\s*)` + VALUE, 'gi'),
+// Secrets embedded in a shell command. Each prefix pattern stops exactly
+// where the secret value starts; the value itself (quoted, or a bare run up
+// to whitespace) is consumed in code, which keeps every pattern short.
+// Mirrors the Guardian's own audit redaction
+// (mcp/servers/egc-guardian/src/audit-log.ts).
+const SECRET_VALUE_PREFIXES = [
+  /authorization\s*:\s*(?:bearer|basic|token)\s+/gi,
+  /(?:x-)?(?:api|secret|access|private|auth)[-_]?(?:key|secret|token)\s*:\s*/gi,
+  /--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:/gi,
+  /--?(?:token|password|passwd|secret|auth|credentials?)(?:=|\s+)/gi,
+  /--?(?:api|access|private)[-_]?key(?:=|\s+)/gi,
+  /\b\w*(?:token|password|passwd|secret|apikey)\w*\s*=\s*/gi,
+  /\b(?:api|access|private)_key\w*\s*=\s*/gi,
+  /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
+];
+const SECRET_SHAPES = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
   /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b/g,
   /\bgithub_pat_\w{20,}\b/g,
@@ -40,21 +45,49 @@ const SECRET_PATTERNS = [
   /\bAIza[\w-]{35}\b/g,
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
+const REDACTED = '<REDACTED>';
+
+function secretValueEnd(text, start) {
+  const quote = text[start];
+  if (quote === '"' || quote === "'") {
+    const close = text.indexOf(quote, start + 1);
+    return close === -1 ? text.length : close + 1;
+  }
+  let end = start;
+  while (end < text.length && !/[\s"'&;]/.test(text[end])) end += 1;
+  return end;
+}
+
+function redactValuesAfter(text, prefixPattern) {
+  let out = '';
+  let last = 0;
+  for (const match of text.matchAll(prefixPattern)) {
+    const start = match.index + match[0].length;
+    if (start < last) continue;
+    const end = secretValueEnd(text, start);
+    if (end === start) continue;
+    out += `${text.slice(last, start)}${REDACTED}`;
+    last = end;
+  }
+  return out + text.slice(last);
+}
 
 function sanitizeCommand(command) {
   let out = String(command || '').replaceAll('\n', ' ');
-  for (const pattern of SECRET_PATTERNS) {
-    out = out.replace(pattern, (match, prefix) => (typeof prefix === 'string' ? `${prefix}<REDACTED>` : '<REDACTED>'));
-  }
+  for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
+  for (const shape of SECRET_SHAPES) out = out.replace(shape, (match, keep) => (typeof keep === 'string' ? `${keep}${REDACTED}` : REDACTED));
   return out;
 }
 
 // The log holds every command the agent ran; it is created private to the
 // user and an older world-readable copy is tightened on the next write.
 function appendLine(filePath, line) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  // mkdirSync only reports a directory it created itself: that one is made
+  // private; a directory the user already had keeps the mode they chose.
+  const created = fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
   fs.appendFileSync(filePath, `${line}\n`, { encoding: 'utf8', mode: 0o600 });
   try {
+    if (created) fs.chmodSync(created, 0o700);
     fs.chmodSync(filePath, 0o600);
   } catch {
     // Permission bits are advisory on filesystems that do not carry them.

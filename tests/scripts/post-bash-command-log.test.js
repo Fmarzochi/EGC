@@ -36,14 +36,16 @@ let failed = 0;
 
 if (
   test('sanitizeCommand redacts common secret formats', () => {
-    const input = 'gh pr create --token abc123 Authorization: Bearer hello password=swordfish ghp_abc github_pat_xyz';
+    const ghp = `ghp_${'a'.repeat(36)}`;
+    const pat = `github_pat_${'x'.repeat(22)}`;
+    const input = `gh pr create --token abc123 Authorization: Bearer hello password=swordfish ${ghp} ${pat}`;
     const sanitized = sanitizeCommand(input);
     assert.ok(!sanitized.includes('abc123'));
     assert.ok(!sanitized.includes('swordfish'));
-    assert.ok(!sanitized.includes('ghp_abc'));
-    assert.ok(!sanitized.includes('github_pat_xyz'));
-    assert.ok(sanitized.includes('--token=<REDACTED>'));
-    assert.ok(sanitized.includes('Authorization:<REDACTED>'));
+    assert.ok(!sanitized.includes(ghp));
+    assert.ok(!sanitized.includes(pat));
+    assert.ok(sanitized.includes('--token <REDACTED>'));
+    assert.ok(sanitized.includes('Authorization: Bearer <REDACTED>'));
     assert.ok(sanitized.includes('password=<REDACTED>'));
   })
 )
@@ -66,7 +68,7 @@ if (
 
       const logFile = path.join(homeDir, '.gemini', 'bash-commands.log');
       const logContent = fs.readFileSync(logFile, 'utf8');
-      assert.ok(logContent.includes('--token=<REDACTED>'));
+      assert.ok(logContent.includes('--token <REDACTED>'));
       assert.ok(!logContent.includes('abc123'));
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });

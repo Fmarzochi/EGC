@@ -54,6 +54,18 @@ function validateSchema(ajv, schemaPath, data, label) {
   return false;
 }
 
+// Strict is the default: a referenced path that does not exist is an error
+// unless the run opts out with EGC_MANIFEST_STRICT=0. Returns true on error.
+function reportMissingPath(moduleId, normalizedPath) {
+  if (fs.existsSync(path.join(REPO_ROOT, normalizedPath))) return false;
+  const strict = process.env.EGC_MANIFEST_STRICT !== '0';
+  const level = strict ? 'ERROR' : 'WARN';
+  console[strict ? 'error' : 'warn'](
+    `${level}: Module ${moduleId} references missing path: ${normalizedPath}`
+  );
+  return strict;
+}
+
 function validateModulePaths(module, claimedPaths) {
   let hasErrors = false;
 
@@ -66,18 +78,7 @@ function validateModulePaths(module, claimedPaths) {
       continue;
     }
     const normalizedPath = normalizeRelativePath(relativePath);
-    const absolutePath = path.join(REPO_ROOT, normalizedPath);
-
-    if (!fs.existsSync(absolutePath)) {
-      // Strict is the default: a referenced path that does not exist is an
-      // error unless the run opts out with EGC_MANIFEST_STRICT=0.
-      const strict = process.env.EGC_MANIFEST_STRICT !== '0';
-      const level = strict ? 'ERROR' : 'WARN';
-      console[strict ? 'error' : 'warn'](
-        `${level}: Module ${module.id} references missing path: ${normalizedPath}`
-      );
-      if (strict) hasErrors = true;
-    }
+    if (reportMissingPath(module.id, normalizedPath)) hasErrors = true;
 
     if (claimedPaths.has(normalizedPath)) {
       console.error(

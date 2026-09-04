@@ -55,6 +55,37 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a non-string path is unsafe and refused by the loader', () => {
+    assert.strictEqual(isUnsafeManifestPath(null), true);
+    assert.strictEqual(isUnsafeManifestPath(42), true);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'manifest-paths-'));
+    try {
+      writeRepo(root, ['rules', null]);
+      assert.throws(() => loadInstallManifests({ repoRoot: root }), /unsafe path/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('a relative path that leaves the repository through a symlink is refused', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'manifest-paths-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'manifest-outside-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'secret.txt'), 'x');
+      try {
+        fs.symlinkSync(outside, path.join(root, 'rules'), 'dir');
+      } catch (error) {
+        console.log(`    - skipped: cannot create symlinks here (${error.code})`);
+        return;
+      }
+      writeRepo(root, ['rules']);
+      assert.throws(() => loadInstallManifests({ repoRoot: root }), /through a link/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('loadInstallManifests still accepts ordinary relative paths', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'manifest-paths-'));
     try {
