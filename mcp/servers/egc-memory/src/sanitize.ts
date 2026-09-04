@@ -101,3 +101,23 @@ export function sanitizeStateFields(fields: StateTextFields): { flagged: boolean
   fields.next?.forEach((n, i) => check(`next[${i}]`, n));
   return { flagged: reasons.length > 0, reasons };
 }
+
+// Returns a copy of the fields with every flagged string replaced by the
+// sanitizer's block marker, plus the reasons. Used on the merged state doc
+// right before propagation: entries stored before the scan covered every
+// field must not reach the instruction files either.
+export function scrubStateFields(fields: StateTextFields): { fields: StateTextFields; reasons: string[] } {
+  const reasons: string[] = [];
+  const clean = (label: string, value: string): string => {
+    const result = sanitize(value);
+    if (result.flagged) reasons.push(`${label}: ${result.reason}`);
+    return result.value;
+  };
+  const out: StateTextFields = {};
+  if (fields.context !== undefined) out.context = clean('context', fields.context);
+  if (fields.decisions) out.decisions = fields.decisions.map((d, i) => ({ what: clean(`decisions[${i}].what`, d.what), ...(d.why === undefined ? {} : { why: clean(`decisions[${i}].why`, d.why) }) }));
+  if (fields.avoid) out.avoid = fields.avoid.map((d, i) => ({ what: clean(`avoid[${i}].what`, d.what), ...(d.why === undefined ? {} : { why: clean(`avoid[${i}].why`, d.why) }) }));
+  if (fields.preferences) out.preferences = fields.preferences.map((v, i) => clean(`preferences[${i}]`, v));
+  if (fields.next) out.next = fields.next.map((v, i) => clean(`next[${i}]`, v));
+  return { fields: out, reasons };
+}

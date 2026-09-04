@@ -94,7 +94,15 @@ async function runTests() {
     await server.request('tools/call', { name: 'validate_command', arguments: { command: allowedCmd } });
     const denied = await server.request('tools/call', { name: 'validate_command', arguments: { command: deniedCmd } });
     assert.ok(denied.result, JSON.stringify(denied.error));
-    await new Promise(r => setTimeout(r, 300));
+    // The logger appends asynchronously after the tool has already answered:
+    // wait for both entries to land on disk instead of guessing a delay.
+    const sysLogPath = path.join(home, '.egc', 'logs', 'egc-guardian-router.log');
+    const deadline = Date.now() + CLI_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const entries = fs.existsSync(sysLogPath) ? (fs.readFileSync(sysLogPath, 'utf8').match(/COMMAND_EXECUTION/g) || []).length : 0;
+      if (entries >= 2 && fs.existsSync(path.join(home, '.egc', 'audit.log'))) break;
+      await new Promise(r => setTimeout(r, 50));
+    }
 
     if (await test('the stderr audit stream carries neither the bearer token nor the flag value', async () => {
       const err = server.stderr();

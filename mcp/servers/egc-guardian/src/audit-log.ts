@@ -19,23 +19,33 @@ const REDACTED_KEYS = new Set([
   'authorization', 'auth', 'credential', 'private_key', 'privatekey',
 ]);
 
-// Secrets embedded inside free text such as a shell command: header and
-// flag values, key=value assignments, URL credentials, well-known token
-// prefixes and JWTs. Each pattern is anchored on a literal and consumes a
-// single run of non-space characters, so none of them backtracks.
+// Secrets embedded inside free text such as a shell command. A value is a
+// quoted run or a bare run of non-space characters; each pattern is
+// anchored on a literal and short enough to read on its own.
+const VALUE = String.raw`(?:"[^"]*"|'[^']*'|[^\s"'&;]+)`;
 const IN_TEXT_SECRET_PATTERNS: RegExp[] = [
-  /(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+/gi,
-  /(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth)(?:=|\s+))[^\s"']+/gi,
-  /(\b[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey)[a-z_]*\s*=\s*)[^\s"'&;]+/gi,
+  // Authorization: Bearer|Basic|Token <value>
+  new RegExp(String.raw`(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+`, 'gi'),
+  // X-API-Key: <value>, Private-Token: <value>, X-Auth-Token: <value>, ...
+  new RegExp(String.raw`((?:x-)?(?:api[-_]?key|api[-_]?secret|auth[-_]?token|access[-_]?token|secret[-_]?key|private[-_]?token)\s*:\s*)[^\s"']+`, 'gi'),
+  // curl -u user:password, --user=user:password: the user stays, the password goes
+  new RegExp(String.raw`(--?u(?:ser)?(?:=|\s+)["']?[^\s:"']+:)[^\s"']+`, 'gi'),
+  // --token <value>, --password=<value>, -p<value> style flags
+  new RegExp(String.raw`(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth|credentials?)(?:=|\s+))` + VALUE, 'gi'),
+  // KEY=value assignments whose name says it holds a secret
+  new RegExp(String.raw`\b((?:[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey|private[-_]?key|access[-_]?key)[a-z_]*|auth|authorization|credentials?)\s*=\s*)` + VALUE, 'gi'),
+  // scheme://user:password@host
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
+  // well-known token prefixes
   /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
-  /\bsk-[A-Za-z0-9_-]{20,}\b/g,
+  /\bgithub_pat_\w{20,}\b/g,
+  /\bsk-[\w-]{20,}\b/g,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
   /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
-  /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
-  /\bAIza[0-9A-Za-z_-]{35}\b/g,
-  /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+  /\bglpat-[\w-]{20,}\b/g,
+  /\bAIza[\w-]{35}\b/g,
+  // JWT
+  /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
 
 /**

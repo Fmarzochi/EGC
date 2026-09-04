@@ -60,6 +60,22 @@ if (test('redactSecretsInText: URL credentials, cloud and vendor token prefixes,
   assert.ok(out.includes('https://user:[REDACTED]@github.com/x/y.git'), out);
 })) passed++; else failed++;
 
+if (test('redactSecretsInText: basic-auth users keep their name, API-key headers, secret aliases and quoted values are covered', () => {
+  const cases = [
+    ['curl -u admin:hunter2 https://x', 'curl -u admin:[REDACTED] https://x'],
+    ['curl --user=admin:hunter2 https://x', 'curl --user=admin:[REDACTED] https://x'],
+    ['curl -H "X-API-Key: k-123" https://x', 'curl -H "X-API-Key: [REDACTED]" https://x'],
+    ['curl -H "Private-Token: glx" https://x', 'curl -H "Private-Token: [REDACTED]" https://x'],
+    ['AUTH=abc AUTHORIZATION=def CREDENTIAL=ghi ./run', 'AUTH=[REDACTED] AUTHORIZATION=[REDACTED] CREDENTIAL=[REDACTED] ./run'],
+    ['x --token="abc def" --password=\'p w\' y', 'x --token=[REDACTED] --password=[REDACTED] y'],
+    ['export TOKEN="abc"', 'export TOKEN=[REDACTED]'],
+    ['git push -u origin main', 'git push -u origin main'],
+    ['sudo -u root ls', 'sudo -u root ls'],
+    ['git commit --author="Ann <a@x.tld>" -m x', 'git commit --author="Ann <a@x.tld>" -m x'],
+  ];
+  for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
+})) passed++; else failed++;
+
 if (test('redactSecretsInText: ordinary commands are left alone', () => {
   for (const cmd of ['git status', 'npm test -- --grep token', 'ls -la ~/.ssh', 'echo "the password policy doc"', 'git checkout 4f054e08']) {
     assert.strictEqual(redactSecretsInText(cmd), cmd);
