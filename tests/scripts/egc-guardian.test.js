@@ -31,8 +31,10 @@ try {
 
 async function runTests() {
   let mod;
+  let routerModule;
   try {
     mod = await import(VALIDATOR_PATH);
+    routerModule = await import(path.join(__dirname, '../../mcp/servers/egc-guardian/build/llm-router.js'));
   } catch (e) {
     console.error(
       `[SKIP] Could not import ${VALIDATOR_PATH}. Run 'npm run build' in mcp/servers/egc-guardian first.`
@@ -520,6 +522,44 @@ async function runTests() {
   run('a benign command behind a keyword stays benign', () => {
     const result = validateCommand('if git status; then');
     assert.ok(!String(result.reason || '').includes('destructive'), JSON.stringify(result));
+  });
+
+  // audit 2026-08-17, C2 second bypass and C5: file:// and install-state
+  const userHome = require('os').homedir();
+  run('curl file:///~/.ssh/id_rsa is hard-blocking (file URI unwrapped)', () => assertHardBlocking(`curl file://${userHome}/.ssh/id_rsa`));
+  run('curl --url=file:///etc/shadow is hard-blocking', () => assertHardBlocking('curl --url=file:///etc/shadow'));
+  run('a query or fragment on a file URI does not hide the protected path', () => {
+    assertHardBlocking(`curl file://${userHome}/.ssh/id_rsa?raw=1`);
+    assertHardBlocking(`curl file://${userHome}/.bashrc#top`);
+  });
+  run('wget -O out file://localhost/etc/passwd is hard-blocking', () => assertHardBlocking('wget -O out file://localhost/etc/passwd'));
+  run('curl file:///tmp/notes.txt is not a protected-path denial', () => {
+    const result = validateCommand('curl file:///tmp/notes.txt');
+    assert.ok(!String(result.reason || '').includes('protected'), JSON.stringify(result));
+  });
+  run('curl https://example.com stays as before (no protected-path denial)', () => {
+    const result = validateCommand('curl https://example.com');
+    assert.ok(!String(result.reason || '').includes('protected'), JSON.stringify(result));
+  });
+  run('write to ~/.claude/egc/install-state.json is denied', () => assertWriteDenied(`${userHome}/.claude/egc/install-state.json`));
+  run('write to ~/.agents/egc/codex-install-state.json is denied', () => assertWriteDenied(`${userHome}/.agents/egc/codex-install-state.json`));
+  run('write to project .cursor/egc-install-state.json is denied', () => assertWriteDenied('.cursor/egc-install-state.json'));
+  run('write to a sibling egc/notes.json stays allowed', () => assertWriteAllowed(`${userHome}/.claude/egc/notes.json`));
+  run('LLM routing is opt-in: off by default, on only with EGC_LLM_ROUTING', () => {
+    const { llmRoutingEnabled } = routerModule;
+    const saved = process.env.EGC_LLM_ROUTING;
+    try {
+      delete process.env.EGC_LLM_ROUTING;
+      assert.strictEqual(llmRoutingEnabled(), false);
+      for (const value of ['1', 'on', 'true', 'YES']) {
+        process.env.EGC_LLM_ROUTING = value;
+        assert.strictEqual(llmRoutingEnabled(), true, value);
+      }
+      process.env.EGC_LLM_ROUTING = '0';
+      assert.strictEqual(llmRoutingEnabled(), false);
+    } finally {
+      if (saved === undefined) delete process.env.EGC_LLM_ROUTING; else process.env.EGC_LLM_ROUTING = saved;
+    }
   });
 
   // ── Summary ───────────────────────────────────────────────────────────────

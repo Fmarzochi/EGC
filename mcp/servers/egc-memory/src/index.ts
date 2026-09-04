@@ -1471,9 +1471,16 @@ async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
   const args = SessionAnnounceSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(args.project_path);
   const sessionId = resolveBusSessionId(args.session_id);
+  // Presence is never refused, but a territory line that fails the scan is
+  // stored as the block marker instead of reaching every peer's context.
+  const territoryCheck = args.territory === undefined ? null : sanitize(args.territory);
+  if (territoryCheck?.flagged) {
+    log('WARN', 'session_announce: suspicious territory withheld', { session: sessionId, reason: territoryCheck.reason });
+  }
+  const territory = territoryCheck ? territoryCheck.value : args.territory;
   await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
-    await busAnnounce(db, { sessionId, projectPath: projPath, territory: args.territory });
+    await busAnnounce(db, { sessionId, projectPath: projPath, territory });
   });
   const peers = await busListPeers(db, projPath);
   const peerLines = peers
@@ -1483,9 +1490,10 @@ async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
   return { content: [{ type: "text", text: `Session ${sessionId} announced.\nLive peers in this project: ${peerLines.length === 0 ? 'none' : '\n' + peerLines.join('\n')}` }] };
 }
 
+// A territory stored before the scan existed is scrubbed on the way out too.
 function territoryNote(territory: unknown): string {
   const text = rowText(territory);
-  return text ? ` (territory: ${text})` : '';
+  return text ? ` (territory: ${sanitize(text).value})` : '';
 }
 
 function describePeer(p: Record<string, unknown>): string {
@@ -1530,9 +1538,19 @@ async function handleSessionSend(db: Database, toolArgs: unknown) {
   const args = SessionSendSchema.parse(toolArgs || {});
   const fromSession = resolveBusSessionId(args.session_id);
   const projPath = args.project_path ? resolveProjectPath(args.project_path) : undefined;
+  // A bus payload lands verbatim in another session's context: the same
+  // scan that guards project state runs here before anything is stored.
+  // The sender's heartbeat is refreshed whether or not the send goes out.
+  const payloadCheck = sanitize(args.payload ?? '');
+  const kindCheck = sanitize(args.kind);
+  let flagged: string | null = null;
+  if (payloadCheck.flagged) flagged = payloadCheck.reason ?? 'suspicious payload';
+  else if (kindCheck.flagged) flagged = kindCheck.reason ?? 'suspicious kind';
+  if (flagged) log('WARN', 'session_send: suspicious content blocked', { from: fromSession, reason: flagged });
   const result = await writeArbitrator.enqueue(async () => {
     await busSweepDead(db);
     await busAnnounce(db, { sessionId: fromSession, projectPath: projPath });
+    if (flagged) return { ok: false as const, reason: `blocked: ${flagged}` };
     return busSendEvent(db, {
       fromSession,
       toSession: args.to_session,
@@ -1573,8 +1591,9 @@ function formatDeliveredEvents(sessionId: string, events: Record<string, unknown
   // sender's session id (both arbitrary sender strings) would let a crafted
   // event forge headers and provenance. Everything the sender controls is
   // rendered on a single line; id and created_at are server-generated.
+  // Rows queued before the scan existed are scrubbed on delivery as well.
   const oneLine = (value: unknown): string =>
-    rowText(value).replaceAll(/\r?\n/g, String.raw`\n`);
+    sanitize(rowText(value)).value.replaceAll(/\r?\n/g, String.raw`\n`);
   const lines = events.map(e =>
     `- #${rowText(e.id)} [${oneLine(e.kind)}] from ${oneLine(e.from_session)}${e.to_session ? '' : ' (broadcast)'} at ${rowText(e.created_at)}\n  ${oneLine(e.payload || '(no payload)')}`
   );

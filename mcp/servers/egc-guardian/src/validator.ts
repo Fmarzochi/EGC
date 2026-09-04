@@ -661,6 +661,10 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // tool's official docs, verified 2026-07-11 (see docs/architecture or the
 // PR that introduced this comment for the full per-tool research).
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
+  // EGC install-state: egc repair and uninstall replay what it records, so a
+  // planted entry would turn either into a write or delete of its choosing.
+  /(^|[\\/])egc[\\/][\w-]*install-state\.json$/,
+  /(^|[\\/])egc-install-state\.json$/,
   /\.env$/,
   // .env.example/.sample/.template are conventionally committed templates
   // with placeholder values, never real secrets — excluded so they're
@@ -1448,15 +1452,40 @@ function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
 // Filesystem targets an argument can carry: a bare operand (URIs excluded,
 // they are download targets, not local paths), a --flag=value value, or a
 // value glued to a short flag (`-o~/.bashrc`).
+// file:///path and file://localhost/path name a local file, so the path
+// inside gets the same protected-path check as a bare operand would; every
+// other scheme is a download/read target with no local path in it.
+const FILE_URI_RE = /^file:\/\/(?:localhost)?(?=\/)/i;
+
+function unwrapFileUri(arg: string): string {
+  const match = FILE_URI_RE.exec(arg);
+  if (!match) return arg;
+  // A query or fragment is not part of the file a client opens.
+  const tail = arg.slice(match[0].length);
+  const cut = tail.search(/[?#]/);
+  const rest = cut === -1 ? tail : tail.slice(0, cut);
+  let decoded = rest;
+  try {
+    decoded = decodeURIComponent(rest);
+  } catch {
+    // A malformed escape keeps the raw text; the check still sees the path.
+  }
+  // file:///C:/Users/x carries a slash before the drive letter.
+  return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
+}
+
 function pathCandidatesOf(args: string[]): string[] {
   return args.flatMap(rawArg => {
     const arg = bareToken(rawArg);
+    const cased = stripQuotes(rawArg);
     if (!arg.startsWith('-')) {
-      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [arg];
+      const unwrapped = unwrapFileUri(cased);
+      if (unwrapped !== cased) return [unwrapped];
+      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
     }
-    const eq = arg.indexOf('=');
-    if (eq > 0) return [arg.slice(eq + 1)];
-    if (!arg.startsWith('--') && arg.length > 2) return [arg.slice(2)];
+    const eq = cased.indexOf('=');
+    if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
+    if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
     return [];
   });
 }

@@ -249,6 +249,21 @@ async function runTests() {
       assert.strictEqual(calls.length, 0);
     })) passed++; else failed++;
 
+    if (await test('validates write and edit targets with the Guardian', async () => {
+      const hooks = await EgcGuardianCrusher({ directory: tempDir });
+      await assert.rejects(
+        () => hooks['tool.execute.before']({ tool: 'write' }, { args: { filePath: path.join(tempDir, '.ssh', 'id_rsa'), content: 'x' } }),
+        /EGC Guardian BLOCKED/
+      );
+      await assert.rejects(
+        () => hooks['tool.execute.before']({ tool: 'edit' }, { args: { filePath: path.join(tempDir, '.aws', 'credentials'), oldString: 'a', newString: 'b' } }),
+        /EGC Guardian BLOCKED/
+      );
+      const fine = { args: { filePath: path.join(tempDir, 'notes.md'), content: 'hello' } };
+      await hooks['tool.execute.before']({ tool: 'write' }, fine);
+      assert.strictEqual(fine.args.content, 'hello');
+    })) passed++; else failed++;
+
     if (await test('preserves Guardian and Crusher behavior', async () => {
       let hooks = await EgcGuardianCrusher({ directory: tempDir });
       const readOutput = { args: { filePath: '/tmp/x' } };

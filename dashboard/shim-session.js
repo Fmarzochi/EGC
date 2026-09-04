@@ -1,41 +1,15 @@
 #!/usr/bin/env node
 'use strict';
 
-const http = require('http');
 const { PORT } = require('./port');
+const { postEvent } = require('./telemetry-client');
 
 const IDE   = process.argv[2] || 'trae';
 const EVENT = process.argv[3] || 'session_start';
 
 function post(ev) {
-  const body = JSON.stringify(ev);
-  const req = http.request(
-    { hostname:'127.0.0.1', port:PORT, path:'/event', method:'POST',
-      headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)},
-      timeout:300 },
-    (res) => {
-      res.resume();
-      
-      res.on('end', () => {
-        process.exit(0);
-      });
-
-      res.on('error', () => {
-        process.exit(0);
-      });
-    }
-  );
-  
-  req.on('error', () => {
-    process.exit(0);
-  });
-  
-  req.on('timeout', () => {
-    req.destroy();
-    process.exit(0);
-  });
-  
-  req.end(body);
+  // One shot: the process ends as soon as the dashboard answers or fails.
+  postEvent(ev, { port: PORT, onDone: () => process.exit(0) });
 }
 
 post({ ide:IDE, event:EVENT, agent:'main', status:'running', detail:'' });

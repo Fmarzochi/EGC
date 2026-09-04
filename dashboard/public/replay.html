@@ -184,7 +184,7 @@ function renderSessionList() {
   el.innerHTML = sessions.map((s, i) => `
     <div class="sl-item ${currentSession && currentSession.id === s.id ? 'active' : ''}"
          onclick="selectSession(sessions[${i}])">
-      <div class="sl-ide">${s.ide || 'unknown'}</div>
+      <div class="sl-ide">${escHtml(s.ide || 'unknown')}</div>
       <div class="sl-time">${formatTs(s.timestamp)}</div>
       <div class="sl-meta">
         <span>${s.eventCount || 0} events</span>

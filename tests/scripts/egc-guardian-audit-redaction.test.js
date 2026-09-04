@@ -22,10 +22,19 @@ if (!fs.existsSync(SERVER)) {
 const TOKEN = 'ghp_' + 'Q'.repeat(36);
 const BEARER = 'abc.def.ghi';
 
+// A provider key is present and the opt-in is absent: orchestrate_task must
+// keep the prompt local (security audit 2026-08-17, H7).
+function serverEnv(home, projectDir) {
+  const env = { ...process.env, HOME: home, USERPROFILE: home, ANTHROPIC_API_KEY: 'not-a-real-key' };
+  if (projectDir) env.EGC_PROJECT = projectDir;
+  delete env.EGC_LLM_ROUTING;
+  return env;
+}
+
 function startServer(home, projectDir) {
   const child = spawn(process.execPath, [SERVER], {
     cwd: projectDir,
-    env: { ...process.env, HOME: home, USERPROFILE: home, EGC_PROJECT: projectDir },
+    env: serverEnv(home, projectDir),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let buffer = '';
@@ -121,6 +130,15 @@ async function runTests() {
         assert.ok(!text.includes(BEARER) && !text.includes(TOKEN), `${file} leaks a credential`);
       }
       assert.ok(fs.readFileSync(auditLog, 'utf8').includes('[REDACTED]'));
+    })) passed++; else failed++;
+
+    if (await test('orchestrate_task keeps routing local when a key is set without EGC_LLM_ROUTING', async () => {
+      const response = await server.request('tools/call', { name: 'orchestrate_task', arguments: { prompt: 'review the authentication module for security issues' } });
+      assert.ok(response.result, JSON.stringify(response.error));
+      const body = JSON.parse((response.result.content || []).map(c => c.text).join(''));
+      assert.strictEqual(body.routing.provider, 'keyword', JSON.stringify(body.routing));
+      assert.ok(String(body.routing_hint || '').includes('EGC_LLM_ROUTING'), body.routing_hint);
+      assert.ok(String(body.routing_hint || '').includes('a provider key is set'), body.routing_hint);
     })) passed++; else failed++;
 
     if (await test('the tool answers are unaffected', async () => {

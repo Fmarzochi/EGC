@@ -217,6 +217,21 @@ interface LlmRouteResult {
   provider: string;
 }
 
+// Sending a task prompt to a third-party provider is an explicit choice, not
+// a side effect of having a key in the environment: EGC_LLM_ROUTING must be
+// switched on as well.
+export function llmRoutingEnabled(): boolean {
+  const flag = (process.env.EGC_LLM_ROUTING || '').trim().toLowerCase();
+  return flag === '1' || flag === 'on' || flag === 'true' || flag === 'yes';
+}
+
+export function hasProviderKey(): boolean {
+  return Boolean(
+    process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+    || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY
+  );
+}
+
 export async function llmRoute(prompt: string): Promise<LlmRouteResult | null> {
   const promptTokens = tokenize(prompt);
   if (promptTokens.size === 0) return null;

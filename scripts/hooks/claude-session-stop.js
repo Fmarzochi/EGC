@@ -14,6 +14,16 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+// The token reader ships with the hooks runtime; an install recorded before
+// it existed has no copy until egc repair refreshes it, and then the event
+// goes out without a token instead of the hook failing to load.
+let readDashboardToken = () => null;
+try {
+  const loaded = require('../lib/dashboard-token');
+  if (typeof loaded.readDashboardToken === 'function') readDashboardToken = loaded.readDashboardToken;
+} catch {
+  // an older install without the helper: no token, no crash
+}
 const _egcRaw = process.env.EGC_PORT;
 const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : Number.NaN;
 const DASHBOARD_PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;
@@ -63,10 +73,11 @@ function shouldPromptSave(input, nowMs) {
 
 function post(ev, done) {
   const body = JSON.stringify(ev);
+  const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+  const token = readDashboardToken();
+  if (token) headers['x-egc-token'] = token;
   const req = http.request(
-    { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      timeout: 300 },
+    { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST', headers, timeout: 300 },
     () => done()
   );
   req.on('error', () => done());

@@ -4,7 +4,8 @@ const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
-const { copyFileKeepingMode, writeTextKeepingMode } = require('./install/preserving-write');
+const { hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
+const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./install/preserving-write');
 const { assertSafeMcpConfig, isMcpConfigPath, parseMcpConfigText } = require('./mcp-config');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
@@ -85,12 +86,75 @@ function getManagedOperations(state) {
     : [];
 }
 
+// Only the manifest-relative path recorded at install time is joined onto
+// the reference repository; the absolute sourcePath stored next to it is
+// never replayed, so a planted entry cannot make repair copy from anywhere,
+// and a source that leaves the repository through a link is refused too.
 function resolveOperationSourcePath(repoRoot, operation) {
-  if (operation.sourceRelativePath) {
-    return path.join(repoRoot, operation.sourceRelativePath);
+  const relative = operation.sourceRelativePath;
+  if (typeof relative !== 'string' || relative.trim() === '' || isAnchoredPath(relative) || hasParentSegment(relative)) {
+    return null;
   }
+  const joined = path.join(repoRoot, relative);
+  return isInsideReal(joined, repoRoot) ? joined : null;
+}
 
-  return operation.sourcePath || null;
+// Destinations this adapter would produce today, derived from the current
+// manifest rather than read back from the state file. The recorded request
+// is tried first; a request the manifest can no longer plan falls back to the
+// full profile, and with no plan at all only the derived target root counts.
+function collectPlannedDestinations(record, context) {
+  const request = record.state?.request || {};
+  const attempts = [
+    { profileId: request.profile || null, moduleIds: request.modules || [], includeComponentIds: request.includeComponents || [], excludeComponentIds: request.excludeComponents || [] },
+    { profileId: 'full', moduleIds: [], includeComponentIds: [], excludeComponentIds: [] },
+  ];
+  for (const attempt of attempts) {
+    try {
+      const plan = createManifestInstallPlan({
+        sourceRoot: context.repoRoot,
+        target: record.adapter.target,
+        projectRoot: context.projectRoot,
+        homeDir: context.homeDir,
+        ...attempt,
+      });
+      const operations = Array.isArray(plan.operations) ? plan.operations : [];
+      return {
+        files: new Set(operations.map(operation => realizePath(operation.destinationPath))),
+        dirs: new Set(operations.filter(operation => operation.kind === 'copy-path').map(operation => realizePath(operation.destinationPath))),
+      };
+    } catch (_error) { // NOSONAR: a request the current manifest cannot plan falls through to the next attempt
+      continue;
+    }
+  }
+  return { files: new Set(), dirs: new Set() };
+}
+
+// A recorded operation may only touch the derived target root, a file the
+// current manifest plans for this adapter, or a directory that plan copies.
+// Every comparison is made on real locations (links followed, missing tails
+// kept), so a link inside the root cannot point the replay outside it.
+function operationEscapes(operation, root, planned) {
+  const destination = operation.destinationPath;
+  if (typeof destination !== 'string' || !isAnchoredPath(destination) || hasParentSegment(destination)) return true;
+  const resolved = realizePath(destination);
+  if (operation.kind === 'remove' && resolved === root) return true;
+  if (isInsideReal(resolved, root)) return false;
+  if (planned.files.has(resolved)) return false;
+  return ![...planned.dirs].some(dir => isInsideReal(resolved, dir));
+}
+
+function findEscapingOperation(operations, record, context) {
+  const root = realizePath(record.targetRoot);
+  const planned = collectPlannedDestinations(record, context);
+  return operations.find(operation => operationEscapes(operation, root, planned)) || null;
+}
+
+function assertRecordedOperationsContained(record, context, operations) {
+  const escaping = findEscapingOperation(operations, record, context);
+  if (escaping) {
+    throw new Error(`Recorded operation escapes the managed roots for ${record.adapter.id}: ${escaping.destinationPath}`);
+  }
 }
 
 // Identity for matching a health inspection back to the operation entry in a
@@ -382,7 +446,7 @@ function repairMergeJson(operation) {
   const mergedValue = deepMergeJson(currentValue, payload);
 
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, formatJson(mergedValue));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, formatJson(mergedValue)));
 }
 
 function repairRemove(operation) {
@@ -410,7 +474,7 @@ function repairMergeYamlReadList(operation) {
     );
   }
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
 }
 
 function repairMergeMarkdownIndex(operation) {
@@ -423,7 +487,7 @@ function repairMergeMarkdownIndex(operation) {
     relativePath: operation.relativePath,
   });
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
 }
 
 function executeRepairOperation(repoRoot, operation) {
@@ -448,14 +512,14 @@ function restorePreviousContent(operation) {
   const previousContent = getOperationPreviousContent(operation);
   if (previousContent !== null) {
     ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, previousContent);
+    replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, previousContent));
     return { removedPaths: [], cleanupTargets: [] };
   }
 
   const previousJson = getOperationPreviousJson(operation);
   if (previousJson !== undefined) {
     ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, formatJson(previousJson));
+    replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, formatJson(previousJson)));
     return { removedPaths: [], cleanupTargets: [] };
   }
 
@@ -497,7 +561,7 @@ function uninstallMergeJson(operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, formatJson(nextValue));
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, formatJson(nextValue)));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -526,7 +590,7 @@ function uninstallAiderConfigReadList(operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -542,7 +606,7 @@ function uninstallWarpAgentsIndexEntry(operation) {
   const existingContent = fs.readFileSync(operation.destinationPath, 'utf8');
   const nextContent = removeSkillIndexEntry(existingContent, operation.skillName);
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -1133,15 +1197,17 @@ function createRepairPlanFromRecord(record, context) {
 
   if (state.request.legacyMode || shouldRepairFromRecordedOperations(state)) {
     const operations = hydrateRecordedOperations(context.repoRoot, getManagedOperations(state));
+    assertRecordedOperationsContained(record, context, operations);
     const statePreview = buildRecordedStatePreview(state, context, operations);
 
+    // Roots come from the adapter (record), never from the state file.
     return {
       mode: state.request.legacyMode ? 'legacy' : 'recorded',
       target: record.adapter.target,
       adapter: record.adapter,
-      targetRoot: state.target.root,
-      installRoot: state.target.root,
-      installStatePath: state.target.installStatePath,
+      targetRoot: record.targetRoot,
+      installRoot: record.targetRoot,
+      installStatePath: record.installStatePath,
       warnings: [],
       languages: Array.isArray(state.request.legacyLanguages)
         ? [...state.request.legacyLanguages]
@@ -1422,9 +1488,14 @@ function cleanupEmptyParentDirs(filePath, stopAt) {
 }
 
 function uninstallInstalledStates(options = {}) {
+  const context = {
+    repoRoot: options.repoRoot || DEFAULT_REPO_ROOT,
+    homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
+    projectRoot: options.projectRoot || process.cwd(),
+  };
   const records = discoverInstalledStates({
-    homeDir: options.homeDir,
-    projectRoot: options.projectRoot,
+    homeDir: context.homeDir,
+    projectRoot: context.projectRoot,
     targets: options.targets,
   }).filter(record => record.exists);
 
@@ -1441,9 +1512,23 @@ function uninstallInstalledStates(options = {}) {
     }
 
     const state = record.state;
+    const operations = getManagedOperations(state);
+    // Every recorded path is checked against the roots the adapter derives
+    // today before anything is removed; one planted entry refuses the target.
+    const escaping = findEscapingOperation(operations, record, context);
+    if (escaping) {
+      return {
+        adapter: record.adapter,
+        status: 'error',
+        installStatePath: record.installStatePath,
+        removedPaths: [],
+        plannedRemovals: [],
+        error: `Recorded operation escapes the managed roots for ${record.adapter.id}: ${escaping.destinationPath}`,
+      };
+    }
     const plannedRemovals = Array.from(new Set([
-      ...getManagedOperations(state).map(operation => operation.destinationPath),
-      state.target.installStatePath,
+      ...operations.map(operation => operation.destinationPath),
+      record.installStatePath,
     ]));
 
     if (options.dryRun) {
@@ -1460,7 +1545,6 @@ function uninstallInstalledStates(options = {}) {
     try {
       const removedPaths = [];
       const cleanupTargets = [];
-      const operations = getManagedOperations(state);
 
       for (const operation of operations) {
         const outcome = executeUninstallOperation(operation);
@@ -1468,14 +1552,14 @@ function uninstallInstalledStates(options = {}) {
         cleanupTargets.push(...outcome.cleanupTargets);
       }
 
-      if (fs.existsSync(state.target.installStatePath)) {
-        fs.rmSync(state.target.installStatePath, { force: true });
-        removedPaths.push(state.target.installStatePath);
-        cleanupTargets.push(state.target.installStatePath);
+      if (fs.existsSync(record.installStatePath)) {
+        fs.rmSync(record.installStatePath, { force: true });
+        removedPaths.push(record.installStatePath);
+        cleanupTargets.push(record.installStatePath);
       }
 
       for (const cleanupTarget of cleanupTargets) {
-        cleanupEmptyParentDirs(cleanupTarget, state.target.root);
+        cleanupEmptyParentDirs(cleanupTarget, record.targetRoot);
       }
 
       return {
