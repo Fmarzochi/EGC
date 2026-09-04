@@ -19,7 +19,8 @@ const path = require('node:path');
 // goes out without a token instead of the hook failing to load.
 let readDashboardToken = () => null;
 try {
-  ({ readDashboardToken } = require('../lib/dashboard-token'));
+  const loaded = require('../lib/dashboard-token');
+  if (typeof loaded.readDashboardToken === 'function') readDashboardToken = loaded.readDashboardToken;
 } catch {
   // an older install without the helper: no token, no crash
 }

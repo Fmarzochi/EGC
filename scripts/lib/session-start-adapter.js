@@ -11,7 +11,8 @@ const http = require('node:http');
 // goes out without a token instead of the hook failing to load.
 let readDashboardToken = () => null;
 try {
-  ({ readDashboardToken } = require('./dashboard-token'));
+  const loaded = require('./dashboard-token');
+  if (typeof loaded.readDashboardToken === 'function') readDashboardToken = loaded.readDashboardToken;
 } catch {
   // an older install without the helper: no token, no crash
 }
