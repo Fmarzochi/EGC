@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Ajv = require('ajv');
 const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
+const { isUnsafeManifestPath } = require('#lib/install-manifests');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const MODULES_MANIFEST_PATH = path.join(REPO_ROOT, 'manifests/install-modules.json');
@@ -57,11 +58,20 @@ function validateModulePaths(module, claimedPaths) {
   let hasErrors = false;
 
   for (const relativePath of module.paths) {
+    // Hard error regardless of strictness: an absolute or climbing path is
+    // never a repository location, whatever exists on disk.
+    if (isUnsafeManifestPath(relativePath)) {
+      console.error(`ERROR: Module ${module.id} has an unsafe path '${relativePath}': manifest paths must be relative to the repository root and must not contain '..'`);
+      hasErrors = true;
+      continue;
+    }
     const normalizedPath = normalizeRelativePath(relativePath);
     const absolutePath = path.join(REPO_ROOT, normalizedPath);
 
     if (!fs.existsSync(absolutePath)) {
-      const strict = process.env.EGC_MANIFEST_STRICT === '1';
+      // Strict is the default: a referenced path that does not exist is an
+      // error unless the run opts out with EGC_MANIFEST_STRICT=0.
+      const strict = process.env.EGC_MANIFEST_STRICT !== '0';
       const level = strict ? 'ERROR' : 'WARN';
       console[strict ? 'error' : 'warn'](
         `${level}: Module ${module.id} references missing path: ${normalizedPath}`

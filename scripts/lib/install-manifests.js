@@ -98,6 +98,26 @@ function readOptionalStringOption(options, key) {
   return options[key];
 }
 
+// A manifest path is a location inside the repository, never an absolute
+// path and never one that climbs out of it: everything the installer copies
+// or the uninstaller removes is derived from these entries, so an entry that
+// escaped the root would turn a manifest edit into an arbitrary file write.
+function isUnsafeManifestPath(relativePath) {
+  const text = String(relativePath);
+  if (text.trim() === '') return true;
+  if (text.startsWith('/') || text.startsWith('\\') || /^[A-Za-z]:/.test(text)) return true;
+  return text.split(/[\\/]/).includes('..');
+}
+
+function assertSafeModulePaths(module) {
+  const paths = Array.isArray(module.paths) ? module.paths : [];
+  for (const relativePath of paths) {
+    if (isUnsafeManifestPath(relativePath)) {
+      throw new Error(`Install module ${module.id} has an unsafe path '${relativePath}': manifest paths must be relative to the repository root and must not contain '..'`);
+    }
+  }
+}
+
 function readModuleTargetsOrThrow(module) {
   const moduleId = module?.id ? module.id : '<unknown>';
   const targets = module?.targets;
@@ -175,6 +195,7 @@ function loadInstallManifests(options = {}) {
   const components = Array.isArray(componentsData.components) ? componentsData.components : [];
 
   for (const module of modules) {
+    assertSafeModulePaths(module);
     readModuleTargetsOrThrow(module);
   }
 
@@ -620,6 +641,7 @@ function resolveInstallPlan(options = {}) {
 
 module.exports = {
   DEFAULT_REPO_ROOT,
+  isUnsafeManifestPath,
   SUPPORTED_INSTALL_TARGETS,
   getManifestPaths,
   loadInstallManifests,

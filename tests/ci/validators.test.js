@@ -2518,8 +2518,7 @@ function runTests() {
     ]);
     fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
 
-    // Strict mode pins the historical hard-fail behavior; lenient default
-    // converts absent paths to WARN so partial-public-baseline CI stays green.
+    // Strict is the default; EGC_MANIFEST_STRICT=0 is the explicit opt-out.
     const result = runValidatorWithDirs('validate-install-manifests', {
       REPO_ROOT: testDir,
       MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
@@ -2533,6 +2532,56 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when a referenced path is missing');
     assert.ok(result.stderr.includes('references missing path'), 'Should report missing path');
     cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('a missing path fails by default and only warns with EGC_MANIFEST_STRICT=0', () => {
+    const testDir = createTestDir();
+    writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+      version: 1,
+      modules: [{ id: 'rules-core', kind: 'rules', description: 'Rules', paths: ['rules', 'does-not-exist'], targets: ['egc'], dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' }]
+    });
+    writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), { version: 1, profiles: Object.fromEntries(['minimal', 'core', 'developer', 'security', 'research', 'full'].map(name => [name, { description: name, modules: ['rules-core'] }])) });
+    writeJson(path.join(testDir, 'manifests', 'install-components.json'), { version: 1, components: [] });
+    fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
+    const dirs = {
+      REPO_ROOT: testDir,
+      MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+      PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+      COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+      MODULES_SCHEMA_PATH: modulesSchemaPath,
+      PROFILES_SCHEMA_PATH: profilesSchemaPath,
+      COMPONENTS_SCHEMA_PATH: componentsSchemaPath,
+    };
+    const strictByDefault = runValidatorWithDirs('validate-install-manifests', { ...dirs, env: {} });
+    assert.strictEqual(strictByDefault.code, 1, 'missing path must fail without any env');
+    const relaxed = runValidatorWithDirs('validate-install-manifests', { ...dirs, env: { EGC_MANIFEST_STRICT: '0' } });
+    assert.strictEqual(relaxed.code, 0, `EGC_MANIFEST_STRICT=0 relaxes the missing path to a warning: ${relaxed.stderr}`);
+    cleanupTestDir(testDir);
+  })) passed++; else failed++;
+
+  if (test('rejects manifest paths that are absolute or climb out of the repository', () => {
+    for (const unsafe of ['../outside', 'rules/../../etc', '/etc/passwd']) {
+      const testDir = createTestDir();
+      writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+        version: 1,
+        modules: [{ id: 'rules-core', kind: 'rules', description: 'Rules', paths: [unsafe], targets: ['egc'], dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' }]
+      });
+      writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), { version: 1, profiles: Object.fromEntries(['minimal', 'core', 'developer', 'security', 'research', 'full'].map(name => [name, { description: name, modules: ['rules-core'] }])) });
+      writeJson(path.join(testDir, 'manifests', 'install-components.json'), { version: 1, components: [] });
+      const result = runValidatorWithDirs('validate-install-manifests', {
+        REPO_ROOT: testDir,
+        MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+        PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+        COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+        MODULES_SCHEMA_PATH: modulesSchemaPath,
+        PROFILES_SCHEMA_PATH: profilesSchemaPath,
+        COMPONENTS_SCHEMA_PATH: componentsSchemaPath,
+        env: { EGC_MANIFEST_STRICT: '0' },
+      });
+      assert.strictEqual(result.code, 1, `${unsafe} must be rejected even in relaxed mode`);
+      assert.ok(/unsafe path|must match pattern/.test(result.stderr), result.stderr);
+      cleanupTestDir(testDir);
+    }
   })) passed++; else failed++;
 
   if (test('fails when two install modules claim the same path', () => {

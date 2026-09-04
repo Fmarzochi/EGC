@@ -19,23 +19,44 @@ const MODE_CONFIG = {
   },
 };
 
+// Secrets embedded in a shell command: header and flag values, key=value
+// assignments, URL credentials, well-known token prefixes and JWTs. Each
+// pattern is anchored on a literal and consumes one run of non-space
+// characters, so none of them backtracks. Mirrors the Guardian's own audit
+// redaction (mcp/servers/egc-guardian/src/audit-log.ts).
+const SECRET_PATTERNS = [
+  /(authorization\s*:\s*(?:bearer|basic|token)\s+)[^\s"']+/gi,
+  /(--?(?:token|password|passwd|secret|api[-_]?key|access[-_]?key|private[-_]?key|auth)(?:=|\s+))[^\s"']+/gi,
+  /(\b[a-z_]*(?:token|password|passwd|secret|api[-_]?key|apikey)[a-z_]*\s*=\s*)[^\s"'&;]+/gi,
+  /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
+  /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
+  /\bsk-[A-Za-z0-9_-]{20,}\b/g,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
+  /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
+  /\bAIza[0-9A-Za-z_-]{35}\b/g,
+  /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+];
+
 function sanitizeCommand(command) {
-  return String(command || '')
-    .replaceAll('\n', ' ')
-    .replace(/--token[= ][^ ]*/g, '--token=<REDACTED>')
-    .replace(/Authorization:[: ]*[^ ]*[: ]*[^ ]*/gi, 'Authorization:<REDACTED>')
-    .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED>')
-    .replace(/\bASIA[A-Z0-9]{16}\b/g, '<REDACTED>')
-    .replace(/password[= ][^ ]*/gi, 'password=<REDACTED>')
-    .replace(/\bghp_\w+\b/g, '<REDACTED>')
-    .replace(/\bgho_\w+\b/g, '<REDACTED>')
-    .replace(/\bghs_\w+\b/g, '<REDACTED>')
-    .replace(/\bgithub_pat_\w+\b/g, '<REDACTED>');
+  let out = String(command || '').replaceAll('\n', ' ');
+  for (const pattern of SECRET_PATTERNS) {
+    out = out.replace(pattern, (match, prefix) => (typeof prefix === 'string' ? `${prefix}<REDACTED>` : '<REDACTED>'));
+  }
+  return out;
 }
 
+// The log holds every command the agent ran; it is created private to the
+// user and an older world-readable copy is tightened on the next write.
 function appendLine(filePath, line) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.appendFileSync(filePath, `${line}\n`, 'utf8');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  fs.appendFileSync(filePath, `${line}\n`, { encoding: 'utf8', mode: 0o600 });
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch {
+    // Permission bits are advisory on filesystems that do not carry them.
+  }
 }
 
 function run(rawInput, mode = 'audit') {
