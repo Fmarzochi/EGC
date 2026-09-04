@@ -2472,6 +2472,42 @@ function runTests() {
     cleanup(outside);
   }
 
+  // A hard link inside the root that aliases a file outside it: the replay
+  // replaces the link instead of writing through it.
+  {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
+    const outside = createTempDir('lifecycle-outside-');
+    const victim = path.join(outside, 'aliased.md');
+    const destinationPath = path.join(projectRoot, '.cursor', 'rules', 'coding-style.md');
+    let linked = false;
+    try {
+      fs.writeFileSync(victim, 'outside content');
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fs.linkSync(victim, destinationPath);
+      linked = true;
+    } catch (error) {
+      console.log(`  - skipped (hard link): cannot create hard links here (${error.code})`);
+    }
+    if (linked) {
+      if (test('repair replaces a hard-linked destination without touching the file it aliased', () => {
+        writeCursorState(projectRoot, {
+          operations: [
+            managedOperation('copy-file', destinationPath, { sourceRelativePath: 'rules/common/coding-style.md', strategy: 'copy-file' }),
+          ],
+        });
+        const result = repairInstalledStates({ repoRoot: REPO_ROOT, homeDir, projectRoot, targets: ['cursor'] });
+        assert.strictEqual(result.results[0].status, 'repaired', JSON.stringify(result.results[0]));
+        assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'outside content');
+        assert.ok(fs.readFileSync(destinationPath).equals(fs.readFileSync(path.join(REPO_ROOT, 'rules', 'common', 'coding-style.md'))));
+        assert.notStrictEqual(fs.statSync(destinationPath).ino, fs.statSync(victim).ino);
+      })) passed++; else failed++;
+    }
+    cleanup(homeDir);
+    cleanup(projectRoot);
+    cleanup(outside);
+  }
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

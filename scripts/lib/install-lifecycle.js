@@ -5,6 +5,7 @@ const path = require('node:path');
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
 const { hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
+const { copyFileKeepingMode, replaceFileWith } = require('./install/preserving-write');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
@@ -417,7 +418,7 @@ function repairCopyFile(repoRoot, operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  fs.copyFileSync(sourcePath, operation.destinationPath);
+  copyFileKeepingMode(sourcePath, operation.destinationPath);
 }
 
 function repairMergeJson(operation) {
@@ -432,7 +433,7 @@ function repairMergeJson(operation) {
   const mergedValue = deepMergeJson(currentValue, payload);
 
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, formatJson(mergedValue));
+  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, formatJson(mergedValue)));
 }
 
 function repairRemove(operation) {
@@ -460,7 +461,7 @@ function repairMergeYamlReadList(operation) {
     );
   }
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
 }
 
 function repairMergeMarkdownIndex(operation) {
@@ -473,7 +474,7 @@ function repairMergeMarkdownIndex(operation) {
     relativePath: operation.relativePath,
   });
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
 }
 
 function executeRepairOperation(repoRoot, operation) {
@@ -498,14 +499,14 @@ function restorePreviousContent(operation) {
   const previousContent = getOperationPreviousContent(operation);
   if (previousContent !== null) {
     ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, previousContent);
+    replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, previousContent));
     return { removedPaths: [], cleanupTargets: [] };
   }
 
   const previousJson = getOperationPreviousJson(operation);
   if (previousJson !== undefined) {
     ensureParentDir(operation.destinationPath);
-    fs.writeFileSync(operation.destinationPath, formatJson(previousJson));
+    replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, formatJson(previousJson)));
     return { removedPaths: [], cleanupTargets: [] };
   }
 
@@ -547,7 +548,7 @@ function uninstallMergeJson(operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, formatJson(nextValue));
+  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, formatJson(nextValue)));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -576,7 +577,7 @@ function uninstallAiderConfigReadList(operation) {
   }
 
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
@@ -592,7 +593,7 @@ function uninstallWarpAgentsIndexEntry(operation) {
   const existingContent = fs.readFileSync(operation.destinationPath, 'utf8');
   const nextContent = removeSkillIndexEntry(existingContent, operation.skillName);
   ensureParentDir(operation.destinationPath);
-  fs.writeFileSync(operation.destinationPath, nextContent);
+  replaceFileWith(operation.destinationPath, temporary => fs.writeFileSync(temporary, nextContent));
   return { removedPaths: [], cleanupTargets: [] };
 }
 
