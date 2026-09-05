@@ -1,3 +1,5 @@
+
+const BLOCKED_TEXT = '[BLOCKED: suspicious content detected]';
 // Prompt injection and command injection detection for EGC state inputs.
 // Applied to every free-text field of the write paths: update_state
 // (context, decisions, avoid, preferences, next), working_memory_set and
@@ -94,7 +96,7 @@ export function sanitize(input: string): SanitizeResult {
   const reason = injectionReason(input);
   if (reason !== null) {
     return {
-      value: '[BLOCKED: suspicious content detected]',
+      value: BLOCKED_TEXT,
       flagged: true,
       reason,
     };
@@ -209,13 +211,36 @@ export function scrubStateFields(fields: StateTextFields): { fields: StateTextFi
     if (assembled !== null) {
       reasons.push(`fields together: ${assembled}`);
       const withheld = { ...scrubbed };
-      if (withheld.context !== undefined) withheld.context = '[BLOCKED: suspicious content detected]';
-      if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ what: '[BLOCKED: suspicious content detected]', ...(decision.why === undefined ? {} : { why: '[BLOCKED: suspicious content detected]' }) }));
+      if (withheld.context !== undefined) withheld.context = BLOCKED_TEXT;
+      if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ what: BLOCKED_TEXT, ...(decision.why === undefined ? {} : { why: BLOCKED_TEXT }) }));
 
-      if (withheld.next) withheld.next = withheld.next.map(() => '[BLOCKED: suspicious content detected]');
+      if (withheld.next) withheld.next = withheld.next.map(() => BLOCKED_TEXT);
       return { fields: withheld, reasons };
     }
   }
   return { fields: scrubbed, reasons };
 }
 
+// Lines that one block presents together (the global appendix get_state
+// adds to every project's state): each line is scanned on its own, and the
+// block is then read whole, so a directive split across lines is withheld
+// from the block instead of reaching every project.
+export function scrubPresentedLines(sections: Record<string, string[]>): { sections: Record<string, string[]>; reasons: string[] } {
+  const reasons: string[] = [];
+  const scrubbed: Record<string, string[]> = {};
+  for (const [heading, lines] of Object.entries(sections)) {
+    scrubbed[heading] = lines.map(line => {
+      const result = sanitize(line);
+      if (result.flagged) reasons.push(`${heading}: ${result.reason}`);
+      return result.value;
+    });
+  }
+  if (reasons.length === 0) {
+    const assembled = injectionReason(Object.values(scrubbed).flat().join('\n'));
+    if (assembled !== null) {
+      reasons.push(`lines together: ${assembled}`);
+      for (const heading of Object.keys(scrubbed)) scrubbed[heading] = scrubbed[heading].map(() => BLOCKED_TEXT);
+    }
+  }
+  return { sections: scrubbed, reasons };
+}

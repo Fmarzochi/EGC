@@ -12,7 +12,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
-import { buildGlobalAppendix, globalStateFilePath } from './global-state';
+import { GLOBAL_APPENDIX_SECTIONS, buildGlobalAppendix, globalStateFilePath } from './global-state';
 import {
   announce as busAnnounce,
   claimPath as busClaimPath,
@@ -45,7 +45,7 @@ import {
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { llmCompress, loadRawObservations, replaceObservation } from './compress.js';
-import { sanitize, sanitizeStrings, sanitizeStateFields, scrubStateFields } from './sanitize.js';
+import { sanitize, sanitizeStrings, sanitizeStateFields, scrubPresentedLines, scrubStateFields } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 
 function resolveStateStoreDbPath(): string {
@@ -1352,7 +1352,20 @@ function readGlobalAppendix(projectContent: string): string | null {
   try {
     const globalFile = getGlobalStateFile();
     if (!fs.existsSync(globalFile)) return null;
-    return buildGlobalAppendix(readStateDoc(globalFile), projectContent);
+    const globalDoc = readStateDoc(globalFile);
+    // The appendix reaches every project, so its sections are scrubbed the
+    // way propagated fields are: a line that is an injection on its own, or
+    // a directive that only reads as one across lines, is withheld.
+    const presented: Record<string, string[]> = {};
+    for (const { heading } of GLOBAL_APPENDIX_SECTIONS) {
+      const lines = globalDoc[heading];
+      if (Array.isArray(lines)) presented[heading] = lines;
+    }
+    const scrubbed = scrubPresentedLines(presented);
+    if (scrubbed.reasons.length > 0) {
+      log('WARN', 'get_state: suspicious global entries withheld from the appendix', { reasons: scrubbed.reasons });
+    }
+    return buildGlobalAppendix({ ...globalDoc, ...scrubbed.sections }, projectContent);
   } catch (err) {
     log('WARN', 'Failed to read global state, returning project state only', { error: String(err) });
     return null;
