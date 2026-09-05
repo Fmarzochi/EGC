@@ -33,16 +33,32 @@ function tarAvailable() {
 
 // An archive built from `entries` ({ name, content } for files, { name } for
 // directories, { name, link } for symbolic links), all under package/.
+// Null when a link entry cannot be created here (a platform without
+// symbolic links for this user), so the caller skips instead of failing.
+function stageEntry(stage, entry) {
+  const target = path.join(stage, entry.name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (entry.link !== undefined) {
+    try {
+      fs.symlinkSync(entry.link, target);
+    } catch {
+      return false;
+    }
+  } else if (entry.content !== undefined) {
+    fs.writeFileSync(target, entry.content);
+  } else {
+    fs.mkdirSync(target, { recursive: true });
+  }
+  return true;
+}
+
 function buildArchive(dir, archiveName, entries) {
   const stage = path.join(dir, `stage-${archiveName}`);
   fs.mkdirSync(path.join(stage, 'package'), { recursive: true });
   for (const entry of entries) {
-    const target = path.join(stage, entry.name);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    if (entry.link !== undefined) fs.symlinkSync(entry.link, target);
-    else if (entry.content !== undefined) fs.writeFileSync(target, entry.content);
-    else fs.mkdirSync(target, { recursive: true });
+    if (!stageEntry(stage, entry)) return null;
   }
+
   const archivePath = path.join(dir, archiveName);
   const packed = spawnSync('tar', ['-czf', archivePath, '-C', stage, 'package'], { encoding: 'utf-8', stdio: 'pipe' });
   assert.strictEqual(packed.status, 0, packed.stderr);
@@ -94,10 +110,51 @@ function runTests() {
     { name: 'package/skills/demo/SKILL.md', content: '# demo' },
   ];
   try {
+    if (test('a scope and a plugin of the same name never share a store path', () => {
+      const scoped = registry.getPluginDir('@scope/plugin');
+      const plain = registry.getPluginDir('scope');
+      assert.strictEqual(path.dirname(scoped), path.dirname(plain), 'both sit directly under the store');
+      assert.notStrictEqual(scoped, plain);
+      assert.ok(!scoped.startsWith(plain + path.sep), 'the scoped plugin is not inside the plain one');
+      assert.ok(registry.pluginNameError('@scope'), 'a bare scope is not a name');
+      assert.strictEqual(registry.pluginNameError('scope__plugin'), null, 'the stored spelling is itself a valid plain name and lands in its own directory');
+      assert.notStrictEqual(registry.getPluginDir('scope__plugin'), scoped);
+    })) passed++; else failed++;
+
+    if (test('a plugin recorded under a name the store no longer accepts fails per plugin instead of throwing', () => {
+      const lockPath = registry.PLUGINS_LOCK_PATH;
+      fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+      fs.writeFileSync(lockPath, JSON.stringify({ schemaVersion: 'egc.plugins.v1', installed: { '../legacy': { name: '../legacy', version: '1.0.0' } } }));
+      assert.strictEqual(registry.removePlugin('../legacy').success, false);
+      assert.strictEqual(registry.updatePlugin('../legacy').success, false);
+      const results = registry.reinstallAllPlugins();
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].success, false);
+      assert.ok(results[0].errors[0].includes('no longer accepts'), JSON.stringify(results[0]));
+      fs.writeFileSync(lockPath, JSON.stringify({ schemaVersion: 'egc.plugins.v1', installed: {} }));
+    })) passed++; else failed++;
+
+    if (test('a plugin whose required entry is a link is refused, not installed incomplete', () => {
+      const source = path.join(dir, 'linked-required');
+      fs.mkdirSync(source, { recursive: true });
+      fs.writeFileSync(path.join(source, 'plugin.json'), JSON.stringify({ name: 'lr', version: '1.0.0', description: 'lr', egcPeerVersion: '>=1.1.0' }));
+      fs.mkdirSync(path.join(dir, 'real-skills', 'demo'), { recursive: true });
+      try {
+        fs.symlinkSync(path.join(dir, 'real-skills'), path.join(source, 'skills'), 'dir');
+      } catch (error) {
+        console.log(`  - links not available here (${error.code}); skipped`);
+        return;
+      }
+      const result = registry.installPluginFromDir(source, 'lr');
+      assert.strictEqual(result.success, false, JSON.stringify(result));
+      assert.ok(result.errors.some(error => error.includes('not a link')), JSON.stringify(result.errors));
+      assert.ok(!fs.existsSync(path.join(home, '.egc', 'plugins', 'installed', 'lr')), 'nothing is recorded or left behind');
+    })) passed++; else failed++;
+
     if (test('a plugin name is one directory segment, optionally scoped', () => {
       assert.strictEqual(registry.pluginNameError('egc-plugin-docker'), null);
       assert.strictEqual(registry.pluginNameError('@scope/plugin'), null);
-      for (const bad of ['../escape', '..', 'a/b', '/abs', 'name\\evil', '@scope/../x', '@a/b/c', '']) {
+      for (const bad of ['../escape', '..', 'a/b', '/abs', 'name\\evil', '@scope/../x', '@a/b/c', '@scope', '']) {
         assert.ok(registry.pluginNameError(bad), `${bad} must be refused`);
       }
       const result = registry.installPluginFromDir(dir, '../escape');
@@ -113,9 +170,29 @@ function runTests() {
 
       if (test('an archive with a symbolic link is refused before extraction', () => {
         const archive = buildArchive(dir, 'link.tgz', [...validPlugin, { name: 'package/rules/out.md', link: path.join(dir, 'outside.md') }]);
+        if (archive === null) {
+          console.log('  - links not available here; listing check skipped');
+          return;
+        }
         const errors = registry.archiveInspectionErrors(archive);
         assert.ok(errors.some(error => error.includes('not a plain file or directory')), JSON.stringify(errors));
       })) passed++; else failed++;
+
+      if (test('the extracted tree is judged on disk, whatever the listing looked like', () => {
+        const extracted = path.join(dir, 'extracted-tree');
+        fs.mkdirSync(path.join(extracted, 'package', 'skills'), { recursive: true });
+        fs.writeFileSync(path.join(extracted, 'package', 'plugin.json'), '{}');
+        assert.deepStrictEqual(registry.extractedTreeErrors(extracted), []);
+        try {
+          fs.symlinkSync(dir, path.join(extracted, 'package', 'skills', 'escape'), 'dir');
+        } catch (error) {
+          console.log(`  - links not available here (${error.code}); clean tree only`);
+          return;
+        }
+        const errors = registry.extractedTreeErrors(extracted);
+        assert.ok(errors.some(error => error.includes('not a plain file or directory')), JSON.stringify(errors));
+      })) passed++; else failed++;
+
 
       if (test('an archive with a climbing entry is refused before extraction', () => {
         const archive = path.join(dir, 'climb.tgz');
@@ -143,7 +220,7 @@ function runTests() {
       let linked = true;
       try {
         fs.symlinkSync(path.join(dir, 'secret.md'), path.join(source, 'skills', 'demo', 'linked.md'));
-        fs.symlinkSync(dir, path.join(source, 'rules'), 'dir');
+        fs.symlinkSync(dir, path.join(source, 'skills', 'demo', 'linked-dir'), 'dir');
       } catch (error) {
         linked = false;
         console.log(`  - links not available here (${error.code}); copy check only`);
@@ -154,8 +231,9 @@ function runTests() {
       assert.ok(fs.existsSync(path.join(installed, 'skills', 'demo', 'SKILL.md')));
       if (linked) {
         assert.ok(!fs.existsSync(path.join(installed, 'skills', 'demo', 'linked.md')), 'the linked file is not copied');
-        assert.ok(!fs.existsSync(path.join(installed, 'rules')), 'the linked directory is not copied');
+        assert.ok(!fs.existsSync(path.join(installed, 'skills', 'demo', 'linked-dir')), 'the linked directory is not copied');
       }
+
     })) passed++; else failed++;
   } finally {
     process.env.HOME = previousHome.HOME;
