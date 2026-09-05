@@ -77,7 +77,7 @@ function checkTree() {
 
 function report(leaks, context) {
   if (leaks.length === 0) {
-    console.log('internal-tool leak check: clean');
+    console.error('internal-tool leak check: clean');
     return 0;
   }
   console.error(`BLOCKED: internal/personal tool references must never be public. Found in ${context}:`);
@@ -91,7 +91,7 @@ function report(leaks, context) {
 function checkText(text) {
   const hits = findHits(text);
   if (hits.length === 0) {
-    console.log('internal-tool leak check: clean');
+    console.error('internal-tool leak check: clean');
     return 0;
   }
   console.error(`BLOCKED: internal/personal tool reference found in PR title/body: ${hits.join(', ')}`);
