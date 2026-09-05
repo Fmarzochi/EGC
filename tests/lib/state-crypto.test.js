@@ -105,6 +105,13 @@ function runTests() {
       fs.symlinkSync(keyPath, linkPath);
       assert.throws(() => assertPrivateKeyFile(linkPath), /symbolic link/);
       assert.throws(() => decryptStateBuffer(Buffer.alloc(64), linkPath), /symbolic link/, 'a read never silently resolves to null on a refused key');
+      const dangling = path.join(dir, 'dangling.key');
+      fs.symlinkSync(path.join(dir, 'nowhere.key'), dangling);
+      assert.throws(() => decryptStateBuffer(Buffer.alloc(64), dangling), /symbolic link/, 'a dangling link is refused as a link, never treated as absent');
+      const folder = path.join(dir, 'folder.key');
+      fs.mkdirSync(folder);
+      assert.throws(() => assertPrivateKeyFile(folder), /not a regular file/, 'a directory is not a key');
+
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -57,16 +57,27 @@ if (test('loadOrCreateEncKey: a key file left readable by others is tightened, a
     loadOrCreateEncKey(keyPath);
     assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0, 'tightened to owner only');
     fs.chmodSync(keyPath, 0o644);
-    fs.chmodSync = (target, mode) => {
-      if (target === keyPath) throw new Error('EPERM: simulated filesystem that cannot hold 0600');
-      return originalChmodSync(target, mode);
+    // The mode is set through the descriptor, so the descriptor call is the
+    // one to fail; it restores itself on the first call.
+    const originalFchmodSync = fs.fchmodSync;
+    fs.fchmodSync = () => {
+      fs.fchmodSync = originalFchmodSync;
+      throw new Error('EPERM: simulated filesystem that cannot hold 0600');
     };
     assert.throws(() => assertPrivateKeyFile(keyPath), /Could not set 0600/, 'an existing key that resists tightening is refused');
-    fs.chmodSync = originalChmodSync;
+    fs.fchmodSync = originalFchmodSync;
     const linkPath = path.join(dir, 'linked.key');
     fs.symlinkSync(keyPath, linkPath);
     assert.throws(() => assertPrivateKeyFile(linkPath), /symbolic link/, 'a link is refused before anything is touched');
-    assert.throws(() => assertPrivateKeyFile(path.join(dir, 'missing.key')), /Could not inspect/, 'a missing file is an error, not a pass');
+    assert.throws(() => assertPrivateKeyFile(path.join(dir, 'missing.key')), /Could not open/, 'a missing file is an error, not a pass');
+    const dangling = path.join(dir, 'dangling.key');
+    fs.symlinkSync(path.join(dir, 'nowhere.key'), dangling);
+    assert.throws(() => assertPrivateKeyFile(dangling), /symbolic link/, 'a dangling link is refused as a link');
+    assert.throws(() => loadOrCreateEncKey(dangling), /symbolic link/, 'a dangling link at the key path is never replaced by a fresh key');
+    const folder = path.join(dir, 'folder.key');
+    fs.mkdirSync(folder);
+    assert.throws(() => assertPrivateKeyFile(folder), /not a regular file/, 'a directory is not a key');
+
   } finally {
     fs.chmodSync = originalChmodSync;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -126,11 +137,13 @@ if (test('loadOrCreateEncKey: refuses a key whose permissions cannot be tightene
   const originalConsoleError = console.error;
   const errorLines = [];
   console.error = (...args) => errorLines.push(args.join(' '));
-  fs.chmodSync = (target, mode) => {
-    if (target === keyPath) {
-      throw new Error('EPERM: simulated filesystem without permission bit support');
-    }
-    return originalChmodSync(target, mode);
+  // The mode is set through the descriptor of the key file, so the
+  // descriptor call is the one to fail; it restores itself on the first
+  // call, and the path-based chmod stays real for the temp file.
+  const originalFchmodSync = fs.fchmodSync;
+  fs.fchmodSync = () => {
+    fs.fchmodSync = originalFchmodSync;
+    throw new Error('EPERM: simulated filesystem without permission bit support');
   };
   try {
     if (process.platform === 'win32') return;

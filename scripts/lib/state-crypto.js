@@ -42,53 +42,82 @@ function isEncryptedBuffer(data) {
     && data.subarray(0, MAGIC_BYTES).toString('utf-8') === MAGIC;
 }
 
-// A key file must be private and must be the file itself. A link is refused
-// before anything is touched, so the permissions of an unrelated target are
-// never changed or trusted. The bits are then set and read back: where the
-// filesystem keeps POSIX bits a file still readable by the group or others
-// after the chmod is a hard error, because the key would sit exposed with
-// nothing but a log line to say so, and a mount that cannot hold 0600 at
-// all is refused with the advice to move the key. Windows has no bits to
-// tighten, so the mode check is skipped there.
-function refuseLinkedKey(filePath) {
-  let isLink;
+// A key file must be private and must be the file itself: it is opened
+// without following links (O_NOFOLLOW where the platform has it), the
+// object behind the descriptor must be a regular file, the mode is set and
+// read back through that descriptor, and the content is read from it, so
+// the file that was checked is the file that is used. Where the filesystem
+// keeps POSIX bits a file still readable by others after the chmod is a
+// hard error; on Windows there are no bits to tighten, so the mode step is
+// skipped there.
+const NO_FOLLOW_FLAG = fs.constants.O_NOFOLLOW || 0;
+
+function linkRefusal(filePath, cause) {
+  return new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`, { cause });
+}
+
+function keyDescriptor(filePath) {
+  if (!NO_FOLLOW_FLAG && fs.lstatSync(filePath).isSymbolicLink()) throw linkRefusal(filePath, null);
   try {
-    isLink = fs.lstatSync(filePath).isSymbolicLink();
-  } catch (statErr) {
-    throw new Error(`[EGC] Could not inspect ${filePath}: ${statErr.message}. The key file must exist and be a regular file.`, { cause: statErr });
-  }
-  if (isLink) {
-    throw new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`);
+    return fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG);
+  } catch (openErr) {
+    if (openErr.code === 'ELOOP') throw linkRefusal(filePath, openErr);
+    const error = new Error(`[EGC] Could not open ${filePath}: ${openErr.message}. The key file must exist and be a regular file.`, { cause: openErr });
+    error.code = openErr.code;
+    throw error;
   }
 }
 
-function tightenToOwner(filePath) {
+function refuseUnlessRegularAndPrivate(fd, filePath) {
+  if (!fs.fstatSync(fd).isFile()) {
+    throw new Error(`[EGC] ${filePath} is not a regular file; the key must be a regular file. Replace it and restart.`);
+  }
+  if (process.platform === 'win32') return;
   let failure = null;
-  try { fs.chmodSync(filePath, 0o600); } catch (chmodErr) { failure = chmodErr; }
+  try { fs.fchmodSync(fd, 0o600); } catch (chmodErr) { failure = chmodErr; }
   if (failure) {
     throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${failure.message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: failure });
   }
-  const bits = fs.statSync(filePath).mode & 0o777;
-  const exposed = bits & 0o077;
-  if (exposed) {
+  const bits = fs.fstatSync(fd).mode & 0o777;
+  if (bits & 0o077) {
     throw new Error(`[EGC] ${filePath} is readable by other users (mode ${bits.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
   }
 }
 
-function assertPrivateKeyFile(filePath) {
-  refuseLinkedKey(filePath);
-  if (process.platform !== 'win32') tightenToOwner(filePath);
+// Runs `use(fd)` on the checked descriptor of the key file, then closes it.
+function withPrivateKeyFile(filePath, use) {
+  const fd = keyDescriptor(filePath);
+  try {
+    refuseUnlessRegularAndPrivate(fd, filePath);
+    return use(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
-// The key at `keyPath`, or null when the file does not exist or is
-// malformed. Every read goes through the privacy check first, so a key left
-// readable by others is refused on read as well, and that refusal is an
-// error, never a silent null.
+function assertPrivateKeyFile(filePath) {
+  withPrivateKeyFile(filePath, () => undefined);
+}
+
+// Whether anything (a file, a link, even a dangling one) sits at the path:
+// a dangling link is refused as a link, never treated as absent.
+function present(filePath) {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The key at `keyPath`, or null when nothing sits at the path or the file
+// is malformed. Every read goes through the checks on the descriptor it
+// reads from, and any refusal (a link, a wide mode, a non-regular object,
+// an unreadable file) is an error, never a silent null.
 function loadKey(keyPath) {
   const resolvedPath = keyPath || defaultKeyPath();
-  if (!fs.existsSync(resolvedPath)) return null;
-  assertPrivateKeyFile(resolvedPath);
-  const hex = fs.readFileSync(resolvedPath, 'utf-8').trim();
+  if (!present(resolvedPath)) return null;
+  const hex = withPrivateKeyFile(resolvedPath, fd => fs.readFileSync(fd, 'utf-8')).trim();
   const key = Buffer.from(hex, 'hex');
   return key.length === 32 ? key : null;
 }
@@ -103,14 +132,18 @@ function loadOrCreateKeySync(keyPath) {
   const dir = path.dirname(resolvedPath);
   try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* may already exist */ }
 
-  if (fs.existsSync(resolvedPath)) {
+  if (present(resolvedPath)) {
     return loadKey(resolvedPath);
   }
 
   const key = crypto.randomBytes(32);
   const tmpPath = `${resolvedPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   try {
-    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    // Created exclusively (wx): a link planted at the temp path is never
+    // followed, so the key lands only in a file this call created.
+    const tmpFd = fs.openSync(tmpPath, 'wx', 0o600);
+    try { fs.writeSync(tmpFd, key.toString('hex')); } finally { fs.closeSync(tmpFd); }
+
     try {
       fs.linkSync(tmpPath, resolvedPath);
       assertPrivateKeyFile(resolvedPath);

@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { assertPrivateKeyFile } from './encryption.js';
+import { assertPrivateKeyFile, pathPresent, readPrivateKeyFile, writePrivateTemp } from './encryption.js';
 
 
 const HMAC_ALGORITHM = 'sha256';
@@ -47,15 +47,11 @@ export function loadOrCreateKey(): Buffer {
   }
 
   const readExistingKey = (): Buffer => {
-    let hex: string;
-    try {
-      hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
-    } catch (readErr: unknown) {
-      throw new Error(
-        `HMAC key file at ${KEY_PATH} exists but could not be read: ${(readErr as Error).message}`,
-        { cause: readErr }
-      );
-    }
+    // Read from the descriptor the private-file checks ran on: a link, a
+    // non-regular object, a wide mode or an unreadable file is refused
+    // there with its own message.
+    const hex = readPrivateKeyFile(KEY_PATH).trim();
+
 
     if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
       throw new Error(
@@ -65,14 +61,11 @@ export function loadOrCreateKey(): Buffer {
     }
 
     const key = Buffer.from(hex, 'hex');
-    // A key copied in with wide permissions is tightened, and the process
-    // refuses to run with it exposed.
-    assertPrivateKeyFile(KEY_PATH);
     try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
     return key;
   };
 
-  if (fs.existsSync(KEY_PATH)) return readExistingKey();
+  if (pathPresent(KEY_PATH)) return readExistingKey();
 
   // Generate a fresh key and publish it the way the encryption key is
   // published: written whole to a private temp file, then linked into place
@@ -86,7 +79,8 @@ export function loadOrCreateKey(): Buffer {
   const tmpPath = `${KEY_PATH}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   let published: boolean;
   try {
-    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    writePrivateTemp(tmpPath, key.toString('hex'));
+
     published = linkExclusively(tmpPath, KEY_PATH);
   } catch (e) {
     throw new Error(`[EGC integrity] Failed to persist HMAC key to ${KEY_PATH}: ${String(e)}. Fix the directory permissions and restart.`, { cause: e });

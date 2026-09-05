@@ -38,34 +38,96 @@ function defaultEncKeyPath(): string {
  * Throws if the key file exists but cannot be read or is malformed —
  * only generates a new key when the file genuinely does not exist.
  */
-// A key file must be private and must be the file itself. A link is refused
-// before anything is touched, so the permissions of an unrelated target are
-// never changed or trusted. The bits are then set and read back: where the
+// A key file must be private and must be the file itself. It is opened
+// without following links (O_NOFOLLOW where the platform has it) and every
+// check runs on that one descriptor: the object must be a regular file,
+// the mode is set and read back through the descriptor, and the content is
+// read from it, so the file that was checked is the file that is used and
+// a path swapped underneath the checks changes nothing. Where the
 // filesystem keeps POSIX bits (Linux, macOS, most network mounts) a file
 // still readable by the group or others after the chmod is a hard error,
 // because the key would sit exposed with nothing but a log line to say so,
-// and a mount that cannot hold 0600 at all (FAT, exFAT) is refused with the
-// advice to move the key. Windows has no bits to tighten, so the mode check
-// is skipped there.
-export function assertPrivateKeyFile(filePath: string): void {
-  let isLink: boolean;
+// and a mount that cannot hold 0600 at all (FAT, exFAT) is refused with
+// the advice to move the key. Windows has no bits to tighten, so the mode
+// step is skipped there.
+const NO_FOLLOW = fs.constants.O_NOFOLLOW ?? 0;
+
+function linkRefusal(filePath: string, cause?: unknown): Error {
+  return new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`, { cause });
+}
+
+function openPrivateKeyFile(filePath: string): number {
+  if (NO_FOLLOW === 0 && fs.lstatSync(filePath).isSymbolicLink()) throw linkRefusal(filePath);
+  let fd: number;
   try {
-    isLink = fs.lstatSync(filePath).isSymbolicLink();
-  } catch (statErr) {
-    throw new Error(`[EGC] Could not inspect ${filePath}: ${(statErr as Error).message}. The key file must exist and be a regular file.`, { cause: statErr });
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW);
+  } catch (openErr) {
+    const code = (openErr as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP') throw linkRefusal(filePath, openErr);
+    const error: NodeJS.ErrnoException = new Error(`[EGC] Could not open ${filePath}: ${(openErr as Error).message}. The key file must exist and be a regular file.`, { cause: openErr });
+    error.code = code;
+    throw error;
   }
-  if (isLink) {
-    throw new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`);
+  try {
+    checkPrivateDescriptor(fd, filePath);
+  } catch (checkErr) {
+    fs.closeSync(fd);
+    throw checkErr;
+  }
+  return fd;
+}
+
+function checkPrivateDescriptor(fd: number, filePath: string): void {
+  if (!fs.fstatSync(fd).isFile()) {
+    throw new Error(`[EGC] ${filePath} is not a regular file; the key must be a regular file. Replace it and restart.`);
   }
   if (process.platform === 'win32') return;
   try {
-    fs.chmodSync(filePath, 0o600);
+    fs.fchmodSync(fd, 0o600);
   } catch (chmodErr) {
     throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${(chmodErr as Error).message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: chmodErr });
   }
-  const mode = fs.statSync(filePath).mode & 0o777;
+  const mode = fs.fstatSync(fd).mode & 0o777;
   if ((mode & 0o077) !== 0) {
     throw new Error(`[EGC] ${filePath} is readable by other users (mode ${mode.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
+  }
+}
+
+export function assertPrivateKeyFile(filePath: string): void {
+  fs.closeSync(openPrivateKeyFile(filePath));
+}
+
+// The content of a key file, read from the descriptor the checks ran on.
+export function readPrivateKeyFile(filePath: string): string {
+  const fd = openPrivateKeyFile(filePath);
+  try {
+    return fs.readFileSync(fd, 'utf-8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Whether anything (a file, a link, even a dangling one) sits at the path:
+// a dangling link must be refused as a link, never treated as absent and
+// replaced.
+export function pathPresent(filePath: string): boolean {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The temp file is created exclusively (wx): a link planted at the temp
+// path is never followed, so the key is written only into a file this call
+// created, private from the first byte.
+export function writePrivateTemp(tmpPath: string, content: string): void {
+  const fd = fs.openSync(tmpPath, 'wx', 0o600);
+  try {
+    fs.writeSync(fd, content);
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
@@ -79,16 +141,16 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
   }
 
   const readExistingKey = (): Buffer => {
-    const hex = fs.readFileSync(keyPath, 'utf-8').trim();
+    const hex = readPrivateKeyFile(keyPath).trim();
+
     const key = Buffer.from(hex, 'hex');
     if (key.length !== 32) {
       throw new Error(`[EGC encryption] Key file at ${keyPath} is malformed (expected 32 bytes, got ${key.length}). Remove it to regenerate.`);
     }
-    assertPrivateKeyFile(keyPath);
     return key;
   };
 
-  if (fs.existsSync(keyPath)) {
+  if (pathPresent(keyPath)) {
     // Key file exists — load it. Do NOT silently regenerate on error;
     // that would destroy access to all previously encrypted state files.
     return readExistingKey();
@@ -110,7 +172,8 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
   const key = crypto.randomBytes(32);
   const tmpPath = `${keyPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   try {
-    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    writePrivateTemp(tmpPath, key.toString('hex'));
+
     try {
       fs.linkSync(tmpPath, keyPath);
       assertPrivateKeyFile(keyPath);
