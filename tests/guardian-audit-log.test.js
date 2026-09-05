@@ -203,6 +203,16 @@ if (test('redactPayload: redacts keys by the words they are made of, and values 
   assert.strictEqual(more.label, 'averyveryverylongidentifierwithoutanydigitsatallhere');
   assert.ok(!more.command.includes('MIIEabc'), more.command);
   assert.ok(more.command.startsWith('deploy --key "') && more.command.endsWith('" now'), more.command);
+  const aws = redactPayload({ accessKey: 'a', access_key: 'b', AWS_ACCESS_KEY_ID: 'c', apiKeys: 'k', accessible: 'plain' });
+  for (const key of ['accessKey', 'access_key', 'AWS_ACCESS_KEY_ID', 'apiKeys']) assert.strictEqual(aws[key], '[REDACTED]', `${key} must be redacted`);
+  assert.strictEqual(aws.accessible, 'plain', 'a word that merely starts like a secret word stays');
+
+  const headers = '-----BEGIN RSA PRIVATE KEY-----\n'.repeat(2000);
+  const started = Date.now();
+  const flood = redactSecretsInText(`${headers}tail`);
+  assert.ok(Date.now() - started < 2000, 'thousands of unterminated headers are redacted in one pass');
+  assert.ok(!flood.includes('BEGIN RSA'), 'every header is covered');
+
 })) passed++; else failed++;
 
 

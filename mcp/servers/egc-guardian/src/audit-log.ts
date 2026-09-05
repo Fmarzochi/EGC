@@ -27,10 +27,15 @@ function keyWords(key: string): string[] {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/).filter(word => word !== '');
 }
 
-// A word with its plural removed (tokens, secrets, credentials, cookies).
+// A known plural of a secret word, read in the singular (tokens, secrets,
+// credentials, cookies, passwords); any other word is left as it is, so
+// `access` never turns into `acces`.
+const PLURAL_SECRET_WORDS = new Set(['tokens', 'secrets', 'passwords', 'credentials', 'cookies', 'keys']);
+
 function singular(word: string): string {
-  return word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word;
+  return PLURAL_SECRET_WORDS.has(word) ? word.slice(0, -1) : word;
 }
+
 
 function isRedactedKey(key: string): boolean {
   const words = keyWords(key).map(singular);
@@ -66,10 +71,29 @@ const SECRET_SHAPES: RegExp[] = [
   /\bglpat-[\w-]{20,}\b/g,
   /\bAIza[\w-]{35}\b/g,
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
-  // A PEM private key block anywhere in the text, header to footer.
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*$/g,
 ];
+
+// A PEM private key block anywhere in the text, header to footer (or to the
+// end of the text when the footer is missing), found with a linear scan:
+// each header is visited once, so a text full of headers costs one pass.
+const PEM_HEADER = /-----BEGIN [A-Z ]*PRIVATE KEY-----/g;
+const PEM_FOOTER = /-----END [A-Z ]*PRIVATE KEY-----/g;
+
+function redactPemBlocks(text: string): string {
+  let out = '';
+  let from = 0;
+  PEM_HEADER.lastIndex = 0;
+  let header = PEM_HEADER.exec(text);
+  while (header) {
+    out += text.slice(from, header.index) + REDACTED;
+    PEM_FOOTER.lastIndex = header.index + header[0].length;
+    const footer = PEM_FOOTER.exec(text);
+    from = footer ? footer.index + footer[0].length : text.length;
+    PEM_HEADER.lastIndex = from;
+    header = from < text.length ? PEM_HEADER.exec(text) : null;
+  }
+  return out + text.slice(from);
+}
 const REDACTED = '[REDACTED]';
 // Command lines nest through substitutions and shell -c bodies; past this
 // many levels a body is replaced whole instead of being read.
@@ -581,7 +605,9 @@ function redactValuesAfter(text: string, prefixPattern: RegExp): string {
  */
 export function redactSecretsInText(text: string): string {
   let out = text;
+  out = redactPemBlocks(out);
   for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
+
   try {
     out = redactCurlBasicAuth(out);
   } catch { // NOSONAR: a command the reader cannot parse is logged whole as redacted, never dropped

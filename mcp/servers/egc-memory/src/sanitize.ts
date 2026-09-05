@@ -16,8 +16,12 @@ export interface SanitizeResult {
 // content, the memory refuses in state, which every tool later loads as
 // trusted instructions. Change the two together.
 const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions?|context|prompts?)/i, reason: 'prompt override attempt' },
-  { pattern: /disregard\s+(all\s+|the\s+)?(system\s+)?(prompt|instructions?|rules?)/i, reason: 'prompt override attempt' },
+  // The last gap also accepts a colon, comma or newline: a decision is stored
+  // as `what: why`, and a directive split over that seam still reads whole.
+  { pattern: /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)[\s:,;]+(instructions?|context|prompts?)/i, reason: 'prompt override attempt' },
+
+  { pattern: /disregard\s+(all\s+|the\s+)?(system[\s:,;]+)?(prompt|instructions?|rules?)/i, reason: 'prompt override attempt' },
+
   { pattern: /disregard\s+(all\s+)?(previous|prior)\s+/i,           reason: 'prompt override attempt' },
   { pattern: /forget\s+(everything|all)\s+(you\s+)?(were\s+told|know)/i, reason: 'context reset attempt' },
   { pattern: /SYSTEM\s*:\s*(OVERRIDE|INSTRUCTION|PROMPT)/i,         reason: 'system prompt injection' },
@@ -162,18 +166,20 @@ function mapStateFields(fields: StateTextFields, visit: TextVisitor): StateTextF
   return out;
 }
 
-// The fields the instruction files present, in their order: the context,
-// each decision's `what`, and the next steps (propagate.ts writes exactly
-// these). A directive assembled across those boundaries is seen whole; a
-// `why`, an `avoid` or a preference never reaches the files, so it is not
-// part of the document.
+// The fields the instruction files present, in their order and spelling:
+// the context, each decision as the state file stores it (`what: why` on
+// one line, which the propagation then reads back whole), and the next
+// steps. A directive assembled across those boundaries is seen whole; an
+// `avoid` entry or a preference never reaches the files, so it is not part
+// of the document.
 function presentedDocument(fields: StateTextFields): string {
   const lines: string[] = [];
   if (fields.context !== undefined) lines.push(fields.context);
-  for (const decision of fields.decisions ?? []) lines.push(decision.what);
+  for (const decision of fields.decisions ?? []) lines.push(decision.why === undefined ? decision.what : `${decision.what}: ${decision.why}`);
   for (const step of fields.next ?? []) lines.push(step);
   return lines.join('\n');
 }
+
 
 // Returns a copy of the fields with every flagged string replaced by the
 // sanitizer's block marker, plus the reasons. Used on the merged state doc
@@ -194,7 +200,8 @@ export function scrubStateFields(fields: StateTextFields): { fields: StateTextFi
       reasons.push(`fields together: ${assembled}`);
       const withheld = { ...scrubbed };
       if (withheld.context !== undefined) withheld.context = '[BLOCKED: suspicious content detected]';
-      if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ ...decision, what: '[BLOCKED: suspicious content detected]' }));
+      if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ what: '[BLOCKED: suspicious content detected]', ...(decision.why === undefined ? {} : { why: '[BLOCKED: suspicious content detected]' }) }));
+
       if (withheld.next) withheld.next = withheld.next.map(() => '[BLOCKED: suspicious content detected]');
       return { fields: withheld, reasons };
     }
