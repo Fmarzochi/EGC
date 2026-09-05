@@ -23,23 +23,12 @@ function keyPath() {
 // state-crypto.js's loadOrCreateKeySync() is already a general 32-byte
 // hex-key-file load-or-create (atomic write-tmp-then-link) -- reused here
 // with the integrity key's own path instead of re-implementing the same
-// routine a second time. Its persistence failures are intentionally fatal
-// for the encryption key (losing it makes existing ciphertext unreadable),
-// but the integrity key has no such stakes: on failure, loadOrCreateKey()
-// in integrity.ts falls back to an unpersisted key held "for this process
-// lifetime" -- every sidecar in that run still gets signed consistently,
-// just with a key that won't survive the process. Cache the same way here:
-// a fresh crypto.randomBytes() on every call would make consecutive
-// writeHmac() calls in one run disagree with each other, not just with a
-// future process.
-let fallbackKey = null;
+// routine a second time. Its failures are as fatal here as they are for
+// the encryption key: a key that cannot be persisted would sign sidecars
+// that fail verification on the next start, and a key that cannot be kept
+// private would let another local user forge them, so neither is used.
 function loadOrCreateIntegrityKey() {
-  try {
-    return loadOrCreateKeySync(keyPath());
-  } catch {
-    if (!fallbackKey) fallbackKey = crypto.randomBytes(32);
-    return fallbackKey;
-  }
+  return loadOrCreateKeySync(keyPath());
 }
 
 function computeHmac(content, key) {

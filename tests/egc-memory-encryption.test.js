@@ -44,7 +44,45 @@ const { loadOrCreateEncKey, encryptState, decryptState, isEncrypted, writeStateF
 
 console.log('\n=== Testing egc-memory encryption ===\n');
 
-// ── encrypt/decrypt round-trip ──────────────────────────────────────────────
+if (test('loadOrCreateEncKey: a key file left readable by others is tightened, and refused when it cannot be', () => {
+  if (process.platform === 'win32') return;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-mode-'));
+  const { assertPrivateKeyFile } = require(buildPath);
+  const originalChmodSync = fs.chmodSync;
+  try {
+    const keyPath = path.join(dir, 'encryption.key');
+    fs.writeFileSync(keyPath, crypto.randomBytes(32).toString('hex'));
+    fs.chmodSync(keyPath, 0o644);
+    assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0o044, 'planted wide');
+    loadOrCreateEncKey(keyPath);
+    assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0, 'tightened to owner only');
+    fs.chmodSync(keyPath, 0o644);
+    // The mode is set through the descriptor, so the descriptor call is the
+    // one to fail; it restores itself on the first call.
+    const originalFchmodSync = fs.fchmodSync;
+    fs.fchmodSync = () => {
+      fs.fchmodSync = originalFchmodSync;
+      throw new Error('EPERM: simulated filesystem that cannot hold 0600');
+    };
+    assert.throws(() => assertPrivateKeyFile(keyPath), /Could not set 0600/, 'an existing key that resists tightening is refused');
+    fs.fchmodSync = originalFchmodSync;
+    const linkPath = path.join(dir, 'linked.key');
+    fs.symlinkSync(keyPath, linkPath);
+    assert.throws(() => assertPrivateKeyFile(linkPath), /symbolic link/, 'a link is refused before anything is touched');
+    assert.throws(() => assertPrivateKeyFile(path.join(dir, 'missing.key')), /Could not open/, 'a missing file is an error, not a pass');
+    const dangling = path.join(dir, 'dangling.key');
+    fs.symlinkSync(path.join(dir, 'nowhere.key'), dangling);
+    assert.throws(() => assertPrivateKeyFile(dangling), /symbolic link/, 'a dangling link is refused as a link');
+    assert.throws(() => loadOrCreateEncKey(dangling), /symbolic link/, 'a dangling link at the key path is never replaced by a fresh key');
+    const folder = path.join(dir, 'folder.key');
+    fs.mkdirSync(folder);
+    assert.throws(() => assertPrivateKeyFile(folder), /not a regular file/, 'a directory is not a key');
+
+  } finally {
+    fs.chmodSync = originalChmodSync;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
 
 if (test('encryptState/decryptState: round-trips plaintext', () => {
   const key = crypto.randomBytes(32);
@@ -92,30 +130,30 @@ if (test('loadOrCreateEncKey: returns a 32-byte Buffer and creates the file with
   }
 })) passed++; else failed++;
 
-if (test('loadOrCreateEncKey: warns (does not throw) when chmod on the key file fails (audit EGC-128, low)', () => {
+if (test('loadOrCreateEncKey: refuses a key whose permissions cannot be tightened (audit 2026-08-17, day 16; supersedes EGC-128)', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
   const keyPath = path.join(tmpDir, 'encryption.key');
   const originalChmodSync = fs.chmodSync;
   const originalConsoleError = console.error;
   const errorLines = [];
   console.error = (...args) => errorLines.push(args.join(' '));
-  fs.chmodSync = (target, mode) => {
-    if (target === keyPath) {
-      throw new Error('EPERM: simulated filesystem without permission bit support');
-    }
-    return originalChmodSync(target, mode);
+  // The mode is set through the descriptor of the key file, so the
+  // descriptor call is the one to fail; it restores itself on the first
+  // call, and the path-based chmod stays real for the temp file.
+  const originalFchmodSync = fs.fchmodSync;
+  fs.fchmodSync = () => {
+    fs.fchmodSync = originalFchmodSync;
+    throw new Error('EPERM: simulated filesystem without permission bit support');
   };
   try {
-    const key = loadOrCreateEncKey(keyPath);
-    assert.ok(Buffer.isBuffer(key), 'should still return a usable key despite the chmod failure');
-    assert.strictEqual(key.length, 32);
-    assert.ok(
-      errorLines.some(line => line.includes(keyPath) && line.includes('0600')),
-      `expected a warning naming the key path and the intended mode, got: ${JSON.stringify(errorLines)}`
-    );
+    if (process.platform === 'win32') return;
+    assert.throws(() => loadOrCreateEncKey(keyPath), error => error.message.includes(keyPath) && error.message.includes('0600'), 'a key that cannot be made private is refused, not used');
+    assert.ok(!fs.existsSync(keyPath) || (fs.statSync(keyPath).mode & 0o077) === 0, 'no exposed key is left behind as the process key');
   } finally {
     fs.chmodSync = originalChmodSync;
+    fs.fchmodSync = originalFchmodSync;
     console.error = originalConsoleError;
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
@@ -155,8 +193,22 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
   const winnerKey = crypto.randomBytes(32);
   fs.writeFileSync(keyPath, winnerKey.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
 
-  const origExistsSync = fs.existsSync;
-  fs.existsSync = (p) => (p === keyPath ? false : origExistsSync(p));
+  // Presence is decided with lstat: the loser's view is an lstat that says
+  // nothing is there while the winner's key already sits on disk.
+  // Only the presence check (the first lstat of the key path) sees the
+  // stale view; the recovery read that follows must see the real file, on
+  // platforms that open with an lstat pre-check too.
+  const origLstatSync = fs.lstatSync;
+  let staleView = true;
+  fs.lstatSync = (p, ...rest) => {
+    if (p === keyPath && staleView) {
+      staleView = false;
+      const missing = new Error('ENOENT: simulated loser view');
+      missing.code = 'ENOENT';
+      throw missing;
+    }
+    return origLstatSync(p, ...rest);
+  };
   try {
     const result = loadOrCreateEncKey(keyPath);
     assert.ok(
@@ -166,7 +218,8 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
     const onDisk = Buffer.from(fs.readFileSync(keyPath, 'utf-8').trim(), 'hex');
     assert.ok(onDisk.equals(winnerKey), 'the winner\'s key on disk must remain untouched');
   } finally {
-    fs.existsSync = origExistsSync;
+    fs.lstatSync = origLstatSync;
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;

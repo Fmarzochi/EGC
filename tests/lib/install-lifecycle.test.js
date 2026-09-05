@@ -1669,6 +1669,35 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('uninstall never removes a prototype key EGC never installed', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-proto-');
+
+    try {
+      const targetRoot = path.join(projectRoot, '.cursor');
+      const destinationPath = path.join(targetRoot, 'settings.json');
+      fs.mkdirSync(targetRoot, { recursive: true });
+      fs.writeFileSync(destinationPath, '{"keep": true, "managed": true, "__proto__": {"user": true}}');
+      writeCursorState(projectRoot, {
+        operations: [
+          managedOperation('merge-json', destinationPath, {
+            mergePayload: JSON.parse('{"managed": true, "__proto__": {"user": true}}'),
+          }),
+        ],
+      });
+
+      const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['cursor'] });
+      assert.strictEqual(result.results[0].status, 'uninstalled');
+      const remaining = JSON.parse(fs.readFileSync(destinationPath, 'utf8'));
+      assert.strictEqual(remaining.keep, true);
+      assert.ok(!Object.hasOwn(remaining, 'managed'), 'the managed key is removed');
+      assert.ok(Object.hasOwn(remaining, '__proto__'), 'the user-owned prototype key is untouched');
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('uninstall handles merge-json subset removal and full-file deletion', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const partialProjectRoot = createTempDir('install-lifecycle-partial-');
