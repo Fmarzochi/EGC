@@ -173,40 +173,41 @@ function installPluginFromDir(sourceDir, pluginName) {
   return { success: true, plugin: lock.installed[pluginName] };
 }
 
-// The entries of a package archive, as tar lists them; null when the
-// archive cannot be listed.
-function listArchiveEntries(archivePath) {
-  const listing = spawnSync('tar', ['-tzvf', archivePath], { // NOSONAR jssecurity:S8705
+// The entry names of a package archive, one per line, as tar lists them
+// with -t alone (no columns, so every tar prints the same thing); null when
+// the archive cannot be listed. bsdtar strips a leading slash from the
+// listing and says so on stderr, so that warning counts as an absolute name.
+function listArchiveNames(archivePath) {
+  const listing = spawnSync('tar', ['-tzf', archivePath], { // NOSONAR jssecurity:S8705
     encoding: 'utf-8',
     stdio: 'pipe',
     timeout: 30000,
   });
   if (listing.status !== 0) return null;
-  return listing.stdout.split('\n').filter(line => line.trim() !== '');
+  const names = listing.stdout.split('\n').filter(line => line.trim() !== '');
+  if (/leading '\/'|absolute path|Removing leading/i.test(listing.stderr || '')) names.push('/');
+  return names;
 }
 
-// Whether a listed archive entry stays inside the extraction directory and
-// is a plain file or directory: an absolute name, a name that climbs, a
-// symbolic or hard link, or a device would land or point outside it.
-function archiveEntryError(line) {
-  const type = line[0];
-  if (type !== '-' && type !== 'd') return `archive entry is not a plain file or directory: ${line.slice(0, 80)}`;
-  const name = line.replace(/^\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+/, '');
+// Whether an archive entry name stays inside the extraction directory: an
+// absolute name or a name that climbs would land outside it. Entry kinds
+// (a link, a device) are judged on the extracted tree, where every tar
+// agrees on what it wrote.
+function archiveNameError(name) {
   const normalized = name.replaceAll('\\', '/');
   if (normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) return `archive entry has an absolute name: ${name}`;
   if (normalized.split('/').includes('..')) return `archive entry climbs out of the package: ${name}`;
   return null;
 }
 
-// Every entry is inspected before anything is written: tar itself refuses
-// absolute names and parent segments, but a link inside the archive would
-// be created and then followed by the copy, so links are refused here.
+// Every name is inspected before anything is written; the extracted tree is
+// inspected again afterwards for links and for where each entry really is.
 function archiveInspectionErrors(archivePath) {
-  const entries = listArchiveEntries(archivePath);
-  if (entries === null) return ['Failed to list the plugin package'];
+  const names = listArchiveNames(archivePath);
+  if (names === null) return ['Failed to list the plugin package'];
   const errors = [];
-  for (const line of entries) {
-    const error = archiveEntryError(line);
+  for (const name of names) {
+    const error = archiveNameError(name);
     if (error) errors.push(error);
   }
   return errors;

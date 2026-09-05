@@ -168,15 +168,20 @@ function runTests() {
         assert.deepStrictEqual(registry.archiveInspectionErrors(archive), []);
       })) passed++; else failed++;
 
-      if (test('an archive with a symbolic link is refused before extraction', () => {
+      if (test('an archive with a symbolic link is refused once extracted', () => {
         const archive = buildArchive(dir, 'link.tgz', [...validPlugin, { name: 'package/rules/out.md', link: path.join(dir, 'outside.md') }]);
         if (archive === null) {
-          console.log('  - links not available here; listing check skipped');
+          console.log('  - links not available here; extraction check skipped');
           return;
         }
-        const errors = registry.archiveInspectionErrors(archive);
+        const extracted = path.join(dir, 'extracted-link');
+        fs.mkdirSync(extracted, { recursive: true });
+        const untar = spawnSync('tar', ['-xzf', archive, '-C', extracted], { encoding: 'utf-8', stdio: 'pipe' });
+        assert.strictEqual(untar.status, 0, untar.stderr);
+        const errors = registry.extractedTreeErrors(extracted);
         assert.ok(errors.some(error => error.includes('not a plain file or directory')), JSON.stringify(errors));
       })) passed++; else failed++;
+
 
       if (test('the extracted tree is judged on disk, whatever the listing looked like', () => {
         const extracted = path.join(dir, 'extracted-tree');
