@@ -218,6 +218,23 @@ process.exit(7);
     }
   })) passed++; else failed++;
 
+  if (test('shell mode refuses a missing target even when no shell runtime is available', () => {
+    const root = createTempDir();
+    try {
+      const result = run(['shell', path.join('scripts', 'missing.sh')], {
+        root,
+        input: 'raw-input',
+        env: { PATH: '', BASH: '' },
+      });
+
+      assert.strictEqual(result.status, 2);
+      assert.strictEqual(result.stdout, '');
+      assert.ok(result.stderr.includes('hook script missing'), result.stderr);
+    } finally {
+      cleanup(root);
+    }
+  })) passed++; else failed++;
+
   if (test('rejects target paths that escape the plugin root', () => {
     const root = createTempDir();
     try {

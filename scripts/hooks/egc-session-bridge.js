@@ -40,12 +40,15 @@ function resolvePluginRoot() {
 }
 
 // A bridge that cannot be found does not run, and the session must not
-// look as if it had been bridged: the reason goes to stderr and the hook
-// exits non-zero, so a broken install is seen instead of silently losing
-// every session event.
+// look as if it had been bridged: the refusal is returned in the shape the
+// hook runner honours (an exit code with the reason on stderr), so a
+// broken install is seen instead of silently losing every session event,
+// whether the hook runs directly or through run-with-flags.
 function refuse(reason) {
-  process.stderr.write(`[${HOOK_ID}] refused: ${reason}; set EGC_PLUGIN_ROOT to the EGC install directory or reinstall with egc install --target gemini\n`);
-  return 1;
+  return {
+    exitCode: 1,
+    stderr: `[${HOOK_ID}] refused: ${reason}; set EGC_PLUGIN_ROOT to the EGC install directory or reinstall with egc install --target gemini\n`,
+  };
 }
 
 function resolvePythonBin(pluginRoot) {
@@ -116,7 +119,12 @@ function run() {
 }
 
 if (require.main === module) {
-  process.exit(run());
+  const outcome = run();
+  if (outcome && typeof outcome === 'object') {
+    if (outcome.stderr) process.stderr.write(outcome.stderr);
+    process.exit(Number.isInteger(outcome.exitCode) ? outcome.exitCode : 0);
+  }
+  process.exit(outcome);
 }
 
 module.exports = { run };

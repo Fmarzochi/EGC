@@ -93,6 +93,9 @@ function spawnNode(rootDir, relPath, raw, args) {
 }
 
 function spawnShell(rootDir, relPath, raw, args) {
+  // The target is resolved and checked before the runtime question, so a
+  // missing hook is refused whether or not a shell is available.
+  const target = resolveTarget(rootDir, relPath);
   const shell = findShellBinary();
   if (!shell) {
     return {
@@ -102,7 +105,7 @@ function spawnShell(rootDir, relPath, raw, args) {
     };
   }
 
-  return spawnSync(shell, [resolveTarget(rootDir, relPath), ...sanitizeArgs(args)], { // NOSONAR jssecurity:S8705
+  return spawnSync(shell, [target, ...sanitizeArgs(args)], { // NOSONAR jssecurity:S8705
     input: raw,
     encoding: 'utf8',
     env: {
