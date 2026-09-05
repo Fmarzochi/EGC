@@ -59,6 +59,7 @@ class MemoryClient {
   }
 
   close() {
+    if (this.child.exitCode !== null || this.child.signalCode !== null) return Promise.resolve();
     return new Promise(resolve => {
       this.child.once('exit', () => resolve());
       this.child.stdin.end();

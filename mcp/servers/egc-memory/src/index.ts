@@ -601,7 +601,9 @@ function canonicalPath(p: string): string {
   const resolved = path.resolve(p);
   let existing = resolved;
   let remainder = '';
-  for (let depth = 0; depth < 1024; depth += 1) {
+  // Every step moves to the parent, and the walk ends when the parent is
+  // the path itself (the root), so the loop always terminates.
+  while (true) {
     try {
       const real = fs.realpathSync(existing);
       const joined = remainder === '' ? real : path.join(real, remainder);
