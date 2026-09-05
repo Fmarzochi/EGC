@@ -72,11 +72,12 @@ function isWordChar(ch) {
 }
 
 // One bracketed segment starting at the `[` at `from`: a quoted name, an
-// index or a `*`, with spaces allowed inside the brackets. Returns the
+// index or a `*`, with expression whitespace (spaces or tabs) allowed
+// inside the brackets. Returns the
 // segment and the index after the `]`, or null when the text is not one.
 function bracketSegment(text, from) {
   let i = from + 1;
-  while (text[i] === ' ') i += 1;
+  while (isBlank(text[i])) i += 1;
   let value;
   const quote = text[i];
   if (quote === "'" || quote === '"') {
@@ -90,7 +91,7 @@ function bracketSegment(text, from) {
     if (i === start) return null;
     value = text.slice(start, i);
   }
-  while (text[i] === ' ') i += 1;
+  while (isBlank(text[i])) i += 1;
   return text[i] === ']' ? { value, next: i + 1 } : null;
 }
 
