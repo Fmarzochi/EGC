@@ -145,21 +145,36 @@ function backtickEnd(text: string, at: number): number {
 // The end (exclusive) of a $(...), <(...), >(...) or `...` substitution
 // starting at `at`, balanced across nested substitutions and quotes; the
 // text length when it never closes.
+// Inside double quotes, the index after the escape or the nested
+// substitution ($( ) or backticks) that starts at `i`; -1 when `i` is an
+// ordinary character. A quote in a nested body belongs to it, not to the
+// enclosing run.
+function nestedInDoubleQuotes(text: string, i: number, level: number): number {
+  if (text[i] === '\\') return i + 2;
+  if (text[i] === '`' || (text[i] === '$' && text[i + 1] === '(')) return substitutionEnd(text, i, level + 1);
+  return -1;
+}
+
 // The index just past the quoted run whose opening quote is at `at`; the
-// text length when it never closes. Inside double quotes a nested
-// substitution ($( ) or backticks) is skipped whole: a quote in its body
-// belongs to it, not to this run.
+// text length when it never closes.
 function quotedRunEnd(text: string, at: number, level = 0): number {
   const quote = text[at];
-  const single = quote === "'";
-  for (let i = at + 1; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === quote) return i + 1;
-    if (single) continue;
-    if (ch === '\\') i += 1;
-    else if (ch === '`' || (ch === '$' && text[i + 1] === '(')) i = substitutionEnd(text, i, level + 1) - 1;
+  let i = at + 1;
+  while (i < text.length) {
+    if (text[i] === quote) return i + 1;
+    const nested = quote === '"' ? nestedInDoubleQuotes(text, i, level) : -1;
+    i = nested === -1 ? i + 1 : nested;
   }
   return text.length;
+}
+
+// Inside a $( ), the index after the escape, quoted run or backtick
+// substitution that starts at `i`; -1 when `i` is an ordinary character.
+function nestedInSubstitution(text: string, i: number, level: number): number {
+  const ch = text[i];
+  if (ch === '\\') return i + 2;
+  if (ch === "'" || ch === '"') return quotedRunEnd(text, i, level);
+  return ch === '`' ? backtickEnd(text, i) : -1;
 }
 
 // The end (exclusive) of a $(...), <(...), >(...) or `...` substitution
@@ -170,22 +185,16 @@ function substitutionEnd(text: string, at: number, level = 0): number {
   if (text[at] === '`') return backtickEnd(text, at);
   if (level >= MAX_NESTING) return text.length;
   let depth = 0;
-  for (let i = at + 1; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === '\\') {
-      i += 1;
+  let i = at + 1;
+  while (i < text.length) {
+    const nested = nestedInSubstitution(text, i, level);
+    if (nested !== -1) {
+      i = nested;
       continue;
     }
-    if (ch === "'" || ch === '"') {
-      i = quotedRunEnd(text, i, level) - 1;
-      continue;
-    }
-    if (ch === '`') {
-      i = backtickEnd(text, i) - 1;
-      continue;
-    }
-    depth += parenthesisDelta(ch);
-    if (depth === 0 && ch === ')') return i + 1;
+    depth += parenthesisDelta(text[i]);
+    if (depth === 0 && text[i] === ')') return i + 1;
+    i += 1;
   }
   return text.length;
 }
