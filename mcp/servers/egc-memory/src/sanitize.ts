@@ -69,14 +69,21 @@ const ZERO_WIDTH_NEAR_KEYWORD_RE = new RegExp(
 
 const ALL_PATTERNS = [...INJECTION_PATTERNS, ...COMMAND_PATTERNS];
 
-// The reason a text is refused, or null when it is clean.
+// eslint-disable-next-line no-misleading-character-class
+const ZERO_WIDTH_ALL_RE = new RegExp(`[${ZERO_WIDTH_CHARS}]`, 'g');
+
+// The reason a text is refused, or null when it is clean. The patterns run
+// over the text with its zero-width characters removed, so a keyword split
+// by invisible characters is read the way the model reads it.
 function injectionReason(input: string): string | null {
+  const visible = input.replace(ZERO_WIDTH_ALL_RE, '');
   for (const { pattern, reason } of ALL_PATTERNS) {
-    if (pattern.test(input)) return reason;
+    if (pattern.test(visible)) return reason;
   }
   if (ZERO_WIDTH_RE.test(input) && ZERO_WIDTH_NEAR_KEYWORD_RE.test(input)) return 'invisible characters near injection keyword';
   return null;
 }
+
 
 export function sanitize(input: string): SanitizeResult {
   if (typeof input !== 'string') return { value: input, flagged: false };
@@ -155,23 +162,25 @@ function mapStateFields(fields: StateTextFields, visit: TextVisitor): StateTextF
   return out;
 }
 
-// The fields as one document, in the order the instruction files present
-// them, so a directive assembled across field boundaries is seen whole.
-function assembledDocument(fields: StateTextFields): string {
+// The fields the instruction files present, in their order: the context,
+// each decision's `what`, and the next steps (propagate.ts writes exactly
+// these). A directive assembled across those boundaries is seen whole; a
+// `why`, an `avoid` or a preference never reaches the files, so it is not
+// part of the document.
+function presentedDocument(fields: StateTextFields): string {
   const lines: string[] = [];
-  mapStateFields(fields, (_label, value) => {
-    lines.push(value);
-    return value;
-  });
+  if (fields.context !== undefined) lines.push(fields.context);
+  for (const decision of fields.decisions ?? []) lines.push(decision.what);
+  for (const step of fields.next ?? []) lines.push(step);
   return lines.join('\n');
 }
 
 // Returns a copy of the fields with every flagged string replaced by the
 // sanitizer's block marker, plus the reasons. Used on the merged state doc
 // right before propagation: entries stored before the scan covered every
-// field must not reach the instruction files either. When the fields only
-// read as an injection together, every field is withheld: the instruction
-// files would otherwise reassemble the directive.
+// field must not reach the instruction files either. When the presented
+// fields only read as an injection together, those fields are withheld:
+// the instruction files would otherwise reassemble the directive.
 export function scrubStateFields(fields: StateTextFields): { fields: StateTextFields; reasons: string[] } {
   const reasons: string[] = [];
   const scrubbed = mapStateFields(fields, (label, value) => {
@@ -180,11 +189,16 @@ export function scrubStateFields(fields: StateTextFields): { fields: StateTextFi
     return result.value;
   });
   if (reasons.length === 0) {
-    const assembled = injectionReason(assembledDocument(fields));
+    const assembled = injectionReason(presentedDocument(fields));
     if (assembled !== null) {
       reasons.push(`fields together: ${assembled}`);
-      return { fields: mapStateFields(fields, () => '[BLOCKED: suspicious content detected]'), reasons };
+      const withheld = { ...scrubbed };
+      if (withheld.context !== undefined) withheld.context = '[BLOCKED: suspicious content detected]';
+      if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ ...decision, what: '[BLOCKED: suspicious content detected]' }));
+      if (withheld.next) withheld.next = withheld.next.map(() => '[BLOCKED: suspicious content detected]');
+      return { fields: withheld, reasons };
     }
   }
   return { fields: scrubbed, reasons };
 }
+

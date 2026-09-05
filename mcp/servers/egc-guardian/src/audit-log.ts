@@ -18,19 +18,25 @@ export const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 // not by an exact spelling. A key is split at case changes and at
 // separators, and its words are read one by one and in adjacent pairs.
 const REDACTED_KEY_WORDS = new Set([
-  'token', 'secret', 'password', 'passwd', 'pwd', 'credential', 'credentials',
-  'authorization', 'auth', 'cookie', 'apikey', 'privatekey',
-  'session id', 'private key', 'api key', 'access key', 'secret key', 'signing key',
+  'token', 'secret', 'password', 'passwd', 'pwd', 'credential', 'authorization', 'auth', 'cookie',
+  'apikey', 'privatekey', 'accesskey', 'secretkey', 'signingkey', 'sessionid', 'sessionkey',
+  'session id', 'session key', 'private key', 'api key', 'access key', 'secret key', 'signing key',
 ]);
 
 function keyWords(key: string): string[] {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/).filter(word => word !== '');
 }
 
+// A word with its plural removed (tokens, secrets, credentials, cookies).
+function singular(word: string): string {
+  return word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word;
+}
+
 function isRedactedKey(key: string): boolean {
-  const words = keyWords(key);
+  const words = keyWords(key).map(singular);
   return words.some((word, index) => REDACTED_KEY_WORDS.has(word) || (index > 0 && REDACTED_KEY_WORDS.has(`${words[index - 1]} ${word}`)));
 }
+
 
 
 // Secrets embedded inside free text such as a shell command. Each prefix
@@ -60,6 +66,9 @@ const SECRET_SHAPES: RegExp[] = [
   /\bglpat-[\w-]{20,}\b/g,
   /\bAIza[\w-]{35}\b/g,
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
+  // A PEM private key block anywhere in the text, header to footer.
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*$/g,
 ];
 const REDACTED = '[REDACTED]';
 // Command lines nest through substitutions and shell -c bodies; past this
@@ -590,9 +599,11 @@ export function redactSecretsInText(text: string): string {
 const SECRET_VALUE_SHAPES: RegExp[] = [
   /^ey[\w-]{20,}\.[\w-]{20,}\.[\w-]+$/,
   /^[A-Fa-f0-9]{32,}$/,
-  /^[A-Za-z0-9+/]{40,}={0,2}$/,
-  /^[\w-]{40,}$/,
+  // A base64 run that carries at least one digit or symbol: a long plain
+  // word (an identifier, a slug) keeps its audit context.
+  /^(?=[A-Za-z0-9+/]*[0-9+/])[A-Za-z0-9+/]{40,}={0,2}$/,
   /^-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+
   /^(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}$/,
   /^github_pat_\w{20,}$/,
   /^sk-[\w-]{20,}$/,

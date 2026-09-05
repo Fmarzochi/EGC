@@ -191,7 +191,20 @@ if (test('redactPayload: redacts keys by the words they are made of, and values 
   }
   assert.strictEqual(result.note, 'plain text stays');
   assert.strictEqual(result.ratio, 'token-free wording');
+  const more = redactPayload({
+    tokens: 't', secrets: 's', credentials: 'c', cookies: 'k', accesskey: 'a', secretkey: 'b', signingkey: 'g', sessionid: 'i',
+    slug: 'z'.repeat(48), label: 'averyveryverylongidentifierwithoutanydigitsatallhere',
+    command: 'deploy --key "-----BEGIN RSA PRIVATE KEY-----\nMIIEabc\n-----END RSA PRIVATE KEY-----" now',
+  });
+  for (const key of ['tokens', 'secrets', 'credentials', 'cookies', 'accesskey', 'secretkey', 'signingkey', 'sessionid']) {
+    assert.strictEqual(more[key], '[REDACTED]', `${key} must be redacted`);
+  }
+  assert.strictEqual(more.slug, 'z'.repeat(48), 'a long plain word keeps its audit context');
+  assert.strictEqual(more.label, 'averyveryverylongidentifierwithoutanydigitsatallhere');
+  assert.ok(!more.command.includes('MIIEabc'), more.command);
+  assert.ok(more.command.startsWith('deploy --key "') && more.command.endsWith('" now'), more.command);
 })) passed++; else failed++;
+
 
 if (test('redactPayload: redacts known secret keys (token, password, api_key, secret)', () => {
   const result = redactPayload({ token: 'abc123', password: 'hunter2', api_key: 'sk-xyz', secret: 'shh' });
