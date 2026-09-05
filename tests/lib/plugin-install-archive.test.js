@@ -10,7 +10,9 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zlib = require('zlib');
 const { spawnSync } = require('child_process');
+
 
 function test(name, fn) {
   try {
@@ -45,6 +47,34 @@ function buildArchive(dir, archiveName, entries) {
   const packed = spawnSync('tar', ['-czf', archivePath, '-C', stage, 'package'], { encoding: 'utf-8', stdio: 'pipe' });
   assert.strictEqual(packed.status, 0, packed.stderr);
   return archivePath;
+}
+
+// A ustar header for one plain file, written by hand: tar itself refuses to
+// create an entry whose name climbs, so the archive a hostile publisher
+// would craft is assembled byte by byte here.
+function ustarEntry(name, content) {
+  const header = Buffer.alloc(512);
+  header.write(name, 0, 100, 'utf8');
+  header.write('0000644\0', 100, 8, 'utf8');
+  header.write('0000000\0', 108, 8, 'utf8');
+  header.write('0000000\0', 116, 8, 'utf8');
+  header.write(content.length.toString(8).padStart(11, '0') + '\0', 124, 12, 'utf8');
+  header.write('00000000000\0', 136, 12, 'utf8');
+  header.write('        ', 148, 8, 'utf8');
+  header.write('0', 156, 1, 'utf8');
+  header.write('ustar\0', 257, 6, 'utf8');
+  header.write('00', 263, 2, 'utf8');
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  header.write(sum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'utf8');
+  const body = Buffer.alloc(Math.ceil(content.length / 512) * 512);
+  body.write(content, 0, 'utf8');
+  return Buffer.concat([header, body]);
+}
+
+function craftArchive(archivePath, entries) {
+  const blocks = entries.map(([name, content]) => ustarEntry(name, content));
+  fs.writeFileSync(archivePath, zlib.gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)])));
 }
 
 function runTests() {
@@ -89,16 +119,16 @@ function runTests() {
 
       if (test('an archive with a climbing entry is refused before extraction', () => {
         const archive = path.join(dir, 'climb.tgz');
-        const stage = path.join(dir, 'stage-climb');
-        fs.mkdirSync(path.join(stage, 'package'), { recursive: true });
-        fs.writeFileSync(path.join(stage, 'package', 'plugin.json'), '{}');
-        fs.writeFileSync(path.join(stage, 'escaped.md'), 'x');
-        // tar records the name as given: the transform turns escaped.md into
-        // a name that climbs, the way a hostile publisher would craft it.
-        const packed = spawnSync('tar', ['-czf', archive, '-C', stage, '--transform', 's,^escaped.md,package/../../escaped.md,', 'package', 'escaped.md'], { encoding: 'utf-8', stdio: 'pipe' });
-        assert.strictEqual(packed.status, 0, packed.stderr);
+        craftArchive(archive, [['package/plugin.json', '{}'], ['package/../../escaped.md', 'x']]);
         const errors = registry.archiveInspectionErrors(archive);
         assert.ok(errors.some(error => error.includes('climbs out')), JSON.stringify(errors));
+      })) passed++; else failed++;
+
+      if (test('an archive with an absolute entry is refused before extraction', () => {
+        const archive = path.join(dir, 'absolute.tgz');
+        craftArchive(archive, [['package/plugin.json', '{}'], ['/tmp/escaped.md', 'x']]);
+        const errors = registry.archiveInspectionErrors(archive);
+        assert.ok(errors.some(error => error.includes('absolute name')), JSON.stringify(errors));
       })) passed++; else failed++;
     } else {
       console.log('  - skipped: tar is not available here');
