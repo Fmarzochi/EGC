@@ -338,7 +338,7 @@ async function runDoctor() {
   const repair = await runJsonScript(repairScript, ['--json']);
   spinner.stop();
   if (!repair.report) {
-    const reason = (repair.stderr || '').split('\n').filter(Boolean).pop();
+    const reason = (repair.stderr || '').split('\n').findLast(Boolean);
     warn('repair', reason ? `did not finish: ${reason}` : 'did not finish');
   } else {
     const repairSummary = summarizeRepairResult(repair.report);

@@ -216,6 +216,10 @@ test('the repair summary counts files, not targets, and flags what stayed unrepa
   assert.strictEqual(stuck.failed, true);
 
   assert.strictEqual(summarizeRepairResult(null).text, 'nothing to restore');
+
+  const refused = summarizeRepairResult({ manifestError: 'manifest schema 9 is newer than this package', results: [], summary: { checkedCount: 0, repairedCount: 0, prunedCount: 0, unrepairableCount: 0, errorCount: 1 } });
+  assert.strictEqual(refused.failed, true);
+  assert.ok(refused.text.startsWith('install manifests refused: manifest schema 9'));
 });
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

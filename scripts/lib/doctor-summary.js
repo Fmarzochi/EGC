@@ -33,7 +33,10 @@ function describeIssue(issue) {
     return message.replace(/^Target root does not exist:/, 'target folder does not exist:');
   }
   if (issue.code === 'missing-source-files') {
-    return message.replace(/\s*\(run 'egc repair'[^)]*\)\s*$/, '');
+    // The doctor appends "(run 'egc repair' ...)"; init prints the command
+    // on its own line, so the hint is cut at its opening parenthesis.
+    const hint = message.indexOf("(run 'egc repair'");
+    return hint < 0 ? message : message.slice(0, hint).trimEnd();
   }
   return message;
 }
@@ -172,15 +175,17 @@ function summarizeRepairResult(result) {
   const errors = entries.filter(entry => entry.status === 'error' || entry.status === 'partial').length;
   const touched = entries.filter(entry => count(entry, 'repairedPaths') > 0 || count(entry, 'prunedPaths') > 0).length;
   const pluginFailures = (Array.isArray(result?.pluginRepairs) ? result.pluginRepairs : []).filter(plugin => !plugin.success).length;
+  const refused = typeof result?.manifestError === 'string' && result.manifestError.length > 0;
   const parts = [];
   if (repaired > 0) parts.push(`restored ${pluralize(repaired, 'file')}`);
   if (pruned > 0) parts.push(`pruned ${pluralize(pruned, 'stale entry', 'stale entries')}`);
-  if (parts.length === 0) parts.push('nothing to restore');
+  if (parts.length === 0) parts.push(refused ? `install manifests refused: ${result.manifestError}` : 'nothing to restore');
   let text = parts.join(', ');
   if (touched > 0) text += ` in ${pluralize(touched, 'target')}`;
   if (unrepairable > 0) text += `; ${unrepairable} unrepairable`;
   if (pluginFailures > 0) text += `; ${pluralize(pluginFailures, 'plugin reinstall')} failed`;
-  return { repaired, pruned, unrepairable, errors, pluginFailures, text, failed: errors > 0 || unrepairable > 0 || pluginFailures > 0 };
+  if (refused && parts.length > 0 && !parts[0].startsWith('install manifests refused')) text += `; install manifests refused: ${result.manifestError}`;
+  return { repaired, pruned, unrepairable, errors, pluginFailures, refused, text, failed: errors > 0 || unrepairable > 0 || pluginFailures > 0 || refused };
 }
 
 module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName };
