@@ -38,6 +38,134 @@ function defaultEncKeyPath(): string {
  * Throws if the key file exists but cannot be read or is malformed —
  * only generates a new key when the file genuinely does not exist.
  */
+// A key file must be private and must be the file itself. It is opened
+// without following links (O_NOFOLLOW where the platform has it, with an
+// identity check across the open where it does not) and without blocking
+// (so a FIFO planted at the path cannot stall the open), and every check
+// runs on that one descriptor: the object must be a regular file, the
+// mode is set and read back through the descriptor, and the content is
+// read from it, so the file that was checked is the file that is used and
+// a path swapped underneath the checks changes nothing. Where the
+// filesystem keeps POSIX bits (Linux, macOS, most network mounts) a file
+// still readable by the group or others after the chmod is a hard error,
+// because the key would sit exposed with nothing but a log line to say so,
+// and a mount that cannot hold 0600 at all (FAT, exFAT) is refused with
+// the advice to move the key. Windows has no bits to tighten, so the mode
+// step is skipped there.
+const NO_FOLLOW = fs.constants.O_NOFOLLOW ?? 0;
+const NON_BLOCKING = fs.constants.O_NONBLOCK ?? 0;
+
+function linkRefusal(filePath: string, cause?: unknown): Error {
+  return new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`, { cause });
+}
+
+// Without O_NOFOLLOW the link check happens before the open, so the object
+// that was opened must be the object that was checked: same device, same
+// inode. Anything else was swapped underneath and is refused.
+function sameObject(before: fs.Stats, fd: number): boolean {
+  const after = fs.fstatSync(fd);
+  return after.dev === before.dev && after.ino === before.ino;
+}
+
+function openPrivateKeyFile(filePath: string): number {
+  let before: fs.Stats | null = null;
+  if (NO_FOLLOW === 0) {
+    before = fs.lstatSync(filePath);
+    if (before.isSymbolicLink()) throw linkRefusal(filePath);
+  }
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW | NON_BLOCKING);
+  } catch (openErr) {
+    const code = (openErr as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP') throw linkRefusal(filePath, openErr);
+    const error: NodeJS.ErrnoException = new Error(`[EGC] Could not open ${filePath}: ${(openErr as Error).message}. The key file must exist and be a regular file.`, { cause: openErr });
+    error.code = code;
+    throw error;
+  }
+  try {
+    if (before !== null && !sameObject(before, fd)) {
+      throw new Error(`[EGC] ${filePath} changed while it was being opened; the key must be a regular file that stays put. Check for a link planted at the path and restart.`);
+    }
+    checkPrivateDescriptor(fd, filePath);
+  } catch (checkErr) {
+    fs.closeSync(fd);
+    throw checkErr;
+  }
+  return fd;
+}
+
+function checkPrivateDescriptor(fd: number, filePath: string): void {
+  if (!fs.fstatSync(fd).isFile()) {
+    throw new Error(`[EGC] ${filePath} is not a regular file; the key must be a regular file. Replace it and restart.`);
+  }
+  if (process.platform === 'win32') return;
+  try {
+    fs.fchmodSync(fd, 0o600);
+  } catch (chmodErr) {
+    throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${(chmodErr as Error).message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: chmodErr });
+  }
+  const mode = fs.fstatSync(fd).mode & 0o777;
+  if ((mode & 0o077) !== 0) {
+    throw new Error(`[EGC] ${filePath} is readable by other users (mode ${mode.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
+  }
+}
+
+export function assertPrivateKeyFile(filePath: string): void {
+  fs.closeSync(openPrivateKeyFile(filePath));
+}
+
+// The content of a key file, read from the descriptor the checks ran on.
+export function readPrivateKeyFile(filePath: string): string {
+  const fd = openPrivateKeyFile(filePath);
+  try {
+    return fs.readFileSync(fd, 'utf-8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Whether anything (a file, a link, even a dangling one) sits at the path:
+// a dangling link must be refused as a link, never treated as absent and
+// replaced. Only a path with nothing at it (ENOENT) is absent; a path that
+// cannot be inspected, a parent that is not a directory included, is an
+// error, never a silent absence.
+export function pathPresent(filePath: string): boolean {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return false;
+
+    throw new Error(`[EGC] Could not inspect ${filePath}: ${(err as Error).message}`, { cause: err });
+  }
+}
+
+// Every byte of `bytes` written to `fd`: a short write continues from where
+// it stopped, and no progress at all is an error, so a file is never
+// published half written.
+function writeAll(fd: number, bytes: Buffer): void {
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (written <= 0) throw new Error('[EGC] short write: no progress while writing the key file');
+    offset += written;
+  }
+}
+
+// The temp file is created exclusively (wx): a link planted at the temp
+// path is never followed, so the key is written only into a file this call
+// created, private from the first byte and complete before it is published.
+export function writePrivateTemp(tmpPath: string, content: string): void {
+  const fd = fs.openSync(tmpPath, 'wx', 0o600);
+  try {
+    writeAll(fd, Buffer.from(content, 'utf-8'));
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffer {
   const dir = path.dirname(keyPath);
   try {
@@ -48,26 +176,16 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
   }
 
   const readExistingKey = (): Buffer => {
-    const hex = fs.readFileSync(keyPath, 'utf-8').trim();
+    const hex = readPrivateKeyFile(keyPath).trim();
+
     const key = Buffer.from(hex, 'hex');
     if (key.length !== 32) {
       throw new Error(`[EGC encryption] Key file at ${keyPath} is malformed (expected 32 bytes, got ${key.length}). Remove it to regenerate.`);
     }
-    try {
-      fs.chmodSync(keyPath, 0o600);
-    } catch (chmodErr) {
-      // Best-effort: some filesystems (FAT/exFAT mounts, certain network
-      // shares) don't support Unix permission bits at all, and that's a
-      // legitimate no-op. But on a filesystem that DOES support them, a
-      // failure here means the encryption key may be sitting world- or
-      // group-readable with no signal to the user that it happened —
-      // worth a warning even though it's not worth failing the read over.
-      console.error(`[EGC encryption] Warning: could not set 0600 permissions on ${keyPath}: ${(chmodErr as Error).message}`);
-    }
     return key;
   };
 
-  if (fs.existsSync(keyPath)) {
+  if (pathPresent(keyPath)) {
     // Key file exists — load it. Do NOT silently regenerate on error;
     // that would destroy access to all previously encrypted state files.
     return readExistingKey();
@@ -89,14 +207,11 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
   const key = crypto.randomBytes(32);
   const tmpPath = `${keyPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   try {
-    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    writePrivateTemp(tmpPath, key.toString('hex'));
+
     try {
       fs.linkSync(tmpPath, keyPath);
-      try {
-        fs.chmodSync(keyPath, 0o600);
-      } catch (chmodErr) {
-        console.error(`[EGC encryption] Warning: could not set 0600 permissions on ${keyPath}: ${(chmodErr as Error).message}`);
-      }
+      assertPrivateKeyFile(keyPath);
       return key;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'EEXIST') {

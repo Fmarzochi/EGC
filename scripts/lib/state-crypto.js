@@ -42,8 +42,117 @@ function isEncryptedBuffer(data) {
     && data.subarray(0, MAGIC_BYTES).toString('utf-8') === MAGIC;
 }
 
+// A key file must be private and must be the file itself: it is opened
+// without following links (O_NOFOLLOW where the platform has it, with an
+// identity check across the open where it does not) and without blocking
+// (a FIFO planted at the path cannot stall the open), the object behind
+// the descriptor must be a regular file, the mode is set and read back
+// through that descriptor, and the content is read from it, so the file
+// that was checked is the file that is used. Where the filesystem keeps
+// POSIX bits a file still readable by others after the chmod is a hard
+// error; on Windows there are no bits to tighten, so the mode step is
+// skipped there.
+const NO_FOLLOW_FLAG = fs.constants.O_NOFOLLOW || 0;
+const NON_BLOCKING_FLAG = fs.constants.O_NONBLOCK || 0;
+
+function linkRefusal(filePath, cause) {
+  return new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`, { cause });
+}
+
+function keyDescriptor(filePath) {
+  const before = NO_FOLLOW_FLAG ? null : fs.lstatSync(filePath);
+  if (before?.isSymbolicLink()) throw linkRefusal(filePath, null);
+  let fd;
+  try {
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG | NON_BLOCKING_FLAG);
+  } catch (openErr) {
+    if (openErr.code === 'ELOOP') throw linkRefusal(filePath, openErr);
+    const error = new Error(`[EGC] Could not open ${filePath}: ${openErr.message}. The key file must exist and be a regular file.`, { cause: openErr });
+    error.code = openErr.code;
+    throw error;
+  }
+  if (before) {
+    let swapped;
+    try {
+      const after = fs.fstatSync(fd);
+      swapped = after.dev !== before.dev || after.ino !== before.ino;
+    } catch (statErr) {
+      fs.closeSync(fd);
+      throw statErr;
+    }
+    if (swapped) {
+      fs.closeSync(fd);
+      throw new Error(`[EGC] ${filePath} changed while it was being opened; the key must be a regular file that stays put. Check for a link planted at the path and restart.`);
+    }
+  }
+  return fd;
+}
+
+function refuseUnlessRegularAndPrivate(fd, filePath) {
+  if (!fs.fstatSync(fd).isFile()) {
+    throw new Error(`[EGC] ${filePath} is not a regular file; the key must be a regular file. Replace it and restart.`);
+  }
+  if (process.platform === 'win32') return;
+  let failure = null;
+  try { fs.fchmodSync(fd, 0o600); } catch (chmodErr) { failure = chmodErr; }
+  if (failure) {
+    throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${failure.message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: failure });
+  }
+  const bits = fs.fstatSync(fd).mode & 0o777;
+  if (bits & 0o077) {
+    throw new Error(`[EGC] ${filePath} is readable by other users (mode ${bits.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
+  }
+}
+
+// Runs `use(fd)` on the checked descriptor of the key file, then closes it.
+function withPrivateKeyFile(filePath, use) {
+  const fd = keyDescriptor(filePath);
+  try {
+    refuseUnlessRegularAndPrivate(fd, filePath);
+    return use(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function assertPrivateKeyFile(filePath) {
+  withPrivateKeyFile(filePath, () => undefined);
+}
+
+// Whether anything (a file, a link, even a dangling one) sits at the path.
+// Only a path with nothing at it (ENOENT) is absent; a path that cannot be
+// inspected, a parent that is not a directory included, is an error, never
+// a silent absence.
+function present(filePath) {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+
+    throw new Error(`[EGC] Could not inspect ${filePath}: ${err.message}`, { cause: err });
+  }
+}
+
+// Every byte written, a short write resumed, no progress refused: a key
+// file is never published half written.
+function writeAllBytes(fd, bytes) {
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (written <= 0) throw new Error('[EGC] short write: no progress while writing the key file');
+    offset += written;
+  }
+}
+
+// The key at `keyPath`, or null when nothing sits at the path or the file
+// is malformed. Every read goes through the checks on the descriptor it
+// reads from, and any refusal (a link, a wide mode, a non-regular object,
+// an unreadable file) is an error, never a silent null.
 function loadKey(keyPath) {
-  const hex = fs.readFileSync(keyPath || defaultKeyPath(), 'utf-8').trim();
+  const resolvedPath = keyPath || defaultKeyPath();
+  if (!present(resolvedPath)) return null;
+  const hex = withPrivateKeyFile(resolvedPath, fd => fs.readFileSync(fd, 'utf-8')).trim();
   const key = Buffer.from(hex, 'hex');
   return key.length === 32 ? key : null;
 }
@@ -58,19 +167,22 @@ function loadOrCreateKeySync(keyPath) {
   const dir = path.dirname(resolvedPath);
   try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* may already exist */ }
 
-  if (fs.existsSync(resolvedPath)) {
-    const key = loadKey(resolvedPath);
-    try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort, not supported on Windows */ }
-    return key;
+  if (present(resolvedPath)) {
+    return loadKey(resolvedPath);
   }
 
   const key = crypto.randomBytes(32);
   const tmpPath = `${resolvedPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   try {
-    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    // Created exclusively (wx): a link planted at the temp path is never
+    // followed, so the key lands only in a file this call created.
+    const tmpFd = fs.openSync(tmpPath, 'wx', 0o600);
+    try { writeAllBytes(tmpFd, Buffer.from(key.toString('hex'), 'utf-8')); } finally { fs.closeSync(tmpFd); }
+
+
     try {
       fs.linkSync(tmpPath, resolvedPath);
-      try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort */ }
+      assertPrivateKeyFile(resolvedPath);
       return key;
     } catch (e) {
       if (e?.code === 'EEXIST') return loadKey(resolvedPath);
@@ -95,9 +207,11 @@ function encryptStateBuffer(plaintext, keyPath) {
 // Returns plaintext, or null when the payload cannot be authenticated and
 // decrypted (missing or malformed key, truncated or tampered ciphertext).
 function decryptStateBuffer(data, keyPath) {
+  // A missing or malformed key resolves to null; a key that cannot be kept
+  // private is an error that reaches the caller.
+  const key = loadKey(keyPath);
+  if (!key) return null;
   try {
-    const key = loadKey(keyPath);
-    if (!key) return null;
     const iv = data.subarray(MAGIC_BYTES, MAGIC_BYTES + IV_BYTES);
     const authTag = data.subarray(MAGIC_BYTES + IV_BYTES, MAGIC_BYTES + IV_BYTES + AUTH_TAG_BYTES);
     const ciphertext = data.subarray(MAGIC_BYTES + IV_BYTES + AUTH_TAG_BYTES);
@@ -124,6 +238,7 @@ function readStateFileDecrypted(filePath, keyPath) {
 }
 
 module.exports = {
+  assertPrivateKeyFile,
   MAGIC,
   isEncryptedBuffer,
   decryptStateBuffer,

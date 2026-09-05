@@ -7,6 +7,8 @@ const { readInstallState, writeInstallState } = require('./install-state');
 const { hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
 const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./install/preserving-write');
 const { assertSafeMcpConfig, isMcpConfigPath, parseMcpConfigText } = require('./mcp-config');
+const { cloneJsonValue, deepMergeJson, isPlainObject, withoutPrototypeKeys } = require('./json-merge');
+
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
@@ -197,17 +199,7 @@ function readFileUtf8(filePath) {
   return content.codePointAt(0) === 0xFEFF ? content.slice(1) : content;
 }
 
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
 
-function cloneJsonValue(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  return structuredClone(value);
-}
 
 function parseJsonLikeValue(value, label) {
   if (value === undefined) {
@@ -240,7 +232,10 @@ function getOperationJsonPayload(operation) {
 
   for (const key of candidateKeys) {
     if (operation[key] !== undefined) {
-      return parseJsonLikeValue(operation[key], `${operation.kind}.${key}`);
+      // The recorded payload is read without prototype keys for every use
+      // (merge, uninstall, inspection), so uninstall never removes a key EGC
+      // never installed and inspection never reports one as drift.
+      return withoutPrototypeKeys(parseJsonLikeValue(operation[key], `${operation.kind}.${key}`));
     }
   }
 
@@ -289,22 +284,6 @@ function readJsonFile(filePath) {
 
 function ensureParentDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-
-function deepMergeJson(baseValue, patchValue) {
-  if (!isPlainObject(baseValue) || !isPlainObject(patchValue)) {
-    return cloneJsonValue(patchValue);
-  }
-
-  const merged = { ...baseValue };
-  for (const [key, value] of Object.entries(patchValue)) {
-    if (isPlainObject(value) && isPlainObject(merged[key])) {
-      merged[key] = deepMergeJson(merged[key], value);
-    } else {
-      merged[key] = cloneJsonValue(value);
-    }
-  }
-  return merged;
 }
 
 function jsonContainsSubset(actualValue, expectedValue) {

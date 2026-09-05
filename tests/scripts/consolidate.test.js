@@ -226,6 +226,27 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a refused integrity key stops the rewrite before the state file or a backup is touched', () => {
+    if (process.platform === 'win32') return;
+    const homeDir = createTempDir('consolidate-home-');
+    const projectDir = createTempDir('consolidate-project-');
+
+    try {
+      const filePath = writeState(homeDir, projectDir, sampleState(projectDir));
+      const before = fs.readFileSync(filePath, 'utf8');
+      fs.mkdirSync(path.join(homeDir, '.egc', 'integrity.key'), { recursive: true });
+
+      const result = run(['--project', projectDir, '--threshold', '10'], { homeDir, cwd: projectDir });
+      assert.notStrictEqual(result.code, 0, 'the rewrite is refused');
+      assert.ok(result.stderr.includes('not a regular file'), result.stderr);
+      assert.strictEqual(fs.readFileSync(filePath, 'utf8'), before, 'the state file is untouched');
+      assert.ok(!fs.existsSync(archiveDir(homeDir)) || fs.readdirSync(archiveDir(homeDir)).length === 0, 'no backup was written');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('emits a JSON report with stats and backup path', () => {
     const homeDir = createTempDir('consolidate-home-');
     const projectDir = createTempDir('consolidate-project-');

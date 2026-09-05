@@ -229,7 +229,12 @@ function performConsolidation(report, result, readPath, stateFile, homeDir, opti
     // Back up the file we actually read from -- for a first-time migration
     // (git project with only a flat legacy file so far) that's not the same
     // path as stateFile, which may not exist yet.
+    // The integrity key is loaded before anything is written: a key that
+    // cannot be persisted or kept private stops the rewrite instead of
+    // leaving a state file behind with a sidecar nobody can verify.
+    const integrityKey = loadOrCreateIntegrityKey();
     report.backup = backupStateFile(homeDir, readPath);
+
     const payload = encrypted ? encryptStateBuffer(result.output) : result.output;
     const tmpPath = `${stateFile}.tmp-${process.pid}-${crypto.randomUUID()}`;
     try {
@@ -242,7 +247,8 @@ function performConsolidation(report, result, readPath, stateFile, homeDir, opti
     // The sidecar HMAC covers the plaintext (matching writeHmac()'s use in
     // index.ts), computed over result.output regardless of `encrypted` --
     // leaving it stale here is exactly the mismatch this rewrite fixes.
-    writeHmac(stateFile, result.output, loadOrCreateIntegrityKey());
+    writeHmac(stateFile, result.output, integrityKey);
+
   }
 
   if (options.json) {
