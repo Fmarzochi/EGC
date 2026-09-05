@@ -13,11 +13,37 @@ export const AUDIT_LOG_DIR = path.join(os.homedir(), '.egc');
 export const AUDIT_LOG_PATH = path.join(AUDIT_LOG_DIR, 'audit.log');
 export const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-// Keys whose values are always redacted regardless of content.
-const REDACTED_KEYS = new Set([
-  'token', 'secret', 'password', 'api_key', 'apikey',
-  'authorization', 'auth', 'credential', 'private_key', 'privatekey',
+// Keys whose values are always redacted, matched by the words the key is
+// made of (token, apiToken, x-api-key, client_secret, sessionCookie, ...),
+// not by an exact spelling. A key is split at case changes and at
+// separators, and its words are read one by one and in adjacent pairs.
+const REDACTED_KEY_WORDS = new Set([
+  'token', 'secret', 'password', 'passwd', 'pwd', 'credential', 'authorization', 'auth', 'cookie',
+  'apikey', 'privatekey', 'accesskey', 'secretkey', 'signingkey', 'sessionid', 'sessionkey',
+  'session id', 'session key', 'private key', 'api key', 'access key', 'secret key', 'signing key',
 ]);
+
+function keyWords(key: string): string[] {
+  return key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/).filter(word => word !== '');
+}
+
+// The spellings a word is tried under: as written and, when it ends in s,
+// without that s (tokens, secrets, apikeys, sessionids, api keys). Only a
+// spelling that is a secret word counts, so `access` never turns into
+// `acces`.
+function spellings(word: string): string[] {
+  return word.endsWith('s') && word.length > 2 ? [word, word.slice(0, -1)] : [word];
+}
+
+function isRedactedKey(key: string): boolean {
+  const words = keyWords(key);
+  return words.some((word, index) => spellings(word).some(spelling => (
+    REDACTED_KEY_WORDS.has(spelling) || (index > 0 && REDACTED_KEY_WORDS.has(`${words[index - 1]} ${spelling}`))
+  )));
+}
+
+
+
 
 // Secrets embedded inside free text such as a shell command. Each prefix
 // pattern stops exactly where the secret value starts; the value itself
@@ -47,6 +73,28 @@ const SECRET_SHAPES: RegExp[] = [
   /\bAIza[\w-]{35}\b/g,
   /\bey[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b/g,
 ];
+
+// A PEM private key block anywhere in the text, header to footer (or to the
+// end of the text when the footer is missing), found with a linear scan:
+// each header is visited once, so a text full of headers costs one pass.
+const PEM_HEADER = /-----BEGIN [A-Z ]*PRIVATE KEY-----/g;
+const PEM_FOOTER = /-----END [A-Z ]*PRIVATE KEY-----/g;
+
+function redactPemBlocks(text: string): string {
+  let out = '';
+  let from = 0;
+  PEM_HEADER.lastIndex = 0;
+  let header = PEM_HEADER.exec(text);
+  while (header) {
+    out += text.slice(from, header.index) + REDACTED;
+    PEM_FOOTER.lastIndex = header.index + header[0].length;
+    const footer = PEM_FOOTER.exec(text);
+    from = footer ? footer.index + footer[0].length : text.length;
+    PEM_HEADER.lastIndex = from;
+    header = from < text.length ? PEM_HEADER.exec(text) : null;
+  }
+  return out + text.slice(from);
+}
 const REDACTED = '[REDACTED]';
 // Command lines nest through substitutions and shell -c bodies; past this
 // many levels a body is replaced whole instead of being read.
@@ -558,7 +606,9 @@ function redactValuesAfter(text: string, prefixPattern: RegExp): string {
  */
 export function redactSecretsInText(text: string): string {
   let out = text;
+  out = redactPemBlocks(out);
   for (const prefix of SECRET_VALUE_PREFIXES) out = redactValuesAfter(out, prefix);
+
   try {
     out = redactCurlBasicAuth(out);
   } catch { // NOSONAR: a command the reader cannot parse is logged whole as redacted, never dropped
@@ -570,7 +620,31 @@ export function redactSecretsInText(text: string): string {
 }
 
 // Pattern for values that look like secrets (long hex/base64 strings, JWTs).
-const SECRET_VALUE_RE = /^(ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2})$/;
+// A value that is a secret by shape alone: a JWT, a long hex or base64
+// run, a PEM block, or a vendor token, even under an innocent key. One
+// short pattern per shape, each anchored to the whole value.
+const SECRET_VALUE_SHAPES: RegExp[] = [
+  /^ey[\w-]{20,}\.[\w-]{20,}\.[\w-]+$/,
+  /^[A-Fa-f0-9]{32,}$/,
+  // A base64 run that carries at least one digit or symbol: a long plain
+  // word (an identifier, a slug) keeps its audit context.
+  /^(?=[A-Za-z0-9+/]*[0-9+/])[A-Za-z0-9+/]{40,}={0,2}$/,
+  /^-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+
+  /^(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}$/,
+  /^github_pat_\w{20,}$/,
+  /^sk-[\w-]{20,}$/,
+  /^xox[abprs]-[A-Za-z0-9-]{10,}$/,
+  /^(?:AKIA|ASIA)[A-Z0-9]{16}$/,
+  /^glpat-[\w-]{20,}$/,
+  /^AIza[\w-]{35}$/,
+];
+
+function isSecretValue(value: string): boolean {
+  return SECRET_VALUE_SHAPES.some(shape => shape.test(value));
+}
+
+
 
 /**
  * Returns a shallow copy of `payload` with secret-looking values replaced by
@@ -581,7 +655,7 @@ function redactArrayItem(item: unknown): unknown {
     return redactPayload(item as Record<string, unknown>);
   }
   if (typeof item === 'string') {
-    return SECRET_VALUE_RE.test(item) ? '[REDACTED]' : redactSecretsInText(item);
+    return isSecretValue(item) ? '[REDACTED]' : redactSecretsInText(item);
   }
   return item;
 }
@@ -591,11 +665,11 @@ export function redactPayload(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(payload)) {
-    const lk = k.toLowerCase();
-    if (REDACTED_KEYS.has(lk)) {
+    if (isRedactedKey(k)) {
+
       out[k] = '[REDACTED]';
     } else if (typeof v === 'string') {
-      out[k] = SECRET_VALUE_RE.test(v) ? '[REDACTED]' : redactSecretsInText(v);
+      out[k] = isSecretValue(v) ? '[REDACTED]' : redactSecretsInText(v);
     } else if (Array.isArray(v)) {
       out[k] = v.map(redactArrayItem);
     } else if (v !== null && typeof v === 'object') {
