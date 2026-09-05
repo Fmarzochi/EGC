@@ -53,35 +53,37 @@ const REDACTED = '[REDACTED]';
 const MAX_NESTING = 64;
 
 
-function secretValueEnd(text: string, start: number, attached: boolean): number {
-  const quote = text[start];
-  // After a space-separated option a bare run that starts with '-' is the
-  // next flag, not a value; a value attached with '=' or ':' is taken as is.
-  if (!attached && quote === '-') return start;
-  if (quote === '"' || quote === "'") {
-    const close = text.indexOf(quote, start + 1);
-    return close === -1 ? text.length : close + 1;
-  }
-  let end = start;
-  while (end < text.length && !/[\s"'&;]/.test(text[end])) end += 1;
-  return end;
-}
+// The end (exclusive) of a secret value starting at `start`: a quoted value
+// runs to its closing quote, a bare one to the next blank or shell
+// delimiter. After a space-separated option a bare run starting with '-'
+// is the next flag, not a value; a value attached with '=' or ':' is taken
+// as is.
+const BARE_VALUE_END = /[\s"'&;]/;
 
-// curl's -u name:password in any spelling (-u name:pw, -uname:pw, -u=name:pw,
-// --user name:pw, --user=name:pw, -u ":pw", -u 'a b:c', $(curl -u ...),
-// "$(curl -u ...)", sh -c 'curl -u ...'), redacted in one left-to-right pass
-// over shell words read the way the shell reads them; a separator (;, |, &,
-// newline) starts a new command, a substitution is redacted as a command
-// line of its own, and a value is touched only after curl appeared in that
-// command. -u is an ordinary flag for rsync, sudo and others, so those keep
-// theirs.
-const COMMAND_SEPARATORS = new Set([';', '|', '&', '\n']);
-const BACKSLASH_ESCAPES = process.platform !== 'win32';
+function secretValueEnd(text: string, start: number, attached: boolean): number {
+  const first = text[start];
+  if (!attached && first === '-') return start;
+  if (first === '"' || first === "'") {
+    const close = text.indexOf(first, start + 1);
+    return close < 0 ? text.length : close + 1;
+  }
+  const stop = text.slice(start).search(BARE_VALUE_END);
+  return stop < 0 ? text.length : start + stop;
+}
 
 // A character that came from a quoted run, an escape or a substitution:
 // literal text the outer command never treats as syntax.
 const LITERAL = '\u0001';
 const ANSI_NAMED: Record<string, string> = { n: '\n', t: '\t', r: '\r', a: '\u0007', b: '\b', f: '\f', v: '\v', e: '\u001b', E: '\u001b', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+
+// curl's -u name:password in any spelling, redacted in one left-to-right
+// pass over shell words read the way the shell reads them. A separator
+// starts a new command, a substitution is a command line of its own, and a
+// value is touched only after curl appeared in that command (-u is an
+// ordinary flag for rsync, sudo and others). Backslashes escape outside
+// quotes only where the platform's shell reads them so.
+const COMMAND_SEPARATORS = ';|&\n';
+const BACKSLASH_ESCAPES = process.platform !== 'win32';
 
 type ShellWord = { raw: string; value: string; code: string; end: number };
 type Piece = { value: string; raw: string; end: number };
@@ -149,41 +151,41 @@ function backtickEnd(text: string, at: number): number {
 // belongs to it, not to this run.
 function quotedRunEnd(text: string, at: number, level = 0): number {
   const quote = text[at];
-  let i = at + 1;
-  while (i < text.length) {
+  const single = quote === "'";
+  for (let i = at + 1; i < text.length; i += 1) {
     const ch = text[i];
-    if (quote === '"' && ch === '\\') i += 2;
-    else if (quote === '"' && (ch === '`' || (ch === '$' && text[i + 1] === '('))) i = substitutionEnd(text, i, level + 1);
-
-    else if (ch === quote) return i + 1;
-    else i += 1;
+    if (ch === quote) return i + 1;
+    if (single) continue;
+    if (ch === '\\') i += 1;
+    else if (ch === '`' || (ch === '$' && text[i + 1] === '(')) i = substitutionEnd(text, i, level + 1) - 1;
   }
   return text.length;
 }
 
+// The end (exclusive) of a $(...), <(...), >(...) or `...` substitution
+// starting at `at`, balanced across nested substitutions and quotes; the
+// text length when it never closes. Past the nesting bound the rest of the
+// text is one unclosed unit.
 function substitutionEnd(text: string, at: number, level = 0): number {
   if (text[at] === '`') return backtickEnd(text, at);
-  // Past the nesting bound the rest of the text is one unclosed unit.
   if (level >= MAX_NESTING) return text.length;
-
   let depth = 0;
-  let i = at + 1;
-  while (i < text.length) {
+  for (let i = at + 1; i < text.length; i += 1) {
     const ch = text[i];
     if (ch === '\\') {
-      i += 2;
-    } else if (ch === "'" || ch === '"') {
-      i = quotedRunEnd(text, i, level);
-
-    } else if (ch === '`') {
-      // A nested backtick substitution is skipped whole: its own parentheses
-      // do not close this one.
-      i = backtickEnd(text, i);
-    } else {
-      depth += parenthesisDelta(ch);
-      if (ch === ')' && depth === 0) return i + 1;
       i += 1;
+      continue;
     }
+    if (ch === "'" || ch === '"') {
+      i = quotedRunEnd(text, i, level) - 1;
+      continue;
+    }
+    if (ch === '`') {
+      i = backtickEnd(text, i) - 1;
+      continue;
+    }
+    depth += parenthesisDelta(ch);
+    if (depth === 0 && ch === ')') return i + 1;
   }
   return text.length;
 }
@@ -217,10 +219,6 @@ function redactSubstitution(inner: string, redactor: CurlRedactor): string {
 
 }
 
-// The body of a quoted run starting at its opening quote (or at the $ of
-// $'...' and $"..."): single quotes are literal, double quotes decode their
-// escapes and still run the substitutions inside them, $'...' decodes the
-// ANSI-C escapes. `raw` is the run as it will be logged.
 // A substitution at `at` as one literal unit, redacted inside.
 function substitutionPiece(text: string, at: number, redactor: CurlRedactor): Piece {
   const end = substitutionEnd(text, at);
@@ -228,26 +226,36 @@ function substitutionPiece(text: string, at: number, redactor: CurlRedactor): Pi
   return { value: inner, raw: redactSubstitution(inner, redactor), end };
 }
 
-function readQuoted(text: string, start: number, redactor: CurlRedactor): Piece {
-  const ansi = text[start] === '$';
-  const quote = ansi ? text[start + 1] : text[start];
-  const decodes = quote === '"' || ansi;
-  let value = '';
-  let raw = text.slice(start, start + (ansi ? 2 : 1));
-  let i = start + (ansi ? 2 : 1);
-  while (i < text.length && text[i] !== quote) {
-    let piece: Piece | null = null;
-    if (quote === '"' && isSubstitutionOpener(text, i)) piece = substitutionPiece(text, i, redactor);
-    else if (text[i] === '\\' && decodes) piece = quotedEscape(text, i, quote === "'");
-    piece ??= { value: text[i], raw: text[i], end: i + 1 };
+// One piece of a quoted run at `at`: a substitution (double quotes run
+// them), a decoded escape, or the character itself.
+function quotedPiece(text: string, at: number, quote: string, decodes: boolean, redactor: CurlRedactor): Piece {
+  if (quote === '"' && isSubstitutionOpener(text, at)) return substitutionPiece(text, at, redactor);
+  const escaped = decodes && text[at] === '\\' ? quotedEscape(text, at, quote === "'") : null;
+  return escaped ?? { value: text[at], raw: text[at], end: at + 1 };
+}
 
-    value += piece.value;
-    raw += piece.raw;
+// The body of a quoted run starting at its opening quote (or at the $ of
+// $'...' and $"..."): single quotes are literal, double quotes decode their
+// escapes and still run the substitutions inside them, $'...' decodes the
+// ANSI-C escapes. `raw` is the run as it will be logged.
+function readQuoted(text: string, start: number, redactor: CurlRedactor): Piece {
+  const opener = text[start] === '$' ? 2 : 1;
+  const quote = text[start + opener - 1];
+  const decodes = quote === '"' || opener === 2;
+  const pieces: Piece[] = [];
+  let i = start + opener;
+  while (i < text.length && text[i] !== quote) {
+    const piece = quotedPiece(text, i, quote, decodes, redactor);
+    pieces.push(piece);
     i = piece.end;
   }
   const end = Math.min(i + 1, text.length);
-  raw += text.slice(i, end);
-  return { value, raw, end };
+  const body = pieces.map(piece => piece.raw).join('');
+  return {
+    value: pieces.map(piece => piece.value).join(''),
+    raw: `${text.slice(start, start + opener)}${body}${text.slice(i, end)}`,
+    end,
+  };
 }
 
 // One piece of a word at `at`: a dropped continuation, a substitution (one
@@ -268,7 +276,7 @@ function wordPiece(text: string, at: number, redactor: CurlRedactor): { value: s
   if (ch === '\\' && BACKSLASH_ESCAPES && at + 1 < text.length) {
     return { value: text[at + 1], code: LITERAL, raw: text.slice(at, at + 2), end: at + 2 };
   }
-  if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) return null;
+  if (COMMAND_SEPARATORS.includes(ch) || /\s/.test(ch)) return null;
   return { value: ch, code: ch, raw: ch, end: at + 1 };
 }
 
@@ -308,20 +316,14 @@ function isCommandStringFlag(value: string): boolean {
 // everything after the first separator goes, or the whole run; null when
 // the credential has no such run.
 // The index of the dollar of an unescaped $'...' opener outside quotes,
-// read with the same escape and quote rules as the mask; -1 when none.
+// read with the mask's own steps; -1 when none.
 function ansiOpenerIndex(raw: string): number {
-  let quote: string | null = null;
-  let dollarBefore = false;
-  let i = 0;
-  while (i < raw.length) {
-    const step = escapeLength(raw, i, quote);
-    if (step === 1) {
-      const next = quoteAfter(raw, i, quote, dollarBefore);
-      if (next === 'ansi') return i - 1;
-      quote = next;
-    }
-    dollarBefore = step === 1 && raw[i] === '$';
-    i += step;
+  const state: MaskState = { quote: null, dollarBefore: false };
+  for (let at = 0; at < raw.length;) {
+    const wasAnsi = state.quote === 'ansi';
+    const step = maskStep(raw, at, state);
+    if (!wasAnsi && state.quote === 'ansi') return at - 1;
+    at = step.end;
   }
   return -1;
 }
@@ -382,8 +384,8 @@ class CurlRedactor {
     let i = 0;
     while (i < text.length) {
       const ch = text[i];
-      if (COMMAND_SEPARATORS.has(ch) || /\s/.test(ch)) {
-        if (COMMAND_SEPARATORS.has(ch)) nested.reset();
+      if (COMMAND_SEPARATORS.includes(ch) || /\s/.test(ch)) {
+        if (COMMAND_SEPARATORS.includes(ch)) nested.reset();
         out += ch;
         i += 1;
         continue;
@@ -490,32 +492,38 @@ function maskedShape(inner: string): string {
   return `${backtick ? '`' : inner.slice(0, 2)}${REDACTED}${closer}`;
 }
 
+type MaskState = { quote: string | null; dollarBefore: boolean };
+
+// One step of the credential mask at `at`: a substitution the shell would
+// run comes back masked, anything else as typed; `state` follows the quote
+// the shell is in and whether an unescaped dollar just went by.
+function maskStep(raw: string, at: number, state: MaskState): { text: string; end: number } {
+  if (activeSubstitution(raw, at, state.quote)) {
+    const end = substitutionEnd(raw, at);
+    state.dollarBefore = false;
+    return { text: maskedShape(raw.slice(at, end)), end };
+  }
+  const step = escapeLength(raw, at, state.quote);
+  if (step === 1) state.quote = quoteAfter(raw, at, state.quote, state.dollarBefore);
+  state.dollarBefore = step === 1 && raw[at] === '$';
+  return { text: raw.slice(at, at + step), end: at + step };
+}
+
 // Every substitution the shell would run inside a credential, with its body
 // replaced: the command line that produces a credential is a secret in its
 // own right. A $( ) spelled inside single quotes or behind a backslash is
 // plain text and stays.
 function maskSubstitutions(raw: string): string {
-  let out = '';
-  let quote: string | null = null;
-  // Whether the previous character was an unescaped dollar (a $' opener).
-  let dollarBefore = false;
-  let i = 0;
-  while (i < raw.length) {
-    if (activeSubstitution(raw, i, quote)) {
-      const end = substitutionEnd(raw, i);
-      out += maskedShape(raw.slice(i, end));
-      i = end;
-      dollarBefore = false;
-      continue;
-    }
-    const step = escapeLength(raw, i, quote);
-    if (step === 1) quote = quoteAfter(raw, i, quote, dollarBefore);
-    dollarBefore = step === 1 && raw[i] === '$';
-    out += raw.slice(i, i + step);
-    i += step;
+  const state: MaskState = { quote: null, dollarBefore: false };
+  const parts: string[] = [];
+  for (let at = 0; at < raw.length;) {
+    const step = maskStep(raw, at, state);
+    parts.push(step.text);
+    at = step.end;
   }
-  return out;
+  return parts.join('');
 }
+
 function redactCurlBasicAuth(text: string): string {
   return new CurlRedactor().redact(text);
 }
