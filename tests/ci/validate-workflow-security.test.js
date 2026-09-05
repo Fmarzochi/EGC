@@ -48,6 +48,39 @@ function run() {
   let passed = 0;
   let failed = 0;
 
+  if (test('rejects a run: step that splices the pull request title into the shell', () => {
+    const result = runValidator({
+      'title.yml': 'name: T\non:\n  pull_request:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event.pull_request.title }}"\n',
+    });
+    assert.notStrictEqual(result.status, 0, 'a title inside run: is a violation');
+    assert.ok(result.stderr.includes('github.event.pull_request.title'), result.stderr);
+    assert.ok(result.stderr.includes('title.yml:8'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('rejects a block-scalar run: with an issue body or a branch name on a later line', () => {
+    const result = runValidator({
+      'body.yml': 'name: B\non:\n  issues:\n    types: [opened]\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - name: show\n        run: |\n          echo start\n          echo "${{ github.event.issue.body }}"\n          git checkout "${{ github.head_ref }}"\n',
+    });
+    assert.notStrictEqual(result.status, 0);
+    assert.ok(result.stderr.includes('body.yml:12'), result.stderr);
+    assert.ok(result.stderr.includes('body.yml:13'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('allows the same text passed through an env: variable', () => {
+    const result = runValidator({
+      'env.yml': 'name: E\non:\n  pull_request:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n        run: echo "$TITLE"\n',
+    });
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  })) passed++; else failed++;
+
+  if (test('allows run: steps that use trusted context only', () => {
+    const result = runValidator({
+      'ok.yml': 'name: O\non:\n  pull_request:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo "${{ github.sha }} ${{ github.event.pull_request.number }}"\n          echo "${{ runner.os }}"\n',
+    });
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  })) passed++; else failed++;
+
+
   if (test('allows safe workflow_run workflow that only checks out the base repository', () => {
     const result = runValidator({
       'safe.yml': `name: Safe\non:\n  workflow_run:\n    workflows: ["CI"]\n    types: [completed]\njobs:\n  repair:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo safe\n`,

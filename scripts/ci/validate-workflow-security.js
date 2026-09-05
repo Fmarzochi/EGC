@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
  * Reject unsafe GitHub Actions patterns that execute or checkout untrusted PR code
- * from privileged events such as workflow_run or pull_request_target.
+ * from privileged events such as workflow_run or pull_request_target, and
+ * any `run:` step that splices attacker-controlled event text (a pull
+ * request title or body, an issue or comment body, a branch name) into the
+ * shell: the runner expands the expression before the shell reads it, so
+ * the text is code.
  */
 
 const fs = require('node:fs');
@@ -28,6 +32,50 @@ const RULES = [
     ],
   },
 ];
+
+// Event fields whose text is written by whoever opened the pull request,
+// issue or comment, or named the branch; any of them inside a run: step is
+// a shell injection whatever the triggering event.
+const UNTRUSTED_TEXT_EXPRESSION = /\$\{\{\s*github\.(?:event\.(?:pull_request\.(?:title|body|head\.(?:ref|label)|user\.(?:login|email))|issue\.(?:title|body)|comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|commits\[\d+\]\.(?:message|author\.(?:name|email))|head_commit\.(?:message|author\.(?:name|email)))|head_ref)\s*\}\}/g;
+
+// The run: blocks of a workflow, with the line each one starts on: the
+// scalar after `run:` and, for a block scalar (| or >), every following
+// line indented deeper than the key.
+function extractRunBlocks(source) {
+  const blocks = [];
+  const lines = source.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(lines[i]);
+    if (!match) continue;
+    const indent = match[1].length;
+    const text = [match[2]];
+    if (/^[|>]/.test(match[2].trim())) {
+      let j = i + 1;
+      while (j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > indent)) {
+        text.push(lines[j]);
+        j += 1;
+      }
+    }
+    blocks.push({ startLine: i + 1, text: text.join('\n') });
+  }
+  return blocks;
+}
+
+function findRunInjections(filePath, source) {
+  const violations = [];
+  for (const block of extractRunBlocks(source)) {
+    for (const match of block.text.matchAll(UNTRUSTED_TEXT_EXPRESSION)) {
+      violations.push({
+        filePath,
+        event: 'run',
+        description: 'run: must not splice untrusted event text into the shell; pass it through an env: variable and quote it',
+        expression: match[0],
+        line: block.startLine + getLineNumber(block.text, match.index) - 1,
+      });
+    }
+  }
+  return violations;
+}
 
 function getWorkflowFiles(workflowsDir) {
   if (!fs.existsSync(workflowsDir)) {
@@ -109,6 +157,7 @@ function findViolations(filePath, source) {
     }
   }
 
+  violations.push(...findRunInjections(filePath, source));
   return violations;
 }
 
@@ -144,6 +193,8 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_WORKFLOWS_DIR,
   extractCheckoutSteps,
+  extractRunBlocks,
+  findRunInjections,
   findViolations,
   validateWorkflowSecurity,
 };

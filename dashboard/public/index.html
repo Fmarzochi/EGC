@@ -750,7 +750,10 @@ const IDES=[
   {id:'vscode',    label:'VS Code',    c:'#007acc',e:'🔷'},
   {id:'aider',     label:'Aider',      c:'#f57c00',e:'⚡'},
 ];
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Every character that could end an attribute or a quoted string inside
+// an inline handler is escaped, single quotes included, so a value is
+// text wherever it lands in the markup.
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 const EGC_AGENTS=[
   {id:'memory',    name:'Memory',        icon:'🧠',node:'memory',    c:'#00d992',tools:['Read','Grep','Glob','Search'],   thoughts:{Read:'🧠 Reading memory',Grep:'🔎 Searching history',Glob:'📂 Scanning directory',Search:'🔎 Searching knowledge base'}},
@@ -1238,8 +1241,8 @@ startTimer();
 /* ── IDE PILLS ──────────────────────────────────────────── */
 function iconf(id){return IDES.find(i=>i.id===id)||{label:id,c:'#888',e:'🔧'};}
 document.getElementById('idePills').innerHTML=IDES.map(i=>
-  `<div class="ide-pill" id="pill-${i.id}" style="--pill-c:${i.c}" onclick="selIde('${i.id}')" title="${i.label}">
-    <div class="ide-dot"></div><span class="ide-ico">${i.e}</span><span class="ide-lbl">${i.label}</span></div>`
+  `<div class="ide-pill" id="pill-${esc(i.id)}" style="--pill-c:${esc(i.c)}" onclick="selIde('${esc(i.id)}')" title="${esc(i.label)}">
+    <div class="ide-dot"></div><span class="ide-ico">${esc(i.e)}</span><span class="ide-lbl">${esc(i.label)}</span></div>`
 ).join('');
 function selIde(id){
   S.filter=S.filter===id?null:id;
