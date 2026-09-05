@@ -38,19 +38,70 @@ const RULES = [
 // inside a run: step is a shell injection whatever the triggering event.
 // A field is matched anywhere inside an expression (`|| ''`, `format()`,
 // a ternary), not only as the whole expression.
-const UNTRUSTED_EVENT_FIELDS = [
-  /\bgithub\.event\.pull_request\.(?:title|body)\b/,
-  /\bgithub\.event\.pull_request\.head\.(?:ref|label)\b/,
-  /\bgithub\.event\.pull_request\.user\.(?:login|email)\b/,
-  /\bgithub\.event\.issue\.(?:title|body)\b/,
-  /\bgithub\.event\.(?:comment|review|review_comment)\.body\b/,
-  /\bgithub\.event\.discussion\.(?:title|body)\b/,
-  /\bgithub\.event\.commits\[\d+\]\.message\b/,
-  /\bgithub\.event\.commits\[\d+\]\.(?:author|committer)\.(?:name|email)\b/,
-  /\bgithub\.event\.head_commit\.message\b/,
-  /\bgithub\.event\.head_commit\.(?:author|committer)\.(?:name|email)\b/,
-  /\bgithub\.head_ref\b/,
+const UNTRUSTED_EVENT_PATHS = [
+  ['github', 'event', 'pull_request', 'title'],
+  ['github', 'event', 'pull_request', 'body'],
+  ['github', 'event', 'pull_request', 'head', 'ref'],
+  ['github', 'event', 'pull_request', 'head', 'label'],
+  ['github', 'event', 'pull_request', 'user', 'login'],
+  ['github', 'event', 'pull_request', 'user', 'email'],
+  ['github', 'event', 'issue', 'title'],
+  ['github', 'event', 'issue', 'body'],
+  ['github', 'event', 'comment', 'body'],
+  ['github', 'event', 'review', 'body'],
+  ['github', 'event', 'review_comment', 'body'],
+  ['github', 'event', 'discussion', 'title'],
+  ['github', 'event', 'discussion', 'body'],
+  ['github', 'event', 'commits', '*', 'message'],
+  ['github', 'event', 'commits', '*', 'author', 'name'],
+  ['github', 'event', 'commits', '*', 'author', 'email'],
+  ['github', 'event', 'commits', '*', 'committer', 'name'],
+  ['github', 'event', 'commits', '*', 'committer', 'email'],
+  ['github', 'event', 'head_commit', 'message'],
+  ['github', 'event', 'head_commit', 'author', 'name'],
+  ['github', 'event', 'head_commit', 'author', 'email'],
+  ['github', 'event', 'head_commit', 'committer', 'name'],
+  ['github', 'event', 'head_commit', 'committer', 'email'],
+  ['github', 'head_ref'],
 ];
+
+// The context paths referenced in an expression, each as its segments, read
+// from dotted (`a.b`), bracketed (`a['b']`, `a["b"]`) and indexed (`a[0]`)
+// spellings alike, so the spelling cannot hide the field.
+function contextPathsIn(expression) {
+  const paths = [];
+  const reader = /\bgithub((?:\.[A-Za-z_][\w-]*|\[\s*(?:'[^']*'|"[^"]*"|\d+|\*)\s*\])+)/g;
+  for (const match of expression.matchAll(reader)) {
+    const segments = ['github'];
+    const tail = match[1];
+    const segment = /\.([A-Za-z_][\w-]*)|\[\s*(?:'([^']*)'|"([^"]*)"|(\d+|\*))\s*\]/g;
+    for (const piece of tail.matchAll(segment)) segments.push(piece[1] ?? piece[2] ?? piece[3] ?? piece[4]);
+    paths.push(segments);
+  }
+  return paths;
+}
+
+function isUntrustedPath(segments) {
+  return UNTRUSTED_EVENT_PATHS.some(known => known.length === segments.length && known.every((part, index) => part === '*' ? /^\d+$|^\*$/.test(segments[index]) : part === segments[index]));
+}
+
+// The end of the expression opened at `from`: the first `}}` outside a
+// quoted string, so a brace pair inside a string literal is not a closer.
+function expressionEnd(text, from) {
+  let quote = null;
+  for (let i = from + 3; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) quote = text[i + 1] === quote ? (i += 1, quote) : null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+    } else if (ch === '}' && text[i + 1] === '}') {
+      return i + 2;
+    }
+  }
+  return -1;
+}
+
 
 // The untrusted fields found inside the `${{ ... }}` expressions of `text`,
 // each with its offset in the text. Expressions are found by a plain scan
@@ -60,14 +111,13 @@ function untrustedFieldsIn(text) {
   const found = [];
   let from = text.indexOf('${{');
   while (from !== -1) {
-    const close = text.indexOf('}}', from + 3);
-    if (close === -1) break;
-    const expression = text.slice(from, close + 2);
-    for (const field of UNTRUSTED_EVENT_FIELDS) {
-      const match = field.exec(expression);
-      if (match) found.push({ index: from, expression: expression.length > 120 ? `${expression.slice(0, 117)}...` : expression, field: match[0] });
+    const end = expressionEnd(text, from);
+    if (end === -1) break;
+    const expression = text.slice(from, end);
+    for (const segments of contextPathsIn(expression)) {
+      if (isUntrustedPath(segments)) found.push({ index: from, expression: expression.length > 120 ? `${expression.slice(0, 117)}...` : expression, field: segments.join('.') });
     }
-    from = text.indexOf('${{', close + 2);
+    from = text.indexOf('${{', end);
   }
   return found;
 }

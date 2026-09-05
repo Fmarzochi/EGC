@@ -76,6 +76,16 @@ function run() {
     assert.ok(result.stderr.includes('committer.name'), result.stderr);
   })) passed++; else failed++;
 
+  if (test('rejects bracket spellings and a field placed after a string that carries }}', () => {
+    const result = runValidator({
+      'spelling.yml': 'name: X\non:\n  push:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event[\'pull_request\'][\'title\'] }}"\n      - run: echo "${{ format(\'}}\', github.event.issue.body) }}"\n      - run: echo "${{ github.event.commits[3][\'message\'] }}"\n',
+    });
+    assert.notStrictEqual(result.status, 0);
+    assert.ok(result.stderr.includes('spelling.yml:8'), result.stderr);
+    assert.ok(result.stderr.includes('spelling.yml:9'), result.stderr);
+    assert.ok(result.stderr.includes('spelling.yml:10'), result.stderr);
+  })) passed++; else failed++;
+
   if (test('allows an env: sibling that follows a block-scalar run:', () => {
     const result = runValidator({
       'sibling.yml': 'name: S\non:\n  issues:\n    types: [opened]\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo "$BODY"\n          echo done\n        env:\n          BODY: ${{ github.event.issue.body }}\n',
