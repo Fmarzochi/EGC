@@ -7,7 +7,8 @@ const path = require('node:path');
 const { writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../mcp-config');
-const { writeTextKeepingMode } = require('./preserving-write');
+const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./preserving-write');
+
 const {
   HOOK_OPERATION_KIND,
   applyManagedHookOperation,
@@ -144,8 +145,9 @@ function applyMergeJsonOperation(operation, disabledServers) {
     ? readJsonObject(operation.destinationPath, 'existing JSON config')
     : {};
   const mergedValue = deepMergeJson(currentValue, filteredPayload);
-  fs.writeFileSync(operation.destinationPath, formatJson(mergedValue), 'utf8');
+  writeManagedText(operation.destinationPath, formatJson(mergedValue));
 }
+
 
 function applyMergeYamlReadListOperation(operation) {
   if (!operation.readEntry) {
@@ -167,7 +169,7 @@ function applyMergeYamlReadListOperation(operation) {
       { cause: error },
     );
   }
-  fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+  writeManagedText(operation.destinationPath, nextContent);
 }
 
 function applyMergeMarkdownIndexOperation(operation) {
@@ -179,7 +181,7 @@ function applyMergeMarkdownIndexOperation(operation) {
     description: operation.skillDescription,
     relativePath: operation.relativePath,
   });
-  fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+  writeManagedText(operation.destinationPath, nextContent);
 }
 
 // The text that was validated is the text that lands (or the filtered form
@@ -226,11 +228,7 @@ function writeGuardianCliMarker(onWarning, homeDir) {
   const markerPath = path.join(homeDir || os.homedir(), '.egc', 'guardian-cli-path.json');
   try {
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-    fs.writeFileSync(
-      markerPath,
-      `${JSON.stringify({ packageRoot: resolvePackageRoot() }, null, 2)}\n`,
-      'utf8'
-    );
+    writeManagedText(markerPath, `${JSON.stringify({ packageRoot: resolvePackageRoot() }, null, 2)}\n`);
   } catch (error) {
     const msg = `Warning: Failed to write Guardian CLI marker: ${error.message}`;
     if (typeof onWarning === 'function') {
@@ -246,6 +244,13 @@ function writeGuardianCliMarker(onWarning, homeDir) {
 // target root, is refused before anything is created. The root itself may be
 // a link the user made (a dotfiles manager, say); what lies below it is what
 // the installer owns.
+// Every managed file lands through an exclusive temporary and a rename, so a
+// link at the destination (planted before the pre-flight check or swapped in
+// after it) is replaced, never written through.
+function writeManagedText(destinationPath, text) {
+  replaceFileWith(destinationPath, descriptor => fs.writeFileSync(descriptor, text, 'utf8'));
+}
+
 function refuseLinkedDestination(destinationPath, targetRoot) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   let probe = path.resolve(destinationPath);
@@ -293,7 +298,8 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
       applyMcpCopyFileOperation(operation, disabledServers);
     } else {
-      fs.copyFileSync(operation.sourcePath, operation.destinationPath);
+      copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
+
     }
   }
 
@@ -301,11 +307,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
     fs.mkdirSync(path.dirname(resolvedClaudeHooksPlan.hooksDestinationPath), { recursive: true });
 
-    fs.writeFileSync(
-      resolvedClaudeHooksPlan.hooksDestinationPath,
-      JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2) + '\n',
-      'utf8'
-    );
+    writeManagedText(resolvedClaudeHooksPlan.hooksDestinationPath, `${JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2)}\n`);
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
@@ -344,4 +346,6 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 module.exports = {
   applyInstallPlan,
   refuseLinkedDestination,
+  writeManagedText,
+
 };

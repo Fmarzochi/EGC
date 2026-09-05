@@ -9,7 +9,9 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { refuseLinkedDestination } = require('../../scripts/lib/install/apply');
+const { refuseLinkedDestination, writeManagedText } = require('../../scripts/lib/install/apply');
+const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+
 
 function test(name, fn) {
   try {
@@ -58,6 +60,38 @@ function runTests() {
         assert.doesNotThrow(() => refuseLinkedDestination(path.join(viaLink, 'rules', 'plain.md'), viaLink));
       })) passed++; else failed++;
     }
+
+    if (test('a hard link at the destination is replaced and the aliased file keeps its content', () => {
+      const aliased = path.join(outside, 'aliased.md');
+      fs.writeFileSync(aliased, 'aliased content');
+      fs.mkdirSync(path.join(root, 'notes'), { recursive: true });
+      const destination = path.join(root, 'notes', 'hard.md');
+      try {
+        fs.linkSync(aliased, destination);
+      } catch (error) {
+        console.log(`  - skipped: cannot create hard links here (${error.code})`);
+        return;
+      }
+      assert.doesNotThrow(() => refuseLinkedDestination(destination, root), 'a hard link is a regular name to lstat');
+      writeManagedText(destination, 'managed');
+      assert.strictEqual(fs.readFileSync(aliased, 'utf8'), 'aliased content', 'the aliased file is untouched');
+      assert.strictEqual(fs.readFileSync(destination, 'utf8'), 'managed');
+      assert.strictEqual(fs.statSync(destination).nlink, 1, 'the destination is its own file now');
+      const statePath = path.join(root, 'notes', 'egc-install-state.json');
+      fs.linkSync(aliased, statePath);
+      const state = createInstallState({
+        adapter: { id: 'cursor-project' },
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: 'developer', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [],
+      });
+      writeInstallState(statePath, state);
+      assert.strictEqual(fs.readFileSync(aliased, 'utf8'), 'aliased content', 'the state file never writes through a link either');
+      assert.strictEqual(fs.statSync(statePath).nlink, 1);
+      assert.strictEqual(fs.readdirSync(path.join(root, 'notes')).filter(name => name.endsWith('.tmp')).length, 0, 'no temporary survives');
+    })) passed++; else failed++;
 
     if (test('a plain destination, existing or not, passes', () => {
       fs.mkdirSync(path.join(root, 'rules'), { recursive: true });

@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { hasParentSegment, isAnchoredPath } = require('./path-safety');
+const { replaceFileWith } = require('./install/preserving-write');
+
 
 let Ajv = null;
 try {
@@ -334,7 +336,9 @@ function readInstallState(filePath) {
 function writeInstallState(filePath, state) {
   assertValidInstallState(state, filePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`);
+  // The state file lands like every managed file: an exclusive temporary
+  // renamed over the destination, so a link there is replaced, not followed.
+  replaceFileWith(filePath, descriptor => fs.writeFileSync(descriptor, `${JSON.stringify(state, null, 2)}\n`));
   return state;
 }
 
