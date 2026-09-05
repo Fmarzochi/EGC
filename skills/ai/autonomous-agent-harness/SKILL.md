@@ -194,19 +194,18 @@ Ensure these are in `~/.gemini.json`:
   "mcpServers": {
     "memory": {
       "command": "npx",
-      "args": ["-y", "@anthropic/memory-mcp-server"]
-    },
-    "scheduled-tasks": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/scheduled-tasks-mcp-server"]
-    },
-    "computer-use": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/computer-use-mcp-server"]
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
     }
   }
 }
 ```
+
+Only register servers you have verified on the registry you install from
+(`npm view <name>` shows the publisher and the versions). A name that looks
+plausible but is not published is the shape of a slopsquatting attack: the
+day someone registers it, `npx -y` runs their code. Scheduled tasks and
+computer use have no first-party server at the time of writing; wire those
+through your own scripts or a server you have audited.
 
 ### Step 2: Create Base Crons
 

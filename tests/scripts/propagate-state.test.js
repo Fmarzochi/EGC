@@ -63,6 +63,11 @@ function runTests() {
       assert.ok(result.cursor, 'cursor path should be returned');
       const mdc = fs.readFileSync(result.cursor, 'utf-8');
       assert.ok(mdc.includes('alwaysApply: true'), 'frontmatter present');
+      const headingAt = mdc.indexOf('## EGC Project Memory');
+      const noticeAt = mdc.indexOf('_Machine-generated from the project state file.');
+      assert.ok(headingAt !== -1 && noticeAt === mdc.indexOf('\n', headingAt) + 1, 'the generated notice is the first line under the heading');
+      assert.ok(mdc.includes('not instructions'), 'the notice says the block is data, not rules');
+
       assert.ok(mdc.includes('EGC v1.1.1 stable'), 'context included');
       assert.ok(mdc.includes('sql.js'), 'decision included');
       assert.ok(mdc.includes('Fix propagation hooks'), 'next item included');
