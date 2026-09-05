@@ -570,21 +570,36 @@ function getGlobalStateFile(): string {
   return file;
 }
 
-function isProtectedPath(p: string): boolean {
-  const home = os.homedir();
-  const denied = [
-    path.join(home, '.ssh'),
-    path.join(home, '.aws'),
-    path.join(home, '.config'),
-    path.join(home, '.cursor'),
-    path.join(home, '.claude'),
-    path.join(home, '.gemini')
-  ];
-  const normalizedP = path.resolve(p);
-  for (const d of denied) {
-    if (normalizedP === d || normalizedP.startsWith(d + path.sep)) return true;
+// The shapes a project path may take: the home directory itself (the
+// fallback when no working directory is known), any directory under home
+// except the hidden ones directly under it (~/.ssh, ~/.config, ~/.claude
+// and every other dot-directory a tool keeps its secrets and settings in),
+// and any directory outside home that is not a system root. Everything
+// else is refused, so a new tool's dot-directory is covered the day it
+// appears instead of waiting for a list to name it.
+const SYSTEM_ROOTS = process.platform === 'win32'
+  ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)', 'C:\\ProgramData']
+  : ['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64', '/boot', '/proc', '/sys', '/dev', '/root', '/var/lib', '/var/log', '/var/run', '/run'];
+
+function underRoot(resolved: string, root: string): boolean {
+  const a = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  const b = process.platform === 'win32' ? root.toLowerCase() : root;
+  return a === b || a.startsWith(b + path.sep);
+}
+
+// The reason a resolved project path is refused, or null when it has one of
+// the accepted shapes.
+function projectPathRefusal(resolved: string): string | null {
+  const home = path.resolve(os.homedir());
+  const fromHome = path.relative(home, resolved);
+  if (fromHome === '') return null;
+  const insideHome = !fromHome.startsWith('..') && !path.isAbsolute(fromHome);
+  if (insideHome) {
+    const first = fromHome.split(path.sep)[0];
+    return first.startsWith('.') ? `${first} is a hidden directory under the home directory, where tools keep settings and secrets` : null;
   }
-  return false;
+  const root = SYSTEM_ROOTS.find(candidate => underRoot(resolved, candidate));
+  return root === undefined ? null : `${root} is a system directory`;
 }
 
 function resolveProjectPath(provided?: string): string {
@@ -606,8 +621,9 @@ function resolveProjectPath(provided?: string): string {
   if (fs.existsSync(resolved)) {
     resolved = fs.realpathSync(resolved);
   }
-  if (isProtectedPath(resolved)) {
-    throw new Error(`project_path is protected and cannot be used: ${resolved}`);
+  const refusal = projectPathRefusal(resolved);
+  if (refusal !== null) {
+    throw new Error(`project_path is not allowed (${refusal}): ${resolved}`);
   }
   return resolved;
 }

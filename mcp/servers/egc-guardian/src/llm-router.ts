@@ -1,4 +1,6 @@
 import { CATALOG } from './catalog-index.js';
+import { scanForInjection } from './prompt-injection-scanner.js';
+
 
 const ROUTE_TIMEOUT_MS = 5_000;
 const MAX_CANDIDATES = 40;
@@ -53,10 +55,37 @@ function pickCandidates(promptTokens: Set<string>) {
     .slice(0, MAX_CANDIDATES);
 }
 
-function buildCatalogBlock(
+const MAX_DESCRIPTION_CHARS = 200;
+
+// The text with every control, format and zero-width character turned into
+// a space and runs of whitespace collapsed: one line of printable text, so
+// a description can neither open a second catalog line nor hide a word
+// from the scan.
+function printable(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    const invisible = code < 0x20 || code === 0x7f || (code >= 0x200b && code <= 0x200d) || code === 0x2060 || code === 0xfeff;
+    out += invisible ? ' ' : ch;
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+// A catalog description as the router's prompt carries it: one bounded line
+// of printable text, and never a description that reads as an instruction
+// to the model (the catalog is data the router chooses from, not text that
+// steers it). An entry whose description is withheld keeps its name, so it
+// can still be chosen by name.
+export function promptDescription(description: string): string {
+  const line = printable(description);
+  if (scanForInjection(line).length > 0) return '[description withheld]';
+  return line.length > MAX_DESCRIPTION_CHARS ? `${line.slice(0, MAX_DESCRIPTION_CHARS - 3)}...` : line;
+}
+
+export function buildCatalogBlock(
   candidates: Array<{ kind: string; name: string; description: string }>,
 ): string {
-  return candidates.map(e => `${e.kind}:${e.name} - ${e.description}`).join('\n');
+  return candidates.map(e => `${e.kind}:${printable(e.name)} - ${promptDescription(e.description)}`).join('\n');
 }
 
 const SYSTEM_PROMPT =
