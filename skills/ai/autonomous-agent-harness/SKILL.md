@@ -195,17 +195,26 @@ Ensure these are in `~/.gemini.json`:
     "memory": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "scheduled-tasks": {
+      "command": "<the scheduled-tasks server you verified and installed>"
+    },
+    "computer-use": {
+      "command": "<the computer-use server you verified and installed>"
     }
   }
 }
 ```
 
-Only register servers you have verified on the registry you install from
-(`npm view <name>` shows the publisher and the versions). A name that looks
-plausible but is not published is the shape of a slopsquatting attack: the
-day someone registers it, `npx -y` runs their code. Scheduled tasks and
-computer use have no first-party server at the time of writing; wire those
-through your own scripts or a server you have audited.
+The `memory` entry names a published package. The `scheduled-tasks` and
+`computer-use` entries are placeholders: no first-party package exists for
+them at the time of writing, so point each at a server you have audited and
+installed yourself (the tool names used below, `mcp__scheduled-tasks__*`
+and the computer-use tools, are whatever that server exposes). Only
+register servers you have verified on the registry you install from
+(`npm view <name>` shows the publisher and the versions): a name that looks
+plausible but is not published is the shape of a slopsquatting attack, and
+the day someone registers it, `npx -y` runs their code.
 
 ### Step 2: Create Base Crons
 
