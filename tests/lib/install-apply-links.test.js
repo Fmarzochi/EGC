@@ -86,6 +86,7 @@ function runTests() {
         request: { profile: 'developer', modules: [], legacyLanguages: [], legacyMode: false },
         resolution: { selectedModules: [], skippedModules: [] },
         operations: [],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
       });
       writeInstallState(statePath, state);
       assert.strictEqual(fs.readFileSync(aliased, 'utf8'), 'aliased content', 'the state file never writes through a link either');
