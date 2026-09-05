@@ -298,7 +298,7 @@ function printDoctorSummary(summary) {
   }
   if (summary.hint) action(summary.hint);
   for (const line of summary.details) detail(`${line.adapterId}  ${line.text}`);
-  for (const command of summary.commands) action(`${summary.status === 'empty' ? '' : 'Run: '}${command}`);
+  for (const command of summary.commands) action(`${summary.bare ? '' : 'Run: '}${command}`);
   for (const note of summary.notes) action(note);
 }
 
@@ -404,7 +404,7 @@ function printClosingLine(summary) {
     return;
   }
   if (summary.status === 'warning') {
-    const count = summary.warnings > 0 ? summary.warnings : summary.notes.length;
+    const count = summary.warnings + summary.notes.length;
     console.log(`  ${c.green}${c.bold}Installation complete${c.reset} ${c.yellow}with ${count} warning${count === 1 ? '' : 's'}.${c.reset} ${c.dim}Details anytime with \`egc doctor\`.${c.reset}`);
     return;
   }

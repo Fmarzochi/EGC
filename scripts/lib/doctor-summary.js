@@ -38,18 +38,18 @@ function describeIssue(issue) {
   return message;
 }
 
+// One line per target that needs attention, however many issues it has.
 function issueLines(results) {
   const lines = [];
   for (const result of results) {
     if (result.status === 'ok') continue;
     const issues = Array.isArray(result.issues) ? result.issues : [];
-    if (issues.length === 0) {
-      lines.push({ adapterId: result.adapter.id, text: `status ${result.status}` });
-      continue;
-    }
-    for (const issue of issues) {
-      lines.push({ adapterId: result.adapter.id, severity: issue.severity, code: issue.code, text: describeIssue(issue) });
-    }
+    lines.push({
+      adapterId: result.adapter.id,
+      status: result.status,
+      codes: issues.map(issue => issue.code),
+      text: issues.length === 0 ? `status ${result.status}` : issues.map(describeIssue).join('; '),
+    });
   }
   return lines;
 }
@@ -102,14 +102,15 @@ function headlineFor(checked, ok, warnings, errors, afterRepair) {
 
 // options.afterRepair: the report comes from the re-check that follows the
 // automatic repair, so whatever is still broken needs the person's hand.
+// Counts are targets, not issues: the doctor's own summary adds up issues
+// per target, which would overstate how many tools need attention.
 function summarizeDoctorReport(report, options = {}) {
   const repoRoot = options.repoRoot || path.join(__dirname, '..', '..');
   const results = Array.isArray(report?.results) ? report.results : [];
-  const summary = report?.summary || {};
-  const checked = summary.checkedCount ?? results.length;
-  const ok = summary.okCount ?? results.filter(result => result.status === 'ok').length;
-  const warnings = summary.warningCount ?? results.filter(result => result.status === 'warning').length;
-  const errors = summary.errorCount ?? results.filter(result => result.status === 'error').length;
+  const checked = results.length;
+  const ok = results.filter(result => result.status === 'ok').length;
+  const warnings = results.filter(result => result.status === 'warning').length;
+  const errors = results.filter(result => result.status === 'error').length;
   const notes = stateStoreNotes(report?.stateDb, repoRoot);
 
   if (report?.manifestError) {
@@ -122,7 +123,7 @@ function summarizeDoctorReport(report, options = {}) {
 
   if (results.length === 0) {
     return {
-      status: 'empty', checked: 0, ok: 0, warnings: 0, errors: 0,
+      status: notes.length > 0 ? 'warning' : 'empty', bare: true, checked: 0, ok: 0, warnings: 0, errors: 0,
       headline: 'core runtime healthy; no managed target profile installed yet',
       hint: 'Managed content (rules, skills, hooks) is optional; add it for your tool anytime with:',
       details: [],
@@ -135,10 +136,12 @@ function summarizeDoctorReport(report, options = {}) {
 
   if (errors > 0) {
     const residual = options.afterRepair ? errorCommands(results) : { commands: [], notes: [] };
+    // Warnings that sit next to residual errors still have their own fix.
+    const commands = options.afterRepair && warnings > 0 ? [...residual.commands, 'egc repair'] : residual.commands;
     return {
       status: 'error', checked, ok, warnings, errors,
       headline: headlineFor(checked, ok, warnings, errors, Boolean(options.afterRepair)),
-      details, commands: residual.commands, notes: [...residual.notes, ...notes],
+      details, commands, notes: [...residual.notes, ...notes],
     };
   }
 
@@ -157,16 +160,18 @@ function summarizeDoctorReport(report, options = {}) {
   };
 }
 
-// The repair JSON carries one entry per target; init only needs the count
-// of files it restored and whether anything stayed unrepairable.
+// The repair JSON carries one entry per target; init needs the files it
+// restored (the repair summary's repairedCount counts targets), whether
+// anything stayed unrepairable, and whether a plugin reinstall failed.
 function summarizeRepairResult(result) {
   const entries = Array.isArray(result?.results) ? result.results : [];
-  const summary = result?.summary || {};
-  const repaired = summary.repairedCount ?? entries.reduce((total, entry) => total + ((entry.repairedPaths || []).length), 0);
-  const pruned = summary.prunedCount ?? 0;
-  const unrepairable = summary.unrepairableCount ?? 0;
-  const errors = summary.errorCount ?? entries.filter(entry => entry.status === 'error').length;
-  const touched = entries.filter(entry => (entry.repairedPaths || []).length > 0 || (entry.prunedPaths || []).length > 0).length;
+  const count = (entry, field) => (Array.isArray(entry[field]) ? entry[field].length : 0);
+  const repaired = entries.reduce((total, entry) => total + count(entry, 'repairedPaths'), 0);
+  const pruned = entries.reduce((total, entry) => total + count(entry, 'prunedPaths'), 0);
+  const unrepairable = entries.reduce((total, entry) => total + count(entry, 'unrepairable'), 0);
+  const errors = entries.filter(entry => entry.status === 'error' || entry.status === 'partial').length;
+  const touched = entries.filter(entry => count(entry, 'repairedPaths') > 0 || count(entry, 'prunedPaths') > 0).length;
+  const pluginFailures = (Array.isArray(result?.pluginRepairs) ? result.pluginRepairs : []).filter(plugin => !plugin.success).length;
   const parts = [];
   if (repaired > 0) parts.push(`restored ${pluralize(repaired, 'file')}`);
   if (pruned > 0) parts.push(`pruned ${pluralize(pruned, 'stale entry', 'stale entries')}`);
@@ -174,7 +179,8 @@ function summarizeRepairResult(result) {
   let text = parts.join(', ');
   if (touched > 0) text += ` in ${pluralize(touched, 'target')}`;
   if (unrepairable > 0) text += `; ${unrepairable} unrepairable`;
-  return { repaired, pruned, unrepairable, errors, text, failed: errors > 0 || unrepairable > 0 };
+  if (pluginFailures > 0) text += `; ${pluralize(pluginFailures, 'plugin reinstall')} failed`;
+  return { repaired, pruned, unrepairable, errors, pluginFailures, text, failed: errors > 0 || unrepairable > 0 || pluginFailures > 0 };
 }
 
 module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName };

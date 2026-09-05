@@ -11,7 +11,21 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const INIT = path.join(__dirname, '..', '..', 'scripts', 'init.js');
+const { FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
+const ROOT = path.join(__dirname, '..', '..');
+const INIT = path.join(ROOT, 'scripts', 'init.js');
+const SERVER_BUILDS = [
+  path.join(ROOT, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js'),
+  path.join(ROOT, 'mcp', 'servers', 'egc-memory', 'build', 'index.js'),
+];
+
+// init refuses to start without the MCP server builds, so a checkout that
+// has not built them (a bare CI runner) cannot exercise this end to end.
+if (!SERVER_BUILDS.every(file => fs.existsSync(file))) {
+  console.log('[SKIP] MCP server builds not found. Run npm run build in mcp/servers/egc-guardian and mcp/servers/egc-memory first.');
+  process.exit(0);
+}
 
 let passed = 0;
 let failed = 0;
@@ -40,8 +54,6 @@ function cleanup(dirPath) {
   }
 }
 
-// A cold init bootstraps the cognitive protocol and the state store, so it
-// gets the long budget the other installer tests use on Windows runners.
 function runInit(args, { homeDir, projectDir }) {
   const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, CI: '1' };
   delete env.EGC_DIR;
@@ -49,7 +61,7 @@ function runInit(args, { homeDir, projectDir }) {
     cwd: projectDir,
     env,
     encoding: 'utf8',
-    timeout: process.platform === 'win32' ? 180000 : 90000,
+    timeout: FULL_INSTALL_TIMEOUT_MS,
   });
 }
 
@@ -81,8 +93,10 @@ test('a sandboxed init prints the compact check, the status lines and ends on th
     assert.ok(!out.includes('Route heavy commands'), 'the closing tip is gone');
 
     assert.ok(out.includes("Dashboard not started (headless environment). Run 'egc dashboard' to start it."), 'headless runs print the same dashboard line as the other installers');
-    assert.ok(out.includes('Installation complete.'), 'the completion line is printed');
-    assert.ok(lastNonEmptyLine(out).trim().startsWith('Installation complete.'), `the completion line must be the last line, got: ${lastNonEmptyLine(out)}`);
+    // A fresh home may carry a state-store note from the doctor, which turns
+    // the closing line into the warning form; both forms must end the run.
+    assert.ok(/Installation complete( with \d+ warnings?)?\./.test(out), 'the completion line is printed');
+    assert.ok(lastNonEmptyLine(out).trim().startsWith('Installation complete'), `the completion line must be the last line, got: ${lastNonEmptyLine(out)}`);
 
     assert.ok(!out.includes('\r'), 'no carriage return without a TTY');
     assert.ok(!out.includes('\x1b['), 'no escape sequence without a TTY');

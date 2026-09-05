@@ -88,7 +88,7 @@ egc init
 
 This bootstraps the cognitive protocol, registers MCP servers, configures project-local memory protections, verifies the setup, and starts the dashboard.
 
-The run ends with a short install check. When everything is healthy it is one line (`12 targets healthy`); when something needs attention, only those targets are listed, each with the command to run. The full report is always one command away with `egc doctor`. Two status lines above the check tell you whether the state store is ready and whether the Token Crusher shim is on your PATH (the shim is installed by `egc install`, and a new terminal picks it up).
+After those steps `egc init` prints a short install check, then the dashboard line, then `Installation complete.`. When everything is healthy the check is one line (`12 targets healthy`); when something needs attention, only those targets are listed, each with the command to run. The full report is always one command away with `egc doctor`. Two status lines above the check tell you whether the state store is ready and whether the Token Crusher shim is on your PATH (the shim is installed by `egc install`, and a new terminal picks it up).
 
 ### 3. Full profile
 

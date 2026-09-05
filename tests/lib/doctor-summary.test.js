@@ -57,10 +57,7 @@ test('a single healthy target is not pluralized', () => {
 });
 
 test('warnings list each target once and point at egc repair', () => {
-  const results = TWELVE.map(entry => {
-    if (entry.adapter.id === 'cursor-home') return entry;
-    return entry;
-  });
+  const results = TWELVE.slice();
   results[7] = target('windsurf-home', 'windsurf', 'warning', [
     { severity: 'warning', code: 'drifted-managed-files', message: '2 managed file(s) differ from the source repo', paths: ['a', 'b'] },
   ]);
@@ -124,10 +121,47 @@ test('the command uses the CLI target name, never the adapter id', () => {
 test('zero targets is the bare install, with the full-profile command', () => {
   const summary = summarizeDoctorReport(report([]));
   assert.strictEqual(summary.status, 'empty');
+  assert.strictEqual(summary.bare, true);
   assert.ok(summary.headline.includes('no managed target profile installed'));
   assert.deepStrictEqual(summary.commands, ['egc install --target <target> --profile full']);
   assert.ok(summary.hint.includes('optional'));
   assert.deepStrictEqual(summary.notes, []);
+});
+
+test('a bare install with a state store finding is a warning, not a clean run', () => {
+  const stateDb = { missing: true, dbPath: '/home/user/.egc/egc/state.db', memoryDbPath: '/x', hasHarnessDb: false, hasMemoryDb: false, cliStoreMisplaced: false, fragments: [] };
+  const summary = summarizeDoctorReport(report([], { stateDb }));
+  assert.strictEqual(summary.status, 'warning');
+  assert.strictEqual(summary.bare, true);
+  assert.strictEqual(summary.notes.length, 1);
+  assert.ok(summary.notes[0].startsWith('state store not found at'));
+});
+
+test('a target with several issues is one line, and counts stay per target', () => {
+  const results = TWELVE.slice();
+  results[1] = target('claude-home', 'claude', 'warning', [
+    { severity: 'warning', code: 'drifted-managed-files', message: '2 managed file(s) differ from the source repo', paths: ['a', 'b'] },
+    { severity: 'warning', code: 'repo-version-mismatch', message: 'Recorded repo version 1.1.20 differs from current repo version 1.1.21' },
+  ]);
+  const summary = summarizeDoctorReport(report(results));
+  assert.strictEqual(summary.headline, '11 of 12 targets healthy, 1 need an update');
+  assert.strictEqual(summary.details.length, 1);
+  assert.strictEqual(summary.details[0].text, '2 managed file(s) differ from the source repo; recorded version 1.1.20, current 1.1.21');
+  assert.deepStrictEqual(summary.details[0].codes, ['drifted-managed-files', 'repo-version-mismatch']);
+});
+
+test('warnings that sit next to residual errors still get egc repair', () => {
+  const results = BROKEN.slice();
+  results[10] = target('zed-home', 'zed', 'warning', [
+    { severity: 'warning', code: 'drifted-managed-files', message: '1 managed file(s) differ from the source repo', paths: ['a'] },
+  ]);
+  const summary = summarizeDoctorReport(report(results), { afterRepair: true });
+  assert.strictEqual(summary.headline, '9 of 12 targets healthy, 2 still broken after automatic repair');
+  assert.deepStrictEqual(summary.commands, [
+    'egc install --target windsurf --profile full',
+    'egc install --target amp --profile full',
+    'egc repair',
+  ]);
 });
 
 test('refused manifests are an error with the reason in the headline', () => {
@@ -158,13 +192,21 @@ test('a healthy two-store layout adds no note', () => {
   assert.deepStrictEqual(summary.notes, []);
 });
 
-test('the repair summary counts what was restored and flags what stayed unrepairable', () => {
+test('the repair summary counts files, not targets, and flags what stayed unrepairable', () => {
   const restored = summarizeRepairResult({
     results: [{ adapter: { id: 'amp-home' }, status: 'repaired', repairedPaths: ['a', 'b', 'c', 'd'], prunedPaths: [] }],
-    summary: { checkedCount: 1, repairedCount: 4, prunedCount: 0, unrepairableCount: 0, errorCount: 0 },
+    summary: { checkedCount: 1, repairedCount: 1, prunedCount: 0, unrepairableCount: 0, errorCount: 0 },
   });
   assert.strictEqual(restored.text, 'restored 4 files in 1 target');
   assert.strictEqual(restored.failed, false);
+
+  const pluginBroken = summarizeRepairResult({
+    results: [{ adapter: { id: 'amp-home' }, status: 'ok', repairedPaths: [], prunedPaths: [] }],
+    summary: { checkedCount: 1, repairedCount: 0, prunedCount: 0, unrepairableCount: 0, errorCount: 0 },
+    pluginRepairs: [{ name: 'egc-tools', success: false, errors: ['git clone failed'] }],
+  });
+  assert.strictEqual(pluginBroken.text, 'nothing to restore; 1 plugin reinstall failed');
+  assert.strictEqual(pluginBroken.failed, true);
 
   const stuck = summarizeRepairResult({
     results: [{ adapter: { id: 'amp-home' }, status: 'error', repairedPaths: [], prunedPaths: ['x'], unrepairable: [{ path: 'y' }] }],
