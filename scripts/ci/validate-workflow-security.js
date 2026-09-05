@@ -65,18 +65,70 @@ const UNTRUSTED_EVENT_PATHS = [
   ['github', 'head_ref'],
 ];
 
+const IDENTIFIER_CHARS = /^[A-Za-z0-9_-]$/;
+
+function isWordChar(ch) {
+  return ch !== undefined && IDENTIFIER_CHARS.test(ch);
+}
+
+// One bracketed segment starting at the `[` at `from`: a quoted name, an
+// index or a `*`, with spaces allowed inside the brackets. Returns the
+// segment and the index after the `]`, or null when the text is not one.
+function bracketSegment(text, from) {
+  let i = from + 1;
+  while (text[i] === ' ') i += 1;
+  let value;
+  const quote = text[i];
+  if (quote === "'" || quote === '"') {
+    const close = text.indexOf(quote, i + 1);
+    if (close === -1) return null;
+    value = text.slice(i + 1, close);
+    i = close + 1;
+  } else {
+    const start = i;
+    while (text[i] === '*' || (text[i] >= '0' && text[i] <= '9')) i += 1;
+    if (i === start) return null;
+    value = text.slice(start, i);
+  }
+  while (text[i] === ' ') i += 1;
+  return text[i] === ']' ? { value, next: i + 1 } : null;
+}
+
+// One dotted segment starting at the `.` at `from`: an identifier or the
+// `*` object filter. Returns the segment and the index after it, or null.
+function dottedSegment(text, from) {
+  let i = from + 1;
+  if (text[i] === '*') return { value: '*', next: i + 1 };
+  const start = i;
+  while (isWordChar(text[i])) i += 1;
+  return i === start ? null : { value: text.slice(start, i), next: i };
+}
+
+function nextSegment(text, at) {
+  if (text[at] === '.') return dottedSegment(text, at);
+  return text[at] === '[' ? bracketSegment(text, at) : null;
+}
+
 // The context paths referenced in an expression, each as its segments, read
 // from dotted (`a.b`), bracketed (`a['b']`, `a["b"]`), indexed (`a[0]`) and
 // filtered (`a.*.b`) spellings alike, so the spelling cannot hide the field.
+// A plain index walk, so no pattern can make the read backtrack.
 function contextPathsIn(expression) {
   const paths = [];
-  const reader = /\bgithub((?:\.(?:[A-Za-z_][\w-]*|\*)|\[\s*(?:'[^']*'|"[^"]*"|\d+|\*)\s*\])+)/g;
-  for (const match of expression.matchAll(reader)) {
+  let from = expression.indexOf('github');
+  while (from !== -1) {
+    let i = from + 'github'.length;
     const segments = ['github'];
-    const tail = match[1];
-    const segment = /\.([A-Za-z_][\w-]*|\*)|\[\s*(?:'([^']*)'|"([^"]*)"|(\d+|\*))\s*\]/g;
-    for (const piece of tail.matchAll(segment)) segments.push(piece[1] ?? piece[2] ?? piece[3] ?? piece[4]);
-    paths.push(segments);
+    if (!isWordChar(expression[from - 1])) {
+      let segment = nextSegment(expression, i);
+      while (segment) {
+        segments.push(segment.value);
+        i = segment.next;
+        segment = nextSegment(expression, i);
+      }
+      if (segments.length > 1) paths.push(segments);
+    }
+    from = expression.indexOf('github', i);
   }
   return paths;
 }
@@ -128,15 +180,41 @@ function untrustedFieldsIn(text) {
 // deeper than the key itself. The key's column, not the dash's, bounds the
 // block, so a sibling key (env:, shell:) after a block-scalar run: is not
 // swallowed into it.
+function isBlank(ch) {
+  return ch === ' ' || ch === '\t';
+}
+
+// The `run` key on a line, with the column the key starts on (after the
+// indentation and an optional list dash) and the scalar after the colon;
+// spaces before the colon are allowed, as YAML does. Read by index, so no
+// pattern can make the read backtrack.
+function runKeyOn(line) {
+  let i = 0;
+  while (isBlank(line[i])) i += 1;
+  if (line[i] === '-') {
+    i += 1;
+    if (!isBlank(line[i])) return null;
+    while (isBlank(line[i])) i += 1;
+  }
+  const column = i;
+  if (!line.startsWith('run', i)) return null;
+  i += 'run'.length;
+  while (isBlank(line[i])) i += 1;
+  if (line[i] !== ':') return null;
+  i += 1;
+  while (isBlank(line[i])) i += 1;
+  return { column, value: line.slice(i) };
+}
+
 function extractRunBlocks(source) {
   const blocks = [];
   const lines = source.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
-    const match = /^(\s*(?:-\s+)?)run\s*:\s*(.*)$/.exec(lines[i]);
-    if (!match) continue;
-    const keyColumn = match[1].length;
-    const text = [match[2]];
-    if (/^[|>]/.test(match[2].trim())) {
+    const key = runKeyOn(lines[i]);
+    if (!key) continue;
+    const keyColumn = key.column;
+    const text = [key.value];
+    if (/^[|>]/.test(key.value.trim())) {
       let j = i + 1;
       while (j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > keyColumn)) {
         text.push(lines[j]);
