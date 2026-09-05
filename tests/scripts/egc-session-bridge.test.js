@@ -85,6 +85,24 @@ test('hooks.json registers SessionStart + SessionEnd entries', () => {
   assert.ok(endMatches, 'SessionEnd missing egc-session-bridge entry');
 });
 
+test('fails closed when the plugin root does not resolve', () => {
+  const r = runHook('SessionStart', 'egc-test-root', { pluginRoot: path.join(REPO_ROOT, 'no-such-plugin-root') });
+  assert.strictEqual(r.status, 1, r.stderr);
+  assert.ok(r.stderr.includes('does not exist'), r.stderr);
+  assert.ok(r.stderr.includes('EGC_PLUGIN_ROOT'), r.stderr);
+});
+
+test('fails closed when the bridge is missing under the plugin root', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bridge-root-'));
+  try {
+    const r = runHook('SessionStart', 'egc-test-bridge', { pluginRoot: root });
+    assert.strictEqual(r.status, 1, r.stderr);
+    assert.ok(r.stderr.includes('is missing under plugin root'), r.stderr);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('hook is a no-op when EGC_SESSION_BRIDGE=off', () => {
   const tmp = createTempDir('egc-bridge-off-');
   try {

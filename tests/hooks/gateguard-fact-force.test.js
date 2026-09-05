@@ -797,6 +797,27 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // --- Test 16b: the Claude Code settings file is exempt the same way, the rest of .claude/ is not ---
+  clearState();
+  if (test('allows edits to .claude/settings.local.json without gating, and still gates .claude/CLAUDE.md', () => {
+    const settings = runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: '/workspace/app/.claude/settings.local.json', old_string: '{}', new_string: '{"hooks":[]}' }
+    });
+    const settingsOutput = parseOutput(settings.stdout);
+    assert.ok(settingsOutput, 'should produce valid JSON output');
+    assert.notStrictEqual(settingsOutput.hookSpecificOutput?.permissionDecision, 'deny', 'the settings file must not be gated');
+    clearState();
+    const memory = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '/workspace/app/.claude/CLAUDE.md', content: '# rules' }
+    });
+    const memoryOutput = parseOutput(memory.stdout);
+    assert.ok(memoryOutput, 'should produce valid JSON output');
+    const gated = memoryOutput.hookSpecificOutput?.permissionDecision === 'deny' || memoryOutput.decision === 'block';
+    assert.ok(gated, `a first write under .claude/ is still gated: ${memory.stdout.slice(0, 200)}`);
+  })) passed++; else failed++;
+
   // --- Test 17: allows read-only git introspection without first-bash gating ---
   clearState();
   if (test('allows read-only git status without first-bash gating', () => {

@@ -42,6 +42,9 @@ function resolveTarget(rootDir, relPath) {
   ) {
     throw new Error(`Path traversal rejected: ${relPath}`);
   }
+  if (!fs.existsSync(resolvedTarget)) {
+    throw new Error(`hook script missing: ${resolvedTarget}; the EGC install under ${resolvedRoot} is incomplete`);
+  }
   return resolvedTarget;
 }
 
@@ -120,34 +123,48 @@ function sanitizeArgs(args) {
   return args.filter(a => typeof a === 'string' && !a.includes('\0'));
 }
 
+// A hook that cannot be resolved does not run, and a hook that does not run
+// must not look as if it had: the call is refused with the blocking status
+// every harness honours and the reason on stderr, so a broken install is
+// seen the first time instead of leaving the session silently unguarded.
+const REFUSED_STATUS = 2;
+const INSTALL_HINT = 'set EGC_PLUGIN_ROOT to the EGC install directory, or reinstall with egc install --target gemini';
+
+function refuse(reason) {
+  writeStderr(`[Hook] ${reason}; ${INSTALL_HINT}\n`);
+  process.exit(REFUSED_STATUS);
+}
+
+function refuseUnlessResolvable(mode, relPath, rootDir) {
+  if (!mode || !relPath) {
+    refuse(`bootstrap called without a mode or a target script (mode: ${mode || 'none'}, target: ${relPath || 'none'}); check the hook registration`);
+  }
+  if (!rootDir) {
+    refuse('EGC plugin root not resolved');
+  }
+  if (!fs.existsSync(rootDir)) {
+    refuse(`EGC plugin root ${rootDir} does not exist`);
+  }
+}
+
+function runTarget(mode, rootDir, relPath, raw, args) {
+  try {
+    if (mode === 'node') return spawnNode(rootDir, relPath, raw, args);
+    if (mode === 'shell') return spawnShell(rootDir, relPath, raw, args);
+    return refuse(`unknown bootstrap mode: ${mode}`);
+  } catch (error) {
+    return refuse(`bootstrap resolution failed: ${error.message}`);
+  }
+}
+
 function main() {
   const [, , mode, relPath, ...args] = process.argv;
   const raw = readStdinRaw();
   const rootDir = process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT;
 
   trace('hook:bootstrap:entry', { mode, relPath, args, rootDir });
-
-  if (!mode || !relPath || !rootDir) {
-    process.stdout.write(raw);
-    process.exit(0);
-  }
-
-  let result;
-  try {
-    if (mode === 'node') {
-      result = spawnNode(rootDir, relPath, raw, args);
-    } else if (mode === 'shell') {
-      result = spawnShell(rootDir, relPath, raw, args);
-    } else {
-      writeStderr(`[Hook] unknown bootstrap mode: ${mode}\n`);
-      process.stdout.write(raw);
-      process.exit(0);
-    }
-  } catch (error) {
-    writeStderr(`[Hook] bootstrap resolution failed: ${error.message}\n`);
-    process.stdout.write(raw);
-    process.exit(0);
-  }
+  refuseUnlessResolvable(mode, relPath, rootDir);
+  const result = runTarget(mode, rootDir, relPath, raw, args);
 
   passthrough(raw, result);
   writeStderr(result.stderr);
