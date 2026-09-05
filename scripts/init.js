@@ -24,11 +24,13 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const os = require('node:os');
 
 const { version: PKG_VERSION } = require('../package.json');
 const { registerMcpServers: runMcpRegistration } = require('./lib/mcp-register');
+const { createSpinner } = require('./lib/spinner');
+const { summarizeDoctorReport, summarizeRepairResult } = require('./lib/doctor-summary');
 
 const isTTY = process.stdout.isTTY;
 const c = {
@@ -80,6 +82,9 @@ if (flags.help) showHelp();
 function ok(label, detail = '')  { console.log(`  ${c.green}${c.bold}✓${c.reset}  ${c.bold}${label}${c.reset}${detail ? '  ' + c.dim + detail + c.reset : ''}`); }
 function skip(label, reason = '') { console.log(`  ${c.dim}-  ${label}${reason ? '  (' + reason + ')' : ''}${c.reset}`); }
 function warn(label, reason = '') { console.log(`  ${c.yellow}!${c.reset}  ${label}${reason ? '  ' + c.dim + reason + c.reset : ''}`); }
+function fail(label, reason = '') { console.log(`  ${c.red}${c.bold}✗${c.reset}  ${label}${reason ? '  ' + c.dim + reason + c.reset : ''}`); }
+function detail(msg) { console.log(`       ${c.dim}${msg}${c.reset}`); }
+function action(msg) { console.log(`     ${msg}`); }
 function log(msg) { console.log(msg); }
 function logDry(msg) { if (flags.dryRun) console.log(`  ${c.dim}[dry-run] ${msg}${c.reset}`); }
 function logAction(msg) { console.log(`  ${c.dim}${flags.dryRun ? '[dry-run] ' : ''}${msg}${c.reset}`); }
@@ -211,29 +216,200 @@ function reconcileResolutionDrift() {
   }
 }
 
-function runDoctor() {
-  const doctorScript = path.join(ROOT_DIR, 'scripts', 'doctor.js');
-  log(`\n${c.dim}  checking the finished install (egc doctor)...${c.reset}`);
-  if (flags.dryRun) {
-    logDry(`would run: node scripts/doctor.js`);
-    return;
+// The two status lines used to be fixed strings printed after the doctor.
+// Each one now reflects a real check: the CLI state store the bootstrap
+// just initialized, and the Token Crusher shim that `egc install` puts on
+// PATH (init itself never installs it, so it can only report what it finds).
+function resolveStateDbPath() {
+  try {
+    const { getEGCDir } = require('./lib/utils');
+    return path.join(getEGCDir(), 'egc', 'state.db');
+  } catch {
+    return null;
   }
-  const doctorResult = spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
-  if (doctorResult.status === 0) {
+}
+
+function readShimStatus() {
+  try {
+    return require('./lib/crusher/shim-install').status();
+  } catch {
+    return null;
+  }
+}
+
+function reportRuntimeStatus() {
+  if (flags.dryRun) {
+    logDry('would report memory and token crusher status');
     return;
   }
 
+  const stateDbPath = resolveStateDbPath();
+  if (stateDbPath && fs.existsSync(stateDbPath)) {
+    ok('memory', 'state store ready; loads on your first session');
+  } else {
+    warn('memory', 'state store not found; details: egc doctor');
+  }
+
+  const shim = readShimStatus();
+  if (!shim) {
+    skip('token crusher', 'status unavailable');
+  } else if (shim.dirExists && shim.shimmed.length > 0) {
+    ok('token crusher', shim.activeInCurrentShell ? 'shim installed and on PATH' : 'shim installed, active in every new shell');
+  } else {
+    skip('token crusher', 'shim not installed; egc install adds it');
+  }
+}
+
+// Doctor and repair print their whole report when their stdio is inherited,
+// so init runs them in JSON mode with the output captured: the spinner can
+// animate meanwhile and the summary below is rendered from the same data
+// the tests and tools read. stderr is kept for the failure line.
+function runJsonScript(script, args) {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [script, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', error => resolve({ status: 1, report: null, stderr: error.message }));
+    child.on('close', status => resolve({ status, report: parseJsonOutput(stdout), stderr: stderr.trim() }));
+  });
+}
+
+function parseJsonOutput(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end < start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+function printDoctorSummary(summary) {
+  const label = 'install check';
+  if (summary.status === 'ok' || summary.status === 'empty') {
+    ok(label, summary.headline);
+  } else if (summary.status === 'warning') {
+    warn(label, summary.headline);
+  } else {
+    fail(label, summary.headline);
+  }
+  if (summary.hint) action(summary.hint);
+  for (const line of summary.details) detail(`${line.adapterId}  ${line.text}`);
+  for (const command of summary.commands) action(`${summary.status === 'empty' ? '' : 'Run: '}${command}`);
+  for (const note of summary.notes) action(note);
+}
+
+function reportDoctorFailure(run) {
+  fail('install check', 'the doctor result could not be read');
+  for (const line of (run.stderr || '').split('\n').filter(Boolean)) detail(line);
+  action('Details: egc doctor');
+  return { status: 'error', checked: 0, ok: 0, warnings: 0, errors: 1, headline: '', details: [], commands: [], notes: [] };
+}
+
+async function runDoctor() {
+  const doctorScript = path.join(ROOT_DIR, 'scripts', 'doctor.js');
+  const repairScript = path.join(ROOT_DIR, 'scripts', 'repair.js');
+  if (flags.dryRun) {
+    logDry('would run: egc doctor');
+    return null;
+  }
+
+  const spinner = createSpinner();
+  spinner.start('checking the install (egc doctor)...');
+  const first = await runJsonScript(doctorScript, ['--json']);
+  spinner.stop();
+  if (!first.report) return reportDoctorFailure(first);
+
+  let summary = summarizeDoctorReport(first.report, { repoRoot: ROOT_DIR });
+  if (summary.status !== 'error') {
+    printDoctorSummary(summary);
+    return summary;
+  }
+
+  // Errors are repaired in place before anyone is asked to type a command;
+  // only what survives the repair is reported with its command.
+  warn('install check', `${summary.headline}; repairing...`);
   reconcileResolutionDrift();
 
-  const repairScript = path.join(ROOT_DIR, 'scripts', 'repair.js');
-  log(`\n  the check flagged fixable items; repairing them now...`);
-  spawnSync(process.execPath, [repairScript], { stdio: 'inherit' });
-
-  log(`\n${c.dim}  re-running egc doctor to confirm...${c.reset}`);
-  const verifyResult = spawnSync(process.execPath, [doctorScript], { stdio: 'inherit' });
-  if (verifyResult.status !== 0) {
-    warn('some items still need attention', 'details: egc doctor');
+  spinner.start(`repairing ${summary.errors} target${summary.errors === 1 ? '' : 's'}...`);
+  const repair = await runJsonScript(repairScript, ['--json']);
+  spinner.stop();
+  if (!repair.report) {
+    const reason = (repair.stderr || '').split('\n').filter(Boolean).pop();
+    warn('repair', reason ? `did not finish: ${reason}` : 'did not finish');
+  } else {
+    const repairSummary = summarizeRepairResult(repair.report);
+    if (repairSummary.failed) warn('repair', repairSummary.text);
+    else ok('repair', repairSummary.text);
   }
+
+  spinner.start('checking again (egc doctor)...');
+  const second = await runJsonScript(doctorScript, ['--json']);
+  spinner.stop();
+  if (!second.report) return reportDoctorFailure(second);
+  summary = summarizeDoctorReport(second.report, { repoRoot: ROOT_DIR, afterRepair: true });
+  printDoctorSummary(summary);
+  return summary;
+}
+
+// Same launch decision as install.sh and install-apply.js: a person at a
+// terminal gets the dashboard, a CI job or a piped run gets the headless
+// line. The launcher's own messages are folded into one check line so the
+// completion line below stays the last thing on screen.
+async function launchDashboardLine() {
+  if (flags.dryRun) return;
+  let dashboard;
+  try {
+    dashboard = require('./lib/dashboard-launch');
+  } catch {
+    return;
+  }
+  if (!dashboard.shouldAutoLaunch()) {
+    log("  Dashboard not started (headless environment). Run 'egc dashboard' to start it.");
+    return;
+  }
+
+  const spinner = createSpinner();
+  const notes = [];
+  spinner.start('starting the dashboard...');
+  const ready = await dashboard.launchDashboard({
+    log: message => {
+      notes.push(message);
+      if (message.startsWith('First launch may install')) {
+        spinner.update('starting the dashboard (installing its dependencies, up to a minute)...');
+      }
+    },
+  });
+  spinner.stop();
+
+  if (ready) {
+    ok('dashboard', `available at ${dashboard.DASHBOARD_URL} (opened in your browser; close with \`egc dashboard stop\`)`);
+    return;
+  }
+  if (notes.length === 0) {
+    skip('dashboard', 'not available in this install');
+    return;
+  }
+  warn('dashboard', 'did not start');
+  for (const note of notes) detail(note);
+}
+
+function printClosingLine(summary) {
+  console.log('');
+  if (!summary || summary.status === 'ok' || summary.status === 'empty') {
+    console.log(`  ${c.green}${c.bold}Installation complete.${c.reset} ${c.dim}Re-check anytime with \`egc doctor\`.${c.reset}`);
+    return;
+  }
+  if (summary.status === 'warning') {
+    const count = summary.warnings > 0 ? summary.warnings : summary.notes.length;
+    console.log(`  ${c.green}${c.bold}Installation complete${c.reset} ${c.yellow}with ${count} warning${count === 1 ? '' : 's'}.${c.reset} ${c.dim}Details anytime with \`egc doctor\`.${c.reset}`);
+    return;
+  }
+  const count = summary.errors;
+  console.log(`  ${c.red}${c.bold}Installation finished with ${count} error${count === 1 ? '' : 's'}.${c.reset} ${c.dim}Run the commands above, then \`egc doctor\`.${c.reset}`);
 }
 
 const AUTHOR_NAME = 'Felipe Marzochi';
@@ -256,20 +432,20 @@ console.log(banner.join('\n'));
 if (flags.dryRun) console.log(`  ${c.yellow}dry-run mode -- no files will be written${c.reset}\n`);
 if (flags.mcpOnly) console.log(`  ${c.dim}mcp-only mode -- cognitive bootstrap will be skipped${c.reset}\n`);
 
-checkNode();
-checkMcpBuilds();
-runBootstrap();
-registerMcpServers();
-runStateDbBootstrap();
-configureCommitPrivacyFilter();
-runDoctor();
-
-console.log('');
-console.log(`  ${c.green}${c.bold}Installation complete.${c.reset}`);
-console.log(`  ${c.green}Memory loaded (project + global)${c.reset} ${c.dim}|${c.reset} ${c.bold}Token Crusher engaged:${c.reset} shell output compressed up to 90%`);
-console.log(`  ${c.dim}Route heavy commands through \`egc run <cmd>\`; see savings anytime with \`egc saved\`. Re-check anytime with \`egc doctor\`.${c.reset}`);
-
-if (!flags.dryRun) {
-  const { launchDashboard } = require('./lib/dashboard-launch');
-  launchDashboard({ log: msg => console.log(`\n  ${c.cyan}${msg}${c.reset}`) });
+async function main() {
+  checkNode();
+  checkMcpBuilds();
+  runBootstrap();
+  registerMcpServers();
+  runStateDbBootstrap();
+  configureCommitPrivacyFilter();
+  reportRuntimeStatus();
+  const summary = await runDoctor();
+  await launchDashboardLine();
+  printClosingLine(summary);
 }
+
+main().catch(error => {
+  console.error(`Error: ${error.message}`);
+  process.exit(1);
+});
