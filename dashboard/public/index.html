@@ -750,7 +750,10 @@ const IDES=[
   {id:'vscode',    label:'VS Code',    c:'#007acc',e:'🔷'},
   {id:'aider',     label:'Aider',      c:'#f57c00',e:'⚡'},
 ];
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Every character that could end an attribute or a quoted string inside
+// an inline handler is escaped, single quotes included, so a value is
+// text wherever it lands in the markup.
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 const EGC_AGENTS=[
   {id:'memory',    name:'Memory',        icon:'🧠',node:'memory',    c:'#00d992',tools:['Read','Grep','Glob','Search'],   thoughts:{Read:'🧠 Reading memory',Grep:'🔎 Searching history',Glob:'📂 Scanning directory',Search:'🔎 Searching knowledge base'}},
@@ -906,7 +909,7 @@ function docResultBlock(result){
     .map(i=>`<div class="doc-issue">[${esc(i.severity)}] ${esc(i.code)}: ${esc(i.message)}</div>`)
     .join('');
   const action=status==='ok'?'':`<div class="doc-action">
-        <button class="btn-sm" onclick="opRepair('${esc(target)}')">Repair</button>
+        <button class="btn-sm" data-op="repair" data-target="${esc(target)}">Repair</button>
         <code class="doc-cmd">egc repair --target ${esc(target)}</code>
       </div>`;
   return `<div class="doc-item">
@@ -929,7 +932,7 @@ function docInstallBlock(row){
         <span class="doc-kind">${esc(row.kinds.join(' · '))}</span>
       </div>
       <div class="doc-action">
-        <button class="btn-sm" onclick="opInstall('${esc(row.target)}')">Install</button>
+        <button class="btn-sm" data-op="install" data-target="${esc(row.target)}">Install</button>
         <code class="doc-cmd">egc install --target ${esc(row.target)} --profile full</code>
       </div>
     </div>`;
@@ -1238,9 +1241,22 @@ startTimer();
 /* ── IDE PILLS ──────────────────────────────────────────── */
 function iconf(id){return IDES.find(i=>i.id===id)||{label:id,c:'#888',e:'🔧'};}
 document.getElementById('idePills').innerHTML=IDES.map(i=>
-  `<div class="ide-pill" id="pill-${i.id}" style="--pill-c:${i.c}" onclick="selIde('${i.id}')" title="${i.label}">
-    <div class="ide-dot"></div><span class="ide-ico">${i.e}</span><span class="ide-lbl">${i.label}</span></div>`
+  `<div class="ide-pill" id="pill-${esc(i.id)}" style="--pill-c:${esc(i.c)}" data-ide="${esc(i.id)}" title="${esc(i.label)}">
+    <div class="ide-dot"></div><span class="ide-ico">${esc(i.e)}</span><span class="ide-lbl">${esc(i.label)}</span></div>`
 ).join('');
+// Values never land inside handler code: a click is read from the element's
+// data attribute, which the HTML parser hands over as plain text whatever
+// characters it carries.
+document.getElementById('idePills').addEventListener('click',e=>{
+  const pill=e.target.closest('.ide-pill[data-ide]');
+  if(pill)selIde(pill.dataset.ide);
+});
+document.getElementById('docBody').addEventListener('click',e=>{
+  const btn=e.target.closest('button[data-op][data-target]');
+  if(!btn)return;
+  if(btn.dataset.op==='repair')opRepair(btn.dataset.target);
+  else if(btn.dataset.op==='install')opInstall(btn.dataset.target);
+});
 function selIde(id){
   S.filter=S.filter===id?null:id;
   document.querySelectorAll('.ide-pill').forEach(e=>e.classList.remove('selected'));
