@@ -27,20 +27,21 @@ function keyWords(key: string): string[] {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/).filter(word => word !== '');
 }
 
-// A known plural of a secret word, read in the singular (tokens, secrets,
-// credentials, cookies, passwords); any other word is left as it is, so
-// `access` never turns into `acces`.
-const PLURAL_SECRET_WORDS = new Set(['tokens', 'secrets', 'passwords', 'credentials', 'cookies', 'keys']);
-
-function singular(word: string): string {
-  return PLURAL_SECRET_WORDS.has(word) ? word.slice(0, -1) : word;
+// The spellings a word is tried under: as written and, when it ends in s,
+// without that s (tokens, secrets, apikeys, sessionids, api keys). Only a
+// spelling that is a secret word counts, so `access` never turns into
+// `acces`.
+function spellings(word: string): string[] {
+  return word.endsWith('s') && word.length > 2 ? [word, word.slice(0, -1)] : [word];
 }
-
 
 function isRedactedKey(key: string): boolean {
-  const words = keyWords(key).map(singular);
-  return words.some((word, index) => REDACTED_KEY_WORDS.has(word) || (index > 0 && REDACTED_KEY_WORDS.has(`${words[index - 1]} ${word}`)));
+  const words = keyWords(key);
+  return words.some((word, index) => spellings(word).some(spelling => (
+    REDACTED_KEY_WORDS.has(spelling) || (index > 0 && REDACTED_KEY_WORDS.has(`${words[index - 1]} ${spelling}`))
+  )));
 }
+
 
 
 

@@ -203,8 +203,9 @@ if (test('redactPayload: redacts keys by the words they are made of, and values 
   assert.strictEqual(more.label, 'averyveryverylongidentifierwithoutanydigitsatallhere');
   assert.ok(!more.command.includes('MIIEabc'), more.command);
   assert.ok(more.command.startsWith('deploy --key "') && more.command.endsWith('" now'), more.command);
-  const aws = redactPayload({ accessKey: 'a', access_key: 'b', AWS_ACCESS_KEY_ID: 'c', apiKeys: 'k', accessible: 'plain' });
-  for (const key of ['accessKey', 'access_key', 'AWS_ACCESS_KEY_ID', 'apiKeys']) assert.strictEqual(aws[key], '[REDACTED]', `${key} must be redacted`);
+  const aws = redactPayload({ accessKey: 'a', access_key: 'b', AWS_ACCESS_KEY_ID: 'c', apiKeys: 'k', secretkeys: 's', sessionids: 'i', privatekeys: 'p', accessible: 'plain' });
+  for (const key of ['accessKey', 'access_key', 'AWS_ACCESS_KEY_ID', 'apiKeys', 'secretkeys', 'sessionids', 'privatekeys']) assert.strictEqual(aws[key], '[REDACTED]', `${key} must be redacted`);
+
   assert.strictEqual(aws.accessible, 'plain', 'a word that merely starts like a secret word stays');
 
   const headers = '-----BEGIN RSA PRIVATE KEY-----\n'.repeat(2000);

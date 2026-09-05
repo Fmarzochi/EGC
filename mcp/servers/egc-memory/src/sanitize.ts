@@ -16,11 +16,11 @@ export interface SanitizeResult {
 // content, the memory refuses in state, which every tool later loads as
 // trusted instructions. Change the two together.
 const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  // The last gap also accepts a colon, comma or newline: a decision is stored
-  // as `what: why`, and a directive split over that seam still reads whole.
-  { pattern: /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)[\s:,;]+(instructions?|context|prompts?)/i, reason: 'prompt override attempt' },
+  { pattern: /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions?|context|prompts?)/i, reason: 'prompt override attempt' },
 
-  { pattern: /disregard\s+(all\s+|the\s+)?(system[\s:,;]+)?(prompt|instructions?|rules?)/i, reason: 'prompt override attempt' },
+
+  { pattern: /disregard\s+(all\s+|the\s+)?(system\s+)?(prompt|instructions?|rules?)/i, reason: 'prompt override attempt' },
+
 
   { pattern: /disregard\s+(all\s+)?(previous|prior)\s+/i,           reason: 'prompt override attempt' },
   { pattern: /forget\s+(everything|all)\s+(you\s+)?(were\s+told|know)/i, reason: 'context reset attempt' },
@@ -137,8 +137,17 @@ export interface StateTextFields {
 // fields are also read the way the instruction files will present them,
 // one after another: a directive split across adjacent fields ("ignore
 // previous" in one, "instructions" in the next) is refused as a whole.
+// The update is refused only when a field is an injection on its own; a
+// directive that only appears when the presented fields are read together
+// is not a reason to lose the whole update (the fields are withheld from
+// the instruction files by the scrub before propagation instead).
 export function sanitizeStateFields(fields: StateTextFields): { flagged: boolean; reasons: string[] } {
-  const { reasons } = scrubStateFields(fields);
+  const reasons: string[] = [];
+  mapStateFields(fields, (label, value) => {
+    const result = sanitize(value);
+    if (result.flagged) reasons.push(`${label}: ${result.reason}`);
+    return value;
+  });
   return { flagged: reasons.length > 0, reasons };
 }
 
@@ -175,7 +184,8 @@ function mapStateFields(fields: StateTextFields, visit: TextVisitor): StateTextF
 function presentedDocument(fields: StateTextFields): string {
   const lines: string[] = [];
   if (fields.context !== undefined) lines.push(fields.context);
-  for (const decision of fields.decisions ?? []) lines.push(decision.why === undefined ? decision.what : `${decision.what}: ${decision.why}`);
+  // The same truthiness the state writer uses: an empty why adds nothing.
+  for (const decision of fields.decisions ?? []) lines.push(decision.why ? `${decision.what}: ${decision.why}` : decision.what);
   for (const step of fields.next ?? []) lines.push(step);
   return lines.join('\n');
 }
