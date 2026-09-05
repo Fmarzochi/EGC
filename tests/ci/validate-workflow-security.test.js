@@ -76,14 +76,16 @@ function run() {
     assert.ok(result.stderr.includes('committer.name'), result.stderr);
   })) passed++; else failed++;
 
-  if (test('rejects bracket spellings and a field placed after a string that carries }}', () => {
+  if (test('rejects bracket and filter spellings, and a field placed after a string that carries }}', () => {
     const result = runValidator({
-      'spelling.yml': 'name: X\non:\n  push:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event[\'pull_request\'][\'title\'] }}"\n      - run: echo "${{ format(\'}}\', github.event.issue.body) }}"\n      - run: echo "${{ github.event.commits[3][\'message\'] }}"\n',
+      'spelling.yml': 'name: X\non:\n  push:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ github.event[\'pull_request\'][\'title\'] }}"\n      - run: echo "${{ format(\'}}\', github.event.issue.body) }}"\n      - run: echo "${{ github.event.commits[3][\'message\'] }}"\n      - run: echo "${{ join(github.event.commits.*.message, \', \') }}"\n',
     });
     assert.notStrictEqual(result.status, 0);
     assert.ok(result.stderr.includes('spelling.yml:8'), result.stderr);
     assert.ok(result.stderr.includes('spelling.yml:9'), result.stderr);
     assert.ok(result.stderr.includes('spelling.yml:10'), result.stderr);
+    assert.ok(result.stderr.includes('spelling.yml:11'), result.stderr);
+
   })) passed++; else failed++;
 
   if (test('allows an env: sibling that follows a block-scalar run:', () => {

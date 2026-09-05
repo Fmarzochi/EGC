@@ -66,15 +66,15 @@ const UNTRUSTED_EVENT_PATHS = [
 ];
 
 // The context paths referenced in an expression, each as its segments, read
-// from dotted (`a.b`), bracketed (`a['b']`, `a["b"]`) and indexed (`a[0]`)
-// spellings alike, so the spelling cannot hide the field.
+// from dotted (`a.b`), bracketed (`a['b']`, `a["b"]`), indexed (`a[0]`) and
+// filtered (`a.*.b`) spellings alike, so the spelling cannot hide the field.
 function contextPathsIn(expression) {
   const paths = [];
-  const reader = /\bgithub((?:\.[A-Za-z_][\w-]*|\[\s*(?:'[^']*'|"[^"]*"|\d+|\*)\s*\])+)/g;
+  const reader = /\bgithub((?:\.(?:[A-Za-z_][\w-]*|\*)|\[\s*(?:'[^']*'|"[^"]*"|\d+|\*)\s*\])+)/g;
   for (const match of expression.matchAll(reader)) {
     const segments = ['github'];
     const tail = match[1];
-    const segment = /\.([A-Za-z_][\w-]*)|\[\s*(?:'([^']*)'|"([^"]*)"|(\d+|\*))\s*\]/g;
+    const segment = /\.([A-Za-z_][\w-]*|\*)|\[\s*(?:'([^']*)'|"([^"]*)"|(\d+|\*))\s*\]/g;
     for (const piece of tail.matchAll(segment)) segments.push(piece[1] ?? piece[2] ?? piece[3] ?? piece[4]);
     paths.push(segments);
   }
