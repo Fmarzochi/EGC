@@ -1134,15 +1134,28 @@ function analyzeRecord(record, context) {
   };
 }
 
+// The manifests, or the reason they are refused (a path that is unsafe or
+// leaves the repository through a link): a refused manifest is reported per
+// record instead of aborting the whole run, and nothing is written from it.
+function manifestsOrError(repoRoot) {
+  try {
+    return { manifests: loadInstallManifests({ repoRoot }), error: null };
+  } catch (error) {
+    return { manifests: null, error: error.message };
+  }
+}
+
 function buildDoctorReport(options = {}) {
   const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
-  const manifests = loadInstallManifests({ repoRoot });
+  const loaded = manifestsOrError(repoRoot);
   const records = discoverInstalledStates({
     homeDir: options.homeDir,
     projectRoot: options.projectRoot,
     targets: options.targets,
-  }).filter(record => record.exists);
+  }).filter(record => record.exists).map(record => (loaded.error ? { ...record, error: `Install manifests refused: ${loaded.error}` } : record));
+  const manifests = loaded.manifests || { modulesVersion: null };
   const context = {
+
     repoRoot,
     homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
@@ -1163,7 +1176,8 @@ function buildDoctorReport(options = {}) {
   }, {
     checkedCount: 0,
     okCount: 0,
-    errorCount: 0,
+    // A refused manifest with no record to carry it is still an error.
+    errorCount: loaded.error && records.length === 0 ? 1 : 0,
     warningCount: 0,
   });
 
@@ -1171,6 +1185,7 @@ function buildDoctorReport(options = {}) {
     generatedAt: new Date().toISOString(),
     packageVersion: context.packageVersion,
     manifestVersion: context.manifestVersion,
+    manifestError: loaded.error,
     results,
     summary,
   };
@@ -1401,8 +1416,10 @@ function repairRecord(record, context, options) {
 
 function repairInstalledStates(options = {}) {
   const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
-  const manifests = loadInstallManifests({ repoRoot });
+  const loaded = manifestsOrError(repoRoot);
+  const manifests = loaded.manifests || { modulesVersion: null };
   const context = {
+
     repoRoot,
     homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
@@ -1415,7 +1432,9 @@ function repairInstalledStates(options = {}) {
     targets: options.targets,
   }).filter(record => record.exists);
 
-  const results = records.map(record => repairRecord(record, context, options));
+  const results = records.map(record => (loaded.error
+    ? { adapter: record.adapter, status: 'error', installStatePath: record.installStatePath, repairedPaths: [], plannedRepairs: [], error: `Install manifests refused: ${loaded.error}` }
+    : repairRecord(record, context, options)));
 
   // 'partial' means work plus something unfixable, so it counts in both the
   // work column and the error column. Which work column depends on the mode:
@@ -1436,7 +1455,8 @@ function repairInstalledStates(options = {}) {
     checkedCount: 0,
     repairedCount: 0,
     plannedRepairCount: 0,
-    errorCount: 0,
+    // A refused manifest with no record to carry it is still an error.
+    errorCount: loaded.error && results.length === 0 ? 1 : 0,
     unrepairableCount: 0,
     prunedCount: 0,
     plannedPruneCount: 0,
@@ -1445,6 +1465,7 @@ function repairInstalledStates(options = {}) {
   return {
     dryRun: Boolean(options.dryRun),
     generatedAt: new Date().toISOString(),
+    manifestError: loaded.error,
     results,
     summary,
   };

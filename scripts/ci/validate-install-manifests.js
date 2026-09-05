@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Ajv = require('ajv');
 const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
+const { escapesRepoThroughLink, isUnsafeManifestPath } = require('#lib/install-manifests');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const MODULES_MANIFEST_PATH = path.join(REPO_ROOT, 'manifests/install-modules.json');
@@ -53,21 +54,38 @@ function validateSchema(ajv, schemaPath, data, label) {
   return false;
 }
 
+// Strict is the default: a referenced path that does not exist is an error
+// unless the run opts out with EGC_MANIFEST_STRICT=0. Returns true on error.
+function reportMissingPath(moduleId, normalizedPath) {
+  if (fs.existsSync(path.join(REPO_ROOT, normalizedPath))) return false;
+  const strict = process.env.EGC_MANIFEST_STRICT !== '0';
+  const level = strict ? 'ERROR' : 'WARN';
+  console[strict ? 'error' : 'warn'](
+    `${level}: Module ${moduleId} references missing path: ${normalizedPath}`
+  );
+  return strict;
+}
+
 function validateModulePaths(module, claimedPaths) {
   let hasErrors = false;
 
   for (const relativePath of module.paths) {
-    const normalizedPath = normalizeRelativePath(relativePath);
-    const absolutePath = path.join(REPO_ROOT, normalizedPath);
-
-    if (!fs.existsSync(absolutePath)) {
-      const strict = process.env.EGC_MANIFEST_STRICT === '1';
-      const level = strict ? 'ERROR' : 'WARN';
-      console[strict ? 'error' : 'warn'](
-        `${level}: Module ${module.id} references missing path: ${normalizedPath}`
-      );
-      if (strict) hasErrors = true;
+    // Hard error regardless of strictness: an absolute or climbing path is
+    // never a repository location, whatever exists on disk.
+    if (isUnsafeManifestPath(relativePath)) {
+      console.error(`ERROR: Module ${module.id} has an unsafe path '${relativePath}': manifest paths must be relative to the repository root and must not contain '..'`);
+      hasErrors = true;
+      continue;
     }
+    const normalizedPath = normalizeRelativePath(relativePath);
+    // Same check the loader enforces at install time, so CI fails where
+    // egc install would.
+    if (escapesRepoThroughLink(REPO_ROOT, normalizedPath)) {
+      console.error(`ERROR: Module ${module.id} path '${relativePath}' resolves outside the repository through a link`);
+      hasErrors = true;
+      continue;
+    }
+    if (reportMissingPath(module.id, normalizedPath)) hasErrors = true;
 
     if (claimedPaths.has(normalizedPath)) {
       console.error(

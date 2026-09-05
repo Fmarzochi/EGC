@@ -98,6 +98,46 @@ function readOptionalStringOption(options, key) {
   return options[key];
 }
 
+// A manifest path is a location inside the repository, never an absolute
+// path and never one that climbs out of it: everything the installer copies
+// or the uninstaller removes is derived from these entries, so an entry that
+// escaped the root would turn a manifest edit into an arbitrary file write.
+function isUnsafeManifestPath(relativePath) {
+  if (typeof relativePath !== 'string') return true;
+  const text = relativePath;
+  if (text.trim() === '') return true;
+  if (text.startsWith('/') || text.startsWith('\\') || /^[A-Za-z]:/.test(text)) return true;
+  return text.split(/[\\/]/).includes('..');
+}
+
+// A lexically clean path can still leave the repository through a symlink;
+// when the entry exists, its real location must sit under the real root.
+function escapesRepoThroughLink(repoRoot, relativePath) {
+  // The leaf may not exist yet; the deepest existing ancestor is what a
+  // later write would follow, so that is what gets resolved.
+  let probe = path.join(repoRoot, relativePath);
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) return false;
+    probe = parent;
+  }
+  const realRoot = fs.realpathSync(repoRoot);
+  const real = fs.realpathSync(probe);
+  return real !== realRoot && !real.startsWith(realRoot + path.sep);
+}
+
+function assertSafeModulePaths(module, repoRoot) {
+  const paths = Array.isArray(module.paths) ? module.paths : [];
+  for (const relativePath of paths) {
+    if (isUnsafeManifestPath(relativePath)) {
+      throw new Error(`Install module ${module.id} has an unsafe path '${relativePath}': manifest paths must be relative to the repository root and must not contain '..'`);
+    }
+    if (escapesRepoThroughLink(repoRoot, relativePath)) {
+      throw new Error(`Install module ${module.id} path '${relativePath}' resolves outside the repository through a link`);
+    }
+  }
+}
+
 function readModuleTargetsOrThrow(module) {
   const moduleId = module?.id ? module.id : '<unknown>';
   const targets = module?.targets;
@@ -175,6 +215,7 @@ function loadInstallManifests(options = {}) {
   const components = Array.isArray(componentsData.components) ? componentsData.components : [];
 
   for (const module of modules) {
+    assertSafeModulePaths(module, repoRoot);
     readModuleTargetsOrThrow(module);
   }
 
@@ -620,6 +661,8 @@ function resolveInstallPlan(options = {}) {
 
 module.exports = {
   DEFAULT_REPO_ROOT,
+  escapesRepoThroughLink,
+  isUnsafeManifestPath,
   SUPPORTED_INSTALL_TARGETS,
   getManifestPaths,
   loadInstallManifests,

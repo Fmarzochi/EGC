@@ -54,6 +54,9 @@ function printUnrepairableEntries(entry) {
 }
 
 function printHuman(result) {
+  if (result.manifestError) {
+    console.log(`Install manifests refused: ${result.manifestError}`);
+  }
   if (result.results.length === 0) {
     console.log('No EGC install-state files found for the current home/project context.');
     return;
