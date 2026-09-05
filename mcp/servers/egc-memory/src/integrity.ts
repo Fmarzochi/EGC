@@ -15,6 +15,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { assertPrivateKeyFile, pathPresent, readPrivateKeyFile, writePrivateTemp } from './encryption.js';
+
 
 const HMAC_ALGORITHM = 'sha256';
 
@@ -44,16 +46,12 @@ export function loadOrCreateKey(): Buffer {
     // directory may already exist
   }
 
-  if (fs.existsSync(KEY_PATH)) {
-    let hex: string;
-    try {
-      hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
-    } catch (readErr: unknown) {
-      throw new Error(
-        `HMAC key file at ${KEY_PATH} exists but could not be read: ${(readErr as Error).message}`,
-        { cause: readErr }
-      );
-    }
+  const readExistingKey = (): Buffer => {
+    // Read from the descriptor the private-file checks ran on: a link, a
+    // non-regular object, a wide mode or an unreadable file is refused
+    // there with its own message.
+    const hex = readPrivateKeyFile(KEY_PATH).trim();
+
 
     if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
       throw new Error(
@@ -63,23 +61,47 @@ export function loadOrCreateKey(): Buffer {
     }
 
     const key = Buffer.from(hex, 'hex');
-    // Harden permissions even on existing key in case it was copied with wrong perms
-    try { fs.chmodSync(KEY_PATH, 0o600); } catch { /* best-effort */ }
     try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
     return key;
-  }
+  };
 
-  // Generate a fresh key and persist it.
+  if (pathPresent(KEY_PATH)) return readExistingKey();
+
+  // Generate a fresh key and publish it the way the encryption key is
+  // published: written whole to a private temp file, then linked into place
+  // exclusively, so a concurrent creator never reads a truncated key and
+  // the loser of the race adopts the key that landed instead of signing
+  // with one that is not on disk. A key that cannot be persisted or kept
+  // private is not used: every state file signed with it would fail
+  // verification on the next start, and a key on disk with wide
+  // permissions would let another user forge the signatures.
   const key = crypto.randomBytes(32);
+  const tmpPath = `${KEY_PATH}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  let published: boolean;
   try {
-    fs.writeFileSync(KEY_PATH, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(KEY_PATH, 0o600);
+    writePrivateTemp(tmpPath, key.toString('hex'));
+
+    published = linkExclusively(tmpPath, KEY_PATH);
   } catch (e) {
-    console.error('[EGC integrity] Failed to persist HMAC key:', String(e));
-    // best-effort: if we cannot persist the key we still return it for
-    // this process lifetime (integrity checks will fail on next boot).
+    throw new Error(`[EGC integrity] Failed to persist HMAC key to ${KEY_PATH}: ${String(e)}. Fix the directory permissions and restart.`, { cause: e });
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already linked or never written */ }
   }
+  if (!published) return readExistingKey();
+  assertPrivateKeyFile(KEY_PATH);
   return key;
+}
+
+// True when `target` was created by this call; false when another process
+// published it first.
+function linkExclusively(source: string, target: string): boolean {
+  try {
+    fs.linkSync(source, target);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  }
 }
 
 /**
