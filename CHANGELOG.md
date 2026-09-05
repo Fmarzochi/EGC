@@ -4,6 +4,8 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.21] - 2026-09-05
+
 ### Added
 
 - **EGC Scrubber**: an automatic, deterministic hygiene pass that strips AI provenance marks from content you own. The guaranteed layer removes invisible Unicode carriers and long dashes and strips AI co-authorship from commit messages; an opt-in metadata pass cleans structured text (Markdown/HTML/SVG), PNG/JPEG images, and PDF Document Info dictionaries, fail-safe and honest about partial coverage; and a best-effort rewrite workflow ships as the `content-scrubber` skill and CLI. The Write/Edit hook is registered in the shared hooks runtime so content is cleaned before it reaches disk. Pure Node, additive with no install-engine changes, and fail-open (#1301, #1302, #1304, #1305, #1306, #1307).
@@ -17,11 +19,15 @@ All notable changes to EGC are documented here.
 - **Windsurf GateGuard and Guardian coexist on `pre_run_command`** (#1340): the flat hooks.json merge treated any EGC-owned entry as the stale version of the script being registered, so registering the Guardian displaced the GateGuard, `egc doctor` reported `hooks.json` as drifted on every healthy install, and `egc repair` only swapped the two entries back and forth. A stale entry now has to carry the same script basename before it is migrated in place.
 - **`egc doctor` prints the state-db consolidation hint as an absolute path** (#1341, reported by @Akisolu): the repo-relative `node scripts/maintenance/merge-fragmented-state-dbs.js` only worked from the package root, which a global npm install on Windows never is.
 - **The InsAIts monitor test uses the shared subprocess budget** (#1339): a cold Python start on a busy Windows runner overran the file's private 30s budget and surfaced as a mute `spawnSync ETIMEDOUT`.
+- **A codex-target install no longer reports 24 healthy skills as drifted forever** (#1295): the native `.agents` tree and the flattened skill catalog both recorded a copy-file operation for the same destination with sources that differed by one frontmatter line, so `egc doctor` could never be satisfied and every `egc repair` pass flipped the files between the two flavors. Plans now keep exactly one copy-file owner per destination, and states already recorded with the shared destination are healed on the next repair.
+- **Busy sessions no longer go deaf on the session mesh** (#1296): the cognitive protocol moves to v5 with a busy-sessions-drain-too rule (drain `session_events` at the start of every turn, autonomous-loop ticks and scheduled wakeups included, before any stay-silent decision); the `[egc-mesh]` notice and the integration map state the same rule.
 
 ### Changed
 
 - **Every open code-quality finding cleared** (#1344, #1345, #1346): 117 findings in the new-code period and 25 older ones in the installers, all behavior-preserving. Long functions in the Guardian validator, the memory server, doctor, install-apply, repair, the scrubber and the dashboard parsers were split into named helpers; super-linear regexes were replaced by procedural parsers that keep exactly the tolerance of the patterns they replaced; loosely typed session-bus rows are rendered explicitly. Every rewrite was checked against the original code on the same inputs, and the PowerShell path resolver was exercised in a container.
 - **`sh scripts/install.sh` works when `sh` is dash**: the installer re-executes itself under bash (which it always needed) and stops with a plain message when bash is not installed, instead of failing later on the first bash-only construct (#1344).
+- **The crusher-metrics suite is hermetic on machines with a live session** (#1297): the unknown-session fallback case used to read the real metrics marker and resolve the machine's own session id, failing locally while passing in CI; it now points the marker at a nonexistent path and restores it afterwards.
+- **The mesh-transport tests keep writing until the parked waiter wakes** (#1298): the two cases that relied on a single write could miss a filesystem event on a brand-new macOS watcher; they now repeat the write until the wake arrives, so the suite no longer flakes there.
 
 ### Security
 
