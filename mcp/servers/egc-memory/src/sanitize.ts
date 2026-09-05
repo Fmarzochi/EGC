@@ -10,14 +10,30 @@ export interface SanitizeResult {
   reason?: string;
 }
 
-// Patterns that indicate prompt injection attempts
+// Patterns that indicate prompt injection attempts. The list matches the
+// Guardian's content scanner (mcp/servers/egc-guardian/src/prompt-injection-
+// scanner.ts) pattern for pattern: what the Guardian refuses in fetched
+// content, the memory refuses in state, which every tool later loads as
+// trusted instructions. Change the two together.
 const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /ignore\s+(previous|all|prior)\s+instructions/i,       reason: 'prompt override attempt' },
-  { pattern: /SYSTEM\s*:\s*(OVERRIDE|INSTRUCTION|PROMPT)/i,         reason: 'system prompt injection' },
-  { pattern: /\[SYSTEM\]/i,                                          reason: 'system tag injection' },
-  { pattern: /you\s+are\s+now\s+(a\s+)?(different|new|another)/i,   reason: 'persona override attempt' },
-  { pattern: /new\s+instructions?\s*:/i,                             reason: 'instruction injection' },
+  { pattern: /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions?|context|prompts?)/i, reason: 'prompt override attempt' },
+  { pattern: /disregard\s+(all\s+|the\s+)?(system\s+)?(prompt|instructions?|rules?)/i, reason: 'prompt override attempt' },
   { pattern: /disregard\s+(all\s+)?(previous|prior)\s+/i,           reason: 'prompt override attempt' },
+  { pattern: /forget\s+(everything|all)\s+(you\s+)?(were\s+told|know)/i, reason: 'context reset attempt' },
+  { pattern: /SYSTEM\s*:\s*(OVERRIDE|INSTRUCTION|PROMPT)/i,         reason: 'system prompt injection' },
+  { pattern: /^\s{0,20}SYSTEM\s*:/im,                               reason: 'system prompt injection' },
+  { pattern: /\[\s*SYSTEM\s*\]/i,                                    reason: 'system tag injection' },
+  { pattern: /<\s*system\s*>/i,                                      reason: 'system tag injection' },
+  { pattern: /you\s+are\s+now\s+(a\s+|an\s+)?(different|new|another|unrestricted|jailbroken|DAN)/i, reason: 'persona override attempt' },
+  { pattern: /new\s+instructions?\s*:/i,                             reason: 'instruction injection' },
+  { pattern: /^\s{0,20}#{1,3}\s{0,20}(new|updated)\s+(task|instructions?)/im, reason: 'instruction injection' },
+  { pattern: /send\s+(this|the\s+above|it)\s+to\s+https?:\/\//i,   reason: 'exfiltration directive' },
+  { pattern: /\bexfiltrate\b/i,                                      reason: 'exfiltration directive' },
+  { pattern: /<\|im_start\|>/i,                                      reason: 'chat template spoofing' },
+  { pattern: /<\/?(function_results|tool_use|tool_result)>/i,        reason: 'tool boundary spoofing' },
+  // {0,200} is a deliberate bound: an unbounded run over long text is the
+  // classic catastrophic-backtracking shape.
+  { pattern: /<!--\s*(ignore|system|instructions?)[\s\S]{0,200}-->/i, reason: 'hidden comment directive' },
   // The propagation block is delimited by these markers; text carrying one
   // would break out of the block EGC manages and survive every later upsert.
   { pattern: /<!--\s*egc:(start|end)\s*-->/i,                         reason: 'EGC marker breakout attempt' },
@@ -27,7 +43,9 @@ const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 const COMMAND_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /curl\s+https?:\/\/[^\s]+\s*\|\s*(ba)?sh/i,            reason: 'remote shell execution payload' },
   { pattern: /wget\s+https?:\/\/[^\s]+\s*[|>]/i,                    reason: 'remote download payload' },
-  { pattern: /require\s*\(\s*['"]child_process['"]\s*\)/,            reason: 'child_process injection' },
+  { pattern: /require\s*\(\s*['"](?:node:)?child_process['"]\s*\)/,  reason: 'child_process injection' },
+  { pattern: /import\s*\{[^}]*\bexec(?:Sync)?\b[^}]*\}\s*from\s*['"](?:node:)?child_process['"]/, reason: 'child_process injection' },
+  { pattern: /\bchild_process\s*\.\s*exec(?:Sync)?\s*\(/,           reason: 'child_process injection' },
   { pattern: /execSync?\s*\(\s*[`'"]/,                               reason: 'execSync injection' },
   { pattern: /\beval\s*\(\s*[`'"]/,                                  reason: 'eval injection' },
   { pattern: /\bspawn\s*\(\s*[`'"]/,                                 reason: 'spawn injection' },
@@ -37,21 +55,39 @@ const COMMAND_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\/etc\/shadow/i,                                       reason: 'shadow file access payload' },
 ];
 
+// Four distinct zero-width code points (ZWSP, ZWNJ, ZWJ, BOM): invisible
+// characters clustered near an injection keyword hide a directive from a
+// reader while the model still sees it.
+const ZERO_WIDTH_CHARS = '\u200B\u200C\u200D\uFEFF';
+// eslint-disable-next-line no-misleading-character-class
+const ZERO_WIDTH_RE = new RegExp(`[${ZERO_WIDTH_CHARS}]`);
+const ZERO_WIDTH_NEAR_KEYWORD_RE = new RegExp(
+  // eslint-disable-next-line no-misleading-character-class
+  String.raw`[${ZERO_WIDTH_CHARS}][\s\S]{0,40}(?:ignore|system|instructions?)|(?:ignore|system|instructions?)[\s\S]{0,40}[${ZERO_WIDTH_CHARS}]`,
+  'i',
+);
+
 const ALL_PATTERNS = [...INJECTION_PATTERNS, ...COMMAND_PATTERNS];
+
+// The reason a text is refused, or null when it is clean.
+function injectionReason(input: string): string | null {
+  for (const { pattern, reason } of ALL_PATTERNS) {
+    if (pattern.test(input)) return reason;
+  }
+  if (ZERO_WIDTH_RE.test(input) && ZERO_WIDTH_NEAR_KEYWORD_RE.test(input)) return 'invisible characters near injection keyword';
+  return null;
+}
 
 export function sanitize(input: string): SanitizeResult {
   if (typeof input !== 'string') return { value: input, flagged: false };
-
-  for (const { pattern, reason } of ALL_PATTERNS) {
-    if (pattern.test(input)) {
-      return {
-        value: '[BLOCKED: suspicious content detected]',
-        flagged: true,
-        reason,
-      };
-    }
+  const reason = injectionReason(input);
+  if (reason !== null) {
+    return {
+      value: '[BLOCKED: suspicious content detected]',
+      flagged: true,
+      reason,
+    };
   }
-
   return { value: input, flagged: false };
 }
 
@@ -86,7 +122,10 @@ export interface StateTextFields {
 }
 
 // Runs sanitize() over every free-text field update_state accepts and names
-// the offending field (decisions[2].why, next[0], ...) in each reason.
+// the offending field (decisions[2].why, next[0], ...) in each reason. The
+// fields are also read the way the instruction files will present them,
+// one after another: a directive split across adjacent fields ("ignore
+// previous" in one, "instructions" in the next) is refused as a whole.
 export function sanitizeStateFields(fields: StateTextFields): { flagged: boolean; reasons: string[] } {
   const { reasons } = scrubStateFields(fields);
   return { flagged: reasons.length > 0, reasons };
@@ -116,10 +155,23 @@ function mapStateFields(fields: StateTextFields, visit: TextVisitor): StateTextF
   return out;
 }
 
+// The fields as one document, in the order the instruction files present
+// them, so a directive assembled across field boundaries is seen whole.
+function assembledDocument(fields: StateTextFields): string {
+  const lines: string[] = [];
+  mapStateFields(fields, (_label, value) => {
+    lines.push(value);
+    return value;
+  });
+  return lines.join('\n');
+}
+
 // Returns a copy of the fields with every flagged string replaced by the
 // sanitizer's block marker, plus the reasons. Used on the merged state doc
 // right before propagation: entries stored before the scan covered every
-// field must not reach the instruction files either.
+// field must not reach the instruction files either. When the fields only
+// read as an injection together, every field is withheld: the instruction
+// files would otherwise reassemble the directive.
 export function scrubStateFields(fields: StateTextFields): { fields: StateTextFields; reasons: string[] } {
   const reasons: string[] = [];
   const scrubbed = mapStateFields(fields, (label, value) => {
@@ -127,5 +179,12 @@ export function scrubStateFields(fields: StateTextFields): { fields: StateTextFi
     if (result.flagged) reasons.push(`${label}: ${result.reason}`);
     return result.value;
   });
+  if (reasons.length === 0) {
+    const assembled = injectionReason(assembledDocument(fields));
+    if (assembled !== null) {
+      reasons.push(`fields together: ${assembled}`);
+      return { fields: mapStateFields(fields, () => '[BLOCKED: suspicious content detected]'), reasons };
+    }
+  }
   return { fields: scrubbed, reasons };
 }

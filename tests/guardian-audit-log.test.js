@@ -180,6 +180,19 @@ if (test('redactPayload: leaves non-sensitive keys unchanged', () => {
   assert.strictEqual(result.count, 42);
 })) passed++; else failed++;
 
+if (test('redactPayload: redacts keys by the words they are made of, and values by shape under any key', () => {
+  const result = redactPayload({
+    apiToken: 'abc123', 'x-api-key': 'k', client_secret: 's', sessionCookie: 'c', AuthorizationHeader: 'h', signingKey: 'g',
+    note: 'plain text stays', ratio: 'token-free wording',
+    innocent: 'ghp_' + 'A'.repeat(36), other: '-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----',
+  });
+  for (const key of ['apiToken', 'x-api-key', 'client_secret', 'sessionCookie', 'AuthorizationHeader', 'signingKey', 'innocent', 'other']) {
+    assert.strictEqual(result[key], '[REDACTED]', `${key} must be redacted`);
+  }
+  assert.strictEqual(result.note, 'plain text stays');
+  assert.strictEqual(result.ratio, 'token-free wording');
+})) passed++; else failed++;
+
 if (test('redactPayload: redacts known secret keys (token, password, api_key, secret)', () => {
   const result = redactPayload({ token: 'abc123', password: 'hunter2', api_key: 'sk-xyz', secret: 'shh' });
   assert.strictEqual(result.token, '[REDACTED]');

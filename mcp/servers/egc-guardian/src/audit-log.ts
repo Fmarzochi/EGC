@@ -13,11 +13,15 @@ export const AUDIT_LOG_DIR = path.join(os.homedir(), '.egc');
 export const AUDIT_LOG_PATH = path.join(AUDIT_LOG_DIR, 'audit.log');
 export const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-// Keys whose values are always redacted regardless of content.
-const REDACTED_KEYS = new Set([
-  'token', 'secret', 'password', 'api_key', 'apikey',
-  'authorization', 'auth', 'credential', 'private_key', 'privatekey',
-]);
+// Keys whose values are always redacted, matched by the words the key is
+// made of (token, apiToken, x-api-key, client_secret, sessionCookie, ...),
+// not by an exact spelling.
+const REDACTED_KEY_WORDS = /(?:^|[^a-z])(?:token|secret|password|passwd|pwd|credential|authorization|auth|cookie|session[-_]?id|private[-_]?key|api[-_]?key|access[-_]?key|secret[-_]?key|signing[-_]?key|apikey|privatekey)(?:$|[^a-z])/;
+
+function isRedactedKey(key: string): boolean {
+  const spaced = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+  return REDACTED_KEY_WORDS.test(spaced);
+}
 
 // Secrets embedded inside free text such as a shell command. Each prefix
 // pattern stops exactly where the secret value starts; the value itself
@@ -570,7 +574,10 @@ export function redactSecretsInText(text: string): string {
 }
 
 // Pattern for values that look like secrets (long hex/base64 strings, JWTs).
-const SECRET_VALUE_RE = /^(ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2})$/;
+// A value that is a secret by shape alone: a JWT, a long hex or base64
+// run, a PEM block, or a vendor token, even under an innocent key.
+const SECRET_VALUE_RE = /^(ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2}|[A-Za-z0-9_-]{40,}|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*|(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}|github_pat_\w{20,}|sk-[\w-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(?:AKIA|ASIA)[A-Z0-9]{16}|glpat-[\w-]{20,}|AIza[\w-]{35})$/;
+
 
 /**
  * Returns a shallow copy of `payload` with secret-looking values replaced by
@@ -591,8 +598,8 @@ export function redactPayload(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(payload)) {
-    const lk = k.toLowerCase();
-    if (REDACTED_KEYS.has(lk)) {
+    if (isRedactedKey(k)) {
+
       out[k] = '[REDACTED]';
     } else if (typeof v === 'string') {
       out[k] = SECRET_VALUE_RE.test(v) ? '[REDACTED]' : redactSecretsInText(v);
