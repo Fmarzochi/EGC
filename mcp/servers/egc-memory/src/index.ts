@@ -586,10 +586,10 @@ const CASE_FOLDED_PATHS = process.platform === 'win32' || process.platform === '
 function windowsSystemRoots(): string[] {
   const env = process.env;
   return [
-    env.SystemRoot || 'C:\\Windows',
-    env.ProgramFiles || 'C:\\Program Files',
-    env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
-    env.ProgramData || 'C:\\ProgramData',
+    env.SystemRoot || String.raw`C:\Windows`,
+    env.ProgramFiles || String.raw`C:\Program Files`,
+    env['ProgramFiles(x86)'] || String.raw`C:\Program Files (x86)`,
+    env.ProgramData || String.raw`C:\ProgramData`,
   ];
 }
 
