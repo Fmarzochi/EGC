@@ -150,6 +150,21 @@ run('packaged-tree passes when only unpackaged files are populated', () => {
   assert.strictEqual(res.status, 0, res.stderr);
 });
 
+run('a clean packaged tree keeps stdout empty so npm pack --json can parse its output', () => {
+  const { dir, git } = makeRepo();
+  try {
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['scripts/'] }, null, 2));
+    git('add', '.');
+    git('commit', '-q', '-m', 'init');
+    const res = runScript(dir, '--packaged-tree');
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.strictEqual(res.stdout, '', 'status lines must not reach stdout');
+    assert.ok(res.stderr.includes('state-leak check: clean'), res.stderr);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 run('packaged-tree skips with a notice outside a git checkout', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-nogit-'));
   try {
@@ -158,7 +173,7 @@ run('packaged-tree skips with a notice outside a git checkout', () => {
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.trae/'] }, null, 2));
     const res = runScript(dir, '--packaged-tree');
     assert.strictEqual(res.status, 0, res.stderr);
-    assert.ok(res.stdout.includes('skipped (not a git checkout'), res.stdout);
+    assert.ok(res.stderr.includes('skipped (not a git checkout'), res.stderr);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

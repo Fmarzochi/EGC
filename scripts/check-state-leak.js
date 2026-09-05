@@ -166,7 +166,7 @@ function checkPackagedTree() {
     if (!notARepo && !gitMissing) {
       throw error;
     }
-    console.log(`state-leak check: skipped (${notARepo ? 'not a git checkout' : 'git unavailable'}: ${String(error.message).split('\n')[0]})`);
+    console.error(`state-leak check: skipped (${notARepo ? 'not a git checkout' : 'git unavailable'}: ${String(error.message).split('\n')[0]})`);
     return [];
   }
   const packagedFiles = listing.split('\0').filter(Boolean)
@@ -187,7 +187,7 @@ function main() {
     }
     for (const file of files) {
       fs.writeFileSync(file, cleanContent(fs.readFileSync(file, 'utf8')));
-      console.log(`cleaned: ${file}`);
+      console.error(`cleaned: ${file}`);
     }
     return;
   }
@@ -210,7 +210,10 @@ function main() {
     leaks = checkTree();
   }
   if (leaks.length === 0) {
-    console.log('state-leak check: clean');
+    // Status lines go to stderr: `npm pack --json` runs this script through
+    // the prepack hook and parses stdout as JSON, so stdout stays reserved
+    // for the --stdin filter output.
+    console.error('state-leak check: clean');
     return;
   }
 
