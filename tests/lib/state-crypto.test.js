@@ -14,6 +14,8 @@ const {
   decryptStateBuffer,
   readStateFileDecrypted,
 } = require('../../scripts/lib/state-crypto');
+const { assertPrivateKeyFile } = require('../../scripts/lib/state-crypto');
+
 
 function test(name, fn) {
   try {
@@ -90,6 +92,21 @@ function runTests() {
       );
     } finally {
       cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('refuses a key reached through a link, on the read path as well', () => {
+    if (process.platform === 'win32') return;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-state-crypto-link-'));
+    try {
+      const keyPath = path.join(dir, 'encryption.key');
+      fs.writeFileSync(keyPath, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+      const linkPath = path.join(dir, 'linked.key');
+      fs.symlinkSync(keyPath, linkPath);
+      assert.throws(() => assertPrivateKeyFile(linkPath), /symbolic link/);
+      assert.throws(() => decryptStateBuffer(Buffer.alloc(64), linkPath), /symbolic link/, 'a read never silently resolves to null on a refused key');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 

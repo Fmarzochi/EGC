@@ -47,20 +47,31 @@ console.log('\n=== Testing egc-memory encryption ===\n');
 if (test('loadOrCreateEncKey: a key file left readable by others is tightened, and refused when it cannot be', () => {
   if (process.platform === 'win32') return;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-mode-'));
+  const { assertPrivateKeyFile } = require(buildPath);
+  const originalChmodSync = fs.chmodSync;
   try {
     const keyPath = path.join(dir, 'encryption.key');
-    fs.writeFileSync(keyPath, crypto.randomBytes(32).toString('hex'), { mode: 0o644 });
+    fs.writeFileSync(keyPath, crypto.randomBytes(32).toString('hex'));
+    fs.chmodSync(keyPath, 0o644);
     assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0o044, 'planted wide');
     loadOrCreateEncKey(keyPath);
     assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0, 'tightened to owner only');
-    const { assertPrivateKeyFile } = require(buildPath);
-    assert.throws(() => assertPrivateKeyFile(path.join(dir, 'missing.key')), /Could not set 0600/);
+    fs.chmodSync(keyPath, 0o644);
+    fs.chmodSync = (target, mode) => {
+      if (target === keyPath) throw new Error('EPERM: simulated filesystem that cannot hold 0600');
+      return originalChmodSync(target, mode);
+    };
+    assert.throws(() => assertPrivateKeyFile(keyPath), /Could not set 0600/, 'an existing key that resists tightening is refused');
+    fs.chmodSync = originalChmodSync;
+    const linkPath = path.join(dir, 'linked.key');
+    fs.symlinkSync(keyPath, linkPath);
+    assert.throws(() => assertPrivateKeyFile(linkPath), /symbolic link/, 'a link is refused before anything is touched');
+    assert.throws(() => assertPrivateKeyFile(path.join(dir, 'missing.key')), /Could not inspect/, 'a missing file is an error, not a pass');
   } finally {
+    fs.chmodSync = originalChmodSync;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
-
-// ── encrypt/decrypt round-trip ──────────────────────────────────────────────
 
 if (test('encryptState/decryptState: round-trips plaintext', () => {
   const key = crypto.randomBytes(32);

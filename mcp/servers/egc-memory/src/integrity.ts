@@ -46,7 +46,7 @@ export function loadOrCreateKey(): Buffer {
     // directory may already exist
   }
 
-  if (fs.existsSync(KEY_PATH)) {
+  const readExistingKey = (): Buffer => {
     let hex: string;
     try {
       hex = fs.readFileSync(KEY_PATH, 'utf-8').trim();
@@ -70,20 +70,44 @@ export function loadOrCreateKey(): Buffer {
     assertPrivateKeyFile(KEY_PATH);
     try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
     return key;
-  }
+  };
 
-  // Generate a fresh key and persist it. A key that cannot be persisted or
-  // kept private is not used: every state file signed with it would fail
+  if (fs.existsSync(KEY_PATH)) return readExistingKey();
+
+  // Generate a fresh key and publish it the way the encryption key is
+  // published: written whole to a private temp file, then linked into place
+  // exclusively, so a concurrent creator never reads a truncated key and
+  // the loser of the race adopts the key that landed instead of signing
+  // with one that is not on disk. A key that cannot be persisted or kept
+  // private is not used: every state file signed with it would fail
   // verification on the next start, and a key on disk with wide
   // permissions would let another user forge the signatures.
   const key = crypto.randomBytes(32);
+  const tmpPath = `${KEY_PATH}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  let published: boolean;
   try {
-    fs.writeFileSync(KEY_PATH, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
+    published = linkExclusively(tmpPath, KEY_PATH);
   } catch (e) {
     throw new Error(`[EGC integrity] Failed to persist HMAC key to ${KEY_PATH}: ${String(e)}. Fix the directory permissions and restart.`, { cause: e });
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already linked or never written */ }
   }
+  if (!published) return readExistingKey();
   assertPrivateKeyFile(KEY_PATH);
   return key;
+}
+
+// True when `target` was created by this call; false when another process
+// published it first.
+function linkExclusively(source: string, target: string): boolean {
+  try {
+    fs.linkSync(source, target);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  }
 }
 
 /**

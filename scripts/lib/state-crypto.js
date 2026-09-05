@@ -42,8 +42,53 @@ function isEncryptedBuffer(data) {
     && data.subarray(0, MAGIC_BYTES).toString('utf-8') === MAGIC;
 }
 
+// A key file must be private and must be the file itself. A link is refused
+// before anything is touched, so the permissions of an unrelated target are
+// never changed or trusted. The bits are then set and read back: where the
+// filesystem keeps POSIX bits a file still readable by the group or others
+// after the chmod is a hard error, because the key would sit exposed with
+// nothing but a log line to say so, and a mount that cannot hold 0600 at
+// all is refused with the advice to move the key. Windows has no bits to
+// tighten, so the mode check is skipped there.
+function refuseLinkedKey(filePath) {
+  let isLink;
+  try {
+    isLink = fs.lstatSync(filePath).isSymbolicLink();
+  } catch (statErr) {
+    throw new Error(`[EGC] Could not inspect ${filePath}: ${statErr.message}. The key file must exist and be a regular file.`, { cause: statErr });
+  }
+  if (isLink) {
+    throw new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`);
+  }
+}
+
+function tightenToOwner(filePath) {
+  let failure = null;
+  try { fs.chmodSync(filePath, 0o600); } catch (chmodErr) { failure = chmodErr; }
+  if (failure) {
+    throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${failure.message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: failure });
+  }
+  const bits = fs.statSync(filePath).mode & 0o777;
+  const exposed = bits & 0o077;
+  if (exposed) {
+    throw new Error(`[EGC] ${filePath} is readable by other users (mode ${bits.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
+  }
+}
+
+function assertPrivateKeyFile(filePath) {
+  refuseLinkedKey(filePath);
+  if (process.platform !== 'win32') tightenToOwner(filePath);
+}
+
+// The key at `keyPath`, or null when the file does not exist or is
+// malformed. Every read goes through the privacy check first, so a key left
+// readable by others is refused on read as well, and that refusal is an
+// error, never a silent null.
 function loadKey(keyPath) {
-  const hex = fs.readFileSync(keyPath || defaultKeyPath(), 'utf-8').trim();
+  const resolvedPath = keyPath || defaultKeyPath();
+  if (!fs.existsSync(resolvedPath)) return null;
+  assertPrivateKeyFile(resolvedPath);
+  const hex = fs.readFileSync(resolvedPath, 'utf-8').trim();
   const key = Buffer.from(hex, 'hex');
   return key.length === 32 ? key : null;
 }
@@ -53,34 +98,13 @@ function loadKey(keyPath) {
 // another hook invocation) can never observe a truncated key, and the same
 // "never silently regenerate an existing key" safety rule. Only the create
 // path is new here -- reads still go through loadKey() elsewhere in this file.
-// A key file must be private. The permission bits are set and then read
-// back: where the filesystem keeps POSIX bits a file still readable by the
-// group or others after the chmod is a hard error, because the key would
-// sit exposed with nothing but a log line to say so; on Windows there are
-// no bits to tighten, so the call is a no-op there.
-function assertPrivateKeyFile(filePath) {
-  if (process.platform === 'win32') return;
-  try {
-    fs.chmodSync(filePath, 0o600);
-  } catch (chmodErr) {
-    throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${chmodErr.message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: chmodErr });
-
-  }
-  const mode = fs.statSync(filePath).mode & 0o777;
-  if ((mode & 0o077) !== 0) {
-    throw new Error(`[EGC] ${filePath} is readable by other users (mode ${mode.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
-  }
-}
-
 function loadOrCreateKeySync(keyPath) {
   const resolvedPath = keyPath || defaultKeyPath();
   const dir = path.dirname(resolvedPath);
   try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* may already exist */ }
 
   if (fs.existsSync(resolvedPath)) {
-    const key = loadKey(resolvedPath);
-    assertPrivateKeyFile(resolvedPath);
-    return key;
+    return loadKey(resolvedPath);
   }
 
   const key = crypto.randomBytes(32);
@@ -114,9 +138,11 @@ function encryptStateBuffer(plaintext, keyPath) {
 // Returns plaintext, or null when the payload cannot be authenticated and
 // decrypted (missing or malformed key, truncated or tampered ciphertext).
 function decryptStateBuffer(data, keyPath) {
+  // A missing or malformed key resolves to null; a key that cannot be kept
+  // private is an error that reaches the caller.
+  const key = loadKey(keyPath);
+  if (!key) return null;
   try {
-    const key = loadKey(keyPath);
-    if (!key) return null;
     const iv = data.subarray(MAGIC_BYTES, MAGIC_BYTES + IV_BYTES);
     const authTag = data.subarray(MAGIC_BYTES + IV_BYTES, MAGIC_BYTES + IV_BYTES + AUTH_TAG_BYTES);
     const ciphertext = data.subarray(MAGIC_BYTES + IV_BYTES + AUTH_TAG_BYTES);

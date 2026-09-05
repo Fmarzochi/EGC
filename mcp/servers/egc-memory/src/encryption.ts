@@ -38,20 +38,30 @@ function defaultEncKeyPath(): string {
  * Throws if the key file exists but cannot be read or is malformed —
  * only generates a new key when the file genuinely does not exist.
  */
-// A key file must be private. The permission bits are set and then read
-// back: where the filesystem keeps POSIX bits (Linux, macOS, most network
-// mounts) a file still readable by the group or others after the chmod is a
-// hard error, because the key would sit exposed with nothing but a log line
-// to say so; where the filesystem has no bits at all (FAT, exFAT, Windows)
-// the read-back shows the mode Node synthesizes and nothing can be
-// tightened, so the call is a no-op there.
+// A key file must be private and must be the file itself. A link is refused
+// before anything is touched, so the permissions of an unrelated target are
+// never changed or trusted. The bits are then set and read back: where the
+// filesystem keeps POSIX bits (Linux, macOS, most network mounts) a file
+// still readable by the group or others after the chmod is a hard error,
+// because the key would sit exposed with nothing but a log line to say so,
+// and a mount that cannot hold 0600 at all (FAT, exFAT) is refused with the
+// advice to move the key. Windows has no bits to tighten, so the mode check
+// is skipped there.
 export function assertPrivateKeyFile(filePath: string): void {
+  let isLink: boolean;
+  try {
+    isLink = fs.lstatSync(filePath).isSymbolicLink();
+  } catch (statErr) {
+    throw new Error(`[EGC] Could not inspect ${filePath}: ${(statErr as Error).message}. The key file must exist and be a regular file.`, { cause: statErr });
+  }
+  if (isLink) {
+    throw new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`);
+  }
   if (process.platform === 'win32') return;
   try {
     fs.chmodSync(filePath, 0o600);
   } catch (chmodErr) {
     throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${(chmodErr as Error).message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: chmodErr });
-
   }
   const mode = fs.statSync(filePath).mode & 0o777;
   if ((mode & 0o077) !== 0) {

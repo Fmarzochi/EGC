@@ -129,6 +129,10 @@ function loadState(projectPath) {
 // atomically via temp-file-then-rename so a reader never observes a
 // partially-written file.
 function saveState(filePath, content) {
+  // The integrity key is loaded before anything is written: a key that
+  // cannot be persisted or kept private stops the write instead of leaving
+  // a state file behind with a sidecar nobody can verify.
+  const integrityKey = loadOrCreateIntegrityKey();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const encrypted = encryptStateBuffer(content);
   const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
@@ -142,7 +146,8 @@ function saveState(filePath, content) {
   // Same sidecar contract as writeHmac() in index.ts: without this, a hook
   // write here (PreCompact snapshot, mined-memory apply) leaves the old HMAC
   // in place and the next get_state reports a false tamper mismatch.
-  writeHmac(filePath, content, loadOrCreateIntegrityKey());
+  writeHmac(filePath, content, integrityKey);
+
 }
 
 function writeSnapshotToDisk(projectPath = process.env.PWD || process.cwd()) {

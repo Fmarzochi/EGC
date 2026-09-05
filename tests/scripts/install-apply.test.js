@@ -77,6 +77,12 @@ function runTests() {
     assert.strictEqual(merged.polluted, undefined);
     assert.ok(!Object.hasOwn(merged, 'constructor'), 'constructor is not a data key');
     assert.deepStrictEqual(Object.keys(merged.mcpServers).sort(), ['a', 'b']);
+    const nested = deepMergeJson({}, JSON.parse('{"new": {"__proto__": {"p": 1}, "keep": 1}, "list": [{"__proto__": {"q": 2}, "ok": true}]}'));
+    assert.ok(!Object.hasOwn(nested.new, '__proto__'), 'a new subtree is filtered too');
+    assert.strictEqual(nested.new.keep, 1);
+    assert.ok(!Object.hasOwn(nested.list[0], '__proto__'), 'objects inside arrays are filtered');
+    assert.strictEqual(nested.list[0].ok, true);
+
   })) passed++; else failed++;
 
 

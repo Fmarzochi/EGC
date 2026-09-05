@@ -8,6 +8,8 @@ const { writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../mcp-config');
 const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./preserving-write');
+const { cloneJsonValue, deepMergeJson } = require('../json-merge');
+
 
 const {
   HOOK_OPERATION_KIND,
@@ -35,40 +37,6 @@ function readJsonObject(filePath, label) {
   }
 
   return parsed;
-}
-
-function cloneJsonValue(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  return structuredClone(value);
-}
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-// Keys that name the prototype chain rather than data: a patch carrying
-// one of them is data from a manifest or a config file, never a request to
-// change what every object inherits.
-const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-function deepMergeJson(baseValue, patchValue) {
-  if (!isPlainObject(baseValue) || !isPlainObject(patchValue)) {
-    return cloneJsonValue(patchValue);
-  }
-
-  const merged = { ...baseValue };
-  for (const [key, value] of Object.entries(patchValue)) {
-    if (PROTOTYPE_KEYS.has(key)) continue;
-    if (isPlainObject(value) && isPlainObject(merged[key])) {
-      merged[key] = deepMergeJson(merged[key], value);
-    } else {
-      merged[key] = cloneJsonValue(value);
-    }
-  }
-  return merged;
 }
 
 function formatJson(value) {
