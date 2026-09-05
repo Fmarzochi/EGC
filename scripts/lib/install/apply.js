@@ -7,7 +7,8 @@ const path = require('node:path');
 const { writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../mcp-config');
-const { writeTextKeepingMode } = require('./preserving-write');
+const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./preserving-write');
+
 const {
   HOOK_OPERATION_KIND,
   applyManagedHookOperation,
@@ -144,8 +145,9 @@ function applyMergeJsonOperation(operation, disabledServers) {
     ? readJsonObject(operation.destinationPath, 'existing JSON config')
     : {};
   const mergedValue = deepMergeJson(currentValue, filteredPayload);
-  fs.writeFileSync(operation.destinationPath, formatJson(mergedValue), 'utf8');
+  writeManagedText(operation.destinationPath, formatJson(mergedValue));
 }
+
 
 function applyMergeYamlReadListOperation(operation) {
   if (!operation.readEntry) {
@@ -167,7 +169,7 @@ function applyMergeYamlReadListOperation(operation) {
       { cause: error },
     );
   }
-  fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+  writeManagedText(operation.destinationPath, nextContent);
 }
 
 function applyMergeMarkdownIndexOperation(operation) {
@@ -179,7 +181,7 @@ function applyMergeMarkdownIndexOperation(operation) {
     description: operation.skillDescription,
     relativePath: operation.relativePath,
   });
-  fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
+  writeManagedText(operation.destinationPath, nextContent);
 }
 
 // The text that was validated is the text that lands (or the filtered form
@@ -223,14 +225,15 @@ function resolvePackageRoot() {
 // existing ones are unaffected -- so it is logged and swallowed rather than
 // failing the whole install.
 function writeGuardianCliMarker(onWarning, homeDir) {
-  const markerPath = path.join(homeDir || os.homedir(), '.egc', 'guardian-cli-path.json');
+  const home = homeDir || os.homedir();
+  const markerPath = path.join(home, '.egc', 'guardian-cli-path.json');
   try {
+    // The marker's own directory answers to the same link check as every
+    // install destination; a linked ~/.egc turns the write into a warning.
+    refuseLinkedDestination(markerPath, home);
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-    fs.writeFileSync(
-      markerPath,
-      `${JSON.stringify({ packageRoot: resolvePackageRoot() }, null, 2)}\n`,
-      'utf8'
-    );
+
+    writeManagedText(markerPath, `${JSON.stringify({ packageRoot: resolvePackageRoot() }, null, 2)}\n`);
   } catch (error) {
     const msg = `Warning: Failed to write Guardian CLI marker: ${error.message}`;
     if (typeof onWarning === 'function') {
@@ -241,12 +244,53 @@ function writeGuardianCliMarker(onWarning, homeDir) {
   }
 }
 
+// The installer never writes through a link: a destination that is a
+// symbolic link, or that sits under a linked directory strictly inside the
+// target root, is refused before anything is created. The root itself may be
+// a link the user made (a dotfiles manager, say); what lies below it is what
+// the installer owns.
+// Every managed file lands through an exclusive temporary and a rename, so a
+// link at the destination (planted before the pre-flight check or swapped in
+// after it) is replaced, never written through.
+function writeManagedText(destinationPath, text) {
+  replaceFileWith(destinationPath, descriptor => fs.writeFileSync(descriptor, text, 'utf8'));
+}
+
+function refuseLinkedDestination(destinationPath, targetRoot) {
+  const root = targetRoot ? path.resolve(targetRoot) : null;
+  let probe = path.resolve(destinationPath);
+  for (;;) {
+    let stat;
+    try {
+      stat = fs.lstatSync(probe);
+    } catch {
+      stat = null;
+    }
+    if (stat?.isSymbolicLink()) {
+      throw new Error(`Refusing to write through a symbolic link at ${probe}`);
+    }
+    const parent = path.dirname(probe);
+    if (!root || parent === probe || parent === root || !parent.startsWith(root + path.sep)) break;
+    probe = parent;
+  }
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
+
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
+  // Every destination is checked before the first write, the state file and
+  // the hooks file included, so a planted link fails the install before it
+  // changes anything.
+  refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
+  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
+
+    refuseLinkedDestination(operation.destinationPath, plan.targetRoot);
+
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
+
 
     if (operation.kind === HOOK_OPERATION_KIND) {
       applyManagedHookOperation(operation);
@@ -259,20 +303,21 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
       applyMcpCopyFileOperation(operation, disabledServers);
     } else {
-      fs.copyFileSync(operation.sourcePath, operation.destinationPath);
+      copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
+
     }
   }
 
   if (resolvedClaudeHooksPlan) {
+    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
     fs.mkdirSync(path.dirname(resolvedClaudeHooksPlan.hooksDestinationPath), { recursive: true });
-    fs.writeFileSync(
-      resolvedClaudeHooksPlan.hooksDestinationPath,
-      JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2) + '\n',
-      'utf8'
-    );
+
+    writeManagedText(resolvedClaudeHooksPlan.hooksDestinationPath, `${JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2)}\n`);
   }
 
   writeInstallState(plan.installStatePath, plan.statePreview);
+
+
   writeGuardianCliMarker(onWarning, homeDir);
 
   // Capture the async promise so callers (e.g. install() in the operations
@@ -305,4 +350,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
 module.exports = {
   applyInstallPlan,
+  refuseLinkedDestination,
+  writeGuardianCliMarker,
+  writeManagedText,
+
+
 };
