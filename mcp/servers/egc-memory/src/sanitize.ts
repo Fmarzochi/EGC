@@ -206,19 +206,17 @@ export function scrubStateFields(fields: StateTextFields): { fields: StateTextFi
     if (result.flagged) reasons.push(`${label}: ${result.reason}`);
     return result.value;
   });
-  if (reasons.length === 0) {
-    const assembled = injectionReason(presentedDocument(fields));
-    if (assembled !== null) {
-      reasons.push(`fields together: ${assembled}`);
-      const withheld = { ...scrubbed };
-      if (withheld.context !== undefined) withheld.context = BLOCKED_TEXT;
-      if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ what: BLOCKED_TEXT, ...(decision.why === undefined ? {} : { why: BLOCKED_TEXT }) }));
-
-      if (withheld.next) withheld.next = withheld.next.map(() => BLOCKED_TEXT);
-      return { fields: withheld, reasons };
-    }
-  }
-  return { fields: scrubbed, reasons };
+  // The combined read runs on the scrubbed fields whatever the per-field
+  // scan found: a field flagged on its own must not shield a directive
+  // split across the fields next to it.
+  const assembled = injectionReason(presentedDocument(scrubbed));
+  if (assembled === null) return { fields: scrubbed, reasons };
+  reasons.push(`fields together: ${assembled}`);
+  const withheld = { ...scrubbed };
+  if (withheld.context !== undefined) withheld.context = BLOCKED_TEXT;
+  if (withheld.decisions) withheld.decisions = withheld.decisions.map(decision => ({ what: BLOCKED_TEXT, ...(decision.why === undefined ? {} : { why: BLOCKED_TEXT }) }));
+  if (withheld.next) withheld.next = withheld.next.map(() => BLOCKED_TEXT);
+  return { fields: withheld, reasons };
 }
 
 // Lines that one block presents together (the global appendix get_state
@@ -235,12 +233,12 @@ export function scrubPresentedLines(sections: Record<string, string[]>): { secti
       return result.value;
     });
   }
-  if (reasons.length === 0) {
-    const assembled = injectionReason(Object.values(scrubbed).flat().join('\n'));
-    if (assembled !== null) {
-      reasons.push(`lines together: ${assembled}`);
-      for (const heading of Object.keys(scrubbed)) scrubbed[heading] = scrubbed[heading].map(() => BLOCKED_TEXT);
-    }
+  // The block is read whole on the scrubbed lines whatever the per-line
+  // scan found, so a line flagged on its own never shields a split pair.
+  const assembled = injectionReason(Object.values(scrubbed).flat().join('\n'));
+  if (assembled !== null) {
+    reasons.push(`lines together: ${assembled}`);
+    for (const heading of Object.keys(scrubbed)) scrubbed[heading] = scrubbed[heading].map(() => BLOCKED_TEXT);
   }
   return { sections: scrubbed, reasons };
 }
