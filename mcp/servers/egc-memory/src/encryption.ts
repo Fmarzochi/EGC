@@ -127,15 +127,17 @@ export function readPrivateKeyFile(filePath: string): string {
 
 // Whether anything (a file, a link, even a dangling one) sits at the path:
 // a dangling link must be refused as a link, never treated as absent and
-// replaced. Only a path with nothing at it is absent; a path that cannot
-// be inspected is an error, never a silent absence.
+// replaced. Only a path with nothing at it (ENOENT) is absent; a path that
+// cannot be inspected, a parent that is not a directory included, is an
+// error, never a silent absence.
 export function pathPresent(filePath: string): boolean {
   try {
     fs.lstatSync(filePath);
     return true;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+    if (code === 'ENOENT') return false;
+
     throw new Error(`[EGC] Could not inspect ${filePath}: ${(err as Error).message}`, { cause: err });
   }
 }

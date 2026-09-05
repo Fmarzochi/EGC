@@ -195,9 +195,14 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
 
   // Presence is decided with lstat: the loser's view is an lstat that says
   // nothing is there while the winner's key already sits on disk.
+  // Only the presence check (the first lstat of the key path) sees the
+  // stale view; the recovery read that follows must see the real file, on
+  // platforms that open with an lstat pre-check too.
   const origLstatSync = fs.lstatSync;
+  let staleView = true;
   fs.lstatSync = (p, ...rest) => {
-    if (p === keyPath) {
+    if (p === keyPath && staleView) {
+      staleView = false;
       const missing = new Error('ENOENT: simulated loser view');
       missing.code = 'ENOENT';
       throw missing;

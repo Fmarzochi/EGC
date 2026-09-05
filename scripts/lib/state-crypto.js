@@ -72,8 +72,15 @@ function keyDescriptor(filePath) {
     throw error;
   }
   if (before) {
-    const after = fs.fstatSync(fd);
-    if (after.dev !== before.dev || after.ino !== before.ino) {
+    let swapped;
+    try {
+      const after = fs.fstatSync(fd);
+      swapped = after.dev !== before.dev || after.ino !== before.ino;
+    } catch (statErr) {
+      fs.closeSync(fd);
+      throw statErr;
+    }
+    if (swapped) {
       fs.closeSync(fd);
       throw new Error(`[EGC] ${filePath} changed while it was being opened; the key must be a regular file that stays put. Check for a link planted at the path and restart.`);
     }
@@ -113,14 +120,16 @@ function assertPrivateKeyFile(filePath) {
 }
 
 // Whether anything (a file, a link, even a dangling one) sits at the path.
-// Only a path with nothing at it is absent; a path that cannot be
-// inspected is an error, never a silent absence.
+// Only a path with nothing at it (ENOENT) is absent; a path that cannot be
+// inspected, a parent that is not a directory included, is an error, never
+// a silent absence.
 function present(filePath) {
   try {
     fs.lstatSync(filePath);
     return true;
   } catch (err) {
-    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return false;
+    if (err.code === 'ENOENT') return false;
+
     throw new Error(`[EGC] Could not inspect ${filePath}: ${err.message}`, { cause: err });
   }
 }
