@@ -25,6 +25,7 @@ All notable changes to EGC are documented here.
 
 ### Security
 
+- **Hardening round across the memory server, the installer, the hooks and the dashboard** (#1356 to #1363, #1365 to #1373): an eighteen-step pass planned in August and landed in September, with tighter defaults and stricter checks on what EGC accepts from disk, from the network and from the tools it talks to. Every step carries its own tests and went through review on its pull request; no documented command changes.
 - **Open advisories cleared in every lockfile** (#1338): browserslist 4.28.8 in the root lockfile, fast-uri 3.1.7 and qs 6.16.0 across the root, egc-guardian and egc-memory lockfiles, plus pip 26.2 in the test requirements. The dashboard lockfile clears its own qs advisory by dropping the stale express tree it no longer declares.
 
 ## [1.1.20] - 2026-08-16
