@@ -57,16 +57,16 @@ function pickCandidates(promptTokens: Set<string>) {
 
 const MAX_DESCRIPTION_CHARS = 200;
 
-// The text with every zero-width and format character removed, every
-// control character turned into a space and runs of whitespace collapsed:
-// one line of printable text, so a description can neither open a second
-// catalog line nor split a word the scan looks for.
+// The text with every format character (Unicode Cf: zero-width joiners
+// and spaces, bidi marks, invisible operators, the byte order mark) removed,
+// every control character (Cc) turned into a space and runs of whitespace
+// collapsed: one line of printable text, so a description can neither open
+// a second catalog line nor split a word the scan looks for.
 function printable(text: string): string {
   let out = '';
   for (const ch of text) {
-    const code = ch.codePointAt(0) ?? 0;
-    if ((code >= 0x200b && code <= 0x200d) || code === 0x2060 || code === 0xfeff) continue;
-    out += code < 0x20 || code === 0x7f ? ' ' : ch;
+    if (/\p{Cf}/u.test(ch)) continue;
+    out += /\p{Cc}/u.test(ch) ? ' ' : ch;
   }
   return out.replace(/\s+/g, ' ').trim();
 }

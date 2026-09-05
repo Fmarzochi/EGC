@@ -593,36 +593,57 @@ function windowsSystemRoots(): string[] {
   ];
 }
 
-// The form of a path used for comparison: links resolved when the path
-// exists (so /etc and /private/etc on macOS, or a symlinked home, compare
+// The form of a path used for comparison: links resolved through the
+// nearest existing ancestor (so a missing child of a linked directory still
+// lands under the real one, and /etc, /private/etc or a linked home compare
 // equal) and case folded where the filesystem ignores case.
 function canonicalPath(p: string): string {
-  let real = path.resolve(p);
-  try { real = fs.realpathSync(real); } catch { /* a path that does not exist keeps its resolved spelling */ }
-  return CASE_FOLDED_PATHS ? real.toLowerCase() : real;
+  const resolved = path.resolve(p);
+  let existing = resolved;
+  let remainder = '';
+  for (let depth = 0; depth < 1024; depth += 1) {
+    try {
+      const real = fs.realpathSync(existing);
+      const joined = remainder === '' ? real : path.join(real, remainder);
+      return CASE_FOLDED_PATHS ? joined.toLowerCase() : joined;
+    } catch {
+      const parent = path.dirname(existing);
+      if (parent === existing) break;
+      remainder = remainder === '' ? path.basename(existing) : path.join(path.basename(existing), remainder);
+      existing = parent;
+    }
+  }
+  return CASE_FOLDED_PATHS ? resolved.toLowerCase() : resolved;
 }
 
-function underRoot(target: string, root: string): boolean {
-  return target === root || target.startsWith(root + path.sep);
+// The part of `target` below `root`: '' when they are the same path, null
+// when `target` is not under `root`. A root that already ends with the
+// separator (a filesystem or drive root) is not given a second one.
+function below(target: string, root: string): string | null {
+  if (target === root) return '';
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+  return target.startsWith(prefix) ? target.slice(prefix.length) : null;
 }
 
+// A filesystem root as the platform's own parser sees it: '/', a drive
+// root, or a UNC share root.
 function isFilesystemRoot(target: string): boolean {
-  return target === path.sep || /^[a-z]:\\?$/i.test(target);
+  const root = path.parse(target).root;
+  return root !== '' && (target === root || target === root.slice(0, -1));
 }
 
 // The reason a resolved project path is refused, or null when it has one of
 // the accepted shapes.
 function projectPathRefusal(resolved: string): string | null {
   const target = canonicalPath(resolved);
-  const home = canonicalPath(os.homedir());
-  if (target === home) return null;
-  if (underRoot(target, home)) {
-    const first = target.slice(home.length + 1).split(path.sep)[0];
+  const underHome = below(target, canonicalPath(os.homedir()));
+  if (underHome !== null) {
+    const first = underHome.split(path.sep)[0];
     return first.startsWith('.') ? `${first} is a hidden directory under the home directory, where tools keep settings and secrets` : null;
   }
   if (isFilesystemRoot(target)) return 'the filesystem root is not a project';
   const roots = process.platform === 'win32' ? windowsSystemRoots() : POSIX_SYSTEM_ROOTS;
-  const root = roots.find(candidate => underRoot(target, canonicalPath(candidate)));
+  const root = roots.find(candidate => below(target, canonicalPath(candidate)) !== null);
   return root === undefined ? null : `${root} is a system directory`;
 }
 

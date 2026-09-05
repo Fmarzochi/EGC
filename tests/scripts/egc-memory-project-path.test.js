@@ -59,8 +59,11 @@ class MemoryClient {
   }
 
   close() {
-    this.child.stdin.end();
-    this.child.kill();
+    return new Promise(resolve => {
+      this.child.once('exit', () => resolve());
+      this.child.stdin.end();
+      this.child.kill();
+    });
   }
 }
 
@@ -113,6 +116,14 @@ async function main() {
       const reply = await client.tool('update_state', { project_path: filesystemRoot, context: 'x' });
       assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
     });
+    if (process.platform !== 'win32') {
+      await check('a missing child of a linked system directory is refused through the link', async () => {
+        const link = path.join(home, 'work', 'binlink');
+        fs.symlinkSync('/bin', link);
+        const reply = await client.tool('update_state', { project_path: path.join(link, 'new-project'), context: 'x' });
+        assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
+      });
+    }
     await check('a system root is refused', async () => {
       const reply = await client.tool('update_state', { project_path: systemRoot, context: 'x' });
       assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
@@ -127,9 +138,10 @@ async function main() {
       assert.ok(reply.includes('updated'), reply.slice(0, 300));
     });
   } finally {
-    client.close();
+    await client.close();
     fs.rmSync(home, { recursive: true, force: true });
   }
+
 
 
   console.log(`\nPassed: ${passed}\nFailed: ${failed}`);
