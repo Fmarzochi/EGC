@@ -57,16 +57,16 @@ function pickCandidates(promptTokens: Set<string>) {
 
 const MAX_DESCRIPTION_CHARS = 200;
 
-// The text with every control, format and zero-width character turned into
-// a space and runs of whitespace collapsed: one line of printable text, so
-// a description can neither open a second catalog line nor hide a word
-// from the scan.
+// The text with every zero-width and format character removed, every
+// control character turned into a space and runs of whitespace collapsed:
+// one line of printable text, so a description can neither open a second
+// catalog line nor split a word the scan looks for.
 function printable(text: string): string {
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
-    const invisible = code < 0x20 || code === 0x7f || (code >= 0x200b && code <= 0x200d) || code === 0x2060 || code === 0xfeff;
-    out += invisible ? ' ' : ch;
+    if ((code >= 0x200b && code <= 0x200d) || code === 0x2060 || code === 0xfeff) continue;
+    out += code < 0x20 || code === 0x7f ? ' ' : ch;
   }
   return out.replace(/\s+/g, ' ').trim();
 }
@@ -78,7 +78,11 @@ function printable(text: string): string {
 // can still be chosen by name.
 export function promptDescription(description: string): string {
   const line = printable(description);
-  if (scanForInjection(line).length > 0) return '[description withheld]';
+  // Both spellings are scanned: the original catches invisible characters
+  // clustered around a keyword, the printable line catches the keyword
+  // they were splitting.
+  if (scanForInjection(description).length > 0 || scanForInjection(line).length > 0) return '[description withheld]';
+
   return line.length > MAX_DESCRIPTION_CHARS ? `${line.slice(0, MAX_DESCRIPTION_CHARS - 3)}...` : line;
 }
 

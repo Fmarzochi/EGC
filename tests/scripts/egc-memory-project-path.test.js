@@ -70,7 +70,10 @@ async function main() {
   const hidden = path.join(home, '.gnupg');
   const toolDir = path.join(home, '.claude', 'worktrees', 'w');
   const worktree = path.join(project, '.claude', 'worktrees', 'feature');
-  for (const dir of [project, hidden, toolDir, worktree]) fs.mkdirSync(dir, { recursive: true });
+  const doubleDot = path.join(home, '..secrets');
+  for (const dir of [project, hidden, toolDir, worktree, doubleDot]) fs.mkdirSync(dir, { recursive: true });
+  const filesystemRoot = process.platform === 'win32' ? 'C:\\' : '/';
+
   const systemRoot = process.platform === 'win32' ? 'C:\\Windows' : '/etc';
 
   let passed = 0;
@@ -101,6 +104,15 @@ async function main() {
       const reply = await client.tool('update_state', { project_path: toolDir, context: 'x' });
       assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
     });
+    await check('a hidden directory whose name starts with two dots is refused as hidden, not read as a parent', async () => {
+      const reply = await client.tool('update_state', { project_path: doubleDot, context: 'x' });
+      assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
+      assert.ok(reply.includes('hidden directory'), reply.slice(0, 300));
+    });
+    await check('the filesystem root is refused', async () => {
+      const reply = await client.tool('update_state', { project_path: filesystemRoot, context: 'x' });
+      assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
+    });
     await check('a system root is refused', async () => {
       const reply = await client.tool('update_state', { project_path: systemRoot, context: 'x' });
       assert.ok(reply.includes('not allowed'), reply.slice(0, 300));
@@ -116,7 +128,9 @@ async function main() {
     });
   } finally {
     client.close();
+    fs.rmSync(home, { recursive: true, force: true });
   }
+
 
   console.log(`\nPassed: ${passed}\nFailed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

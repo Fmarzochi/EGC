@@ -574,31 +574,55 @@ function getGlobalStateFile(): string {
 // fallback when no working directory is known), any directory under home
 // except the hidden ones directly under it (~/.ssh, ~/.config, ~/.claude
 // and every other dot-directory a tool keeps its secrets and settings in),
-// and any directory outside home that is not a system root. Everything
-// else is refused, so a new tool's dot-directory is covered the day it
-// appears instead of waiting for a list to name it.
-const SYSTEM_ROOTS = process.platform === 'win32'
-  ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)', 'C:\\ProgramData']
-  : ['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64', '/boot', '/proc', '/sys', '/dev', '/root', '/var/lib', '/var/log', '/var/run', '/run'];
+// and any directory outside home that is neither a filesystem root nor a
+// system directory. Everything else is refused, so a new tool's
+// dot-directory is covered the day it appears instead of waiting for a
+// list to name it.
+const POSIX_SYSTEM_ROOTS = ['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64', '/boot', '/proc', '/sys', '/dev', '/root', '/var/lib', '/var/log', '/var/run', '/run'];
+const CASE_FOLDED_PATHS = process.platform === 'win32' || process.platform === 'darwin';
 
-function underRoot(resolved: string, root: string): boolean {
-  const a = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-  const b = process.platform === 'win32' ? root.toLowerCase() : root;
-  return a === b || a.startsWith(b + path.sep);
+// The system directories of a Windows install, wherever it lives: the
+// environment names them, the usual spellings stand in when it does not.
+function windowsSystemRoots(): string[] {
+  const env = process.env;
+  return [
+    env.SystemRoot || 'C:\\Windows',
+    env.ProgramFiles || 'C:\\Program Files',
+    env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
+    env.ProgramData || 'C:\\ProgramData',
+  ];
+}
+
+// The form of a path used for comparison: links resolved when the path
+// exists (so /etc and /private/etc on macOS, or a symlinked home, compare
+// equal) and case folded where the filesystem ignores case.
+function canonicalPath(p: string): string {
+  let real = path.resolve(p);
+  try { real = fs.realpathSync(real); } catch { /* a path that does not exist keeps its resolved spelling */ }
+  return CASE_FOLDED_PATHS ? real.toLowerCase() : real;
+}
+
+function underRoot(target: string, root: string): boolean {
+  return target === root || target.startsWith(root + path.sep);
+}
+
+function isFilesystemRoot(target: string): boolean {
+  return target === path.sep || /^[a-z]:\\?$/i.test(target);
 }
 
 // The reason a resolved project path is refused, or null when it has one of
 // the accepted shapes.
 function projectPathRefusal(resolved: string): string | null {
-  const home = path.resolve(os.homedir());
-  const fromHome = path.relative(home, resolved);
-  if (fromHome === '') return null;
-  const insideHome = !fromHome.startsWith('..') && !path.isAbsolute(fromHome);
-  if (insideHome) {
-    const first = fromHome.split(path.sep)[0];
+  const target = canonicalPath(resolved);
+  const home = canonicalPath(os.homedir());
+  if (target === home) return null;
+  if (underRoot(target, home)) {
+    const first = target.slice(home.length + 1).split(path.sep)[0];
     return first.startsWith('.') ? `${first} is a hidden directory under the home directory, where tools keep settings and secrets` : null;
   }
-  const root = SYSTEM_ROOTS.find(candidate => underRoot(resolved, candidate));
+  if (isFilesystemRoot(target)) return 'the filesystem root is not a project';
+  const roots = process.platform === 'win32' ? windowsSystemRoots() : POSIX_SYSTEM_ROOTS;
+  const root = roots.find(candidate => underRoot(target, canonicalPath(candidate)));
   return root === undefined ? null : `${root} is a system directory`;
 }
 
