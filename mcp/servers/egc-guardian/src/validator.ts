@@ -342,13 +342,56 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
 // off the front of a token list until the real command is reached, looping
 // so stacked wrappers (`sudo timeout 5 xargs rm -rf`) all get unwrapped
 // rather than just the outermost one.
+// Shell keywords and grouping openers that stand in front of the command
+// actually run: `if rm ...; then`, `then rm ...`, `(rm ...)`, `{ rm ...; }`,
+// `! rm ...`. Judged as "the command", the keyword would read as a mere
+// allowlist miss and let whatever follows it pass.
+const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
+
+// `case word in pattern) command`: the command starts after the pattern.
+function unwrapCaseClause(current: string[]): string[] {
+  const inIndex = current.findIndex((token, index) => index > 0 && bareToken(token) === 'in');
+  const rest = current.slice(inIndex === -1 ? 1 : inIndex + 1);
+  return rest.length > 0 && stripQuotes(rest[0]).endsWith(')') ? rest.slice(1) : rest;
+}
+
+function isBlockOpener(token: string | undefined): boolean {
+  const bare = token === undefined ? '' : stripQuotes(token);
+  return bare.startsWith('{') || bare.startsWith('(');
+}
+
+// Constructs that run a command of their own: case arms, coprocesses and
+// function bodies (`function f { ... }`, `f() { ... }`) are unwrapped to the
+// command they carry so it is judged as if typed directly.
+function tryUnwrapCommandCarrier(current: string[]): UnwrapStep | null {
+  const head = bareToken(current[0]);
+  if (head === 'case') return { remaining: unwrapCaseClause(current) };
+  if (head === 'coproc') return { remaining: current.slice(isBlockOpener(current[2]) ? 2 : 1) };
+  if (head === 'function') return { remaining: current.slice(2) };
+  if (head.endsWith('()')) return { remaining: current.slice(1) };
+  // A later arm of a case (`b) command`, `b ) command`) starts its own segment after ;;.
+  if (head.endsWith(')')) return { remaining: current.slice(1) };
+  if (current.length > 1 && bareToken(current[1]) === ')') return { remaining: current.slice(2) };
+  if (current.length > 1 && bareToken(current[1]) === '()') return { remaining: current.slice(2) };
+  return null;
+}
+
+function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
+  const head = bareToken(current[0]);
+  if (SHELL_KEYWORDS.has(head)) return { remaining: current.slice(1) };
+  if ((head.startsWith('(') || head.startsWith('{')) && head.length > 1) {
+    return { remaining: [stripQuotes(current[0]).slice(1), ...current.slice(1)] };
+  }
+  return tryUnwrapCommandCarrier(current);
+}
+
 function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
   let current = tokens;
   let changed = true;
   while (changed && current.length > 0) {
     changed = false;
 
-    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current);
+    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
     if (step) {
       if (step.blocked) return { tokens: [], blocked: step.blocked };
       current = step.remaining as string[];
@@ -618,6 +661,10 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // tool's official docs, verified 2026-07-11 (see docs/architecture or the
 // PR that introduced this comment for the full per-tool research).
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
+  // EGC install-state: egc repair and uninstall replay what it records, so a
+  // planted entry would turn either into a write or delete of its choosing.
+  /(^|[\\/])egc[\\/][\w-]*install-state\.json$/,
+  /(^|[\\/])egc-install-state\.json$/,
   /\.env$/,
   // .env.example/.sample/.template are conventionally committed templates
   // with placeholder values, never real secrets — excluded so they're
@@ -1405,15 +1452,40 @@ function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
 // Filesystem targets an argument can carry: a bare operand (URIs excluded,
 // they are download targets, not local paths), a --flag=value value, or a
 // value glued to a short flag (`-o~/.bashrc`).
+// file:///path and file://localhost/path name a local file, so the path
+// inside gets the same protected-path check as a bare operand would; every
+// other scheme is a download/read target with no local path in it.
+const FILE_URI_RE = /^file:\/\/(?:localhost)?(?=\/)/i;
+
+function unwrapFileUri(arg: string): string {
+  const match = FILE_URI_RE.exec(arg);
+  if (!match) return arg;
+  // A query or fragment is not part of the file a client opens.
+  const tail = arg.slice(match[0].length);
+  const cut = tail.search(/[?#]/);
+  const rest = cut === -1 ? tail : tail.slice(0, cut);
+  let decoded = rest;
+  try {
+    decoded = decodeURIComponent(rest);
+  } catch {
+    // A malformed escape keeps the raw text; the check still sees the path.
+  }
+  // file:///C:/Users/x carries a slash before the drive letter.
+  return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
+}
+
 function pathCandidatesOf(args: string[]): string[] {
   return args.flatMap(rawArg => {
     const arg = bareToken(rawArg);
+    const cased = stripQuotes(rawArg);
     if (!arg.startsWith('-')) {
-      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [arg];
+      const unwrapped = unwrapFileUri(cased);
+      if (unwrapped !== cased) return [unwrapped];
+      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
     }
-    const eq = arg.indexOf('=');
-    if (eq > 0) return [arg.slice(eq + 1)];
-    if (!arg.startsWith('--') && arg.length > 2) return [arg.slice(2)];
+    const eq = cased.indexOf('=');
+    if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
+    if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
     return [];
   });
 }

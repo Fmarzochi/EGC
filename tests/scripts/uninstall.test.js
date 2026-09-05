@@ -119,6 +119,38 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('uninstalls a home target that writes outside its own root (copilot: ~/.github and ~/.copilot)', () => {
+    const homeDir = createTempDir('uninstall-home-');
+    const projectRoot = createTempDir('uninstall-project-');
+
+    try {
+      execFileSync('node', [INSTALL_SCRIPT, '--target', 'copilot', '--profile', 'full'], {
+        cwd: projectRoot,
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: SUBPROCESS_TIMEOUT_MS,
+      });
+      const hooksFile = path.join(fs.realpathSync(homeDir), '.copilot', 'hooks', 'hooks.json');
+      assert.ok(fs.existsSync(hooksFile), 'the install must have written outside the target root');
+      // Windows writes these paths with backslashes (escaped once more in JSON).
+      const carriesEgcHooks = content => /scripts[\\/]+hooks/.test(content);
+      assert.ok(carriesEgcHooks(fs.readFileSync(hooksFile, 'utf8')), 'the merged file carries the EGC hook entries');
+
+      // The recorded entries live outside ~/.github; they are still accepted
+      // because the current manifest plans them, so the merge is reversed
+      // (the file itself is the user's and stays) and nothing errors.
+      const uninstallResult = run(['--target', 'copilot'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(uninstallResult.code, 0, uninstallResult.stderr);
+      assert.ok(uninstallResult.stdout.includes('Status: UNINSTALLED'), uninstallResult.stdout);
+      assert.ok(uninstallResult.stdout.includes('errors=0'), uninstallResult.stdout);
+      assert.ok(!carriesEgcHooks(fs.readFileSync(hooksFile, 'utf8')), 'the EGC hook entries are reversed out of the merged file');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('reverses non-copy operations and keeps unrelated files', () => {
     const homeDir = createTempDir('uninstall-home-');
     const projectRoot = createTempDir('uninstall-project-');

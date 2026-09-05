@@ -186,11 +186,13 @@
           },
           "sourceRelativePath": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^(?![/\\\\]|[A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).+$"
           },
           "destinationPath": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^(?=/|[A-Za-z]:[\\\\/]|\\\\\\\\)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$)).+$"
           },
           "strategy": {
             "type": "string",

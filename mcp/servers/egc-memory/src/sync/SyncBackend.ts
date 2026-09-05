@@ -9,12 +9,14 @@ export interface SyncConfig {
   backend: string;
   remote: string;
   branch: string;
+  teamKey?: string;
 }
 
 export interface SyncResult {
   pulledCount: number;
   pushedCount: number;
   conflictCount: number;
+  rejectedCount: number;
   errors: string[];
 }
 

@@ -487,7 +487,64 @@ async function runTests() {
     assert.ok(!String(result.reason || '').includes('inline code execution'), JSON.stringify(result));
   });
   run('pwsh7 -c is still hard-blocking', () => assertHardBlocking(`pwsh7 -c "Get-Process"`));
+  run('case arms, coprocesses and function bodies do not hide a denied command', () => {
+    for (const command of [
+      'case x in x) rm -rf /tmp/guarded;; esac',
+      'case "$1" in (start|restart) rm -rf /tmp/guarded ;; esac',
+      'b) rm -rf /tmp/guarded',
+      '(b) rm -rf /tmp/guarded',
+      'stop|halt) rm -rf /tmp/guarded',
+      'b ) rm -rf /tmp/guarded',
+      '(b ) rm -rf /tmp/guarded',
+      'coproc rm -rf /tmp/guarded',
+      'coproc worker { rm -rf /tmp/guarded; }',
+      'function f() { rm -rf /tmp/guarded; }; f',
+      'function f { rm -rf /tmp/guarded; }',
+      'f() { rm -rf /tmp/guarded; }',
+      'f () { rm -rf /tmp/guarded; }',
+    ]) {
+      assertHardBlocking(command);
+    }
+  });
 
+  // audit 2026-08-17, H3 follow-up: a keyword or grouping opener in front of
+  // the real command must not turn a denial into an allowlist miss.
+  run('a denied command behind if/then/else/do is still hard-blocking', () => {
+    for (const command of [`if rm -rf /tmp/x; then`, `then rm -rf /tmp/x`, `else rm -rf /tmp/x`, `do rm -rf /tmp/x`, `while rm -rf /tmp/x`, `! rm -rf /tmp/x`]) {
+      assertHardBlocking(command);
+    }
+  });
+  run('a denied command inside a subshell or group is still hard-blocking', () => {
+    for (const command of [`(rm -rf /tmp/x)`, `( rm -rf /tmp/x )`, `{ rm -rf /tmp/x; }`]) {
+      assertHardBlocking(command);
+    }
+  });
+  run('a benign command behind a keyword stays benign', () => {
+    const result = validateCommand('if git status; then');
+    assert.ok(!String(result.reason || '').includes('destructive'), JSON.stringify(result));
+  });
+
+  // audit 2026-08-17, C2 second bypass and C5: file:// and install-state
+  const userHome = require('os').homedir();
+  run('curl file:///~/.ssh/id_rsa is hard-blocking (file URI unwrapped)', () => assertHardBlocking(`curl file://${userHome}/.ssh/id_rsa`));
+  run('curl --url=file:///etc/shadow is hard-blocking', () => assertHardBlocking('curl --url=file:///etc/shadow'));
+  run('a query or fragment on a file URI does not hide the protected path', () => {
+    assertHardBlocking(`curl file://${userHome}/.ssh/id_rsa?raw=1`);
+    assertHardBlocking(`curl file://${userHome}/.bashrc#top`);
+  });
+  run('wget -O out file://localhost/etc/passwd is hard-blocking', () => assertHardBlocking('wget -O out file://localhost/etc/passwd'));
+  run('curl file:///tmp/notes.txt is not a protected-path denial', () => {
+    const result = validateCommand('curl file:///tmp/notes.txt');
+    assert.ok(!String(result.reason || '').includes('protected'), JSON.stringify(result));
+  });
+  run('curl https://example.com stays as before (no protected-path denial)', () => {
+    const result = validateCommand('curl https://example.com');
+    assert.ok(!String(result.reason || '').includes('protected'), JSON.stringify(result));
+  });
+  run('write to ~/.claude/egc/install-state.json is denied', () => assertWriteDenied(`${userHome}/.claude/egc/install-state.json`));
+  run('write to ~/.agents/egc/codex-install-state.json is denied', () => assertWriteDenied(`${userHome}/.agents/egc/codex-install-state.json`));
+  run('write to project .cursor/egc-install-state.json is denied', () => assertWriteDenied('.cursor/egc-install-state.json'));
+  run('write to a sibling egc/notes.json stays allowed', () => assertWriteAllowed(`${userHome}/.claude/egc/notes.json`));
   run('LLM routing is opt-in: off by default, on only with EGC_LLM_ROUTING', () => {
     const { llmRoutingEnabled } = routerModule;
     const saved = process.env.EGC_LLM_ROUTING;

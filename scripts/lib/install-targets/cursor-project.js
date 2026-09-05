@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { toCursorAgentFileName } = require('../cursor-agent-names');
+const { assertSafeMcpConfig, isMcpConfigPath } = require('../mcp-config');
 const {
   createFlatFileOperations,
   createFlatRuleOperations,
@@ -199,6 +200,15 @@ function createJsonMergeOperation({ moduleId, repoRoot, sourceRelativePath, dest
   });
 }
 
+// Judged only on the branches that emit it, so an install that selects
+// rules alone is not refused over an MCP payload it never writes.
+function guardMcpOperation(operation) {
+  if (isMcpConfigPath(operation.destinationPath)) {
+    assertSafeMcpConfig(operation.mergePayload, operation.sourceRelativePath);
+  }
+  return operation;
+}
+
 // Cursor treats nested AGENTS.md files as directory context; do not install
 // EGC's root project identity into a host project's .cursor/.
 function planAgentsMdOperations() {
@@ -251,7 +261,7 @@ function planCursorDirOperations({ module, repoRoot, targetRoot, cursorMcpOperat
 
   return takeUniqueOperations([
     ...childOperations,
-    ...(cursorMcpOperation ? [cursorMcpOperation] : []),
+    ...(cursorMcpOperation ? [guardMcpOperation(cursorMcpOperation)] : []),
     ...ruleOperations,
   ]);
 }
@@ -263,7 +273,7 @@ function planMcpConfigsOperations({
     adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput),
   ];
   if (cursorMcpOperation) {
-    operations.push(cursorMcpOperation);
+    operations.push(guardMcpOperation(cursorMcpOperation));
   }
   return takeUniqueOperations(operations);
 }

@@ -16,6 +16,7 @@ const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-sou
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('./warp-agents-merge');
+const { assertSafeMcpConfig, isMcpConfigPath } = require('./mcp-config');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const GEMINI_EGC_NAMESPACE = 'egc';
@@ -206,6 +207,16 @@ function readJsonObject(filePath, label) {
   return parsed;
 }
 
+// An MCP config payload answers to the command allowlist the moment it is
+// read, so a bad entry fails the plan instead of reaching a live config.
+function readMergePayload(sourceRoot, sourceRelativePath, destinationPath) {
+  const payload = readJsonObject(path.join(sourceRoot, sourceRelativePath), sourceRelativePath);
+  if (isMcpConfigPath(destinationPath)) {
+    assertSafeMcpConfig(payload, sourceRelativePath);
+  }
+  return payload;
+}
+
 function addJsonMergeOperation(operations, options) {
   const sourcePath = path.join(options.sourceRoot, options.sourceRelativePath);
   if (!fs.existsSync(sourcePath)) {
@@ -220,7 +231,7 @@ function addJsonMergeOperation(operations, options) {
     strategy: 'merge-json',
     ownership: 'managed',
     scaffoldOnly: false,
-    mergePayload: readJsonObject(sourcePath, options.sourceRelativePath),
+    mergePayload: readMergePayload(options.sourceRoot, options.sourceRelativePath, options.destinationPath),
   });
 
   return true;
@@ -604,10 +615,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
       strategy: operation.strategy || 'merge-json',
       ownership: operation.ownership || 'managed',
       scaffoldOnly: Object.hasOwn(operation, 'scaffoldOnly') ? operation.scaffoldOnly : false,
-      mergePayload: readJsonObject(
-        path.join(sourceRoot, operation.sourceRelativePath),
-        operation.sourceRelativePath
-      ),
+      mergePayload: readMergePayload(sourceRoot, operation.sourceRelativePath, operation.destinationPath),
     }];
   }
 
