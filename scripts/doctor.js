@@ -50,6 +50,9 @@ function statusLabel(status) {
 }
 
 function printHuman(report) {
+  if (report.manifestError) {
+    console.log(`Install manifests refused: ${report.manifestError}`);
+  }
   if (report.results.length === 0) {
     console.log('Core runtime: OK. No managed target profile installed (that is what a bare `egc install` does).');
     console.log('Managed content (skills, rules, hooks) is optional; add it anytime with:');

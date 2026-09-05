@@ -99,7 +99,6 @@
         ".gemini-plugin",
         ".codex",
         ".cursor",
-        ".gemini",
         ".opencode",
         "mcp-configs",
         "scripts/auto-update.js",
