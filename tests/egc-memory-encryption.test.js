@@ -151,7 +151,9 @@ if (test('loadOrCreateEncKey: refuses a key whose permissions cannot be tightene
     assert.ok(!fs.existsSync(keyPath) || (fs.statSync(keyPath).mode & 0o077) === 0, 'no exposed key is left behind as the process key');
   } finally {
     fs.chmodSync = originalChmodSync;
+    fs.fchmodSync = originalFchmodSync;
     console.error = originalConsoleError;
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
@@ -191,8 +193,17 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
   const winnerKey = crypto.randomBytes(32);
   fs.writeFileSync(keyPath, winnerKey.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
 
-  const origExistsSync = fs.existsSync;
-  fs.existsSync = (p) => (p === keyPath ? false : origExistsSync(p));
+  // Presence is decided with lstat: the loser's view is an lstat that says
+  // nothing is there while the winner's key already sits on disk.
+  const origLstatSync = fs.lstatSync;
+  fs.lstatSync = (p, ...rest) => {
+    if (p === keyPath) {
+      const missing = new Error('ENOENT: simulated loser view');
+      missing.code = 'ENOENT';
+      throw missing;
+    }
+    return origLstatSync(p, ...rest);
+  };
   try {
     const result = loadOrCreateEncKey(keyPath);
     assert.ok(
@@ -202,7 +213,8 @@ if (test('loadOrCreateEncKey: TOCTOU race — a concurrent winner\'s key is read
     const onDisk = Buffer.from(fs.readFileSync(keyPath, 'utf-8').trim(), 'hex');
     assert.ok(onDisk.equals(winnerKey), 'the winner\'s key on disk must remain untouched');
   } finally {
-    fs.existsSync = origExistsSync;
+    fs.lstatSync = origLstatSync;
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;

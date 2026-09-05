@@ -39,9 +39,11 @@ function defaultEncKeyPath(): string {
  * only generates a new key when the file genuinely does not exist.
  */
 // A key file must be private and must be the file itself. It is opened
-// without following links (O_NOFOLLOW where the platform has it) and every
-// check runs on that one descriptor: the object must be a regular file,
-// the mode is set and read back through the descriptor, and the content is
+// without following links (O_NOFOLLOW where the platform has it, with an
+// identity check across the open where it does not) and without blocking
+// (so a FIFO planted at the path cannot stall the open), and every check
+// runs on that one descriptor: the object must be a regular file, the
+// mode is set and read back through the descriptor, and the content is
 // read from it, so the file that was checked is the file that is used and
 // a path swapped underneath the checks changes nothing. Where the
 // filesystem keeps POSIX bits (Linux, macOS, most network mounts) a file
@@ -51,16 +53,29 @@ function defaultEncKeyPath(): string {
 // the advice to move the key. Windows has no bits to tighten, so the mode
 // step is skipped there.
 const NO_FOLLOW = fs.constants.O_NOFOLLOW ?? 0;
+const NON_BLOCKING = fs.constants.O_NONBLOCK ?? 0;
 
 function linkRefusal(filePath: string, cause?: unknown): Error {
   return new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`, { cause });
 }
 
+// Without O_NOFOLLOW the link check happens before the open, so the object
+// that was opened must be the object that was checked: same device, same
+// inode. Anything else was swapped underneath and is refused.
+function sameObject(before: fs.Stats, fd: number): boolean {
+  const after = fs.fstatSync(fd);
+  return after.dev === before.dev && after.ino === before.ino;
+}
+
 function openPrivateKeyFile(filePath: string): number {
-  if (NO_FOLLOW === 0 && fs.lstatSync(filePath).isSymbolicLink()) throw linkRefusal(filePath);
+  let before: fs.Stats | null = null;
+  if (NO_FOLLOW === 0) {
+    before = fs.lstatSync(filePath);
+    if (before.isSymbolicLink()) throw linkRefusal(filePath);
+  }
   let fd: number;
   try {
-    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW);
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW | NON_BLOCKING);
   } catch (openErr) {
     const code = (openErr as NodeJS.ErrnoException).code;
     if (code === 'ELOOP') throw linkRefusal(filePath, openErr);
@@ -69,6 +84,9 @@ function openPrivateKeyFile(filePath: string): number {
     throw error;
   }
   try {
+    if (before !== null && !sameObject(before, fd)) {
+      throw new Error(`[EGC] ${filePath} changed while it was being opened; the key must be a regular file that stays put. Check for a link planted at the path and restart.`);
+    }
     checkPrivateDescriptor(fd, filePath);
   } catch (checkErr) {
     fs.closeSync(fd);
@@ -109,23 +127,38 @@ export function readPrivateKeyFile(filePath: string): string {
 
 // Whether anything (a file, a link, even a dangling one) sits at the path:
 // a dangling link must be refused as a link, never treated as absent and
-// replaced.
+// replaced. Only a path with nothing at it is absent; a path that cannot
+// be inspected is an error, never a silent absence.
 export function pathPresent(filePath: string): boolean {
   try {
     fs.lstatSync(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+    throw new Error(`[EGC] Could not inspect ${filePath}: ${(err as Error).message}`, { cause: err });
+  }
+}
+
+// Every byte of `bytes` written to `fd`: a short write continues from where
+// it stopped, and no progress at all is an error, so a file is never
+// published half written.
+function writeAll(fd: number, bytes: Buffer): void {
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (written <= 0) throw new Error('[EGC] short write: no progress while writing the key file');
+    offset += written;
   }
 }
 
 // The temp file is created exclusively (wx): a link planted at the temp
 // path is never followed, so the key is written only into a file this call
-// created, private from the first byte.
+// created, private from the first byte and complete before it is published.
 export function writePrivateTemp(tmpPath: string, content: string): void {
   const fd = fs.openSync(tmpPath, 'wx', 0o600);
   try {
-    fs.writeSync(fd, content);
+    writeAll(fd, Buffer.from(content, 'utf-8'));
   } finally {
     fs.closeSync(fd);
   }

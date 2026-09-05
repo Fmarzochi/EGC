@@ -111,6 +111,19 @@ function runTests() {
       const folder = path.join(dir, 'folder.key');
       fs.mkdirSync(folder);
       assert.throws(() => assertPrivateKeyFile(folder), /not a regular file/, 'a directory is not a key');
+      if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+        const locked = path.join(dir, 'locked');
+        fs.mkdirSync(locked);
+        const lockedKey = path.join(locked, 'encryption.key');
+        fs.writeFileSync(lockedKey, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+        fs.chmodSync(locked, 0o000);
+        try {
+          assert.throws(() => decryptStateBuffer(Buffer.alloc(64), lockedKey), /Could not inspect/, 'an inaccessible key is an error, never an absence');
+        } finally {
+          fs.chmodSync(locked, 0o700);
+        }
+      }
+
 
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

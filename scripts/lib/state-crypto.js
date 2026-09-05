@@ -43,29 +43,42 @@ function isEncryptedBuffer(data) {
 }
 
 // A key file must be private and must be the file itself: it is opened
-// without following links (O_NOFOLLOW where the platform has it), the
-// object behind the descriptor must be a regular file, the mode is set and
-// read back through that descriptor, and the content is read from it, so
-// the file that was checked is the file that is used. Where the filesystem
-// keeps POSIX bits a file still readable by others after the chmod is a
-// hard error; on Windows there are no bits to tighten, so the mode step is
+// without following links (O_NOFOLLOW where the platform has it, with an
+// identity check across the open where it does not) and without blocking
+// (a FIFO planted at the path cannot stall the open), the object behind
+// the descriptor must be a regular file, the mode is set and read back
+// through that descriptor, and the content is read from it, so the file
+// that was checked is the file that is used. Where the filesystem keeps
+// POSIX bits a file still readable by others after the chmod is a hard
+// error; on Windows there are no bits to tighten, so the mode step is
 // skipped there.
 const NO_FOLLOW_FLAG = fs.constants.O_NOFOLLOW || 0;
+const NON_BLOCKING_FLAG = fs.constants.O_NONBLOCK || 0;
 
 function linkRefusal(filePath, cause) {
   return new Error(`[EGC] ${filePath} is a symbolic link; the key must be a regular file. Replace the link and restart.`, { cause });
 }
 
 function keyDescriptor(filePath) {
-  if (!NO_FOLLOW_FLAG && fs.lstatSync(filePath).isSymbolicLink()) throw linkRefusal(filePath, null);
+  const before = NO_FOLLOW_FLAG ? null : fs.lstatSync(filePath);
+  if (before?.isSymbolicLink()) throw linkRefusal(filePath, null);
+  let fd;
   try {
-    return fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG);
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG | NON_BLOCKING_FLAG);
   } catch (openErr) {
     if (openErr.code === 'ELOOP') throw linkRefusal(filePath, openErr);
     const error = new Error(`[EGC] Could not open ${filePath}: ${openErr.message}. The key file must exist and be a regular file.`, { cause: openErr });
     error.code = openErr.code;
     throw error;
   }
+  if (before) {
+    const after = fs.fstatSync(fd);
+    if (after.dev !== before.dev || after.ino !== before.ino) {
+      fs.closeSync(fd);
+      throw new Error(`[EGC] ${filePath} changed while it was being opened; the key must be a regular file that stays put. Check for a link planted at the path and restart.`);
+    }
+  }
+  return fd;
 }
 
 function refuseUnlessRegularAndPrivate(fd, filePath) {
@@ -99,14 +112,27 @@ function assertPrivateKeyFile(filePath) {
   withPrivateKeyFile(filePath, () => undefined);
 }
 
-// Whether anything (a file, a link, even a dangling one) sits at the path:
-// a dangling link is refused as a link, never treated as absent.
+// Whether anything (a file, a link, even a dangling one) sits at the path.
+// Only a path with nothing at it is absent; a path that cannot be
+// inspected is an error, never a silent absence.
 function present(filePath) {
   try {
     fs.lstatSync(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return false;
+    throw new Error(`[EGC] Could not inspect ${filePath}: ${err.message}`, { cause: err });
+  }
+}
+
+// Every byte written, a short write resumed, no progress refused: a key
+// file is never published half written.
+function writeAllBytes(fd, bytes) {
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (written <= 0) throw new Error('[EGC] short write: no progress while writing the key file');
+    offset += written;
   }
 }
 
@@ -142,7 +168,8 @@ function loadOrCreateKeySync(keyPath) {
     // Created exclusively (wx): a link planted at the temp path is never
     // followed, so the key lands only in a file this call created.
     const tmpFd = fs.openSync(tmpPath, 'wx', 0o600);
-    try { fs.writeSync(tmpFd, key.toString('hex')); } finally { fs.closeSync(tmpFd); }
+    try { writeAllBytes(tmpFd, Buffer.from(key.toString('hex'), 'utf-8')); } finally { fs.closeSync(tmpFd); }
+
 
     try {
       fs.linkSync(tmpPath, resolvedPath);
