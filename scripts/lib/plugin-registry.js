@@ -40,12 +40,13 @@ function getInstalledDir() {
 }
 
 // Every plugin is one directory directly under the store: @scope/name is
-// stored as @scope__name, a spelling no plain name can produce, so a scope
-// and a plugin of the same name never share a path.
+// stored as @scope+name. The plus sign is outside the segment alphabet, so
+// no other accepted name (plain or scoped) spells the same directory, and a
+// scope and a plugin of the same name never share a path.
 function getPluginDir(name) {
   const error = pluginNameError(name);
   if (error) throw new Error(error);
-  return path.join(INSTALLED_DIR, name.startsWith('@') ? name.replace('/', '__') : name);
+  return path.join(INSTALLED_DIR, name.startsWith('@') ? name.replace('/', '+') : name);
 }
 
 // The plugin directory for a name recorded in the lock file, or null when

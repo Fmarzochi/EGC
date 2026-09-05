@@ -117,8 +117,8 @@ function runTests() {
       assert.notStrictEqual(scoped, plain);
       assert.ok(!scoped.startsWith(plain + path.sep), 'the scoped plugin is not inside the plain one');
       assert.ok(registry.pluginNameError('@scope'), 'a bare scope is not a name');
-      assert.strictEqual(registry.pluginNameError('scope__plugin'), null, 'the stored spelling is itself a valid plain name and lands in its own directory');
-      assert.notStrictEqual(registry.getPluginDir('scope__plugin'), scoped);
+      assert.ok(registry.pluginNameError('scope+plugin'), 'the stored spelling is not an accepted name, so nothing else maps onto it');
+      assert.notStrictEqual(registry.getPluginDir('@scope__plugin/x'), registry.getPluginDir('@scope/plugin__x'), 'two scoped names never share a directory');
     })) passed++; else failed++;
 
     if (test('a plugin recorded under a name the store no longer accepts fails per plugin instead of throwing', () => {
