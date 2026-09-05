@@ -34,24 +34,61 @@ const RULES = [
 ];
 
 // Event fields whose text is written by whoever opened the pull request,
-// issue or comment, or named the branch; any of them inside a run: step is
-// a shell injection whatever the triggering event.
-const UNTRUSTED_TEXT_EXPRESSION = /\$\{\{\s*github\.(?:event\.(?:pull_request\.(?:title|body|head\.(?:ref|label)|user\.(?:login|email))|issue\.(?:title|body)|comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|commits\[\d+\]\.(?:message|author\.(?:name|email))|head_commit\.(?:message|author\.(?:name|email)))|head_ref)\s*\}\}/g;
+// issue or comment, named the branch or authored the commit; any of them
+// inside a run: step is a shell injection whatever the triggering event.
+// A field is matched anywhere inside an expression (`|| ''`, `format()`,
+// a ternary), not only as the whole expression.
+const UNTRUSTED_EVENT_FIELDS = [
+  /\bgithub\.event\.pull_request\.(?:title|body)\b/,
+  /\bgithub\.event\.pull_request\.head\.(?:ref|label)\b/,
+  /\bgithub\.event\.pull_request\.user\.(?:login|email)\b/,
+  /\bgithub\.event\.issue\.(?:title|body)\b/,
+  /\bgithub\.event\.(?:comment|review|review_comment)\.body\b/,
+  /\bgithub\.event\.discussion\.(?:title|body)\b/,
+  /\bgithub\.event\.commits\[\d+\]\.message\b/,
+  /\bgithub\.event\.commits\[\d+\]\.(?:author|committer)\.(?:name|email)\b/,
+  /\bgithub\.event\.head_commit\.message\b/,
+  /\bgithub\.event\.head_commit\.(?:author|committer)\.(?:name|email)\b/,
+  /\bgithub\.head_ref\b/,
+];
+
+// The untrusted fields found inside the `${{ ... }}` expressions of `text`,
+// each with its offset in the text. Expressions are found by a plain scan
+// (no nested braces in the expression syntax), so a malformed one cannot
+// make the scan backtrack.
+function untrustedFieldsIn(text) {
+  const found = [];
+  let from = text.indexOf('${{');
+  while (from !== -1) {
+    const close = text.indexOf('}}', from + 3);
+    if (close === -1) break;
+    const expression = text.slice(from, close + 2);
+    for (const field of UNTRUSTED_EVENT_FIELDS) {
+      const match = field.exec(expression);
+      if (match) found.push({ index: from, expression: expression.length > 120 ? `${expression.slice(0, 117)}...` : expression, field: match[0] });
+    }
+    from = text.indexOf('${{', close + 2);
+  }
+  return found;
+}
 
 // The run: blocks of a workflow, with the line each one starts on: the
-// scalar after `run:` and, for a block scalar (| or >), every following
-// line indented deeper than the key.
+// scalar after the `run` key (spaces before the colon allowed, as YAML
+// does) and, for a block scalar (| or >), every following line indented
+// deeper than the key itself. The key's column, not the dash's, bounds the
+// block, so a sibling key (env:, shell:) after a block-scalar run: is not
+// swallowed into it.
 function extractRunBlocks(source) {
   const blocks = [];
   const lines = source.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
-    const match = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(lines[i]);
+    const match = /^(\s*(?:-\s+)?)run\s*:\s*(.*)$/.exec(lines[i]);
     if (!match) continue;
-    const indent = match[1].length;
+    const keyColumn = match[1].length;
     const text = [match[2]];
     if (/^[|>]/.test(match[2].trim())) {
       let j = i + 1;
-      while (j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > indent)) {
+      while (j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > keyColumn)) {
         text.push(lines[j]);
         j += 1;
       }
@@ -64,13 +101,13 @@ function extractRunBlocks(source) {
 function findRunInjections(filePath, source) {
   const violations = [];
   for (const block of extractRunBlocks(source)) {
-    for (const match of block.text.matchAll(UNTRUSTED_TEXT_EXPRESSION)) {
+    for (const found of untrustedFieldsIn(block.text)) {
       violations.push({
         filePath,
         event: 'run',
-        description: 'run: must not splice untrusted event text into the shell; pass it through an env: variable and quote it',
-        expression: match[0],
-        line: block.startLine + getLineNumber(block.text, match.index) - 1,
+        description: `run: must not splice untrusted event text (${found.field}) into the shell; pass it through an env: variable and quote it`,
+        expression: found.expression,
+        line: block.startLine + getLineNumber(block.text, found.index) - 1,
       });
     }
   }
@@ -195,6 +232,8 @@ module.exports = {
   extractCheckoutSteps,
   extractRunBlocks,
   findRunInjections,
+  untrustedFieldsIn,
+
   findViolations,
   validateWorkflowSecurity,
 };
