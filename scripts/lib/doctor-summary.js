@@ -166,26 +166,48 @@ function summarizeDoctorReport(report, options = {}) {
 // The repair JSON carries one entry per target; init needs the files it
 // restored (the repair summary's repairedCount counts targets), whether
 // anything stayed unrepairable, and whether a plugin reinstall failed.
+function countRepairEntries(entries) {
+  const count = (entry, field) => (Array.isArray(entry[field]) ? entry[field].length : 0);
+  const sum = field => entries.reduce((total, entry) => total + count(entry, field), 0);
+  return {
+    repaired: sum('repairedPaths'),
+    pruned: sum('prunedPaths'),
+    unrepairable: sum('unrepairable'),
+    errors: entries.filter(entry => entry.status === 'error' || entry.status === 'partial').length,
+    touched: entries.filter(entry => count(entry, 'repairedPaths') > 0 || count(entry, 'prunedPaths') > 0).length,
+  };
+}
+
+function describeRepair(counts, pluginFailures, manifestError) {
+  const parts = [];
+  if (counts.repaired > 0) parts.push(`restored ${pluralize(counts.repaired, 'file')}`);
+  if (counts.pruned > 0) parts.push(`pruned ${pluralize(counts.pruned, 'stale entry', 'stale entries')}`);
+  if (parts.length === 0) parts.push(manifestError ? `install manifests refused: ${manifestError}` : 'nothing to restore');
+  const tail = [];
+  if (counts.touched > 0) tail.push(` in ${pluralize(counts.touched, 'target')}`);
+  if (counts.unrepairable > 0) tail.push(`; ${counts.unrepairable} unrepairable`);
+  if (pluginFailures > 0) tail.push(`; ${pluralize(pluginFailures, 'plugin reinstall')} failed`);
+  if (manifestError && parts[0] !== `install manifests refused: ${manifestError}`) tail.push(`; install manifests refused: ${manifestError}`);
+  return parts.join(', ') + tail.join('');
+}
+
 function summarizeRepairResult(result) {
   const entries = Array.isArray(result?.results) ? result.results : [];
-  const count = (entry, field) => (Array.isArray(entry[field]) ? entry[field].length : 0);
-  const repaired = entries.reduce((total, entry) => total + count(entry, 'repairedPaths'), 0);
-  const pruned = entries.reduce((total, entry) => total + count(entry, 'prunedPaths'), 0);
-  const unrepairable = entries.reduce((total, entry) => total + count(entry, 'unrepairable'), 0);
-  const errors = entries.filter(entry => entry.status === 'error' || entry.status === 'partial').length;
-  const touched = entries.filter(entry => count(entry, 'repairedPaths') > 0 || count(entry, 'prunedPaths') > 0).length;
+  const manifestError = typeof result?.manifestError === 'string' && result.manifestError.length > 0 ? result.manifestError : null;
+  const counts = countRepairEntries(entries);
+  // A refusal that produced no entries is still one failed repair.
+  const errors = Math.max(counts.errors, manifestError ? 1 : 0);
   const pluginFailures = (Array.isArray(result?.pluginRepairs) ? result.pluginRepairs : []).filter(plugin => !plugin.success).length;
-  const refused = typeof result?.manifestError === 'string' && result.manifestError.length > 0;
-  const parts = [];
-  if (repaired > 0) parts.push(`restored ${pluralize(repaired, 'file')}`);
-  if (pruned > 0) parts.push(`pruned ${pluralize(pruned, 'stale entry', 'stale entries')}`);
-  if (parts.length === 0) parts.push(refused ? `install manifests refused: ${result.manifestError}` : 'nothing to restore');
-  let text = parts.join(', ');
-  if (touched > 0) text += ` in ${pluralize(touched, 'target')}`;
-  if (unrepairable > 0) text += `; ${unrepairable} unrepairable`;
-  if (pluginFailures > 0) text += `; ${pluralize(pluginFailures, 'plugin reinstall')} failed`;
-  if (refused && parts.length > 0 && !parts[0].startsWith('install manifests refused')) text += `; install manifests refused: ${result.manifestError}`;
-  return { repaired, pruned, unrepairable, errors, pluginFailures, refused, text, failed: errors > 0 || unrepairable > 0 || pluginFailures > 0 || refused };
+  return {
+    repaired: counts.repaired,
+    pruned: counts.pruned,
+    unrepairable: counts.unrepairable,
+    errors,
+    pluginFailures,
+    refused: Boolean(manifestError),
+    text: describeRepair(counts, pluginFailures, manifestError),
+    failed: errors > 0 || counts.unrepairable > 0 || pluginFailures > 0,
+  };
 }
 
 module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName };
