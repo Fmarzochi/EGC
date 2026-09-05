@@ -44,6 +44,22 @@ const { loadOrCreateEncKey, encryptState, decryptState, isEncrypted, writeStateF
 
 console.log('\n=== Testing egc-memory encryption ===\n');
 
+if (test('loadOrCreateEncKey: a key file left readable by others is tightened, and refused when it cannot be', () => {
+  if (process.platform === 'win32') return;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-mode-'));
+  try {
+    const keyPath = path.join(dir, 'encryption.key');
+    fs.writeFileSync(keyPath, crypto.randomBytes(32).toString('hex'), { mode: 0o644 });
+    assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0o044, 'planted wide');
+    loadOrCreateEncKey(keyPath);
+    assert.strictEqual(fs.statSync(keyPath).mode & 0o077, 0, 'tightened to owner only');
+    const { assertPrivateKeyFile } = require(buildPath);
+    assert.throws(() => assertPrivateKeyFile(path.join(dir, 'missing.key')), /Could not set 0600/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
 // ── encrypt/decrypt round-trip ──────────────────────────────────────────────
 
 if (test('encryptState/decryptState: round-trips plaintext', () => {
@@ -92,7 +108,7 @@ if (test('loadOrCreateEncKey: returns a 32-byte Buffer and creates the file with
   }
 })) passed++; else failed++;
 
-if (test('loadOrCreateEncKey: warns (does not throw) when chmod on the key file fails (audit EGC-128, low)', () => {
+if (test('loadOrCreateEncKey: refuses a key whose permissions cannot be tightened (audit 2026-08-17, day 16; supersedes EGC-128)', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
   const keyPath = path.join(tmpDir, 'encryption.key');
   const originalChmodSync = fs.chmodSync;
@@ -106,13 +122,9 @@ if (test('loadOrCreateEncKey: warns (does not throw) when chmod on the key file 
     return originalChmodSync(target, mode);
   };
   try {
-    const key = loadOrCreateEncKey(keyPath);
-    assert.ok(Buffer.isBuffer(key), 'should still return a usable key despite the chmod failure');
-    assert.strictEqual(key.length, 32);
-    assert.ok(
-      errorLines.some(line => line.includes(keyPath) && line.includes('0600')),
-      `expected a warning naming the key path and the intended mode, got: ${JSON.stringify(errorLines)}`
-    );
+    if (process.platform === 'win32') return;
+    assert.throws(() => loadOrCreateEncKey(keyPath), error => error.message.includes(keyPath) && error.message.includes('0600'), 'a key that cannot be made private is refused, not used');
+    assert.ok(!fs.existsSync(keyPath) || (fs.statSync(keyPath).mode & 0o077) === 0, 'no exposed key is left behind as the process key');
   } finally {
     fs.chmodSync = originalChmodSync;
     console.error = originalConsoleError;

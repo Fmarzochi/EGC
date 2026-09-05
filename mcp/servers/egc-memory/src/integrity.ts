@@ -15,6 +15,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { assertPrivateKeyFile } from './encryption.js';
+
 
 const HMAC_ALGORITHM = 'sha256';
 
@@ -63,22 +65,24 @@ export function loadOrCreateKey(): Buffer {
     }
 
     const key = Buffer.from(hex, 'hex');
-    // Harden permissions even on existing key in case it was copied with wrong perms
-    try { fs.chmodSync(KEY_PATH, 0o600); } catch { /* best-effort */ }
+    // A key copied in with wide permissions is tightened, and the process
+    // refuses to run with it exposed.
+    assertPrivateKeyFile(KEY_PATH);
     try { fs.chmodSync(KEY_DIR, 0o700); } catch { /* best-effort */ }
     return key;
   }
 
-  // Generate a fresh key and persist it.
+  // Generate a fresh key and persist it. A key that cannot be persisted or
+  // kept private is not used: every state file signed with it would fail
+  // verification on the next start, and a key on disk with wide
+  // permissions would let another user forge the signatures.
   const key = crypto.randomBytes(32);
   try {
     fs.writeFileSync(KEY_PATH, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(KEY_PATH, 0o600);
   } catch (e) {
-    console.error('[EGC integrity] Failed to persist HMAC key:', String(e));
-    // best-effort: if we cannot persist the key we still return it for
-    // this process lifetime (integrity checks will fail on next boot).
+    throw new Error(`[EGC integrity] Failed to persist HMAC key to ${KEY_PATH}: ${String(e)}. Fix the directory permissions and restart.`, { cause: e });
   }
+  assertPrivateKeyFile(KEY_PATH);
   return key;
 }
 

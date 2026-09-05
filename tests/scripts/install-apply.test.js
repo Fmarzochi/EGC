@@ -70,6 +70,16 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
+  if (test('merge-json never carries a prototype key into the config', () => {
+    const { deepMergeJson } = require('../../scripts/lib/install/apply');
+    const merged = deepMergeJson({ mcpServers: { a: { command: 'x' } } }, JSON.parse('{"__proto__": {"polluted": true}, "constructor": {"prototype": {"p": 1}}, "mcpServers": {"b": {"command": "y"}}}'));
+    assert.strictEqual(Object.prototype.polluted, undefined, 'the global prototype is untouched');
+    assert.strictEqual(merged.polluted, undefined);
+    assert.ok(!Object.hasOwn(merged, 'constructor'), 'constructor is not a data key');
+    assert.deepStrictEqual(Object.keys(merged.mcpServers).sort(), ['a', 'b']);
+  })) passed++; else failed++;
+
+
   if (test('shows help with --help', () => {
     const result = run(['--help']);
     assert.strictEqual(result.code, 0);

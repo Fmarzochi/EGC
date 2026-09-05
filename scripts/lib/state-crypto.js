@@ -53,6 +53,25 @@ function loadKey(keyPath) {
 // another hook invocation) can never observe a truncated key, and the same
 // "never silently regenerate an existing key" safety rule. Only the create
 // path is new here -- reads still go through loadKey() elsewhere in this file.
+// A key file must be private. The permission bits are set and then read
+// back: where the filesystem keeps POSIX bits a file still readable by the
+// group or others after the chmod is a hard error, because the key would
+// sit exposed with nothing but a log line to say so; on Windows there are
+// no bits to tighten, so the call is a no-op there.
+function assertPrivateKeyFile(filePath) {
+  if (process.platform === 'win32') return;
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch (chmodErr) {
+    throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${chmodErr.message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: chmodErr });
+
+  }
+  const mode = fs.statSync(filePath).mode & 0o777;
+  if ((mode & 0o077) !== 0) {
+    throw new Error(`[EGC] ${filePath} is readable by other users (mode ${mode.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
+  }
+}
+
 function loadOrCreateKeySync(keyPath) {
   const resolvedPath = keyPath || defaultKeyPath();
   const dir = path.dirname(resolvedPath);
@@ -60,7 +79,7 @@ function loadOrCreateKeySync(keyPath) {
 
   if (fs.existsSync(resolvedPath)) {
     const key = loadKey(resolvedPath);
-    try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort, not supported on Windows */ }
+    assertPrivateKeyFile(resolvedPath);
     return key;
   }
 
@@ -70,7 +89,7 @@ function loadOrCreateKeySync(keyPath) {
     fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
     try {
       fs.linkSync(tmpPath, resolvedPath);
-      try { fs.chmodSync(resolvedPath, 0o600); } catch { /* best-effort */ }
+      assertPrivateKeyFile(resolvedPath);
       return key;
     } catch (e) {
       if (e?.code === 'EEXIST') return loadKey(resolvedPath);
@@ -124,6 +143,7 @@ function readStateFileDecrypted(filePath, keyPath) {
 }
 
 module.exports = {
+  assertPrivateKeyFile,
   MAGIC,
   isEncryptedBuffer,
   decryptStateBuffer,

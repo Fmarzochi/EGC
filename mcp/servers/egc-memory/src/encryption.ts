@@ -38,6 +38,27 @@ function defaultEncKeyPath(): string {
  * Throws if the key file exists but cannot be read or is malformed —
  * only generates a new key when the file genuinely does not exist.
  */
+// A key file must be private. The permission bits are set and then read
+// back: where the filesystem keeps POSIX bits (Linux, macOS, most network
+// mounts) a file still readable by the group or others after the chmod is a
+// hard error, because the key would sit exposed with nothing but a log line
+// to say so; where the filesystem has no bits at all (FAT, exFAT, Windows)
+// the read-back shows the mode Node synthesizes and nothing can be
+// tightened, so the call is a no-op there.
+export function assertPrivateKeyFile(filePath: string): void {
+  if (process.platform === 'win32') return;
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch (chmodErr) {
+    throw new Error(`[EGC] Could not set 0600 permissions on ${filePath}: ${(chmodErr as Error).message}. The key must not be readable by other users; fix the permissions and restart.`, { cause: chmodErr });
+
+  }
+  const mode = fs.statSync(filePath).mode & 0o777;
+  if ((mode & 0o077) !== 0) {
+    throw new Error(`[EGC] ${filePath} is readable by other users (mode ${mode.toString(8)}) and the filesystem did not accept 0600. Move the key to a filesystem with POSIX permissions.`);
+  }
+}
+
 export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffer {
   const dir = path.dirname(keyPath);
   try {
@@ -53,17 +74,7 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
     if (key.length !== 32) {
       throw new Error(`[EGC encryption] Key file at ${keyPath} is malformed (expected 32 bytes, got ${key.length}). Remove it to regenerate.`);
     }
-    try {
-      fs.chmodSync(keyPath, 0o600);
-    } catch (chmodErr) {
-      // Best-effort: some filesystems (FAT/exFAT mounts, certain network
-      // shares) don't support Unix permission bits at all, and that's a
-      // legitimate no-op. But on a filesystem that DOES support them, a
-      // failure here means the encryption key may be sitting world- or
-      // group-readable with no signal to the user that it happened —
-      // worth a warning even though it's not worth failing the read over.
-      console.error(`[EGC encryption] Warning: could not set 0600 permissions on ${keyPath}: ${(chmodErr as Error).message}`);
-    }
+    assertPrivateKeyFile(keyPath);
     return key;
   };
 
@@ -92,11 +103,7 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
     fs.writeFileSync(tmpPath, key.toString('hex'), { encoding: 'utf-8', mode: 0o600 });
     try {
       fs.linkSync(tmpPath, keyPath);
-      try {
-        fs.chmodSync(keyPath, 0o600);
-      } catch (chmodErr) {
-        console.error(`[EGC encryption] Warning: could not set 0600 permissions on ${keyPath}: ${(chmodErr as Error).message}`);
-      }
+      assertPrivateKeyFile(keyPath);
       return key;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'EEXIST') {

@@ -291,6 +291,11 @@ function ensureParentDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
+// Keys that name the prototype chain rather than data: a patch carrying
+// one of them is data from a manifest or a config file, never a request to
+// change what every object inherits.
+const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function deepMergeJson(baseValue, patchValue) {
   if (!isPlainObject(baseValue) || !isPlainObject(patchValue)) {
     return cloneJsonValue(patchValue);
@@ -298,6 +303,7 @@ function deepMergeJson(baseValue, patchValue) {
 
   const merged = { ...baseValue };
   for (const [key, value] of Object.entries(patchValue)) {
+    if (PROTOTYPE_KEYS.has(key)) continue;
     if (isPlainObject(value) && isPlainObject(merged[key])) {
       merged[key] = deepMergeJson(merged[key], value);
     } else {
