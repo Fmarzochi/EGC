@@ -405,9 +405,13 @@ function normalizeForMatch(value) {
     .toLowerCase();
 }
 
+// The settings file of the harness the gate runs under, Claude Code's or
+// Gemini CLI's (`.claude/settings.json`, `.gemini/settings.local.json`,
+// ...): an edit there is how the hook itself is configured or disabled, so
+// it is never gated. Nothing else under those directories is exempt.
 function isClaudeSettingsPath(filePath) {
   const normalized = normalizeForMatch(filePath);
-  return /(^|\/)\.gemini\/settings(?:\.[^/]+)?\.json$/.test(normalized);
+  return /(^|\/)\.(?:claude|gemini)\/settings(?:\.[^/]+)?\.json$/.test(normalized);
 }
 
 const SAFE_GIT_SUBCOMMANDS = {
