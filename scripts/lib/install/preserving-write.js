@@ -72,4 +72,12 @@ function copyFileKeepingMode(sourcePath, destinationPath) {
   replaceFileWith(destinationPath, descriptor => copyThroughDescriptor(sourcePath, descriptor), sourceMode);
 }
 
-module.exports = { copyFileKeepingMode, replaceFileWith };
+// Validated MCP text lands the same way; a destination created here takes
+// the source's permission bits (an MCP file may carry credentials and be
+// mode-restricted), and the temporary never exists under a wider mode.
+function writeTextKeepingMode(destinationPath, text, sourcePath) {
+  const sourceMode = fs.statSync(sourcePath).mode & 0o777;
+  replaceFileWith(destinationPath, descriptor => fs.writeFileSync(descriptor, text), sourceMode);
+}
+
+module.exports = { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode };

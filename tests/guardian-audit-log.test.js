@@ -87,6 +87,74 @@ if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding
     ['tool --secret --other flag', 'tool --secret --other flag'],
     ['tool --token=-hunter2 TOKEN=-hunter2 x', 'tool --token=[REDACTED] TOKEN=[REDACTED] x'],
     ['curl -uadmin:hunter2 https://x', 'curl -uadmin:[REDACTED] https://x'],
+    ['curl -uadmin:pw1 -u root:pw2 -u=ops:pw3 https://x', 'curl -uadmin:[REDACTED] -u root:[REDACTED] -u=ops:[REDACTED] https://x'],
+    ['curl -u ":hunter 2" https://x', 'curl -u ":[REDACTED]" https://x'],
+    ['curl -u ":" https://x', 'curl -u ":[REDACTED]" https://x'],
+    ["curl -d 'a\\' -u admin:pw https://x", "curl -d 'a\\' -u admin:[REDACTED] https://x"],
+    ['curl --user admin:pw https://x', 'curl --user admin:[REDACTED] https://x'],
+    ['echo curl\n-u user:pw', 'echo curl\n-u user:pw'],
+    [`curl ${'-u a:b '.repeat(400)}https://x`, `curl ${'-u a:[REDACTED] '.repeat(400)}https://x`],
+    ['curl.exe -u admin:pw https://x', 'curl.exe -u admin:[REDACTED] https://x'],
+    ['C:/tools/CURL.EXE -u admin:pw https://x', 'C:/tools/CURL.EXE -u admin:[REDACTED] https://x'],
+    ["sh -c 'curl -u user:pw https://x'", "sh -c 'curl -u user:[REDACTED] https://x'"],
+    ['echo $(curl -u user:pw https://x)', 'echo $(curl -u user:[REDACTED] https://x)'],
+    ['echo "$(curl -u user:pw https://x)"', 'echo "$(curl -u user:[REDACTED] https://x)"'],
+    ['echo "pre$(curl -u user:pw https://x) post"', 'echo "pre$(curl -u user:[REDACTED] https://x) post"'],
+    ['echo "`curl -u user:pw https://x`"', 'echo "`curl -u user:[REDACTED] https://x`"'],
+    ['echo $(curl -u user:pw https://x) -u user@host:src', 'echo $(curl -u user:[REDACTED] https://x) -u user@host:src'],
+    ["'x'$(curl -u user:pw https://x)", "'x'$(curl -u user:[REDACTED] https://x)"],
+    ["$'\\143url' -u admin:pw https://x", "$'\\143url' -u admin:[REDACTED] https://x"],
+    ["$'\\u0063url' -u admin:pw https://x", "$'\\u0063url' -u admin:[REDACTED] https://x"],
+    ["curl -u $'user\\x3apw' https://x", "curl -u $'[REDACTED]' https://x"],
+    ["sh -c $'curl -u user:pw https://x'", "sh -c $'curl -u user:[REDACTED] https://x'"],
+    ["echo $(sh -c 'curl -u user:pw https://x')", "echo $(sh -c 'curl -u user:[REDACTED] https://x')"],
+    ['echo "x"$(curl -u user:pw https://x)', 'echo "x"$(curl -u user:[REDACTED] https://x)'],
+    ["curl -u $'user\\x3ap:w' https://x", "curl -u $'[REDACTED]' https://x"],
+    ['echo `echo \\` curl -u user:pw https://x`', 'echo `echo \\` curl -u user:[REDACTED] https://x`'],
+    ["curl -u $'\\U00110000:pw' https://x", "curl -u $'[REDACTED]' https://x"],
+    ["curl -u user:pw$'\\x21' https://x", 'curl -u user:[REDACTED] https://x'],
+    ["curl -u $(printf $'a:b') https://x", 'curl -u $([REDACTED]) https://x'],
+    ['curl -u `printf a:b` https://x', 'curl -u `[REDACTED]` https://x'],
+    ["curl -u user$(printf x):pw https://x", 'curl -u user$([REDACTED]):[REDACTED] https://x'],
+    ["curl -u $(printf u):pw https://x", 'curl -u $([REDACTED]):[REDACTED] https://x'],
+    ['curl -u "user:$(printf pw)" https://x', 'curl -u "user:[REDACTED]" https://x'],
+    ["curl -u $(x `y)`):pw https://x", 'curl -u $([REDACTED]):[REDACTED] https://x'],
+    ["curl -u 'user$(x)':pw https://x", "curl -u 'user$(x)':[REDACTED] https://x"],
+    ["curl -u $'a\\'b'$(x):pw https://x", "curl -u $'[REDACTED]' https://x"],
+    [`curl -u ${'$('.repeat(80)}x${')'.repeat(80)}:pw https://x`, `curl -u $([REDACTED]):[REDACTED] https://x`],
+
+    ["echo $(echo \"`echo '\"'`\") ; curl -u user:pw https://x", "echo $(echo \"`echo '\"'`\") ; curl -u user:[REDACTED] https://x"],
+
+    // A backslash escapes only where the platform's shell reads it so; on
+    // Windows the substitution after a literal backslash is active, and an
+    // ANSI-C run opened after a literal backslash never closes, so the rest
+    // of the command is redacted with it.
+    ["curl -u user\\$(x):pw https://x", process.platform === 'win32' ? 'curl -u user\\$([REDACTED]):[REDACTED] https://x' : 'curl -u user\\$(x):[REDACTED] https://x'],
+    ["curl -u \\$'\\'$(y):pw https://x", process.platform === 'win32' ? "curl -u \\$'[REDACTED]'" : "curl -u \\$'\\'$([REDACTED]):[REDACTED] https://x"],
+
+
+
+
+
+
+
+
+    ['echo "$(curl" -u user@host:src', 'echo "$(curl" -u user@host:src'],
+    ["echo 'pre$(curl -u' -u user@host:src", "echo 'pre$(curl -u' -u user@host:src"],
+    ['echo "curl -u user:pw"', 'echo "curl -u user:pw"'],
+    ["bash -lc 'curl -u user:pw https://x'", "bash -lc 'curl -u user:[REDACTED] https://x'"],
+    ["curl -u $'user:pw' https://x", "curl -u $'[REDACTED]' https://x"],
+    ['echo pre$(curl -u user:pw https://x)', 'echo pre$(curl -u user:[REDACTED] https://x)'],
+    ['cat <(curl -u user:pw https://x)', 'cat <(curl -u user:[REDACTED] https://x)'],
+    ['RESULT=$(curl -u user:pw https://x) ./run', 'RESULT=$(curl -u user:[REDACTED] https://x) ./run'],
+    ['echo `curl -u user:pw https://x`', 'echo `curl -u user:[REDACTED] https://x`'],
+    ['echo "c\'url" -u user@host:src', 'echo "c\'url" -u user@host:src'],
+    ["c'url' -u admin:pw https://x", "c'url' -u admin:[REDACTED] https://x"],
+    ['sudo -u root:wheel curl -u admin:pw https://x', 'sudo -u root:wheel curl -u admin:[REDACTED] https://x'],
+    ['CURL -u admin:pw https://x', 'CURL -u admin:[REDACTED] https://x'],
+    ['curl -u :hunter2 https://x', 'curl -u :[REDACTED] https://x'],
+    ['curl -d "a;b|c&d" -u admin:pw https://x', 'curl -d "a;b|c&d" -u admin:[REDACTED] https://x'],
+    ['curl https://x\nrsync -u user@host:src dest', 'curl https://x\nrsync -u user@host:src dest'],
   ];
   for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
 })) passed++; else failed++;

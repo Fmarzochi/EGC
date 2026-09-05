@@ -6,7 +6,8 @@ const path = require('node:path');
 
 const { writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
-const { filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
+const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../mcp-config');
+const { writeTextKeepingMode } = require('./preserving-write');
 const {
   HOOK_OPERATION_KIND,
   applyManagedHookOperation,
@@ -97,11 +98,6 @@ function findHooksSourcePath(plan, hooksDestinationPath) {
   return operation ? operation.sourcePath : null;
 }
 
-function isMcpConfigPath(filePath) {
-  const basename = path.basename(String(filePath || ''));
-  return basename === '.mcp.json' || basename === 'mcp.json';
-}
-
 function buildResolvedClaudeHooks(plan) {
   if (plan.adapter?.target !== 'egc') {
     return null;
@@ -133,6 +129,9 @@ function applyMergeJsonOperation(operation, disabledServers) {
   const payload = cloneJsonValue(operation.mergePayload);
   if (payload === undefined) {
     throw new Error(`Missing merge payload for ${operation.destinationPath}`);
+  }
+  if (isMcpConfigPath(operation.destinationPath)) {
+    assertSafeMcpConfig(payload, `merge into ${operation.destinationPath}`);
   }
 
   const filteredPayload = (
@@ -183,10 +182,16 @@ function applyMergeMarkdownIndexOperation(operation) {
   fs.writeFileSync(operation.destinationPath, nextContent, 'utf8');
 }
 
+// The text that was validated is the text that lands (or the filtered form
+// of exactly that parse), so nothing can change between check and write.
 function applyMcpCopyFileOperation(operation, disabledServers) {
-  const sourceConfig = readJsonObject(operation.sourcePath, 'MCP config');
-  const filteredConfig = filterMcpConfig(sourceConfig, disabledServers).config;
-  fs.writeFileSync(operation.destinationPath, formatJson(filteredConfig), 'utf8');
+  const text = fs.readFileSync(operation.sourcePath, 'utf8');
+  const sourceConfig = parseMcpConfigText(text, operation.sourcePath);
+  assertSafeMcpConfig(sourceConfig, operation.sourcePath);
+  const landed = disabledServers.length === 0
+    ? text
+    : formatJson(filterMcpConfig(sourceConfig, disabledServers).config);
+  writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
 }
 
 // apply.js's own location is always the real installed package: unlike
@@ -251,7 +256,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
       applyMergeYamlReadListOperation(operation);
     } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
       applyMergeMarkdownIndexOperation(operation);
-    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath) && disabledServers.length > 0) {
+    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
       applyMcpCopyFileOperation(operation, disabledServers);
     } else {
       fs.copyFileSync(operation.sourcePath, operation.destinationPath);

@@ -342,13 +342,56 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
 // off the front of a token list until the real command is reached, looping
 // so stacked wrappers (`sudo timeout 5 xargs rm -rf`) all get unwrapped
 // rather than just the outermost one.
+// Shell keywords and grouping openers that stand in front of the command
+// actually run: `if rm ...; then`, `then rm ...`, `(rm ...)`, `{ rm ...; }`,
+// `! rm ...`. Judged as "the command", the keyword would read as a mere
+// allowlist miss and let whatever follows it pass.
+const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
+
+// `case word in pattern) command`: the command starts after the pattern.
+function unwrapCaseClause(current: string[]): string[] {
+  const inIndex = current.findIndex((token, index) => index > 0 && bareToken(token) === 'in');
+  const rest = current.slice(inIndex === -1 ? 1 : inIndex + 1);
+  return rest.length > 0 && stripQuotes(rest[0]).endsWith(')') ? rest.slice(1) : rest;
+}
+
+function isBlockOpener(token: string | undefined): boolean {
+  const bare = token === undefined ? '' : stripQuotes(token);
+  return bare.startsWith('{') || bare.startsWith('(');
+}
+
+// Constructs that run a command of their own: case arms, coprocesses and
+// function bodies (`function f { ... }`, `f() { ... }`) are unwrapped to the
+// command they carry so it is judged as if typed directly.
+function tryUnwrapCommandCarrier(current: string[]): UnwrapStep | null {
+  const head = bareToken(current[0]);
+  if (head === 'case') return { remaining: unwrapCaseClause(current) };
+  if (head === 'coproc') return { remaining: current.slice(isBlockOpener(current[2]) ? 2 : 1) };
+  if (head === 'function') return { remaining: current.slice(2) };
+  if (head.endsWith('()')) return { remaining: current.slice(1) };
+  // A later arm of a case (`b) command`, `b ) command`) starts its own segment after ;;.
+  if (head.endsWith(')')) return { remaining: current.slice(1) };
+  if (current.length > 1 && bareToken(current[1]) === ')') return { remaining: current.slice(2) };
+  if (current.length > 1 && bareToken(current[1]) === '()') return { remaining: current.slice(2) };
+  return null;
+}
+
+function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
+  const head = bareToken(current[0]);
+  if (SHELL_KEYWORDS.has(head)) return { remaining: current.slice(1) };
+  if ((head.startsWith('(') || head.startsWith('{')) && head.length > 1) {
+    return { remaining: [stripQuotes(current[0]).slice(1), ...current.slice(1)] };
+  }
+  return tryUnwrapCommandCarrier(current);
+}
+
 function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
   let current = tokens;
   let changed = true;
   while (changed && current.length > 0) {
     changed = false;
 
-    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current);
+    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
     if (step) {
       if (step.blocked) return { tokens: [], blocked: step.blocked };
       current = step.remaining as string[];

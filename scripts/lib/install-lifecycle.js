@@ -5,7 +5,8 @@ const path = require('node:path');
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
 const { hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
-const { copyFileKeepingMode, replaceFileWith } = require('./install/preserving-write');
+const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./install/preserving-write');
+const { assertSafeMcpConfig, isMcpConfigPath, parseMcpConfigText } = require('./mcp-config');
 const { syncInstallStateToStore } = require('./install-state-store-sync');
 const {
   createManifestInstallPlan,
@@ -418,13 +419,25 @@ function repairCopyFile(repoRoot, operation) {
   }
 
   ensureParentDir(operation.destinationPath);
+  if (isMcpConfigPath(operation.destinationPath)) {
+    // A replayed MCP copy answers to the allowlist too, and the text that
+    // was validated is the text that lands.
+    const text = fs.readFileSync(sourcePath, 'utf8');
+    assertSafeMcpConfig(parseMcpConfigText(text, sourcePath), sourcePath);
+    writeTextKeepingMode(operation.destinationPath, text, sourcePath);
+    return;
+  }
   copyFileKeepingMode(sourcePath, operation.destinationPath);
 }
-
 function repairMergeJson(operation) {
   const payload = getOperationJsonPayload(operation);
   if (payload === undefined) {
     throw new Error(`Missing merge payload for repair: ${operation.destinationPath}`);
+  }
+  // A replayed payload is data from the state file, not a decision: it
+  // answers to the same allowlist as a fresh install.
+  if (isMcpConfigPath(operation.destinationPath)) {
+    assertSafeMcpConfig(payload, `repair of ${operation.destinationPath}`);
   }
 
   const currentValue = fs.existsSync(operation.destinationPath)

@@ -18,11 +18,29 @@ const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
 // only needs to mirror that for the wrappers the hook tests actually assert
 // on (e.g. "blocks a destructive command behind sudo"), not the full unwrap
 // logic — that sophistication is covered by the real guardian tests.
-const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command', 'doas', 'exec']);
+const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command', 'doas', 'exec', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
+
+// Mirrors the validator: wrappers, then case arms, coprocesses and function
+// definitions are peeled down to the command they carry.
+function unwrapCarriers(input) {
+  let tokens = input;
+  while (tokens.length > 0 && LEADING_WRAPPERS.has(tokens[0])) tokens = tokens.slice(1);
+  if (tokens[0] === 'case') {
+    const at = tokens.indexOf('in');
+    tokens = tokens.slice(at === -1 ? 1 : at + 1);
+    if (tokens[0] && tokens[0].endsWith(')')) tokens = tokens.slice(1);
+  }
+  if (tokens[0] === 'coproc') tokens = tokens.slice(tokens[2] && /^[{(]/.test(tokens[2]) ? 2 : 1);
+  if (tokens[0] === 'function') tokens = tokens.slice(2);
+  if (tokens[0] && tokens[0].endsWith(')')) tokens = tokens.slice(1);
+  while (tokens.length > 0 && LEADING_WRAPPERS.has(tokens[0])) tokens = tokens.slice(1);
+  return tokens;
+}
 
 function verdictForCommand(segment) {
   let tokens = segment.trim().split(/\s+/).filter(Boolean);
-  while (tokens.length > 0 && LEADING_WRAPPERS.has(tokens[0])) tokens = tokens.slice(1);
+  tokens = unwrapCarriers(tokens);
+  if (tokens[0] && /^[({]./.test(tokens[0])) tokens[0] = tokens[0].slice(1);
   const base = tokens[0] || '';
   if (base === 'rm' || base === 'mv') {
     return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS' };
