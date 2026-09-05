@@ -76,7 +76,7 @@ function deriveEventName(payload) {
 }
 
 function run() {
-  if (disabled()) return 0;
+  if (disabled()) return { exitCode: 0 };
 
   const raw = readStdin();
   const payload = parsePayload(raw);
@@ -110,21 +110,18 @@ function run() {
       ? `timed out after ${DEFAULT_TIMEOUT_MS}ms`
       : result.error.message;
     process.stderr.write(`[${HOOK_ID}] soft-fail: ${detail}\n`);
-    return 0;
+    return { exitCode: 0 };
   }
   if ((result.stderr || '').trim()) {
     process.stderr.write(`[${HOOK_ID}] ${String(result.stderr).trim().split('\n').pop()}\n`);
   }
-  return 0;
+  return { exitCode: 0 };
 }
 
 if (require.main === module) {
   const outcome = run();
-  if (outcome && typeof outcome === 'object') {
-    if (outcome.stderr) process.stderr.write(outcome.stderr);
-    process.exit(Number.isInteger(outcome.exitCode) ? outcome.exitCode : 0);
-  }
-  process.exit(outcome);
+  if (outcome.stderr) process.stderr.write(outcome.stderr);
+  process.exit(Number.isInteger(outcome.exitCode) ? outcome.exitCode : 0);
 }
 
 module.exports = { run };
