@@ -225,9 +225,14 @@ function resolvePackageRoot() {
 // existing ones are unaffected -- so it is logged and swallowed rather than
 // failing the whole install.
 function writeGuardianCliMarker(onWarning, homeDir) {
-  const markerPath = path.join(homeDir || os.homedir(), '.egc', 'guardian-cli-path.json');
+  const home = homeDir || os.homedir();
+  const markerPath = path.join(home, '.egc', 'guardian-cli-path.json');
   try {
+    // The marker's own directory answers to the same link check as every
+    // install destination; a linked ~/.egc turns the write into a warning.
+    refuseLinkedDestination(markerPath, home);
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+
     writeManagedText(markerPath, `${JSON.stringify({ packageRoot: resolvePackageRoot() }, null, 2)}\n`);
   } catch (error) {
     const msg = `Warning: Failed to write Guardian CLI marker: ${error.message}`;
@@ -346,6 +351,8 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 module.exports = {
   applyInstallPlan,
   refuseLinkedDestination,
+  writeGuardianCliMarker,
   writeManagedText,
+
 
 };

@@ -9,7 +9,8 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { refuseLinkedDestination, writeManagedText } = require('../../scripts/lib/install/apply');
+const { refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
 
@@ -53,6 +54,16 @@ function runTests() {
       if (test('a destination under a linked directory inside the root is refused, even when the file does not exist yet', () => {
         assert.throws(() => refuseLinkedDestination(path.join(root, 'linked-dir', 'deep', 'new.md'), root), /symbolic link/);
         assert.ok(!fs.existsSync(path.join(outside, 'deep')));
+      })) passed++; else failed++;
+
+      if (test('the Guardian marker is not written through a linked .egc directory', () => {
+        const home = path.join(dir, 'home');
+        fs.mkdirSync(home, { recursive: true });
+        fs.symlinkSync(outside, path.join(home, '.egc'), 'dir');
+        const warnings = [];
+        writeGuardianCliMarker(message => warnings.push(message), home);
+        assert.ok(warnings.some(message => message.includes('symbolic link')), JSON.stringify(warnings));
+        assert.ok(!fs.existsSync(path.join(outside, 'guardian-cli-path.json')), 'nothing lands behind the link');
       })) passed++; else failed++;
 
       if (test('a root that is itself a link is allowed', () => {
