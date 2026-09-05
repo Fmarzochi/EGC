@@ -187,9 +187,9 @@ function renderSessionList() {
       <div class="sl-ide">${escHtml(s.ide || 'unknown')}</div>
       <div class="sl-time">${formatTs(s.timestamp)}</div>
       <div class="sl-meta">
-        <span>${s.eventCount || 0} events</span>
+        <span>${escHtml(s.eventCount || 0)} events</span>
         ${s.duration ? '<span>' + formatDur(s.duration) + '</span>' : ''}
-        ${s.model ? '<span>' + s.model + '</span>' : ''}
+        ${s.model ? '<span>' + escHtml(s.model) + '</span>' : ''}
       </div>
     </div>
   `).join('');
@@ -410,7 +410,7 @@ function formatRelTime(ms) {
 
 function escHtml(s) {
   if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // Wire up scrub bar after DOM ready
