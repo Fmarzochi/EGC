@@ -60,13 +60,32 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  if (test('passes stdin through when required bootstrap inputs are missing', () => {
+  if (test('refuses to run when the bootstrap inputs are missing', () => {
     const result = run([], { input: '{"ok":true}' });
 
-    assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.stdout, '{"ok":true}');
-    assert.strictEqual(result.stderr, '');
+    assert.strictEqual(result.status, 2);
+    assert.strictEqual(result.stdout, '');
+    assert.ok(result.stderr.includes('without a mode or a target script'), result.stderr);
   })) passed++; else failed++;
+
+  if (test('refuses to run when the plugin root is not resolved or does not exist', () => {
+    const unresolved = run(['node', 'hook.js'], { input: 'raw-input', root: '' });
+    assert.strictEqual(unresolved.status, 2);
+    assert.strictEqual(unresolved.stdout, '');
+    assert.ok(unresolved.stderr.includes('plugin root not resolved'), unresolved.stderr);
+    assert.ok(unresolved.stderr.includes('EGC_PLUGIN_ROOT'), unresolved.stderr);
+
+    const root = createTempDir();
+    try {
+      const gone = run(['node', 'hook.js'], { input: 'raw-input', root: path.join(root, 'gone') });
+      assert.strictEqual(gone.status, 2);
+      assert.strictEqual(gone.stdout, '');
+      assert.ok(gone.stderr.includes('does not exist'), gone.stderr);
+    } finally {
+      cleanup(root);
+    }
+  })) passed++; else failed++;
+
 
   if (test('node mode runs target script with plugin root environment', () => {
     const root = createTempDir();
@@ -199,6 +218,23 @@ process.exit(7);
     }
   })) passed++; else failed++;
 
+  if (test('shell mode refuses a missing target even when no shell runtime is available', () => {
+    const root = createTempDir();
+    try {
+      const result = run(['shell', path.join('scripts', 'missing.sh')], {
+        root,
+        input: 'raw-input',
+        env: { PATH: '', BASH: '' },
+      });
+
+      assert.strictEqual(result.status, 2);
+      assert.strictEqual(result.stdout, '');
+      assert.ok(result.stderr.includes('hook script missing'), result.stderr);
+    } finally {
+      cleanup(root);
+    }
+  })) passed++; else failed++;
+
   if (test('rejects target paths that escape the plugin root', () => {
     const root = createTempDir();
     try {
@@ -207,15 +243,15 @@ process.exit(7);
         input: 'raw-input',
       });
 
-      assert.strictEqual(result.status, 0);
-      assert.strictEqual(result.stdout, 'raw-input');
+      assert.strictEqual(result.status, 2);
+      assert.strictEqual(result.stdout, '');
       assert.ok(result.stderr.includes('Path traversal rejected'));
     } finally {
       cleanup(root);
     }
   })) passed++; else failed++;
 
-  if (test('unknown mode fails open with stderr warning', () => {
+  if (test('unknown mode is refused with the reason on stderr', () => {
     const root = createTempDir();
     try {
       const result = run(['python', 'hook.py'], {
@@ -223,15 +259,15 @@ process.exit(7);
         input: 'raw-input',
       });
 
-      assert.strictEqual(result.status, 0);
-      assert.strictEqual(result.stdout, 'raw-input');
+      assert.strictEqual(result.status, 2);
+      assert.strictEqual(result.stdout, '');
       assert.ok(result.stderr.includes('unknown bootstrap mode: python'));
     } finally {
       cleanup(root);
     }
   })) passed++; else failed++;
 
-  if (test('missing node target returns child failure diagnostics', () => {
+  if (test('missing node target is refused with the install hint', () => {
     const root = createTempDir();
     try {
       const result = run(['node', path.join('scripts', 'missing.js')], {
@@ -239,9 +275,10 @@ process.exit(7);
         input: 'raw-input',
       });
 
-      assert.strictEqual(result.status, 1);
+      assert.strictEqual(result.status, 2);
       assert.strictEqual(result.stdout, '');
-      assert.ok(result.stderr.includes('Cannot find module'));
+      assert.ok(result.stderr.includes('hook script missing'), result.stderr);
+      assert.ok(result.stderr.includes('egc install --target gemini'), result.stderr);
     } finally {
       cleanup(root);
     }

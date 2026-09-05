@@ -85,6 +85,46 @@ test('hooks.json registers SessionStart + SessionEnd entries', () => {
   assert.ok(endMatches, 'SessionEnd missing egc-session-bridge entry');
 });
 
+test('fails closed when the plugin root does not resolve', () => {
+  const r = runHook('SessionStart', 'egc-test-root', { pluginRoot: path.join(REPO_ROOT, 'no-such-plugin-root') });
+  assert.strictEqual(r.status, 1, r.stderr);
+  assert.ok(r.stderr.includes('does not exist'), r.stderr);
+  assert.ok(r.stderr.includes('EGC_PLUGIN_ROOT'), r.stderr);
+});
+
+test('fails closed when the bridge is missing under the plugin root', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bridge-root-'));
+  try {
+    const r = runHook('SessionStart', 'egc-test-bridge', { pluginRoot: root });
+    assert.strictEqual(r.status, 1, r.stderr);
+    assert.ok(r.stderr.includes('is missing under plugin root'), r.stderr);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a refusal reaches the hook runner as a non-zero exit, not a passthrough', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bridge-wrapper-'));
+  try {
+    const copy = path.join(root, 'scripts', 'hooks', 'egc-session-bridge.js');
+    fs.mkdirSync(path.dirname(copy), { recursive: true });
+    fs.copyFileSync(HOOK, copy);
+    const runner = path.join(REPO_ROOT, 'scripts', 'hooks', 'run-with-flags.js');
+    const r = spawnSync(process.execPath, [runner, 'sessionstart:egc-session-bridge', 'scripts/hooks/egc-session-bridge.js', 'standard,strict'], {
+      cwd: root,
+      env: { ...process.env, EGC_PLUGIN_ROOT: root, HOOK_EVENT_NAME: 'SessionStart', EGC_HOOK_PROFILE: 'standard' },
+      input: '{}',
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: process.platform === 'win32' ? 30000 : 10000,
+    });
+    assert.strictEqual(r.status, 1, `${r.stdout}\n${r.stderr}`);
+    assert.ok(r.stderr.includes('is missing under plugin root'), r.stderr);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('hook is a no-op when EGC_SESSION_BRIDGE=off', () => {
   const tmp = createTempDir('egc-bridge-off-');
   try {

@@ -29,10 +29,26 @@ function parsePayload(raw) {
   try { return JSON.parse(raw); } catch (_) { return {}; } // NOSONAR: malformed payload is treated as empty
 }
 
+// The plugin root: the environment when it names an existing directory,
+// otherwise the package this hook ships in. A root set in the environment
+// that does not exist is reported, never silently replaced.
 function resolvePluginRoot() {
   const fromEnv = process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT;
-  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
-  return path.resolve(__dirname, '..', '..');
+  if (!fromEnv) return { root: path.resolve(__dirname, '..', '..'), error: null };
+  if (fs.existsSync(fromEnv)) return { root: fromEnv, error: null };
+  return { root: null, error: `plugin root ${fromEnv} does not exist` };
+}
+
+// A bridge that cannot be found does not run, and the session must not
+// look as if it had been bridged: the refusal is returned in the shape the
+// hook runner honours (an exit code with the reason on stderr), so a
+// broken install is seen instead of silently losing every session event,
+// whether the hook runs directly or through run-with-flags.
+function refuse(reason) {
+  return {
+    exitCode: 1,
+    stderr: `[${HOOK_ID}] refused: ${reason}; set EGC_PLUGIN_ROOT to the EGC install directory or reinstall with egc install --target gemini\n`,
+  };
 }
 
 function resolvePythonBin(pluginRoot) {
@@ -60,7 +76,7 @@ function deriveEventName(payload) {
 }
 
 function run() {
-  if (disabled()) return 0;
+  if (disabled()) return { exitCode: 0 };
 
   const raw = readStdin();
   const payload = parsePayload(raw);
@@ -68,9 +84,10 @@ function run() {
   const sessionId = payload.session_id || process.env.EGC_SESSION_ID || process.env.ECC_SESSION_ID
     || `egc-${Date.now()}`;
 
-  const pluginRoot = resolvePluginRoot();
+  const { root: pluginRoot, error: rootError } = resolvePluginRoot();
+  if (rootError) return refuse(rootError);
   const bridgePy = path.join(pluginRoot, 'scripts', 'runtime', 'session_bridge.py');
-  if (!fs.existsSync(bridgePy)) return 0;
+  if (!fs.existsSync(bridgePy)) return refuse(`bridge ${bridgePy} is missing under plugin root ${pluginRoot}`);
 
   const python = resolvePythonBin(pluginRoot);
   const env = { ...process.env };
@@ -93,16 +110,18 @@ function run() {
       ? `timed out after ${DEFAULT_TIMEOUT_MS}ms`
       : result.error.message;
     process.stderr.write(`[${HOOK_ID}] soft-fail: ${detail}\n`);
-    return 0;
+    return { exitCode: 0 };
   }
   if ((result.stderr || '').trim()) {
     process.stderr.write(`[${HOOK_ID}] ${String(result.stderr).trim().split('\n').pop()}\n`);
   }
-  return 0;
+  return { exitCode: 0 };
 }
 
 if (require.main === module) {
-  process.exit(run());
+  const outcome = run();
+  if (outcome.stderr) process.stderr.write(outcome.stderr);
+  process.exit(Number.isInteger(outcome.exitCode) ? outcome.exitCode : 0);
 }
 
 module.exports = { run };
