@@ -70,6 +70,8 @@ async function runTests() {
       const mdc = fs.readFileSync(result.cursor, 'utf-8');
       assert.ok(mdc.includes('alwaysApply: true'), 'should have frontmatter');
       assert.ok(mdc.includes('EGC Project Memory'), 'should have section header');
+      assert.ok(mdc.includes('_Machine-generated from the project state file.'), 'the block names itself as generated data');
+
       assert.ok(mdc.includes('Test project in alpha phase'), 'should have context');
       assert.ok(mdc.includes('Use TypeScript'), 'should have decision');
       assert.ok(mdc.includes('Add rate limiting'), 'should have next item');
