@@ -398,7 +398,23 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
-  (test('registerJson treats an empty (0-byte) or whitespace-only file as an empty object and adds both servers', () => {
+  (test('registerJson treats a 0-byte empty file as an empty object and adds both servers', () => {
+    const tmpHome = makeTempDir();
+    const dir = path.join(tmpHome, '.gemini', 'config');
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'mcp_config.json');
+    fs.writeFileSync(target, '');
+
+    const changed = registerJson(target, bins);
+    assert.strictEqual(changed, true);
+    const written = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(written.mcpServers['egc-guardian']);
+    assert.ok(written.mcpServers['egc-memory']);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerJson treats a whitespace-only file as an empty object and adds both servers', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.gemini', 'config');
     fs.mkdirSync(dir, { recursive: true });
@@ -410,6 +426,31 @@ function runTests() {
     const written = JSON.parse(fs.readFileSync(target, 'utf8'));
     assert.ok(written.mcpServers['egc-guardian']);
     assert.ok(written.mcpServers['egc-memory']);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerJson throws on invalid root shape (array or primitive) to protect user data', () => {
+    const tmpHome = makeTempDir();
+    const dir = path.join(tmpHome, '.cursor');
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'mcp.json');
+    fs.writeFileSync(target, '[1, 2, 3]');
+
+    assert.throws(() => registerJson(target, bins), /not a valid MCP config object/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), '[1, 2, 3]', 'invalid root file must be left untouched');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerJson throws on invalid mcpServers shape (array or primitive) to protect user data', () => {
+    const tmpHome = makeTempDir();
+    const dir = path.join(tmpHome, '.cursor');
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'mcp.json');
+    fs.writeFileSync(target, JSON.stringify({ mcpServers: [1, 2, 3] }));
+
+    assert.throws(() => registerJson(target, bins), /invalid mcpServers object/);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
@@ -711,6 +752,51 @@ function runTests() {
 
     const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
     assert.strictEqual(parsed.context_servers['egc-guardian'].command.args[0], quotedPath, 'a path with a double quote should round-trip exactly');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerZedContextServers treats a 0-byte empty file as an empty object and adds servers', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, '');
+
+    const changed = registerZedContextServers(target, bins);
+    assert.strictEqual(changed, true);
+    const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(parsed.context_servers['egc-guardian']);
+    assert.ok(parsed.context_servers['egc-memory']);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerZedContextServers treats a whitespace-only file as an empty object and adds servers', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, '  \n\t  ');
+
+    const changed = registerZedContextServers(target, bins);
+    assert.strictEqual(changed, true);
+    const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(parsed.context_servers['egc-guardian']);
+    assert.ok(parsed.context_servers['egc-memory']);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerZedContextServers throws on invalid settings root or context_servers shape to protect user data', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, '[1, 2, 3]');
+
+    assert.throws(() => registerZedContextServers(target, bins), /not a valid settings object/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), '[1, 2, 3]', 'invalid root file must be left untouched');
+
+    fs.writeFileSync(target, JSON.stringify({ context_servers: [1, 2, 3] }));
+    assert.throws(() => registerZedContextServers(target, bins), /invalid context_servers object/);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);

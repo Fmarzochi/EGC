@@ -182,6 +182,31 @@ function buildMcpRegistrationTargets(homeDir) {
 }
 
 /**
+ * Parses raw JSON configuration content as an object.
+ * Returns {} if content is null, empty, or whitespace-only.
+ * Throws SyntaxError wrapped in Error if malformed JSON.
+ * Throws TypeError if the root value is not an object or is an array.
+ */
+function parseJsonObject(targetPath, rawContent, rootEntityName = 'config') {
+  if (rawContent === null || rawContent === undefined) return {};
+  const trimmed = rawContent.trim();
+  if (trimmed.length === 0) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
+    }
+    throw err;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new TypeError(`existing file at ${targetPath} is not a valid ${rootEntityName} object - left untouched`);
+  }
+  return parsed;
+}
+
+/**
  * Merges egc-guardian / egc-memory into a JSON mcpServers config, preserving
  * whatever else is already in the file. Returns true if the file was
  * created/changed, false if both entries were already present (a legitimate,
@@ -192,23 +217,13 @@ function buildMcpRegistrationTargets(homeDir) {
  */
 function registerJson(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
-  let obj = { mcpServers: {} };
   const existingContent = readFileIfExists(targetPath);
-  if (existingContent !== null) {
-    const trimmed = existingContent.trim();
-    if (trimmed.length > 0) {
-      try {
-        obj = JSON.parse(trimmed);
-      } catch (err) {
-        if (err instanceof SyntaxError) {
-          throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
-        }
-        throw err;
-      }
-    }
+  const obj = parseJsonObject(targetPath, existingContent, 'MCP config');
+  if (obj.mcpServers === null || obj.mcpServers === undefined) {
+    obj.mcpServers = {};
+  } else if (typeof obj.mcpServers !== 'object' || Array.isArray(obj.mcpServers)) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid mcpServers object - left untouched`);
   }
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) obj = { mcpServers: {} };
-  if (!obj.mcpServers || typeof obj.mcpServers !== 'object' || Array.isArray(obj.mcpServers)) obj.mcpServers = {};
   let changed = false;
   if (!obj.mcpServers['egc-guardian']) {
     obj.mcpServers['egc-guardian'] = { command: 'node', args: [guardianBin] };
@@ -342,25 +357,13 @@ function registerZedContextServers(targetPath, bins) {
     .replaceAll('__MEMORY_BIN__', jsonStringBody(memoryBin));
   const incoming = JSON.parse(template);
 
-  let settings = {};
-  if (fs.existsSync(targetPath)) {
-    const raw = fs.readFileSync(targetPath, 'utf8');
-    const trimmed = raw.trim();
-    if (trimmed.length > 0) {
-      try {
-        settings = JSON.parse(trimmed);
-      } catch (err) {
-        if (err instanceof SyntaxError) {
-          throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
-        }
-        throw err;
-      }
-    }
+  const existingContent = readFileIfExists(targetPath);
+  const settings = parseJsonObject(targetPath, existingContent, 'settings');
+  if (settings.context_servers === null || settings.context_servers === undefined) {
+    settings.context_servers = {};
+  } else if (typeof settings.context_servers !== 'object' || Array.isArray(settings.context_servers)) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid context_servers object - left untouched`);
   }
-
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) settings = {};
-
-  if (!settings.context_servers) settings.context_servers = {};
   let changed = false;
   for (const [key, value] of Object.entries(incoming.context_servers)) {
     if (!settings.context_servers[key]) {
@@ -491,6 +494,7 @@ function registerMcpServers(homeDir, bins, callbacks = {}) {
 
 module.exports = {
   buildMcpRegistrationTargets,
+  parseJsonObject,
   registerJson,
   registerToml,
   registerContinueYaml,
