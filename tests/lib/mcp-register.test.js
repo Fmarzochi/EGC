@@ -398,6 +398,22 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
+  (test('registerJson treats an empty (0-byte) or whitespace-only file as an empty object and adds both servers', () => {
+    const tmpHome = makeTempDir();
+    const dir = path.join(tmpHome, '.gemini', 'config');
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, 'mcp_config.json');
+    fs.writeFileSync(target, '   \n\t  ');
+
+    const changed = registerJson(target, bins);
+    assert.strictEqual(changed, true);
+    const written = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(written.mcpServers['egc-guardian']);
+    assert.ok(written.mcpServers['egc-memory']);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
   // ── registerToml (unchanged behavior, guards against regressions) ──
 
   (test('registerToml appends both mcp_servers blocks to a fresh file', () => {

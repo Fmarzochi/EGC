@@ -195,16 +195,20 @@ function registerJson(targetPath, bins) {
   let obj = { mcpServers: {} };
   const existingContent = readFileIfExists(targetPath);
   if (existingContent !== null) {
-    try {
-      obj = JSON.parse(existingContent);
-    } catch (err) {
-      if (err instanceof SyntaxError) {
-        throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
+    const trimmed = existingContent.trim();
+    if (trimmed.length > 0) {
+      try {
+        obj = JSON.parse(trimmed);
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
+        }
+        throw err;
       }
-      throw err;
     }
   }
-  if (!obj.mcpServers) obj.mcpServers = {};
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) obj = { mcpServers: {} };
+  if (!obj.mcpServers || typeof obj.mcpServers !== 'object' || Array.isArray(obj.mcpServers)) obj.mcpServers = {};
   let changed = false;
   if (!obj.mcpServers['egc-guardian']) {
     obj.mcpServers['egc-guardian'] = { command: 'node', args: [guardianBin] };
@@ -340,15 +344,21 @@ function registerZedContextServers(targetPath, bins) {
 
   let settings = {};
   if (fs.existsSync(targetPath)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
-    } catch (err) {
-      if (err instanceof SyntaxError) {
-        throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
+    const raw = fs.readFileSync(targetPath, 'utf8');
+    const trimmed = raw.trim();
+    if (trimmed.length > 0) {
+      try {
+        settings = JSON.parse(trimmed);
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          throw new Error(`existing file at ${targetPath} is not valid JSON - left untouched: ${err.message}`, { cause: err });
+        }
+        throw err;
       }
-      throw err;
     }
   }
+
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) settings = {};
 
   if (!settings.context_servers) settings.context_servers = {};
   let changed = false;
