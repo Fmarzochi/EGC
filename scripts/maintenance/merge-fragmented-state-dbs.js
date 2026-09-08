@@ -108,8 +108,17 @@ function mergeOneTable(canonicalDb, srcDb, name, pk, apply) {
   };
 }
 
+// Filesystem identity, not spelling: a symlink to the canonical store, or the
+// same file spelled in another case on Windows, must be refused too.
 function samePath(a, b) {
-  return path.resolve(a) === path.resolve(b);
+  const resolvedA = path.resolve(a);
+  const resolvedB = path.resolve(b);
+  try {
+    return fs.realpathSync.native(resolvedA) === fs.realpathSync.native(resolvedB);
+  } catch {
+    const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value);
+    return fold(resolvedA) === fold(resolvedB);
+  }
 }
 
 async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
@@ -149,13 +158,43 @@ function backupBeforeApply(canonicalPath) {
 // they belong to the file they sit beside, so they move with it.
 const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
 
+// The store and its sidecars move together or not at all: every destination
+// is checked first (a rename would silently replace an existing archive), and
+// a rename that fails midway puts the files already moved back under their
+// original names before the error surfaces.
 function archiveOneSource(srcPath, stamp) {
   const archivedTo = `${srcPath}.merged-${stamp}.bak`;
-  fs.renameSync(srcPath, archivedTo);
+  const moves = [[srcPath, archivedTo]];
   for (const suffix of SIDECAR_SUFFIXES) {
-    if (fs.existsSync(`${srcPath}${suffix}`)) fs.renameSync(`${srcPath}${suffix}`, `${archivedTo}${suffix}`);
+    if (fs.existsSync(`${srcPath}${suffix}`)) moves.push([`${srcPath}${suffix}`, `${archivedTo}${suffix}`]);
+  }
+  for (const [, to] of moves) {
+    if (fs.existsSync(to)) throw new Error(`archive destination already exists: ${to}`);
+  }
+  const done = [];
+  try {
+    for (const [from, to] of moves) {
+      fs.renameSync(from, to);
+      done.push([from, to]);
+    }
+  } catch (err) {
+    for (const [from, to] of done.reverse()) {
+      try {
+        fs.renameSync(to, from);
+      } catch {
+        // best-effort rollback: the rename that failed is the error reported
+      }
+    }
+    throw err;
   }
   return archivedTo;
+}
+
+// A file none of whose tables could be read is not a merged copy: renaming
+// it would only hide it from the doctor with everything still inside.
+function nothingMerged(report) {
+  const tables = Object.values(report.tables);
+  return tables.length === 0 || tables.every(table => table.skipped);
 }
 
 // Only after the canonical store is written, flushed and closed: a source
@@ -167,6 +206,10 @@ function archiveSources(reports) {
   const archived = [];
   for (const report of reports) {
     if (report.error) continue;
+    if (nothingMerged(report)) {
+      report.archiveSkipped = 'no table could be merged from this source';
+      continue;
+    }
     try {
       const archivedTo = archiveOneSource(report.source, stamp);
       report.archivedTo = archivedTo;
@@ -230,4 +273,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { mergeStateDbs, MERGE_TABLES };
+module.exports = { mergeStateDbs, archiveOneSource, MERGE_TABLES };

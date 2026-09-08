@@ -7,7 +7,7 @@ const path = require('path');
 
 const { execFileSync } = require('child_process');
 
-const { mergeStateDbs } = require('../../scripts/maintenance/merge-fragmented-state-dbs');
+const { mergeStateDbs, archiveOneSource } = require('../../scripts/maintenance/merge-fragmented-state-dbs');
 const { openDatabase } = require('../../scripts/lib/state-store/db-adapter');
 const { applyMigrations } = require('../../scripts/lib/state-store/migrations');
 
@@ -393,6 +393,140 @@ async function runTests() {
       assert.strictEqual(applied.archived.length, 1);
       assert.ok(fs.existsSync(applied.archived[0].archivedTo));
       assert.ok(!fs.existsSync(sourcePath));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a rename that fails is reported on that source while the merge result stands', async () => {
+    const dir = createTempDir('egc-merge-archive-error-');
+    const originalRename = fs.renameSync;
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      await seedDb(sourcePath);
+
+      // The script and this test share the same fs module object, so a
+      // rename that throws here is exactly what a file held open by another
+      // process produces on Windows, on every platform the suite runs on.
+      fs.renameSync = () => {
+        const error = new Error('EBUSY: resource busy or locked');
+        error.code = 'EBUSY';
+        throw error;
+      };
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
+      fs.renameSync = originalRename;
+
+      assert.strictEqual(result.apply, true);
+      assert.ok(result.backupPath && fs.existsSync(result.backupPath), 'the canonical backup was still taken');
+      assert.deepStrictEqual(result.archived, [], 'nothing was archived');
+      assert.strictEqual(result.reports[0].archivedTo, undefined);
+      assert.ok(result.reports[0].archiveError.includes('EBUSY'), 'the failure is reported on the source entry');
+      assert.ok(fs.existsSync(sourcePath), 'the source stays under its own name');
+    } finally {
+      fs.renameSync = originalRename;
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('the canonical store reached through a symlink or another spelling is refused all the same', async () => {
+    const dir = createTempDir('egc-merge-alias-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      await seedDb(canonicalPath);
+
+      let alias;
+      if (process.platform === 'win32') {
+        // NTFS resolves both spellings to the same file.
+        alias = path.join(dir, 'CANONICAL.DB');
+      } else {
+        alias = path.join(dir, 'alias.db');
+        fs.symlinkSync(canonicalPath, alias);
+      }
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [alias], apply: true });
+      assert.strictEqual(result.reports[0].error, 'source is the canonical store');
+      assert.deepStrictEqual(result.archived, []);
+      assert.ok(fs.existsSync(canonicalPath), 'the live store must still be there under its own name');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('an archive destination that already exists is never overwritten', async () => {
+    const dir = createTempDir('egc-merge-collision-');
+    try {
+      const sourcePath = path.join(dir, 'source.db');
+      fs.writeFileSync(sourcePath, 'live-bytes');
+      const taken = `${sourcePath}.merged-fixed.bak`;
+      fs.writeFileSync(taken, 'older-archive');
+
+      assert.throws(() => archiveOneSource(sourcePath, 'fixed'), /archive destination already exists/);
+      assert.strictEqual(fs.readFileSync(taken, 'utf8'), 'older-archive', 'the earlier archive must survive');
+      assert.strictEqual(fs.readFileSync(sourcePath, 'utf8'), 'live-bytes', 'and the source must not move');
+
+      fs.renameSync(taken, `${taken}-wal`);
+      fs.writeFileSync(`${sourcePath}-wal`, 'live-wal');
+      assert.throws(() => archiveOneSource(sourcePath, 'fixed'), /archive destination already exists/, 'a sidecar destination counts too');
+      assert.ok(fs.existsSync(sourcePath), 'nothing moves when any destination is taken');
+      assert.strictEqual(fs.readFileSync(`${taken}-wal`, 'utf8'), 'older-archive');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a sidecar that fails to move puts the store back under its original name', async () => {
+    const dir = createTempDir('egc-merge-rollback-');
+    const originalRename = fs.renameSync;
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      await seedDb(sourcePath);
+      const sidecar = `${sourcePath}-wal`;
+      fs.writeFileSync(sidecar, 'wal-bytes');
+
+      fs.renameSync = (from, to) => {
+        if (from.endsWith('-wal')) {
+          const error = new Error('EPERM: operation not permitted');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return originalRename(from, to);
+      };
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
+      fs.renameSync = originalRename;
+
+      assert.ok(result.reports[0].archiveError.includes('EPERM'));
+      assert.deepStrictEqual(result.archived, []);
+      assert.ok(fs.existsSync(sourcePath), 'the store must be rolled back to its original name');
+      assert.ok(fs.existsSync(sidecar), 'the sidecar never moved');
+      assert.ok(!fs.readdirSync(dir).some(name => name.includes('.merged-')), 'no half-archive may be left behind');
+    } finally {
+      fs.renameSync = originalRename;
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a source none of whose tables could be read stays in place and says why', async () => {
+    const dir = createTempDir('egc-merge-unreadable-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      // An empty SQLite file: valid database, none of the EGC tables.
+      const empty = await openDatabase(sourcePath);
+      empty.exec('CREATE TABLE unrelated (id TEXT PRIMARY KEY)');
+      await empty.flush();
+      empty.close();
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
+      assert.ok(Object.values(result.reports[0].tables).every(table => table.skipped), 'every table must have been skipped');
+      assert.strictEqual(result.reports[0].archiveSkipped, 'no table could be merged from this source');
+      assert.strictEqual(result.reports[0].archivedTo, undefined);
+      assert.deepStrictEqual(result.archived, []);
+      assert.ok(fs.existsSync(sourcePath), 'the file stays where the doctor can still see it');
     } finally {
       cleanup(dir);
     }
