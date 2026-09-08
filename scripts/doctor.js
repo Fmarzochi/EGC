@@ -7,6 +7,7 @@ const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
+const { consolidateCommand } = require('./lib/doctor-summary');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
 // egc doctor (a project folder, a global npm install on Windows), and a
@@ -143,7 +144,7 @@ function checkStateDb(homeDir) {
   }
   // One predictable shape for --json consumers no matter which condition
   // fired.
-  return { missing, dbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
+  return { missing, dbPath, canonicalDbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
 }
 
 function printStateStoreReport(stateDb) {
@@ -157,7 +158,8 @@ function printStateStoreReport(stateDb) {
     console.log(`    ${stateDb.dbPath}`);
     console.log('  It belongs in the shared ~/.egc store; in a harness directory its');
     console.log('  history is invisible to the rest of EGC. Consolidate it with:');
-    console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
+    console.log(`    ${consolidateCommand(CONSOLIDATE_SCRIPT, [stateDb.dbPath], stateDb.canonicalDbPath)}`);
+    console.log('  Review the dry run, then run the same command with --apply at the end.');
   }
   if (stateDb.fragments.length > 0) {
     const plural = stateDb.fragments.length === 1 ? 'copy' : 'copies';
@@ -167,7 +169,8 @@ function printStateStoreReport(stateDb) {
     }
     console.log('  Nothing is lost, but new sessions no longer write there. Consolidate');
     console.log('  them into the main store (dry-run by default) with:');
-    console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
+    console.log(`    ${consolidateCommand(CONSOLIDATE_SCRIPT, stateDb.fragments.map(fragment => fragment.path), stateDb.canonicalDbPath)}`);
+    console.log('  Review the dry run, then run the same command with --apply at the end.');
   }
   if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
     // "Nothing to do." only when no warning printed above it in this
