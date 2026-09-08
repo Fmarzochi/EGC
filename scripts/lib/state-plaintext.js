@@ -37,7 +37,10 @@ function parentInsideRoot(filePath, root) {
   try {
     const parent = fs.realpathSync.native(path.dirname(filePath));
     return parent === root || parent.startsWith(root + path.sep);
-  } catch {
+  } catch (error) {
+    // Gone or turned into a link: not inside the root. Any other failure is
+    // an I/O error the strict caller has to see, not a quiet skip.
+    if (!NOT_PLAIN_CODES.has(error.code)) throw error;
     return false;
   }
 }
@@ -76,7 +79,8 @@ function descriptorAtPathInsideRoot(fd, stat, filePath, root) {
   try {
     const now = fs.lstatSync(filePath);
     return now.isFile() && now.dev === stat.dev && now.ino === stat.ino;
-  } catch {
+  } catch (error) {
+    if (!NOT_PLAIN_CODES.has(error.code)) throw error;
     return false;
   }
 }
