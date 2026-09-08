@@ -491,8 +491,11 @@ function commandExists(cmd) {
   // real process.
   try {
     if (process.platform === 'win32') {
-      // shell:true inherits PATHEXT so `where npm` resolves npm.cmd/.exe correctly
-      const result = spawnSync('where', [cmd], { stdio: 'pipe', shell: true });
+      // shell:true inherits PATHEXT so `where npm` resolves npm.cmd/.exe
+      // correctly. One string, not an args array: Node 24 deprecates the
+      // array form with a shell (DEP0190), and cmd is validated above to
+      // letters, digits, dot, dash and underscore, so nothing needs escaping.
+      const result = spawnSync(`where ${cmd}`, { stdio: 'pipe', shell: true });
       if (result.status === 0) return true;
     } else {
       const result = spawnSync('which', [cmd], { stdio: 'pipe' });
