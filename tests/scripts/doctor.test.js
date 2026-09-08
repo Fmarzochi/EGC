@@ -807,6 +807,97 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('warns about plain-text state files and lists them with the encryption guidance', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(path.join(stateDir, 'Projetos--demo'), { recursive: true });
+      const flatPlain = path.join(stateDir, 'Projetos--demo.md');
+      const branchPlain = path.join(stateDir, 'Projetos--demo', 'main.md');
+      fs.writeFileSync(flatPlain, '# Project State\nproject: /srv/demo\n');
+      fs.writeFileSync(branchPlain, '# Project State\nbranch: main\n');
+      fs.writeFileSync(path.join(stateDir, 'Projetos--sealed.md'), Buffer.concat([Buffer.from('EGC1:'), Buffer.alloc(40, 7)]));
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('State files:'));
+      assert.ok(result.stdout.includes(`WARNING: 2 of 3 state files under ${stateDir} are plain text:`));
+      assert.ok(result.stdout.includes(flatPlain));
+      assert.ok(result.stdout.includes(branchPlain));
+      assert.ok(!result.stdout.includes('Projetos--sealed.md'), 'an encrypted file is not a finding');
+      assert.ok(result.stdout.includes('run `egc init` in that project'), 'the person must learn what to do about a file a tool wrote by hand');
+      assert.ok(!result.stdout.includes('and 0 more'));
+
+      const json = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+      assert.strictEqual(json.plaintextStateFiles.count, 2);
+      assert.strictEqual(json.plaintextStateFiles.checked, 3);
+      assert.deepStrictEqual(json.plaintextStateFiles.files.map(file => file.path).sort(), [flatPlain, branchPlain].sort());
+      assert.ok(json.plaintextStateFiles.files.every(file => typeof file.modifiedAt === 'string'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('stays silent about state files when every one is encrypted, empty, archived, or behind a link', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+    const outside = createTempDir('doctor-outside-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(path.join(stateDir, 'archive'), { recursive: true });
+      fs.mkdirSync(path.join(stateDir, 'Projetos--demo'), { recursive: true });
+      fs.writeFileSync(path.join(stateDir, 'Projetos--demo', 'main.md'), Buffer.concat([Buffer.from('EGC1:'), Buffer.alloc(40, 7)]));
+      fs.writeFileSync(path.join(stateDir, 'Projetos--empty.md'), '');
+      fs.writeFileSync(path.join(stateDir, 'archive', 'old.md'), '# Project State\narchived copy\n');
+      fs.writeFileSync(path.join(stateDir, 'budget-usage.json'), '{}');
+      const plantedTarget = path.join(outside, 'secret.md');
+      fs.writeFileSync(plantedTarget, '# not state\n');
+      try {
+        fs.symlinkSync(plantedTarget, path.join(stateDir, 'planted.md'));
+      } catch {
+        // Symlink creation needs a privilege on some Windows setups; the
+        // rest of the test still proves the archive and empty cases.
+      }
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(!result.stdout.includes('State files:'), 'nothing plain means no section at all');
+      const json = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+      assert.strictEqual(json.plaintextStateFiles, undefined);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (test('caps the plain-text listing and counts the rest', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(stateDir, { recursive: true });
+      for (let index = 0; index < 7; index++) {
+        fs.writeFileSync(path.join(stateDir, `project-${index}.md`), `# Project State ${index}\n`);
+      }
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('WARNING: 7 of 7 state files'));
+      assert.ok(result.stdout.includes('    and 2 more'));
+      const listed = result.stdout.split('\n').filter(line => /project-\d\.md \(last write /.test(line));
+      assert.strictEqual(listed.length, 5, 'five paths shown, the rest summarised');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

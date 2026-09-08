@@ -8,6 +8,8 @@ const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand } = require('./lib/doctor-summary');
+const { getStateDir } = require('./lib/branch-state');
+const { MAGIC } = require('./lib/state-crypto');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
 // egc doctor (a project folder, a global npm install on Windows), and a
@@ -147,6 +149,90 @@ function checkStateDb(homeDir) {
   return { missing, dbPath, canonicalDbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
 }
 
+// State files have been encrypted at rest since 1.1.6 (EGC1 header). A
+// plain-text file under ~/.egc/state either predates that or was written
+// straight to disk by an AI tool that had no egc-memory server registered
+// and followed the old protocol text to the path (#1395). Only the first
+// bytes are read: the check never decrypts or loads a file.
+const MAGIC_BYTES = Buffer.byteLength(MAGIC, 'utf-8');
+const STATE_ARCHIVE_DIR = 'archive';
+const PLAINTEXT_STATE_SHOWN = 5;
+
+function startsWithMagic(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(MAGIC_BYTES);
+    const read = fs.readSync(fd, head, 0, MAGIC_BYTES, 0);
+    // An empty file holds nothing to protect; only content can be plain.
+    if (read === 0) return true;
+    return read === MAGIC_BYTES && head.toString('utf-8') === MAGIC;
+  } catch {
+    // Unreadable here means unreadable for anyone else too: not a finding.
+    return true;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function listStateMarkdown(dirPath, depth) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const files = [];
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    // Links are never followed: a planted link must not pull in a file from
+    // outside the state directory.
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isFile() && entry.name.endsWith('.md')) files.push(fullPath);
+    // One level of project directories (<project-slug>/<branch>.md); the
+    // archive folder holds consolidated copies and is not live state.
+    if (entry.isDirectory() && depth > 0 && entry.name !== STATE_ARCHIVE_DIR) {
+      files.push(...listStateMarkdown(fullPath, depth - 1));
+    }
+  }
+  return files;
+}
+
+function findPlaintextStateFiles(homeDir) {
+  const stateDir = getStateDir(homeDir);
+  const files = listStateMarkdown(stateDir, 1);
+  const plaintext = [];
+  for (const filePath of files) {
+    if (startsWithMagic(filePath)) continue;
+    let modifiedAt = null;
+    try {
+      modifiedAt = fs.statSync(filePath).mtime.toISOString();
+    } catch {
+      // Vanished between listing and stat: the path is still worth naming.
+    }
+    plaintext.push({ path: filePath, modifiedAt });
+  }
+  if (plaintext.length === 0) return null;
+  return { stateDir, checked: files.length, count: plaintext.length, files: plaintext };
+}
+
+function printPlaintextStateReport(report) {
+  const plural = report.count === 1 ? 'file' : 'files';
+  console.log('\nState files:');
+  console.log(`  WARNING: ${report.count} of ${report.checked} state ${plural} under ${report.stateDir} ${report.count === 1 ? 'is' : 'are'} plain text:`);
+  for (const file of report.files.slice(0, PLAINTEXT_STATE_SHOWN)) {
+    console.log(`    ${file.path}${file.modifiedAt ? ` (last write ${file.modifiedAt})` : ''}`);
+  }
+  if (report.count > PLAINTEXT_STATE_SHOWN) {
+    console.log(`    and ${report.count - PLAINTEXT_STATE_SHOWN} more`);
+  }
+  console.log('  EGC has encrypted state at rest since 1.1.6. A plain file either predates');
+  console.log('  that or was written straight to disk by an AI tool that has no egc-memory');
+  console.log('  server registered. Either way anything on this machine can read it.');
+  console.log('  The memory server encrypts a file the next time it saves it; if a tool');
+  console.log('  wrote one by hand, run `egc init` in that project so the tool gets the server.');
+}
+
 function printStateStoreReport(stateDb) {
   console.log('\nState store:');
   if (stateDb.missing) {
@@ -206,13 +292,17 @@ function main() {
     // run. Exit 1 is reserved for real failures so scripts and CI can trust it.
     const hasFailures = report.summary.errorCount > 0;
     const stateDb = checkStateDb(homeDir);
+    const plaintextState = findPlaintextStateFiles(homeDir);
 
     if (options.json) {
-      const out = stateDb ? { ...report, stateDb } : report;
+      const out = { ...report };
+      if (stateDb) out.stateDb = stateDb;
+      if (plaintextState) out.plaintextStateFiles = plaintextState;
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman(report);
       if (stateDb) printStateStoreReport(stateDb);
+      if (plaintextState) printPlaintextStateReport(plaintextState);
     }
 
     process.exitCode = hasFailures ? 1 : 0;

@@ -10,7 +10,7 @@ const os   = require('node:os');
 // file stamped with an older (or absent) version instead of skipping it, so
 // existing installs pick up new sections on the next `egc init`/auto-update
 // instead of staying frozen at whatever was present on first install.
-const PROTOCOL_VERSION = 5;
+const PROTOCOL_VERSION = 6;
 const MARKER = `<!-- egc-memory-protocol:v${PROTOCOL_VERSION} -->`;
 const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/egc-memory-protocol -->\n?/;
 
