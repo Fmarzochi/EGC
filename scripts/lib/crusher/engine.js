@@ -79,7 +79,7 @@ const STACK_FRAME_AT_RE = /^\s*at\s+\S+/i;
 const STACK_FRAME_PY_RE = /^\s*File\s+"[^"]+",\s+line\s+\d+/i;
 const STACK_FRAME_NATIVE_RE = /^\s*#\d+\s+0x[0-9a-f]+/i;
 const STACK_FRAME_CAUSE_RE = /^\s*(Caused by:|\.{3}\s+\d+\s+more)/i;
-const STACK_FRAME_GO_RE = /^\s+\S+\.go:\d+:/i;
+const STACK_FRAME_GO_RE = /^\s+\S+\.go:\d+(?::|\s|$)/i;
 
 function isStackFrame(line) {
   return STACK_FRAME_AT_RE.test(line)

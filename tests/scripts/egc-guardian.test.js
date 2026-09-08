@@ -385,6 +385,8 @@ async function runTests() {
   run('git -c core.editor override',   () => assertDenied('git -c core.editor=evil rebase -i'));
   run('git --config-env core.hooksPath',() => assertDenied('git --config-env core.hooksPath=EVIL commit -m "bypass"'));
   run('git --config-env=core.editor',  () => assertDenied('git --config-env=core.editor=EVIL commit'));
+  run('git -c alias.probe config override', () => assertDenied('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe'));
+  run('git config alias.probe config write', () => assertDenied('git config alias.egcprobe "config --local core.hooksPath /tmp/x"'));
 
   // ── validate_write: DENIED (PATH/persistence hijack, audit EGC-128) ───────
 

@@ -98,6 +98,8 @@ run('git config core.hooksPath /tmp/evil is hard-blocked', () => assertHardBlock
 run('git config --global core.hooksPath /tmp/evil is hard-blocked', () => assertHardBlocked('git config --global core.hooksPath /tmp/evil'));
 run('git config credential.helper /tmp/evil is hard-blocked', () => assertHardBlocked('git config credential.helper /tmp/evil'));
 run('git config alias.co "!rm -rf /" is hard-blocked', () => assertHardBlocked('git config alias.co "!rm -rf /"'));
+run('git config alias.egcprobe "config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config alias.egcprobe "config --local core.hooksPath /tmp/x"'));
+run('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe is hard-blocked', () => assertHardBlocked('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe'));
 run('git config merge.evil.driver "rm -rf /" is hard-blocked', () => assertHardBlocked('git config merge.evil.driver "rm -rf /"'));
 run('git config user.name "Felipe" stays allowed (benign key)', () => assertAllowed('git config user.name "Felipe"'));
 run('git config alias.co checkout stays allowed (non-bang alias)', () => assertAllowed('git config alias.co checkout'));

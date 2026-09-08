@@ -96,12 +96,14 @@ run('crushed test/install output preserves stack-trace frames with no keep-word 
   lines.push('Traceback (most recent call last):');
   lines.push('  File "app.py", line 42, in main');
   lines.push('  File "app.py", line 10, in helper');
+  lines.push('  runtime/panic.go:1198 +0x71');
   lines.push('ValueError: something broke');
   lines.push('Tests: 1 failed, 300 passed, 301 total');
   const result = crushOutput('pytest', lines.join('\n'));
   assert.ok(result);
   assert.ok(result.crushed.includes('File "app.py", line 42, in main'), 'traceback frame survives');
   assert.ok(result.crushed.includes('File "app.py", line 10, in helper'), 'second traceback frame survives');
+  assert.ok(result.crushed.includes('runtime/panic.go:1198 +0x71'), 'Go runtime stack frame survives');
   assert.ok(result.crushed.includes('ValueError: something broke'), 'exception line survives');
 });
 

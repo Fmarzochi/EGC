@@ -1010,19 +1010,21 @@ const GIT_CONFIG_DIFF_COMMAND_KEY_RE = /^diff\..+\.command$/;
 // like include.path above -- git's conditional-include syntax, not covered
 // by the exact-match DANGEROUS_GIT_CONFIG_KEYS set (audit EGC-533).
 const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
-// An alias is only a shell-escape risk when its value starts with '!' (git's
-// own syntax for "run this as a shell command" instead of a git subcommand);
-// alias.co = checkout is ordinary and harmless.
+// An alias is a shell-escape risk when its value starts with '!' (git's
+// own syntax for "run this as a shell command" instead of a git subcommand),
+// or when its value's first word is 'config' (which allows proxying
+// dangerous config writes through the alias); alias.co = checkout is
+// ordinary and harmless.
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
-// Flags that make `git config` strictly a read or a removal — never a write
-// — and so must never trip the dangerous-key check below. Output-annotation
+// Flags that make `git config` strictly a read or a removal - never a write
+// - and so must never trip the dangerous-key check below. Output-annotation
 // flags (--show-scope, --show-origin, --name-only) are deliberately NOT
 // here: nothing stops one of them from appearing in argv alongside a real
 // key+value SET, so treating their mere presence as proof of "this is a
 // read" would let a set slip through unchecked (e.g. `git config
 // --show-scope core.hooksPath /tmp/evil`). --edit/-e is excluded for the
-// opposite reason — it IS a write (opens an editor over the config file)
+// opposite reason - it IS a write (opens an editor over the config file)
 // and gets its own unconditional deny below instead of an exemption.
 const GIT_CONFIG_READONLY_FLAGS = new Set([
   '--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l',
@@ -1033,7 +1035,7 @@ const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--d
 // Called only once the 'config' subcommand itself has been identified;
 // `args` is everything after 'git' (so args[0] === 'config'). Detects a
 // SET (a key positional followed by a value positional, or --add/
-// --replace-all) of one of the dangerous keys above and hard-blocks it —
+// --replace-all) of one of the dangerous keys above and hard-blocks it -
 // reading or unsetting the same key is left untouched. Also hard-denies
 // --edit/-e outright, since an editor session's eventual changes cannot be
 // inspected the way a plain key/value pair can.
@@ -1077,7 +1079,7 @@ function isDangerousGitConfigWrite(key: string, value: string): boolean {
     || GIT_CONFIG_FILTER_KEY_RE.test(key)
     || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(key)
     || GIT_CONFIG_INCLUDEIF_KEY_RE.test(key)
-    || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && value.startsWith('!'));
+    || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && (value.startsWith('!') || /^\s*config(\s|$)/i.test(value)));
 }
 
 function checkGitConfigWrite(args: string[]): ValidationResult | null {
