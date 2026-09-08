@@ -66,6 +66,29 @@ If the lock does not clear, a reboot releases it. Nothing needs to be uninstalle
 
 ---
 
+## `egc doctor` says some state files are plain text
+
+**Symptom:** the doctor report ends with a `State files` section:
+
+```
+State files:
+  WARNING: 3 of 41 state files under /home/<you>/.egc/state are plain text:
+    /home/<you>/.egc/state/Projetos--demo.md (last write 2026-06-10T05:32:05.652Z)
+    ...
+```
+
+**Cause:** EGC has encrypted state at rest since 1.1.6, but three kinds of file were left in plain text: files written before that release, files the EGC hooks saved before 1.1.18 (the compaction snapshot and the mined memory were written without encrypting), and files an AI tool wrote straight to disk because it had no `egc-memory` server registered and followed the old protocol text to the path. The memory server reads all of them and encrypts a file the next time it saves it, but a file for a project or branch that is never opened again stays plain, readable by anything running on the machine.
+
+**Fix:** encrypt them in place with the maintenance script the doctor names. Dry run first:
+
+```bash
+node "<path printed by egc doctor>/scripts/maintenance/encrypt-plaintext-state.js"
+```
+
+Review the list, then run the same command with `--apply` at the end. Each file is encrypted with the same key the server uses, rewritten atomically with its integrity sidecar, and read back before it counts. A file that changed in between is skipped and reported. Run `egc doctor` again: the section is gone. If a tool wrote one of those files by hand, also run `egc init` in that project so the tool gets the memory server instead of the filesystem.
+
+---
+
 ## Node.js version conflict with mise / asdf (multiple Node installations)
 
 **Symptom:** `egc auto-update` fails with a confusing git error, or `egc` reports version issues even though it is already up to date. Common when using [mise](https://mise.jdx.dev) or [asdf](https://asdf-vm.com) with multiple Node versions.
