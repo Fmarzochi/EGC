@@ -669,6 +669,46 @@ function runTests() {
       assert.ok(result.stdout.includes(strayPath));
       const consolidateScript = path.join(__dirname, '..', '..', 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js');
       assert.ok(result.stdout.includes(`node "${consolidateScript}"`), 'must point at the consolidation script by absolute path, runnable from any cwd');
+      const canonicalDb = path.join(homeDir, '.egc', 'egc', 'state.db');
+      assert.ok(
+        result.stdout.includes(`node "${consolidateScript}" --canonical "${canonicalDb}" --source "${strayPath}"`),
+        'the hint must run as pasted: the script exits with its usage text when no --source is given (#1389)'
+      );
+      assert.ok(result.stdout.includes('with --apply at the end'), 'the person must learn how to turn the dry run into a write');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('names every stray copy as its own --source when more than one is left behind', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const egcDir = computeEGCDirForHome(homeDir);
+      fs.mkdirSync(path.join(egcDir, 'egc'), { recursive: true });
+      fs.mkdirSync(path.join(egcDir, 'memory'), { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'egc', 'state.db'), '');
+      fs.writeFileSync(path.join(egcDir, 'memory', 'state.db'), '');
+      const strays = [
+        path.join(homeDir, '.gemini', 'egc', 'state.db'),
+        path.join(homeDir, '.config', 'opencode', 'egc', 'state.db'),
+      ];
+      for (const stray of strays) {
+        fs.mkdirSync(path.dirname(stray), { recursive: true });
+        fs.writeFileSync(stray, 'stale-bytes');
+      }
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('2 stray state.db copies'));
+      const hint = result.stdout.split('\n').find(line => line.includes('merge-fragmented-state-dbs.js'));
+      assert.ok(hint, 'the consolidation hint must be printed');
+      for (const stray of strays) {
+        assert.ok(hint.includes(`--source "${stray}"`), `the hint must carry --source for ${stray}`);
+      }
+      assert.strictEqual(hint.split('--source ').length - 1, strays.length, 'one --source per copy, nothing else');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
@@ -718,6 +758,10 @@ function runTests() {
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('WARNING: the CLI event store landed in a harness directory'));
       assert.ok(result.stdout.includes(misplacedDb));
+      assert.ok(
+        result.stdout.includes(`--canonical "${canonicalDb}" --source "${misplacedDb}"`),
+        'the misplaced store is the source and the shared store the explicit destination, since the default resolution is what misplaced it'
+      );
       assert.ok(!result.stdout.includes(`${canonicalDb} (`), 'the canonical ~/.egc store must never be listed as a stray copy');
     } finally {
       cleanup(homeDir);
@@ -733,7 +777,7 @@ function runTests() {
       const result = run(['--json'], { cwd: projectRoot, homeDir });
       const parsed = JSON.parse(result.stdout);
       assert.ok(parsed.stateDb, 'missing stores must still produce a stateDb block');
-      for (const key of ['missing', 'dbPath', 'memoryDbPath', 'hasHarnessDb', 'hasMemoryDb', 'cliStoreMisplaced', 'fragments']) {
+      for (const key of ['missing', 'dbPath', 'canonicalDbPath', 'memoryDbPath', 'hasHarnessDb', 'hasMemoryDb', 'cliStoreMisplaced', 'fragments']) {
         assert.ok(Object.hasOwn(parsed.stateDb, key), `stateDb must always carry ${key}`);
       }
       assert.strictEqual(parsed.stateDb.missing, true);
