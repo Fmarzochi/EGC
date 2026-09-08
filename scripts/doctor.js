@@ -157,19 +157,32 @@ function checkStateDb(homeDir) {
 const MAGIC_BYTES = Buffer.byteLength(MAGIC, 'utf-8');
 const STATE_ARCHIVE_DIR = 'archive';
 const PLAINTEXT_STATE_SHOWN = 5;
+// Same open discipline as the key file in state-crypto.js: never through a
+// link (a link swapped in after the listing gets ELOOP, not followed), never
+// blocking (a planted FIFO cannot stall the doctor), and only a regular file
+// is inspected, all through the one descriptor the header is read from.
+const NO_FOLLOW_FLAG = fs.constants.O_NOFOLLOW || 0;
+const NON_BLOCKING_FLAG = fs.constants.O_NONBLOCK || 0;
 
-function startsWithMagic(filePath) {
+function readHeader(fd) {
+  const head = Buffer.alloc(MAGIC_BYTES);
+  const read = fs.readSync(fd, head, 0, MAGIC_BYTES, 0);
+  return read === MAGIC_BYTES && head.toString('utf-8') === MAGIC;
+}
+
+// The finding for one listed path, or null when there is nothing to report:
+// an encrypted file, an empty one (nothing to protect), something that is
+// not a regular file, or a path that cannot be opened here, which cannot be
+// read by anyone else on the machine either.
+function inspectStateFile(filePath) {
   let fd;
   try {
-    fd = fs.openSync(filePath, 'r');
-    const head = Buffer.alloc(MAGIC_BYTES);
-    const read = fs.readSync(fd, head, 0, MAGIC_BYTES, 0);
-    // An empty file holds nothing to protect; only content can be plain.
-    if (read === 0) return true;
-    return read === MAGIC_BYTES && head.toString('utf-8') === MAGIC;
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG | NON_BLOCKING_FLAG);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.size === 0 || readHeader(fd)) return null;
+    return { path: filePath, modifiedAt: stat.mtime.toISOString() };
   } catch {
-    // Unreadable here means unreadable for anyone else too: not a finding.
-    return true;
+    return null;
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
@@ -201,25 +214,16 @@ function listStateMarkdown(dirPath, depth) {
 function findPlaintextStateFiles(homeDir) {
   const stateDir = getStateDir(homeDir);
   const files = listStateMarkdown(stateDir, 1);
-  const plaintext = [];
-  for (const filePath of files) {
-    if (startsWithMagic(filePath)) continue;
-    let modifiedAt = null;
-    try {
-      modifiedAt = fs.statSync(filePath).mtime.toISOString();
-    } catch {
-      // Vanished between listing and stat: the path is still worth naming.
-    }
-    plaintext.push({ path: filePath, modifiedAt });
-  }
+  const plaintext = files.map(inspectStateFile).filter(Boolean);
   if (plaintext.length === 0) return null;
   return { stateDir, checked: files.length, count: plaintext.length, files: plaintext };
 }
 
 function printPlaintextStateReport(report) {
-  const plural = report.count === 1 ? 'file' : 'files';
+  const noun = report.checked === 1 ? 'file' : 'files';
+  const verb = report.count === 1 ? 'is' : 'are';
   console.log('\nState files:');
-  console.log(`  WARNING: ${report.count} of ${report.checked} state ${plural} under ${report.stateDir} ${report.count === 1 ? 'is' : 'are'} plain text:`);
+  console.log(`  WARNING: ${report.count} of ${report.checked} state ${noun} under ${report.stateDir} ${verb} plain text:`);
   for (const file of report.files.slice(0, PLAINTEXT_STATE_SHOWN)) {
     const lastWrite = file.modifiedAt ? ` (last write ${file.modifiedAt})` : '';
     console.log(`    ${file.path}${lastWrite}`);

@@ -875,6 +875,37 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('never blocks on a FIFO planted as a state file and skips a file it cannot open', () => {
+    if (process.platform === 'win32') return;
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(stateDir, { recursive: true });
+      execFileSync('mkfifo', [path.join(stateDir, 'pipe.md')]);
+      const sealedOff = path.join(stateDir, 'sealed-off.md');
+      fs.writeFileSync(sealedOff, '# Project State\nunreadable\n');
+      fs.chmodSync(sealedOff, 0o000);
+      const plain = path.join(stateDir, 'plain.md');
+      fs.writeFileSync(plain, '# Project State\nreadable\n');
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+      const expected = asRoot ? 2 : 1;
+      // The pipe is not a regular file, so the listing never counts it; the
+      // sealed file is listed but cannot be opened, so it is not a finding.
+      assert.ok(result.stdout.includes(`WARNING: ${expected} of 2 state files under ${stateDir} ${expected === 1 ? 'is' : 'are'} plain text:`), `unexpected report: ${result.stdout}`);
+      assert.ok(result.stdout.includes(plain));
+      assert.ok(!result.stdout.includes('pipe.md'));
+    } finally {
+      try { fs.chmodSync(path.join(homeDir, '.egc', 'state', 'sealed-off.md'), 0o600); } catch { /* already gone */ }
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('caps the plain-text listing and counts the rest', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
