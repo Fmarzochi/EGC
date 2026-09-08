@@ -191,6 +191,7 @@ cd EGC
   ```
 - **Antigravity free tier**: the starter quota is limited. Expect to exhaust it within a few exchanges. Upgrade or use Claude Code / Cursor for longer sessions.
 - **Gemini CLI**: free tier discontinued June 18, 2026. Use Antigravity CLI as a replacement on Windows.
+- **Upgrading with `npm install -g @egchq/egc@latest`**: close the AI tools and terminals that run EGC first. npm renames the package folder during the update, and Windows refuses the rename while any process holds a file inside it (an AI tool running the EGC MCP servers, a terminal with a hook mid-run). The failure reads `EBUSY: resource busy or locked` on a path under `node_modules\@egchq\egc`. A reboot clears the lock too. See [Troubleshooting](TROUBLESHOOTING.md#ebusy-resource-busy-or-locked-during-npm-install--g-on-windows).
 
 ---
 
@@ -359,7 +360,7 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 
 ### Getting a fix before it ships to npm
 
-`egc auto-update` only runs a real `git pull` when the install directory has a `.git` folder (i.e. you installed via `git clone`, not `npm install -g`). On a git-based install, `auto-update` pulls straight from `origin/main`, so a fix that has merged but not yet been published as an npm release still reaches you. On an npm-only install, there is no repository to pull from: `auto-update` prints a reminder to run `npm install -g @egchq/egc@latest`, which only helps once a new version has actually been published. If you need a fix that is on `main` but not yet released, `git clone` + `sh scripts/install.sh` (or `.\scripts\install.ps1`) is the reliable path, not `npm install -g`.
+`egc auto-update` only runs a real `git pull` when the install directory has a `.git` folder (i.e. you installed via `git clone`, not `npm install -g`). On a git-based install, `auto-update` pulls straight from `origin/main`, so a fix that has merged but not yet been published as an npm release still reaches you. On an npm-only install, there is no repository to pull from: `auto-update` prints a reminder to run `npm install -g @egchq/egc@latest`, which only helps once a new version has actually been published. On Windows, close the AI tools and terminals that run EGC before that command, or npm fails with `EBUSY` on a file it cannot rename (see the Windows notes above). If you need a fix that is on `main` but not yet released, `git clone` + `sh scripts/install.sh` (or `.\scripts\install.ps1`) is the reliable path, not `npm install -g`.
 
 ---
 

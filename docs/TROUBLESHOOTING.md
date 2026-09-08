@@ -40,6 +40,32 @@ If you prefer not to change your Node installation, the alternative is to [confi
 
 ---
 
+## `EBUSY: resource busy or locked` during `npm install -g` on Windows
+
+**Symptom:** `npm install -g @egchq/egc@latest` fails while EGC is already installed:
+
+```
+npm error code EBUSY
+npm error syscall rename
+npm error path C:\Users\<you>\AppData\Roaming\npm\node_modules\@egchq\egc\dashboard
+npm error errno -4082
+npm error EBUSY: resource busy or locked, rename '...\@egchq\egc\dashboard' -> '...\@egchq\.egc-XXXXXXXX\dashboard'
+```
+
+**Cause:** npm upgrades a global package by renaming the old package folder aside before unpacking the new one. Windows refuses to rename a folder while any process holds a file inside it. The usual holders are an AI tool that is running the EGC MCP servers (`egc-memory` and `egc-guardian` live inside that package) and a terminal where an EGC hook is running.
+
+**Fix:** close the AI tools and terminals that run EGC, then run the install again:
+
+```powershell
+npm install -g @egchq/egc@latest
+egc auto-update
+egc doctor
+```
+
+If the lock does not clear, a reboot releases it. Nothing needs to be uninstalled first: `egc auto-update` reinstalls the new version into every managed target and `egc doctor` confirms the result.
+
+---
+
 ## Node.js version conflict with mise / asdf (multiple Node installations)
 
 **Symptom:** `egc auto-update` fails with a confusing git error, or `egc` reports version issues even though it is already up to date. Common when using [mise](https://mise.jdx.dev) or [asdf](https://asdf-vm.com) with multiple Node versions.
