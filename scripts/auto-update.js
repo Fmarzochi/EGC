@@ -140,12 +140,29 @@ function runExternalCommand(command, args, options = {}) {
   return result;
 }
 
+// npm renames the package folder during a global update, and Windows refuses
+// the rename while any process holds a file inside it: an AI tool running the
+// EGC MCP servers, or a terminal with a hook mid-run, is enough to fail the
+// upgrade with EBUSY. Say so where the upgrade command is suggested (#1380).
+function npmUpgradeHint(platform = process.platform) {
+  const lines = [
+    `EGC is installed via npm (v${PKG_VERSION}).`,
+    'To upgrade to a newer version, run: npm install -g @egchq/egc@latest',
+  ];
+  if (platform === 'win32') {
+    lines.push(
+      '  On Windows, close the AI tools and terminals that run EGC before that command:',
+      '  a file held open inside the package folder makes npm fail with EBUSY.',
+    );
+  }
+  return lines;
+}
+
 function performGitUpdate(repoRoot, env, execute) {
   const isGitRepo = fs.existsSync(path.join(repoRoot, '.git'));
   if (!isGitRepo) {
     // npm-installed: git pull is not applicable. Reinstall from current package.
-    console.log(`EGC is installed via npm (v${PKG_VERSION}).`);
-    console.log('To upgrade to a newer version, run: npm install -g @egchq/egc@latest');
+    for (const line of npmUpgradeHint()) console.log(line);
     console.log('Reinstalling current version into managed targets...\n');
   } else {
     execute('git', ['fetch', '--all', '--prune'], { cwd: repoRoot, env });
@@ -426,6 +443,7 @@ module.exports = {
   deriveRepoRootFromState,
   buildInstallApplyArgs,
   determineInstallCwd,
+  npmUpgradeHint,
   runCognitiveBootstrap,
   runAutoUpdate,
 };

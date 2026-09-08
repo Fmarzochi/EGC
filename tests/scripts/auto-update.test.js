@@ -13,6 +13,7 @@ const {
   deriveRepoRootFromState,
   buildInstallApplyArgs,
   determineInstallCwd,
+  npmUpgradeHint,
   runCognitiveBootstrap,
   runAutoUpdate,
 } = require('../../scripts/auto-update');
@@ -159,6 +160,18 @@ function runTests() {
       () => parseArgs(['node', 'scripts/auto-update.js', '--bogus']),
       /Unknown argument: --bogus/
     );
+  })) passed += 1; else failed += 1;
+
+  if (test('the npm upgrade hint warns Windows about files held open in the package folder, and only Windows', () => {
+    const windows = npmUpgradeHint('win32');
+    assert.ok(windows[1].includes('npm install -g @egchq/egc@latest'), 'the upgrade command stays first');
+    assert.ok(windows.some(line => line.includes('EBUSY')), 'Windows must be told what the failure looks like');
+    assert.ok(windows.some(line => line.includes('close the AI tools and terminals')), 'and what to do before upgrading');
+    for (const platform of ['linux', 'darwin']) {
+      const lines = npmUpgradeHint(platform);
+      assert.strictEqual(lines.length, 2, `${platform} gets the two original lines and nothing else`);
+      assert.ok(!lines.join(' ').includes('EBUSY'));
+    }
   })) passed += 1; else failed += 1;
 
   if (test('deriveRepoRootFromState uses sourcePath and sourceRelativePath', () => {
