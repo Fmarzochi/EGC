@@ -105,6 +105,8 @@ run('git config alias.x "-c core.hooksPath=/tmp/e config --get core.hooksPath" i
 run('git -c alias.x="-c core.hooksPath=/tmp/e status" x is hard-blocked', () => assertHardBlocked('git -c alias.x="-c core.hooksPath=/tmp/e status" x'));
 run('git config alias.x "--config-env core.hooksPath=EVIL commit" is hard-blocked', () => assertHardBlocked('git config alias.x "--config-env core.hooksPath=EVIL commit"'));
 run('git -c alias.x="--config-env core.hooksPath=EVIL commit" x is hard-blocked', () => assertHardBlocked('git -c alias.x="--config-env core.hooksPath=EVIL commit" x'));
+run('git config --comment=x core.hooksPath /tmp/x is hard-blocked', () => assertHardBlocked('git config --comment=x core.hooksPath /tmp/x'));
+run('git config --value=y core.hooksPath /tmp/x is hard-blocked', () => assertHardBlocked('git config --value=y core.hooksPath /tmp/x'));
 run('git config merge.evil.driver "rm -rf /" is hard-blocked', () => assertHardBlocked('git config merge.evil.driver "rm -rf /"'));
 run('git config user.name "Felipe" stays allowed (benign key)', () => assertAllowed('git config user.name "Felipe"'));
 run('git config alias.co checkout stays allowed (non-bang alias)', () => assertAllowed('git config alias.co checkout'));

@@ -1038,22 +1038,9 @@ const GIT_CONFIG_READONLY_FLAGS = new Set([
   '--unset', '--unset-all',
 ]);
 const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--default']);
-const GIT_CONFIG_FLAGS = new Set([
-  '--global', '--system', '--local', '--worktree',
-  '-f', '--file', '--blob', '--type', '--default',
-  '--show-origin', '--show-scope', '--name-only',
-  '--get', '--get-all', '--get-regexp', '--get-urlmatch',
-  '--list', '-l', '--unset', '--unset-all',
-  '--add', '--replace-all', '--edit', '-e',
-  '-z', '--null', '--includes', '--no-includes',
-  '--fixed-value', '--get-color', '--get-colorbool',
-]);
 
 function isGitConfigFlagToken(token: string): boolean {
-  if (!token.startsWith('-') || /\s/.test(token)) return false;
-  const eq = token.indexOf('=');
-  const base = eq > 0 ? token.slice(0, eq) : token;
-  return GIT_CONFIG_FLAGS.has(base);
+  return token.startsWith('-') && !/\s/.test(token);
 }
 
 // Called only once the 'config' subcommand itself has been identified;
