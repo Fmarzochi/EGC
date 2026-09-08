@@ -471,6 +471,13 @@ async function runTests() {
       assert.throws(() => archiveOneSource(sourcePath, 'fixed'), /archive destination already exists/, 'a sidecar destination counts too');
       assert.ok(fs.existsSync(sourcePath), 'nothing moves when any destination is taken');
       assert.strictEqual(fs.readFileSync(`${taken}-wal`, 'utf8'), 'older-archive');
+
+      if (process.platform !== 'win32') {
+        fs.renameSync(`${taken}-wal`, `${dir}/older-archive.bak`);
+        fs.symlinkSync(path.join(dir, 'gone.db'), taken);
+        assert.throws(() => archiveOneSource(sourcePath, 'fixed'), /archive destination already exists/, 'a dangling symlink at the destination counts as taken');
+        assert.ok(fs.existsSync(sourcePath));
+      }
     } finally {
       cleanup(dir);
     }
@@ -633,6 +640,21 @@ async function runTests() {
       assert.strictEqual(run.code, 1, run.stdout);
       assert.ok(run.stderr.length > 0, 'the failure must be printed');
       assert.ok(fs.existsSync(sourcePath), 'a failed run never touches the source');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('an in-memory canonical store never archives the sources, since nothing outlives the run', async () => {
+    const dir = createTempDir('egc-merge-memory-');
+    try {
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(sourcePath);
+
+      const result = await mergeStateDbs({ canonicalPath: ':memory:', sourcePaths: [sourcePath], apply: true });
+      assert.strictEqual(result.canonical, ':memory:');
+      assert.deepStrictEqual(result.archived, []);
+      assert.ok(fs.existsSync(sourcePath), 'the only copy on disk must stay');
     } finally {
       cleanup(dir);
     }

@@ -22,7 +22,6 @@
 //   node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply] [--keep-sources]
 
 const fs = require('node:fs');
-const path = require('node:path');
 const { openDatabase } = require('../lib/state-store/db-adapter');
 const { applyMigrations } = require('../lib/state-store/migrations');
 const { resolveStateStorePath } = require('../lib/state-store');
@@ -110,17 +109,16 @@ function mergeOneTable(canonicalDb, srcDb, name, pk, apply) {
 
 // Filesystem identity, not spelling: the live store reached through a
 // symlink, a hard link, or another spelling of its name on Windows must be
-// refused too. Both files exist by the time this runs (the source was
-// checked, the canonical store was just opened), so device and inode settle
-// it; a filesystem that reports no inode falls back to the resolved names,
-// case-folded on Windows.
+// refused too. The caller only asks about files that exist, so device and
+// inode settle it; a filesystem that reports no inode falls back to the
+// real paths (links followed), case-folded on Windows.
 function sameFile(a, b) {
   const statA = fs.statSync(a, { bigint: true });
   const statB = fs.statSync(b, { bigint: true });
   const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value);
   return statA.ino !== 0n && statB.ino !== 0n
     ? statA.dev === statB.dev && statA.ino === statB.ino
-    : fold(path.resolve(a)) === fold(path.resolve(b));
+    : fold(fs.realpathSync.native(a)) === fold(fs.realpathSync.native(b));
 }
 
 // A link is not a copy: archiving a symlink leaves its target behind for the
@@ -139,7 +137,7 @@ async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
     srcReport.error = 'file not found';
     return srcReport;
   }
-  if (canonicalPath !== ':memory:' && sameFile(srcPath, canonicalPath)) {
+  if (canonicalPath !== ':memory:' && fs.existsSync(canonicalPath) && sameFile(srcPath, canonicalPath)) {
     // Merging the store into itself is a no-op, and archiving it afterwards
     // would take the live store away.
     srcReport.error = 'source is the canonical store';
@@ -185,7 +183,9 @@ function archiveOneSource(srcPath, stamp) {
     if (fs.existsSync(`${srcPath}${suffix}`)) moves.push([`${srcPath}${suffix}`, `${archivedTo}${suffix}`]);
   }
   for (const [, to] of moves) {
-    if (fs.existsSync(to)) throw new Error(`archive destination already exists: ${to}`);
+    // lstat, not exists: a dangling symlink at the destination would report
+    // absent and be replaced by the rename.
+    if (fs.lstatSync(to, { throwIfNoEntry: false })) throw new Error(`archive destination already exists: ${to}`);
   }
   const done = [];
   try {
@@ -252,7 +252,9 @@ async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false, keepSo
   if (apply) await canonicalDb.flush();
   canonicalDb.close();
 
-  const archived = apply && !keepSources ? archiveSources(reports) : [];
+  // An in-memory canonical store keeps nothing after close, so the sources
+  // stay the only copy and must not be archived.
+  const archived = apply && !keepSources && resolvedCanonicalPath !== ':memory:' ? archiveSources(reports) : [];
   return { apply, canonical: resolvedCanonicalPath, backupPath, keepSources, archived, reports };
 }
 
