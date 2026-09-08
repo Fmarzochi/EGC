@@ -104,8 +104,11 @@ function usableIntegrityKey() {
 function parentStillDirectory(filePath) {
   try {
     return fs.lstatSync(path.dirname(filePath)).isDirectory();
-  } catch {
-    return false;
+  } catch (error) {
+    // Gone, or a link now sits there: the skip. Anything else is an I/O
+    // failure the run has to report, not a quiet skip with exit 0.
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR' || error.code === 'ELOOP') return false;
+    throw error;
   }
 }
 
