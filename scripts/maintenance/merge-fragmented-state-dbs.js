@@ -108,17 +108,28 @@ function mergeOneTable(canonicalDb, srcDb, name, pk, apply) {
   };
 }
 
-// Filesystem identity, not spelling: a symlink to the canonical store, or the
-// same file spelled in another case on Windows, must be refused too.
-function samePath(a, b) {
-  const resolvedA = path.resolve(a);
-  const resolvedB = path.resolve(b);
-  try {
-    return fs.realpathSync.native(resolvedA) === fs.realpathSync.native(resolvedB);
-  } catch {
-    const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value);
-    return fold(resolvedA) === fold(resolvedB);
-  }
+// Filesystem identity, not spelling: the live store reached through a
+// symlink, a hard link, or another spelling of its name on Windows must be
+// refused too. Both files exist by the time this runs (the source was
+// checked, the canonical store was just opened), so device and inode settle
+// it; a filesystem that reports no inode falls back to the resolved names,
+// case-folded on Windows.
+function sameFile(a, b) {
+  const statA = fs.statSync(a, { bigint: true });
+  const statB = fs.statSync(b, { bigint: true });
+  const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value);
+  return statA.ino !== 0n && statB.ino !== 0n
+    ? statA.dev === statB.dev && statA.ino === statB.ino
+    : fold(path.resolve(a)) === fold(path.resolve(b));
+}
+
+// A link is not a copy: archiving a symlink leaves its target behind for the
+// doctor to flag again, and archiving one name of a hard-linked file leaves
+// the archive tied to whatever the other names keep writing.
+function refuseLinkedSource(srcPath) {
+  if (fs.lstatSync(srcPath).isSymbolicLink()) return 'source is a symbolic link; pass the file it points to';
+  if (fs.statSync(srcPath).nlink > 1) return 'source has other hard links; archiving would not detach it';
+  return null;
 }
 
 async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
@@ -128,10 +139,15 @@ async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
     srcReport.error = 'file not found';
     return srcReport;
   }
-  if (canonicalPath !== ':memory:' && samePath(srcPath, canonicalPath)) {
+  if (canonicalPath !== ':memory:' && sameFile(srcPath, canonicalPath)) {
     // Merging the store into itself is a no-op, and archiving it afterwards
     // would take the live store away.
     srcReport.error = 'source is the canonical store';
+    return srcReport;
+  }
+  const linked = refuseLinkedSource(srcPath);
+  if (linked) {
+    srcReport.error = linked;
     return srcReport;
   }
 
@@ -178,7 +194,7 @@ function archiveOneSource(srcPath, stamp) {
       done.push([from, to]);
     }
   } catch (err) {
-    for (const [from, to] of done.reverse()) {
+    for (const [from, to] of done.toReversed()) {
       try {
         fs.renameSync(to, from);
       } catch {
@@ -193,8 +209,7 @@ function archiveOneSource(srcPath, stamp) {
 // A file none of whose tables could be read is not a merged copy: renaming
 // it would only hide it from the doctor with everything still inside.
 function nothingMerged(report) {
-  const tables = Object.values(report.tables);
-  return tables.length === 0 || tables.every(table => table.skipped);
+  return Object.values(report.tables).every(table => table.skipped);
 }
 
 // Only after the canonical store is written, flushed and closed: a source

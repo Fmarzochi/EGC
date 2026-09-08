@@ -532,6 +532,112 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('a source reached through a symlink is refused so its target never stays behind', async () => {
+    if (process.platform === 'win32') {
+      // Creating a symlink needs a privilege the CI runner does not hold; the
+      // hard-link case below exercises the same refusal path on Windows.
+      return;
+    }
+    const dir = createTempDir('egc-merge-symlink-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const target = path.join(dir, 'fragment', 'state.db');
+      const link = path.join(dir, 'link.db');
+      await seedDb(canonicalPath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      await seedDb(target);
+      fs.symlinkSync(target, link);
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [link], apply: true });
+      assert.strictEqual(result.reports[0].error, 'source is a symbolic link; pass the file it points to');
+      assert.deepStrictEqual(result.archived, []);
+      assert.ok(fs.existsSync(target) && fs.existsSync(link), 'neither the link nor its target moved');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a source with other hard links is refused, and a hard link to the live store counts as the live store', async () => {
+    const dir = createTempDir('egc-merge-hardlink-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const fragment = path.join(dir, 'fragment.db');
+      const twin = path.join(dir, 'twin.db');
+      const aliasOfCanonical = path.join(dir, 'alias-of-canonical.db');
+      await seedDb(canonicalPath);
+      await seedDb(fragment);
+      fs.linkSync(fragment, twin);
+      fs.linkSync(canonicalPath, aliasOfCanonical);
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [fragment, aliasOfCanonical], apply: true });
+      assert.strictEqual(result.reports[0].error, 'source has other hard links; archiving would not detach it');
+      assert.strictEqual(result.reports[1].error, 'source is the canonical store');
+      assert.deepStrictEqual(result.archived, []);
+      for (const file of [fragment, twin, canonicalPath, aliasOfCanonical]) {
+        assert.ok(fs.existsSync(file), `${path.basename(file)} must stay where it is`);
+      }
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a dry run against a canonical store that does not exist yet still tells the source apart from it', async () => {
+    const dir = createTempDir('egc-merge-fresh-');
+    try {
+      const canonicalPath = path.join(dir, 'fresh', 'state.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(sourcePath);
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: false });
+      assert.strictEqual(result.reports[0].error, undefined, 'the source must be merged, not mistaken for the missing store');
+      assert.ok(fs.existsSync(sourcePath));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a rollback that fails too still leaves the original error on the source entry', async () => {
+    const dir = createTempDir('egc-merge-rollback-fail-');
+    const originalRename = fs.renameSync;
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      await seedDb(sourcePath);
+      fs.writeFileSync(`${sourcePath}-wal`, 'wal-bytes');
+
+      fs.renameSync = (from, to) => {
+        if (from.endsWith('-wal') || to === sourcePath) throw new Error('EPERM: operation not permitted');
+        return originalRename(from, to);
+      };
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
+      fs.renameSync = originalRename;
+
+      assert.ok(result.reports[0].archiveError.includes('EPERM'), 'the forward failure is the one reported');
+      assert.deepStrictEqual(result.archived, []);
+    } finally {
+      fs.renameSync = originalRename;
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('the CLI exits with code 1 and prints the error when a source is not a database', async () => {
+    const dir = createTempDir('egc-merge-cli-error-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      fs.writeFileSync(sourcePath, 'this is not a sqlite file');
+
+      const run = runMergeCli(['--canonical', canonicalPath, '--source', sourcePath]);
+      assert.strictEqual(run.code, 1, run.stdout);
+      assert.ok(run.stderr.length > 0, 'the failure must be printed');
+      assert.ok(fs.existsSync(sourcePath), 'a failed run never touches the source');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
