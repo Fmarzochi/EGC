@@ -68,7 +68,8 @@ function issueLines(results) {
 // cmd.exe has no single quotes, so Windows keeps double quotes.
 function shellQuote(value, platform = process.platform) {
   if (platform === 'win32') return `"${value}"`;
-  return `'${String(value).replaceAll("'", String.raw`'\''`)}'`;
+  const escaped = String(value).replaceAll("'", String.raw`'\''`);
+  return `'${escaped}'`;
 }
 
 function consolidateCommand(scriptPath, sourcePaths, canonicalPath, platform = process.platform) {
