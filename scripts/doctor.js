@@ -221,7 +221,8 @@ function printPlaintextStateReport(report) {
   console.log('\nState files:');
   console.log(`  WARNING: ${report.count} of ${report.checked} state ${plural} under ${report.stateDir} ${report.count === 1 ? 'is' : 'are'} plain text:`);
   for (const file of report.files.slice(0, PLAINTEXT_STATE_SHOWN)) {
-    console.log(`    ${file.path}${file.modifiedAt ? ` (last write ${file.modifiedAt})` : ''}`);
+    const lastWrite = file.modifiedAt ? ` (last write ${file.modifiedAt})` : '';
+    console.log(`    ${file.path}${lastWrite}`);
   }
   if (report.count > PLAINTEXT_STATE_SHOWN) {
     console.log(`    and ${report.count - PLAINTEXT_STATE_SHOWN} more`);
