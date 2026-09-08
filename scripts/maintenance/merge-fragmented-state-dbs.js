@@ -13,11 +13,16 @@
 //   - schema_migrations is never merged: each db file tracks its own
 //     migration history, copying those rows would be meaningless.
 //   - Dry-run by default; pass --apply to actually write.
+//   - After a successful --apply each merged source is renamed next to itself
+//     (state.db.merged-<timestamp>.bak, sidecar -wal/-shm/-journal files along
+//     with it) so egc doctor stops listing it as a stray copy (#1390). Nothing
+//     is ever deleted; --keep-sources leaves the files where they are.
 //
 // CLI usage:
-//   node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply]
+//   node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply] [--keep-sources]
 
 const fs = require('node:fs');
+const path = require('node:path');
 const { openDatabase } = require('../lib/state-store/db-adapter');
 const { applyMigrations } = require('../lib/state-store/migrations');
 const { resolveStateStorePath } = require('../lib/state-store');
@@ -103,11 +108,21 @@ function mergeOneTable(canonicalDb, srcDb, name, pk, apply) {
   };
 }
 
-async function mergeOneSource(canonicalDb, srcPath, apply) {
+function samePath(a, b) {
+  return path.resolve(a) === path.resolve(b);
+}
+
+async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
   const srcReport = { source: srcPath, tables: {} };
 
   if (!fs.existsSync(srcPath)) {
     srcReport.error = 'file not found';
+    return srcReport;
+  }
+  if (canonicalPath !== ':memory:' && samePath(srcPath, canonicalPath)) {
+    // Merging the store into itself is a no-op, and archiving it afterwards
+    // would take the live store away.
+    srcReport.error = 'source is the canonical store';
     return srcReport;
   }
 
@@ -119,15 +134,51 @@ async function mergeOneSource(canonicalDb, srcPath, apply) {
   return srcReport;
 }
 
+function fileStamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
 function backupBeforeApply(canonicalPath) {
   if (canonicalPath === ':memory:' || !fs.existsSync(canonicalPath)) return null;
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = `${canonicalPath}.backup-${stamp}`;
+  const backupPath = `${canonicalPath}.backup-${fileStamp()}`;
   fs.copyFileSync(canonicalPath, backupPath);
   return backupPath;
 }
 
-async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false }) {
+// SQLite may leave a write-ahead log or a rollback journal next to a store;
+// they belong to the file they sit beside, so they move with it.
+const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
+
+function archiveOneSource(srcPath, stamp) {
+  const archivedTo = `${srcPath}.merged-${stamp}.bak`;
+  fs.renameSync(srcPath, archivedTo);
+  for (const suffix of SIDECAR_SUFFIXES) {
+    if (fs.existsSync(`${srcPath}${suffix}`)) fs.renameSync(`${srcPath}${suffix}`, `${archivedTo}${suffix}`);
+  }
+  return archivedTo;
+}
+
+// Only after the canonical store is written, flushed and closed: a source
+// that failed to merge stays where it is, and a rename that fails (a file
+// held open by another process on Windows) is reported, not thrown, since
+// the merge itself already succeeded.
+function archiveSources(reports) {
+  const stamp = fileStamp();
+  const archived = [];
+  for (const report of reports) {
+    if (report.error) continue;
+    try {
+      const archivedTo = archiveOneSource(report.source, stamp);
+      report.archivedTo = archivedTo;
+      archived.push({ source: report.source, archivedTo });
+    } catch (err) {
+      report.archiveError = String(err?.message ?? err);
+    }
+  }
+  return archived;
+}
+
+async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false, keepSources = false }) {
   const resolvedCanonicalPath = canonicalPath || resolveStateStorePath();
   const backupPath = apply ? backupBeforeApply(resolvedCanonicalPath) : null;
 
@@ -137,35 +188,38 @@ async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false }) {
 
   const reports = [];
   const commit = canonicalDb.transaction(() => {});
-  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply));
+  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply, resolvedCanonicalPath));
   if (apply) commit(); // no-op body; forces a single persist after all inserts above
 
   if (apply) await canonicalDb.flush();
   canonicalDb.close();
 
-  return { apply, canonical: resolvedCanonicalPath, backupPath, reports };
+  const archived = apply && !keepSources ? archiveSources(reports) : [];
+  return { apply, canonical: resolvedCanonicalPath, backupPath, keepSources, archived, reports };
 }
 
 function parseArgs(argv) {
-  const out = { sourcePaths: [], apply: false, canonicalPath: null };
+  const out = { sourcePaths: [], apply: false, canonicalPath: null, keepSources: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--canonical') out.canonicalPath = argv[++i];
     else if (a === '--source') out.sourcePaths.push(argv[++i]);
     else if (a === '--apply') out.apply = true;
+    else if (a === '--keep-sources') out.keepSources = true;
   }
   return out;
 }
 
 async function main() {
-  const { canonicalPath, sourcePaths, apply } = parseArgs(process.argv.slice(2));
+  const { canonicalPath, sourcePaths, apply, keepSources } = parseArgs(process.argv.slice(2));
   if (sourcePaths.length === 0) {
-    console.error('Usage: node merge-fragmented-state-dbs.js [--canonical <path>] --source <path> [--source <path> ...] [--apply]');
+    console.error('Usage: node merge-fragmented-state-dbs.js [--canonical <path>] --source <path> [--source <path> ...] [--apply] [--keep-sources]');
+    console.error('  After --apply each merged source is renamed to <source>.merged-<timestamp>.bak next to itself; --keep-sources leaves it in place.');
     console.error('  --canonical defaults to the real resolveStateStorePath() (~/.egc/egc/state.db) when omitted.');
     process.exitCode = 1;
     return;
   }
-  const result = await mergeStateDbs({ canonicalPath, sourcePaths, apply });
+  const result = await mergeStateDbs({ canonicalPath, sourcePaths, apply, keepSources });
   console.log(JSON.stringify(result, null, 2));
 }
 

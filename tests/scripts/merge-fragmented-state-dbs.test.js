@@ -5,12 +5,47 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { execFileSync } = require('child_process');
+
 const { mergeStateDbs } = require('../../scripts/maintenance/merge-fragmented-state-dbs');
 const { openDatabase } = require('../../scripts/lib/state-store/db-adapter');
 const { applyMigrations } = require('../../scripts/lib/state-store/migrations');
 
+const DOCTOR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
+const CLI_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 10000;
+
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+const MERGE_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js');
+
+function runMergeCli(args) {
+  try {
+    const stdout = execFileSync('node', [MERGE_SCRIPT, ...args], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: CLI_TIMEOUT_MS,
+    });
+    return { code: 0, stdout, stderr: '' };
+  } catch (error) {
+    return { code: error.status ?? 1, stdout: error.stdout ?? '', stderr: error.stderr ?? '' };
+  }
+}
+
+function runDoctor(homeDir, cwd) {
+  try {
+    const stdout = execFileSync('node', [DOCTOR_SCRIPT], {
+      cwd,
+      env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: CLI_TIMEOUT_MS,
+    });
+    return { code: 0, stdout };
+  } catch (error) {
+    return { code: error.status ?? 1, stdout: error.stdout ?? '' };
+  }
 }
 
 function cleanup(dirPath) {
@@ -178,10 +213,12 @@ async function runTests() {
       srcDb.close();
 
       const before = fs.readFileSync(sourcePath);
-      await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true, keepSources: true });
       const after = fs.readFileSync(sourcePath);
 
       assert.deepStrictEqual(before, after, 'source db file must be byte-identical, merge is read-only on sources');
+      assert.deepStrictEqual(result.archived, [], '--keep-sources must leave every source in place');
+      assert.strictEqual(result.keepSources, true);
     } finally {
       cleanup(dir);
     }
@@ -219,6 +256,143 @@ async function runTests() {
         apply: true,
       });
       assert.strictEqual(result.reports[0].error, 'file not found');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('--apply renames each merged source to a .merged-<timestamp>.bak next to itself, sidecars included, byte for byte', async () => {
+    const dir = createTempDir('egc-merge-archive-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sources = [path.join(dir, 'gemini', 'state.db'), path.join(dir, 'opencode', 'state.db')];
+      await seedDb(canonicalPath);
+      for (const source of sources) {
+        fs.mkdirSync(path.dirname(source), { recursive: true });
+        await seedDb(source);
+      }
+      const sidecar = `${sources[0]}-wal`;
+      fs.writeFileSync(sidecar, 'wal-bytes');
+      const originalBytes = sources.map(source => fs.readFileSync(source));
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: sources, apply: true });
+
+      assert.strictEqual(result.keepSources, false);
+      assert.strictEqual(result.archived.length, 2, 'both merged sources must be archived');
+      sources.forEach((source, index) => {
+        const entry = result.archived[index];
+        assert.strictEqual(entry.source, source);
+        assert.strictEqual(result.reports[index].archivedTo, entry.archivedTo, 'the per-source report must carry the new name too');
+        assert.ok(entry.archivedTo.startsWith(`${source}.merged-`), 'the archive must sit next to the source it replaces');
+        assert.ok(entry.archivedTo.endsWith('.bak'));
+        assert.ok(!fs.existsSync(source), 'the original name must be gone so the doctor stops flagging it');
+        assert.deepStrictEqual(fs.readFileSync(entry.archivedTo), originalBytes[index], 'archiving is a rename: the bytes must survive untouched');
+      });
+      assert.ok(!fs.existsSync(sidecar), 'the write-ahead log must move with its store');
+      assert.ok(fs.existsSync(`${result.archived[0].archivedTo}-wal`), 'and keep its suffix next to the archived name');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a dry run archives nothing, and neither does a source that could not be merged', async () => {
+    const dir = createTempDir('egc-merge-noarchive-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      const missingPath = path.join(dir, 'missing.db');
+      await seedDb(canonicalPath);
+      await seedDb(sourcePath);
+
+      const dryRun = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: false });
+      assert.deepStrictEqual(dryRun.archived, [], 'a dry run must not rename anything');
+      assert.ok(fs.existsSync(sourcePath));
+
+      const applied = await mergeStateDbs({ canonicalPath, sourcePaths: [missingPath, sourcePath], apply: true });
+      assert.strictEqual(applied.reports[0].error, 'file not found');
+      assert.strictEqual(applied.reports[0].archivedTo, undefined, 'a source that failed to merge stays as it is');
+      assert.strictEqual(applied.archived.length, 1, 'the source that did merge is archived');
+      assert.strictEqual(applied.archived[0].source, sourcePath);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('the canonical store handed in as a source is refused and left in place', async () => {
+    const dir = createTempDir('egc-merge-self-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      await seedDb(canonicalPath);
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [path.join(dir, '.', 'canonical.db')], apply: true });
+      assert.strictEqual(result.reports[0].error, 'source is the canonical store');
+      assert.deepStrictEqual(result.archived, []);
+      assert.ok(fs.existsSync(canonicalPath), 'the live store must never be renamed');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('after --apply the doctor no longer lists the merged copies as stray', async () => {
+    const homeDir = createTempDir('egc-merge-home-');
+    const projectRoot = createTempDir('egc-merge-project-');
+    try {
+      const canonicalPath = path.join(homeDir, '.egc', 'egc', 'state.db');
+      const memoryPath = path.join(homeDir, '.egc', 'memory', 'state.db');
+      const strays = [
+        path.join(homeDir, '.gemini', 'egc', 'state.db'),
+        path.join(homeDir, '.config', 'opencode', 'egc', 'state.db'),
+      ];
+      for (const file of [canonicalPath, ...strays]) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        await seedDb(file);
+      }
+      fs.mkdirSync(path.dirname(memoryPath), { recursive: true });
+      fs.writeFileSync(memoryPath, '');
+
+      const before = runDoctor(homeDir, projectRoot);
+      assert.strictEqual(before.code, 0, before.stdout);
+      assert.ok(before.stdout.includes('2 stray state.db copies'), 'the fixture must reproduce the warning first');
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: strays, apply: true });
+      assert.strictEqual(result.archived.length, 2);
+
+      const after = runDoctor(homeDir, projectRoot);
+      assert.strictEqual(after.code, 0, after.stdout);
+      assert.ok(!after.stdout.includes('stray state.db'), `the doctor must come back clean, got:\n${after.stdout}`);
+      assert.ok(fs.existsSync(canonicalPath), 'the canonical store stays');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (await test('the CLI honours --keep-sources and explains the archive step in its usage text', async () => {
+    const dir = createTempDir('egc-merge-cli-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const sourcePath = path.join(dir, 'source.db');
+      await seedDb(canonicalPath);
+      await seedDb(sourcePath);
+
+      const usage = runMergeCli(['--canonical', canonicalPath]);
+      assert.strictEqual(usage.code, 1, 'no --source must still exit with the usage text');
+      assert.ok(usage.stderr.includes('--keep-sources'), 'the usage must list the new flag');
+      assert.ok(usage.stderr.includes('.merged-<timestamp>.bak'), 'and say what --apply does to the sources');
+
+      const kept = runMergeCli(['--canonical', canonicalPath, '--source', sourcePath, '--apply', '--keep-sources']);
+      assert.strictEqual(kept.code, 0, kept.stderr);
+      const parsed = JSON.parse(kept.stdout);
+      assert.strictEqual(parsed.keepSources, true);
+      assert.deepStrictEqual(parsed.archived, []);
+      assert.ok(fs.existsSync(sourcePath), 'the source must stay under its own name');
+
+      const archived = runMergeCli(['--canonical', canonicalPath, '--source', sourcePath, '--apply']);
+      assert.strictEqual(archived.code, 0, archived.stderr);
+      const applied = JSON.parse(archived.stdout);
+      assert.strictEqual(applied.archived.length, 1);
+      assert.ok(fs.existsSync(applied.archived[0].archivedTo));
+      assert.ok(!fs.existsSync(sourcePath));
     } finally {
       cleanup(dir);
     }
