@@ -11,10 +11,13 @@
 // the same file at the same moment cannot interleave with it, and the
 // ciphertext is read back and decrypted before the file counts as done.
 
+const crypto = require('node:crypto');
+const fs = require('node:fs');
 const os = require('node:os');
 const { findPlaintextStateFiles, readPlainStateFile } = require('../lib/state-plaintext');
 const { saveState, withStateFileLockSync } = require('../lib/state-snapshot');
-const { readStateFileDecrypted } = require('../lib/state-crypto');
+const { encryptStateBuffer, decryptStateBuffer, readStateFileDecrypted } = require('../lib/state-crypto');
+const { loadOrCreateIntegrityKey, sidecarMatches, hmacPathFor } = require('../lib/state-integrity');
 
 const { env } = process;
 
@@ -26,10 +29,12 @@ Encrypt the plain-text state files under the EGC state directory in place.
 
 Without --apply nothing is written: the files that would be encrypted are
 listed with their size and last write. With --apply each one is encrypted
-with the EGC encryption key (created if absent), rewritten atomically with
-the integrity sidecar, and read back before it counts. A file that changed
-between the listing and the write, or that is no longer a plain regular
-file, is skipped and reported.
+with the EGC encryption key (created if absent), proven to decrypt back in
+memory before anything is written, rewritten atomically with the integrity
+sidecar, and read back from disk before it counts; if the read-back or the
+sidecar fails, the original plain content is put back and the file is
+reported as failed. A file that stopped being a plain regular file between
+the listing and the write is skipped and reported.
 
 Options:
   --apply   Encrypt the listed files (default is a dry run)
@@ -50,30 +55,61 @@ function parseArgs(argv) {
   return options;
 }
 
+function skipped(filePath, reason) {
+  return { path: filePath, status: 'skipped', reason };
+}
+
+function failed(filePath, reason) {
+  return { path: filePath, status: 'failed', reason };
+}
+
+// Puts the plain content back after a write that did not verify: a fresh
+// exclusive temp file renamed over the path, and the sidecar written for
+// the ciphertext removed, so the file is exactly what it was before.
+function restorePlain(filePath, content) {
+  const tmpPath = `${filePath}.restore-${process.pid}-${crypto.randomUUID()}`;
+  try {
+    fs.writeFileSync(tmpPath, content, { encoding: 'utf-8', flag: 'wx' });
+    fs.renameSync(tmpPath, filePath);
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
+  }
+  try { fs.unlinkSync(hmacPathFor(filePath)); } catch { /* never written */ }
+}
+
 // One file: re-read through the checked descriptor under the lock (the
-// listing is not trusted after the fact), encrypt, then prove the result
-// decrypts back to the exact content before reporting it as done. The
-// read-back is injectable so the mismatch path can be exercised by a test.
-function encryptOne(filePath, readBack = readStateFileDecrypted) {
+// listing is not trusted after the fact), prove the ciphertext decrypts
+// back in memory before anything touches the disk, write, then prove the
+// file on disk and its sidecar before reporting it as done. The read-back
+// is injectable so the mismatch path can be exercised by a test.
+function encryptOne(filePath, root, readBack = readStateFileDecrypted) {
   return withStateFileLockSync(filePath, () => {
-    const content = readPlainStateFile(filePath);
-    if (content === null) return { path: filePath, status: 'skipped', reason: 'no longer a plain regular file' };
+    const content = readPlainStateFile(filePath, root);
+    if (content === null) return skipped(filePath, 'no longer a plain regular file');
+    if (decryptStateBuffer(encryptStateBuffer(content)) !== content) {
+      return failed(filePath, 'the content did not survive an encrypt and decrypt round trip in memory; nothing was written');
+    }
+    const integrityKey = loadOrCreateIntegrityKey();
     saveState(filePath, content);
-    const roundTrip = readBack(filePath);
-    if (roundTrip !== content) {
-      return { path: filePath, status: 'failed', reason: 'the encrypted file did not read back as the original content' };
+    if (readBack(filePath) !== content) {
+      restorePlain(filePath, content);
+      return failed(filePath, 'the encrypted file did not read back as the original content; the plain file was put back');
+    }
+    if (!sidecarMatches(filePath, content, integrityKey)) {
+      restorePlain(filePath, content);
+      return failed(filePath, 'the integrity sidecar could not be written; the plain file was put back');
     }
     return { path: filePath, status: 'encrypted' };
   });
 }
 
-function encryptAll(files) {
+function encryptAll(files, root) {
   const results = [];
   for (const file of files) {
     try {
-      results.push(encryptOne(file.path));
+      results.push(encryptOne(file.path, root));
     } catch (error) {
-      results.push({ path: file.path, status: 'failed', reason: error.message });
+      results.push(failed(file.path, error.message));
     }
   }
   return results;
@@ -113,7 +149,7 @@ function main() {
 
   const homeDir = env.HOME || env.USERPROFILE || os.homedir();
   const scan = findPlaintextStateFiles(homeDir);
-  const results = options.apply ? encryptAll(scan.files) : [];
+  const results = options.apply ? encryptAll(scan.files, scan.root) : [];
   const report = { apply: options.apply, scan, results };
 
   if (options.json) {

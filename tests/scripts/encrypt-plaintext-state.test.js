@@ -7,6 +7,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { encryptOne } = require('../../scripts/maintenance/encrypt-plaintext-state');
+const { stateRoot } = require('../../scripts/lib/state-plaintext');
+const { shellQuote } = require('../../scripts/lib/doctor-summary');
 const { readStateFileDecrypted, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
@@ -146,11 +148,11 @@ function runTests() {
       seedHome(homeDir);
       const doctor = run(DOCTOR_SCRIPT, [], homeDir);
       assert.strictEqual(doctor.code, 0);
-      assert.ok(doctor.stdout.includes(`node "${SCRIPT}"`), 'the hint must run as pasted from any cwd');
+      assert.ok(doctor.stdout.includes(`node ${shellQuote(SCRIPT)}`), 'the hint must run as pasted from any cwd');
       assert.ok(doctor.stdout.includes('with --apply at the end'));
       assert.ok(doctor.stdout.includes('saved by the EGC hooks before 1.1.18'), 'the third origin of a plain file is named');
       const json = JSON.parse(run(DOCTOR_SCRIPT, ['--json'], homeDir).stdout);
-      assert.strictEqual(json.plaintextStateFiles.encryptCommand, `node "${SCRIPT}"`);
+      assert.strictEqual(json.plaintextStateFiles.encryptCommand, `node ${shellQuote(SCRIPT)}`);
     } finally {
       cleanup(homeDir);
     }
@@ -164,7 +166,7 @@ function runTests() {
     env.USERPROFILE = homeDir;
     try {
       const seeded = seedHome(homeDir);
-      const outcome = encryptOne(seeded.sealed);
+      const outcome = encryptOne(seeded.sealed, stateRoot(seeded.stateDir));
       assert.deepStrictEqual(outcome, { path: seeded.sealed, status: 'skipped', reason: 'no longer a plain regular file' });
       assert.ok(Buffer.compare(fs.readFileSync(seeded.sealed), SEALED) === 0);
       assert.ok(!fs.existsSync(`${seeded.sealed}.merge.lock`), 'the lock is released on the skip path');
@@ -183,14 +185,63 @@ function runTests() {
     env.USERPROFILE = homeDir;
     try {
       const seeded = seedHome(homeDir);
-      const outcome = encryptOne(seeded.flat, () => 'something else');
+      const original = fs.readFileSync(seeded.flat, 'utf8');
+      const outcome = encryptOne(seeded.flat, stateRoot(seeded.stateDir), () => 'something else');
       assert.strictEqual(outcome.status, 'failed');
       assert.ok(outcome.reason.includes('did not read back'));
+      assert.strictEqual(fs.readFileSync(seeded.flat, 'utf8'), original, 'the plain content is put back after a failed verification');
+      assert.ok(!fs.existsSync(`${seeded.flat}.hmac`), 'the sidecar written for the discarded ciphertext is removed');
       assert.ok(!fs.existsSync(`${seeded.flat}.merge.lock`), 'the lock is released on the failure path');
     } finally {
       env.HOME = previousHome;
       env.USERPROFILE = previousProfile;
       cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a sidecar that cannot be published fails the file and puts the plain content back', () => {
+    const homeDir = createTempDir('encrypt-home-');
+    try {
+      const seeded = seedHome(homeDir);
+      const original = fs.readFileSync(seeded.flat, 'utf8');
+      // A directory squatting on the sidecar path: the exclusive temp file
+      // cannot be renamed over it, so the sidecar write reports failure.
+      fs.mkdirSync(`${seeded.flat}.hmac`);
+
+      const result = run(SCRIPT, ['--apply'], homeDir);
+      assert.strictEqual(result.code, 1, result.stdout);
+      assert.ok(result.stdout.includes('the integrity sidecar could not be written; the plain file was put back'), result.stdout);
+      assert.strictEqual(fs.readFileSync(seeded.flat, 'utf8'), original, 'the plain content must be back in place');
+      assert.ok(fs.statSync(`${seeded.flat}.hmac`).isDirectory(), 'the squatter is left alone');
+      assert.ok(isEncryptedBuffer(fs.readFileSync(seeded.branch)), 'the other file still went through');
+      assert.ok(/Encrypted 1, skipped 0, failed 1\./.test(result.stdout), result.stdout);
+    } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a project directory that is really a link is never entered, and a link at the sidecar path is replaced, not followed', () => {
+    if (process.platform === 'win32') return;
+    const homeDir = createTempDir('encrypt-home-');
+    const outside = createTempDir('encrypt-outside-');
+    try {
+      const seeded = seedHome(homeDir);
+      fs.writeFileSync(path.join(outside, 'main.md'), '# Project State\nnot ours\n');
+      fs.symlinkSync(outside, path.join(seeded.stateDir, 'Projetos--linked'));
+      const target = path.join(outside, 'victim.txt');
+      fs.writeFileSync(target, 'untouched');
+      fs.symlinkSync(target, `${seeded.flat}.hmac`);
+
+      const result = run(SCRIPT, ['--apply'], homeDir);
+      assert.strictEqual(result.code, 0, result.stdout);
+      assert.ok(!result.stdout.includes('Projetos--linked'), 'a linked directory is not scanned');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'main.md'), 'utf8'), '# Project State\nnot ours\n', 'nothing outside the state directory is touched');
+      assert.strictEqual(fs.readFileSync(target, 'utf8'), 'untouched', 'the sidecar write must not go through the link');
+      assert.ok(fs.lstatSync(`${seeded.flat}.hmac`).isFile(), 'the link is replaced by the real sidecar');
+      assert.ok(isEncryptedBuffer(fs.readFileSync(seeded.flat)));
+    } finally {
+      cleanup(homeDir);
+      cleanup(outside);
     }
   })) passed++; else failed++;
 

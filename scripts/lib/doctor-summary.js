@@ -62,10 +62,19 @@ function issueLines(results) {
 // copy in the wrong place to begin with. The doctor already knows every path
 // involved, so the printed command carries all of them: it runs as pasted
 // (dry-run by default) from any shell and any cwd (#1389).
-function consolidateCommand(scriptPath, sourcePaths, canonicalPath) {
-  const parts = [`node "${scriptPath}"`];
-  if (canonicalPath) parts.push(`--canonical "${canonicalPath}"`);
-  for (const sourcePath of sourcePaths) parts.push(`--source "${sourcePath}"`);
+// A path pasted into a POSIX shell inside double quotes still goes through
+// $(...) and backtick substitution, so the hint single-quotes it there (the
+// only character that needs care inside single quotes is the quote itself).
+// cmd.exe has no single quotes, so Windows keeps double quotes.
+function shellQuote(value, platform = process.platform) {
+  if (platform === 'win32') return `"${value}"`;
+  return `'${String(value).replaceAll("'", String.raw`'\''`)}'`;
+}
+
+function consolidateCommand(scriptPath, sourcePaths, canonicalPath, platform = process.platform) {
+  const parts = [`node ${shellQuote(scriptPath, platform)}`];
+  if (canonicalPath) parts.push(`--canonical ${shellQuote(canonicalPath, platform)}`);
+  for (const sourcePath of sourcePaths) parts.push(`--source ${shellQuote(sourcePath, platform)}`);
   return parts.join(' ');
 }
 
@@ -224,4 +233,4 @@ function summarizeRepairResult(result) {
   };
 }
 
-module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName, consolidateCommand };
+module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName, consolidateCommand, shellQuote };

@@ -35,18 +35,48 @@ function computeHmac(content, key) {
   return crypto.createHmac(HMAC_ALGORITHM, key).update(content, 'utf-8').digest('hex');
 }
 
-// Writes/refreshes the sidecar at `<stateFilePath>.hmac`. Best-effort: a
-// sidecar write failure must never block the state write it accompanies.
+function hmacPathFor(stateFilePath) {
+  return `${stateFilePath}.hmac`;
+}
+
+// Writes/refreshes the sidecar at `<stateFilePath>.hmac`. Best-effort for
+// the hooks (a sidecar failure must never block the state write it
+// accompanies), so the outcome is returned rather than thrown; a caller
+// that needs the sidecar checks the boolean. The bytes land in a fresh
+// exclusive temp file and are renamed over the sidecar path: rename
+// replaces whatever sits there, a planted link included, and never writes
+// through it.
 function writeHmac(stateFilePath, content, key) {
-  const hmacPath = `${stateFilePath}.hmac`;
+  const hmacPath = hmacPathFor(stateFilePath);
+  const tmpPath = `${hmacPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
   try {
-    fs.writeFileSync(hmacPath, computeHmac(content, key), { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(hmacPath, 0o600);
-  } catch { /* best-effort */ }
+    fs.writeFileSync(tmpPath, computeHmac(content, key), { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+    try { fs.chmodSync(tmpPath, 0o600); } catch { /* no POSIX bits on this filesystem */ }
+    fs.renameSync(tmpPath, hmacPath);
+    return true;
+  } catch {
+    try { fs.unlinkSync(tmpPath); } catch { /* never created, or already renamed */ }
+    return false;
+  }
+}
+
+// Whether the sidecar on disk is a regular file carrying the HMAC of
+// `content`. Read without following a link: a link at the sidecar path is
+// never a valid sidecar.
+function sidecarMatches(stateFilePath, content, key) {
+  const hmacPath = hmacPathFor(stateFilePath);
+  try {
+    if (!fs.lstatSync(hmacPath).isFile()) return false;
+    return fs.readFileSync(hmacPath, 'utf-8').trim() === computeHmac(content, key);
+  } catch {
+    return false;
+  }
 }
 
 module.exports = {
   loadOrCreateIntegrityKey,
   computeHmac,
   writeHmac,
+  sidecarMatches,
+  hmacPathFor,
 };

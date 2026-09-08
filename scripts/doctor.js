@@ -7,7 +7,7 @@ const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
-const { consolidateCommand } = require('./lib/doctor-summary');
+const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
 const { findPlaintextStateFiles } = require('./lib/state-plaintext');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
@@ -156,7 +156,7 @@ const ENCRYPT_SCRIPT = path.join(__dirname, 'maintenance', 'encrypt-plaintext-st
 function checkPlaintextState(homeDir) {
   const report = findPlaintextStateFiles(homeDir);
   if (report.count === 0) return null;
-  return { ...report, encryptCommand: `node "${ENCRYPT_SCRIPT}"` };
+  return { ...report, encryptCommand: `node ${shellQuote(ENCRYPT_SCRIPT)}` };
 }
 
 function printPlaintextStateReport(report) {

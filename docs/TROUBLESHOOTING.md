@@ -79,13 +79,13 @@ State files:
 
 **Cause:** EGC has encrypted state at rest since 1.1.6, but three kinds of file were left in plain text: files written before that release, files the EGC hooks saved before 1.1.18 (the compaction snapshot and the mined memory were written without encrypting), and files an AI tool wrote straight to disk because it had no `egc-memory` server registered and followed the old protocol text to the path. The memory server reads all of them and encrypts a file the next time it saves it, but a file for a project or branch that is never opened again stays plain, readable by anything running on the machine.
 
-**Fix:** encrypt them in place with the maintenance script the doctor names. Dry run first:
+**Fix:** encrypt them in place with the maintenance script. The doctor prints the exact command, with the absolute path of the script inside the installed package, right under the list; on Linux it looks like this:
 
 ```bash
-node "<path printed by egc doctor>/scripts/maintenance/encrypt-plaintext-state.js"
+node '/usr/lib/node_modules/@egchq/egc/scripts/maintenance/encrypt-plaintext-state.js'
 ```
 
-Review the list, then run the same command with `--apply` at the end. Each file is encrypted with the same key the server uses, rewritten atomically with its integrity sidecar, and read back before it counts. A file that changed in between is skipped and reported. Run `egc doctor` again: the section is gone. If a tool wrote one of those files by hand, also run `egc init` in that project so the tool gets the memory server instead of the filesystem.
+Run it as printed: without `--apply` it is a dry run that lists what it would encrypt and writes nothing. Review the list, then run the same command with `--apply` at the end. Each file is encrypted with the same key the server uses, proven to decrypt back in memory before anything is written, rewritten atomically with its integrity sidecar, and read back from disk before it counts; if that read-back or the sidecar fails, the plain content is put back and the file is reported as failed. A file that stopped being a plain regular file in between (already encrypted by the server, replaced by something else) is skipped and reported. Run `egc doctor` again: the section is gone. If a tool wrote one of those files by hand, also run `egc init` in that project so the tool gets the memory server instead of the filesystem.
 
 ---
 
