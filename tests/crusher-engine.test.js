@@ -173,8 +173,12 @@ run('crushed output preserves multi-line assertion detail from pytest, Go, Rust,
   lines.push('>       assert 1 == 2');
   lines.push('E       assert 1 == 2');
   lines.push('--- FAIL: TestAdd (0.00s)');
+  lines.push('    math_test.go:42: unexpected result');
   lines.push('    expected: 1');
   lines.push('    actual: 2');
+  lines.push('    Received: null');
+  lines.push('    - Expected: 1');
+  lines.push('    + Received: 2');
   lines.push('assertion `left == right` failed');
   lines.push('  left: 1');
   lines.push(' right: 2');
@@ -186,11 +190,30 @@ run('crushed output preserves multi-line assertion detail from pytest, Go, Rust,
   assert.ok(result);
   assert.ok(result.crushed.includes('>       assert 1 == 2'), 'pytest ">" detail line survives');
   assert.ok(result.crushed.includes('E       assert 1 == 2'), 'pytest "E" detail line survives');
+  assert.ok(result.crushed.includes('math_test.go:42: unexpected result'), 'Go "file.go:line:" location frame survives');
   assert.ok(result.crushed.includes('expected: 1'), 'Go "expected:" detail line survives');
   assert.ok(result.crushed.includes('actual: 2'), 'Go "actual:" detail line survives');
+  assert.ok(result.crushed.includes('Received: null'), 'Jest "Received:" detail line survives');
+  assert.ok(result.crushed.includes('- Expected: 1'), 'diff "- Expected:" detail line survives');
+  assert.ok(result.crushed.includes('+ Received: 2'), 'diff "+ Received:" detail line survives');
   assert.ok(result.crushed.includes('left: 1'), 'Rust "left:" detail line survives');
   assert.ok(result.crushed.includes('right: 2'), 'Rust "right:" detail line survives');
   assert.ok(result.crushed.includes('^~~~~'), 'compiler caret line survives');
+});
+
+run('crushed output preserves Jest, Vitest, and Mocha failing test titles and symbols', () => {
+  const lines = [];
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('  ● UserProfile › fetches user data from backend');
+  lines.push('  ❯ src/auth.test.ts:15:7 › login user');
+  lines.push('  1) Database connection should connect with valid credentials:');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  lines.push('done');
+  const result = crushOutput('npm test', lines.join('\n'));
+  assert.ok(result);
+  assert.ok(result.crushed.includes('● UserProfile › fetches user data'), 'Jest bullet failure title survives');
+  assert.ok(result.crushed.includes('❯ src/auth.test.ts:15:7 › login user'), 'Vitest indicator failure title survives');
+  assert.ok(result.crushed.includes('1) Database connection should connect'), 'Mocha numbered failure title survives');
 });
 
 run('crushed output preserves the Spanish past-tense verbs "falló" and "fallaron"', () => {

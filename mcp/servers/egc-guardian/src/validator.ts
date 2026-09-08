@@ -1111,20 +1111,59 @@ function findGitSubcommandIndex(args: string[]): number {
   return -1;
 }
 
+function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null {
+  for (let i = 0; i < args.length; i++) {
+    const raw = args[i];
+    const t = bareToken(raw);
+    let keyVal: string | null = null;
+    if (t === '-c') {
+      if (args[i + 1] !== undefined) {
+        keyVal = bareToken(args[i + 1]);
+      }
+    } else if (t.startsWith('-c=')) {
+      keyVal = t.slice(3);
+    } else if (t.startsWith('-c') && t.length > 2) {
+      keyVal = t.slice(2);
+    }
+    if (keyVal) {
+      const eq = keyVal.indexOf('=');
+      const key = (eq > 0 ? keyVal.slice(0, eq) : keyVal).toLowerCase();
+      const value = eq > 0 ? keyVal.slice(eq + 1) : '';
+      if (isDangerousGitConfigWrite(key, value)) {
+        return {
+          allowed: false,
+          reason: `git -c inline override for '${key}' persists a hook/execution-bypass override and is forbidden`,
+          trust_level: 'DANGEROUS',
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function validateGitArgs(args: string[]): ValidationResult {
   // Block force pushes, including --force-with-lease/--force-if-includes
   // (startsWith, not includes, so these are caught even though their
   // second character is '-' and they carry a value after '=').
   const hasForceFlag = args.some(
-a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
+    a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
   );
   if (hasForceFlag) {
-return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
+    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
   }
-  // Additional check for combined short flags like -fu used destructively
-  if (args.includes('push') && args.some(a => /^-[a-zA-Z]*f/.test(a))) {
-return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
+  // Additional check for combined short flags like -fu used destructively or forced refspecs (+ref)
+  if (args.includes('push')) {
+    if (args.some(a => /^-[a-zA-Z]*f/.test(a))) {
+      return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
+    }
+    if (args.some(a => a.startsWith('+') && a.length > 1)) {
+      return { allowed: false, reason: 'git force-push via forced refspec (+) is forbidden', trust_level: 'SAFE_READONLY' };
+    }
   }
+
+  const inlineOverrideDenial = checkInlineGitConfigOverrides(args);
+  if (inlineOverrideDenial) return inlineOverrideDenial;
+
   const subcommandIdx = findGitSubcommandIndex(args);
   if (subcommandIdx >= 0 && bareToken(args[subcommandIdx]) === 'config') {
     const configDenial = checkGitConfigWrite(args.slice(subcommandIdx));

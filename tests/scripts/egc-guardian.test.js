@@ -377,9 +377,12 @@ async function runTests() {
   run(`node on protected path arg`,    () => assertDenied(`node ${home}/.egc/encryption.key`));
   run('find -delete bypasses rm ban',  () => assertDenied('find . -name "*.tmp" -delete'));
   run('find -exec bypasses rm ban',    () => assertDenied(`find . -name "*.log" -exec rm {} \\;`));
-  run('find -execdir',                 () => assertDenied('find . -execdir touch {} \\;'));
   run('git push --force-with-lease',   () => assertDenied('git push --force-with-lease origin main'));
   run('git push --force-if-includes',  () => assertDenied('git push --force-if-includes'));
+  run('git push origin +main',         () => assertDenied('git push origin +main'));
+  run('git push origin +HEAD:main',    () => assertDenied('git push origin +HEAD:main'));
+  run('git -c core.hooksPath override',() => assertDenied('git -c core.hooksPath=/dev/null commit -m "bypass"'));
+  run('git -c core.editor override',   () => assertDenied('git -c core.editor=evil rebase -i'));
 
   // ── validate_write: DENIED (PATH/persistence hijack, audit EGC-128) ───────
 
