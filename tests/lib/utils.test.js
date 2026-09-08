@@ -11,6 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const utils = require('../../scripts/lib/utils');
 
@@ -601,7 +602,7 @@ function runTests() {
         `const utils = require(${JSON.stringify(utilsPath)});`,
         "process.stdout.write(String(utils.commandExists('node')));",
       ].join('\n'));
-      const result = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8', timeout: 10000 });
+      const result = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
       assert.strictEqual(result.status, 0, `Expected exit 0, got ${result.status}. stderr: ${result.stderr}`);
       assert.strictEqual(result.stdout, 'true', 'node must be found on PATH');
       assert.ok(!result.stderr.includes('DEP0190'), `the lookup must not trigger DEP0190, got: ${result.stderr}`);
