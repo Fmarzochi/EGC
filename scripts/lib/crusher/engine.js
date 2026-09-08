@@ -113,7 +113,7 @@ function isStackFrame(line) {
 // below), not by shape, since its second line ("> resolved-command") has
 // no shape of its own to exclude.
 const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
-const ASSERT_DETAIL_GO_RE = /^\s*[-+]?\s*(expected|actual|got|want|received)\s*:/i;
+const ASSERT_DETAIL_GO_RE = /^\s+(?:[-+]\s+)?(expected|actual|got|want|received)\s*:/i;
 const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
 const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
 const ASSERT_DETAIL_DIFF_RE = /^\s*[-+]\s+\S/i;
@@ -308,15 +308,23 @@ function crushGitDiff(output) {
   ].join('\n');
 }
 
+const TEST_SUMMARY_HEADER_RE = /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|FAIL|PASS:?\s*$)/i;
+const TEST_FAIL_MARKER_RE = /^\s*[●❯›]/u;
+const TEST_MOCHA_HEADER_RE = /^\s*\d+\)\s+\S/;
+const TEST_COUNTS_RE = /^\s*\d+ (passed|failed|skipped|pending)/i;
+
 function crushTestRunner(output) {
   const lines = output.split('\n');
   const bannerLineCount = npmScriptBannerLineCount(lines);
   const kept = lines.filter((raw, i) => {
     if (i < bannerLineCount) return false;
     const l = stripAnsi(raw);
+    const trimmed = l.trim();
     return shouldKeepLine(l)
-      || /^\s*(Tests|Test Suites|Snapshots|Time|Ran all|passed|failed|\u2715|\u2717|\u2716|\u25cf|\u276f|\u203a|FAIL|PASS:?\s*$|\d+\)\s+\S)/i.test(l.trim())
-      || /^\s*\d+ (passed|failed|skipped|pending)/i.test(l);
+      || TEST_SUMMARY_HEADER_RE.test(trimmed)
+      || TEST_FAIL_MARKER_RE.test(trimmed)
+      || TEST_MOCHA_HEADER_RE.test(l)
+      || TEST_COUNTS_RE.test(l);
   });
   const summaryTail = lines.slice(-5).filter(l => l.trim());
   const merged = [...new Set([...kept, ...summaryTail])];

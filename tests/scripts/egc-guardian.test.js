@@ -383,6 +383,8 @@ async function runTests() {
   run('git push origin +HEAD:main',    () => assertDenied('git push origin +HEAD:main'));
   run('git -c core.hooksPath override',() => assertDenied('git -c core.hooksPath=/dev/null commit -m "bypass"'));
   run('git -c core.editor override',   () => assertDenied('git -c core.editor=evil rebase -i'));
+  run('git --config-env core.hooksPath',() => assertDenied('git --config-env core.hooksPath=EVIL commit -m "bypass"'));
+  run('git --config-env=core.editor',  () => assertDenied('git --config-env=core.editor=EVIL commit'));
 
   // ── validate_write: DENIED (PATH/persistence hijack, audit EGC-128) ───────
 

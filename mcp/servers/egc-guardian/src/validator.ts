@@ -810,11 +810,19 @@ export function resolveRealOrLexical(p: string): string {
   try {
     return fs.realpathSync(p);
   } catch {
-    try {
-      return path.join(fs.realpathSync(path.dirname(p)), path.basename(p));
-    } catch {
-      return p;
+    let curr = p;
+    const pieces: string[] = [];
+    while (curr && curr !== path.dirname(curr)) {
+      pieces.unshift(path.basename(curr));
+      curr = path.dirname(curr);
+      try {
+        const resolved = fs.realpathSync(curr);
+        return path.join(resolved, ...pieces);
+      } catch {
+        // continue walking up
+      }
     }
+    return p;
   }
 }
 
@@ -1092,7 +1100,7 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
 // skipping these (and their values), a global flag in front of `config`
 // shifts the subcommand out of args[0] and the dangerous-key check below is
 // never reached at all.
-const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix']);
+const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix', '--config-env']);
 
 // Returns the index of the actual subcommand token (skipping global flags
 // and their values), not just its name — reusing this same index to slice
@@ -1111,31 +1119,45 @@ function findGitSubcommandIndex(args: string[]): number {
   return -1;
 }
 
-function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null {
-  for (let i = 0; i < args.length; i++) {
-    const raw = args[i];
-    const t = bareToken(raw);
-    let keyVal: string | null = null;
-    if (t === '-c') {
-      if (args[i + 1] !== undefined) {
-        keyVal = bareToken(args[i + 1]);
-      }
-    } else if (t.startsWith('-c=')) {
-      keyVal = t.slice(3);
-    } else if (t.startsWith('-c') && t.length > 2) {
-      keyVal = t.slice(2);
+function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string; consumedNext: boolean } | null {
+  const bare = bareToken(token);
+  let rawPair: string | null = null;
+  let consumedNext = false;
+
+  if (bare === '-c' || bare === '--config-env') {
+    if (nextToken !== undefined) {
+      rawPair = bareToken(nextToken);
+      consumedNext = true;
     }
-    if (keyVal) {
-      const eq = keyVal.indexOf('=');
-      const key = (eq > 0 ? keyVal.slice(0, eq) : keyVal).toLowerCase();
-      const value = eq > 0 ? keyVal.slice(eq + 1) : '';
-      if (isDangerousGitConfigWrite(key, value)) {
-        return {
-          allowed: false,
-          reason: `git -c inline override for '${key}' persists a hook/execution-bypass override and is forbidden`,
-          trust_level: 'DANGEROUS',
-        };
-      }
+  } else if (bare.startsWith('--config-env=')) {
+    rawPair = bare.slice('--config-env='.length);
+  } else if (bare.startsWith('-c=')) {
+    rawPair = bare.slice(3);
+  } else if (bare.startsWith('-c') && bare.length > 2) {
+    rawPair = bare.slice(2);
+  }
+
+  if (rawPair === null) return null;
+
+  const eq = rawPair.indexOf('=');
+  const key = (eq > 0 ? rawPair.slice(0, eq) : rawPair).toLowerCase();
+  const value = eq > 0 ? rawPair.slice(eq + 1) : '';
+  return { key, value, consumedNext };
+}
+
+function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null {
+  const subIdx = findGitSubcommandIndex(args);
+  const limit = subIdx >= 0 ? subIdx : args.length;
+  for (let i = 0; i < limit; i++) {
+    const pair = parseInlineConfigToken(args[i], args[i + 1]);
+    if (!pair) continue;
+    if (pair.consumedNext) i += 1;
+    if (isDangerousGitConfigWrite(pair.key, pair.value)) {
+      return {
+        allowed: false,
+        reason: `git inline config override for '${pair.key}' persists a hook/execution-bypass override and is forbidden`,
+        trust_level: 'DANGEROUS',
+      };
     }
   }
   return null;
