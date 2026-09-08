@@ -61,9 +61,11 @@ function openCandidate(filePath) {
 
 // Runs `use(fd, stat)` on a descriptor that is a regular file with plain
 // content inside `root`, then closes it. Anything else (encrypted, not
-// regular, empty, outside the state directory, cannot be opened here, which
-// means nobody else on the machine can read it either) is null.
-function withPlainCandidate(filePath, root, use) {
+// regular, empty, outside the state directory) is null. A path that cannot
+// be opened or read is null for a scan (nobody else on the machine can
+// read it either, so it is not a finding) and an error for a strict
+// caller, which must not report a plain file as handled when it was not.
+function withPlainCandidate(filePath, root, use, { strict = false } = {}) {
   let fd;
   try {
     fd = openCandidate(filePath);
@@ -71,7 +73,8 @@ function withPlainCandidate(filePath, root, use) {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile() || stat.size === 0 || !parentInsideRoot(filePath, root) || readHeader(fd)) return null;
     return use(fd, stat);
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return null;
   } finally {
     if (fd !== undefined && fd !== null) fs.closeSync(fd);
@@ -90,14 +93,15 @@ function inspectStateFile(filePath, root) {
 // The full plain content of one path, read through the same checked
 // descriptor, or null when the file is no longer a plain regular file of
 // the size it was opened at: a writer truncating it mid-read yields a short
-// read, and a prefix is never treated as the whole state.
+// read, a writer growing it shows in a second fstat, and neither prefix is
+// ever treated as the whole state. An I/O error is thrown, not swallowed.
 function readPlainStateFile(filePath, root) {
   return withPlainCandidate(filePath, root, (fd, stat) => {
     const content = Buffer.alloc(stat.size);
     const read = fs.readSync(fd, content, 0, stat.size, 0);
-    if (read !== stat.size) return null;
+    if (read !== stat.size || fs.fstatSync(fd).size !== stat.size) return null;
     return content.toString('utf-8');
-  });
+  }, { strict: true });
 }
 
 function stillDirectory(dirPath) {

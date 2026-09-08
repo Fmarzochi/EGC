@@ -59,6 +59,18 @@ function seedHome(homeDir) {
   return { stateDir, flat, branch, sealed, archived };
 }
 
+// Whether the directory really refuses a new file for this process.
+function directoryRefusesWrites(dirPath) {
+  const probe = path.join(dirPath, '.probe-' + process.pid);
+  try {
+    fs.writeFileSync(probe, '', { flag: 'wx' });
+  } catch {
+    return true;
+  }
+  fs.unlinkSync(probe);
+  return false;
+}
+
 function test(name, fn) {
   try {
     fn();
@@ -247,7 +259,6 @@ function runTests() {
 
   if (test('a write that cannot land is reported as failed with exit 1 and the plain file is left as it was', () => {
     if (process.platform === 'win32') return;
-    if (typeof process.getuid === 'function' && process.getuid() === 0) return;
     const homeDir = createTempDir('encrypt-home-');
     try {
       const seeded = seedHome(homeDir);
@@ -257,6 +268,14 @@ function runTests() {
       const original = fs.readFileSync(seeded.flat, 'utf8');
       fs.chmodSync(path.join(seeded.stateDir, 'Projetos--demo'), 0o500);
       fs.chmodSync(seeded.stateDir, 0o500);
+      // Root, a container with broad DAC privileges, or a filesystem that
+      // ignores mode bits can still write here; then the failure cannot be
+      // provoked and the case is skipped rather than asserted on.
+      if (!directoryRefusesWrites(seeded.stateDir)) {
+        fs.chmodSync(seeded.stateDir, 0o700);
+        fs.chmodSync(path.join(seeded.stateDir, 'Projetos--demo'), 0o700);
+        return;
+      }
       try {
         const result = run(SCRIPT, ['--apply'], homeDir);
         assert.strictEqual(result.code, 1, 'a failed file must fail the run');
@@ -268,6 +287,36 @@ function runTests() {
         fs.chmodSync(path.join(seeded.stateDir, 'Projetos--demo'), 0o700);
       }
     } finally {
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a plain file that cannot be read is a failure of the run, not a skip that leaves it plain', () => {
+    if (process.platform === 'win32') return;
+    const homeDir = createTempDir('encrypt-home-');
+    try {
+      const seeded = seedHome(homeDir);
+      // The scan lists the file while it is readable; it is sealed only
+      // for the apply pass, through the injectable reader of encryptOne.
+      const original = fs.readFileSync(seeded.flat, 'utf8');
+      fs.chmodSync(seeded.flat, 0o000);
+      const readable = (() => { try { fs.readFileSync(seeded.flat); return true; } catch { return false; } })();
+      if (readable) return; // privileges make the seal ineffective here
+      const previousHome = env.HOME;
+      const previousProfile = env.USERPROFILE;
+      env.HOME = homeDir;
+      env.USERPROFILE = homeDir;
+      try {
+        assert.throws(() => encryptOne(seeded.flat, stateRoot(seeded.stateDir)), /EACCES|EPERM/, 'an I/O error must surface, not read as a skip');
+        assert.ok(!fs.existsSync(`${seeded.flat}.merge.lock`), 'the lock is released when the read throws');
+      } finally {
+        env.HOME = previousHome;
+        env.USERPROFILE = previousProfile;
+      }
+      fs.chmodSync(seeded.flat, 0o600);
+      assert.strictEqual(fs.readFileSync(seeded.flat, 'utf8'), original, 'the file was never touched');
+    } finally {
+      try { fs.chmodSync(path.join(homeDir, '.egc', 'state', 'Projetos--demo.md'), 0o600); } catch { /* already gone */ }
       cleanup(homeDir);
     }
   })) passed++; else failed++;

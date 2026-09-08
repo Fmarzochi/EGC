@@ -14,6 +14,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
+const path = require('node:path');
 const { findPlaintextStateFiles, readPlainStateFile } = require('../lib/state-plaintext');
 const { saveState, withStateFileLockSync } = require('../lib/state-snapshot');
 const { encryptStateBuffer, decryptStateBuffer, readStateFileDecrypted } = require('../lib/state-crypto');
@@ -67,9 +68,12 @@ function failed(filePath, reason) {
 // exclusive temp file renamed over the path, and the sidecar written for
 // the ciphertext removed, so the file is exactly what it was before.
 function restorePlain(filePath, content) {
-  const tmpPath = `${filePath}.restore-${process.pid}-${crypto.randomUUID()}`;
+  const tmpPath = path.join(path.dirname(filePath), `.egc-restore-${process.pid}-${crypto.randomUUID()}`);
   try {
-    fs.writeFileSync(tmpPath, content, { encoding: 'utf-8', flag: 'wx' });
+    // Private from the first byte: the restored plain file must not be more
+    // readable than the ciphertext it replaces.
+    fs.writeFileSync(tmpPath, content, { encoding: 'utf-8', flag: 'wx', mode: 0o600 });
+    try { fs.chmodSync(tmpPath, 0o600); } catch { /* no POSIX bits on this filesystem */ }
     fs.renameSync(tmpPath, filePath);
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
@@ -84,6 +88,8 @@ function restorePlain(filePath, content) {
 // is injectable so the mismatch path can be exercised by a test.
 function encryptOne(filePath, root, readBack = readStateFileDecrypted) {
   return withStateFileLockSync(filePath, () => {
+    // A read error propagates: a plain file that cannot be read is a
+    // failure of this run, never a skip that leaves it plain with exit 0.
     const content = readPlainStateFile(filePath, root);
     if (content === null) return skipped(filePath, 'no longer a plain regular file');
     if (decryptStateBuffer(encryptStateBuffer(content)) !== content) {
