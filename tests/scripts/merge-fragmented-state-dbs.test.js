@@ -11,8 +11,9 @@ const { mergeStateDbs, archiveOneSource } = require('../../scripts/maintenance/m
 const { openDatabase } = require('../../scripts/lib/state-store/db-adapter');
 const { applyMigrations } = require('../../scripts/lib/state-store/migrations');
 
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
 const DOCTOR_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
-const CLI_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 10000;
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
