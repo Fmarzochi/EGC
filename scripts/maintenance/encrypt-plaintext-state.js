@@ -110,7 +110,7 @@ function parentStillDirectory(filePath) {
 }
 
 function encryptOne(filePath, root, readBack = readEncryptedStateFile) {
-  if (!parentStillDirectory(filePath)) return skipped(filePath, 'no longer a plain regular file');
+  if (!parentStillDirectory(filePath)) return skipped(filePath, 'its directory is gone');
   return withStateFileLockSync(filePath, () => {
     // A read error propagates: a plain file that cannot be read is a
     // failure of this run, never a skip that leaves it plain with exit 0.

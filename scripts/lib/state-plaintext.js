@@ -159,9 +159,11 @@ function readEncryptedStateFile(filePath, root) {
     if (!stat.isFile() || !descriptorAtPathInsideRoot(fd, stat, filePath, root)) return null;
     const raw = Buffer.alloc(stat.size);
     const read = fs.readSync(fd, raw, 0, stat.size, 0);
-    // A file that grew or shrank under the read is not the file that was
-    // written: the caller treats null as a failed read-back and restores.
-    if (read !== stat.size || fs.fstatSync(fd).size !== stat.size || !isEncryptedBuffer(raw)) return null;
+    // A file that grew or shrank under the read, or a path that no longer
+    // leads to this descriptor, is not the file that was written: the
+    // caller treats null as a failed read-back and restores.
+    if (read !== stat.size || fs.fstatSync(fd).size !== stat.size) return null;
+    if (!descriptorAtPathInsideRoot(fd, stat, filePath, root) || !isEncryptedBuffer(raw)) return null;
     return decryptStateBuffer(raw);
   } catch {
     return null;

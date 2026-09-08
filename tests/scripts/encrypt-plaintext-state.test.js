@@ -363,7 +363,7 @@ function runTests() {
       assert.deepStrictEqual(encryptOne(gone, root), { path: gone, status: 'skipped', reason: 'no longer a plain regular file' });
       const removedDir = path.join(seeded.stateDir, 'Projetos--removed');
       const orphan = path.join(removedDir, 'main.md');
-      assert.strictEqual(encryptOne(orphan, root).status, 'skipped');
+      assert.deepStrictEqual(encryptOne(orphan, root), { path: orphan, status: 'skipped', reason: 'its directory is gone' });
       assert.ok(!fs.existsSync(removedDir), 'a skip must not recreate the project directory the lock helper would make');
       if (process.platform !== 'win32') {
         const linked = path.join(seeded.stateDir, 'Projetos--linked.md');
