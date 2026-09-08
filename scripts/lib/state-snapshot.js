@@ -137,7 +137,9 @@ function saveState(filePath, content) {
   const encrypted = encryptStateBuffer(content);
   const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
   try {
-    fs.writeFileSync(tmpPath, encrypted);
+    // Exclusive and private from the first byte: the temp file is never
+    // written through anything already sitting at its name.
+    fs.writeFileSync(tmpPath, encrypted, { flag: 'wx', mode: 0o600 });
     try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
     fs.renameSync(tmpPath, filePath);
   } finally {

@@ -98,7 +98,19 @@ function usableIntegrityKey() {
 // sidecar before reporting it as done; any failure after the write puts
 // the plain content back. The read-back is injectable so the mismatch and
 // error paths can be exercised by a test.
+// Whether the parent directory is still a real directory: the lock helper
+// creates it when missing, and a skip must never recreate a directory the
+// person removed between the listing and the apply pass.
+function parentStillDirectory(filePath) {
+  try {
+    return fs.lstatSync(path.dirname(filePath)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function encryptOne(filePath, root, readBack = readEncryptedStateFile) {
+  if (!parentStillDirectory(filePath)) return skipped(filePath, 'no longer a plain regular file');
   return withStateFileLockSync(filePath, () => {
     // A read error propagates: a plain file that cannot be read is a
     // failure of this run, never a skip that leaves it plain with exit 0.

@@ -129,6 +129,10 @@ function readPlainStateFile(filePath, root) {
     const content = Buffer.alloc(stat.size);
     const read = fs.readSync(fd, content, 0, stat.size, 0);
     if (read !== stat.size || fs.fstatSync(fd).size !== stat.size) return null;
+    // The path is checked once more after the read: a file swapped in
+    // under the same name while this descriptor was open would otherwise
+    // be overwritten with the stale content just read from the old one.
+    if (!descriptorAtPathInsideRoot(fd, stat, filePath, root)) return null;
     return content.toString('utf-8');
   }, { strict: true });
 }
