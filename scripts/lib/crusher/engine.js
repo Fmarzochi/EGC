@@ -116,7 +116,7 @@ const ASSERT_DETAIL_PYTEST_RE = /^\s*[>E]\s+\S/;
 const ASSERT_DETAIL_GO_RE = /^\s+(?:[-+]\s+)?(expected|actual|got|want|received)\s*:/i;
 const ASSERT_DETAIL_RUST_RE = /^\s+(left|right)\s*:\s/;
 const ASSERT_DETAIL_CARET_RE = /^\s*\^[\^~]*\s*$/;
-const ASSERT_DETAIL_DIFF_RE = /^\s*[-+]\s+\S/i;
+const ASSERT_DETAIL_DIFF_RE = /^\s+[-+]\s+\S/i;
 
 function isAssertionDetail(line) {
   return ASSERT_DETAIL_PYTEST_RE.test(line)

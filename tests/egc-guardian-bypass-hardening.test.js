@@ -99,12 +99,22 @@ run('git config --global core.hooksPath /tmp/evil is hard-blocked', () => assert
 run('git config credential.helper /tmp/evil is hard-blocked', () => assertHardBlocked('git config credential.helper /tmp/evil'));
 run('git config alias.co "!rm -rf /" is hard-blocked', () => assertHardBlocked('git config alias.co "!rm -rf /"'));
 run('git config alias.egcprobe "config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config alias.egcprobe "config --local core.hooksPath /tmp/x"'));
+run('git config ALIAS.egcprobe "config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config ALIAS.egcprobe "config --local core.hooksPath /tmp/x"'));
 run('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe is hard-blocked', () => assertHardBlocked('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe'));
+run('git config alias.x "-c core.hooksPath=/tmp/e config --get core.hooksPath" is hard-blocked', () => assertHardBlocked('git config alias.x "-c core.hooksPath=/tmp/e config --get core.hooksPath"'));
+run('git -c alias.x="-c core.hooksPath=/tmp/e status" x is hard-blocked', () => assertHardBlocked('git -c alias.x="-c core.hooksPath=/tmp/e status" x'));
+run('git config alias.x "--config-env core.hooksPath=EVIL commit" is hard-blocked', () => assertHardBlocked('git config alias.x "--config-env core.hooksPath=EVIL commit"'));
+run('git -c alias.x="--config-env core.hooksPath=EVIL commit" x is hard-blocked', () => assertHardBlocked('git -c alias.x="--config-env core.hooksPath=EVIL commit" x'));
 run('git config merge.evil.driver "rm -rf /" is hard-blocked', () => assertHardBlocked('git config merge.evil.driver "rm -rf /"'));
 run('git config user.name "Felipe" stays allowed (benign key)', () => assertAllowed('git config user.name "Felipe"'));
 run('git config alias.co checkout stays allowed (non-bang alias)', () => assertAllowed('git config alias.co checkout'));
+run('git config alias.co Config stays allowed (Config is not config subcommand)', () => assertAllowed('git config alias.co Config'));
 run('git config --get core.hooksPath stays allowed (read, not write)', () => assertAllowed('git config --get core.hooksPath'));
 run('git config --unset core.hooksPath stays allowed (removal, not write)', () => assertAllowed('git config --unset core.hooksPath'));
+run('git push origin "+main" is hard-blocked', () => assertHardBlocked('git push origin "+main"'));
+run('git push origin \'+main\' is hard-blocked', () => assertHardBlocked("git push origin '+main'"));
+run('git push origin "+HEAD:main" is hard-blocked', () => assertHardBlocked('git push origin "+HEAD:main"'));
+run('git push origin \'+HEAD:main\' is hard-blocked', () => assertHardBlocked("git push origin '+HEAD:main'"));
 
 console.log('\nmetacharacter-check reordering (must not swallow a real DANGEROUS verdict):');
 run('rm -rf $HOME is hard-blocked (not downgraded to metachar advisory)', () => assertHardBlocked('rm -rf $HOME'));

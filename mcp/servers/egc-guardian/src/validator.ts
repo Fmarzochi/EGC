@@ -799,13 +799,11 @@ export const DENIED_PATHS: string[] = buildDeniedPaths();
 
 // Shared by both the incoming path and each DENIED_PATHS entry in
 // isProtectedPath(): resolve through fs.realpathSync(), falling back to
-// resolving just the parent directory (then the lexical path unchanged) when
-// the target doesn't exist yet. A denied entry resolved once at DENIED_PATHS'
-// module-load time would go stale for a directory that becomes a symlink (or
-// whose symlink target starts existing) after the guardian process starts --
-// the same shape as the macOS /etc bug, just materializing later instead of
-// always being present (cubic review, PR #1129). Resolving both sides fresh
-// on every isProtectedPath() call removes that staleness window entirely.
+// resolving the nearest existing ancestor directory (then rejoining the remaining
+// path components) when the target doesn't exist yet. Walking ancestor directories
+// ensures that symlinks at any parent level (such as macOS /etc -> /private/etc)
+// resolve correctly even for deeply nested non-existent paths (e.g. /etc/wireguard/wg0.conf).
+// Resolving both sides fresh on every isProtectedPath() call removes any staleness window entirely.
 export function resolveRealOrLexical(p: string): string {
   try {
     return fs.realpathSync(p);
@@ -1012,10 +1010,19 @@ const GIT_CONFIG_DIFF_COMMAND_KEY_RE = /^diff\..+\.command$/;
 const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
 // An alias is a shell-escape risk when its value starts with '!' (git's
 // own syntax for "run this as a shell command" instead of a git subcommand),
-// or when its value's first word is 'config' (which allows proxying
-// dangerous config writes through the alias); alias.co = checkout is
+// or when its value's first token is -c, --config-env, or 'config' (which allows proxying
+// dangerous config writes or overrides through the alias); alias.co = checkout is
 // ordinary and harmless.
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
+
+const DANGEROUS_ALIAS_STARTS = new Set(['-c', '--config-env', 'config']);
+
+function isDangerousAliasValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('!')) return true;
+  const firstWord = trimmed.split(/\s+/)[0];
+  return DANGEROUS_ALIAS_STARTS.has(firstWord);
+}
 
 // Flags that make `git config` strictly a read or a removal - never a write
 // - and so must never trip the dangerous-key check below. Output-annotation
@@ -1031,6 +1038,23 @@ const GIT_CONFIG_READONLY_FLAGS = new Set([
   '--unset', '--unset-all',
 ]);
 const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--default']);
+const GIT_CONFIG_FLAGS = new Set([
+  '--global', '--system', '--local', '--worktree',
+  '-f', '--file', '--blob', '--type', '--default',
+  '--show-origin', '--show-scope', '--name-only',
+  '--get', '--get-all', '--get-regexp', '--get-urlmatch',
+  '--list', '-l', '--unset', '--unset-all',
+  '--add', '--replace-all', '--edit', '-e',
+  '-z', '--null', '--includes', '--no-includes',
+  '--fixed-value', '--get-color', '--get-colorbool',
+]);
+
+function isGitConfigFlagToken(token: string): boolean {
+  if (!token.startsWith('-') || /\s/.test(token)) return false;
+  const eq = token.indexOf('=');
+  const base = eq > 0 ? token.slice(0, eq) : token;
+  return GIT_CONFIG_FLAGS.has(base);
+}
 
 // Called only once the 'config' subcommand itself has been identified;
 // `args` is everything after 'git' (so args[0] === 'config'). Detects a
@@ -1053,9 +1077,10 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
   const positionals: string[] = [];
 
   for (let i = 0; i < rest.length; i++) {
-    const flag = bareToken(rest[i]);
-    if (flag === '--') { positionals.push(...rest.slice(i + 1).map(bareToken)); break; }
-    if (!flag.startsWith('-')) { positionals.push(flag); continue; }
+    const raw = rest[i];
+    const flag = bareToken(raw);
+    if (flag === '--') { positionals.push(...rest.slice(i + 1).map(stripQuotes)); break; }
+    if (!isGitConfigFlagToken(flag)) { positionals.push(stripQuotes(raw)); continue; }
     if (flag === '--edit' || flag === '-e') {
       const editDenial: ValidationResult = {
         allowed: false,
@@ -1074,12 +1099,13 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
 }
 
 function isDangerousGitConfigWrite(key: string, value: string): boolean {
-  return DANGEROUS_GIT_CONFIG_KEYS.has(key)
-    || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(key)
-    || GIT_CONFIG_FILTER_KEY_RE.test(key)
-    || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(key)
-    || GIT_CONFIG_INCLUDEIF_KEY_RE.test(key)
-    || (GIT_CONFIG_ALIAS_KEY_RE.test(key) && (value.startsWith('!') || /^\s*config(\s|$)/i.test(value)));
+  const lowerKey = key.toLowerCase();
+  return DANGEROUS_GIT_CONFIG_KEYS.has(lowerKey)
+    || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(lowerKey)
+    || GIT_CONFIG_FILTER_KEY_RE.test(lowerKey)
+    || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(lowerKey)
+    || GIT_CONFIG_INCLUDEIF_KEY_RE.test(lowerKey)
+    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value));
 }
 
 function checkGitConfigWrite(args: string[]): ValidationResult | null {
@@ -1105,7 +1131,7 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
 const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix', '--config-env']);
 
 // Returns the index of the actual subcommand token (skipping global flags
-// and their values), not just its name — reusing this same index to slice
+// and their values), not just its name - reusing this same index to slice
 // `args` is what keeps "is the subcommand config" and "where does config's
 // own arg list start" from ever disagreeing with each other, which a second,
 // independent indexOf/findIndex scan over the same array could do (e.g. if
@@ -1122,21 +1148,22 @@ function findGitSubcommandIndex(args: string[]): number {
 }
 
 function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string; consumedNext: boolean } | null {
+  const stripped = stripQuotes(token);
   const bare = bareToken(token);
   let rawPair: string | null = null;
   let consumedNext = false;
 
   if (bare === '-c' || bare === '--config-env') {
     if (nextToken !== undefined) {
-      rawPair = bareToken(nextToken);
+      rawPair = stripQuotes(nextToken);
       consumedNext = true;
     }
   } else if (bare.startsWith('--config-env=')) {
-    rawPair = bare.slice('--config-env='.length);
+    rawPair = stripped.slice('--config-env='.length);
   } else if (bare.startsWith('-c=')) {
-    rawPair = bare.slice(3);
+    rawPair = stripped.slice(3);
   } else if (bare.startsWith('-c') && bare.length > 2) {
-    rawPair = bare.slice(2);
+    rawPair = stripped.slice(2);
   }
 
   if (rawPair === null) return null;
@@ -1166,22 +1193,23 @@ function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null 
 }
 
 function validateGitArgs(args: string[]): ValidationResult {
+  const tokens = args.map(bareToken);
   // Block force pushes, including --force-with-lease/--force-if-includes
   // (startsWith, not includes, so these are caught even though their
   // second character is '-' and they carry a value after '=').
-  const hasForceFlag = args.some(
+  const hasForceFlag = tokens.some(
     a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
   );
   if (hasForceFlag) {
-    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
+    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'DANGEROUS' };
   }
   // Additional check for combined short flags like -fu used destructively or forced refspecs (+ref)
-  if (args.includes('push')) {
-    if (args.some(a => /^-[a-zA-Z]*f/.test(a))) {
-      return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'SAFE_READONLY' };
+  if (tokens.includes('push')) {
+    if (tokens.some(a => /^-[a-zA-Z]*f/.test(a))) {
+      return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'DANGEROUS' };
     }
-    if (args.some(a => a.startsWith('+') && a.length > 1)) {
-      return { allowed: false, reason: 'git force-push via forced refspec (+) is forbidden', trust_level: 'SAFE_READONLY' };
+    if (tokens.some(a => a.startsWith('+') && a.length > 1)) {
+      return { allowed: false, reason: 'git force-push via forced refspec (+) is forbidden', trust_level: 'DANGEROUS' };
     }
   }
 

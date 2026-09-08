@@ -313,6 +313,25 @@ async function runTests() {
     assert.ok(denied.includes(path.join(home, '.ssh')));
     assert.strictEqual(isProtectedPath(path.join(home, '.ssh', 'id_rsa')), true);
   });
+  run(`resolveRealOrLexical resolves symlinked ancestor for deeply nested non-existent path`, () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-guardian-nested-symlink-'));
+    const realTarget = path.join(tmpBase, 'real-root');
+    const linkPath = path.join(tmpBase, 'link-root');
+    fs.mkdirSync(realTarget, { recursive: true });
+    fs.symlinkSync(realTarget, linkPath, 'dir');
+
+    try {
+      const nestedNonExistent = path.join(linkPath, 'sub1', 'sub2', 'file.txt');
+      const expected = path.join(fs.realpathSync(realTarget), 'sub1', 'sub2', 'file.txt');
+      assert.strictEqual(
+        resolveRealOrLexical(nestedNonExistent),
+        expected,
+        'nested non-existent path under symlink must resolve ancestor symlink'
+      );
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
   run(`protected: .env`,            () => assert.strictEqual(isProtectedPath('.env'), true));
   run(`protected: secret.pem`,      () => assert.strictEqual(isProtectedPath('secret.pem'), true));
   run(`not protected: src/index.ts`,() => assert.strictEqual(isProtectedPath('src/index.ts'), false));
@@ -320,7 +339,7 @@ async function runTests() {
 
   // ── isProtectedPath: baseDir threading (audit EGC-128) ─────────────────────
   // A relative path must be judged against the caller-supplied baseDir, not
-  // this process's own cwd — otherwise a hook running from one directory can
+  // this process's own cwd - otherwise a hook running from one directory can
   // clear a relative path that actually resolves into a protected directory
   // from the real invocation directory of the command being checked.
 
@@ -377,16 +396,26 @@ async function runTests() {
   run(`node on protected path arg`,    () => assertDenied(`node ${home}/.egc/encryption.key`));
   run('find -delete bypasses rm ban',  () => assertDenied('find . -name "*.tmp" -delete'));
   run('find -exec bypasses rm ban',    () => assertDenied(`find . -name "*.log" -exec rm {} \\;`));
+  run('find -execdir bypasses rm ban', () => assertDenied('find . -name "*.tmp" -execdir rm {} \\;'));
   run('git push --force-with-lease',   () => assertDenied('git push --force-with-lease origin main'));
   run('git push --force-if-includes',  () => assertDenied('git push --force-if-includes'));
   run('git push origin +main',         () => assertDenied('git push origin +main'));
   run('git push origin +HEAD:main',    () => assertDenied('git push origin +HEAD:main'));
+  run('git push origin "+main"',       () => assertDenied('git push origin "+main"'));
+  run('git push origin \'+main\'',       () => assertDenied("git push origin '+main'"));
+  run('git push origin "+HEAD:main"',  () => assertDenied('git push origin "+HEAD:main"'));
+  run('git push origin \'+HEAD:main\'',  () => assertDenied("git push origin '+HEAD:main'"));
   run('git -c core.hooksPath override',() => assertDenied('git -c core.hooksPath=/dev/null commit -m "bypass"'));
   run('git -c core.editor override',   () => assertDenied('git -c core.editor=evil rebase -i'));
   run('git --config-env core.hooksPath',() => assertDenied('git --config-env core.hooksPath=EVIL commit -m "bypass"'));
   run('git --config-env=core.editor',  () => assertDenied('git --config-env=core.editor=EVIL commit'));
   run('git -c alias.probe config override', () => assertDenied('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe'));
   run('git config alias.probe config write', () => assertDenied('git config alias.egcprobe "config --local core.hooksPath /tmp/x"'));
+  run('git config ALIAS.probe uppercase key write', () => assertDenied('git config ALIAS.egcprobe "config --local core.hooksPath /tmp/x"'));
+  run('git config alias.x -c nested override', () => assertDenied("git config alias.x '-c core.hooksPath=/tmp/e config --get core.hooksPath'"));
+  run('git -c alias.x -c nested override', () => assertDenied("git -c alias.x='-c core.hooksPath=/tmp/e status' x"));
+  run('git config alias.x --config-env nested override', () => assertDenied("git config alias.x '--config-env core.hooksPath=EVIL commit'"));
+  run('git -c alias.x --config-env nested override', () => assertDenied("git -c alias.x='--config-env core.hooksPath=EVIL commit' x"));
 
   // ── validate_write: DENIED (PATH/persistence hijack, audit EGC-128) ───────
 

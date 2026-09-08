@@ -92,12 +92,13 @@ run('classifies package installs across languages beyond the original npm-only s
 
 run('crushed test/install output preserves stack-trace frames with no keep-word of their own (audit EGC-490)', () => {
   const lines = [];
-  for (let i = 0; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
+  for (let i = 0; i < 150; i++) lines.push(`  ok test case number ${i} does something fine`);
   lines.push('Traceback (most recent call last):');
   lines.push('  File "app.py", line 42, in main');
   lines.push('  File "app.py", line 10, in helper');
   lines.push('  runtime/panic.go:1198 +0x71');
   lines.push('ValueError: something broke');
+  for (let i = 150; i < 300; i++) lines.push(`  ok test case number ${i} does something fine`);
   lines.push('Tests: 1 failed, 300 passed, 301 total');
   const result = crushOutput('pytest', lines.join('\n'));
   assert.ok(result);
