@@ -15,9 +15,9 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { findPlaintextStateFiles, readPlainStateFile } = require('../lib/state-plaintext');
+const { findPlaintextStateFiles, readPlainStateFile, readEncryptedStateFile } = require('../lib/state-plaintext');
 const { saveState, withStateFileLockSync } = require('../lib/state-snapshot');
-const { encryptStateBuffer, decryptStateBuffer, readStateFileDecrypted } = require('../lib/state-crypto');
+const { encryptStateBuffer, decryptStateBuffer } = require('../lib/state-crypto');
 const { loadOrCreateIntegrityKey, sidecarMatches, hmacPathFor } = require('../lib/state-integrity');
 
 const { env } = process;
@@ -81,12 +81,24 @@ function restorePlain(filePath, content) {
   try { fs.unlinkSync(hmacPathFor(filePath)); } catch { /* never written */ }
 }
 
+// The integrity key must be usable before anything is written: a missing
+// or malformed key would let the ciphertext land and the sidecar fail.
+function usableIntegrityKey() {
+  const key = loadOrCreateIntegrityKey();
+  if (!Buffer.isBuffer(key) || key.length !== 32) {
+    throw new Error('the integrity key is missing or malformed; nothing was written');
+  }
+  return key;
+}
+
 // One file: re-read through the checked descriptor under the lock (the
 // listing is not trusted after the fact), prove the ciphertext decrypts
 // back in memory before anything touches the disk, write, then prove the
-// file on disk and its sidecar before reporting it as done. The read-back
-// is injectable so the mismatch path can be exercised by a test.
-function encryptOne(filePath, root, readBack = readStateFileDecrypted) {
+// file on disk (read through a checked descriptor, never a link) and its
+// sidecar before reporting it as done; any failure after the write puts
+// the plain content back. The read-back is injectable so the mismatch and
+// error paths can be exercised by a test.
+function encryptOne(filePath, root, readBack = readEncryptedStateFile) {
   return withStateFileLockSync(filePath, () => {
     // A read error propagates: a plain file that cannot be read is a
     // failure of this run, never a skip that leaves it plain with exit 0.
@@ -95,9 +107,16 @@ function encryptOne(filePath, root, readBack = readStateFileDecrypted) {
     if (decryptStateBuffer(encryptStateBuffer(content)) !== content) {
       return failed(filePath, 'the content did not survive an encrypt and decrypt round trip in memory; nothing was written');
     }
-    const integrityKey = loadOrCreateIntegrityKey();
+    const integrityKey = usableIntegrityKey();
     saveState(filePath, content);
-    if (readBack(filePath) !== content) {
+    let roundTrip;
+    try {
+      roundTrip = readBack(filePath, root);
+    } catch (error) {
+      restorePlain(filePath, content);
+      return failed(filePath, `the encrypted file could not be read back: ${error.message}; the plain file was put back`);
+    }
+    if (roundTrip !== content) {
       restorePlain(filePath, content);
       return failed(filePath, 'the encrypted file did not read back as the original content; the plain file was put back');
     }

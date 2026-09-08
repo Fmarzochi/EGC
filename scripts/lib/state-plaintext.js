@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { getStateDir } = require('./branch-state');
-const { MAGIC } = require('./state-crypto');
+const { MAGIC, isEncryptedBuffer, decryptStateBuffer } = require('./state-crypto');
 
 // State files have been encrypted at rest since 1.1.6 (EGC1 header). A
 // plain-text file in the state directory either predates that, was written
@@ -21,6 +21,7 @@ const STATE_ARCHIVE_DIR = 'archive';
 const NO_FOLLOW_FLAG = fs.constants.O_NOFOLLOW || 0;
 const NON_BLOCKING_FLAG = fs.constants.O_NONBLOCK || 0;
 const OPEN_FLAGS = fs.constants.O_RDONLY | NO_FOLLOW_FLAG | NON_BLOCKING_FLAG;
+const NOT_PLAIN_CODES = new Set(['ENOENT', 'ELOOP', 'ENOTDIR']);
 
 function readHeader(fd) {
   const head = Buffer.alloc(MAGIC_BYTES);
@@ -74,7 +75,10 @@ function withPlainCandidate(filePath, root, use, { strict = false } = {}) {
     if (!stat.isFile() || stat.size === 0 || !parentInsideRoot(filePath, root) || readHeader(fd)) return null;
     return use(fd, stat);
   } catch (error) {
-    if (strict) throw error;
+    // Gone, or a link now sits at the path: no longer a plain regular
+    // file, which is a skip even for a strict caller. Anything else on an
+    // existing file is a real I/O failure for that caller.
+    if (strict && !NOT_PLAIN_CODES.has(error.code)) throw error;
     return null;
   } finally {
     if (fd !== undefined && fd !== null) fs.closeSync(fd);
@@ -109,6 +113,29 @@ function stillDirectory(dirPath) {
     return fs.lstatSync(dirPath).isDirectory();
   } catch {
     return false;
+  }
+}
+
+// The decrypted content of an encrypted state file read through the same
+// checked descriptor (never through a link, regular file, parent resolved
+// into `root`), or null when the path is not an encrypted regular file
+// inside the state directory or does not decrypt. Used to read a file back
+// after it was written, so a swap after the write is not mistaken for it.
+function readEncryptedStateFile(filePath, root) {
+  let fd;
+  try {
+    fd = openCandidate(filePath);
+    if (fd === null) return null;
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || !parentInsideRoot(filePath, root)) return null;
+    const raw = Buffer.alloc(stat.size);
+    const read = fs.readSync(fd, raw, 0, stat.size, 0);
+    if (read !== stat.size || !isEncryptedBuffer(raw)) return null;
+    return decryptStateBuffer(raw);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined && fd !== null) fs.closeSync(fd);
   }
 }
 
@@ -159,6 +186,7 @@ module.exports = {
   findPlaintextStateFiles,
   inspectStateFile,
   readPlainStateFile,
+  readEncryptedStateFile,
   listStateMarkdown,
   stateRoot,
 };

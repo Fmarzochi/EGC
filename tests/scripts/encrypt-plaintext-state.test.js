@@ -7,7 +7,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { encryptOne } = require('../../scripts/maintenance/encrypt-plaintext-state');
-const { stateRoot } = require('../../scripts/lib/state-plaintext');
+const { stateRoot, readEncryptedStateFile } = require('../../scripts/lib/state-plaintext');
 const { shellQuote } = require('../../scripts/lib/doctor-summary');
 const { readStateFileDecrypted, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
@@ -318,6 +318,90 @@ function runTests() {
     } finally {
       try { fs.chmodSync(path.join(homeDir, '.egc', 'state', 'Projetos--demo.md'), 0o600); } catch { /* already gone */ }
       cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a read-back that throws restores the plain content and reports the file as failed', () => {
+    const homeDir = createTempDir('encrypt-home-');
+    const previousHome = env.HOME;
+    const previousProfile = env.USERPROFILE;
+    env.HOME = homeDir;
+    env.USERPROFILE = homeDir;
+    try {
+      const seeded = seedHome(homeDir);
+      const original = fs.readFileSync(seeded.flat, 'utf8');
+      const outcome = encryptOne(seeded.flat, stateRoot(seeded.stateDir), () => { throw new Error('disk went away'); });
+      assert.strictEqual(outcome.status, 'failed');
+      assert.ok(outcome.reason.includes('could not be read back: disk went away'), outcome.reason);
+      assert.strictEqual(fs.readFileSync(seeded.flat, 'utf8'), original, 'the plain content is put back');
+      assert.ok(!fs.existsSync(`${seeded.flat}.hmac`), 'the sidecar for the discarded ciphertext is removed');
+      if (process.platform !== 'win32') {
+        assert.strictEqual(fs.statSync(seeded.flat).mode & 0o777, 0o600, 'the restored file is private');
+      }
+    } finally {
+      env.HOME = previousHome;
+      env.USERPROFILE = previousProfile;
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('a listed file that vanished or became a link before the apply pass is skipped, not failed', () => {
+    const homeDir = createTempDir('encrypt-home-');
+    const previousHome = env.HOME;
+    const previousProfile = env.USERPROFILE;
+    env.HOME = homeDir;
+    env.USERPROFILE = homeDir;
+    try {
+      const seeded = seedHome(homeDir);
+      const root = stateRoot(seeded.stateDir);
+      const gone = path.join(seeded.stateDir, 'Projetos--gone.md');
+      assert.deepStrictEqual(encryptOne(gone, root), { path: gone, status: 'skipped', reason: 'no longer a plain regular file' });
+      if (process.platform !== 'win32') {
+        const linked = path.join(seeded.stateDir, 'Projetos--linked.md');
+        fs.symlinkSync(seeded.branch, linked);
+        assert.strictEqual(encryptOne(linked, root).status, 'skipped', 'a link at the path is never read through');
+        assert.ok(!isEncryptedBuffer(fs.readFileSync(seeded.branch)), 'the link target is left alone');
+      }
+    } finally {
+      env.HOME = previousHome;
+      env.USERPROFILE = previousProfile;
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('the encrypted read-back never goes through a link and only accepts a file inside the state directory', () => {
+    if (process.platform === 'win32') return;
+    const homeDir = createTempDir('encrypt-home-');
+    const outside = createTempDir('encrypt-outside-');
+    try {
+      const seeded = seedHome(homeDir);
+      const root = stateRoot(seeded.stateDir);
+      const original = fs.readFileSync(seeded.flat, 'utf8');
+      const result = run(SCRIPT, ['--apply'], homeDir);
+      assert.strictEqual(result.code, 0, result.stdout);
+      const keyPath = path.join(homeDir, '.egc', 'encryption.key');
+      assert.strictEqual(readStateFileDecrypted(seeded.flat, keyPath), original);
+      // The in-process reader resolves the key from HOME, like the script does.
+      const previousHome = env.HOME;
+      const previousProfile = env.USERPROFILE;
+      env.HOME = homeDir;
+      env.USERPROFILE = homeDir;
+      try {
+        assert.strictEqual(readEncryptedStateFile(seeded.flat, root), original, 'a real encrypted file reads back');
+        const linkPath = path.join(seeded.stateDir, 'Projetos--link.md');
+        fs.symlinkSync(seeded.flat, linkPath);
+        assert.strictEqual(readEncryptedStateFile(linkPath, root), null, 'a link is refused even when it points at a valid file');
+        const moved = path.join(outside, 'moved.md');
+        fs.copyFileSync(seeded.flat, moved);
+        assert.strictEqual(readEncryptedStateFile(moved, root), null, 'a file outside the state directory is refused');
+        assert.strictEqual(readEncryptedStateFile(seeded.sealed, root), null, 'bytes that do not decrypt read back as nothing');
+      } finally {
+        env.HOME = previousHome;
+        env.USERPROFILE = previousProfile;
+      }
+    } finally {
+      cleanup(homeDir);
+      cleanup(outside);
     }
   })) passed++; else failed++;
 
