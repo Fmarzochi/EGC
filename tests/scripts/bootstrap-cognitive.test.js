@@ -128,6 +128,10 @@ async function runClaudeCodeAndGeminiCliTests() {
     try {
       fs.mkdirSync(path.join(home, '.claude'));
       fs.mkdirSync(path.join(home, '.codex'));
+      fs.mkdirSync(path.join(home, '.opencode'));
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      fs.writeFileSync(path.join(cursorSettingsDir, 'settings.json'), JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
       run(home);
 
       const block = fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8');
@@ -140,6 +144,16 @@ async function runClaudeCodeAndGeminiCliTests() {
       assert.ok(toml.includes('never read or write those files directly'), 'the Codex line must carry the same rule');
       assert.ok(toml.includes('say the server is not registered and point at egc init'), 'and the same fallback');
       assert.ok(!toml.includes('State lives at'), 'the Codex line must no longer point at a state file path');
+
+      const standalone = fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8');
+      assert.ok(standalone.includes('never read or write those files directly'), 'the standalone file must carry the same rule');
+      assert.ok(standalone.includes('say the server is not registered and point at `egc init`'), 'and the same fallback');
+      assert.ok(!standalone.includes('State lives at') && !standalone.includes('plain Markdown'), 'the standalone file must not carry the old wording');
+
+      const cursorRules = JSON.parse(fs.readFileSync(path.join(cursorSettingsDir, 'settings.json'), 'utf8'))['cursor.rules'];
+      assert.ok(cursorRules.includes('never read or write those files directly'), 'the Cursor rules must carry the same rule');
+      assert.ok(cursorRules.includes('say the server is not registered and point at egc init'), 'and the same fallback');
+      assert.ok(!cursorRules.includes('State lives at'), 'the Cursor rules must no longer point at a state file path');
     } finally {
       cleanup(home);
     }
