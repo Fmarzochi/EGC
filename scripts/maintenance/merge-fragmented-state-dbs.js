@@ -13,9 +13,13 @@
 //   - schema_migrations is never merged: each db file tracks its own
 //     migration history, copying those rows would be meaningless.
 //   - Dry-run by default; pass --apply to actually write.
+//   - After a successful --apply each merged source is renamed next to itself
+//     (state.db.merged-<timestamp>.bak, sidecar -wal/-shm/-journal files along
+//     with it) so egc doctor stops listing it as a stray copy (#1390). Nothing
+//     is ever deleted; --keep-sources leaves the files where they are.
 //
 // CLI usage:
-//   node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply]
+//   node merge-fragmented-state-dbs.js --canonical <path> --source <path> [--source <path> ...] [--apply] [--keep-sources]
 
 const fs = require('node:fs');
 const { openDatabase } = require('../lib/state-store/db-adapter');
@@ -103,11 +107,45 @@ function mergeOneTable(canonicalDb, srcDb, name, pk, apply) {
   };
 }
 
-async function mergeOneSource(canonicalDb, srcPath, apply) {
+// Filesystem identity, not spelling: the live store reached through a
+// symlink, a hard link, or another spelling of its name on Windows must be
+// refused too. The caller only asks about files that exist, so device and
+// inode settle it; a filesystem that reports no inode falls back to the
+// real paths (links followed), case-folded on Windows.
+function sameFile(a, b) {
+  const statA = fs.statSync(a, { bigint: true });
+  const statB = fs.statSync(b, { bigint: true });
+  const fold = value => (process.platform === 'win32' ? value.toLowerCase() : value);
+  return statA.ino !== 0n && statB.ino !== 0n
+    ? statA.dev === statB.dev && statA.ino === statB.ino
+    : fold(fs.realpathSync.native(a)) === fold(fs.realpathSync.native(b));
+}
+
+// A link is not a copy: archiving a symlink leaves its target behind for the
+// doctor to flag again, and archiving one name of a hard-linked file leaves
+// the archive tied to whatever the other names keep writing.
+function refuseLinkedSource(srcPath) {
+  if (fs.lstatSync(srcPath).isSymbolicLink()) return 'source is a symbolic link; pass the file it points to';
+  if (fs.statSync(srcPath).nlink > 1) return 'source has other hard links; archiving would not detach it';
+  return null;
+}
+
+async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
   const srcReport = { source: srcPath, tables: {} };
 
   if (!fs.existsSync(srcPath)) {
     srcReport.error = 'file not found';
+    return srcReport;
+  }
+  if (canonicalPath !== ':memory:' && fs.existsSync(canonicalPath) && sameFile(srcPath, canonicalPath)) {
+    // Merging the store into itself is a no-op, and archiving it afterwards
+    // would take the live store away.
+    srcReport.error = 'source is the canonical store';
+    return srcReport;
+  }
+  const linked = refuseLinkedSource(srcPath);
+  if (linked) {
+    srcReport.error = linked;
     return srcReport;
   }
 
@@ -119,15 +157,86 @@ async function mergeOneSource(canonicalDb, srcPath, apply) {
   return srcReport;
 }
 
+function fileStamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
 function backupBeforeApply(canonicalPath) {
   if (canonicalPath === ':memory:' || !fs.existsSync(canonicalPath)) return null;
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = `${canonicalPath}.backup-${stamp}`;
+  const backupPath = `${canonicalPath}.backup-${fileStamp()}`;
   fs.copyFileSync(canonicalPath, backupPath);
   return backupPath;
 }
 
-async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false }) {
+// SQLite may leave a write-ahead log or a rollback journal next to a store;
+// they belong to the file they sit beside, so they move with it.
+const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
+
+// The store and its sidecars move together or not at all: every destination
+// is checked first (a rename would silently replace an existing archive), and
+// a rename that fails midway puts the files already moved back under their
+// original names before the error surfaces.
+function archiveOneSource(srcPath, stamp) {
+  const archivedTo = `${srcPath}.merged-${stamp}.bak`;
+  const moves = [[srcPath, archivedTo]];
+  for (const suffix of SIDECAR_SUFFIXES) {
+    if (fs.existsSync(`${srcPath}${suffix}`)) moves.push([`${srcPath}${suffix}`, `${archivedTo}${suffix}`]);
+  }
+  for (const [, to] of moves) {
+    // lstat, not exists: a dangling symlink at the destination would report
+    // absent and be replaced by the rename.
+    if (fs.lstatSync(to, { throwIfNoEntry: false })) throw new Error(`archive destination already exists: ${to}`);
+  }
+  const done = [];
+  try {
+    for (const [from, to] of moves) {
+      fs.renameSync(from, to);
+      done.push([from, to]);
+    }
+  } catch (err) {
+    for (const [from, to] of done.toReversed()) {
+      try {
+        fs.renameSync(to, from);
+      } catch {
+        // best-effort rollback: the rename that failed is the error reported
+      }
+    }
+    throw err;
+  }
+  return archivedTo;
+}
+
+// A file none of whose tables could be read is not a merged copy: renaming
+// it would only hide it from the doctor with everything still inside.
+function nothingMerged(report) {
+  return Object.values(report.tables).every(table => table.skipped);
+}
+
+// Only after the canonical store is written, flushed and closed: a source
+// that failed to merge stays where it is, and a rename that fails (a file
+// held open by another process on Windows) is reported, not thrown, since
+// the merge itself already succeeded.
+function archiveSources(reports) {
+  const stamp = fileStamp();
+  const archived = [];
+  for (const report of reports) {
+    if (report.error) continue;
+    if (nothingMerged(report)) {
+      report.archiveSkipped = 'no table could be merged from this source';
+      continue;
+    }
+    try {
+      const archivedTo = archiveOneSource(report.source, stamp);
+      report.archivedTo = archivedTo;
+      archived.push({ source: report.source, archivedTo });
+    } catch (err) {
+      report.archiveError = String(err?.message ?? err);
+    }
+  }
+  return archived;
+}
+
+async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false, keepSources = false }) {
   const resolvedCanonicalPath = canonicalPath || resolveStateStorePath();
   const backupPath = apply ? backupBeforeApply(resolvedCanonicalPath) : null;
 
@@ -137,35 +246,40 @@ async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false }) {
 
   const reports = [];
   const commit = canonicalDb.transaction(() => {});
-  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply));
+  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply, resolvedCanonicalPath));
   if (apply) commit(); // no-op body; forces a single persist after all inserts above
 
   if (apply) await canonicalDb.flush();
   canonicalDb.close();
 
-  return { apply, canonical: resolvedCanonicalPath, backupPath, reports };
+  // An in-memory canonical store keeps nothing after close, so the sources
+  // stay the only copy and must not be archived.
+  const archived = apply && !keepSources && resolvedCanonicalPath !== ':memory:' ? archiveSources(reports) : [];
+  return { apply, canonical: resolvedCanonicalPath, backupPath, keepSources, archived, reports };
 }
 
 function parseArgs(argv) {
-  const out = { sourcePaths: [], apply: false, canonicalPath: null };
+  const out = { sourcePaths: [], apply: false, canonicalPath: null, keepSources: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--canonical') out.canonicalPath = argv[++i];
     else if (a === '--source') out.sourcePaths.push(argv[++i]);
     else if (a === '--apply') out.apply = true;
+    else if (a === '--keep-sources') out.keepSources = true;
   }
   return out;
 }
 
 async function main() {
-  const { canonicalPath, sourcePaths, apply } = parseArgs(process.argv.slice(2));
+  const { canonicalPath, sourcePaths, apply, keepSources } = parseArgs(process.argv.slice(2));
   if (sourcePaths.length === 0) {
-    console.error('Usage: node merge-fragmented-state-dbs.js [--canonical <path>] --source <path> [--source <path> ...] [--apply]');
+    console.error('Usage: node merge-fragmented-state-dbs.js [--canonical <path>] --source <path> [--source <path> ...] [--apply] [--keep-sources]');
+    console.error('  After --apply each merged source is renamed to <source>.merged-<timestamp>.bak next to itself; --keep-sources leaves it in place.');
     console.error('  --canonical defaults to the real resolveStateStorePath() (~/.egc/egc/state.db) when omitted.');
     process.exitCode = 1;
     return;
   }
-  const result = await mergeStateDbs({ canonicalPath, sourcePaths, apply });
+  const result = await mergeStateDbs({ canonicalPath, sourcePaths, apply, keepSources });
   console.log(JSON.stringify(result, null, 2));
 }
 
@@ -176,4 +290,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { mergeStateDbs, MERGE_TABLES };
+module.exports = { mergeStateDbs, archiveOneSource, MERGE_TABLES };
