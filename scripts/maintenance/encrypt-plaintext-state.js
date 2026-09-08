@@ -104,10 +104,13 @@ function encryptOne(filePath, root, readBack = readEncryptedStateFile) {
     // failure of this run, never a skip that leaves it plain with exit 0.
     const content = readPlainStateFile(filePath, root);
     if (content === null) return skipped(filePath, 'no longer a plain regular file');
+    // The integrity key comes first: the in-memory check below creates the
+    // encryption key when it is absent, and a run that stops on the
+    // integrity key must leave nothing behind.
+    const integrityKey = usableIntegrityKey();
     if (decryptStateBuffer(encryptStateBuffer(content)) !== content) {
       return failed(filePath, 'the content did not survive an encrypt and decrypt round trip in memory; nothing was written');
     }
-    const integrityKey = usableIntegrityKey();
     saveState(filePath, content);
     let roundTrip;
     try {

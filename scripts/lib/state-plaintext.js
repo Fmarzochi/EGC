@@ -50,14 +50,35 @@ function openCandidate(filePath) {
   const before = NO_FOLLOW_FLAG ? null : fs.lstatSync(filePath);
   if (before?.isSymbolicLink()) return null;
   const fd = fs.openSync(filePath, OPEN_FLAGS);
-  if (before) {
+  if (!before) return fd;
+  // From here the descriptor is owned: a failing fstat must not leak it.
+  let same;
+  try {
     const after = fs.fstatSync(fd);
-    if (after.dev !== before.dev || after.ino !== before.ino) {
-      fs.closeSync(fd);
-      return null;
-    }
+    same = after.dev === before.dev && after.ino === before.ino;
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
   }
-  return fd;
+  if (same) return fd;
+  fs.closeSync(fd);
+  return null;
+}
+
+// Whether the open descriptor is the object that sits at the path right
+// now, while the path's parent resolves inside `root`. The two checks are
+// taken together so a directory swapped after the open cannot leave a
+// descriptor pointing outside the state directory while the pathname
+// still reads as inside it: the object behind the descriptor has to be
+// the regular file at a path that is inside the root at this moment.
+function descriptorAtPathInsideRoot(fd, stat, filePath, root) {
+  if (!parentInsideRoot(filePath, root)) return false;
+  try {
+    const now = fs.lstatSync(filePath);
+    return now.isFile() && now.dev === stat.dev && now.ino === stat.ino;
+  } catch {
+    return false;
+  }
 }
 
 // Runs `use(fd, stat)` on a descriptor that is a regular file with plain
@@ -72,7 +93,7 @@ function withPlainCandidate(filePath, root, use, { strict = false } = {}) {
     fd = openCandidate(filePath);
     if (fd === null) return null;
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || stat.size === 0 || !parentInsideRoot(filePath, root) || readHeader(fd)) return null;
+    if (!stat.isFile() || stat.size === 0 || !descriptorAtPathInsideRoot(fd, stat, filePath, root) || readHeader(fd)) return null;
     return use(fd, stat);
   } catch (error) {
     // Gone, or a link now sits at the path: no longer a plain regular
@@ -127,10 +148,12 @@ function readEncryptedStateFile(filePath, root) {
     fd = openCandidate(filePath);
     if (fd === null) return null;
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || !parentInsideRoot(filePath, root)) return null;
+    if (!stat.isFile() || !descriptorAtPathInsideRoot(fd, stat, filePath, root)) return null;
     const raw = Buffer.alloc(stat.size);
     const read = fs.readSync(fd, raw, 0, stat.size, 0);
-    if (read !== stat.size || !isEncryptedBuffer(raw)) return null;
+    // A file that grew or shrank under the read is not the file that was
+    // written: the caller treats null as a failed read-back and restores.
+    if (read !== stat.size || fs.fstatSync(fd).size !== stat.size || !isEncryptedBuffer(raw)) return null;
     return decryptStateBuffer(raw);
   } catch {
     return null;

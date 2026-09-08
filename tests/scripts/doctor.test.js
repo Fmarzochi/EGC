@@ -855,6 +855,12 @@ function runTests() {
       fs.writeFileSync(path.join(stateDir, 'Projetos--empty.md'), '');
       fs.writeFileSync(path.join(stateDir, 'archive', 'old.md'), '# Project State\narchived copy\n');
       fs.writeFileSync(path.join(stateDir, 'budget-usage.json'), '{}');
+      // A project directory this process cannot list is not a crash and
+      // not a finding (root and privileged containers can still list it).
+      const sealedDir = path.join(stateDir, 'Projetos--sealed-dir');
+      fs.mkdirSync(sealedDir);
+      fs.writeFileSync(path.join(sealedDir, 'main.md'), '# Project State\nhidden\n');
+      if (process.platform !== 'win32') fs.chmodSync(sealedDir, 0o000);
       const plantedTarget = path.join(outside, 'secret.md');
       fs.writeFileSync(plantedTarget, '# not state\n');
       try {
@@ -866,10 +872,16 @@ function runTests() {
 
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
-      assert.ok(!result.stdout.includes('State files:'), 'nothing plain means no section at all');
-      const json = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
-      assert.strictEqual(json.plaintextStateFiles, undefined);
+      const canListSealed = (() => { try { fs.readdirSync(sealedDir); return true; } catch { return false; } })();
+      if (canListSealed) {
+        assert.ok(result.stdout.includes('Projetos--sealed-dir'), 'a privileged process lists the sealed directory like any other');
+      } else {
+        assert.ok(!result.stdout.includes('State files:'), 'nothing plain means no section at all');
+        const json = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+        assert.strictEqual(json.plaintextStateFiles, undefined);
+      }
     } finally {
+      try { fs.chmodSync(path.join(homeDir, '.egc', 'state', 'Projetos--sealed-dir'), 0o700); } catch { /* already gone */ }
       cleanup(homeDir);
       cleanup(projectRoot);
       cleanup(outside);

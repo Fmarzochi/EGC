@@ -10,6 +10,7 @@ const { encryptOne } = require('../../scripts/maintenance/encrypt-plaintext-stat
 const { stateRoot, readEncryptedStateFile } = require('../../scripts/lib/state-plaintext');
 const { shellQuote } = require('../../scripts/lib/doctor-summary');
 const { readStateFileDecrypted, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
+const { sidecarMatches, computeHmac } = require('../../scripts/lib/state-integrity');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const { env } = process;
@@ -124,9 +125,13 @@ function runTests() {
       const original = { flat: fs.readFileSync(seeded.flat, 'utf8'), branch: fs.readFileSync(seeded.branch, 'utf8') };
       const keyPath = path.join(homeDir, '.egc', 'encryption.key');
 
+      const probeKey = Buffer.alloc(32, 9);
+      assert.strictEqual(sidecarMatches(seeded.flat, original.flat, probeKey), false, 'no sidecar yet means no match');
+
       const result = run(SCRIPT, ['--apply'], homeDir);
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Encrypting 2 plain-text state files'), result.stdout);
+      assert.strictEqual(fs.readFileSync(`${seeded.flat}.hmac`, 'utf8').length, computeHmac(original.flat, probeKey).length, 'the sidecar carries a hex sha256 digest');
       assert.ok(result.stdout.includes('Encrypted 2, skipped 0, failed 0.'), result.stdout);
 
       for (const [name, filePath] of Object.entries({ flat: seeded.flat, branch: seeded.branch })) {
