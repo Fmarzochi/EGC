@@ -9,6 +9,7 @@ const { maybeSkipBaselineAbsent } = require('./baseline-absent');
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawnSync } = require('child_process');
 
 const utils = require('../../scripts/lib/utils');
@@ -584,6 +585,29 @@ function runTests() {
   if (test('commandExists finds node', () => {
     const exists = utils.commandExists('node');
     assert.strictEqual(exists, true);
+  })) passed++; else failed++;
+
+  if (test('commandExists resolves a real command in a child process without a DEP0190 warning', () => {
+    // The Windows branch shells out to `where` with shell:true; Node 24 warns
+    // (DEP0190) when an args array is passed with a shell, and the warning
+    // lands in the middle of egc init output on Windows (#1394). The child
+    // process is what makes the warning observable: it is printed once per
+    // process, on stderr, by the runtime itself.
+    const utilsPath = path.join(__dirname, '..', '..', 'scripts', 'lib', 'utils.js');
+    const scriptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-command-exists-'));
+    const scriptPath = path.join(scriptDir, 'probe.js');
+    try {
+      fs.writeFileSync(scriptPath, [
+        `const utils = require(${JSON.stringify(utilsPath)});`,
+        "process.stdout.write(String(utils.commandExists('node')));",
+      ].join('\n'));
+      const result = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8', timeout: 10000 });
+      assert.strictEqual(result.status, 0, `Expected exit 0, got ${result.status}. stderr: ${result.stderr}`);
+      assert.strictEqual(result.stdout, 'true', 'node must be found on PATH');
+      assert.ok(!result.stderr.includes('DEP0190'), `the lookup must not trigger DEP0190, got: ${result.stderr}`);
+    } finally {
+      fs.rmSync(scriptDir, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   if (test('commandExists returns false for fake command', () => {
