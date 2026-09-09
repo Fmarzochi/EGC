@@ -18,7 +18,7 @@ const path = require('node:path');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const LEAK_SCRIPT = path.join(REPO_ROOT, 'scripts', 'check-state-leak.js');
-const { configureMemoryFilters, FILTER_NAME } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
+const { configureMemoryFilters, FILTER_NAME, PROPAGATION_FILES } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
 
 const POPULATED = [
   '# EGC: Agent Catalog',
@@ -111,6 +111,89 @@ run('git add stages a zeroed blob for a populated propagation file', () => {
   assert.ok(staged.includes('## EGC Project Memory'), 'staged blob keeps the structure');
   const working = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
   assert.ok(working.includes('secret local context'), 'working tree keeps the populated memory');
+});
+
+run('a configured repo plans no action on the next run', () => {
+  const { dir, git } = makeRepo();
+  const first = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(first.actions.length, 3 + PROPAGATION_FILES.length, 'first run writes the three keys and every binding');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.deepStrictEqual(plan.actions, [], 'nothing is planned once the filter is in place');
+  const second = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(second.configured, true);
+  assert.deepStrictEqual(second.actions, [], 'the second run reports no change');
+  assert.strictEqual(git('config', `filter.${FILTER_NAME}.required`).trim(), 'true');
+});
+
+run('a key that drifted is the only planned action and is put back', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  git('config', `filter.${FILTER_NAME}.required`, 'false');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.strictEqual(plan.actions.length, 1, `only the drifted key is planned: ${JSON.stringify(plan.actions)}`);
+  assert.ok(plan.actions[0].startsWith(`git config filter.${FILTER_NAME}.required true`), plan.actions[0]);
+  assert.strictEqual(git('config', `filter.${FILTER_NAME}.required`).trim(), 'false', 'a dry run writes nothing');
+  const result = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(result.actions.length, 1);
+  assert.strictEqual(git('config', `filter.${FILTER_NAME}.required`).trim(), 'true');
+});
+
+run('a key that was unset is planned again on its own', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  git('config', '--unset', `filter.${FILTER_NAME}.smudge`);
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.deepStrictEqual(plan.actions.map(a => a.split(' ')[2]), [`filter.${FILTER_NAME}.smudge`]);
+});
+
+run('GIT_CONFIG pointing at another file never moves the filter out of .git/config', () => {
+  const { dir, git } = makeRepo();
+  const alternate = path.join(dir, 'alternate-config');
+  const saved = process.env.GIT_CONFIG;
+  process.env.GIT_CONFIG = alternate;
+  let first;
+  let second;
+  try {
+    first = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+    second = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  } finally {
+    if (saved === undefined) delete process.env.GIT_CONFIG; else process.env.GIT_CONFIG = saved;
+  }
+  assert.strictEqual(first.configured, true);
+  assert.ok(first.actions.length >= 3, 'the first run plans the three keys');
+  assert.deepStrictEqual(second.actions, [], 'the second run sees the keys it wrote');
+  assert.ok(!fs.existsSync(alternate), 'nothing is written to the alternate file');
+  assert.strictEqual(git('config', '--local', `filter.${FILTER_NAME}.required`).trim(), 'true', 'the keys live in .git/config');
+});
+
+run('hardening a configured driver with the script missing stays in .git/config under GIT_CONFIG', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  git('config', '--unset', `filter.${FILTER_NAME}.required`);
+  const alternate = path.join(dir, 'alternate-config');
+  const saved = process.env.GIT_CONFIG;
+  process.env.GIT_CONFIG = alternate;
+  let plan;
+  try {
+    plan = configureMemoryFilters({ projectDir: dir, scriptPath: path.join(dir, 'missing.js'), dryRun: false });
+  } finally {
+    if (saved === undefined) delete process.env.GIT_CONFIG; else process.env.GIT_CONFIG = saved;
+  }
+  assert.strictEqual(plan.configured, false, 'a missing script never configures');
+  assert.ok(!fs.existsSync(alternate), 'the alternate file is never touched');
+  assert.strictEqual(git('config', '--local', `filter.${FILTER_NAME}.required`).trim(), 'true', 'the repo is hardened in .git/config');
+});
+
+run('the installer wrapper reports a configured repo instead of zero changes', () => {
+  const { dir } = makeRepo();
+  const { applyCommitPrivacyFilterCli } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
+  const first = [];
+  applyCommitPrivacyFilterCli({ projectDir: dir, scriptPath: LEAK_SCRIPT, log: m => first.push(m) });
+  assert.ok(first.some(m => m.includes('git config filter.')), 'the first run lists what it writes');
+  assert.ok(first[first.length - 1].includes('change(s)'), 'the first run ends with its count');
+  const second = [];
+  applyCommitPrivacyFilterCli({ projectDir: dir, scriptPath: LEAK_SCRIPT, log: m => second.push(m) });
+  assert.deepStrictEqual(second, ['commit-privacy filter: already configured (local repo only)']);
 });
 
 run('non-git directory is skipped with a reason', () => {
