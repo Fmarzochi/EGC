@@ -146,22 +146,31 @@ function runTests() {
     })) passed++; else failed++;
 
     if (test('retirePlannedFiles stops climbing when a parent cannot be read after the removal', () => {
-      if (process.getuid && process.getuid() === 0) {
-        console.log('  - skipped: root can read anything');
-        return;
-      }
       const root3 = path.join(dir, 'retire-sealed');
       const sealed = path.join(root3, 'sealed');
       fs.mkdirSync(sealed, { recursive: true });
       fs.writeFileSync(path.join(sealed, 'gone.ts'), 'x');
       const plan = { targetRoot: root3, retirements: [{ destinationPath: path.join(sealed, 'gone.ts') }] };
-      // Write-only parent: the unlink still works, the readdir afterwards does not.
+      // Write-only parent: the unlink still works, the readdir afterwards
+      // does not. Whether the mode really seals the directory is checked,
+      // not assumed: root, and any uid with CAP_DAC_OVERRIDE, reads it anyway.
       fs.chmodSync(sealed, 0o300);
+      let unreadable = false;
+      try {
+        fs.readdirSync(sealed);
+      } catch {
+        unreadable = true;
+      }
+      if (!unreadable) {
+        fs.chmodSync(sealed, 0o700);
+        console.log('  - skipped: this process can read a mode 0300 directory');
+        return;
+      }
       try {
         const retired = retirePlannedFiles(plan);
         assert.strictEqual(retired.length, 1, 'the file itself is retired');
       } finally {
-        fs.chmodSync(sealed, 0o700);
+        if (fs.existsSync(sealed)) fs.chmodSync(sealed, 0o700);
       }
       assert.ok(fs.existsSync(sealed), 'a parent that could not be read is left where it is');
     })) passed++; else failed++;
