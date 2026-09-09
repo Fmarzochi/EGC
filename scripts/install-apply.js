@@ -113,8 +113,25 @@ function printHumanPlan(plan, dryRun) {
     console.log(`- ${operation.sourceRelativePath} -> ${operation.destinationPath}`);
   }
 
+  printRetirements(plan, dryRun);
+
   if (!dryRun) {
     console.log(`\nDone. Install-state written to ${plan.installStatePath}`);
+  }
+}
+
+// Files an earlier EGC install wrote that this plan no longer covers and
+// the target removes (for OpenCode, the egc-universal package files that
+// broke the config directory, #1396). Listed by the dry run, reported by
+// the apply.
+function printRetirements(plan, dryRun) {
+  const files = dryRun ? plan.retirements : plan.retiredFiles;
+  if (!files || files.length === 0) return;
+  console.log(dryRun
+    ? '\nFiles to retire (written by an earlier EGC install, no longer part of this target):'
+    : '\nRetired files:');
+  for (const file of files) {
+    console.log(`- ${dryRun ? '' : 'retired file: '}${file.destinationPath}`);
   }
 }
 

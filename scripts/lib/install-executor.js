@@ -792,6 +792,7 @@ function createManifestInstallPlan(options = {}) {
     targetRoot: plan.targetRoot,
     installRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
+    retirements: Array.isArray(plan.retirements) ? plan.retirements : [],
     // The structured issues ride along untouched: the CLI's detection gate
     // needs the machine-readable code (ide-not-detected), not just the
     // flattened warning strings below.

@@ -249,6 +249,44 @@ function refuseLinkedDestination(destinationPath, targetRoot) {
   }
 }
 
+// Files a target wants removed: written by an earlier EGC install (the
+// target reads them from the previous install-state) and no longer part of
+// the plan. Only a regular file at the recorded path goes; a link or a
+// directory there is not what EGC wrote and is left alone. Directories the
+// removal empties are dropped too, up to the target root.
+function retirePlannedFiles(plan) {
+  const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
+  const retired = [];
+  for (const retirement of Array.isArray(plan.retirements) ? plan.retirements : []) {
+    const filePath = path.resolve(retirement.destinationPath);
+    if (!root || !filePath.startsWith(root + path.sep)) continue;
+    let stat;
+    try {
+      stat = fs.lstatSync(filePath);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    fs.unlinkSync(filePath);
+    retired.push({ ...retirement, destinationPath: filePath });
+    removeEmptyParents(path.dirname(filePath), root);
+  }
+  return retired;
+}
+
+function removeEmptyParents(dirPath, root) {
+  let current = dirPath;
+  while (current !== root && current.startsWith(root + path.sep)) {
+    try {
+      if (fs.readdirSync(current).length > 0) return;
+      fs.rmdirSync(current);
+    } catch {
+      return;
+    }
+    current = path.dirname(current);
+  }
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
@@ -289,6 +327,8 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     writeManagedText(resolvedClaudeHooksPlan.hooksDestinationPath, `${JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2)}\n`);
   }
 
+  const retiredFiles = retirePlannedFiles(plan);
+
   writeInstallState(plan.installStatePath, plan.statePreview);
 
 
@@ -312,7 +352,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true };
+  const result = { ...plan, applied: true, retiredFiles };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -324,6 +364,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
 module.exports = {
   applyInstallPlan,
+  retirePlannedFiles,
   deepMergeJson,
   refuseLinkedDestination,
   writeGuardianCliMarker,
