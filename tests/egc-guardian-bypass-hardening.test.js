@@ -111,6 +111,9 @@ run('git config alias.x "-ccore.hooksPath=/tmp/e status" is hard-blocked', () =>
 run('git config alias.x "-c=core.hooksPath=/tmp/e status" is hard-blocked', () => assertHardBlocked('git config alias.x "-c=core.hooksPath=/tmp/e status"'));
 run('git config --comment=x core.hooksPath /tmp/x is hard-blocked', () => assertHardBlocked('git config --comment=x core.hooksPath /tmp/x'));
 run('git config --value=y core.hooksPath /tmp/x is hard-blocked', () => assertHardBlocked('git config --value=y core.hooksPath /tmp/x'));
+run('git config core.hooksPath -/tmp/evil is hard-blocked', () => assertHardBlocked('git config core.hooksPath -/tmp/evil'));
+run('git config --local core.hooksPath -evil is hard-blocked', () => assertHardBlocked('git config --local core.hooksPath -evil'));
+run('git config alias.egcprobe "--no-pager config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config alias.egcprobe "--no-pager config --local core.hooksPath /tmp/x"'));
 run('git config merge.evil.driver "rm -rf /" is hard-blocked', () => assertHardBlocked('git config merge.evil.driver "rm -rf /"'));
 run('git config user.name "Felipe" stays allowed (benign key)', () => assertAllowed('git config user.name "Felipe"'));
 run('git config alias.co checkout stays allowed (non-bang alias)', () => assertAllowed('git config alias.co checkout'));

@@ -1011,17 +1011,46 @@ const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
 // An alias is a shell-escape risk when its value starts with '!' (git's
 // own syntax for "run this as a shell command" instead of a git subcommand),
 // or when its value's first token is -c, --config-env, or 'config' (which allows proxying
-// dangerous config writes or overrides through the alias); alias.co = checkout is
-// ordinary and harmless.
+// Global git flags that take a value and can appear BEFORE the subcommand
+// (`git -c foo=bar config ...`, `git -C /path config ...`), mirroring the
+// same set block-no-verify.js already trusts for this exact purpose. Without
+// skipping these (and their values), a global flag in front of `config`
+// shifts the subcommand out of args[0] and the dangerous-key check below is
+// never reached at all.
+const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix', '--config-env']);
+
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
 function isDangerousAliasValue(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.startsWith('!')) return true;
-  const firstWord = trimmed.split(/\s+/)[0];
-  return firstWord === 'config'
-    || firstWord.startsWith('-c')
-    || firstWord.startsWith('--config-env');
+  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+
+  let i = 0;
+  while (i < words.length) {
+    const word = words[i];
+    if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
+      return true;
+    }
+    if (GIT_GLOBAL_FLAGS_WITH_ARG.has(word)) {
+      i += 2;
+      continue;
+    }
+    if (word.startsWith('-')) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+
+  if (i < words.length) {
+    const word = words[i];
+    if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Flags that make `git config` strictly a read or a removal - never a write
@@ -1067,6 +1096,15 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
     const raw = rest[i];
     const flag = bareToken(raw);
     if (flag === '--') { positionals.push(...rest.slice(i + 1).map(stripQuotes)); break; }
+
+    // Once the key positional has been seen (positionals.length === 1), the
+    // following token is taken as the value positional regardless of whether
+    // it starts with '-' (e.g. `git config core.hooksPath -/tmp/evil`).
+    if (positionals.length === 1) {
+      positionals.push(stripQuotes(raw));
+      continue;
+    }
+
     if (!isGitConfigFlagToken(flag)) { positionals.push(stripQuotes(raw)); continue; }
     if (flag === '--edit' || flag === '-e') {
       const editDenial: ValidationResult = {
@@ -1108,14 +1146,6 @@ function checkGitConfigWrite(args: string[]): ValidationResult | null {
     trust_level: 'DANGEROUS',
   };
 }
-
-// Global git flags that take a value and can appear BEFORE the subcommand
-// (`git -c foo=bar config ...`, `git -C /path config ...`), mirroring the
-// same set block-no-verify.js already trusts for this exact purpose. Without
-// skipping these (and their values), a global flag in front of `config`
-// shifts the subcommand out of args[0] and the dangerous-key check below is
-// never reached at all.
-const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix', '--config-env']);
 
 // Returns the index of the actual subcommand token (skipping global flags
 // and their values), not just its name - reusing this same index to slice
