@@ -173,13 +173,54 @@ async function main() {
       const statImpl = file => { stats += 1; return fs.statSync(file); };
       const transport = mesh.createMeshTransport({ dbPath, watchImpl: silentWatch, pollMs: 20, statImpl });
       try {
+        const baseline = stats;
+        assert.ok(baseline > 0, 'the baseline is sampled at creation');
         await new Promise(resolve => setTimeout(resolve, 150));
-        assert.strictEqual(stats, 0, 'no waiter, no poll');
+        assert.strictEqual(stats, baseline, 'no waiter, no poll');
         assert.strictEqual(await transport.waitForChange(200), 'timeout', 'no write, no wake');
         const during = stats;
-        assert.ok(during > 0, 'the poll ran while the waiter was parked');
+        assert.ok(during > baseline, 'the poll ran while the waiter was parked');
         await new Promise(resolve => setTimeout(resolve, 150));
         assert.strictEqual(stats, during, 'the poll stopped when the last waiter left');
+      } finally {
+        transport.close();
+      }
+    });
+  });
+
+  await run('a write that lands before the waiter parks still wakes it: the baseline moves only on wake', async () => {
+    await withTempDir(async dir => {
+      const dbPath = path.join(dir, 'state.db');
+      fs.writeFileSync(dbPath, 'db');
+      const transport = mesh.createMeshTransport({ dbPath, watchImpl: silentWatch, pollMs: 40 });
+      try {
+        fs.appendFileSync(`${dbPath}-wal`, 'landed between the read and the park');
+        assert.strictEqual(await transport.waitForChange(3000), 'change', 'the first tick sees the older baseline');
+        assert.strictEqual(await transport.waitForChange(200), 'timeout', 'the wake refreshed the baseline: nothing new, no wake');
+      } finally {
+        transport.close();
+      }
+    });
+  });
+
+  await run('a stat failure other than ENOENT wakes once and then stays quiet', async () => {
+    await withTempDir(async dir => {
+      const dbPath = path.join(dir, 'state.db');
+      fs.writeFileSync(dbPath, 'db');
+      let failing = false;
+      const statImpl = file => {
+        if (failing && file.endsWith('-wal')) {
+          const error = new Error('permission denied');
+          error.code = 'EACCES';
+          throw error;
+        }
+        return fs.statSync(file);
+      };
+      const transport = mesh.createMeshTransport({ dbPath, watchImpl: silentWatch, pollMs: 20, statImpl });
+      try {
+        failing = true;
+        assert.strictEqual(await transport.waitForChange(2000), 'change', 'the store became unreadable: one wake');
+        assert.strictEqual(await transport.waitForChange(200), 'timeout', 'the failure is stable: no storm');
       } finally {
         transport.close();
       }

@@ -110,7 +110,6 @@ export function createMeshTransport(options: MeshTransportOptions): MeshTranspor
   const statImpl = options.statImpl ?? fs.statSync;
   const polledFiles = [options.dbPath, `${options.dbPath}-wal`];
   let pollTimer: NodeJS.Timeout | null = null;
-  let pollSignature = '';
 
   const stopPoll = (): void => {
     if (!pollTimer) return;
@@ -118,10 +117,34 @@ export function createMeshTransport(options: MeshTransportOptions): MeshTranspor
     pollTimer = null;
   };
 
+  // Size and mtime of the store and its -wal, as one string. A file that is
+  // not there yet is part of the signature too: its appearance is a write.
+  // Any other stat failure is its own stable value, so a store that became
+  // unreadable wakes the waiters once (the re-read reports the real error)
+  // and then stays quiet instead of waking every tick.
+  const storeSignature = (): string => polledFiles.map(file => {
+    try {
+      const stat = statImpl(file);
+      return `${stat.size}:${stat.mtimeMs}`;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === 'ENOENT' ? 'absent' : `error:${code ?? 'unknown'}`;
+    }
+  }).join('|');
+
+  // The baseline is the store as last seen by this transport: sampled at
+  // creation and refreshed whenever the waiters are woken, never when a
+  // waiter parks. A write that lands while a waiter is being registered
+  // therefore still differs from the baseline and wakes it on the first
+  // tick; a stale baseline costs at most one extra re-read, which the
+  // design allows.
+  let pollSignature = storeSignature();
+
   const wakeAll = (reason: WakeReason): void => {
     const pending = [...waiters];
     waiters.clear();
     stopPoll();
+    pollSignature = storeSignature();
     for (const resolve of pending) resolve(reason);
   };
 
@@ -134,23 +157,9 @@ export function createMeshTransport(options: MeshTransportOptions): MeshTranspor
     debounceTimer.unref();
   };
 
-  // Size and mtime of the store and its -wal, as one string. A file that is
-  // not there yet is part of the signature too: its appearance is a write.
-  const storeSignature = (): string => polledFiles.map(file => {
-    try {
-      const stat = statImpl(file);
-      return `${stat.size}:${stat.mtimeMs}`;
-    } catch {
-      return 'absent';
-    }
-  }).join('|');
-
-  // Started when the first waiter parks, stopped when the last one leaves:
-  // the sample taken at start is the baseline, so only a write that lands
-  // after parking wakes anyone, exactly like a watcher event would.
+  // Started when the first waiter parks, stopped when the last one leaves.
   const startPoll = (): void => {
     if (pollMs <= 0 || pollTimer || closed) return;
-    pollSignature = storeSignature();
     pollTimer = setInterval(() => {
       if (waiters.size === 0) {
         stopPoll();
