@@ -89,13 +89,21 @@ function bareToken(a: string): string {
 
 // Same quote/backslash stripping as bareToken(), but case-preserving. Used
 // wherever a flag's exact letter case is part of its identity (e.g. a
-// wrapper's -e vs -E are two different flags with different arities) —
+// wrapper's -e vs -E are two different flags with different arities) -
 // lowercasing before the membership check would make an unrecognized
 // uppercase flag collide with an unrelated lowercase entry in valueFlags,
 // silently consuming (or failing to consume) the wrong number of tokens and
 // misidentifying the real wrapped command.
 function stripQuotes(a: string): string {
   return a.replaceAll('\\', '').replaceAll(/["']/g, '');
+}
+
+function stripEnclosingQuotes(s: string): string {
+  const trimmed = s.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
 }
 
 function positionalsOf(tokens: string[]): string[] {
@@ -1022,13 +1030,14 @@ const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
 function isDangerousAliasValue(value: string): boolean {
-  const trimmed = value.trim();
+  const trimmed = stripEnclosingQuotes(value);
   if (trimmed.startsWith('!')) return true;
-  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+  const words = tokenizeWords(trimmed);
 
   let i = 0;
   while (i < words.length) {
-    const word = words[i];
+    const raw = words[i];
+    const word = stripEnclosingQuotes(raw);
     if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
       return true;
     }
@@ -1044,7 +1053,8 @@ function isDangerousAliasValue(value: string): boolean {
   }
 
   if (i < words.length) {
-    const word = words[i];
+    const raw = words[i];
+    const word = stripEnclosingQuotes(raw);
     if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
       return true;
     }
@@ -1095,13 +1105,13 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
   for (let i = 0; i < rest.length; i++) {
     const raw = rest[i];
     const flag = bareToken(raw);
-    if (flag === '--') { positionals.push(...rest.slice(i + 1).map(stripQuotes)); break; }
+    if (flag === '--') { positionals.push(...rest.slice(i + 1).map(stripEnclosingQuotes)); break; }
 
     // Once the key positional has been seen (positionals.length === 1), the
     // following token is taken as the value positional regardless of whether
     // it starts with '-' (e.g. `git config core.hooksPath -/tmp/evil`).
     if (positionals.length === 1) {
-      positionals.push(stripQuotes(raw));
+      positionals.push(stripEnclosingQuotes(raw));
       continue;
     }
 
@@ -1165,14 +1175,14 @@ function findGitSubcommandIndex(args: string[]): number {
 }
 
 function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string; consumedNext: boolean } | null {
-  const stripped = stripQuotes(token);
+  const stripped = stripEnclosingQuotes(token);
   const bare = bareToken(token);
   let rawPair: string | null = null;
   let consumedNext = false;
 
   if (bare === '-c' || bare === '--config-env') {
     if (nextToken !== undefined) {
-      rawPair = stripQuotes(nextToken);
+      rawPair = stripEnclosingQuotes(nextToken);
       consumedNext = true;
     }
   } else if (bare.startsWith('--config-env=')) {
