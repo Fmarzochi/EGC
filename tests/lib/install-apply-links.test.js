@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { findLegacyLinks, refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+const { checkedDestinations, findLegacyLinks, refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
 
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
@@ -81,13 +81,15 @@ function runTests() {
 
         assert.throws(() => refuseLinkedDestination(destination, home), /symbolic link/, 'without migration the refusal stands');
 
-        const listed = findLegacyLinks({ targetRoot: home, operations: [{ destinationPath: destination }, { destinationPath: path.join(link, 'other.md') }] });
-        assert.deepStrictEqual(listed, [{ linkPath: link, resolvedTo: managed }], 'the dry run lists the link once');
+        // resolvedTo is a real path; on macOS the temp directory sits behind a link.
+        const realManaged = fs.realpathSync.native(managed);
+        const listed = findLegacyLinks({ targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [{ destinationPath: destination }, { destinationPath: path.join(link, 'other.md') }] });
+        assert.deepStrictEqual(listed, [{ linkPath: link, resolvedTo: realManaged }], 'the dry run lists the link once');
         assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the dry run touches nothing');
 
         const migrate = [];
         assert.doesNotThrow(() => refuseLinkedDestination(destination, home, { migrate }));
-        assert.deepStrictEqual(migrate, [{ linkPath: link, resolvedTo: managed }]);
+        assert.deepStrictEqual(migrate, [{ linkPath: link, resolvedTo: realManaged }]);
         assert.ok(!fs.existsSync(link), 'the link is gone');
         assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8'), 'managed copy', 'what it pointed at is untouched');
         assert.doesNotThrow(() => refuseLinkedDestination(destination, home, { migrate }), 'a second pass finds no link');
@@ -108,7 +110,19 @@ function runTests() {
         assert.throws(() => refuseLinkedDestination(path.join(dangling, 'SKILL.md'), home, { migrate }), /symbolic link/, 'a dangling link resolves nowhere');
         assert.deepStrictEqual(migrate, []);
         assert.ok(fs.lstatSync(elsewhere).isSymbolicLink() && fs.lstatSync(dangling).isSymbolicLink(), 'both links stay');
-        assert.deepStrictEqual(findLegacyLinks({ targetRoot: home, operations: [{ destinationPath: path.join(elsewhere, 'SKILL.md') }] }), []);
+        const plan = { targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [{ destinationPath: path.join(elsewhere, 'SKILL.md') }] };
+        assert.deepStrictEqual(findLegacyLinks(plan), [], 'the dry run lists nothing for it');
+        assert.throws(() => findLegacyLinks(plan, { strict: true }), /symbolic link/, 'the strict pass refuses it before anything is removed');
+      })) passed++; else failed++;
+
+      if (test('the dry run walks the install-state path too, so a legacy link above it is listed', () => {
+        const home = path.join(dir, 'state-home');
+        const managed = path.join(home, 'skills', 'egc', 'egc');
+        fs.mkdirSync(managed, { recursive: true });
+        fs.symlinkSync(managed, path.join(home, 'egc'), 'dir');
+        const plan = { targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [] };
+        assert.deepStrictEqual(checkedDestinations(plan), [plan.installStatePath]);
+        assert.deepStrictEqual(findLegacyLinks(plan).map(entry => entry.linkPath), [path.join(home, 'egc')]);
       })) passed++; else failed++;
 
       if (test('a root that is itself a link is allowed', () => {

@@ -268,7 +268,8 @@ function legacyLinkTarget(linkPath, root) {
 // inside the target root. With `migrate` given, a link that is EGC's legacy
 // layout is not refused: it is recorded in that list (linkPath, resolvedTo)
 // and, unless `dryRun`, removed so the real directory takes its place; the
-// unlink removes the link only, never what it pointed at.
+// unlink removes the link only, never what it pointed at. The apply
+// collects with dryRun first and unlinks only after every path passed.
 function refuseLinkedDestination(destinationPath, targetRoot, { migrate, dryRun = false } = {}) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   let probe = path.resolve(destinationPath);
@@ -291,16 +292,28 @@ function refuseLinkedDestination(destinationPath, targetRoot, { migrate, dryRun 
   }
 }
 
-// The legacy links a plan would migrate, without touching anything: what a
-// dry run lists. Links that would be refused are left for the apply to
-// report, exactly as before.
-function findLegacyLinks(plan) {
+// Every path the apply checks for links: the state file, the hooks file
+// and each operation, in that order.
+function checkedDestinations(plan) {
+  const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
+  const paths = [plan.installStatePath];
+  if (resolvedClaudeHooksPlan) paths.push(resolvedClaudeHooksPlan.hooksDestinationPath);
+  for (const operation of plan.operations) paths.push(operation.destinationPath);
+  return paths.filter(Boolean);
+}
+
+// The legacy links a plan would migrate, without touching anything. With
+// `strict`, a link that is not ours throws here, before anything is
+// removed; without it (the dry run) such a link is left for the apply to
+// refuse and only the migratable ones are listed. The dry run and the
+// apply walk the same paths, so the list is what the apply will do.
+function findLegacyLinks(plan, { strict = false } = {}) {
   const migrate = [];
-  for (const operation of plan.operations) {
+  for (const destinationPath of checkedDestinations(plan)) {
     try {
-      refuseLinkedDestination(operation.destinationPath, plan.targetRoot, { migrate, dryRun: true });
-    } catch {
-      // A link that is not ours: the apply refuses it; the dry run only lists what it would migrate.
+      refuseLinkedDestination(destinationPath, plan.targetRoot, { migrate, dryRun: true });
+    } catch (error) {
+      if (strict) throw error;
     }
   }
   return migrate;
@@ -313,15 +326,18 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   // Every destination is checked before the first write, the state file and
   // the hooks file included, so a planted link fails the install before it
-  // changes anything. Links that are EGC's own legacy layout are migrated
-  // on the way (#1400) and reported with the result.
-  const migratedLegacyLinks = [];
-  const linkOptions = { migrate: migratedLegacyLinks };
-  refuseLinkedDestination(plan.installStatePath, plan.targetRoot, linkOptions);
-  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot, linkOptions);
+  // changes anything. Links that are EGC's own legacy layout (#1400) are
+  // collected in that same pass and only removed once every path has
+  // passed: a refusal further down never leaves a skill half migrated.
+  // The per-destination check below then runs as before; a link swapped in
+  // after this point is refused like any other.
+  const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
+  for (const link of migratedLegacyLinks) fs.unlinkSync(link.linkPath);
+  refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
+  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
 
-    refuseLinkedDestination(operation.destinationPath, plan.targetRoot, linkOptions);
+    refuseLinkedDestination(operation.destinationPath, plan.targetRoot);
 
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
@@ -343,7 +359,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   }
 
   if (resolvedClaudeHooksPlan) {
-    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot, linkOptions);
+    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
     fs.mkdirSync(path.dirname(resolvedClaudeHooksPlan.hooksDestinationPath), { recursive: true });
 
     writeManagedText(resolvedClaudeHooksPlan.hooksDestinationPath, `${JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2)}\n`);
@@ -384,6 +400,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
 module.exports = {
   applyInstallPlan,
+  checkedDestinations,
   deepMergeJson,
   findLegacyLinks,
   refuseLinkedDestination,
