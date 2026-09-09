@@ -117,6 +117,13 @@ run('git config alias.egcprobe "--no-pager config --local core.hooksPath /tmp/x"
 run('git config alias.x "-C \'/tmp/my dir\' config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked("git config alias.x \"-C '/tmp/my dir' config --local core.hooksPath /tmp/x\""));
 run('git config alias.x "--git-dir \'/tmp/a b/.git\' config core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked("git config alias.x \"--git-dir '/tmp/a b/.git' config core.hooksPath /tmp/x\""));
 run('git config alias.x "-C \'/tmp/my dir\' status" stays allowed', () => assertAllowed("git config alias.x \"-C '/tmp/my dir' status\""));
+run('git config -- core."hooksPath" /tmp/x is hard-blocked', () => assertHardBlocked('git config -- core."hooksPath" /tmp/x'));
+run('git config -- core.hooks\'P\'ath /tmp/x is hard-blocked', () => assertHardBlocked("git config -- core.hooks'P'ath /tmp/x"));
+run('git -c core.hooks\'P\'ath=/tmp/x status is hard-blocked', () => assertHardBlocked("git -c core.hooks'P'ath=/tmp/x status"));
+run('git -ccore.hooks"Path"=/tmp/x status is hard-blocked', () => assertHardBlocked('git -ccore.hooks"Path"=/tmp/x status'));
+run('git config alias.x "con\'f\'ig --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config alias.x "con\'f\'ig --local core.hooksPath /tmp/x"'));
+run('git config core.hooks\'P\'ath /tmp/x is hard-blocked', () => assertHardBlocked("git config core.hooks'P'ath /tmp/x"));
+run('git config user.na\'m\'e Felipe stays allowed', () => assertAllowed("git config user.na'm'e Felipe"));
 run('git config merge.evil.driver "rm -rf /" is hard-blocked', () => assertHardBlocked('git config merge.evil.driver "rm -rf /"'));
 run('git config user.name "Felipe" stays allowed (benign key)', () => assertAllowed('git config user.name "Felipe"'));
 run('git config alias.co checkout stays allowed (non-bang alias)', () => assertAllowed('git config alias.co checkout'));

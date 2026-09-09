@@ -1037,7 +1037,7 @@ function isDangerousAliasValue(value: string): boolean {
   let i = 0;
   while (i < words.length) {
     const raw = words[i];
-    const word = stripEnclosingQuotes(raw);
+    const word = stripQuotes(raw);
     if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
       return true;
     }
@@ -1054,7 +1054,7 @@ function isDangerousAliasValue(value: string): boolean {
 
   if (i < words.length) {
     const raw = words[i];
-    const word = stripEnclosingQuotes(raw);
+    const word = stripQuotes(raw);
     if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
       return true;
     }
@@ -1105,7 +1105,17 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
   for (let i = 0; i < rest.length; i++) {
     const raw = rest[i];
     const flag = bareToken(raw);
-    if (flag === '--') { positionals.push(...rest.slice(i + 1).map(stripEnclosingQuotes)); break; }
+    if (flag === '--') {
+      const restAfter = rest.slice(i + 1);
+      for (const t of restAfter) {
+        if (positionals.length === 1) {
+          positionals.push(stripEnclosingQuotes(t));
+        } else {
+          positionals.push(stripQuotes(t));
+        }
+      }
+      break;
+    }
 
     // Once the key positional has been seen (positionals.length === 1), the
     // following token is taken as the value positional regardless of whether
@@ -1175,14 +1185,14 @@ function findGitSubcommandIndex(args: string[]): number {
 }
 
 function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string; consumedNext: boolean } | null {
-  const stripped = stripEnclosingQuotes(token);
+  const stripped = stripQuotes(token);
   const bare = bareToken(token);
   let rawPair: string | null = null;
   let consumedNext = false;
 
   if (bare === '-c' || bare === '--config-env') {
     if (nextToken !== undefined) {
-      rawPair = stripEnclosingQuotes(nextToken);
+      rawPair = stripQuotes(nextToken);
       consumedNext = true;
     }
   } else if (bare.startsWith('--config-env=')) {
