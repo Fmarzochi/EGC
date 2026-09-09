@@ -396,7 +396,8 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (process.platform !== 'win32' && test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
+  if (process.platform !== 'win32') {
+  if (test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     try {
@@ -439,6 +440,7 @@ function runTests() {
       cleanup(projectDir);
     }
   })) passed++; else failed++;
+  }
 
   if (test('supports manifest profile dry-runs through the installer', () => {
     const homeDir = createTempDir('install-apply-home-');
