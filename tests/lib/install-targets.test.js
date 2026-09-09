@@ -1464,6 +1464,19 @@ function runTests() {
       });
       const sources = plan.operations.map(op => normalizedRelativePath(op.sourceRelativePath)).filter(p => p.startsWith('.opencode'));
       assert.deepStrictEqual(sources, ['.opencode/commands'], 'the linked prompts directory is not planned');
+
+      // Naming a file inside the linked directory does not get around it.
+      const viaFile = planInstallTargetScaffold({
+        target: 'opencode',
+        repoRoot: fakeRepo,
+        homeDir: '/Users/example',
+        modules: [{ id: 'x', paths: ['.opencode/prompts/p.md', '.opencode/commands/a.md'] }],
+      });
+      assert.deepStrictEqual(
+        viaFile.operations.map(op => normalizedRelativePath(op.sourceRelativePath)).filter(p => p.startsWith('.opencode')),
+        ['.opencode/commands/a.md'],
+        'a file under the linked directory is not planned either'
+      );
     } finally {
       fs.rmSync(fakeRepo, { recursive: true, force: true });
       fs.rmSync(elsewhere, { recursive: true, force: true });

@@ -60,7 +60,12 @@ function isShippedPackagePath(packagePath) {
 // materialised.
 function isRealEntryInside(entryPath, repoRoot) {
   try {
-    if (fs.lstatSync(entryPath).isSymbolicLink()) return false;
+    const packageRoot = path.join(repoRoot, OPENCODE_PACKAGE_ROOT);
+    // No link anywhere between the package root and the entry: a linked
+    // shipped directory must not be entered through a file named inside it.
+    for (let probe = entryPath; probe !== packageRoot && probe.startsWith(packageRoot + path.sep); probe = path.dirname(probe)) {
+      if (fs.lstatSync(probe).isSymbolicLink()) return false;
+    }
     const stat = fs.statSync(entryPath);
     if (!stat.isDirectory() && !stat.isFile()) return false;
     const real = fs.realpathSync.native(entryPath);
