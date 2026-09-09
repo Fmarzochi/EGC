@@ -199,6 +199,53 @@ function runTests() {
     }
   }) ? passed++ : failed++);
 
+  (test('OpenCode: with both files present, opencode.json gets the servers and the legacy config.json loses only our stale block', () => {
+    const tmpHome = makeTempDir();
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const documented = path.join(dir, 'opencode.json');
+      const legacy = path.join(dir, 'config.json');
+      fs.writeFileSync(documented, JSON.stringify({ model: 'anthropic/claude' }));
+      fs.writeFileSync(legacy, JSON.stringify({
+        theme: 'dark',
+        mcpServers: { theirs: { command: 'x' }, 'egc-guardian': { command: 'node', args: ['old'] }, 'egc-memory': { command: 'node', args: ['old'] } },
+      }));
+      assert.strictEqual(openCodeConfigPath(tmpHome), documented, 'the documented file wins when both exist');
+      assert.strictEqual(registerOpenCodeMcp(documented, bins), true);
+      const written = JSON.parse(fs.readFileSync(documented, 'utf8'));
+      assert.deepStrictEqual(Object.keys(written.mcp).sort(), ['egc-guardian', 'egc-memory']);
+      const sibling = JSON.parse(fs.readFileSync(legacy, 'utf8'));
+      assert.strictEqual(sibling.theme, 'dark', 'the rest of the legacy file is untouched');
+      assert.deepStrictEqual(sibling.mcpServers, { theirs: { command: 'x' } }, 'only our stale entries leave the legacy file');
+      assert.strictEqual(registerOpenCodeMcp(documented, bins), false, 'nothing left to do in either file');
+    } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('OpenCode: an entry the person set to null is theirs and is not replaced', () => {
+    const tmpHome = makeTempDir();
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'opencode.json');
+      fs.writeFileSync(file, JSON.stringify({ mcp: { 'egc-guardian': null } }));
+      assert.strictEqual(registerOpenCodeMcp(file, bins), true, 'egc-memory is still added');
+      const written = JSON.parse(fs.readFileSync(file, 'utf8'));
+      assert.strictEqual(written.mcp['egc-guardian'], null, 'the null entry stays as set');
+      assert.strictEqual(written.mcp['egc-memory'].type, 'local');
+    } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
   (test('OpenCode: invalid mcp containers are refused and the file is left untouched', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.

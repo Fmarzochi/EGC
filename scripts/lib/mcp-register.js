@@ -490,15 +490,41 @@ function registerOpenCodeMcp(targetPath, bins) {
     'egc-memory': { type: 'local', command: ['node', memoryBin] },
   };
   for (const [name, entry] of Object.entries(incoming)) {
-    if (!obj.mcp[name]) {
+    // Presence, not truthiness: an entry the person set to null or false
+    // is theirs to keep, whatever OpenCode makes of it.
+    if (!Object.hasOwn(obj.mcp, name)) {
       obj.mcp[name] = entry;
       changed = true;
     }
   }
   if (dropStaleEgcServers(obj)) changed = true;
-  if (!changed) return false;
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  if (changed) {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  }
+  const siblingChanged = retireStaleLegacySibling(targetPath);
+  return changed || siblingChanged;
+}
+
+// When the servers go into opencode.json and a legacy config.json sits next
+// to it, the mcpServers block an older EGC may have left in that legacy file
+// is retired too (our entries only; the rest of the file is left as it is).
+// OpenCode merges both files, so the entries written above reach it either
+// way. A legacy file that cannot be parsed is left alone: it is not the file
+// being registered into.
+function retireStaleLegacySibling(targetPath) {
+  if (path.basename(targetPath) !== 'opencode.json') return false;
+  const legacyPath = path.join(path.dirname(targetPath), 'config.json');
+  const content = readFileIfExists(legacyPath);
+  if (content === null || content === undefined) return false;
+  let legacy;
+  try {
+    legacy = parseJsonObject(legacyPath, content, 'OpenCode config');
+  } catch {
+    return false;
+  }
+  if (!dropStaleEgcServers(legacy)) return false;
+  fs.writeFileSync(legacyPath, JSON.stringify(legacy, null, 2) + '\n');
   return true;
 }
 
