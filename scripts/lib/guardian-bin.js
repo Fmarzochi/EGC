@@ -39,6 +39,15 @@ function openCodeConfigDir() {
   return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'opencode');
 }
 
+// The argv a config entry stores for a server: every other target keeps
+// { command, args }; OpenCode keeps the whole argv as { command: [...] },
+// so that array is read as the args.
+function configuredArgs(server) {
+  if (Array.isArray(server?.args)) return server.args;
+  if (Array.isArray(server?.command)) return server.command;
+  return [];
+}
+
 function fromMcpConfigs() {
   const configPaths = [
     path.join(os.homedir(), '.claude.json'),
@@ -80,8 +89,7 @@ function fromMcpConfigs() {
       const server = data?.mcpServers?.['egc-guardian'] ?? data?.mcp?.['egc-guardian'];
       // Every other target stores { command, args }; OpenCode stores the
       // whole argv as { command: [...] }, so the array is read as the args.
-      const args = Array.isArray(server?.args) ? server.args
-        : Array.isArray(server?.command) ? server.command : [];
+      const args = configuredArgs(server);
       // Compare against a fixed forward-slash suffix instead of building it
       // with path.join(), which bakes in the *running* OS's separator
       // ('\' on Windows). A config value stored with '/' (common even in
