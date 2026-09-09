@@ -73,7 +73,10 @@ function summarizeCognitiveOutput(text) {
 
 // Turns the grouped result into one check line plus its detail lines.
 // level: 'ok' when every detected tool carries the protocol, 'warn' when a
-// tool failed, 'skip' when no tool was detected at all.
+// tool was skipped or failed (the protocol is not in that tool), 'skip'
+// when no tool was detected at all. Only a recognised "already configured"
+// counts as up to date; a line the parser does not know stays visible as a
+// detail instead of being counted as current.
 function describeCognitiveSummary(summary) {
   const details = [];
   const versionSuffix = summary.version ? ` (v${summary.version})` : '';
@@ -85,23 +88,24 @@ function describeCognitiveSummary(summary) {
   if (summary.installed.length > 0) parts.push(`installed in ${joinNames(summary.installed.map(t => t.label))}`);
   if (summary.upgraded.length > 0) parts.push(`upgraded in ${joinNames(summary.upgraded.map(t => t.label))}`);
   const changed = summary.installed.length + summary.upgraded.length;
-  const settled = summary.upToDate.length + summary.unknown.length;
+  const settled = summary.upToDate.length;
   if (changed > 0) {
     let detail = parts.join(', ') + versionSuffix;
     if (settled > 0) detail += `; ${plural(settled, 'tool')} already up to date`;
     for (const tool of [...summary.installed, ...summary.upgraded]) details.push(`${tool.label}  ${tool.message}`);
-    return finishCognitive('ok', detail, details, summary);
+    return finishCognitive(detail, details, summary);
   }
   if (settled > 0) {
-    return finishCognitive('ok', `${plural(settled, 'tool')} up to date${versionSuffix}`, details, summary);
+    return finishCognitive(`${plural(settled, 'tool')} up to date${versionSuffix}`, details, summary);
   }
-  return finishCognitive('ok', 'nothing to update', details, summary);
+  return finishCognitive('nothing to update', details, summary);
 }
 
-function finishCognitive(level, detail, details, summary) {
-  let finalLevel = level;
+function finishCognitive(detail, details, summary) {
+  let finalLevel = 'ok';
   let finalDetail = detail;
   if (summary.skipped.length > 0) {
+    finalLevel = 'warn';
     finalDetail += `; ${plural(summary.skipped.length, 'tool')} skipped`;
     for (const tool of summary.skipped) details.push(`${tool.label}  ${tool.reason}`);
   }

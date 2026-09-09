@@ -114,6 +114,30 @@ test('describeCognitiveSummary warns when a tool failed and lists skips and fore
   ]);
 });
 
+test('describeCognitiveSummary warns on a skipped tool alone: the protocol is not in that tool', () => {
+  const result = describeCognitiveSummary(summarizeCognitiveOutput([
+    '  [cognitive] Claude Code: already configured (v6)',
+    '  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping',
+  ].join('\n')));
+  assert.strictEqual(result.level, 'warn');
+  assert.strictEqual(result.detail, '1 tool up to date (v6); 1 tool skipped');
+  assert.deepStrictEqual(result.details, ['Cursor  settings.json is not valid JSON (JSONC?)']);
+});
+
+test('describeCognitiveSummary never counts an unrecognised line as up to date', () => {
+  const result = describeCognitiveSummary(summarizeCognitiveOutput([
+    '  [cognitive] Claude Code: already configured (v6)',
+    '  [cognitive] Zed: some wording this parser has never seen',
+  ].join('\n')));
+  assert.strictEqual(result.level, 'ok');
+  assert.strictEqual(result.detail, '1 tool up to date (v6)', 'only the recognised tool is counted');
+  assert.deepStrictEqual(result.details, ['Zed  some wording this parser has never seen'], 'the unknown line stays visible');
+
+  const onlyUnknown = describeCognitiveSummary(summarizeCognitiveOutput('  [cognitive] Zed: some wording this parser has never seen'));
+  assert.strictEqual(onlyUnknown.detail, 'nothing to update');
+  assert.deepStrictEqual(onlyUnknown.details, ['Zed  some wording this parser has never seen']);
+});
+
 test('describeCognitiveSummary reports no tool when the child printed nothing', () => {
   const result = describeCognitiveSummary(summarizeCognitiveOutput(''));
   assert.strictEqual(result.level, 'skip');

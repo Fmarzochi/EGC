@@ -146,6 +146,38 @@ run('a key that was unset is planned again on its own', () => {
   assert.deepStrictEqual(plan.actions.map(a => a.split(' ')[2]), [`filter.${FILTER_NAME}.smudge`]);
 });
 
+run('GIT_CONFIG pointing at another file never moves the filter out of .git/config', () => {
+  const { dir, git } = makeRepo();
+  const alternate = path.join(dir, 'alternate-config');
+  const saved = process.env.GIT_CONFIG;
+  process.env.GIT_CONFIG = alternate;
+  let first;
+  let second;
+  try {
+    first = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+    second = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  } finally {
+    if (saved === undefined) delete process.env.GIT_CONFIG; else process.env.GIT_CONFIG = saved;
+  }
+  assert.strictEqual(first.configured, true);
+  assert.ok(first.actions.length >= 3, 'the first run plans the three keys');
+  assert.deepStrictEqual(second.actions, [], 'the second run sees the keys it wrote');
+  assert.ok(!fs.existsSync(alternate), 'nothing is written to the alternate file');
+  assert.strictEqual(git('config', '--local', `filter.${FILTER_NAME}.required`).trim(), 'true', 'the keys live in .git/config');
+});
+
+run('the installer wrapper reports a configured repo instead of zero changes', () => {
+  const { dir } = makeRepo();
+  const { applyCommitPrivacyFilterCli } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
+  const first = [];
+  applyCommitPrivacyFilterCli({ projectDir: dir, scriptPath: LEAK_SCRIPT, log: m => first.push(m) });
+  assert.ok(first.some(m => m.includes('git config filter.')), 'the first run lists what it writes');
+  assert.ok(first[first.length - 1].includes('change(s)'), 'the first run ends with its count');
+  const second = [];
+  applyCommitPrivacyFilterCli({ projectDir: dir, scriptPath: LEAK_SCRIPT, log: m => second.push(m) });
+  assert.deepStrictEqual(second, ['commit-privacy filter: already configured (local repo only)']);
+});
+
 run('non-git directory is skipped with a reason', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-nongit-'));
   const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });

@@ -240,8 +240,8 @@ function foldBindings(actions) {
 
 // The state store is initialized by its own script, so a native module that
 // fails to load cannot take init down with it. What the script reports
-// becomes the memory line; the on-disk check is the fallback for a package
-// that does not ship the script.
+// becomes the memory line; the on-disk check is used only when the package
+// does not ship the script.
 async function runStateDbBootstrap() {
   const bootstrapScript = path.join(ROOT_DIR, 'scripts', 'bootstrap-state-db.js');
   if (flags.dryRun) {
@@ -264,7 +264,12 @@ async function runStateDbBootstrap() {
   } else if (parsed.status === 'failed') {
     warn('memory', `state store failed to initialize: ${parsed.reason}`);
   } else {
-    reportStateStoreFromDisk();
+    // No recognised status line: the script crashed or printed something
+    // new. An existing database on disk says nothing about this run, so the
+    // outcome is reported as unknown rather than read from the file.
+    warn('memory', result.status === 0
+      ? 'state store bootstrap returned no status; details: egc doctor'
+      : 'state store bootstrap did not finish; details: egc doctor');
     for (const line of parsed.lines) detail(line);
   }
 }

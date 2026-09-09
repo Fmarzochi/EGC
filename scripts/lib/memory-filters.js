@@ -108,6 +108,16 @@ function computeMissingBindings(attributesFile) {
   return { existing, missing };
 }
 
+// `git config` honours GIT_CONFIG as an alternate file for both reads and
+// writes. The filter only protects this repository when it lives in
+// .git/config, so the variable is dropped and the local file is named
+// explicitly on every read and write below.
+function localConfigEnv() {
+  const env = { ...process.env, GIT_CONFIG: undefined };
+  delete env.GIT_CONFIG;
+  return env;
+}
+
 // The local value of one filter key, or null when it is not set. Only the
 // repository config is read: a global or system value does not protect this
 // repo's worktree the way the local one does, so it is not counted as
@@ -117,6 +127,7 @@ function readLocalConfig(projectDir, key) {
     return execFileSync(GIT_BIN, ['config', '--local', '--get', key], {
       cwd: projectDir,
       encoding: 'utf8',
+      env: localConfigEnv(),
       stdio: ['ignore', 'pipe', 'ignore'],
     }).replace(/\n$/, '');
   } catch {
@@ -153,9 +164,10 @@ function computeMissingConfig(projectDir, cleanCommand) {
 
 function applyFilterConfig(projectDir, missingConfig, attributesFile, existing, missingBindings) {
   for (const entry of missingConfig) {
-    execFileSync(GIT_BIN, ['config', entry.key, entry.value], {
+    execFileSync(GIT_BIN, ['config', '--local', entry.key, entry.value], {
       cwd: projectDir,
       encoding: 'utf8',
+      env: localConfigEnv(),
     });
   }
   if (missingBindings.length > 0) {
@@ -213,6 +225,10 @@ function applyCommitPrivacyFilterCli({ projectDir, scriptPath, log }) {
   const plan = configureMemoryFilters({ projectDir, scriptPath, dryRun: true });
   if (!plan.configured) {
     log(`skip commit-privacy filter: ${plan.reason}`);
+    return plan;
+  }
+  if (plan.actions.length === 0) {
+    log('commit-privacy filter: already configured (local repo only)');
     return plan;
   }
   for (const action of plan.actions) log(`commit-privacy filter: ${action}`);
