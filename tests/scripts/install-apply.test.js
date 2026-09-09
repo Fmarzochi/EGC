@@ -396,6 +396,53 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    try {
+      // Find a skill the egc target installs, from the plan itself.
+      const planned = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+      assert.strictEqual(planned.code, 0, planned.stderr);
+      const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+      const match = planned.stdout.split('\n').map(line => line.trim()).find(line => line.includes(cliSkills));
+      assert.ok(match, 'the plan writes Antigravity CLI skills');
+      const skill = path.relative(cliSkills, match.slice(match.indexOf(cliSkills))).split(path.sep)[0];
+      // The June layout: the skill under the Antigravity CLI is a link into
+      // the Gemini home copy.
+      const managed = path.join(homeDir, '.gemini', 'skills', 'egc', skill);
+      fs.mkdirSync(managed, { recursive: true });
+      fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
+      fs.mkdirSync(cliSkills, { recursive: true });
+      try {
+        fs.symlinkSync(managed, path.join(cliSkills, skill), 'dir');
+      } catch (error) {
+        console.log(`  - skipped: cannot create symlinks here (${error.code})`);
+        return;
+      }
+
+      const dryRun = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+      assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+      assert.ok(dryRun.stdout.includes('Legacy links to migrate'), dryRun.stdout);
+      assert.ok(dryRun.stdout.includes(`- ${path.join(cliSkills, skill)} (pointed at `), 'the link is listed with its target');
+      assert.ok(fs.lstatSync(path.join(cliSkills, skill)).isSymbolicLink(), 'the dry run touches nothing');
+      const json = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected', '--json'], { cwd: projectDir, homeDir });
+      assert.strictEqual(JSON.parse(json.stdout).plan.legacyLinks.length, 1, 'the JSON plan carries the list');
+
+      const applied = run(['--target', 'egc', '--profile', 'minimal', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.strictEqual(applied.code, 0, applied.stderr);
+      assert.ok(applied.stdout.includes(`migrated legacy link: ${path.join(cliSkills, skill)} (pointed at `), applied.stdout);
+      assert.ok(fs.lstatSync(path.join(cliSkills, skill)).isDirectory(), 'the link became a real directory');
+      assert.ok(fs.existsSync(path.join(cliSkills, skill, 'SKILL.md')), 'with the real file inside');
+      assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8').length > 0, true, 'the copy it pointed at is still there');
+
+      const again = run(['--target', 'egc', '--profile', 'minimal', '--allow-undetected', '--json'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.deepStrictEqual(JSON.parse(again.stdout).result.migratedLegacyLinks, [], 'nothing left to migrate');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('supports manifest profile dry-runs through the installer', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
