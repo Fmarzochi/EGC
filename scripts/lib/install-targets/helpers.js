@@ -430,6 +430,15 @@ function createInstallTargetAdapter(config) {
       // audit) instead of calling that already-extracted helper.
       return createDefaultScaffoldOperations(input, adapter);
     },
+    // Files a previous install wrote that this plan no longer covers and
+    // that the target wants removed on the next apply; most targets have
+    // none (the installer never deletes what it did not write).
+    planRetirements(input = {}) {
+      if (typeof config.planRetirements === 'function') {
+        return config.planRetirements(input, adapter);
+      }
+      return [];
+    },
     supportsModule(module, input = {}) {
       if (typeof config.supportsModule === 'function') {
         return config.supportsModule(module, input, adapter);
