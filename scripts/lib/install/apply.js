@@ -337,17 +337,24 @@ function findLegacyLinks(plan, { strict = false } = {}) {
 function removeLegacyLinks(links, targetRoot) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   const deepestFirst = [...links].sort((a, b) => segments(b.linkPath) - segments(a.linkPath));
+  // Every link is checked before any is removed, so a link that changed is
+  // refused with the layout still whole, not after part of it is gone.
+  for (const link of deepestFirst) assertStillLegacyLink(link, root);
   for (const link of deepestFirst) {
-    let stat;
-    try {
-      stat = fs.lstatSync(link.linkPath);
-    } catch {
-      stat = null;
-    }
-    if (!stat?.isSymbolicLink() || legacyLinkTarget(link.linkPath, root) !== link.resolvedTo) {
-      throw new Error(`Refusing to write through a symbolic link at ${link.linkPath}: it changed during the install`);
-    }
+    assertStillLegacyLink(link, root);
     fs.unlinkSync(link.linkPath);
+  }
+}
+
+function assertStillLegacyLink(link, root) {
+  let stat;
+  try {
+    stat = fs.lstatSync(link.linkPath);
+  } catch {
+    stat = null;
+  }
+  if (!stat?.isSymbolicLink() || legacyLinkTarget(link.linkPath, root) !== link.resolvedTo) {
+    throw new Error(`Refusing to write through a symbolic link at ${link.linkPath}: it changed during the install`);
   }
 }
 

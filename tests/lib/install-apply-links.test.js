@@ -141,11 +141,18 @@ function runTests() {
         const migrate = [];
         refuseLinkedDestination(path.join(link, 'SKILL.md'), home, { migrate, dryRun: true });
         assert.strictEqual(migrate.length, 1);
+        // A second legacy link, collected too, must survive when the first
+        // one turns out to have changed: nothing is removed at all.
+        const other = path.join(cliSkills, 'other');
+        fs.symlinkSync(managed, other, 'dir');
+        refuseLinkedDestination(path.join(other, 'SKILL.md'), home, { migrate, dryRun: true });
+        assert.strictEqual(migrate.length, 2);
         // Swapped for a link the person made, between the scan and the removal.
         fs.unlinkSync(link);
         fs.symlinkSync(outside, link, 'dir');
         assert.throws(() => removeLegacyLinks(migrate, home), /changed during the install/);
         assert.ok(fs.lstatSync(link).isSymbolicLink() && fs.realpathSync.native(link) === fs.realpathSync.native(outside), 'the foreign link stays');
+        assert.ok(fs.lstatSync(other).isSymbolicLink(), 'the other legacy link was not removed either');
       })) passed++; else failed++;
 
       if (test('nested legacy links are removed deepest first, whatever order the scan produced', () => {

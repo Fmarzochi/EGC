@@ -396,7 +396,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
+  if (process.platform !== 'win32' && test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     try {
@@ -413,12 +413,9 @@ function runTests() {
       fs.mkdirSync(managed, { recursive: true });
       fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
       fs.mkdirSync(cliSkills, { recursive: true });
-      try {
-        fs.symlinkSync(managed, path.join(cliSkills, skill), 'dir');
-      } catch (error) {
-        console.log(`  - skipped: cannot create symlinks here (${error.code})`);
-        return;
-      }
+      // Gated on platform above, like the other link tests in this file:
+      // a link that cannot be created fails loudly instead of passing.
+      fs.symlinkSync(managed, path.join(cliSkills, skill), 'dir');
 
       const dryRun = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
       assert.strictEqual(dryRun.code, 0, dryRun.stderr);
