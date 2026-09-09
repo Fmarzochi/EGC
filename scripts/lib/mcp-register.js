@@ -72,17 +72,30 @@ function tomlHasActiveServer(content, serverName) {
  * `gate()` returns true, so we don't create config files for tools the
  * person doesn't have installed.
  */
-// %APPDATA% is the documented location, with the conventional layout as a
-// fallback for the rare environment that does not export it. Computed once
-// so the path a target advertises and the path its gate checks can never
-// drift apart.
-function windowsAppDataOpenCodeConfig(homeDir) {
-  const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
-  return path.join(appData, 'opencode', 'config.json');
+// OpenCode resolves its global config directory through xdg-basedir, which
+// is XDG_CONFIG_HOME or ~/.config on every platform, Windows included (there
+// is no %APPDATA% lookup in OpenCode). From that directory it loads, in
+// order, config.json, opencode.json and opencode.jsonc, and it reads MCP
+// servers from the `mcp` key. The documented file name is opencode.json;
+// config.json is the legacy name it still honours (#1405).
+function openCodeConfigDir(homeDir) {
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'opencode');
+}
+
+// The file the servers go into: the documented name when it exists, the
+// legacy name when only that exists, the documented name when creating.
+// A jsonc file is never edited (comments would not survive a rewrite);
+// OpenCode merges every file it finds, so a sibling opencode.json is read.
+function openCodeConfigPath(homeDir) {
+  const dir = openCodeConfigDir(homeDir);
+  const documented = path.join(dir, 'opencode.json');
+  const legacy = path.join(dir, 'config.json');
+  if (fs.existsSync(documented)) return documented;
+  if (fs.existsSync(legacy)) return legacy;
+  return documented;
 }
 
 function buildMcpRegistrationTargets(homeDir) {
-  const openCodeAppData = windowsAppDataOpenCodeConfig(homeDir);
   return [
     {
       name: 'Antigravity CLI',
@@ -151,32 +164,19 @@ function buildMcpRegistrationTargets(homeDir) {
     },
     {
       name: 'OpenCode',
-      path: path.join(homeDir, '.config', 'opencode', 'config.json'),
-      // The PATH signal deliberately does not open this target on Windows:
-      // OpenCode reads %APPDATA% there, so writing the XDG-style file for a
-      // freshly installed copy would produce a config the editor never sees.
-      // The AppData target below handles that case instead.
-      gate: () => fs.existsSync(path.join(homeDir, '.config', 'opencode', 'config.json'))
-        || (process.platform !== 'win32' && commandExists('opencode')),
-      format: 'json',
+      path: openCodeConfigPath(homeDir),
+      // The directory is what OpenCode creates on first launch and what the
+      // plugin and skills installers already write into; the PATH signal
+      // covers an install that was never launched. Same rule on every
+      // platform, since OpenCode's paths are the same everywhere.
+      gate: () => fs.existsSync(openCodeConfigDir(homeDir)) || commandExists('opencode'),
+      format: 'opencode-mcp',
     },
     {
       name: 'Zed',
       path: path.join(homeDir, '.config', 'zed', 'settings.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'zed')),
       format: 'zed-context-servers',
-    },
-    // Windows installs of OpenCode have been seen under %APPDATA% rather
-    // than the XDG-style path above, which is where install.ps1 wrote until
-    // the three registration lists were unified. Kept as a separate,
-    // existence-gated entry so no Windows user loses a registration that
-    // used to work; on any other platform the gate never opens.
-    {
-      name: 'OpenCode (Windows AppData)',
-      path: openCodeAppData,
-      gate: () => process.platform === 'win32'
-        && (fs.existsSync(openCodeAppData) || commandExists('opencode')),
-      format: 'json',
     },
   ];
 }
@@ -451,11 +451,89 @@ function registerClaudeCli(_targetPath, bins) {
   return changed;
 }
 
+const EGC_SERVER_NAMES = ['egc-guardian', 'egc-memory'];
+
+// An mcpServers block in an OpenCode file is dead weight: OpenCode never
+// reads that key, and an older EGC is the only thing that wrote it there.
+// Our two entries are removed from it; anything the person added stays,
+// and the key goes away once it is empty.
+function dropStaleEgcServers(obj) {
+  const stale = obj.mcpServers;
+  if (!stale || typeof stale !== 'object' || Array.isArray(stale)) return false;
+  let changed = false;
+  for (const name of EGC_SERVER_NAMES) {
+    if (name in stale) { delete stale[name]; changed = true; }
+  }
+  if (Object.keys(stale).length === 0) { delete obj.mcpServers; changed = true; }
+  return changed;
+}
+
+/**
+ * Merges egc-guardian / egc-memory into an OpenCode config under the `mcp`
+ * key, in OpenCode's own shape ({ type: "local", command: [...] }), leaving
+ * every other key as it was. Also retires an `mcpServers` block an older
+ * EGC left behind, which OpenCode never read (#1405). Returns true if the
+ * file was written.
+ */
+function registerOpenCodeMcp(targetPath, bins) {
+  const { guardianBin, memoryBin } = bins;
+  const existingContent = readFileIfExists(targetPath);
+  const obj = parseJsonObject(targetPath, existingContent, 'OpenCode config');
+  if (obj.mcp === null || obj.mcp === undefined) {
+    obj.mcp = {};
+  } else if (typeof obj.mcp !== 'object' || Array.isArray(obj.mcp)) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid mcp object - left untouched`);
+  }
+  let changed = false;
+  const incoming = {
+    'egc-guardian': { type: 'local', command: ['node', guardianBin] },
+    'egc-memory': { type: 'local', command: ['node', memoryBin] },
+  };
+  for (const [name, entry] of Object.entries(incoming)) {
+    // Presence, not truthiness: an entry the person set to null or false
+    // is theirs to keep, whatever OpenCode makes of it.
+    if (!Object.hasOwn(obj.mcp, name)) {
+      obj.mcp[name] = entry;
+      changed = true;
+    }
+  }
+  if (dropStaleEgcServers(obj)) changed = true;
+  if (changed) {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  }
+  const siblingChanged = retireStaleLegacySibling(targetPath);
+  return changed || siblingChanged;
+}
+
+// When the servers go into opencode.json and a legacy config.json sits next
+// to it, the mcpServers block an older EGC may have left in that legacy file
+// is retired too (our entries only; the rest of the file is left as it is).
+// OpenCode merges both files, so the entries written above reach it either
+// way. A legacy file that cannot be parsed is left alone: it is not the file
+// being registered into.
+function retireStaleLegacySibling(targetPath) {
+  if (path.basename(targetPath) !== 'opencode.json') return false;
+  const legacyPath = path.join(path.dirname(targetPath), 'config.json');
+  const content = readFileIfExists(legacyPath);
+  if (content === null || content === undefined) return false;
+  let legacy;
+  try {
+    legacy = parseJsonObject(legacyPath, content, 'OpenCode config');
+  } catch {
+    return false;
+  }
+  if (!dropStaleEgcServers(legacy)) return false;
+  fs.writeFileSync(legacyPath, JSON.stringify(legacy, null, 2) + '\n');
+  return true;
+}
+
 const FORMAT_HANDLERS = {
   'json': registerJson,
   'toml': registerToml,
   'continue-yaml': registerContinueYaml,
   'zed-context-servers': registerZedContextServers,
+  'opencode-mcp': registerOpenCodeMcp,
   'claude-cli': registerClaudeCli,
 };
 
@@ -499,6 +577,8 @@ module.exports = {
   registerToml,
   registerContinueYaml,
   registerZedContextServers,
+  registerOpenCodeMcp,
+  openCodeConfigPath,
   registerClaudeCli,
   quoteForCmdShell,
   registerMcpServers,
