@@ -283,22 +283,35 @@ function refuseLinkedDestination(destinationPath, targetRoot, { migrate, dryRun 
   const root = targetRoot ? path.resolve(targetRoot) : null;
   let probe = path.resolve(destinationPath);
   for (;;) {
-    let stat;
-    try {
-      stat = fs.lstatSync(probe);
-    } catch {
-      stat = null;
-    }
-    if (stat?.isSymbolicLink()) {
-      const resolvedTo = migrate ? legacyLinkTarget(probe, root) : null;
-      if (!resolvedTo) throw new Error(`Refusing to write through a symbolic link at ${probe}`);
-      if (!migrate.some(entry => entry.linkPath === probe)) migrate.push({ linkPath: probe, resolvedTo });
-      if (!dryRun) fs.unlinkSync(probe);
-    }
+    if (isSymbolicLink(probe)) handleLinkedProbe(probe, root, migrate, dryRun);
     const parent = path.dirname(probe);
-    if (!root || parent === probe || parent === root || !parent.startsWith(root + path.sep)) break;
+    if (!insideRoot(parent, probe, root)) break;
     probe = parent;
   }
+}
+
+function isSymbolicLink(filePath) {
+  try {
+    return fs.lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+// Whether the walk continues to `parent`: only strictly inside the root,
+// never the root itself (it may be a link the user made) and never past it.
+function insideRoot(parent, probe, root) {
+  return Boolean(root) && parent !== probe && parent !== root && parent.startsWith(root + path.sep);
+}
+
+// A link found on the walk: refused, unless migration is on and it is
+// EGC's legacy layout, in which case it is recorded once (and removed
+// unless this is a dry run).
+function handleLinkedProbe(probe, root, migrate, dryRun) {
+  const resolvedTo = migrate ? legacyLinkTarget(probe, root) : null;
+  if (!resolvedTo) throw new Error(`Refusing to write through a symbolic link at ${probe}`);
+  if (!migrate.some(entry => entry.linkPath === probe)) migrate.push({ linkPath: probe, resolvedTo });
+  if (!dryRun) fs.unlinkSync(probe);
 }
 
 // Every path the apply checks for links: the state file, the hooks file
