@@ -77,19 +77,14 @@ function resolveAttributesFile(projectDir) {
 // change.
 function hardenMissingScriptFilter(projectDir, scriptPath, dryRun) {
   if (!dryRun) {
-    let alreadyConfigured = true;
-    try {
-      execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`], { cwd: projectDir, encoding: 'utf8' });
-    } catch {
-      alreadyConfigured = false;
-    }
+    const alreadyConfigured = readLocalConfig(projectDir, `filter.${FILTER_NAME}.clean`) !== null;
     if (alreadyConfigured) {
       // A driver configured before the smudge fix existed may have only
       // `clean` set. Hardening straight to required=true here without also
       // ensuring `smudge=cat` would turn every checkout/worktree/clone on
       // this repo into a hard "smudge filter egc-memory failed" failure.
-      execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], { cwd: projectDir, encoding: 'utf8' });
-      execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], { cwd: projectDir, encoding: 'utf8' });
+      writeLocalConfig(projectDir, `filter.${FILTER_NAME}.smudge`, 'cat');
+      writeLocalConfig(projectDir, `filter.${FILTER_NAME}.required`, 'true');
     }
   }
   return { configured: false, reason: `clean-filter script not found at ${scriptPath}`, actions: [] };
@@ -162,14 +157,16 @@ function computeMissingConfig(projectDir, cleanCommand) {
   return desiredFilterConfig(cleanCommand).filter(entry => readLocalConfig(projectDir, entry.key) !== entry.value);
 }
 
+function writeLocalConfig(projectDir, key, value) {
+  execFileSync(GIT_BIN, ['config', '--local', key, value], {
+    cwd: projectDir,
+    encoding: 'utf8',
+    env: localConfigEnv(),
+  });
+}
+
 function applyFilterConfig(projectDir, missingConfig, attributesFile, existing, missingBindings) {
-  for (const entry of missingConfig) {
-    execFileSync(GIT_BIN, ['config', '--local', entry.key, entry.value], {
-      cwd: projectDir,
-      encoding: 'utf8',
-      env: localConfigEnv(),
-    });
-  }
+  for (const entry of missingConfig) writeLocalConfig(projectDir, entry.key, entry.value);
   if (missingBindings.length > 0) {
     fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
     const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';

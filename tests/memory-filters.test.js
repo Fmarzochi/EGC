@@ -166,6 +166,24 @@ run('GIT_CONFIG pointing at another file never moves the filter out of .git/conf
   assert.strictEqual(git('config', '--local', `filter.${FILTER_NAME}.required`).trim(), 'true', 'the keys live in .git/config');
 });
 
+run('hardening a configured driver with the script missing stays in .git/config under GIT_CONFIG', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  git('config', '--unset', `filter.${FILTER_NAME}.required`);
+  const alternate = path.join(dir, 'alternate-config');
+  const saved = process.env.GIT_CONFIG;
+  process.env.GIT_CONFIG = alternate;
+  let plan;
+  try {
+    plan = configureMemoryFilters({ projectDir: dir, scriptPath: path.join(dir, 'missing.js'), dryRun: false });
+  } finally {
+    if (saved === undefined) delete process.env.GIT_CONFIG; else process.env.GIT_CONFIG = saved;
+  }
+  assert.strictEqual(plan.configured, false, 'a missing script never configures');
+  assert.ok(!fs.existsSync(alternate), 'the alternate file is never touched');
+  assert.strictEqual(git('config', '--local', `filter.${FILTER_NAME}.required`).trim(), 'true', 'the repo is hardened in .git/config');
+});
+
 run('the installer wrapper reports a configured repo instead of zero changes', () => {
   const { dir } = makeRepo();
   const { applyCommitPrivacyFilterCli } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
