@@ -432,6 +432,9 @@ function runTests() {
       assert.ok(dryRun.stdout.includes(`- ${path.join(configDir, 'tools', 'index.ts')}`));
       assert.ok(dryRun.stdout.includes(`- ${path.join(configDir, 'package.json')}`));
       assert.ok(!dryRun.stdout.includes(`- ${path.join(configDir, 'opencode.json')}`), 'opencode.json is never retired');
+      assert.ok(!dryRun.stdout.includes(`- ${path.join(configDir, 'tools', 'run-tests.ts')}`), 'the dry run does not list the file the person edited, because the apply keeps it');
+      const dryJson = run(['--target', 'opencode', '--profile', 'minimal', '--dry-run', '--allow-undetected', '--json'], { cwd: projectDir, homeDir });
+      assert.deepStrictEqual(JSON.parse(dryJson.stdout).plan.retirements.map(entry => entry.destinationPath).sort(), [path.join(configDir, 'package.json'), path.join(configDir, 'tools', 'index.ts')].sort(), 'the JSON dry run lists exactly what the apply removes');
       assert.ok(fs.existsSync(path.join(configDir, 'tools', 'index.ts')), 'the dry run touches nothing');
       assert.ok(!dryRun.stdout.includes('.opencode/tools/'), 'the tools are not planned any more');
       assert.ok(!dryRun.stdout.includes('.opencode/opencode.json'), 'the package opencode.json is not planned any more');

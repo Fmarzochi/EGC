@@ -298,15 +298,26 @@ function refuseLinkedDestination(destinationPath, targetRoot, { migrate, dryRun 
 function retirePlannedFiles(plan) {
   const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
   const retired = [];
+  for (const retirement of retirableFiles(plan)) {
+    fs.unlinkSync(retirement.destinationPath);
+    retired.push(retirement);
+    removeEmptyParents(path.dirname(retirement.destinationPath), root);
+  }
+  return retired;
+}
+
+// The retirements of a plan that would actually be removed right now: the
+// same test the apply runs, so a dry run lists exactly what the apply does.
+function retirableFiles(plan) {
+  const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
+  const result = [];
   for (const retirement of Array.isArray(plan.retirements) ? plan.retirements : []) {
     const filePath = path.resolve(retirement.destinationPath);
     if (!root || !filePath.startsWith(root + path.sep)) continue;
     if (!isRetirableFile(filePath, root, retirement.sourcePath)) continue;
-    fs.unlinkSync(filePath);
-    retired.push({ ...retirement, destinationPath: filePath });
-    removeEmptyParents(path.dirname(filePath), root);
+    result.push({ ...retirement, destinationPath: filePath });
   }
-  return retired;
+  return result;
 }
 
 function isSymbolicLink(filePath) {
@@ -517,6 +528,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
 module.exports = {
   applyInstallPlan,
+  retirableFiles,
   retirePlannedFiles,
   checkedDestinations,
   deepMergeJson,

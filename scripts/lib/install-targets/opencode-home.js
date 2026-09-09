@@ -54,14 +54,16 @@ function isShippedPackagePath(packagePath) {
   return OPENCODE_PACKAGE_SHIPPED_DIRS.some(dir => packagePath === dir || packagePath.startsWith(`${dir}/`));
 }
 
-// A shipped directory has to be a real directory whose real path stays
-// inside the repository: a link planted there would otherwise be followed
-// into whatever it points at when the operation is materialised.
-function isRealDirectoryInside(dirPath, repoRoot) {
+// A shipped directory, or one file inside it, has to be a real entry whose
+// real path stays inside the repository: a link planted there would
+// otherwise be followed into whatever it points at when the operation is
+// materialised.
+function isRealEntryInside(entryPath, repoRoot) {
   try {
-    if (fs.lstatSync(dirPath).isSymbolicLink()) return false;
-    if (!fs.statSync(dirPath).isDirectory()) return false;
-    const real = fs.realpathSync.native(dirPath);
+    if (fs.lstatSync(entryPath).isSymbolicLink()) return false;
+    const stat = fs.statSync(entryPath);
+    if (!stat.isDirectory() && !stat.isFile()) return false;
+    const real = fs.realpathSync.native(entryPath);
     const root = fs.realpathSync.native(repoRoot);
     return real === root || real.startsWith(root + path.sep);
   } catch {
@@ -80,7 +82,7 @@ function createOpenCodePackageOperations(adapter, moduleId, sourceRelativePath, 
     ? OPENCODE_PACKAGE_SHIPPED_DIRS
     : (isShippedPackagePath(packagePath) ? [packagePath] : []);
   return candidates
-    .filter(candidate => isRealDirectoryInside(path.join(repoRoot, OPENCODE_PACKAGE_ROOT, ...candidate.split('/')), repoRoot))
+    .filter(candidate => isRealEntryInside(path.join(repoRoot, OPENCODE_PACKAGE_ROOT, ...candidate.split('/')), repoRoot))
     .map(candidate => createRemappedOperation(
       adapter,
       moduleId,

@@ -1432,6 +1432,18 @@ function runTests() {
     });
     const directOps = direct.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('.opencode'));
     assert.deepStrictEqual(directOps.map(op => normalizedRelativePath(op.sourceRelativePath)), ['.opencode/commands']);
+
+    // One file inside a shipped directory is planned on its own.
+    const single = planInstallTargetScaffold({
+      target: 'opencode',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'x', paths: ['.opencode/commands/build-fix.md', '.opencode/tools/index.ts'] }],
+    });
+    assert.deepStrictEqual(
+      single.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('.opencode')).map(op => [normalizedRelativePath(op.sourceRelativePath), op.destinationPath]),
+      [['.opencode/commands/build-fix.md', path.join(configDir, 'commands', 'build-fix.md')]]
+    );
   })) passed++; else failed++;
 
   if (test('opencode adapter skips a shipped package directory that is a link (#1396)', () => {

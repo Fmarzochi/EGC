@@ -360,8 +360,11 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      const { findLegacyLinks } = require('./lib/install/apply');
+      const { findLegacyLinks, retirableFiles } = require('./lib/install/apply');
       plan.legacyLinks = findLegacyLinks(plan);
+      // The same test the apply runs: a file the person replaced is not
+      // listed, because it would not be removed.
+      plan.retirements = retirableFiles(plan);
       emitDryRunPlan(options, plan);
       return;
     }
