@@ -89,6 +89,14 @@ Run it as printed: without `--apply` it is a dry run that lists what it would en
 
 ---
 
+## `Refusing to write through a symbolic link` during `egc install` or `egc auto-update`
+
+The installer never writes through a link below a target root: a link at the destination, or a linked directory above it, stops the install before anything changes. Two cases look the same and are handled differently.
+
+**A link EGC made.** Machines set up before 10 June 2026 have the Antigravity CLI skills as links, one per skill under `~/.gemini/antigravity-cli/skills/`, each pointing into `~/.gemini/skills/egc/`, the copy EGC installs for the Gemini home. Since the fix for #1400 the installer recognises that layout and migrates it on its own: the link is removed and the real files are written in its place, reported as `migrated legacy link` in the output (`egc install --dry-run` lists the links it would migrate first, under `Legacy links to migrate`). Nothing to do beyond running the install again.
+
+**Any other link.** A link that resolves anywhere else, a link at the destination itself, or a dangling link keeps the refusal. The installer does not know who made it, so it leaves it alone. Remove the link yourself (or point the install elsewhere) and run the install again.
+
 ## Node.js version conflict with mise / asdf (multiple Node installations)
 
 **Symptom:** `egc auto-update` fails with a confusing git error, or `egc` reports version issues even though it is already up to date. Common when using [mise](https://mise.jdx.dev) or [asdf](https://asdf-vm.com) with multiple Node versions.

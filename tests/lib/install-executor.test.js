@@ -489,6 +489,54 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('applyInstallPlan migrates the June 2026 linked skills layout and refuses any other link (#1400)', () => {
+    const sourceRoot = createTempDir('install-executor-source-');
+    const homeDir = createTempDir('install-executor-home-');
+    try {
+      writeManifestSourceFixture(sourceRoot);
+      // A previous install left the Gemini home copy in place, and the
+      // Antigravity CLI skill as a link into it.
+      const managed = path.join(homeDir, '.gemini', 'skills', 'egc', 'demo');
+      fs.mkdirSync(managed, { recursive: true });
+      fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
+      const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+      fs.mkdirSync(cliSkills, { recursive: true });
+      try {
+        fs.symlinkSync(managed, path.join(cliSkills, 'demo'), 'dir');
+      } catch (error) {
+        console.log(`  - skipped: cannot create symlinks here (${error.code})`);
+        return;
+      }
+      const plan = createManifestInstallPlan({ sourceRoot, homeDir, target: 'egc', profileId: 'minimal' });
+
+      const applied = applyInstallPlan(plan);
+
+      assert.deepStrictEqual(applied.migratedLegacyLinks, [{ linkPath: path.join(cliSkills, 'demo'), resolvedTo: managed }]);
+      assert.ok(fs.lstatSync(path.join(cliSkills, 'demo')).isDirectory(), 'the link became a real directory');
+      assert.ok(fs.existsSync(path.join(cliSkills, 'demo', 'SKILL.md')), 'with the real file inside');
+      assert.ok(fs.existsSync(path.join(managed, 'SKILL.md')), 'the copy it pointed at is still there');
+      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'egc', 'install-state.json')), 'the install completed');
+
+      // The same layout with a link that points outside the managed copy
+      // is not EGC's: the refusal from before stays.
+      const outside = createTempDir('install-executor-outside-');
+      try {
+        fs.writeFileSync(path.join(outside, 'SKILL.md'), 'theirs');
+        fs.rmSync(path.join(cliSkills, 'demo'), { recursive: true, force: true });
+        fs.symlinkSync(outside, path.join(cliSkills, 'demo'), 'dir');
+        const again = createManifestInstallPlan({ sourceRoot, homeDir, target: 'egc', profileId: 'minimal' });
+        assert.throws(() => applyInstallPlan(again), /symbolic link/);
+        assert.ok(fs.lstatSync(path.join(cliSkills, 'demo')).isSymbolicLink(), 'the foreign link stays');
+        assert.strictEqual(fs.readFileSync(path.join(outside, 'SKILL.md'), 'utf8'), 'theirs', 'nothing lands behind it');
+      } finally {
+        cleanup(outside);
+      }
+    } finally {
+      cleanup(sourceRoot);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (test('applyInstallPlan re-export applies a manifest plan and writes install state', () => {
     const sourceRoot = createTempDir('install-executor-source-');
     const homeDir = createTempDir('install-executor-home-');

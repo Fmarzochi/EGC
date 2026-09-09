@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+const { findLegacyLinks, refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
 
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
@@ -64,6 +64,51 @@ function runTests() {
         writeGuardianCliMarker(message => warnings.push(message), home);
         assert.ok(warnings.some(message => message.includes('symbolic link')), JSON.stringify(warnings));
         assert.ok(!fs.existsSync(path.join(outside, 'guardian-cli-path.json')), 'nothing lands behind the link');
+      })) passed++; else failed++;
+
+      if (test('a link into the managed skills copy under the same root is EGC\'s legacy layout: listed by a dry run, replaced on apply (#1400)', () => {
+        // The June 2026 Antigravity CLI layout: skills/<skill> under the
+        // target root as a link into <root>/skills/egc/<skill>.
+        const home = path.join(dir, 'legacy-home');
+        const managed = path.join(home, 'skills', 'egc', 'demo');
+        fs.mkdirSync(managed, { recursive: true });
+        fs.writeFileSync(path.join(managed, 'SKILL.md'), 'managed copy');
+        const cliSkills = path.join(home, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        const link = path.join(cliSkills, 'demo');
+        fs.symlinkSync(managed, link, 'dir');
+        const destination = path.join(link, 'SKILL.md');
+
+        assert.throws(() => refuseLinkedDestination(destination, home), /symbolic link/, 'without migration the refusal stands');
+
+        const listed = findLegacyLinks({ targetRoot: home, operations: [{ destinationPath: destination }, { destinationPath: path.join(link, 'other.md') }] });
+        assert.deepStrictEqual(listed, [{ linkPath: link, resolvedTo: managed }], 'the dry run lists the link once');
+        assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the dry run touches nothing');
+
+        const migrate = [];
+        assert.doesNotThrow(() => refuseLinkedDestination(destination, home, { migrate }));
+        assert.deepStrictEqual(migrate, [{ linkPath: link, resolvedTo: managed }]);
+        assert.ok(!fs.existsSync(link), 'the link is gone');
+        assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8'), 'managed copy', 'what it pointed at is untouched');
+        assert.doesNotThrow(() => refuseLinkedDestination(destination, home, { migrate }), 'a second pass finds no link');
+        assert.strictEqual(migrate.length, 1);
+      })) passed++; else failed++;
+
+      if (test('a link that resolves anywhere else is refused even when migration is on', () => {
+        const home = path.join(dir, 'foreign-home');
+        const cliSkills = path.join(home, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        fs.mkdirSync(path.join(home, 'skills', 'egc'), { recursive: true });
+        const elsewhere = path.join(cliSkills, 'elsewhere');
+        fs.symlinkSync(outside, elsewhere, 'dir');
+        const dangling = path.join(cliSkills, 'dangling');
+        fs.symlinkSync(path.join(home, 'skills', 'egc', 'missing'), dangling, 'dir');
+        const migrate = [];
+        assert.throws(() => refuseLinkedDestination(path.join(elsewhere, 'SKILL.md'), home, { migrate }), /symbolic link/);
+        assert.throws(() => refuseLinkedDestination(path.join(dangling, 'SKILL.md'), home, { migrate }), /symbolic link/, 'a dangling link resolves nowhere');
+        assert.deepStrictEqual(migrate, []);
+        assert.ok(fs.lstatSync(elsewhere).isSymbolicLink() && fs.lstatSync(dangling).isSymbolicLink(), 'both links stay');
+        assert.deepStrictEqual(findLegacyLinks({ targetRoot: home, operations: [{ destinationPath: path.join(elsewhere, 'SKILL.md') }] }), []);
       })) passed++; else failed++;
 
       if (test('a root that is itself a link is allowed', () => {

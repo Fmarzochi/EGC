@@ -230,7 +230,36 @@ function writeManagedText(destinationPath, text) {
   replaceFileWith(destinationPath, descriptor => fs.writeFileSync(descriptor, text, 'utf8'));
 }
 
-function refuseLinkedDestination(destinationPath, targetRoot) {
+// Until 10 June 2026 the Antigravity CLI skills landed as one link per
+// skill into the copy EGC installs under the same target root (for the
+// Gemini home, ~/.gemini/skills/egc). Those links are EGC's own layout, not
+// something the person made: a link below the target root whose resolved
+// target sits inside that copy is replaced by the real files on the next
+// install (#1400). A link that resolves anywhere else keeps the refusal.
+function legacyLinkRoots(root) {
+  return root ? [path.join(root, 'skills', 'egc')] : [];
+}
+
+// The resolved target of the link at linkPath when it is EGC's legacy
+// layout, null otherwise (a dangling link resolves nowhere and is refused
+// like any other).
+function legacyLinkTarget(linkPath, root) {
+  let resolved;
+  try {
+    resolved = fs.realpathSync.native(linkPath);
+  } catch {
+    return null;
+  }
+  const inside = legacyLinkRoots(root).some(legacyRoot => resolved === legacyRoot || resolved.startsWith(legacyRoot + path.sep));
+  return inside ? resolved : null;
+}
+
+// Refuses a link at the destination or under a linked directory strictly
+// inside the target root. With `migrate` given, a link that is EGC's legacy
+// layout is not refused: it is recorded in that list (linkPath, resolvedTo)
+// and, unless `dryRun`, removed so the real directory takes its place; the
+// unlink removes the link only, never what it pointed at.
+function refuseLinkedDestination(destinationPath, targetRoot, { migrate, dryRun = false } = {}) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   let probe = path.resolve(destinationPath);
   for (;;) {
@@ -241,12 +270,30 @@ function refuseLinkedDestination(destinationPath, targetRoot) {
       stat = null;
     }
     if (stat?.isSymbolicLink()) {
-      throw new Error(`Refusing to write through a symbolic link at ${probe}`);
+      const resolvedTo = migrate ? legacyLinkTarget(probe, root) : null;
+      if (!resolvedTo) throw new Error(`Refusing to write through a symbolic link at ${probe}`);
+      if (!migrate.some(entry => entry.linkPath === probe)) migrate.push({ linkPath: probe, resolvedTo });
+      if (!dryRun) fs.unlinkSync(probe);
     }
     const parent = path.dirname(probe);
     if (!root || parent === probe || parent === root || !parent.startsWith(root + path.sep)) break;
     probe = parent;
   }
+}
+
+// The legacy links a plan would migrate, without touching anything: what a
+// dry run lists. Links that would be refused are left for the apply to
+// report, exactly as before.
+function findLegacyLinks(plan) {
+  const migrate = [];
+  for (const operation of plan.operations) {
+    try {
+      refuseLinkedDestination(operation.destinationPath, plan.targetRoot, { migrate, dryRun: true });
+    } catch {
+      // A link that is not ours: the apply refuses it; the dry run only lists what it would migrate.
+    }
+  }
+  return migrate;
 }
 
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
@@ -256,12 +303,15 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   // Every destination is checked before the first write, the state file and
   // the hooks file included, so a planted link fails the install before it
-  // changes anything.
-  refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
-  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
+  // changes anything. Links that are EGC's own legacy layout are migrated
+  // on the way (#1400) and reported with the result.
+  const migratedLegacyLinks = [];
+  const linkOptions = { migrate: migratedLegacyLinks };
+  refuseLinkedDestination(plan.installStatePath, plan.targetRoot, linkOptions);
+  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot, linkOptions);
   for (const operation of plan.operations) {
 
-    refuseLinkedDestination(operation.destinationPath, plan.targetRoot);
+    refuseLinkedDestination(operation.destinationPath, plan.targetRoot, linkOptions);
 
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
@@ -283,7 +333,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   }
 
   if (resolvedClaudeHooksPlan) {
-    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
+    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot, linkOptions);
     fs.mkdirSync(path.dirname(resolvedClaudeHooksPlan.hooksDestinationPath), { recursive: true });
 
     writeManagedText(resolvedClaudeHooksPlan.hooksDestinationPath, `${JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2)}\n`);
@@ -312,7 +362,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true };
+  const result = { ...plan, applied: true, migratedLegacyLinks };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -325,6 +375,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 module.exports = {
   applyInstallPlan,
   deepMergeJson,
+  findLegacyLinks,
   refuseLinkedDestination,
   writeGuardianCliMarker,
   writeManagedText,
