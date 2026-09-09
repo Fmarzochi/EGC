@@ -23,6 +23,10 @@ All notable changes to EGC are documented here.
 
 - **`egc init` ends with a compact install check instead of the full doctor report** (#1384): a healthy install is one line (`12 targets healthy`); only targets that need attention are listed, each with the exact command to run (`egc repair` for drift and version skew, `egc install --target <name> --profile full` for what the automatic repair could not fix, with `egc uninstall --target <name>` offered when the tool is no longer in use), and a bare install shows the full-profile command right there. The check runs behind a live spinner on an interactive terminal and prints one plain line without a TTY. The memory and Token Crusher lines moved above the check and now report real state (the CLI state store the bootstrap created, the crusher shim on PATH) instead of a fixed sentence; the closing tip and the compression claim are gone; the dashboard is one check line with its URL and the command to close it, headless runs print the same line as the other installers, and `Installation complete.` is the last line. `egc doctor` keeps its full report and its JSON contract.
 
+### Security
+
+- **Four advisories published on 9 September 2026 cleared in the three lockfiles**: `js-yaml` 4.3.2 (GHSA for the merge-key CPU bound, high), and `hono` raised from the 4.12.34 pin of #1184 to 4.13.7 with `@hono/node-server` 2.1.1, which closes the three moderate advisories against `hono` below 4.13.5 (`toSSG()` path escape GHSA-gqvv-2mrq-wpjv, `parseBody()` nesting GHSA-g6gw-c38x-mqfc, query parsing past the fragment GHSA-crvj-82cr-hjcx). The pin moves in the root package and in both MCP servers; `npm audit` reports zero findings in each.
+
 ## [1.1.21] - 2026-09-05
 
 ### Added

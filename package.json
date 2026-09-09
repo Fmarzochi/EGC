@@ -138,7 +138,7 @@
     "markdown-it": "^14.2.0",
     "undici": "^6.27.0",
     "@hono/node-server": "^2.0.5",
-    "hono": "4.12.34"
+    "hono": "4.13.7"
   },
   "pnpm": {
     "overrides": {
@@ -147,7 +147,7 @@
       "markdown-it": "^14.2.0",
       "undici": "^6.27.0",
       "@hono/node-server": "^2.0.5",
-      "hono": "4.12.34"
+      "hono": "4.13.7"
     }
   }
 }
