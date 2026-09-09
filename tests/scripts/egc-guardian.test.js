@@ -416,6 +416,8 @@ async function runTests() {
   run('git -c alias.x -c nested override', () => assertDenied("git -c alias.x='-c core.hooksPath=/tmp/e status' x"));
   run('git config alias.x --config-env nested override', () => assertDenied("git config alias.x '--config-env core.hooksPath=EVIL commit'"));
   run('git -c alias.x --config-env nested override', () => assertDenied("git -c alias.x='--config-env core.hooksPath=EVIL commit' x"));
+  run('git config alias.x --config-env= attached override', () => assertDenied("git config alias.x '--config-env=core.hooksPath=EVIL commit'"));
+  run('git -c alias.x --config-env= attached override', () => assertDenied("git -c alias.x='--config-env=core.hooksPath=EVIL commit' x"));
 
   // ── validate_write: DENIED (PATH/persistence hijack, audit EGC-128) ───────
 

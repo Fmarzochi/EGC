@@ -1015,13 +1015,13 @@ const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
 // ordinary and harmless.
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
-const DANGEROUS_ALIAS_STARTS = new Set(['-c', '--config-env', 'config']);
-
 function isDangerousAliasValue(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.startsWith('!')) return true;
   const firstWord = trimmed.split(/\s+/)[0];
-  return DANGEROUS_ALIAS_STARTS.has(firstWord);
+  return firstWord === 'config'
+    || firstWord.startsWith('-c')
+    || firstWord.startsWith('--config-env');
 }
 
 // Flags that make `git config` strictly a read or a removal - never a write
