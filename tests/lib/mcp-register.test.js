@@ -97,6 +97,9 @@ function runTests() {
 
   (test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
     const tmpHome = makeTempDir();
+    // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     try {
       const dir = path.join(tmpHome, '.config', 'opencode');
       fs.mkdirSync(dir, { recursive: true });
@@ -112,12 +115,16 @@ function runTests() {
       assert.strictEqual(written.mcpServers, undefined, 'the key OpenCode never reads must not be written');
       assert.strictEqual(registerOpenCodeMcp(target.path, bins), false, 'a second run is a no-op');
     } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
 
   (test('OpenCode: an existing opencode.json keeps its other servers and keys', () => {
     const tmpHome = makeTempDir();
+    // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     try {
       const dir = path.join(tmpHome, '.config', 'opencode');
       fs.mkdirSync(dir, { recursive: true });
@@ -136,12 +143,16 @@ function runTests() {
       assert.strictEqual(written.mcp['egc-guardian'].type, 'local');
       assert.strictEqual(written.mcp['egc-memory'].command[1], bins.memoryBin);
     } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
 
   (test('OpenCode: a legacy config.json written by an older EGC is used, and its dead mcpServers block is retired', () => {
     const tmpHome = makeTempDir();
+    // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     try {
       const dir = path.join(tmpHome, '.config', 'opencode');
       fs.mkdirSync(dir, { recursive: true });
@@ -159,12 +170,16 @@ function runTests() {
       assert.deepStrictEqual(Object.keys(written.mcp).sort(), ['egc-guardian', 'egc-memory']);
       assert.ok(!fs.existsSync(path.join(dir, 'opencode.json')), 'no second file is created next to the legacy one');
     } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
 
   (test('OpenCode: a foreign mcpServers block keeps its own entries, only ours are removed', () => {
     const tmpHome = makeTempDir();
+    // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     try {
       const dir = path.join(tmpHome, '.config', 'opencode');
       fs.mkdirSync(dir, { recursive: true });
@@ -179,12 +194,16 @@ function runTests() {
       assert.deepStrictEqual(written.mcp['egc-memory'].command, ['node', '/kept/by/hand'], 'an entry the person already has is never overwritten');
       assert.strictEqual(written.mcp['egc-guardian'].command[1], bins.guardianBin);
     } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
 
   (test('OpenCode: invalid mcp containers are refused and the file is left untouched', () => {
     const tmpHome = makeTempDir();
+    // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     try {
       const dir = path.join(tmpHome, '.config', 'opencode');
       fs.mkdirSync(dir, { recursive: true });
@@ -194,6 +213,7 @@ function runTests() {
       assert.throws(() => registerOpenCodeMcp(file, bins), /invalid mcp object/);
       assert.strictEqual(fs.readFileSync(file, 'utf8'), original);
     } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);

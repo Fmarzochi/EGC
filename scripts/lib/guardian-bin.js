@@ -33,6 +33,12 @@ function fromPackageLayout() {
 // validate_write's PROTECTED_FILE_PATTERNS/DENIED_PATHS — a repo cannot get
 // content into them just by being cloned. A project's own .mcp.json is
 // deliberately never consulted for this resolution.
+// OpenCode's config directory, resolved the way OpenCode resolves it
+// (xdg-basedir: XDG_CONFIG_HOME, else ~/.config, on every platform).
+function openCodeConfigDir() {
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'opencode');
+}
+
 function fromMcpConfigs() {
   const configPaths = [
     path.join(os.homedir(), '.claude.json'),
@@ -57,8 +63,8 @@ function fromMcpConfigs() {
     // platform. The servers live under the `mcp` key there, in OpenCode's
     // own shape (#1405); the mcpServers shape below is the one every other
     // JSON target uses.
-    path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
-    path.join(os.homedir(), '.config', 'opencode', 'config.json'),
+    path.join(openCodeConfigDir(), 'opencode.json'),
+    path.join(openCodeConfigDir(), 'config.json'),
   ];
 
   // Resolved candidates must live under the user's home directory. This

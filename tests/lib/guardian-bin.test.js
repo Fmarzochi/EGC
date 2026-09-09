@@ -33,7 +33,12 @@ function createTempDir(prefix) {
 function withEnv(overrides, fn) {
   const saved = {};
   for (const key of Object.keys(overrides)) saved[key] = process.env[key];
-  Object.assign(process.env, overrides);
+  // An undefined override unsets the variable (assigning it would store the
+  // string "undefined").
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   try {
     return fn();
   } finally {
@@ -308,7 +313,7 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome, XDG_CONFIG_HOME: undefined }, () => {
         const { fromMcpConfigs } = freshGuardianBin();
         const resolved = fromMcpConfigs();
         assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
@@ -339,7 +344,7 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome, XDG_CONFIG_HOME: undefined }, () => {
         const { fromMcpConfigs } = freshGuardianBin();
         const resolved = fromMcpConfigs();
         assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
