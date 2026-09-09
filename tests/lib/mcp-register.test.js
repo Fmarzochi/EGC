@@ -227,6 +227,26 @@ function runTests() {
     }
   }) ? passed++ : failed++);
 
+  (test('OpenCode: an unparsable legacy config.json next to opencode.json is left alone', () => {
+    const tmpHome = makeTempDir();
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const documented = path.join(dir, 'opencode.json');
+      const legacy = path.join(dir, 'config.json');
+      fs.writeFileSync(documented, '{}');
+      fs.writeFileSync(legacy, '{ not json');
+      assert.strictEqual(registerOpenCodeMcp(documented, bins), true, 'the documented file is still registered into');
+      assert.strictEqual(fs.readFileSync(legacy, 'utf8'), '{ not json', 'the broken legacy file is not touched');
+      assert.ok(JSON.parse(fs.readFileSync(documented, 'utf8')).mcp['egc-guardian']);
+    } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
   (test('OpenCode: an entry the person set to null is theirs and is not replaced', () => {
     const tmpHome = makeTempDir();
     const savedXdg = process.env.XDG_CONFIG_HOME;
