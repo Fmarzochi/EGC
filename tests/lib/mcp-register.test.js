@@ -1075,14 +1075,35 @@ function runTests() {
 
     const registered = [];
     const warned = [];
+    const unchanged = [];
     registerMcpServers(tmpHome, bins, {
       dryRun: false,
       onRegister: (target) => registered.push(target.name),
       onWarn: (target) => warned.push(target.name),
+      onUnchanged: (target) => unchanged.push(target.name),
     });
 
     assert.ok(!registered.includes('Cursor'), 'nothing changed, so onRegister should not fire again');
     assert.ok(!warned.includes('Cursor'), 'an already-registered target is not an error and should not warn');
+    assert.ok(unchanged.includes('Cursor'), 'the caller is told the target was already registered');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerMcpServers reports a fresh target through onRegister only, never onUnchanged', () => {
+    const tmpHome = makeTempDir();
+    fs.mkdirSync(path.join(tmpHome, '.cursor'), { recursive: true });
+
+    const registered = [];
+    const unchanged = [];
+    registerMcpServers(tmpHome, bins, {
+      dryRun: false,
+      onRegister: (target) => registered.push(target.name),
+      onUnchanged: (target) => unchanged.push(target.name),
+    });
+
+    assert.ok(registered.includes('Cursor'), 'a fresh target is registered');
+    assert.ok(!unchanged.includes('Cursor'), 'a target that was just written is not reported as unchanged');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);

@@ -18,7 +18,7 @@ const path = require('node:path');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const LEAK_SCRIPT = path.join(REPO_ROOT, 'scripts', 'check-state-leak.js');
-const { configureMemoryFilters, FILTER_NAME } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
+const { configureMemoryFilters, FILTER_NAME, PROPAGATION_FILES } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
 
 const POPULATED = [
   '# EGC: Agent Catalog',
@@ -111,6 +111,39 @@ run('git add stages a zeroed blob for a populated propagation file', () => {
   assert.ok(staged.includes('## EGC Project Memory'), 'staged blob keeps the structure');
   const working = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
   assert.ok(working.includes('secret local context'), 'working tree keeps the populated memory');
+});
+
+run('a configured repo plans no action on the next run', () => {
+  const { dir, git } = makeRepo();
+  const first = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(first.actions.length, 3 + PROPAGATION_FILES.length, 'first run writes the three keys and every binding');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.deepStrictEqual(plan.actions, [], 'nothing is planned once the filter is in place');
+  const second = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(second.configured, true);
+  assert.deepStrictEqual(second.actions, [], 'the second run reports no change');
+  assert.strictEqual(git('config', `filter.${FILTER_NAME}.required`).trim(), 'true');
+});
+
+run('a key that drifted is the only planned action and is put back', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  git('config', `filter.${FILTER_NAME}.required`, 'false');
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.strictEqual(plan.actions.length, 1, `only the drifted key is planned: ${JSON.stringify(plan.actions)}`);
+  assert.ok(plan.actions[0].startsWith(`git config filter.${FILTER_NAME}.required true`), plan.actions[0]);
+  assert.strictEqual(git('config', `filter.${FILTER_NAME}.required`).trim(), 'false', 'a dry run writes nothing');
+  const result = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(result.actions.length, 1);
+  assert.strictEqual(git('config', `filter.${FILTER_NAME}.required`).trim(), 'true');
+});
+
+run('a key that was unset is planned again on its own', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  git('config', '--unset', `filter.${FILTER_NAME}.smudge`);
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.deepStrictEqual(plan.actions.map(a => a.split(' ')[2]), [`filter.${FILTER_NAME}.smudge`]);
 });
 
 run('non-git directory is skipped with a reason', () => {

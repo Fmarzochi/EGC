@@ -88,6 +88,8 @@ egc init
 
 This bootstraps the cognitive protocol, registers MCP servers, configures project-local memory protections, verifies the setup, and starts the dashboard.
 
+Each of those steps is one check line: `cognitive protocol` says how many tools carry the current protocol and names the ones it installed or upgraded, `MCP registration` says how many tools already had the servers and names the ones it wrote, `memory` reports the state store with its migration count, and `commit-privacy filter` lists what it changed in the repository the first time and reports the filter as configured afterwards. A detail line appears only when something changed, was skipped or failed.
+
 After those steps `egc init` prints a short install check, then the dashboard line, then the closing line: `Installation complete.`, or the same line with the number of warnings, or `Installation finished with N errors.` when something is still broken. When everything is healthy the check is one line (`12 targets healthy`); when something needs attention, only those targets are listed, each with the command to run. The full report is always one command away with `egc doctor`. Two status lines above the check tell you whether the state store is ready and whether the Token Crusher shim is on your PATH (the shim is installed by `egc install`, and a new terminal picks it up).
 
 ### 3. Full profile

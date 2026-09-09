@@ -108,19 +108,56 @@ function computeMissingBindings(attributesFile) {
   return { existing, missing };
 }
 
-function applyFilterConfig(projectDir, cleanCommand, attributesFile, existing, missingBindings) {
-  execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.clean`, cleanCommand], {
-    cwd: projectDir,
-    encoding: 'utf8',
-  });
-  execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.smudge`, 'cat'], {
-    cwd: projectDir,
-    encoding: 'utf8',
-  });
-  execFileSync(GIT_BIN, ['config', `filter.${FILTER_NAME}.required`, 'true'], {
-    cwd: projectDir,
-    encoding: 'utf8',
-  });
+// The local value of one filter key, or null when it is not set. Only the
+// repository config is read: a global or system value does not protect this
+// repo's worktree the way the local one does, so it is not counted as
+// configured.
+function readLocalConfig(projectDir, key) {
+  try {
+    return execFileSync(GIT_BIN, ['config', '--local', '--get', key], {
+      cwd: projectDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).replace(/\n$/, '');
+  } catch {
+    return null;
+  }
+}
+
+// The three filter keys and the value each one must carry. required=true
+// makes git refuse to stage a file through this filter if the clean command
+// itself fails, instead of silently falling back to the original
+// (unfiltered, still populated) content: fail-closed matches the README's
+// unconditional "never gets committed to git" promise. But required=true
+// also turns an *unconfigured* smudge side into a hard failure instead of
+// the passthru git defaults to when a filter driver is missing entirely
+// (gitattributes(5)): once clean is set, checkout/worktree/clone on this
+// repo starts failing with "smudge filter egc-memory failed" without an
+// explicit smudge command. cat is configured as an identity smudge: the
+// working tree keeps whatever content is checked out, only the staged blob
+// gets cleaned.
+function desiredFilterConfig(cleanCommand) {
+  return [
+    { key: `filter.${FILTER_NAME}.clean`, value: cleanCommand, shown: `"${cleanCommand}"` },
+    { key: `filter.${FILTER_NAME}.smudge`, value: 'cat', shown: 'cat' },
+    { key: `filter.${FILTER_NAME}.required`, value: 'true', shown: 'true' },
+  ];
+}
+
+// Only the keys whose local value differs from the desired one are planned,
+// so a second run on a configured repo reports no change instead of the
+// same three writes every time.
+function computeMissingConfig(projectDir, cleanCommand) {
+  return desiredFilterConfig(cleanCommand).filter(entry => readLocalConfig(projectDir, entry.key) !== entry.value);
+}
+
+function applyFilterConfig(projectDir, missingConfig, attributesFile, existing, missingBindings) {
+  for (const entry of missingConfig) {
+    execFileSync(GIT_BIN, ['config', entry.key, entry.value], {
+      cwd: projectDir,
+      encoding: 'utf8',
+    });
+  }
   if (missingBindings.length > 0) {
     fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
     const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
@@ -130,6 +167,8 @@ function applyFilterConfig(projectDir, cleanCommand, attributesFile, existing, m
 }
 
 // Returns the action plan without touching anything when dryRun is true.
+// `actions` lists only what is not in place yet: an empty list on a
+// configured repo means the filter is already there and nothing is written.
 function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   const attributesFile = resolveAttributesFile(projectDir);
   if (!attributesFile) {
@@ -144,23 +183,8 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   }
 
   const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
-
-  const actions = [
-    `git config filter.${FILTER_NAME}.clean '${cleanCommand}' (local repo config)`,
-    // required=true makes git refuse to stage a file through this filter if
-    // the clean command itself fails, instead of silently falling back to
-    // the original (unfiltered, still populated) content -- fail-closed
-    // matches the README's unconditional "never gets committed to git"
-    // promise. But required=true also turns an *unconfigured* smudge side
-    // into a hard failure instead of the passthru git defaults to when a
-    // filter driver is missing entirely (gitattributes(5)): once clean is
-    // set, checkout/worktree/clone on this repo starts failing with "smudge
-    // filter egc-memory failed" without an explicit smudge command. cat is
-    // configured as an identity smudge: the working tree keeps whatever
-    // content is checked out, only the staged blob gets cleaned.
-    `git config filter.${FILTER_NAME}.smudge cat (local repo config)`,
-    `git config filter.${FILTER_NAME}.required true (local repo config)`,
-  ];
+  const missingConfig = computeMissingConfig(projectDir, cleanCommand);
+  const actions = missingConfig.map(entry => `git config ${entry.key} ${entry.shown} (local repo config)`);
 
   const { existing, missing: missingBindings } = computeMissingBindings(attributesFile);
   for (const file of missingBindings) {
@@ -168,7 +192,7 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   }
 
   if (!dryRun) {
-    applyFilterConfig(projectDir, cleanCommand, attributesFile, existing, missingBindings);
+    applyFilterConfig(projectDir, missingConfig, attributesFile, existing, missingBindings);
   }
 
   return { configured: true, actions, attributesFile };
