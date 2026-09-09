@@ -237,7 +237,17 @@ function writeManagedText(destinationPath, text) {
 // target sits inside that copy is replaced by the real files on the next
 // install (#1400). A link that resolves anywhere else keeps the refusal.
 function legacyLinkRoots(root) {
-  return root ? [path.join(root, 'skills', 'egc')] : [];
+  if (!root) return [];
+  const managed = path.join(root, 'skills', 'egc');
+  // The link target is compared as a real path, so the managed copy has to
+  // be one too: on macOS the temp and home directories sit behind links
+  // (/var is /private/var) and the two spellings would never match.
+  try {
+    const real = fs.realpathSync.native(managed);
+    return real === managed ? [managed] : [managed, real];
+  } catch {
+    return [managed];
+  }
 }
 
 // The resolved target of the link at linkPath when it is EGC's legacy
