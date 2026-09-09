@@ -31,6 +31,13 @@ const { version: PKG_VERSION } = require('../package.json');
 const { registerMcpServers: runMcpRegistration } = require('./lib/mcp-register');
 const { createSpinner } = require('./lib/spinner');
 const { summarizeDoctorReport, summarizeRepairResult } = require('./lib/doctor-summary');
+const {
+  summarizeCognitiveOutput,
+  describeCognitiveSummary,
+  parseStateDbOutput,
+  describeRegistration,
+  plural,
+} = require('./lib/init-steps');
 
 const isTTY = process.stdout.isTTY;
 const c = {
@@ -46,6 +53,13 @@ const c = {
 const ROOT_DIR = path.resolve(__dirname, '..');
 const GUARDIAN_BIN = path.join(ROOT_DIR, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js');
 const MEMORY_BIN = path.join(ROOT_DIR, 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
+const HOME = os.homedir();
+
+// Detail lines show paths the way the cognitive bootstrap does: the home
+// directory as `~`, so a long prefix does not push the message off screen.
+function tilde(text) {
+  return HOME ? text.split(HOME).join('~') : text;
+}
 
 const args = new Set(process.argv.slice(2));
 const flags = {
@@ -119,24 +133,49 @@ function checkMcpBuilds() {
   ok('MCP servers', 'built');
 }
 
-function runBootstrap() {
+// Every step below prints one check line in the same shape as the install
+// check at the end: a mark, a label and a short detail. The child scripts
+// print one line per tool or per result; init runs them with their output
+// captured, behind the spinner the doctor uses, and reads that output into
+// the step line. A detail line appears only when a tool changed, was
+// skipped or failed, so a run on a configured machine stays one line per
+// step.
+function printStepLine(label, summary) {
+  if (summary.level === 'skip') skip(label, summary.detail);
+  else if (summary.level === 'warn') warn(label, summary.detail);
+  else ok(label, summary.detail);
+  for (const line of summary.details) detail(tilde(line));
+}
+
+async function runBootstrap() {
   if (flags.mcpOnly) {
-    skip('cognitive bootstrap', '--mcp-only');
+    skip('cognitive protocol', 'skipped with --mcp-only');
     return;
   }
   const bootstrapScript = path.join(ROOT_DIR, 'scripts', 'bootstrap-cognitive.js');
-  logAction('bootstrapping cognitive protocol...');
-  if (flags.dryRun) return;
-  const result = spawnSync(process.execPath, [bootstrapScript], { stdio: 'inherit' });
+  if (flags.dryRun) {
+    logDry('would bootstrap the cognitive protocol in every detected tool');
+    return;
+  }
+  const spinner = createSpinner();
+  spinner.start('bootstrapping the cognitive protocol...');
+  const result = await runScript(bootstrapScript, []);
+  spinner.stop();
   if (result.status !== 0) {
-    console.error('Bootstrap cognitive failed');
+    fail('cognitive protocol', 'the bootstrap did not finish');
+    for (const line of `${result.stdout}\n${result.stderr}`.split('\n').filter(l => l.trim())) detail(line.trim());
     process.exit(result.status || 1);
   }
+  printStepLine('cognitive protocol', describeCognitiveSummary(summarizeCognitiveOutput(result.stdout)));
 }
 
 function registerMcpServers() {
-  logAction('detecting tools...');
-  const HOME = os.homedir();
+  if (flags.dryRun) logAction('detecting tools...');
+  const registered = [];
+  const unchanged = [];
+  const warned = [];
+  const spinner = flags.dryRun ? null : createSpinner();
+  if (spinner) spinner.start('registering the MCP servers in every detected tool...');
 
   runMcpRegistration(
     HOME,
@@ -144,10 +183,15 @@ function registerMcpServers() {
     {
       dryRun: flags.dryRun,
       onSkip: (target) => logDry(`would register in ${target.name} (${target.path})`),
-      onRegister: (target) => ok(target.name),
-      onWarn: (target, err) => warn(target.name, err.message),
+      onRegister: (target) => registered.push({ name: target.name, path: target.path }),
+      onUnchanged: (target) => unchanged.push({ name: target.name, path: target.path }),
+      onWarn: (target, err) => warned.push({ name: target.name, reason: err.message }),
     }
   );
+
+  if (spinner) spinner.stop();
+  if (flags.dryRun) return;
+  printStepLine('MCP registration', describeRegistration({ registered, unchanged, warned }));
 }
 
 function configureCommitPrivacyFilter() {
@@ -160,27 +204,74 @@ function configureCommitPrivacyFilter() {
   }
 
   const scriptPath = path.join(ROOT_DIR, 'scripts', 'check-state-leak.js');
-  logAction('configuring commit-privacy filter (planned changes below)...');
   const plan = configureMemoryFilters({ projectDir: process.cwd(), scriptPath, dryRun: true });
   if (!plan.configured) {
     skip('commit-privacy filter', plan.reason);
     return;
   }
-  for (const action of plan.actions) logAction(action);
-  if (flags.dryRun) return;
+  if (flags.dryRun) {
+    if (plan.actions.length === 0) {
+      logDry('commit-privacy filter already configured in this repo');
+    } else {
+      logDry(`would configure the commit-privacy filter (${plural(plan.actions.length, 'change')}, local repo only):`);
+      for (const action of plan.actions) logDry(tilde(action));
+    }
+    return;
+  }
+  if (plan.actions.length === 0) {
+    ok('commit-privacy filter', 'already configured; populated memory is stripped from staged blobs (local repo only)');
+    return;
+  }
 
   const result = configureMemoryFilters({ projectDir: process.cwd(), scriptPath, dryRun: false });
-  ok('commit-privacy filter', `populated memory is stripped from staged blobs (${result.actions.length} change(s), local repo only)`);
+  ok('commit-privacy filter', `populated memory is stripped from staged blobs (${plural(result.actions.length, 'change')}, local repo only)`);
+  for (const line of foldBindings(result.actions)) detail(tilde(line));
 }
 
-function runStateDbBootstrap() {
+// A first configuration binds every propagation file; the list is one
+// detail line with the count instead of one line per file.
+function foldBindings(actions) {
+  const bindings = actions.filter(action => action.startsWith('bind '));
+  const rest = actions.filter(action => !action.startsWith('bind '));
+  if (bindings.length === 0) return rest;
+  const target = bindings[0].replace(/^bind \S+ to /, '');
+  return [...rest, `bind ${plural(bindings.length, 'propagation file')} to ${target}`];
+}
+
+// The state store is initialized by its own script, so a native module that
+// fails to load cannot take init down with it. What the script reports
+// becomes the memory line; the on-disk check is used only when the package
+// does not ship the script.
+async function runStateDbBootstrap() {
   const bootstrapScript = path.join(ROOT_DIR, 'scripts', 'bootstrap-state-db.js');
-  if (!fs.existsSync(bootstrapScript)) return;
-  logAction('initializing state store...');
-  if (flags.dryRun) return;
-  const result = spawnSync(process.execPath, [bootstrapScript], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
-  const output = (result.stderr || '').trim();
-  if (output) console.log('  ' + output.replaceAll('\n', '\n  '));
+  if (flags.dryRun) {
+    logDry('would initialize the state store and report the memory status');
+    return;
+  }
+  if (!fs.existsSync(bootstrapScript)) {
+    reportStateStoreFromDisk();
+    return;
+  }
+  const spinner = createSpinner();
+  spinner.start('initializing the state store...');
+  const result = await runScript(bootstrapScript, []);
+  spinner.stop();
+  const parsed = parseStateDbOutput(result.stderr);
+  if (parsed.status === 'ok') {
+    ok('memory', `state store ready (${plural(parsed.migrations, 'migration')}); loads on your first session`);
+  } else if (parsed.status === 'warning') {
+    warn('memory', 'state store could not be initialized; hook-level memory persistence stays off until egc init succeeds');
+  } else if (parsed.status === 'failed') {
+    warn('memory', `state store failed to initialize: ${parsed.reason}`);
+  } else {
+    // No recognised status line: the script crashed or printed something
+    // new. An existing database on disk says nothing about this run, so the
+    // outcome is reported as unknown rather than read from the file.
+    warn('memory', result.status === 0
+      ? 'state store bootstrap returned no status; details: egc doctor'
+      : 'state store bootstrap did not finish; details: egc doctor');
+    for (const line of parsed.lines) detail(line);
+  }
 }
 
 /**
@@ -216,10 +307,10 @@ function reconcileResolutionDrift() {
   }
 }
 
-// The two status lines used to be fixed strings printed after the doctor.
-// Each one now reflects a real check: the CLI state store the bootstrap
-// just initialized, and the Token Crusher shim that `egc install` puts on
-// PATH (init itself never installs it, so it can only report what it finds).
+// The memory line reports the state store the bootstrap above initialized
+// (read from disk only when that script is not shipped), and the token
+// crusher line reports the shim that `egc install` puts on PATH: init itself
+// never installs it, so it can only report what it finds.
 function resolveStateDbPath() {
   try {
     const { getEGCDir } = require('./lib/utils');
@@ -237,17 +328,19 @@ function readShimStatus() {
   }
 }
 
-function reportRuntimeStatus() {
-  if (flags.dryRun) {
-    logDry('would report memory and token crusher status');
-    return;
-  }
-
+function reportStateStoreFromDisk() {
   const stateDbPath = resolveStateDbPath();
   if (stateDbPath && fs.existsSync(stateDbPath)) {
     ok('memory', 'state store ready; loads on your first session');
   } else {
     warn('memory', 'state store not found; details: egc doctor');
+  }
+}
+
+function reportCrusherStatus() {
+  if (flags.dryRun) {
+    logDry('would report the token crusher status');
+    return;
   }
 
   const shim = readShimStatus();
@@ -260,20 +353,27 @@ function reportRuntimeStatus() {
   }
 }
 
-// Doctor and repair print their whole report when their stdio is inherited,
-// so init runs them in JSON mode with the output captured: the spinner can
-// animate meanwhile and the summary below is rendered from the same data
-// the tests and tools read. stderr is kept for the failure line.
-function runJsonScript(script, args) {
+// The child scripts print their whole output when their stdio is inherited,
+// so init runs them with the output captured: the spinner can animate
+// meanwhile and each step line is rendered from what the child said. stderr
+// is kept for the failure line.
+function runScript(script, args) {
   return new Promise(resolve => {
     const child = spawn(process.execPath, [script, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
-    child.on('error', error => resolve({ status: 1, report: null, stderr: error.message }));
-    child.on('close', status => resolve({ status, report: parseJsonOutput(stdout), stderr: stderr.trim() }));
+    child.on('error', error => resolve({ status: 1, stdout, stderr: error.message }));
+    child.on('close', status => resolve({ status, stdout, stderr: stderr.trim() }));
   });
+}
+
+// Doctor and repair run in JSON mode so the summary below is rendered from
+// the same data the tests and tools read.
+async function runJsonScript(script, args) {
+  const run = await runScript(script, args);
+  return { status: run.status, report: parseJsonOutput(run.stdout), stderr: run.stderr };
 }
 
 function parseJsonOutput(text) {
@@ -435,11 +535,11 @@ if (flags.mcpOnly) console.log(`  ${c.dim}mcp-only mode -- cognitive bootstrap w
 async function main() {
   checkNode();
   checkMcpBuilds();
-  runBootstrap();
+  await runBootstrap();
   registerMcpServers();
-  runStateDbBootstrap();
+  await runStateDbBootstrap();
   configureCommitPrivacyFilter();
-  reportRuntimeStatus();
+  reportCrusherStatus();
   const summary = await runDoctor();
   await launchDashboardLine();
   printClosingLine(summary);

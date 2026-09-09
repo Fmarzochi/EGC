@@ -1072,17 +1072,51 @@ function runTests() {
     // Pre-register by calling registerJson directly, simulating a second
     // `egc init` run on a machine that's already set up.
     registerJson(path.join(dir, 'mcp.json'), bins);
+    // CI runners export XDG_CONFIG_HOME; the OpenCode gate must read the temp home.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
 
     const registered = [];
     const warned = [];
-    registerMcpServers(tmpHome, bins, {
-      dryRun: false,
-      onRegister: (target) => registered.push(target.name),
-      onWarn: (target) => warned.push(target.name),
-    });
+    const unchanged = [];
+    try {
+      registerMcpServers(tmpHome, bins, {
+        dryRun: false,
+        onRegister: (target) => registered.push(target.name),
+        onWarn: (target) => warned.push(target.name),
+        onUnchanged: (target) => unchanged.push(target.name),
+      });
+    } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+    }
 
     assert.ok(!registered.includes('Cursor'), 'nothing changed, so onRegister should not fire again');
     assert.ok(!warned.includes('Cursor'), 'an already-registered target is not an error and should not warn');
+    assert.ok(unchanged.includes('Cursor'), 'the caller is told the target was already registered');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerMcpServers reports a fresh target through onRegister only, never onUnchanged', () => {
+    const tmpHome = makeTempDir();
+    fs.mkdirSync(path.join(tmpHome, '.cursor'), { recursive: true });
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
+
+    const registered = [];
+    const unchanged = [];
+    try {
+      registerMcpServers(tmpHome, bins, {
+        dryRun: false,
+        onRegister: (target) => registered.push(target.name),
+        onUnchanged: (target) => unchanged.push(target.name),
+      });
+    } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+    }
+
+    assert.ok(registered.includes('Cursor'), 'a fresh target is registered');
+    assert.ok(!unchanged.includes('Cursor'), 'a target that was just written is not reported as unchanged');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);

@@ -11,7 +11,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { PROPAGATION_FILES } = require('../../scripts/lib/memory-filters');
 
 const ROOT = path.join(__dirname, '..', '..');
 const INIT = path.join(ROOT, 'scripts', 'init.js');
@@ -86,7 +87,16 @@ test('a sandboxed init prints the compact check, the status lines and ends on th
     assert.ok(out.includes('egc install --target <target> --profile full'), 'the full-profile command is printed');
 
     assert.ok(out.includes('  memory  '), 'the memory status line is printed');
-    assert.ok(/state store (ready|not found)/.test(out), 'the memory line reports the state store');
+    assert.ok(/state store (ready( \(\d+ migrations?\))?|not found|could not be initialized|failed to initialize)/.test(out), 'the memory line reports the state store');
+
+    // The first steps print one check line each, in the shape of the tail,
+    // instead of the lines their child scripts write.
+    assert.ok(!out.includes('[cognitive]'), 'the cognitive bootstrap lines are read into one step line');
+    assert.ok(!out.includes('[bootstrap-state-db]'), 'the state store line is read into the memory line');
+    assert.ok(!/^\s*git config filter\./m.test(out), 'no raw git config line outside a detail');
+    assert.ok(/^\s*[-✓!]\s+cognitive protocol\s/m.test(out), 'the cognitive protocol step is one check line');
+    assert.ok(/^\s*[-✓!]\s+MCP registration\s/m.test(out), 'the MCP registration step is one check line');
+    assert.ok(/^\s*-\s+commit-privacy filter\s+\(not a git repository\)/m.test(out), 'a project outside git skips the filter with the reason');
     assert.ok(/token crusher/.test(out), 'the token crusher status line is printed');
     assert.ok(!out.includes('Token Crusher engaged'), 'the old slogan is gone');
     assert.ok(!out.includes('compressed up to'), 'no percentage claim');
@@ -100,6 +110,30 @@ test('a sandboxed init prints the compact check, the status lines and ends on th
 
     assert.ok(!out.includes('\r'), 'no carriage return without a TTY');
     assert.ok(!out.includes('\x1b['), 'no escape sequence without a TTY');
+  } finally {
+    cleanup(homeDir);
+    cleanup(projectDir);
+  }
+});
+
+test('in a git repository the filter step lists what it changed once, then reports it as configured', () => {
+  const homeDir = makeTempDir('egc-init-home-');
+  const projectDir = makeTempDir('egc-init-project-');
+  try {
+    spawnSync('git', ['init', '-q'], { cwd: projectDir, timeout: CLI_TIMEOUT_MS });
+    const first = runInit(['--yes'], { homeDir, projectDir });
+    assert.strictEqual(first.status, 0, `init exited ${first.status}\n${first.stderr}\n${first.stdout}`);
+    const changes = 3 + PROPAGATION_FILES.length;
+    assert.ok(first.stdout.includes(`commit-privacy filter  populated memory is stripped from staged blobs (${changes} changes, local repo only)`), `first run configures the filter:\n${first.stdout}`);
+    assert.ok(first.stdout.includes('git config filter.egc-memory.clean "node '), 'the clean command is shown as a detail');
+    assert.ok(first.stdout.includes('git config filter.egc-memory.required true (local repo config)'), 'each key is shown as a detail');
+    assert.ok(first.stdout.includes(`bind ${PROPAGATION_FILES.length} propagation files to filter=egc-memory (.git/info/attributes)`), 'the bindings are one counted detail line');
+    assert.ok(!first.stdout.includes('bind AGENTS.md'), 'no per-file binding line');
+
+    const second = runInit(['--yes'], { homeDir, projectDir });
+    assert.strictEqual(second.status, 0, `second init exited ${second.status}\n${second.stderr}`);
+    assert.ok(second.stdout.includes('commit-privacy filter  already configured; populated memory is stripped from staged blobs (local repo only)'), `second run reports the filter as configured:\n${second.stdout}`);
+    assert.ok(!second.stdout.includes('git config filter.'), 'nothing to list on the second run');
   } finally {
     cleanup(homeDir);
     cleanup(projectDir);
