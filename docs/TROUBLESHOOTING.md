@@ -89,6 +89,14 @@ Run it as printed: without `--apply` it is a dry run that lists what it would en
 
 ---
 
+## OpenCode stops responding on every request after installing EGC
+
+Installs made with EGC 1.1.21 or earlier copied the whole `egc-universal` package into `~/.config/opencode/` (on Windows `%USERPROFILE%\.config\opencode\`). OpenCode imports every file under `tools/` and `plugins/` in that directory when it starts, the copied TypeScript sources fail to load, and every prompt dies before an answer comes back (#1396). The same copy left a `package.json` there, which makes OpenCode's own background dependency install fail, and replaced your `opencode.json` with EGC's.
+
+**Fix:** update EGC and run `egc install --target opencode --profile full` (or `egc auto-update`). The installer removes the package files it wrote earlier and reports each one as `retired file`; `egc install --target opencode --dry-run` lists them first under `Files to retire`. Your `opencode.json` is left as it is: if EGC overwrote it, restore your own model, permission and plugin settings by hand.
+
+**Without updating:** inside `~/.config/opencode/`, remove `tools/`, `dist/`, `plugins/egc-hooks.ts`, `plugins/index.ts`, `plugins/lib/`, `index.ts`, `package.json`, `package-lock.json`, `tsconfig.json`, `.npmignore`, `README.md` and `MIGRATION.md`; keep `plugins/opencode-egc-plugin.js`, `commands/`, `skills/`, `scripts/`, `hooks/` and `egc/`.
+
 ## Node.js version conflict with mise / asdf (multiple Node installations)
 
 **Symptom:** `egc auto-update` fails with a confusing git error, or `egc` reports version issues even though it is already up to date. Common when using [mise](https://mise.jdx.dev) or [asdf](https://asdf-vm.com) with multiple Node versions.

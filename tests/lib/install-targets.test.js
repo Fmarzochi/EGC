@@ -1399,6 +1399,82 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('opencode adapter plans only the markdown folders of the egc-universal package, never its tools, plugin sources, package files or opencode.json (#1396)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const configDir = path.join(homeDir, '.config', 'opencode');
+
+    const plan = planInstallTargetScaffold({
+      target: 'opencode',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'platform-configs', paths: ['.opencode'] }],
+    });
+
+    const packageOps = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('.opencode'));
+    assert.deepStrictEqual(
+      packageOps.map(op => [normalizedRelativePath(op.sourceRelativePath), op.destinationPath]).sort(),
+      [
+        ['.opencode/commands', path.join(configDir, 'commands')],
+        ['.opencode/instructions', path.join(configDir, 'instructions')],
+        ['.opencode/prompts', path.join(configDir, 'prompts')],
+      ],
+      'commands, instructions and prompts land under the config directory by their own name, nothing else from the package'
+    );
+    assert.ok(!plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === '.opencode'), 'the package root is never copied whole');
+
+    // A module naming a package path directly follows the same rule.
+    const direct = planInstallTargetScaffold({
+      target: 'opencode',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'x', paths: ['.opencode/tools', '.opencode/opencode.json', '.opencode/commands'] }],
+    });
+    const directOps = direct.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('.opencode'));
+    assert.deepStrictEqual(directOps.map(op => normalizedRelativePath(op.sourceRelativePath)), ['.opencode/commands']);
+  })) passed++; else failed++;
+
+  if (test('opencode adapter retires the package files an earlier install wrote, keeps the shipped folders and opencode.json, and plans nothing without a previous state (#1396)', () => {
+    const fs = require('fs');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-retire-'));
+    const configDir = path.join(homeDir, '.config', 'opencode');
+    try {
+      assert.deepStrictEqual(planInstallTargetScaffold({ target: 'opencode', repoRoot, homeDir, modules: [] }).retirements, [], 'no previous install, nothing to retire');
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      const statePath = path.join(configDir, 'egc', 'install-state.json');
+      const previous = [
+        ['.opencode/tools/index.ts', path.join(configDir, 'tools', 'index.ts')],
+        ['.opencode/plugins/egc-hooks.ts', path.join(configDir, 'plugins', 'egc-hooks.ts')],
+        ['.opencode/package.json', path.join(configDir, 'package.json')],
+        ['.opencode/opencode.json', path.join(configDir, 'opencode.json')],
+        ['.opencode/commands/build-fix.md', path.join(configDir, 'commands', 'build-fix.md')],
+        ['scripts/hooks/opencode-egc-plugin.js', path.join(configDir, 'plugins', 'opencode-egc-plugin.js')],
+        ['.opencode/dist/index.js', path.join(homeDir, 'elsewhere', 'index.js')],
+      ];
+      const state = createInstallState({
+        adapter: { id: 'opencode-home' },
+        targetRoot: configDir,
+        installStatePath: statePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: previous.map(([sourceRelativePath, destinationPath]) => ({ kind: 'copy-file', moduleId: 'platform-configs', sourceRelativePath, destinationPath, strategy: 'sync-root-children', ownership: 'managed', scaffoldOnly: false })),
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(statePath, state);
+
+      const plan = planInstallTargetScaffold({ target: 'opencode', repoRoot, homeDir, modules: [] });
+      assert.deepStrictEqual(
+        plan.retirements.map(entry => entry.destinationPath).sort(),
+        [path.join(configDir, 'package.json'), path.join(configDir, 'plugins', 'egc-hooks.ts'), path.join(configDir, 'tools', 'index.ts')].sort(),
+        'package files go; commands, opencode.json, the real plugin and a destination outside the root stay'
+      );
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('opencode adapter always plans the Guardian+Crusher plugin, even with no modules selected (EGC-494/EGC-498)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

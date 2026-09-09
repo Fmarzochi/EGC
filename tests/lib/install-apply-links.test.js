@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+const { refuseLinkedDestination, retirePlannedFiles, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
 
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
@@ -103,6 +103,46 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(aliased, 'utf8'), 'aliased content', 'the state file never writes through a link either');
       assert.strictEqual(fs.statSync(statePath).nlink, 1);
       assert.strictEqual(fs.readdirSync(path.join(root, 'notes')).filter(name => name.endsWith('.tmp')).length, 0, 'no temporary survives');
+    })) passed++; else failed++;
+
+    if (test('retirePlannedFiles removes only regular files inside the root and drops the directories it empties (#1396)', () => {
+      const root2 = path.join(dir, 'retire-root');
+      fs.mkdirSync(path.join(root2, 'tools'), { recursive: true });
+      fs.mkdirSync(path.join(root2, 'plugins', 'lib'), { recursive: true });
+      fs.writeFileSync(path.join(root2, 'tools', 'index.ts'), 'x');
+      fs.writeFileSync(path.join(root2, 'plugins', 'lib', 'helper.ts'), 'x');
+      fs.writeFileSync(path.join(root2, 'plugins', 'real.js'), 'keep');
+      fs.writeFileSync(path.join(root2, 'package.json'), '{}');
+      fs.mkdirSync(path.join(root2, 'dist'), { recursive: true });
+      fs.writeFileSync(path.join(outside, 'theirs.json'), 'theirs');
+      const plan = {
+        targetRoot: root2,
+        retirements: [
+          { destinationPath: path.join(root2, 'tools', 'index.ts') },
+          { destinationPath: path.join(root2, 'plugins', 'lib', 'helper.ts') },
+          { destinationPath: path.join(root2, 'package.json') },
+          { destinationPath: path.join(root2, 'dist') },
+          { destinationPath: path.join(root2, 'missing.txt') },
+          { destinationPath: path.join(outside, 'theirs.json') },
+          { destinationPath: path.join(root2, '..', 'retire-root', 'plugins', 'real.js.nope') },
+        ],
+      };
+      if (links) {
+        fs.symlinkSync(path.join(outside, 'theirs.json'), path.join(root2, 'linked.json'));
+        plan.retirements.push({ destinationPath: path.join(root2, 'linked.json') });
+      }
+      const retired = retirePlannedFiles(plan);
+      assert.deepStrictEqual(
+        retired.map(entry => entry.destinationPath).sort(),
+        [path.join(root2, 'package.json'), path.join(root2, 'plugins', 'lib', 'helper.ts'), path.join(root2, 'tools', 'index.ts')].sort()
+      );
+      assert.ok(!fs.existsSync(path.join(root2, 'tools')), 'the emptied tools directory is gone');
+      assert.ok(!fs.existsSync(path.join(root2, 'plugins', 'lib')), 'the emptied lib directory is gone');
+      assert.ok(fs.existsSync(path.join(root2, 'plugins', 'real.js')), 'a file that stays keeps its directory');
+      assert.ok(fs.existsSync(path.join(root2, 'dist')), 'a directory at a recorded path is not removed');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'theirs.json'), 'utf8'), 'theirs', 'a path outside the root is never touched');
+      if (links) assert.ok(fs.lstatSync(path.join(root2, 'linked.json')).isSymbolicLink(), 'a link at a recorded path is left alone');
+      assert.ok(fs.existsSync(root2), 'the root itself stays');
     })) passed++; else failed++;
 
     if (test('a plain destination, existing or not, passes', () => {

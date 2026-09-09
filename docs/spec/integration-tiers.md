@@ -22,7 +22,7 @@ EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This 
 | 2 | **Antigravity (AGY)** | 1 | `antigravity` | `.agents/` (project-scoped, per repo) | Skills, agents, rules, and commands installed per-project; GateGuard hooks registered; no home-level target (Antigravity has no global rule discovery) |
 | 3 | **Cursor** | 1 | `cursor` | `~/.cursor/` | Rules injected into global cursor.rules |
 | 4 | **Codex CLI** | 1 | `codex` | `~/.agents/skills/<name>/SKILL.md` | Skills installed flat; `persistent_instructions` appended |
-| 5 | **OpenCode** | 1 | `opencode` | `~/.config/opencode/skills/<name>/SKILL.md` | Native plugin events for hooks |
+| 5 | **OpenCode** | 1 | `opencode` | `~/.config/opencode/skills/<name>/SKILL.md` | Native plugin events for hooks. From the repository's `.opencode/` package only `commands`, `instructions` and `prompts` are installed into the config directory, never its TypeScript tools, plugin sources, package files or `opencode.json` (#1396) |
 | 6 | **CodeBuddy** | 1 | `codebuddy` | `.codebuddy/skills/<name>/SKILL.md` | Context injection |
 | 7 | **Windsurf** | 1 | `windsurf` | `~/.codeium/windsurf/skills/<name>/SKILL.md` | Skills installed flat |
 | 8 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat; Guardian + Token Crusher wired via Amp's Plugin API (`tool.call` event, `.amp/plugins/` project or `~/.config/amp/plugins/` home -- a genuinely different root than the skills path above), executed in-process by Amp's own Bun runtime, same pattern as OpenCode's plugin |
