@@ -402,13 +402,17 @@ function runTests() {
     try {
       const configDir = path.join(homeDir, '.config', 'opencode');
       const statePath = path.join(configDir, 'egc', 'install-state.json');
+      const repoRoot = path.join(__dirname, '..', '..');
       fs.mkdirSync(path.join(configDir, 'tools'), { recursive: true });
-      fs.writeFileSync(path.join(configDir, 'tools', 'index.ts'), 'export {}');
-      fs.writeFileSync(path.join(configDir, 'package.json'), '{}');
+      // The bytes EGC copied there, and one file the person edited since.
+      fs.copyFileSync(path.join(repoRoot, '.opencode', 'tools', 'index.ts'), path.join(configDir, 'tools', 'index.ts'));
+      fs.copyFileSync(path.join(repoRoot, '.opencode', 'package.json'), path.join(configDir, 'package.json'));
+      fs.writeFileSync(path.join(configDir, 'tools', 'run-tests.ts'), 'edited by hand');
       fs.writeFileSync(path.join(configDir, 'opencode.json'), JSON.stringify({ model: 'mine/model' }));
       const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
       const previous = [
         ['.opencode/tools/index.ts', path.join(configDir, 'tools', 'index.ts')],
+        ['.opencode/tools/run-tests.ts', path.join(configDir, 'tools', 'run-tests.ts')],
         ['.opencode/package.json', path.join(configDir, 'package.json')],
         ['.opencode/opencode.json', path.join(configDir, 'opencode.json')],
       ];
@@ -435,7 +439,8 @@ function runTests() {
       const applied = run(['--target', 'opencode', '--profile', 'minimal', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
       assert.strictEqual(applied.code, 0, applied.stderr);
       assert.ok(applied.stdout.includes(`retired file: ${path.join(configDir, 'tools', 'index.ts')}`), applied.stdout);
-      assert.ok(!fs.existsSync(path.join(configDir, 'tools')), 'the tools directory is gone');
+      assert.ok(!fs.existsSync(path.join(configDir, 'tools', 'index.ts')), 'the file EGC wrote is gone');
+      assert.strictEqual(fs.readFileSync(path.join(configDir, 'tools', 'run-tests.ts'), 'utf8'), 'edited by hand', 'the file the person edited stays');
       assert.ok(!fs.existsSync(path.join(configDir, 'package.json')));
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(configDir, 'opencode.json'), 'utf8')), { model: 'mine/model' }, 'the person\'s opencode.json is untouched');
       assert.ok(fs.existsSync(path.join(configDir, 'plugins', 'opencode-egc-plugin.js')), 'the real plugin is installed');

@@ -260,18 +260,47 @@ function retirePlannedFiles(plan) {
   for (const retirement of Array.isArray(plan.retirements) ? plan.retirements : []) {
     const filePath = path.resolve(retirement.destinationPath);
     if (!root || !filePath.startsWith(root + path.sep)) continue;
-    let stat;
-    try {
-      stat = fs.lstatSync(filePath);
-    } catch {
-      continue;
-    }
-    if (!stat.isFile()) continue;
+    if (!isRetirableFile(filePath, root, retirement.sourcePath)) continue;
     fs.unlinkSync(filePath);
     retired.push({ ...retirement, destinationPath: filePath });
     removeEmptyParents(path.dirname(filePath), root);
   }
   return retired;
+}
+
+function isSymbolicLink(filePath) {
+  try {
+    return fs.lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+// Whether the file at filePath is the one EGC wrote and may go: a regular
+// file (never a link), reached through no link between the root and it (a
+// linked ancestor would point the unlink outside the root), and, when the
+// source EGC copied is still known, byte-identical to it. A file the person
+// replaced since is theirs, and a file whose source is gone cannot be told
+// apart from one, so both stay.
+function isRetirableFile(filePath, root, sourcePath) {
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch {
+    return false;
+  }
+  if (!stat.isFile()) return false;
+  for (let dir = path.dirname(filePath); dir !== root && dir.startsWith(root + path.sep); dir = path.dirname(dir)) {
+    if (isSymbolicLink(dir)) return false;
+  }
+  if (!sourcePath) return false;
+  try {
+    const source = fs.statSync(sourcePath);
+    if (!source.isFile()) return false;
+    return fs.readFileSync(sourcePath).equals(fs.readFileSync(filePath));
+  } catch {
+    return false;
+  }
 }
 
 function removeEmptyParents(dirPath, root) {

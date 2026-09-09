@@ -1434,6 +1434,30 @@ function runTests() {
     assert.deepStrictEqual(directOps.map(op => normalizedRelativePath(op.sourceRelativePath)), ['.opencode/commands']);
   })) passed++; else failed++;
 
+  if (test('opencode adapter skips a shipped package directory that is a link (#1396)', () => {
+    if (process.platform === 'win32') return;
+    const fs = require('fs');
+    const fakeRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-linked-'));
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-elsewhere-'));
+    try {
+      fs.mkdirSync(path.join(fakeRepo, '.opencode', 'commands'), { recursive: true });
+      fs.writeFileSync(path.join(fakeRepo, '.opencode', 'commands', 'a.md'), 'a');
+      fs.writeFileSync(path.join(elsewhere, 'p.md'), 'p');
+      fs.symlinkSync(elsewhere, path.join(fakeRepo, '.opencode', 'prompts'), 'dir');
+      const plan = planInstallTargetScaffold({
+        target: 'opencode',
+        repoRoot: fakeRepo,
+        homeDir: '/Users/example',
+        modules: [{ id: 'platform-configs', paths: ['.opencode'] }],
+      });
+      const sources = plan.operations.map(op => normalizedRelativePath(op.sourceRelativePath)).filter(p => p.startsWith('.opencode'));
+      assert.deepStrictEqual(sources, ['.opencode/commands'], 'the linked prompts directory is not planned');
+    } finally {
+      fs.rmSync(fakeRepo, { recursive: true, force: true });
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('opencode adapter retires the package files an earlier install wrote, keeps the shipped folders and opencode.json, and plans nothing without a previous state (#1396)', () => {
     const fs = require('fs');
     const repoRoot = path.join(__dirname, '..', '..');
@@ -1470,6 +1494,7 @@ function runTests() {
         [path.join(configDir, 'package.json'), path.join(configDir, 'plugins', 'egc-hooks.ts'), path.join(configDir, 'tools', 'index.ts')].sort(),
         'package files go; commands, opencode.json, the real plugin and a destination outside the root stay'
       );
+      assert.ok(plan.retirements.every(entry => entry.sourcePath === path.join(repoRoot, ...entry.sourceRelativePath.split('/'))), 'each retirement names the file EGC copied, for the apply to compare');
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }

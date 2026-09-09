@@ -105,52 +105,74 @@ function runTests() {
       assert.strictEqual(fs.readdirSync(path.join(root, 'notes')).filter(name => name.endsWith('.tmp')).length, 0, 'no temporary survives');
     })) passed++; else failed++;
 
-    if (test('retirePlannedFiles removes only regular files inside the root and drops the directories it empties (#1396)', () => {
+    if (test('retirePlannedFiles removes only the files EGC wrote, inside the root, and drops the directories it empties (#1396)', () => {
       const root2 = path.join(dir, 'retire-root');
+      const source = path.join(dir, 'retire-source');
       fs.mkdirSync(path.join(root2, 'tools'), { recursive: true });
       fs.mkdirSync(path.join(root2, 'plugins', 'lib'), { recursive: true });
-      fs.writeFileSync(path.join(root2, 'tools', 'index.ts'), 'x');
-      fs.writeFileSync(path.join(root2, 'plugins', 'lib', 'helper.ts'), 'x');
-      fs.writeFileSync(path.join(root2, 'plugins', 'real.js'), 'keep');
-      fs.writeFileSync(path.join(root2, 'package.json'), '{}');
       fs.mkdirSync(path.join(root2, 'dist'), { recursive: true });
+      fs.mkdirSync(source, { recursive: true });
+      // What EGC copied: the same bytes in the source and at the destination.
+      for (const name of ['index.ts', 'helper.ts', 'package.json', 'edited.ts', 'orphan.ts']) fs.writeFileSync(path.join(source, name), `egc ${name}`);
+      fs.writeFileSync(path.join(root2, 'tools', 'index.ts'), 'egc index.ts');
+      fs.writeFileSync(path.join(root2, 'plugins', 'lib', 'helper.ts'), 'egc helper.ts');
+      fs.writeFileSync(path.join(root2, 'package.json'), 'egc package.json');
+      fs.writeFileSync(path.join(root2, 'plugins', 'real.js'), 'keep');
+      // A file the person replaced since, and one whose source is gone.
+      fs.writeFileSync(path.join(root2, 'tools', 'edited.ts'), 'mine now');
+      fs.writeFileSync(path.join(root2, 'tools', 'orphan.ts'), 'egc orphan.ts');
       fs.writeFileSync(path.join(outside, 'theirs.json'), 'theirs');
+      const entry = (rel, sourceName) => ({ destinationPath: path.join(root2, ...rel), sourcePath: sourceName ? path.join(source, sourceName) : undefined });
       const plan = {
         targetRoot: root2,
         retirements: [
-          { destinationPath: path.join(root2, 'tools', 'index.ts') },
-          { destinationPath: path.join(root2, 'plugins', 'lib', 'helper.ts') },
-          { destinationPath: path.join(root2, 'package.json') },
-          { destinationPath: path.join(root2, 'dist') },
-          { destinationPath: path.join(root2, 'missing.txt') },
-          { destinationPath: path.join(outside, 'theirs.json') },
-          { destinationPath: path.join(root2, '..', 'retire-root', 'plugins', 'real.js.nope') },
+          entry(['tools', 'index.ts'], 'index.ts'),
+          entry(['plugins', 'lib', 'helper.ts'], 'helper.ts'),
+          entry(['package.json'], 'package.json'),
+          entry(['tools', 'edited.ts'], 'edited.ts'),
+          entry(['tools', 'orphan.ts'], 'missing-source.ts'),
+          entry(['dist'], 'index.ts'),
+          entry(['missing.txt'], 'index.ts'),
+          { destinationPath: path.join(outside, 'theirs.json'), sourcePath: path.join(source, 'index.ts') },
         ],
       };
       if (links) {
         fs.symlinkSync(path.join(outside, 'theirs.json'), path.join(root2, 'linked.json'));
-        plan.retirements.push({ destinationPath: path.join(root2, 'linked.json') });
+        plan.retirements.push({ destinationPath: path.join(root2, 'linked.json'), sourcePath: path.join(source, 'index.ts') });
+        // A regular file reached through a linked directory inside the root:
+        // the unlink would land outside the root.
+        fs.writeFileSync(path.join(outside, 'behind-link.ts'), 'egc index.ts');
+        fs.symlinkSync(outside, path.join(root2, 'linked-dir'), 'dir');
+        plan.retirements.push({ destinationPath: path.join(root2, 'linked-dir', 'behind-link.ts'), sourcePath: path.join(source, 'index.ts') });
       }
       const retired = retirePlannedFiles(plan);
       assert.deepStrictEqual(
-        retired.map(entry => entry.destinationPath).sort(),
+        retired.map(item => item.destinationPath).sort(),
         [path.join(root2, 'package.json'), path.join(root2, 'plugins', 'lib', 'helper.ts'), path.join(root2, 'tools', 'index.ts')].sort()
       );
-      assert.ok(!fs.existsSync(path.join(root2, 'tools')), 'the emptied tools directory is gone');
+      assert.ok(fs.existsSync(path.join(root2, 'tools', 'edited.ts')), 'a file the person replaced stays');
+      assert.ok(fs.existsSync(path.join(root2, 'tools', 'orphan.ts')), 'a file whose source is gone stays');
+      assert.ok(fs.existsSync(path.join(root2, 'tools')), 'so the tools directory stays too');
       assert.ok(!fs.existsSync(path.join(root2, 'plugins', 'lib')), 'the emptied lib directory is gone');
       assert.ok(fs.existsSync(path.join(root2, 'plugins', 'real.js')), 'a file that stays keeps its directory');
       assert.ok(fs.existsSync(path.join(root2, 'dist')), 'a directory at a recorded path is not removed');
       assert.strictEqual(fs.readFileSync(path.join(outside, 'theirs.json'), 'utf8'), 'theirs', 'a path outside the root is never touched');
-      if (links) assert.ok(fs.lstatSync(path.join(root2, 'linked.json')).isSymbolicLink(), 'a link at a recorded path is left alone');
+      if (links) {
+        assert.ok(fs.lstatSync(path.join(root2, 'linked.json')).isSymbolicLink(), 'a link at a recorded path is left alone');
+        assert.ok(fs.existsSync(path.join(outside, 'behind-link.ts')), 'a file behind a linked directory is left alone');
+      }
       assert.ok(fs.existsSync(root2), 'the root itself stays');
     })) passed++; else failed++;
 
     if (test('retirePlannedFiles stops climbing when a parent cannot be read after the removal', () => {
       const root3 = path.join(dir, 'retire-sealed');
       const sealed = path.join(root3, 'sealed');
+      const source3 = path.join(dir, 'retire-sealed-source');
       fs.mkdirSync(sealed, { recursive: true });
+      fs.mkdirSync(source3, { recursive: true });
       fs.writeFileSync(path.join(sealed, 'gone.ts'), 'x');
-      const plan = { targetRoot: root3, retirements: [{ destinationPath: path.join(sealed, 'gone.ts') }] };
+      fs.writeFileSync(path.join(source3, 'gone.ts'), 'x');
+      const plan = { targetRoot: root3, retirements: [{ destinationPath: path.join(sealed, 'gone.ts'), sourcePath: path.join(source3, 'gone.ts') }] };
       // Write-only parent: the unlink still works, the readdir afterwards
       // does not. Whether the mode really seals the directory is checked,
       // not assumed: root, and any uid with CAP_DAC_OVERRIDE, reads it anyway.

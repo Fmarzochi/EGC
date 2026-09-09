@@ -54,6 +54,21 @@ function isShippedPackagePath(packagePath) {
   return OPENCODE_PACKAGE_SHIPPED_DIRS.some(dir => packagePath === dir || packagePath.startsWith(`${dir}/`));
 }
 
+// A shipped directory has to be a real directory whose real path stays
+// inside the repository: a link planted there would otherwise be followed
+// into whatever it points at when the operation is materialised.
+function isRealDirectoryInside(dirPath, repoRoot) {
+  try {
+    if (fs.lstatSync(dirPath).isSymbolicLink()) return false;
+    if (!fs.statSync(dirPath).isDirectory()) return false;
+    const real = fs.realpathSync.native(dirPath);
+    const root = fs.realpathSync.native(repoRoot);
+    return real === root || real.startsWith(root + path.sep);
+  } catch {
+    return false;
+  }
+}
+
 // The operations for a module path under .opencode: the shipped directories
 // that exist, each landing under the config directory by its own name, and
 // nothing else from the package.
@@ -65,7 +80,7 @@ function createOpenCodePackageOperations(adapter, moduleId, sourceRelativePath, 
     ? OPENCODE_PACKAGE_SHIPPED_DIRS
     : (isShippedPackagePath(packagePath) ? [packagePath] : []);
   return candidates
-    .filter(candidate => fs.existsSync(path.join(repoRoot, OPENCODE_PACKAGE_ROOT, ...candidate.split('/'))))
+    .filter(candidate => isRealDirectoryInside(path.join(repoRoot, OPENCODE_PACKAGE_ROOT, ...candidate.split('/')), repoRoot))
     .map(candidate => createRemappedOperation(
       adapter,
       moduleId,
@@ -83,6 +98,7 @@ function planOpenCodePackageRetirements(adapter, planningInput) {
   const { readInstallState } = require('../install-state');
   const installStatePath = adapter.getInstallStatePath(planningInput);
   const targetRoot = adapter.resolveRoot(planningInput);
+  const repoRoot = planningInput.repoRoot || process.cwd();
   let previous;
   try {
     previous = readInstallState(installStatePath);
@@ -100,7 +116,14 @@ function planOpenCodePackageRetirements(adapter, planningInput) {
     const resolved = path.resolve(destinationPath);
     if (!resolved.startsWith(path.resolve(targetRoot) + path.sep) || seen.has(resolved)) continue;
     seen.add(resolved);
-    retirements.push({ destinationPath: resolved, sourceRelativePath: source, reason: 'egc-universal package file, not part of the OpenCode config directory' });
+    retirements.push({
+      destinationPath: resolved,
+      sourceRelativePath: source,
+      // The file EGC copied there, for the apply to compare against: a file
+      // the person replaced since is theirs and stays.
+      sourcePath: path.join(repoRoot, ...source.split('/')),
+      reason: 'egc-universal package file, not part of the OpenCode config directory',
+    });
   }
   return retirements;
 }
