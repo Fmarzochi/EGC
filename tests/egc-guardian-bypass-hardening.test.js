@@ -98,6 +98,10 @@ run('git config core.hooksPath /tmp/evil is hard-blocked', () => assertHardBlock
 run('git config --global core.hooksPath /tmp/evil is hard-blocked', () => assertHardBlocked('git config --global core.hooksPath /tmp/evil'));
 run('git config credential.helper /tmp/evil is hard-blocked', () => assertHardBlocked('git config credential.helper /tmp/evil'));
 run('git config alias.co "!rm -rf /" is hard-blocked', () => assertHardBlocked('git config alias.co "!rm -rf /"'));
+run('git config alias.x \'!\'evil is hard-blocked', () => assertHardBlocked("git config alias.x '!'evil"));
+run('git config alias.x \\!evil is hard-blocked', () => assertHardBlocked('git config alias.x \\!evil'));
+run('git config --global alias.x "\'!\'sh -c evil" is hard-blocked', () => assertHardBlocked('git config --global alias.x "\'!\'sh -c evil"'));
+run('git config alias.x status stays allowed', () => assertAllowed('git config alias.x status'));
 run('git config alias.egcprobe "config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config alias.egcprobe "config --local core.hooksPath /tmp/x"'));
 run('git config ALIAS.egcprobe "config --local core.hooksPath /tmp/x" is hard-blocked', () => assertHardBlocked('git config ALIAS.egcprobe "config --local core.hooksPath /tmp/x"'));
 run('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe is hard-blocked', () => assertHardBlocked('git -c alias.egcprobe="config --local core.hooksPath /tmp/x" egcprobe'));

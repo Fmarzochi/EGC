@@ -420,6 +420,9 @@ async function runTests() {
   run('git -c alias.x --config-env= attached override', () => assertDenied("git -c alias.x='--config-env=core.hooksPath=EVIL commit' x"));
   run('git config alias.probe global option config write', () => assertDenied("git config alias.egcprobe '--no-pager config --local core.hooksPath /tmp/x'"));
   run('git config alias.x quoted path global option config write', () => assertDenied("git config alias.x \"-C '/tmp/my dir' config --local core.hooksPath /tmp/x\""));
+  run('git config alias.x \'!\'evil write', () => assertDenied("git config alias.x '!'evil"));
+  run('git config alias.x \\!evil write', () => assertDenied("git config alias.x \\!evil"));
+  run('git config --global alias.x "\'!\'sh -c evil" write', () => assertDenied('git config --global alias.x "\'!\'sh -c evil"'));
   run('git config -- core."hooksPath" write', () => assertDenied('git config -- core."hooksPath" /tmp/x'));
   run('git config -- core.hooks\'P\'ath write', () => assertDenied("git config -- core.hooks'P'ath /tmp/x"));
   run('git -c core.hooks\'P\'ath override', () => assertDenied("git -c core.hooks'P'ath=/tmp/x status"));

@@ -1031,14 +1031,14 @@ const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
 function isDangerousAliasValue(value: string): boolean {
   const trimmed = stripEnclosingQuotes(value);
-  if (trimmed.startsWith('!')) return true;
+  if (stripQuotes(trimmed).startsWith('!')) return true;
   const words = tokenizeWords(trimmed);
 
   let i = 0;
   while (i < words.length) {
     const raw = words[i];
     const word = stripQuotes(raw);
-    if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
+    if (word.startsWith('!') || word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
       return true;
     }
     if (GIT_GLOBAL_FLAGS_WITH_ARG.has(word)) {
@@ -1055,7 +1055,7 @@ function isDangerousAliasValue(value: string): boolean {
   if (i < words.length) {
     const raw = words[i];
     const word = stripQuotes(raw);
-    if (word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
+    if (word.startsWith('!') || word.startsWith('-c') || word.startsWith('--config-env') || word === 'config') {
       return true;
     }
   }
@@ -1082,6 +1082,33 @@ function isGitConfigFlagToken(token: string): boolean {
   return token.startsWith('-') && !/\s/.test(token);
 }
 
+function pushConfigPositionalsAfterDoubleDash(positionals: string[], tokens: string[]): void {
+  for (const t of tokens) {
+    if (positionals.length === 1) {
+      positionals.push(stripEnclosingQuotes(t));
+    } else {
+      positionals.push(stripQuotes(t));
+    }
+  }
+}
+
+interface GitConfigFlagResult {
+  readOnly: boolean;
+  skipNext: boolean;
+  editDenial: boolean;
+}
+
+function processGitConfigFlag(flag: string): GitConfigFlagResult {
+  if (flag === '--edit' || flag === '-e') {
+    return { readOnly: false, skipNext: false, editDenial: true };
+  }
+  const eq = flag.indexOf('=');
+  const flagName = eq > 0 ? flag.slice(0, eq) : flag;
+  const readOnly = GIT_CONFIG_READONLY_FLAGS.has(flagName);
+  const skipNext = eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName);
+  return { readOnly, skipNext, editDenial: false };
+}
+
 // Called only once the 'config' subcommand itself has been identified;
 // `args` is everything after 'git' (so args[0] === 'config'). Detects a
 // SET (a key positional followed by a value positional, or --add/
@@ -1106,14 +1133,7 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
     const raw = rest[i];
     const flag = bareToken(raw);
     if (flag === '--') {
-      const restAfter = rest.slice(i + 1);
-      for (const t of restAfter) {
-        if (positionals.length === 1) {
-          positionals.push(stripEnclosingQuotes(t));
-        } else {
-          positionals.push(stripQuotes(t));
-        }
-      }
+      pushConfigPositionalsAfterDoubleDash(positionals, rest.slice(i + 1));
       break;
     }
 
@@ -1125,8 +1145,13 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
       continue;
     }
 
-    if (!isGitConfigFlagToken(flag)) { positionals.push(stripQuotes(raw)); continue; }
-    if (flag === '--edit' || flag === '-e') {
+    if (!isGitConfigFlagToken(flag)) {
+      positionals.push(stripQuotes(raw));
+      continue;
+    }
+
+    const flagResult = processGitConfigFlag(flag);
+    if (flagResult.editDenial) {
       const editDenial: ValidationResult = {
         allowed: false,
         reason: `git config --edit opens an editable session over the config file and is forbidden`,
@@ -1134,10 +1159,8 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
       };
       return { readOnly, positionals, editDenial };
     }
-    const eq = flag.indexOf('=');
-    const flagName = eq > 0 ? flag.slice(0, eq) : flag;
-    if (GIT_CONFIG_READONLY_FLAGS.has(flagName)) readOnly = true;
-    if (eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName)) i += 1;
+    if (flagResult.readOnly) readOnly = true;
+    if (flagResult.skipNext) i += 1;
   }
 
   return { readOnly, positionals, editDenial: null };
