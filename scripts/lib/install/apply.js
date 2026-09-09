@@ -239,15 +239,24 @@ function writeManagedText(destinationPath, text) {
 function legacyLinkRoots(root) {
   if (!root) return [];
   const managed = path.join(root, 'skills', 'egc');
-  // The link target is compared as a real path, so the managed copy has to
-  // be one too: on macOS the temp and home directories sit behind links
-  // (/var is /private/var) and the two spellings would never match.
+  // The link target is compared as a real path, so the managed copy is
+  // spelled through the root's own real path too (on macOS the temp and
+  // home directories sit behind links: /var is /private/var). Only that
+  // alias is accepted: a managed directory that is itself a link to
+  // somewhere else is not EGC's copy, and links into it keep the refusal.
+  let realRoot;
   try {
-    const real = fs.realpathSync.native(managed);
-    return real === managed ? [managed] : [managed, real];
+    realRoot = fs.realpathSync.native(root);
   } catch {
     return [managed];
   }
+  const realManaged = path.join(realRoot, 'skills', 'egc');
+  try {
+    if (fs.realpathSync.native(managed) !== realManaged) return [];
+  } catch {
+    // Absent: a link into it dangles and is refused like any other.
+  }
+  return realManaged === managed ? [managed] : [managed, realManaged];
 }
 
 // The resolved target of the link at linkPath when it is EGC's legacy
@@ -319,6 +328,33 @@ function findLegacyLinks(plan, { strict = false } = {}) {
   return migrate;
 }
 
+// Removes the collected legacy links, deepest path first so a link seen
+// through another is gone before the one it was seen through. Each link is
+// checked again right before the unlink: it must still be a link resolving
+// to the target recorded by the scan, otherwise the path changed under the
+// install and is refused, never removed. unlink never follows a link, so
+// only the link itself goes.
+function removeLegacyLinks(links, targetRoot) {
+  const root = targetRoot ? path.resolve(targetRoot) : null;
+  const deepestFirst = [...links].sort((a, b) => segments(b.linkPath) - segments(a.linkPath));
+  for (const link of deepestFirst) {
+    let stat;
+    try {
+      stat = fs.lstatSync(link.linkPath);
+    } catch {
+      stat = null;
+    }
+    if (!stat?.isSymbolicLink() || legacyLinkTarget(link.linkPath, root) !== link.resolvedTo) {
+      throw new Error(`Refusing to write through a symbolic link at ${link.linkPath}: it changed during the install`);
+    }
+    fs.unlinkSync(link.linkPath);
+  }
+}
+
+function segments(filePath) {
+  return path.resolve(filePath).split(path.sep).length;
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
@@ -332,7 +368,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   // The per-destination check below then runs as before; a link swapped in
   // after this point is refused like any other.
   const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
-  for (const link of migratedLegacyLinks) fs.unlinkSync(link.linkPath);
+  removeLegacyLinks(migratedLegacyLinks, plan.targetRoot);
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
   if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
@@ -404,6 +440,7 @@ module.exports = {
   deepMergeJson,
   findLegacyLinks,
   refuseLinkedDestination,
+  removeLegacyLinks,
   writeGuardianCliMarker,
   writeManagedText,
 

@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { checkedDestinations, findLegacyLinks, refuseLinkedDestination, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+const { checkedDestinations, findLegacyLinks, refuseLinkedDestination, removeLegacyLinks, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
 
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
@@ -113,6 +113,59 @@ function runTests() {
         const plan = { targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [{ destinationPath: path.join(elsewhere, 'SKILL.md') }] };
         assert.deepStrictEqual(findLegacyLinks(plan), [], 'the dry run lists nothing for it');
         assert.throws(() => findLegacyLinks(plan, { strict: true }), /symbolic link/, 'the strict pass refuses it before anything is removed');
+      })) passed++; else failed++;
+
+      if (test('a managed skills directory that is itself a link elsewhere is not EGC\'s copy: links into it keep the refusal', () => {
+        const home = path.join(dir, 'linked-managed-home');
+        const elsewhere = path.join(dir, 'elsewhere-copy');
+        fs.mkdirSync(path.join(elsewhere, 'demo'), { recursive: true });
+        fs.mkdirSync(path.join(home, 'skills'), { recursive: true });
+        fs.symlinkSync(elsewhere, path.join(home, 'skills', 'egc'), 'dir');
+        const cliSkills = path.join(home, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        fs.symlinkSync(path.join(home, 'skills', 'egc', 'demo'), path.join(cliSkills, 'demo'), 'dir');
+        const migrate = [];
+        assert.throws(() => refuseLinkedDestination(path.join(cliSkills, 'demo', 'SKILL.md'), home, { migrate }), /symbolic link/);
+        assert.deepStrictEqual(migrate, []);
+        assert.ok(fs.lstatSync(path.join(cliSkills, 'demo')).isSymbolicLink(), 'nothing removed');
+      })) passed++; else failed++;
+
+      if (test('a link that changed after the scan is refused at removal time, and nothing is removed', () => {
+        const home = path.join(dir, 'swap-home');
+        const managed = path.join(home, 'skills', 'egc', 'demo');
+        fs.mkdirSync(managed, { recursive: true });
+        const cliSkills = path.join(home, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        const link = path.join(cliSkills, 'demo');
+        fs.symlinkSync(managed, link, 'dir');
+        const migrate = [];
+        refuseLinkedDestination(path.join(link, 'SKILL.md'), home, { migrate, dryRun: true });
+        assert.strictEqual(migrate.length, 1);
+        // Swapped for a link the person made, between the scan and the removal.
+        fs.unlinkSync(link);
+        fs.symlinkSync(outside, link, 'dir');
+        assert.throws(() => removeLegacyLinks(migrate, home), /changed during the install/);
+        assert.ok(fs.lstatSync(link).isSymbolicLink() && fs.realpathSync.native(link) === fs.realpathSync.native(outside), 'the foreign link stays');
+      })) passed++; else failed++;
+
+      if (test('nested legacy links are removed deepest first, whatever order the scan produced', () => {
+        const home = path.join(dir, 'nested-home');
+        const managed = path.join(home, 'skills', 'egc');
+        fs.mkdirSync(path.join(managed, 'real'), { recursive: true });
+        // Inside the managed copy, demo is itself a link to a sibling directory.
+        fs.symlinkSync(path.join(managed, 'real'), path.join(managed, 'demo'), 'dir');
+        const cli = path.join(home, 'antigravity-cli');
+        fs.mkdirSync(cli, { recursive: true });
+        // The skills directory is a link to the managed copy, so skills/demo is seen through it.
+        fs.symlinkSync(managed, path.join(cli, 'skills'), 'dir');
+        const migrate = [];
+        refuseLinkedDestination(path.join(cli, 'skills', 'demo', 'SKILL.md'), home, { migrate, dryRun: true });
+        assert.deepStrictEqual(migrate.map(entry => entry.linkPath), [path.join(cli, 'skills', 'demo'), path.join(cli, 'skills')]);
+        // Shallowest first would remove skills and then fail on skills/demo.
+        assert.doesNotThrow(() => removeLegacyLinks([...migrate].reverse(), home));
+        assert.ok(!fs.existsSync(path.join(cli, 'skills')), 'the outer link is gone');
+        assert.ok(!fs.existsSync(path.join(managed, 'demo')), 'the inner link is gone');
+        assert.ok(fs.existsSync(path.join(managed, 'real')), 'what it pointed at stays');
       })) passed++; else failed++;
 
       if (test('the dry run walks the install-state path too, so a legacy link above it is listed', () => {
