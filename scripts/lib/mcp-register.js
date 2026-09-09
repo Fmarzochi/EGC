@@ -537,12 +537,16 @@ const FORMAT_HANDLERS = {
   'claude-cli': registerClaudeCli,
 };
 
-function registerTarget(target, bins, onRegister, onWarn) {
+function registerTarget(target, bins, onRegister, onWarn, onUnchanged) {
   const handler = FORMAT_HANDLERS[target.format];
   if (!handler) return;
   try {
     const registered = handler(target.path, bins);
-    if (registered && onRegister) onRegister(target);
+    if (registered) {
+      if (onRegister) onRegister(target);
+    } else if (onUnchanged) {
+      onUnchanged(target);
+    }
   } catch (err) {
     if (onWarn) onWarn(target, err);
   }
@@ -552,10 +556,12 @@ function registerTarget(target, bins, onRegister, onWarn) {
  * Walks every gated target for homeDir and registers egc-guardian /
  * egc-memory into whichever tools are actually installed. Callbacks let the
  * caller (scripts/init.js) drive its own console output without this module
- * needing to know about colors or dry-run formatting.
+ * needing to know about colors or dry-run formatting: onRegister when a
+ * target was written, onUnchanged when both servers were already there,
+ * onWarn when the target could not be updated, onSkip on a dry run.
  */
 function registerMcpServers(homeDir, bins, callbacks = {}) {
-  const { dryRun = false, onSkip, onRegister, onWarn } = callbacks;
+  const { dryRun = false, onSkip, onRegister, onWarn, onUnchanged } = callbacks;
   const targets = buildMcpRegistrationTargets(homeDir);
 
   for (const target of targets) {
@@ -564,7 +570,7 @@ function registerMcpServers(homeDir, bins, callbacks = {}) {
       if (onSkip) onSkip(target);
       continue;
     }
-    registerTarget(target, bins, onRegister, onWarn);
+    registerTarget(target, bins, onRegister, onWarn, onUnchanged);
   }
 
   return targets;
