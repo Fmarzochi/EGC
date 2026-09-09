@@ -114,6 +114,7 @@ function printHumanPlan(plan, dryRun) {
   }
 
   printRetirements(plan, dryRun);
+  printLegacyLinks(plan, dryRun);
 
   if (!dryRun) {
     console.log(`\nDone. Install-state written to ${plan.installStatePath}`);
@@ -132,6 +133,20 @@ function printRetirements(plan, dryRun) {
     : '\nRetired files:');
   for (const file of files) {
     console.log(`- ${dryRun ? '' : 'retired file: '}${file.destinationPath}`);
+  }
+}
+
+// The links from EGC's own June 2026 layout (one link per Antigravity CLI
+// skill into the Gemini home copy) that this run replaces, or would
+// replace, with real files (#1400). Any other link is refused as before.
+function printLegacyLinks(plan, dryRun) {
+  const links = dryRun ? plan.legacyLinks : plan.migratedLegacyLinks;
+  if (!links || links.length === 0) return;
+  console.log(dryRun
+    ? '\nLegacy links to migrate (EGC\'s own layout from June 2026, each replaced by the real files):'
+    : '\nMigrated legacy links:');
+  for (const link of links) {
+    console.log(`- ${dryRun ? '' : 'migrated legacy link: '}${link.linkPath} (pointed at ${link.resolvedTo})`);
   }
 }
 
@@ -335,15 +350,18 @@ function main() {
       ...options,
       config,
     });
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const plan = createInstallPlanFromRequest(request, {
       projectRoot: process.cwd(),
-      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
+      homeDir,
       claudeRulesDir: process.env.GEMINI_RULES_DIR || null,
     });
 
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
+      const { findLegacyLinks } = require('./lib/install/apply');
+      plan.legacyLinks = findLegacyLinks(plan);
       emitDryRunPlan(options, plan);
       return;
     }
