@@ -76,6 +76,14 @@ function isRealEntryInside(entryPath, repoRoot) {
   }
 }
 
+// What a module path under .opencode may contribute: the package root
+// yields the shipped directories, a path inside one of them yields itself,
+// anything else nothing.
+function shippedCandidates(packagePath) {
+  if (packagePath === '') return OPENCODE_PACKAGE_SHIPPED_DIRS;
+  return isShippedPackagePath(packagePath) ? [packagePath] : [];
+}
+
 // The operations for a module path under .opencode: the shipped directories
 // that exist, each landing under the config directory by its own name, and
 // nothing else from the package.
@@ -83,9 +91,7 @@ function createOpenCodePackageOperations(adapter, moduleId, sourceRelativePath, 
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
   const packagePath = packageRelativePath(normalizedPath);
   const repoRoot = planningInput.repoRoot || process.cwd();
-  const candidates = packagePath === ''
-    ? OPENCODE_PACKAGE_SHIPPED_DIRS
-    : (isShippedPackagePath(packagePath) ? [packagePath] : []);
+  const candidates = shippedCandidates(packagePath);
   return candidates
     .filter(candidate => isRealEntryInside(path.join(repoRoot, OPENCODE_PACKAGE_ROOT, ...candidate.split('/')), repoRoot))
     .map(candidate => createRemappedOperation(
