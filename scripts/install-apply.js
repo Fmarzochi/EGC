@@ -113,8 +113,40 @@ function printHumanPlan(plan, dryRun) {
     console.log(`- ${operation.sourceRelativePath} -> ${operation.destinationPath}`);
   }
 
+  printRetirements(plan, dryRun);
+  printLegacyLinks(plan, dryRun);
+
   if (!dryRun) {
     console.log(`\nDone. Install-state written to ${plan.installStatePath}`);
+  }
+}
+
+// Files an earlier EGC install wrote that this plan no longer covers and
+// the target removes (for OpenCode, the egc-universal package files that
+// broke the config directory, #1396). Listed by the dry run, reported by
+// the apply.
+function printRetirements(plan, dryRun) {
+  const files = dryRun ? plan.retirements : plan.retiredFiles;
+  if (!files || files.length === 0) return;
+  console.log(dryRun
+    ? '\nFiles to retire (written by an earlier EGC install, no longer part of this target):'
+    : '\nRetired files:');
+  for (const file of files) {
+    console.log(`- ${dryRun ? '' : 'retired file: '}${file.destinationPath}`);
+  }
+}
+
+// The links from EGC's own June 2026 layout (one link per Antigravity CLI
+// skill into the Gemini home copy) that this run replaces, or would
+// replace, with real files (#1400). Any other link is refused as before.
+function printLegacyLinks(plan, dryRun) {
+  const links = dryRun ? plan.legacyLinks : plan.migratedLegacyLinks;
+  if (!links || links.length === 0) return;
+  console.log(dryRun
+    ? '\nLegacy links to migrate (EGC\'s own layout from June 2026, each replaced by the real files):'
+    : '\nMigrated legacy links:');
+  for (const link of links) {
+    console.log(`- ${dryRun ? '' : 'migrated legacy link: '}${link.linkPath} (pointed at ${link.resolvedTo})`);
   }
 }
 
@@ -318,15 +350,21 @@ function main() {
       ...options,
       config,
     });
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const plan = createInstallPlanFromRequest(request, {
       projectRoot: process.cwd(),
-      homeDir: process.env.HOME || process.env.USERPROFILE || os.homedir(),
+      homeDir,
       claudeRulesDir: process.env.GEMINI_RULES_DIR || null,
     });
 
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
+      const { findLegacyLinks, retirableFiles } = require('./lib/install/apply');
+      plan.legacyLinks = findLegacyLinks(plan);
+      // The same test the apply runs: a file the person replaced is not
+      // listed, because it would not be removed.
+      plan.retirements = retirableFiles(plan);
       emitDryRunPlan(options, plan);
       return;
     }

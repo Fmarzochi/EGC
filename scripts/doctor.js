@@ -7,6 +7,8 @@ const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
 const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
 const { parseTargetArgs } = require('./lib/cli-target-args');
+const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
+const { findPlaintextStateFiles } = require('./lib/state-plaintext');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
 // egc doctor (a project folder, a global npm install on Windows), and a
@@ -143,7 +145,40 @@ function checkStateDb(homeDir) {
   }
   // One predictable shape for --json consumers no matter which condition
   // fired.
-  return { missing, dbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
+  return { missing, dbPath, canonicalDbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
+}
+
+const PLAINTEXT_STATE_SHOWN = 5;
+// Absolute for the same reason as CONSOLIDATE_SCRIPT: the hint must run as
+// pasted from wherever doctor was invoked.
+const ENCRYPT_SCRIPT = path.join(__dirname, 'maintenance', 'encrypt-plaintext-state.js');
+
+function checkPlaintextState(homeDir) {
+  const report = findPlaintextStateFiles(homeDir);
+  if (report.count === 0) return null;
+  return { ...report, encryptCommand: `node ${shellQuote(ENCRYPT_SCRIPT)}` };
+}
+
+function printPlaintextStateReport(report) {
+  const noun = report.checked === 1 ? 'file' : 'files';
+  const verb = report.count === 1 ? 'is' : 'are';
+  console.log('\nState files:');
+  console.log(`  WARNING: ${report.count} of ${report.checked} state ${noun} under ${report.stateDir} ${verb} plain text:`);
+  for (const file of report.files.slice(0, PLAINTEXT_STATE_SHOWN)) {
+    const lastWrite = file.modifiedAt ? ` (last write ${file.modifiedAt})` : '';
+    console.log(`    ${file.path}${lastWrite}`);
+  }
+  if (report.count > PLAINTEXT_STATE_SHOWN) {
+    console.log(`    and ${report.count - PLAINTEXT_STATE_SHOWN} more`);
+  }
+  console.log('  EGC has encrypted state at rest since 1.1.6. A plain file predates that, was');
+  console.log('  saved by the EGC hooks before 1.1.18, or was written straight to disk by an');
+  console.log('  AI tool that has no egc-memory server registered. Either way anything on');
+  console.log('  this machine can read it. Encrypt them in place (dry run by default) with:');
+  console.log(`    ${report.encryptCommand}`);
+  console.log('  Review the list, then run the same command with --apply at the end. If a');
+  console.log('  tool wrote one by hand, also run `egc init` in that project so the tool');
+  console.log('  gets the server.');
 }
 
 function printStateStoreReport(stateDb) {
@@ -157,7 +192,8 @@ function printStateStoreReport(stateDb) {
     console.log(`    ${stateDb.dbPath}`);
     console.log('  It belongs in the shared ~/.egc store; in a harness directory its');
     console.log('  history is invisible to the rest of EGC. Consolidate it with:');
-    console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
+    console.log(`    ${consolidateCommand(CONSOLIDATE_SCRIPT, [stateDb.dbPath], stateDb.canonicalDbPath)}`);
+    console.log('  Review the dry run, then run the same command with --apply at the end.');
   }
   if (stateDb.fragments.length > 0) {
     const plural = stateDb.fragments.length === 1 ? 'copy' : 'copies';
@@ -167,7 +203,8 @@ function printStateStoreReport(stateDb) {
     }
     console.log('  Nothing is lost, but new sessions no longer write there. Consolidate');
     console.log('  them into the main store (dry-run by default) with:');
-    console.log(`    node "${CONSOLIDATE_SCRIPT}"`);
+    console.log(`    ${consolidateCommand(CONSOLIDATE_SCRIPT, stateDb.fragments.map(fragment => fragment.path), stateDb.canonicalDbPath)}`);
+    console.log('  Review the dry run, then run the same command with --apply at the end.');
   }
   if (stateDb.hasHarnessDb && !stateDb.hasMemoryDb) {
     // "Nothing to do." only when no warning printed above it in this
@@ -203,13 +240,17 @@ function main() {
     // run. Exit 1 is reserved for real failures so scripts and CI can trust it.
     const hasFailures = report.summary.errorCount > 0;
     const stateDb = checkStateDb(homeDir);
+    const plaintextState = checkPlaintextState(homeDir);
 
     if (options.json) {
-      const out = stateDb ? { ...report, stateDb } : report;
+      const out = { ...report };
+      if (stateDb) out.stateDb = stateDb;
+      if (plaintextState) out.plaintextStateFiles = plaintextState;
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman(report);
       if (stateDb) printStateStoreReport(stateDb);
+      if (plaintextState) printPlaintextStateReport(plaintextState);
     }
 
     process.exitCode = hasFailures ? 1 : 0;

@@ -601,6 +601,7 @@ function buildInstallPlanResult({
     installStatePath: scaffoldPlan ? scaffoldPlan.installStatePath : null,
     validationIssues: scaffoldPlan ? scaffoldPlan.validationIssues : [],
     operations: scaffoldPlan ? scaffoldPlan.operations : [],
+    retirements: scaffoldPlan ? (scaffoldPlan.retirements || []) : [],
   };
 }
 

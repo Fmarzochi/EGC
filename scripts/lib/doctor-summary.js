@@ -57,17 +57,41 @@ function issueLines(results) {
   return lines;
 }
 
+// The merge script refuses to run without at least one --source, and its
+// default canonical store follows the same directory resolution that put a
+// copy in the wrong place to begin with. The doctor already knows every path
+// involved, so the printed command carries all of them: it runs as pasted
+// (dry-run by default) from any shell and any cwd (#1389).
+// A path pasted into a POSIX shell inside double quotes still goes through
+// $(...) and backtick substitution, so the hint single-quotes it there (the
+// only character that needs care inside single quotes is the quote itself).
+// cmd.exe has no single quotes, so Windows keeps double quotes.
+function shellQuote(value, platform = process.platform) {
+  if (platform === 'win32') return `"${value}"`;
+  const escaped = String(value).replaceAll("'", String.raw`'\''`);
+  return `'${escaped}'`;
+}
+
+function consolidateCommand(scriptPath, sourcePaths, canonicalPath, platform = process.platform) {
+  const parts = [`node ${shellQuote(scriptPath, platform)}`];
+  if (canonicalPath) parts.push(`--canonical ${shellQuote(canonicalPath, platform)}`);
+  for (const sourcePath of sourcePaths) parts.push(`--source ${shellQuote(sourcePath, platform)}`);
+  return parts.join(' ');
+}
+
 function stateStoreNotes(stateDb, repoRoot) {
   if (!stateDb) return [];
   const notes = [];
-  const consolidate = `node "${path.join(repoRoot, 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js')}"`;
+  const script = path.join(repoRoot, 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js');
   if (stateDb.missing) {
     notes.push(`state store not found at ${stateDb.dbPath}; run egc init again`);
   }
   if (stateDb.cliStoreMisplaced) {
+    const consolidate = consolidateCommand(script, [stateDb.dbPath], stateDb.canonicalDbPath);
     notes.push(`the CLI event store landed in a harness directory (${stateDb.dbPath}); consolidate it with: ${consolidate}`);
   }
   if (Array.isArray(stateDb.fragments) && stateDb.fragments.length > 0) {
+    const consolidate = consolidateCommand(script, stateDb.fragments.map(fragment => fragment.path), stateDb.canonicalDbPath);
     notes.push(`${pluralize(stateDb.fragments.length, 'stray state.db copy', 'stray state.db copies')} left by older versions; consolidate with: ${consolidate}`);
   }
   return notes;
@@ -210,4 +234,4 @@ function summarizeRepairResult(result) {
   };
 }
 
-module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName };
+module.exports = { summarizeDoctorReport, summarizeRepairResult, describeIssue, targetName, consolidateCommand, shellQuote };

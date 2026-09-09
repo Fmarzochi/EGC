@@ -109,6 +109,10 @@ function planInstallTargetScaffold(options = {}) {
     ...planningInput,
     modules,
   });
+  const retirements = adapter.planRetirements({
+    ...planningInput,
+    modules,
+  });
 
   return {
     adapter: {
@@ -120,6 +124,7 @@ function planInstallTargetScaffold(options = {}) {
     installStatePath,
     validationIssues,
     operations,
+    retirements,
   };
 }
 

@@ -5,7 +5,7 @@
 
 const assert = require('assert');
 const path = require('path');
-const { summarizeDoctorReport, summarizeRepairResult, targetName } = require('../../scripts/lib/doctor-summary');
+const { summarizeDoctorReport, summarizeRepairResult, targetName, consolidateCommand, shellQuote } = require('../../scripts/lib/doctor-summary');
 
 let passed = 0;
 let failed = 0;
@@ -182,7 +182,45 @@ test('state store findings become notes with the consolidation command, and down
   assert.strictEqual(summary.notes.length, 1);
   assert.ok(summary.notes[0].startsWith('1 stray state.db copy left by older versions'));
   assert.ok(summary.notes[0].includes(path.join('/repo', 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js')));
+  assert.ok(summary.notes[0].includes(`--source ${shellQuote('/home/user/.claude/egc/state.db')}`), 'the note must name the copy the script has to read');
   assert.deepStrictEqual(summary.commands, []);
+});
+
+test('the consolidation command carries the canonical store and one --source per copy, quoted for any shell', () => {
+  const script = path.join('/repo', 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js');
+  const canonical = '/srv/egc-home/egc/state.db';
+  const windowsCopy = String.raw`C:\Users\comp\.gemini\egc\state.db`;
+  const two = consolidateCommand(script, ['/home/user/.claude/egc/state.db', windowsCopy], canonical, 'win32');
+  assert.strictEqual(
+    two,
+    `node "${script}" --canonical "${canonical}" --source "/home/user/.claude/egc/state.db" --source "${windowsCopy}"`,
+    'cmd.exe has no single quotes, so Windows keeps double quotes'
+  );
+  const posix = consolidateCommand(script, ['/x/state.db'], canonical, 'linux');
+  assert.strictEqual(posix, `node '${script}' --canonical '${canonical}' --source '/x/state.db'`, 'a POSIX shell gets single quotes, which substitute nothing');
+  const bare = consolidateCommand(script, ['/x/state.db'], undefined, 'win32');
+  assert.strictEqual(bare, `node "${script}" --source "/x/state.db"`, 'without a known canonical the script keeps its own default');
+});
+
+test('shellQuote keeps a hostile path literal on POSIX and leaves Windows on double quotes', () => {
+  const hostile = '/opt/$(touch pwned)/`id`/egc';
+  assert.strictEqual(shellQuote(hostile, 'linux'), `'${hostile}'`, 'inside single quotes neither $() nor backticks run');
+  assert.strictEqual(shellQuote(hostile, 'darwin'), `'${hostile}'`);
+  assert.strictEqual(shellQuote("/home/o'neil/.egc", 'linux'), String.raw`'/home/o'\''neil/.egc'`, 'a quote inside the path closes, escapes and reopens');
+  assert.strictEqual(shellQuote(String.raw`C:\Users\comp\egc`, 'win32'), String.raw`"C:\Users\comp\egc"`);
+  assert.strictEqual(shellQuote('/plain/path'), shellQuote('/plain/path', process.platform), 'the default platform is the running one');
+});
+
+test('a misplaced CLI store is consolidated from its own path into the canonical store', () => {
+  const canonical = '/srv/egc-home/egc/state.db';
+  const stateDb = {
+    missing: false, dbPath: '/home/user/.gemini/egc/state.db', canonicalDbPath: canonical,
+    memoryDbPath: '/srv/egc-home/memory/state.db', hasHarnessDb: true, hasMemoryDb: true, cliStoreMisplaced: true, fragments: [],
+  };
+  const summary = summarizeDoctorReport(report(TWELVE, { stateDb }), { repoRoot: '/repo' });
+  assert.strictEqual(summary.notes.length, 1);
+  assert.ok(summary.notes[0].includes(`--canonical ${shellQuote(canonical)}`));
+  assert.ok(summary.notes[0].includes(`--source ${shellQuote('/home/user/.gemini/egc/state.db')}`));
 });
 
 test('a healthy two-store layout adds no note', () => {

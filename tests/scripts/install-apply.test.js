@@ -396,6 +396,111 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('lists the egc-universal package files an earlier OpenCode install wrote in the dry run and retires them on apply (#1396)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    try {
+      const configDir = path.join(homeDir, '.config', 'opencode');
+      const statePath = path.join(configDir, 'egc', 'install-state.json');
+      const repoRoot = path.join(__dirname, '..', '..');
+      fs.mkdirSync(path.join(configDir, 'tools'), { recursive: true });
+      // The bytes EGC copied there, and one file the person edited since.
+      fs.copyFileSync(path.join(repoRoot, '.opencode', 'tools', 'index.ts'), path.join(configDir, 'tools', 'index.ts'));
+      fs.copyFileSync(path.join(repoRoot, '.opencode', 'package.json'), path.join(configDir, 'package.json'));
+      fs.writeFileSync(path.join(configDir, 'tools', 'run-tests.ts'), 'edited by hand');
+      fs.writeFileSync(path.join(configDir, 'opencode.json'), JSON.stringify({ model: 'mine/model' }));
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      const previous = [
+        ['.opencode/tools/index.ts', path.join(configDir, 'tools', 'index.ts')],
+        ['.opencode/tools/run-tests.ts', path.join(configDir, 'tools', 'run-tests.ts')],
+        ['.opencode/package.json', path.join(configDir, 'package.json')],
+        ['.opencode/opencode.json', path.join(configDir, 'opencode.json')],
+      ];
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'opencode-home' },
+        targetRoot: configDir,
+        installStatePath: statePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: previous.map(([sourceRelativePath, destinationPath]) => ({ kind: 'copy-file', moduleId: 'platform-configs', sourceRelativePath, destinationPath, strategy: 'sync-root-children', ownership: 'managed', scaffoldOnly: false })),
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+
+      const dryRun = run(['--target', 'opencode', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+      assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+      assert.ok(dryRun.stdout.includes('Files to retire'), dryRun.stdout);
+      assert.ok(dryRun.stdout.includes(`- ${path.join(configDir, 'tools', 'index.ts')}`));
+      assert.ok(dryRun.stdout.includes(`- ${path.join(configDir, 'package.json')}`));
+      assert.ok(!dryRun.stdout.includes(`- ${path.join(configDir, 'opencode.json')}`), 'opencode.json is never retired');
+      assert.ok(!dryRun.stdout.includes(`- ${path.join(configDir, 'tools', 'run-tests.ts')}`), 'the dry run does not list the file the person edited, because the apply keeps it');
+      const dryJson = run(['--target', 'opencode', '--profile', 'minimal', '--dry-run', '--allow-undetected', '--json'], { cwd: projectDir, homeDir });
+      assert.deepStrictEqual(JSON.parse(dryJson.stdout).plan.retirements.map(entry => entry.destinationPath).sort(), [path.join(configDir, 'package.json'), path.join(configDir, 'tools', 'index.ts')].sort(), 'the JSON dry run lists exactly what the apply removes');
+      assert.ok(fs.existsSync(path.join(configDir, 'tools', 'index.ts')), 'the dry run touches nothing');
+      assert.ok(!dryRun.stdout.includes('.opencode/tools/'), 'the tools are not planned any more');
+      assert.ok(!dryRun.stdout.includes('.opencode/opencode.json'), 'the package opencode.json is not planned any more');
+
+      const applied = run(['--target', 'opencode', '--profile', 'minimal', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.strictEqual(applied.code, 0, applied.stderr);
+      assert.ok(applied.stdout.includes(`retired file: ${path.join(configDir, 'tools', 'index.ts')}`), applied.stdout);
+      assert.ok(!fs.existsSync(path.join(configDir, 'tools', 'index.ts')), 'the file EGC wrote is gone');
+      assert.strictEqual(fs.readFileSync(path.join(configDir, 'tools', 'run-tests.ts'), 'utf8'), 'edited by hand', 'the file the person edited stays');
+      assert.ok(!fs.existsSync(path.join(configDir, 'package.json')));
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(configDir, 'opencode.json'), 'utf8')), { model: 'mine/model' }, 'the person\'s opencode.json is untouched');
+      assert.ok(fs.existsSync(path.join(configDir, 'plugins', 'opencode-egc-plugin.js')), 'the real plugin is installed');
+
+      const again = run(['--target', 'opencode', '--profile', 'minimal', '--allow-undetected', '--json'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.deepStrictEqual(JSON.parse(again.stdout).result.retiredFiles, [], 'nothing left to retire');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+  if (process.platform !== 'win32') {
+    if (test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      try {
+        // Find a skill the egc target installs, from the plan itself.
+        const planned = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+        assert.strictEqual(planned.code, 0, planned.stderr);
+        const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+        const match = planned.stdout.split('\n').map(line => line.trim()).find(line => line.includes(cliSkills));
+        assert.ok(match, 'the plan writes Antigravity CLI skills');
+        const skill = path.relative(cliSkills, match.slice(match.indexOf(cliSkills))).split(path.sep)[0];
+        // The June layout: the skill under the Antigravity CLI is a link into
+        // the Gemini home copy.
+        const managed = path.join(homeDir, '.gemini', 'skills', 'egc', skill);
+        fs.mkdirSync(managed, { recursive: true });
+        fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        // Gated on platform above, like the other link tests in this file:
+        // a link that cannot be created fails loudly instead of passing.
+        fs.symlinkSync(managed, path.join(cliSkills, skill), 'dir');
+
+        const dryRun = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+        assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+        assert.ok(dryRun.stdout.includes('Legacy links to migrate'), dryRun.stdout);
+        assert.ok(dryRun.stdout.includes(`- ${path.join(cliSkills, skill)} (pointed at `), 'the link is listed with its target');
+        assert.ok(fs.lstatSync(path.join(cliSkills, skill)).isSymbolicLink(), 'the dry run touches nothing');
+        const json = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected', '--json'], { cwd: projectDir, homeDir });
+        assert.strictEqual(JSON.parse(json.stdout).plan.legacyLinks.length, 1, 'the JSON plan carries the list');
+
+        const applied = run(['--target', 'egc', '--profile', 'minimal', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+        assert.strictEqual(applied.code, 0, applied.stderr);
+        assert.ok(applied.stdout.includes(`migrated legacy link: ${path.join(cliSkills, skill)} (pointed at `), applied.stdout);
+        assert.ok(fs.lstatSync(path.join(cliSkills, skill)).isDirectory(), 'the link became a real directory');
+        assert.ok(fs.existsSync(path.join(cliSkills, skill, 'SKILL.md')), 'with the real file inside');
+        assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8').length > 0, true, 'the copy it pointed at is still there');
+
+        const again = run(['--target', 'egc', '--profile', 'minimal', '--allow-undetected', '--json'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+        assert.deepStrictEqual(JSON.parse(again.stdout).result.migratedLegacyLinks, [], 'nothing left to migrate');
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+      }
+    })) passed++; else failed++;
+  }
+
   if (test('supports manifest profile dry-runs through the installer', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

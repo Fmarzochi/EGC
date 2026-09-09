@@ -40,6 +40,70 @@ If you prefer not to change your Node installation, the alternative is to [confi
 
 ---
 
+## `EBUSY: resource busy or locked` during `npm install -g` on Windows
+
+**Symptom:** `npm install -g @egchq/egc@latest` fails while EGC is already installed:
+
+```
+npm error code EBUSY
+npm error syscall rename
+npm error path C:\Users\<you>\AppData\Roaming\npm\node_modules\@egchq\egc\dashboard
+npm error errno -4082
+npm error EBUSY: resource busy or locked, rename '...\@egchq\egc\dashboard' -> '...\@egchq\.egc-XXXXXXXX\dashboard'
+```
+
+**Cause:** npm upgrades a global package by renaming the old package folder aside before unpacking the new one. Windows refuses to rename a folder while any process holds a file inside it. The usual holders are an AI tool that is running the EGC MCP servers (`egc-memory` and `egc-guardian` live inside that package) and a terminal where an EGC hook is running.
+
+**Fix:** close the AI tools and terminals that run EGC, then run the install again:
+
+```powershell
+npm install -g @egchq/egc@latest
+egc auto-update
+egc doctor
+```
+
+If the lock does not clear, a reboot releases it. Nothing needs to be uninstalled first: `egc auto-update` reinstalls the new version into every managed target and `egc doctor` confirms the result.
+
+---
+
+## `egc doctor` says some state files are plain text
+
+**Symptom:** the doctor report ends with a `State files` section:
+
+```
+State files:
+  WARNING: 3 of 41 state files under /home/<you>/.egc/state are plain text:
+    /home/<you>/.egc/state/Projetos--demo.md (last write 2026-06-10T05:32:05.652Z)
+    ...
+```
+
+**Cause:** EGC has encrypted state at rest since 1.1.6, but three kinds of file were left in plain text: files written before that release, files the EGC hooks saved before 1.1.18 (the compaction snapshot and the mined memory were written without encrypting), and files an AI tool wrote straight to disk because it had no `egc-memory` server registered and followed the old protocol text to the path. The memory server reads all of them and encrypts a file the next time it saves it, but a file for a project or branch that is never opened again stays plain, readable by anything running on the machine.
+
+**Fix:** encrypt them in place with the maintenance script. The doctor prints the exact command, with the absolute path of the script inside the installed package, right under the list; on Linux it looks like this:
+
+```bash
+node '/usr/lib/node_modules/@egchq/egc/scripts/maintenance/encrypt-plaintext-state.js'
+```
+
+Run it as printed: without `--apply` it is a dry run that lists what it would encrypt and writes nothing. Review the list, then run the same command with `--apply` at the end. Each file is encrypted with the same key the server uses, proven to decrypt back in memory before anything is written, rewritten atomically with its integrity sidecar, and read back from disk before it counts; if that read-back or the sidecar fails, the plain content is put back and the file is reported as failed. A file that stopped being a plain regular file in between (already encrypted by the server, replaced by something else) is skipped and reported. Run `egc doctor` again: the section is gone. If a tool wrote one of those files by hand, also run `egc init` in that project so the tool gets the memory server instead of the filesystem.
+
+---
+
+## OpenCode stops responding on every request after installing EGC
+
+Installs made with EGC 1.1.21 or earlier copied the whole `egc-universal` package into `~/.config/opencode/` (on Windows `%USERPROFILE%\.config\opencode\`). OpenCode imports every file under `tools/` and `plugins/` in that directory when it starts, the copied TypeScript sources fail to load, and every prompt dies before an answer comes back (#1396). The same copy left a `package.json` there, which makes OpenCode's own background dependency install fail, and replaced your `opencode.json` with EGC's.
+
+**Fix:** update EGC and run `egc install --target opencode --profile full` (or `egc auto-update`). The installer removes the package files it wrote earlier and reports each one as `retired file`; `egc install --target opencode --dry-run` lists them first under `Files to retire`. Your `opencode.json` is left as it is: if EGC overwrote it, restore your own model, permission and plugin settings by hand.
+
+**Without updating:** inside `~/.config/opencode/`, remove `tools/`, `dist/`, `plugins/egc-hooks.ts`, `plugins/index.ts`, `plugins/lib/`, `index.ts`, `package.json`, `package-lock.json`, `tsconfig.json`, `.npmignore`, `README.md` and `MIGRATION.md`; keep `plugins/opencode-egc-plugin.js`, `commands/`, `instructions/`, `prompts/`, `skills/`, `scripts/`, `hooks/` and `egc/`.
+## `Refusing to write through a symbolic link` during `egc install` or `egc auto-update`
+
+The installer never writes through a link below a target root: a link at the destination, or a linked directory above it, stops the install before anything changes. Two cases look the same and are handled differently.
+
+**A link EGC made.** Machines set up before 10 June 2026 have the Antigravity CLI skills as links, one per skill under `~/.gemini/antigravity-cli/skills/`, each pointing into `~/.gemini/skills/egc/`, the copy EGC installs for the Gemini home. Since the fix for #1400 the installer recognises that layout and migrates it on its own: the link is removed and the real files are written in its place, reported as `migrated legacy link` in the output (`egc install --dry-run` lists the links it would migrate first, under `Legacy links to migrate`). Nothing to do beyond running the install again.
+
+**Any other link.** A link that resolves anywhere else, a link at the destination itself, or a dangling link keeps the refusal. The installer does not know who made it, so it leaves it alone. Remove the link yourself (or point the install elsewhere) and run the install again.
+
 ## Node.js version conflict with mise / asdf (multiple Node installations)
 
 **Symptom:** `egc auto-update` fails with a confusing git error, or `egc` reports version issues even though it is already up to date. Common when using [mise](https://mise.jdx.dev) or [asdf](https://asdf-vm.com) with multiple Node versions.

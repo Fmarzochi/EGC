@@ -21,6 +21,7 @@ const {
   writeInstallState,
 } = require('../../scripts/lib/install-state');
 const { getEGCDir } = require('../../scripts/lib/utils');
+const { shellQuote } = require('../../scripts/lib/doctor-summary');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -668,7 +669,47 @@ function runTests() {
       assert.ok(result.stdout.includes('1 stray state.db copy'));
       assert.ok(result.stdout.includes(strayPath));
       const consolidateScript = path.join(__dirname, '..', '..', 'scripts', 'maintenance', 'merge-fragmented-state-dbs.js');
-      assert.ok(result.stdout.includes(`node "${consolidateScript}"`), 'must point at the consolidation script by absolute path, runnable from any cwd');
+      assert.ok(result.stdout.includes(`node ${shellQuote(consolidateScript)}`), 'must point at the consolidation script by absolute path, runnable from any cwd');
+      const canonicalDb = path.join(homeDir, '.egc', 'egc', 'state.db');
+      assert.ok(
+        result.stdout.includes(`node ${shellQuote(consolidateScript)} --canonical ${shellQuote(canonicalDb)} --source ${shellQuote(strayPath)}`),
+        'the hint must run as pasted: the script exits with its usage text when no --source is given (#1389)'
+      );
+      assert.ok(result.stdout.includes('with --apply at the end'), 'the person must learn how to turn the dry run into a write');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('names every stray copy as its own --source when more than one is left behind', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const egcDir = computeEGCDirForHome(homeDir);
+      fs.mkdirSync(path.join(egcDir, 'egc'), { recursive: true });
+      fs.mkdirSync(path.join(egcDir, 'memory'), { recursive: true });
+      fs.writeFileSync(path.join(egcDir, 'egc', 'state.db'), '');
+      fs.writeFileSync(path.join(egcDir, 'memory', 'state.db'), '');
+      const strays = [
+        path.join(homeDir, '.gemini', 'egc', 'state.db'),
+        path.join(homeDir, '.config', 'opencode', 'egc', 'state.db'),
+      ];
+      for (const stray of strays) {
+        fs.mkdirSync(path.dirname(stray), { recursive: true });
+        fs.writeFileSync(stray, 'stale-bytes');
+      }
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('2 stray state.db copies'));
+      const hint = result.stdout.split('\n').find(line => line.includes('merge-fragmented-state-dbs.js'));
+      assert.ok(hint, 'the consolidation hint must be printed');
+      for (const stray of strays) {
+        assert.ok(hint.includes(`--source ${shellQuote(stray)}`), `the hint must carry --source for ${stray}`);
+      }
+      assert.strictEqual(hint.split('--source ').length - 1, strays.length, 'one --source per copy, nothing else');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
@@ -718,6 +759,10 @@ function runTests() {
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('WARNING: the CLI event store landed in a harness directory'));
       assert.ok(result.stdout.includes(misplacedDb));
+      assert.ok(
+        result.stdout.includes(`--canonical ${shellQuote(canonicalDb)} --source ${shellQuote(misplacedDb)}`),
+        'the misplaced store is the source and the shared store the explicit destination, since the default resolution is what misplaced it'
+      );
       assert.ok(!result.stdout.includes(`${canonicalDb} (`), 'the canonical ~/.egc store must never be listed as a stray copy');
     } finally {
       cleanup(homeDir);
@@ -733,7 +778,7 @@ function runTests() {
       const result = run(['--json'], { cwd: projectRoot, homeDir });
       const parsed = JSON.parse(result.stdout);
       assert.ok(parsed.stateDb, 'missing stores must still produce a stateDb block');
-      for (const key of ['missing', 'dbPath', 'memoryDbPath', 'hasHarnessDb', 'hasMemoryDb', 'cliStoreMisplaced', 'fragments']) {
+      for (const key of ['missing', 'dbPath', 'canonicalDbPath', 'memoryDbPath', 'hasHarnessDb', 'hasMemoryDb', 'cliStoreMisplaced', 'fragments']) {
         assert.ok(Object.hasOwn(parsed.stateDb, key), `stateDb must always carry ${key}`);
       }
       assert.strictEqual(parsed.stateDb.missing, true);
@@ -757,6 +802,140 @@ function runTests() {
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('OK: the MCP memory store appears after your first session saves state'));
       assert.ok(!result.stdout.includes('WARNING: the CLI event store'), 'a store in the right place must not trigger the misplacement warning');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('warns about plain-text state files and lists them with the encryption guidance', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(path.join(stateDir, 'Projetos--demo'), { recursive: true });
+      const flatPlain = path.join(stateDir, 'Projetos--demo.md');
+      const branchPlain = path.join(stateDir, 'Projetos--demo', 'main.md');
+      fs.writeFileSync(flatPlain, '# Project State\nproject: /srv/demo\n');
+      fs.writeFileSync(branchPlain, '# Project State\nbranch: main\n');
+      fs.writeFileSync(path.join(stateDir, 'Projetos--sealed.md'), Buffer.concat([Buffer.from('EGC1:'), Buffer.alloc(40, 7)]));
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('State files:'));
+      assert.ok(result.stdout.includes(`WARNING: 2 of 3 state files under ${stateDir} are plain text:`));
+      assert.ok(result.stdout.includes(flatPlain));
+      assert.ok(result.stdout.includes(branchPlain));
+      assert.ok(!result.stdout.includes('Projetos--sealed.md'), 'an encrypted file is not a finding');
+      assert.ok(result.stdout.includes('run `egc init` in that project'), 'the person must learn what to do about a file a tool wrote by hand');
+      assert.ok(!result.stdout.includes('and 0 more'));
+
+      const json = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+      assert.strictEqual(json.plaintextStateFiles.count, 2);
+      assert.strictEqual(json.plaintextStateFiles.checked, 3);
+      assert.deepStrictEqual(json.plaintextStateFiles.files.map(file => file.path).sort(), [flatPlain, branchPlain].sort());
+      assert.ok(json.plaintextStateFiles.files.every(file => typeof file.modifiedAt === 'string'));
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('stays silent about state files when every one is encrypted, empty, archived, or behind a link', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+    const outside = createTempDir('doctor-outside-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(path.join(stateDir, 'archive'), { recursive: true });
+      fs.mkdirSync(path.join(stateDir, 'Projetos--demo'), { recursive: true });
+      fs.writeFileSync(path.join(stateDir, 'Projetos--demo', 'main.md'), Buffer.concat([Buffer.from('EGC1:'), Buffer.alloc(40, 7)]));
+      fs.writeFileSync(path.join(stateDir, 'Projetos--empty.md'), '');
+      fs.writeFileSync(path.join(stateDir, 'archive', 'old.md'), '# Project State\narchived copy\n');
+      fs.writeFileSync(path.join(stateDir, 'budget-usage.json'), '{}');
+      // A project directory this process cannot list is not a crash and
+      // not a finding (root and privileged containers can still list it).
+      const sealedDir = path.join(stateDir, 'Projetos--sealed-dir');
+      fs.mkdirSync(sealedDir);
+      fs.writeFileSync(path.join(sealedDir, 'main.md'), '# Project State\nhidden\n');
+      if (process.platform !== 'win32') fs.chmodSync(sealedDir, 0o000);
+      const plantedTarget = path.join(outside, 'secret.md');
+      fs.writeFileSync(plantedTarget, '# not state\n');
+      try {
+        fs.symlinkSync(plantedTarget, path.join(stateDir, 'planted.md'));
+      } catch {
+        // Symlink creation needs a privilege on some Windows setups; the
+        // rest of the test still proves the archive and empty cases.
+      }
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const canListSealed = (() => { try { fs.readdirSync(sealedDir); return true; } catch { return false; } })();
+      if (canListSealed) {
+        assert.ok(result.stdout.includes('Projetos--sealed-dir'), 'a privileged process lists the sealed directory like any other');
+      } else {
+        assert.ok(!result.stdout.includes('State files:'), 'nothing plain means no section at all');
+        const json = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+        assert.strictEqual(json.plaintextStateFiles, undefined);
+      }
+    } finally {
+      try { fs.chmodSync(path.join(homeDir, '.egc', 'state', 'Projetos--sealed-dir'), 0o700); } catch { /* already gone */ }
+      cleanup(homeDir);
+      cleanup(projectRoot);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (test('never blocks on a FIFO planted as a state file and skips a file it cannot open', () => {
+    if (process.platform === 'win32') return;
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(stateDir, { recursive: true });
+      execFileSync('mkfifo', [path.join(stateDir, 'pipe.md')]);
+      const sealedOff = path.join(stateDir, 'sealed-off.md');
+      fs.writeFileSync(sealedOff, '# Project State\nunreadable\n');
+      fs.chmodSync(sealedOff, 0o000);
+      const plain = path.join(stateDir, 'plain.md');
+      fs.writeFileSync(plain, '# Project State\nreadable\n');
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+      const expected = asRoot ? 2 : 1;
+      // The pipe is not a regular file, so the listing never counts it; the
+      // sealed file is listed but cannot be opened, so it is not a finding.
+      assert.ok(result.stdout.includes(`WARNING: ${expected} of 2 state files under ${stateDir} ${expected === 1 ? 'is' : 'are'} plain text:`), `unexpected report: ${result.stdout}`);
+      assert.ok(result.stdout.includes(plain));
+      assert.ok(!result.stdout.includes('pipe.md'));
+    } finally {
+      try { fs.chmodSync(path.join(homeDir, '.egc', 'state', 'sealed-off.md'), 0o600); } catch { /* already gone */ }
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('caps the plain-text listing and counts the rest', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      fs.mkdirSync(stateDir, { recursive: true });
+      for (let index = 0; index < 7; index++) {
+        fs.writeFileSync(path.join(stateDir, `project-${index}.md`), `# Project State ${index}\n`);
+      }
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('WARNING: 7 of 7 state files'));
+      assert.ok(result.stdout.includes('    and 2 more'));
+      const listed = result.stdout.split('\n').filter(line => /project-\d\.md \(last write /.test(line));
+      assert.strictEqual(listed.length, 5, 'five paths shown, the rest summarised');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
