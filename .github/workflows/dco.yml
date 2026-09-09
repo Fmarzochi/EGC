@@ -31,6 +31,11 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           missing=0
+          # Merge commits (two or more parents) carry no authored content:
+          # they only join histories already checked here, and the ones
+          # GitHub creates through "Update branch" never carry a sign-off
+          # nobody can add. They are skipped, the way the reference DCO app
+          # skips them; every other commit still needs its Signed-off-by.
           while IFS= read -r sha; do
             body=$(git log -1 --format="%B" "$sha")
             if ! echo "$body" | grep -qE "^Signed-off-by: .+ <.+>$"; then
@@ -38,7 +43,7 @@ jobs:
               echo "::warning::Commit $sha ($author) is missing Signed-off-by"
               missing=1
             fi
-          done < <(git log --format="%H" "${BASE_SHA}..${HEAD_SHA}")
+          done < <(git log --no-merges --format="%H" "${BASE_SHA}..${HEAD_SHA}")
           echo "missing=$missing" >> "$GITHUB_OUTPUT"
           if [ "$missing" -eq 1 ]; then
             echo ""
