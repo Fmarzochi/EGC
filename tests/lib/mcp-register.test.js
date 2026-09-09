@@ -20,6 +20,8 @@ const {
   registerToml,
   registerContinueYaml,
   registerZedContextServers,
+  registerOpenCodeMcp,
+  openCodeConfigPath,
   registerClaudeCli,
   registerMcpServers,
 } = require('../../scripts/lib/mcp-register');
@@ -93,70 +95,161 @@ function runTests() {
     }
   }) ? passed++ : failed++);
 
-  (test('the Windows AppData OpenCode target follows APPDATA and only opens on win32', () => {
+  (test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
     const tmpHome = makeTempDir();
-    const savedPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-    const savedAppData = process.env.APPDATA;
-    const appData = path.join(tmpHome, 'AppData', 'Roaming');
-    const config = path.join(appData, 'opencode', 'config.json');
-    fs.mkdirSync(path.dirname(config), { recursive: true });
-    fs.writeFileSync(config, JSON.stringify({ mcpServers: {} }));
-    process.env.APPDATA = appData;
     try {
-      const target = () => buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenCode (Windows AppData)');
-      assert.strictEqual(target().path, config, 'the advertised path must come from APPDATA');
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenCode');
+      assert.strictEqual(target.path, path.join(dir, 'opencode.json'), 'the documented file name is used when creating');
+      assert.strictEqual(target.format, 'opencode-mcp');
+      assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
 
-      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-      assert.strictEqual(target().gate(), true, 'an existing AppData config on Windows must be registered');
-
-      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-      assert.strictEqual(target().gate(), false, 'the Windows-only target must never open elsewhere');
+      assert.strictEqual(registerOpenCodeMcp(target.path, bins), true);
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcp['egc-guardian'], { type: 'local', command: ['node', bins.guardianBin] });
+      assert.deepStrictEqual(written.mcp['egc-memory'], { type: 'local', command: ['node', bins.memoryBin] });
+      assert.strictEqual(written.mcpServers, undefined, 'the key OpenCode never reads must not be written');
+      assert.strictEqual(registerOpenCodeMcp(target.path, bins), false, 'a second run is a no-op');
     } finally {
-      if (savedPlatform) Object.defineProperty(process, 'platform', savedPlatform);
-      if (savedAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = savedAppData;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
 
-  (test('a fresh Windows OpenCode is routed to AppData, never to the XDG path', () => {
-    // Installed but never launched: neither config file exists, so only the
-    // PATH signal is available. Writing the XDG file on Windows would
-    // produce a config the editor never reads.
+  (test('OpenCode: an existing opencode.json keeps its other servers and keys', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'opencode.json');
+      fs.writeFileSync(file, JSON.stringify({
+        $schema: 'https://opencode.ai/config.json',
+        model: 'anthropic/claude',
+        mcp: { 'my-server': { type: 'remote', url: 'https://example.invalid/mcp' } },
+      }, null, 2));
+      assert.strictEqual(openCodeConfigPath(tmpHome), file);
+      assert.strictEqual(registerOpenCodeMcp(file, bins), true);
+      const written = JSON.parse(fs.readFileSync(file, 'utf8'));
+      assert.strictEqual(written.$schema, 'https://opencode.ai/config.json');
+      assert.strictEqual(written.model, 'anthropic/claude');
+      assert.deepStrictEqual(written.mcp['my-server'], { type: 'remote', url: 'https://example.invalid/mcp' });
+      assert.strictEqual(written.mcp['egc-guardian'].type, 'local');
+      assert.strictEqual(written.mcp['egc-memory'].command[1], bins.memoryBin);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('OpenCode: a legacy config.json written by an older EGC is used, and its dead mcpServers block is retired', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const legacy = path.join(dir, 'config.json');
+      fs.writeFileSync(legacy, JSON.stringify({
+        mcpServers: {
+          'egc-guardian': { command: 'node', args: [bins.guardianBin] },
+          'egc-memory': { command: 'node', args: [bins.memoryBin] },
+        },
+      }, null, 2));
+      assert.strictEqual(openCodeConfigPath(tmpHome), legacy, 'only the legacy file exists, so it is the one edited');
+      assert.strictEqual(registerOpenCodeMcp(legacy, bins), true);
+      const written = JSON.parse(fs.readFileSync(legacy, 'utf8'));
+      assert.strictEqual(written.mcpServers, undefined, 'the block OpenCode never read is gone');
+      assert.deepStrictEqual(Object.keys(written.mcp).sort(), ['egc-guardian', 'egc-memory']);
+      assert.ok(!fs.existsSync(path.join(dir, 'opencode.json')), 'no second file is created next to the legacy one');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('OpenCode: a foreign mcpServers block keeps its own entries, only ours are removed', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'opencode.json');
+      fs.writeFileSync(file, JSON.stringify({
+        mcpServers: { theirs: { command: 'x' }, 'egc-guardian': { command: 'node', args: ['old'] } },
+        mcp: { 'egc-memory': { type: 'local', command: ['node', '/kept/by/hand'] } },
+      }));
+      assert.strictEqual(registerOpenCodeMcp(file, bins), true);
+      const written = JSON.parse(fs.readFileSync(file, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers, { theirs: { command: 'x' } }, 'a block with other entries is not ours to delete');
+      assert.deepStrictEqual(written.mcp['egc-memory'].command, ['node', '/kept/by/hand'], 'an entry the person already has is never overwritten');
+      assert.strictEqual(written.mcp['egc-guardian'].command[1], bins.guardianBin);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('OpenCode: invalid mcp containers are refused and the file is left untouched', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const dir = path.join(tmpHome, '.config', 'opencode');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'opencode.json');
+      const original = JSON.stringify({ mcp: ['not', 'an', 'object'] });
+      fs.writeFileSync(file, original);
+      assert.throws(() => registerOpenCodeMcp(file, bins), /invalid mcp object/);
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), original);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('OpenCode: the same gate on every platform, no AppData target, PATH opens it for a never-launched install', () => {
     const tmpHome = makeTempDir();
     const binDir = makeTempDir();
+    // A PATH holding only an empty directory: the machine running the tests
+    // may have a real opencode installed, and the closed-gate assertion
+    // must not depend on that.
+    const emptyBinDir = makeTempDir();
     const savedPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const savedPath = process.env.PATH;
-    const savedAppData = process.env.APPDATA;
     const savedPathExt = process.env.PATHEXT;
-    // PATHEXT is pinned and the stand-in named to match it exactly: Windows
-    // itself is case-insensitive, but this assertion has to hold on the
-    // case-sensitive filesystem the tests actually run on.
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     process.env.PATHEXT = '.CMD';
     fs.writeFileSync(path.join(binDir, 'opencode.CMD'), '@echo off\r\n', { mode: 0o755 });
     fs.writeFileSync(path.join(binDir, 'opencode'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    process.env.PATH = `${binDir}${path.delimiter}${savedPath}`;
-    process.env.APPDATA = path.join(tmpHome, 'AppData', 'Roaming');
     try {
-      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-      const targets = buildMcpRegistrationTargets(tmpHome);
-      const appData = targets.find(t => t.name === 'OpenCode (Windows AppData)');
-      const xdg = targets.find(t => t.name === 'OpenCode');
-      assert.strictEqual(appData.gate(), true, 'the AppData target must open for a PATH-visible OpenCode on Windows');
-      assert.strictEqual(xdg.gate(), false, 'the XDG target must stay closed on Windows');
-
-      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-      const posixTargets = buildMcpRegistrationTargets(tmpHome);
-      assert.strictEqual(posixTargets.find(t => t.name === 'OpenCode').gate(), true, 'elsewhere the XDG target is the right one');
-      assert.strictEqual(posixTargets.find(t => t.name === 'OpenCode (Windows AppData)').gate(), false);
+      for (const platform of ['win32', 'linux', 'darwin']) {
+        Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+        process.env.PATH = emptyBinDir;
+        const targets = buildMcpRegistrationTargets(tmpHome);
+        assert.strictEqual(targets.filter(t => t.name.startsWith('OpenCode')).length, 1, `${platform}: one OpenCode target only`);
+        const target = targets.find(t => t.name === 'OpenCode');
+        assert.strictEqual(target.path, path.join(tmpHome, '.config', 'opencode', 'opencode.json'), `${platform}: OpenCode reads the same directory everywhere`);
+        assert.strictEqual(target.gate(), false, `${platform}: no directory and no binary keeps the gate closed`);
+        process.env.PATH = `${binDir}${path.delimiter}${emptyBinDir}`;
+        assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenCode').gate(), true, `${platform}: a PATH-visible opencode opens the gate`);
+      }
     } finally {
       if (savedPlatform) Object.defineProperty(process, 'platform', savedPlatform);
       process.env.PATH = savedPath;
-      if (savedAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = savedAppData;
       if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      if (savedXdg !== undefined) process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
       fs.rmSync(binDir, { recursive: true, force: true });
+      fs.rmSync(emptyBinDir, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
+
+  (test('OpenCode: XDG_CONFIG_HOME moves the directory, matching OpenCode\'s own resolution', () => {
+    const tmpHome = makeTempDir();
+    const xdg = makeTempDir();
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = xdg;
+    try {
+      assert.strictEqual(openCodeConfigPath(tmpHome), path.join(xdg, 'opencode', 'opencode.json'));
+    } finally {
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      fs.rmSync(xdg, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
 
   (test('a tool present on PATH but not yet configured is still registered', () => {
     // Someone who installed Cursor and has not launched it owns no ~/.cursor

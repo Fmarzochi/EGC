@@ -51,9 +51,13 @@ function fromMcpConfigs() {
     // fallback here either, for the same fail-open reason as Gemini CLI
     // above.
     path.join(os.homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json'),
-    // OpenCode's real MCP registration file (scripts/lib/mcp-register.js's
-    // "OpenCode" target) — same audit, same fail-open gap for a
-    // pure-OpenCode install.
+    // OpenCode's real MCP registration files (scripts/lib/mcp-register.js's
+    // "OpenCode" target): the documented opencode.json and the legacy
+    // config.json, both read by OpenCode from ~/.config/opencode on every
+    // platform. The servers live under the `mcp` key there, in OpenCode's
+    // own shape (#1405); the mcpServers shape below is the one every other
+    // JSON target uses.
+    path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
     path.join(os.homedir(), '.config', 'opencode', 'config.json'),
   ];
 
@@ -67,8 +71,11 @@ function fromMcpConfigs() {
   for (const configPath of configPaths) {
     try {
       const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const server = data?.mcpServers?.['egc-guardian'];
-      const args = Array.isArray(server?.args) ? server.args : [];
+      const server = data?.mcpServers?.['egc-guardian'] ?? data?.mcp?.['egc-guardian'];
+      // Every other target stores { command, args }; OpenCode stores the
+      // whole argv as { command: [...] }, so the array is read as the args.
+      const args = Array.isArray(server?.args) ? server.args
+        : Array.isArray(server?.command) ? server.command : [];
       // Compare against a fixed forward-slash suffix instead of building it
       // with path.join(), which bakes in the *running* OS's separator
       // ('\' on Windows). A config value stored with '/' (common even in
