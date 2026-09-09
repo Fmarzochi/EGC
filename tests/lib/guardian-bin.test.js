@@ -33,7 +33,12 @@ function createTempDir(prefix) {
 function withEnv(overrides, fn) {
   const saved = {};
   for (const key of Object.keys(overrides)) saved[key] = process.env[key];
-  Object.assign(process.env, overrides);
+  // An undefined override unsets the variable (assigning it would store the
+  // string "undefined").
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   try {
     return fn();
   } finally {
@@ -290,6 +295,34 @@ function main() {
     }
   });
 
+  run('resolves via opencode.json in OpenCode\'s own mcp shape', () => {
+    // #1405: OpenCode reads MCP servers from the `mcp` key as
+    // { type: "local", command: [...] }, which is what mcp-register now writes.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      fs.mkdirSync(path.join(fakeHome, '.config', 'opencode'), { recursive: true });
+      fs.writeFileSync(
+        path.join(fakeHome, '.config', 'opencode', 'opencode.json'),
+        JSON.stringify({
+          mcp: {
+            'egc-guardian': { type: 'local', command: ['node', path.join(installDir, 'index.js')] },
+          },
+        }),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome, XDG_CONFIG_HOME: undefined }, () => {
+        const { fromMcpConfigs } = freshGuardianBin();
+        const resolved = fromMcpConfigs();
+        assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   run('resolves via ~/.config/opencode/config.json on an OpenCode-only install', () => {
     // Same audit: OpenCode's real MCP registration file (scripts/lib/
     // mcp-register.js's "OpenCode" target) was never consulted either.
@@ -311,7 +344,7 @@ function main() {
         }),
       );
 
-      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome, XDG_CONFIG_HOME: undefined }, () => {
         const { fromMcpConfigs } = freshGuardianBin();
         const resolved = fromMcpConfigs();
         assert.strictEqual(resolved, path.join(installDir, 'guardian-cli.js'));
