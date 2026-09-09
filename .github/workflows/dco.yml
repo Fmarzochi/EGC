@@ -31,19 +31,25 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           missing=0
-          # Merge commits (two or more parents) carry no authored content:
-          # they only join histories already checked here, and the ones
-          # GitHub creates through "Update branch" never carry a sign-off
-          # nobody can add. They are skipped, the way the reference DCO app
-          # skips them; every other commit still needs its Signed-off-by.
+          # A merge commit GitHub itself creates ("Update branch" button or
+          # the update-branch API) joins histories already checked here,
+          # carries no authored content, and never carries a sign-off anyone
+          # can add: it is skipped. A merge commit a person made locally is
+          # theirs and is checked like any other, so `git merge -s` stays
+          # the rule for those.
           while IFS= read -r sha; do
+            parents=$(git log -1 --format="%P" "$sha" | wc -w)
+            committer=$(git log -1 --format="%ce" "$sha")
+            if [ "$parents" -ge 2 ] && [ "$committer" = "noreply@github.com" ]; then
+              continue
+            fi
             body=$(git log -1 --format="%B" "$sha")
             if ! echo "$body" | grep -qE "^Signed-off-by: .+ <.+>$"; then
               author=$(git log -1 --format="%an <%ae>" "$sha")
               echo "::warning::Commit $sha ($author) is missing Signed-off-by"
               missing=1
             fi
-          done < <(git log --no-merges --format="%H" "${BASE_SHA}..${HEAD_SHA}")
+          done < <(git log --format="%H" "${BASE_SHA}..${HEAD_SHA}")
           echo "missing=$missing" >> "$GITHUB_OUTPUT"
           if [ "$missing" -eq 1 ]; then
             echo ""
