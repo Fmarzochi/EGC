@@ -36,27 +36,31 @@ document as stored; --json parses it into header fields and the five sections.
 Exit codes: 0 printed, 1 usage or read error, 2 no memory for the scope,
 3 encrypted memory whose key is missing.`;
 
+// One entry per accepted flag: how to recognise it and what it sets.
+// `next` consumes the following argument as the flag's value.
+const OPTIONS = [
+  { matches: arg => arg === '--help' || arg === '-h', apply: opts => { opts.help = true; } },
+  { matches: arg => arg === '--json', apply: opts => { opts.json = true; } },
+  { matches: arg => arg === '--project' || arg === '-p', apply: (opts, next) => { opts.project = next('--project needs a path'); } },
+  { matches: arg => arg.startsWith('--project='), apply: (opts, next, arg) => { opts.project = arg.slice('--project='.length); } },
+  { matches: arg => arg === '--scope', apply: (opts, next) => { opts.scope = next('--scope needs project or global'); } },
+  { matches: arg => arg.startsWith('--scope='), apply: (opts, next, arg) => { opts.scope = arg.slice('--scope='.length); } },
+];
+
 function parseArgs(argv) {
   const opts = { project: null, scope: 'project', json: false, help: false };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--help' || arg === '-h') {
-      opts.help = true;
-    } else if (arg === '--json') {
-      opts.json = true;
-    } else if (arg === '--project' || arg === '-p') {
-      opts.project = argv[++i];
-      if (!opts.project) throw new Error('--project needs a path');
-    } else if (arg.startsWith('--project=')) {
-      opts.project = arg.slice('--project='.length);
-    } else if (arg === '--scope') {
-      opts.scope = argv[++i];
-      if (!opts.scope) throw new Error('--scope needs project or global');
-    } else if (arg.startsWith('--scope=')) {
-      opts.scope = arg.slice('--scope='.length);
-    } else {
-      throw new Error(`unknown argument: ${arg}`);
-    }
+  let index = 0;
+  const next = message => {
+    index += 1;
+    if (!argv[index]) throw new Error(message);
+    return argv[index];
+  };
+  while (index < argv.length) {
+    const arg = argv[index];
+    const option = OPTIONS.find(candidate => candidate.matches(arg));
+    if (!option) throw new Error(`unknown argument: ${arg}`);
+    option.apply(opts, next, arg);
+    index += 1;
   }
   if (opts.scope !== 'project' && opts.scope !== 'global') {
     throw new Error(`unknown scope: ${opts.scope} (use project or global)`);
@@ -69,7 +73,7 @@ function parseArgs(argv) {
 function parseHeader(content) {
   const header = {};
   const lines = content.split('\n');
-  let index = lines[0] && lines[0].startsWith('# ') ? 1 : 0;
+  let index = lines[0]?.startsWith('# ') ? 1 : 0;
   for (; index < lines.length; index++) {
     const line = lines[index];
     if (!line.trim()) {
@@ -77,7 +81,7 @@ function parseHeader(content) {
       continue;
     }
     if (line.startsWith('#')) break;
-    const match = /^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
+    const match = /^([A-Za-z_][A-Za-z0-9_-]*):(.*)$/.exec(line);
     if (!match) break;
     header[match[1]] = match[2].trim();
   }
