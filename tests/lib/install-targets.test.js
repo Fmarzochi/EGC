@@ -3995,9 +3995,37 @@ function runTests() {
         'a malformed sibling state suppresses retirement'
       );
 
-      // Same for a state that is valid but unreadable (no permission bits);
-      // root reads everything, so the check only means something elsewhere.
+      // A dangling link at the sibling's state path is not an absence: the
+      // link is there, the state behind it is not, so nothing is offered up.
+      if (process.platform !== 'win32') {
+        const dangling = path.join(homeDir, 'dangling-install-state.json');
+        fs.symlinkSync(path.join(homeDir, 'nowhere.json'), dangling);
+        assert.deepStrictEqual(
+          adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [dangling] }),
+          [],
+          'a dangling link at a sibling state path suppresses retirement'
+        );
+      }
+
+      // Same for a state that is valid but unreadable (no permission bits),
+      // and for a state whose parent cannot be inspected; root reads
+      // everything, so the checks only mean something elsewhere.
       if (process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() !== 0) {
+        const sealed = path.join(homeDir, 'sealed');
+        const sealedState = path.join(sealed, 'install-state.json');
+        fs.mkdirSync(sealed);
+        writeInstallState(sealedState, stateB);
+        fs.chmodSync(sealed, 0o000);
+        try {
+          assert.deepStrictEqual(
+            adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [sealedState] }),
+            [],
+            'a sibling state behind an inaccessible parent suppresses retirement'
+          );
+        } finally {
+          fs.chmodSync(sealed, 0o700);
+        }
+
         writeInstallState(siblingBStatePath, stateB);
         fs.chmodSync(siblingBStatePath, 0o000);
         try {

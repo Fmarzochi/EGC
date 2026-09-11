@@ -448,11 +448,17 @@ function recordedManagedCopies(state) {
 // mistaken for an empty one.
 const UNREADABLE_STATE = Symbol('unreadable install-state');
 
-// An install-state, null when there is none, UNREADABLE_STATE when the file
-// exists but cannot be trusted.
+// An install-state, null when nothing sits at the path (a definite ENOENT
+// and nothing else: a dangling link, a parent that cannot be inspected or
+// is not a directory all count as a state that cannot be trusted), and
+// UNREADABLE_STATE when something is there but cannot be read or parsed.
 function readInstallStateOrNull(statePath) {
   if (typeof statePath !== 'string' || statePath.length === 0) return null;
-  if (!fs.existsSync(statePath)) return null;
+  try {
+    fs.lstatSync(statePath);
+  } catch (error) {
+    return error.code === 'ENOENT' ? null : UNREADABLE_STATE;
+  }
   const { readInstallState } = require('../install-state');
   try {
     return readInstallState(statePath);
