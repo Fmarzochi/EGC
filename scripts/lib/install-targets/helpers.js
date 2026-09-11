@@ -443,17 +443,21 @@ function recordedManagedCopies(state) {
   ));
 }
 
-// An install-state, or null when there is none or it cannot be trusted. For
-// a sibling that means nothing to protect (its absence cannot make this
-// adapter's candidate safe, and a corrupt file must not either); for the
-// adapter itself it means nothing to diff against.
+// The marker for an install-state that exists but cannot be read or parsed:
+// unlike a missing one it may still record destinations, so it must never be
+// mistaken for an empty one.
+const UNREADABLE_STATE = Symbol('unreadable install-state');
+
+// An install-state, null when there is none, UNREADABLE_STATE when the file
+// exists but cannot be trusted.
 function readInstallStateOrNull(statePath) {
   if (typeof statePath !== 'string' || statePath.length === 0) return null;
+  if (!fs.existsSync(statePath)) return null;
   const { readInstallState } = require('../install-state');
   try {
     return readInstallState(statePath);
   } catch {
-    return null;
+    return UNREADABLE_STATE;
   }
 }
 
@@ -463,11 +467,16 @@ function readInstallStateOrNull(statePath) {
 // install-state: if one adapter removes a skill from its plan, its retirement
 // diff must not delete the file another adapter still installs. The sibling
 // coverage check reads those sibling state files (passed in by registry.js
-// when it plans) and refuses any candidate another adapter still owns.
+// when it plans) and refuses any candidate another adapter still owns. A
+// sibling with no state file owns nothing; a sibling whose state exists but
+// cannot be read may own any of them, so the answer is null: unknown
+// ownership fails closed, never open.
 function collectSiblingOwnedDestinations(statePaths) {
   const owned = new Set();
   for (const statePath of Array.isArray(statePaths) ? statePaths : []) {
-    for (const operation of recordedManagedCopies(readInstallStateOrNull(statePath))) {
+    const siblingState = readInstallStateOrNull(statePath);
+    if (siblingState === UNREADABLE_STATE) return null;
+    for (const operation of recordedManagedCopies(siblingState)) {
       owned.add(path.resolve(operation.destinationPath));
     }
   }
@@ -514,7 +523,14 @@ function planGenericRetirements(input, adapter) {
   // answer is to retire nothing rather than to guess a directory.
   const repoRoot = typeof input.repoRoot === 'string' && input.repoRoot.length > 0 ? input.repoRoot : null;
   const previous = repoRoot ? readInstallStateOrNull(adapter.getInstallStatePath(input)) : null;
-  if (!previous) return [];
+  if (!previous || previous === UNREADABLE_STATE) return [];
+
+  // Destinations another adapter sharing this root still manages: never a
+  // retirement candidate here, whatever this adapter's own coverage says. A
+  // sibling state that cannot be read may still own any of them, so nothing
+  // is retired until it can be trusted again.
+  const siblingOwned = collectSiblingOwnedDestinations(input.siblingStatePaths);
+  if (!siblingOwned) return [];
 
   const selectedModuleIds = new Set(
     (Array.isArray(input.modules) ? input.modules : [])
@@ -524,9 +540,7 @@ function planGenericRetirements(input, adapter) {
   const boundaries = {
     managedRoots: resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root)),
     seen: new Set(),
-    // Destinations another adapter sharing this root still manages: never a
-    // retirement candidate here, whatever this adapter's own coverage says.
-    siblingOwned: collectSiblingOwnedDestinations(input.siblingStatePaths),
+    siblingOwned,
     covered: collectCurrentlyCoveredDestinations(
       Array.isArray(input.operations) ? input.operations : adapter.planOperations(input),
       repoRoot

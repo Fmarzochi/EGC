@@ -3976,6 +3976,40 @@ function runTests() {
         [path.join(targetRoot, 'skills', 'shared', 'SKILL.md')],
         'with no sibling ownership left, the dropped skill is offered up'
       );
+
+      // A sibling that never installed anything has no state file: absent,
+      // and the candidate is still offered up.
+      const absentSibling = path.join(homeDir, 'nowhere', 'install-state.json');
+      assert.deepStrictEqual(
+        adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [absentSibling] }).map(entry => entry.destinationPath),
+        [path.join(targetRoot, 'skills', 'shared', 'SKILL.md')],
+        'a missing sibling state owns nothing'
+      );
+
+      // A sibling state that exists but cannot be parsed may still own the
+      // destination: nothing is offered up until it can be read again.
+      fs.writeFileSync(siblingBStatePath, '{ not json');
+      assert.deepStrictEqual(
+        adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [siblingBStatePath] }),
+        [],
+        'a malformed sibling state suppresses retirement'
+      );
+
+      // Same for a state that is valid but unreadable (no permission bits);
+      // root reads everything, so the check only means something elsewhere.
+      if (process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() !== 0) {
+        writeInstallState(siblingBStatePath, stateB);
+        fs.chmodSync(siblingBStatePath, 0o000);
+        try {
+          assert.deepStrictEqual(
+            adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [siblingBStatePath] }),
+            [],
+            'an unreadable sibling state suppresses retirement'
+          );
+        } finally {
+          fs.chmodSync(siblingBStatePath, 0o600);
+        }
+      }
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
