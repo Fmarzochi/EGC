@@ -30,18 +30,19 @@ function branchStateKey(branch) {
   return `${readablePrefix}--${digest}`;
 }
 
-// Validates a resolved absolute path is within a trusted directory root
-// (home or tmp) and contains '.git' as a path segment. Using startsWith
-// against os.homedir()/os.tmpdir() -- which are untainted system values --
-// satisfies SonarCloud's path-injection sanitization requirement and also
-// prevents traversal to unrelated filesystem locations.
-function isGitRelatedPath(p) {
+// The resolved absolute form of a git path when it sits under a trusted
+// root (the home directory or the temp directory, untainted system values)
+// and carries '.git' as a path segment; null otherwise. The value returned
+// here is the one every read below uses, so a path handed in by a hook
+// payload or a CLI argument never reaches the filesystem unchecked, and a
+// traversal to an unrelated location is refused before any read.
+function trustedGitPath(p) {
   const resolved = path.resolve(p);
   const home = os.homedir() + path.sep;
   const tmp = os.tmpdir() + path.sep;
   const underTrustedRoot = resolved.startsWith(home) || resolved.startsWith(tmp);
   const hasGitSegment = resolved.split(path.sep).includes('.git');
-  return underTrustedRoot && hasGitSegment;
+  return underTrustedRoot && hasGitSegment ? resolved : null;
 }
 
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
@@ -61,17 +62,17 @@ function detectBranch(projectPath) {
   try {
     const rawGitDir = findGitDir(projectPath);
     if (!rawGitDir) return null;
-    let gitDir = path.resolve(rawGitDir);
-    if (!isGitRelatedPath(gitDir)) return null;
+    let gitDir = trustedGitPath(rawGitDir);
+    if (!gitDir) return null;
     if (fs.statSync(gitDir).isFile()) {
       // Worktrees and submodules store a pointer file instead of a directory
       const pointer = fs.readFileSync(gitDir, 'utf8').trim();
       if (!pointer.startsWith('gitdir:')) return null;
-      gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
-      if (!isGitRelatedPath(gitDir)) return null;
+      gitDir = trustedGitPath(path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim()));
+      if (!gitDir) return null;
     }
-    const headPath = path.resolve(gitDir, 'HEAD');
-    if (!isGitRelatedPath(headPath)) return null;
+    const headPath = trustedGitPath(path.resolve(gitDir, 'HEAD'));
+    if (!headPath) return null;
     const head = fs.readFileSync(headPath, 'utf8').trim();
     const refPrefix = 'ref: refs/heads/';
     // Detached HEAD stores a bare commit hash; treat it as no branch
@@ -141,6 +142,7 @@ module.exports = {
   sanitizeBranchName,
   branchStateKey,
   detectBranch,
+  trustedGitPath,
   flatStateFile,
   branchStateFile,
   legacyBranchStateFile,

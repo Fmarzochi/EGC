@@ -17,6 +17,7 @@ const {
   legacyBranchStateFile,
   resolveStateRead,
   resolveStateWrite,
+  trustedGitPath,
 } = require('../../scripts/lib/branch-state');
 
 const { collectMemoryState } = require('../../scripts/status');
@@ -101,6 +102,14 @@ function runTests() {
   if (test('detectBranch returns the current branch in a git repo', () => {
     const repo = makeGitRepo('feature/auth');
     assert.strictEqual(detectBranch(repo), 'feature/auth');
+  })) passed++; else failed++;
+
+  if (test('trustedGitPath returns the resolved path only under a trusted root with a .git segment', () => {
+    const under = path.join(os.tmpdir(), 'egc-trusted', '.git', 'HEAD');
+    assert.strictEqual(trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'sub', '..', '.git', 'HEAD')), under, 'resolved and normalised');
+    assert.strictEqual(trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'HEAD')), null, 'no .git segment');
+    assert.strictEqual(trustedGitPath(path.join(path.sep, 'etc', '.git', 'HEAD')), null, 'outside the home and temp roots');
+    assert.strictEqual(trustedGitPath(path.join(os.tmpdir(), '..', 'other', '.git')), null, 'a traversal that leaves the temp root is refused');
   })) passed++; else failed++;
 
   if (test('detectBranch returns null outside a git repo', () => {
