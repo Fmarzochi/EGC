@@ -65,6 +65,10 @@ const COMMANDS = {
     script: 'status.js',
     description: 'Query the EGC SQLite state store status summary',
   },
+  export: {
+    script: 'export.js',
+    description: 'Print the decrypted memory document for a project or the global scope, as text or --json (read-only)',
+  },
   overview: {
     script: 'overview.js',
     description: 'Aggregated read-only view of every per-project memory state',
@@ -164,6 +168,7 @@ const PRIMARY_COMMANDS = [
   'auto-update',
   'status',
   'overview',
+  'export',
   'verify',
   'sessions',
   'replay',
@@ -227,6 +232,8 @@ Examples:
   egc status --json
   egc overview
   egc overview --json
+  egc export
+  egc export --scope global --json
   egc verify
   egc verify -- npm run test:unit
   egc sessions

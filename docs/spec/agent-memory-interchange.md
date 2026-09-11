@@ -110,11 +110,13 @@ When assembling context for an agent, consumers MUST apply precedence: branch ov
 
 ## 8. Interchange operations (reference behavior)
 
-Two operations complete the interchange story. They are specified here by behavior; `egc export` and `egc import` are the planned reference implementation.
+Two operations complete the interchange story. They are specified here by behavior; `egc export` is the reference implementation of the first, `egc import` is planned.
 
 ### 8.1 Export
 
 Produce the plain-text AMI document for a given scope, decrypted, ready to hand to another tool or person. Export MUST NOT include storage artifacts (encryption headers, integrity trailers).
+
+Reference: `egc export [--project <path>] [--scope project|global] [--json]` prints the document for a project (default: the current directory, resolved to its branch state like `get_state`) or for the global scope. Plain text is the stored document byte for byte, decrypted; `--json` parses the header fields and the five sections (unknown sections are kept under `other_sections`). It never writes the state files, the key or the sidecars. Exit codes: 0 printed, 1 usage or read error, 2 no memory for the scope, 3 encrypted memory whose key is missing.
 
 ### 8.2 Import
 

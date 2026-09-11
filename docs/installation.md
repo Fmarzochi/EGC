@@ -337,6 +337,7 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 | `egc auto-update` | Pull latest EGC changes and reinstall the current managed targets |
 | `egc status` | Query the EGC SQLite state store status summary |
 | `egc overview` | Aggregated read-only view of every per-project memory state |
+| `egc export` | Print the decrypted memory document for a project or the global scope, as text or `--json` (read-only) |
 | `egc verify` | Run the project verification command and record a receipt for the commit gate |
 | `egc sessions` | List or inspect EGC sessions from the SQLite state store |
 | `egc replay` | List or replay recorded sessions with timeline scrubbing |

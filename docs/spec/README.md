@@ -19,7 +19,7 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 | Surface | Specified by | Validated by |
 |---------|--------------|--------------|
 | Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` |
-| Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | gap: reference `egc export` / `egc import` pair planned |
+| Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | `tests/scripts/export.test.js` (export, section 8.1); gap: reference `egc import` planned |
 | Hooks contract | `schemas/hooks.schema.json` | `tests/hooks/hooks.test.js` |
 | Plugin manifest | `schemas/plugin.schema.json` | `tests/plugin-manifest.test.js` |
 | Runtime map | `schemas/runtime-map.schema.json` | gap: `tests/test_orchestrator.py` was removed in #307; the schema's consumers (`scripts/runtime/discovery.js`, `scripts/orchestration/router.py`) have no dedicated validator |
