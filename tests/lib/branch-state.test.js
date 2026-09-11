@@ -130,6 +130,17 @@ function runTests() {
         // created or moved later and redirect the read past the check.
         fs.symlinkSync(path.join(base, 'not-yet'), path.join(base, 'dangling'));
         assert.strictEqual(trustedGitPath(path.join(base, 'dangling', '.git', 'HEAD')), null, 'a dangling link on the way is refused');
+        // A parent that cannot be inspected: refused, never guessed.
+        if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+          const sealed = path.join(base, 'sealed');
+          fs.mkdirSync(sealed);
+          fs.chmodSync(sealed, 0o000);
+          try {
+            assert.strictEqual(trustedGitPath(path.join(sealed, 'repo', '.git', 'HEAD')), null, 'a path behind a sealed parent is refused');
+          } finally {
+            fs.chmodSync(sealed, 0o700);
+          }
+        }
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }

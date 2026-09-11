@@ -30,14 +30,16 @@ function branchStateKey(branch) {
   return `${readablePrefix}--${digest}`;
 }
 
-// Whether a link sits at the path (a dangling one included): such a
-// component is never appended lexically, since a target created or moved
-// later would redirect it past the check.
-function isLink(p) {
+// What sits at a path that does not resolve: 'absent' (nothing there, or
+// a parent that is not a directory), 'link' (a link, a dangling one
+// included: never appended lexically, since a target created or moved
+// later would redirect it past the check), or 'unknown' when the path
+// cannot be inspected at all, which the caller treats like a link.
+function unresolvedComponent(p) {
   try {
-    return fs.lstatSync(p).isSymbolicLink();
-  } catch {
-    return false;
+    return fs.lstatSync(p).isSymbolicLink() ? 'link' : 'plain';
+  } catch (error) {
+    return error.code === 'ENOENT' || error.code === 'ENOTDIR' ? 'absent' : 'unknown';
   }
 }
 
@@ -57,7 +59,8 @@ function canonicalPath(p) {
     } catch (error) {
       if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') return null;
     }
-    if (isLink(existing)) return null;
+    const component = unresolvedComponent(existing);
+    if (component === 'link' || component === 'unknown') return null;
     const parent = path.dirname(existing);
     if (parent === existing) return null;
     tail.unshift(path.basename(existing));
