@@ -3839,6 +3839,147 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('generic planRetirements honors a declared second managed root, so an adapter that writes outside its own root can still retire its files (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-roots-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-roots-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'scripts', 'plugin.ts'), 'plugin');
+
+      // Mirrors amp-home's real shape: skills under the adapter root, plugin
+      // scripts under a second XDG-style root (resolveAmpConfigRoot), both
+      // declared via resolveManagedRoots.
+      const rootsTarget = path.join(homeDir, '.config', 'egc-generic-retire-roots-target');
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-roots-target',
+        target: 'egc-generic-retire-roots-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-roots-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+        resolveManagedRoots(input) {
+          return [path.join(input.homeDir || homeDir, 'egc-generic-retire-roots-target'), path.join(input.homeDir || homeDir, '.config', 'egc-generic-retire-roots-target')];
+        },
+      });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      const planningInput = { repoRoot, homeDir, modules: [] };
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot: rootsTarget,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'scripts/plugin.ts', destinationPath: path.join(rootsTarget, 'plugins', 'plugin.ts'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          // A destination under a root this adapter does NOT trust: stays
+          // untouched even though the module dropped it.
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'scripts/plugin.ts', destinationPath: path.join(homeDir, 'untrusted', 'plugin.ts'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      assert.deepStrictEqual(
+        adapter.planRetirements(planningInput).map(entry => entry.destinationPath),
+        [path.join(rootsTarget, 'plugins', 'plugin.ts')],
+        'the file under the declared second root is offered up; the one under an untrusted root is not'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements does not retire a file a sibling adapter sharing the same root still owns (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-sibling-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-sibling-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'skills', 'shared'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'skills', 'shared', 'SKILL.md'), 'shared skill');
+
+      const adapterA = createInstallTargetAdapter({
+        id: 'egc-generic-retire-sibling-a',
+        target: 'egc-generic-retire-sibling-a',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-shared-root'],
+        installStatePathSegments: ['egc', 'a-install-state.json'],
+      });
+      const adapterB = createInstallTargetAdapter({
+        id: 'egc-generic-retire-sibling-b',
+        target: 'egc-generic-retire-sibling-b',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-shared-root'],
+        installStatePathSegments: ['egc', 'b-install-state.json'],
+      });
+
+      const targetRoot = adapterA.resolveRoot({ repoRoot, homeDir });
+      const siblingBStatePath = adapterB.getInstallStatePath({ repoRoot, homeDir });
+      const planningInputA = { repoRoot, homeDir, modules: [] };
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      // A's own previous state: it installed the shared skill, but its plan
+      // dropped it. B's sibling state still owns the same destination.
+      const stateA = createInstallState({
+        adapter: { id: adapterA.id },
+        targetRoot,
+        installStatePath: adapterA.getInstallStatePath({ repoRoot, homeDir }),
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'skills/shared/SKILL.md', destinationPath: path.join(targetRoot, 'skills', 'shared', 'SKILL.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      const stateB = {
+        ...createInstallState({
+          adapter: { id: adapterB.id },
+          targetRoot,
+          installStatePath: siblingBStatePath,
+          request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+          resolution: { selectedModules: [], skippedModules: [] },
+          operations: [
+            { kind: 'copy-file', moduleId: 'y', sourceRelativePath: 'skills/shared/SKILL.md', destinationPath: path.join(targetRoot, 'skills', 'shared', 'SKILL.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          ],
+          source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+        }),
+      };
+      writeInstallState(adapterA.getInstallStatePath({ repoRoot, homeDir }), stateA);
+      writeInstallState(siblingBStatePath, stateB);
+
+      assert.deepStrictEqual(
+        adapterA.planRetirements({
+          ...planningInputA,
+          operations: adapterA.planOperations(planningInputA),
+          siblingStatePaths: [siblingBStatePath],
+        }),
+        [],
+        'B still owns the shared skill, so A must not retire it'
+      );
+
+      // Once B no longer records the destination, A's candidate is offered.
+      writeInstallState(siblingBStatePath, {
+        ...stateB,
+        operations: stateB.operations.filter(operation => operation.kind !== 'copy-file'),
+      });
+      const retirements = adapterA.planRetirements({
+        ...planningInputA,
+        operations: adapterA.planOperations(planningInputA),
+        siblingStatePaths: [siblingBStatePath],
+      });
+      assert.deepStrictEqual(
+        retirements.map(entry => entry.destinationPath),
+        [path.join(targetRoot, 'skills', 'shared', 'SKILL.md')],
+        'with no sibling ownership left, the dropped skill is offered up'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

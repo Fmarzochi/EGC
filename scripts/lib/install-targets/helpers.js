@@ -414,6 +414,54 @@ function isDestinationCovered(resolved, { files, dirs }) {
   return false;
 }
 
+// The roots an adapter may legitimately write install files under. Most
+// adapters write everything under their own resolveRoot(), but a few
+// deliberately land copies in a second location (Amp's plugin scripts go to
+// ~/.config/amp/plugins/ via resolveAmpConfigRoot(), distinct from its skills
+// root ~/.amp/). A retirement candidate is only ever considered for one of
+// these trusted roots, so a target with a second root must declare it here or
+// its own writes can never be retired.
+function resolveAdapterManagedRoots(adapter, input = {}) {
+  if (typeof adapter.resolveManagedRoots === 'function') {
+    const declared = adapter.resolveManagedRoots(input);
+    if (Array.isArray(declared)) {
+      return declared.filter(root => typeof root === 'string' && root.length > 0);
+    }
+  }
+  return [adapter.resolveRoot(input)];
+}
+
+// Destinations a sibling adapter sharing the same trusted root still records
+// as its own managed copies. codex-home, goose-home and openhands-home all
+// write skills into the shared ~/.agents tree, each with its own
+// install-state: if one adapter removes a skill from its plan, its retirement
+// diff must not delete the file another adapter still installs. The sibling
+// coverage check reads those sibling state files (passed in by registry.js
+// when it plans) and refuses any candidate another adapter still owns.
+function collectSiblingOwnedDestinations(statePaths) {
+  const { readInstallState } = require('../install-state');
+  const owned = new Set();
+  for (const statePath of Array.isArray(statePaths) ? statePaths : []) {
+    if (typeof statePath !== 'string' || statePath.length === 0) continue;
+    let siblingState;
+    try {
+      siblingState = readInstallState(statePath);
+    } catch {
+      // A sibling without a readable install-state owns nothing to protect
+      // here: the absence of one cannot make this adapter's candidate safe,
+      // and the presence of a corrupt one must not either.
+      continue;
+    }
+    for (const operation of Array.isArray(siblingState?.operations) ? siblingState.operations : []) {
+      if (operation.ownership !== 'managed' || operation.kind !== 'copy-file') continue;
+      const destinationPath = typeof operation.destinationPath === 'string' ? operation.destinationPath : '';
+      if (!destinationPath) continue;
+      owned.add(path.resolve(destinationPath));
+    }
+  }
+  return owned;
+}
+
 // The default planRetirements body: compares the previous install-state's
 // managed copy-file operations against what this plan would write today: a
 // destination the state remembers EGC copied, that no scaffold operation
@@ -438,7 +486,7 @@ function isDestinationCovered(resolved, { files, dirs }) {
 function planGenericRetirements(input, adapter) {
   const { readInstallState } = require('../install-state');
   const repoRoot = input.repoRoot || process.cwd();
-  const targetRoot = path.resolve(adapter.resolveRoot(input));
+  const managedRoots = resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root));
 
   let previous;
   try {
@@ -454,6 +502,10 @@ function planGenericRetirements(input, adapter) {
     repoRoot
   );
 
+  // Destinations another adapter sharing this root still manages: never a
+  // retirement candidate here, whatever this adapter's own coverage says.
+  const siblingOwned = collectSiblingOwnedDestinations(input.siblingStatePaths);
+
   const retirements = [];
   const seen = new Set();
   for (const operation of Array.isArray(previous.operations) ? previous.operations : []) {
@@ -461,8 +513,9 @@ function planGenericRetirements(input, adapter) {
     const destinationPath = typeof operation.destinationPath === 'string' ? operation.destinationPath : '';
     if (!destinationPath) continue;
     const resolved = path.resolve(destinationPath);
-    if (!resolved.startsWith(targetRoot + path.sep) || seen.has(resolved)) continue;
+    if (!managedRoots.some(root => resolved.startsWith(root + path.sep)) || seen.has(resolved)) continue;
     if (isDestinationCovered(resolved, covered)) continue;
+    if (siblingOwned.has(resolved)) continue;
     const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
     if (!source) continue;
     seen.add(resolved);
@@ -490,6 +543,19 @@ function createInstallTargetAdapter(config) {
     resolveRoot(input = {}) {
       const baseRoot = resolveBaseRoot(config.kind, input);
       return path.join(baseRoot, ...config.rootSegments);
+    },
+    // The roots under which config.resolveManagedRoots (when declared) lets
+    // retirement plan writes; defaults to resolveRoot() alone. A target that
+    // lands install files in a second directory (Amp's plugin config root)
+    // declares the full list so its own writes can be retired too.
+    resolveManagedRoots(input = {}) {
+      if (typeof config.resolveManagedRoots === 'function') {
+        const declared = config.resolveManagedRoots(input, adapter);
+        if (Array.isArray(declared)) {
+          return declared.filter(root => typeof root === 'string' && root.length > 0);
+        }
+      }
+      return [adapter.resolveRoot(input)];
     },
     getInstallStatePath(input = {}) {
       const root = adapter.resolveRoot(input);
@@ -593,5 +659,6 @@ module.exports = {
   normalizeRelativePath,
   planFlatSkillOperation,
   planGenericRetirements,
+  resolveAdapterManagedRoots,
   resolveModulesPlan,
 };

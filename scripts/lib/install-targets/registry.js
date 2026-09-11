@@ -1,3 +1,5 @@
+const path = require('node:path');
+
 const aiderProject = require('./aider-project');
 const amazonqProject = require('./amazonq-project');
 const amazonqHome = require('./amazonq-home');
@@ -90,6 +92,34 @@ function getInstallTargetAdapter(targetOrAdapterId) {
   return adapter;
 }
 
+// The install-state paths of every other registered adapter that shares a
+// managed root with this one. codex-home, goose-home and openhands-home all
+// write skills into the same ~/.agents tree under separate state files, so
+// when any one of them drops a file from its plan, retirement must check the
+// siblings' states before deleting -- the file may still be owned by one of
+// the others (cubic review, #1412).
+function collectSiblingInstallStatePaths(adapter, planningInput) {
+  const { resolveAdapterManagedRoots } = require('./helpers');
+  const sharedRoots = new Set(resolveAdapterManagedRoots(adapter, planningInput).map(root => path.resolve(root)));
+  const siblingPaths = [];
+
+  for (const sibling of ADAPTERS) {
+    if (sibling.id === adapter.id) continue;
+    try {
+      const sharesRoot = resolveAdapterManagedRoots(sibling, planningInput)
+        .map(root => path.resolve(root))
+        .some(root => sharedRoots.has(root));
+      if (sharesRoot) {
+        siblingPaths.push(sibling.getInstallStatePath(planningInput));
+      }
+    } catch (_error) { // NOSONAR: an unplannable sibling root contributes no shared coverage
+      continue;
+    }
+  }
+
+  return siblingPaths;
+}
+
 function planInstallTargetScaffold(options = {}) {
   const adapter = getInstallTargetAdapter(options.target);
   const modules = Array.isArray(options.modules) ? options.modules : [];
@@ -116,6 +146,7 @@ function planInstallTargetScaffold(options = {}) {
     ...planningInput,
     modules,
     operations,
+    siblingStatePaths: collectSiblingInstallStatePaths(adapter, planningInput),
   });
 
   return {
