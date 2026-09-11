@@ -145,12 +145,12 @@ function stillDirectory(dirPath) {
   }
 }
 
-// The decrypted content of an encrypted state file read through the same
+// The whole content of a state file, plain or encrypted, read through the
 // checked descriptor (never through a link, regular file, parent resolved
-// into `root`), or null when the path is not an encrypted regular file
-// inside the state directory or does not decrypt. Used to read a file back
-// after it was written, so a swap after the write is not mistaken for it.
-function readEncryptedStateFile(filePath, root) {
+// into `root`), or null when the path is not a regular file inside the
+// state directory, grew or shrank under the read, or no longer leads to
+// the descriptor afterwards. An I/O error on an existing file is thrown.
+function readStateFileBytes(filePath, root) {
   let fd;
   try {
     fd = openCandidate(filePath);
@@ -159,16 +159,26 @@ function readEncryptedStateFile(filePath, root) {
     if (!stat.isFile() || !descriptorAtPathInsideRoot(fd, stat, filePath, root)) return null;
     const raw = Buffer.alloc(stat.size);
     const read = fs.readSync(fd, raw, 0, stat.size, 0);
-    // A file that grew or shrank under the read, or a path that no longer
-    // leads to this descriptor, is not the file that was written: the
-    // caller treats null as a failed read-back and restores.
     if (read !== stat.size || fs.fstatSync(fd).size !== stat.size) return null;
-    if (!descriptorAtPathInsideRoot(fd, stat, filePath, root) || !isEncryptedBuffer(raw)) return null;
+    if (!descriptorAtPathInsideRoot(fd, stat, filePath, root)) return null;
+    return raw;
+  } finally {
+    if (fd !== undefined && fd !== null) fs.closeSync(fd);
+  }
+}
+
+// The decrypted content of an encrypted state file read the same way, or
+// null when the path is not an encrypted regular file inside the state
+// directory or does not decrypt. Used to read a file back after it was
+// written, so a swap after the write is not mistaken for it: the caller
+// treats null as a failed read-back and restores.
+function readEncryptedStateFile(filePath, root) {
+  try {
+    const raw = readStateFileBytes(filePath, root);
+    if (raw === null || !isEncryptedBuffer(raw)) return null;
     return decryptStateBuffer(raw);
   } catch {
     return null;
-  } finally {
-    if (fd !== undefined && fd !== null) fs.closeSync(fd);
   }
 }
 
@@ -220,6 +230,7 @@ module.exports = {
   inspectStateFile,
   readPlainStateFile,
   readEncryptedStateFile,
+  readStateFileBytes,
   listStateMarkdown,
   stateRoot,
 };

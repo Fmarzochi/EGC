@@ -13,6 +13,7 @@ const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'export.js');
 const stateCrypto = require('../../scripts/lib/state-crypto');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const { parseArgs, parseHeader, toJson } = require('../../scripts/export.js');
 
 const SAMPLE = `# Project State
@@ -66,7 +67,7 @@ function run(args, homeDir, cwd) {
     encoding: 'utf8',
     cwd: cwd || homeDir,
     env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
-    timeout: 15000,
+    timeout: CLI_TIMEOUT_MS,
   });
 }
 
@@ -240,6 +241,89 @@ async function main() {
       const doc = JSON.parse(json.stdout);
       assert.strictEqual(doc.scope, 'global');
       assert.deepStrictEqual(doc.preferences, ['Conventional commits']);
+    } finally {
+      cleanup(home);
+    }
+  }));
+
+  tally(await test('plain text without a trailing newline goes out exactly as stored', () => {
+    const home = mktemp('egc-export-nonl-');
+    const project = path.join(home, 'projects', 'orbit-tracker');
+    fs.mkdirSync(project, { recursive: true });
+    try {
+      const trimmed = SAMPLE.trimEnd();
+      writeFlatState(home, project, trimmed);
+      const result = run(['--project', project], home);
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.stdout, trimmed, 'not a byte added');
+    } finally {
+      cleanup(home);
+    }
+  }));
+
+  tally(await test('a state file that is a link is refused: exit 1, nothing printed, the target untouched', () => {
+    if (process.platform === 'win32') return;
+    const home = mktemp('egc-export-link-');
+    const project = path.join(home, 'projects', 'orbit-tracker');
+    fs.mkdirSync(project, { recursive: true });
+    try {
+      const elsewhere = path.join(home, 'elsewhere.md');
+      fs.writeFileSync(elsewhere, 'not the memory');
+      fs.symlinkSync(elsewhere, path.join(stateDirFor(home), `${projectSlug(project)}.md`));
+      const result = run(['--project', project], home);
+      assert.strictEqual(result.status, 1, result.stderr);
+      assert.strictEqual(result.stdout, '');
+      assert.ok(result.stderr.includes('regular file'), result.stderr);
+      assert.strictEqual(fs.readFileSync(elsewhere, 'utf8'), 'not the memory');
+    } finally {
+      cleanup(home);
+    }
+  }));
+
+  tally(await test('a state file that cannot be read is exit 1, not the missing-key exit', () => {
+    if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) return;
+    const home = mktemp('egc-export-unreadable-');
+    const project = path.join(home, 'projects', 'orbit-tracker');
+    fs.mkdirSync(project, { recursive: true });
+    try {
+      const file = path.join(stateDirFor(home), `${projectSlug(project)}.md`);
+      fs.writeFileSync(file, SAMPLE);
+      fs.chmodSync(file, 0o000);
+      try {
+        const result = run(['--project', project], home);
+        assert.strictEqual(result.status, 1, result.stderr);
+        assert.strictEqual(result.stdout, '');
+        assert.ok(result.stderr.includes('cannot read'), result.stderr);
+      } finally {
+        fs.chmodSync(file, 0o600);
+      }
+    } finally {
+      cleanup(home);
+    }
+  }));
+
+  tally(await test('a key readable by others is refused and left exactly as it was: the export never touches the key', () => {
+    if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) return;
+    const home = mktemp('egc-export-widekey-');
+    const project = path.join(home, 'projects', 'orbit-tracker');
+    fs.mkdirSync(project, { recursive: true });
+    try {
+      const keyPath = path.join(home, '.egc', path.basename(stateCrypto.defaultKeyPath()));
+      const encrypted = stateCrypto.encryptStateBuffer(SAMPLE, keyPath);
+      fs.writeFileSync(path.join(stateDirFor(home), `${projectSlug(project)}.md`), encrypted);
+      fs.chmodSync(keyPath, 0o644);
+      const before = fs.statSync(keyPath);
+      const result = run(['--project', project], home);
+      assert.strictEqual(result.status, 1, result.stderr);
+      assert.strictEqual(result.stdout, '');
+      assert.ok(result.stderr.includes('readable by other users'), result.stderr);
+      const after = fs.statSync(keyPath);
+      assert.strictEqual(after.mode & 0o777, 0o644, 'the mode was not tightened');
+      assert.strictEqual(after.mtimeMs, before.mtimeMs, 'the key was not rewritten');
+      fs.chmodSync(keyPath, 0o600);
+      const ok = run(['--project', project], home);
+      assert.strictEqual(ok.status, 0, ok.stderr);
+      assert.strictEqual(ok.stdout, SAMPLE);
     } finally {
       cleanup(home);
     }

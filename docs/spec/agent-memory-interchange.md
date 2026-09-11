@@ -116,7 +116,7 @@ Two operations complete the interchange story. They are specified here by behavi
 
 Produce the plain-text AMI document for a given scope, decrypted, ready to hand to another tool or person. Export MUST NOT include storage artifacts (encryption headers, integrity trailers).
 
-Reference: `egc export [--project <path>] [--scope project|global] [--json]` prints the document for a project (default: the current directory, resolved to its branch state like `get_state`) or for the global scope. Plain text is the stored document byte for byte, decrypted; `--json` parses the header fields and the five sections (unknown sections are kept under `other_sections`). It never writes the state files, the key or the sidecars. Exit codes: 0 printed, 1 usage or read error, 2 no memory for the scope, 3 encrypted memory whose key is missing.
+Reference: `egc export [--project <path>] [--scope project|global] [--json]` prints the document for a project (default: the current directory, resolved to its branch state like `get_state`) or for the global scope. Plain text is the stored document byte for byte, decrypted; `--json` parses the header fields and the five sections (unknown sections are kept under `other_sections`). The state file is read through a checked descriptor (never through a link, a regular file inside the state directory) and the key is loaded without changing its mode: the command never writes the state files, the key or the sidecars. Exit codes: 0 printed, 1 usage error or a state file or key that cannot be read or trusted, 2 no memory for the scope, 3 encrypted memory whose key is missing.
 
 ### 8.2 Import
 

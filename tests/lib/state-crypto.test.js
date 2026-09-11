@@ -14,7 +14,7 @@ const {
   decryptStateBuffer,
   readStateFileDecrypted,
 } = require('../../scripts/lib/state-crypto');
-const { assertPrivateKeyFile } = require('../../scripts/lib/state-crypto');
+const { assertPrivateKeyFile, loadKey } = require('../../scripts/lib/state-crypto');
 
 
 function test(name, fn) {
@@ -127,6 +127,27 @@ function runTests() {
 
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('a read-only load never changes the key mode: a private key is read, a wide one is refused as it is', () => {
+    if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) return;
+    const dir = createTempDir('state-crypto-readonly-');
+    try {
+      const key = crypto.randomBytes(32);
+      const keyPath = writeKeyFile(dir, key);
+      fs.chmodSync(keyPath, 0o600);
+      assert.ok(loadKey(keyPath, { readOnly: true }).equals(key), 'a private key loads');
+      const payload = encryptFixture('secret', key);
+      assert.strictEqual(decryptStateBuffer(payload, keyPath, { readOnly: true }), 'secret');
+      assert.strictEqual(decryptStateBuffer(payload, undefined, { keyMaterial: key }), 'secret', 'a key handed in directly is used as is');
+      fs.chmodSync(keyPath, 0o640);
+      assert.throws(() => loadKey(keyPath, { readOnly: true }), /readable by other users/, 'a wide key is refused');
+      assert.strictEqual(fs.statSync(keyPath).mode & 0o777, 0o640, 'and left exactly as it was');
+      assert.ok(loadKey(keyPath).equals(key), 'the default load still tightens and reads');
+      assert.strictEqual(fs.statSync(keyPath).mode & 0o777, 0o600);
+    } finally {
+      cleanup(dir);
     }
   })) passed++; else failed++;
 

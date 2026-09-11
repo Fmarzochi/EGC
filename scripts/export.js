@@ -7,16 +7,21 @@
 // AMI Markdown document) or as JSON. Reference implementation of section 8.1
 // of docs/spec/agent-memory-interchange.md: the output never carries storage
 // artifacts (encryption header, integrity sidecar). Read-only by contract:
-// it never writes the state files, the key, or the sidecars.
+// it never writes the state files, the key, or the sidecars, and it never
+// changes the mode of the key. The state file is read through a checked
+// descriptor (never through a link, a regular file whose parent resolves
+// inside the state directory), the same way the doctor reads it.
 //
-// Exit codes: 0 printed, 1 bad usage or unreadable file, 2 no memory for the
-// scope, 3 encrypted memory whose key is missing or unreadable.
+// Exit codes: 0 printed, 1 bad usage, a state file or key that cannot be
+// read or trusted, 2 no memory for the scope, 3 encrypted memory whose key
+// is missing.
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const branchState = require('./lib/branch-state');
 const stateCrypto = require('./lib/state-crypto');
+const statePlaintext = require('./lib/state-plaintext');
 const globalState = require('./lib/global-state');
 
 const SECTION_KEYS = {
@@ -33,8 +38,9 @@ Prints the decrypted memory document for a project (default: current
 directory) or for the user-wide global scope. Plain text is the AMI Markdown
 document as stored; --json parses it into header fields and the five sections.
 
-Exit codes: 0 printed, 1 usage or read error, 2 no memory for the scope,
-3 encrypted memory whose key is missing.`;
+Exit codes: 0 printed, 1 usage error or a state file or key that cannot be
+read or trusted, 2 no memory for the scope, 3 encrypted memory whose key is
+missing.`;
 
 // One entry per accepted flag: how to recognise it and what it sets.
 // `next` consumes the following argument as the flag's value.
@@ -42,9 +48,9 @@ const OPTIONS = [
   { matches: arg => arg === '--help' || arg === '-h', apply: opts => { opts.help = true; } },
   { matches: arg => arg === '--json', apply: opts => { opts.json = true; } },
   { matches: arg => arg === '--project' || arg === '-p', apply: (opts, next) => { opts.project = next('--project needs a path'); } },
-  { matches: arg => arg.startsWith('--project='), apply: (opts, next, arg) => { opts.project = arg.slice('--project='.length); } },
+  { matches: arg => arg.startsWith('--project='), apply: (opts, _next, arg) => { opts.project = arg.slice('--project='.length); } },
   { matches: arg => arg === '--scope', apply: (opts, next) => { opts.scope = next('--scope needs project or global'); } },
-  { matches: arg => arg.startsWith('--scope='), apply: (opts, next, arg) => { opts.scope = arg.slice('--scope='.length); } },
+  { matches: arg => arg.startsWith('--scope='), apply: (opts, _next, arg) => { opts.scope = arg.slice('--scope='.length); } },
 ];
 
 function parseArgs(argv) {
@@ -120,10 +126,20 @@ function toJson(content, scope) {
   return out;
 }
 
+// Whether anything sits at the path (a link, even a dangling one, counts).
+function present(filePath) {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveDocument(opts) {
   if (opts.scope === 'global') {
     const file = globalState.globalStateFilePath();
-    return { file, exists: fs.existsSync(file), label: 'global memory' };
+    return { file, root: statePlaintext.stateRoot(path.dirname(file)), exists: present(file), label: 'global memory' };
   }
   const projectPath = path.resolve(opts.project || process.cwd());
   const stateDir = branchState.getStateDir();
@@ -131,9 +147,56 @@ function resolveDocument(opts) {
   const resolved = branchState.resolveStateRead(stateDir, projectPath, branch);
   return {
     file: resolved.filePath,
+    root: statePlaintext.stateRoot(stateDir),
     exists: resolved.source !== 'none',
     label: `memory for ${projectPath}`,
   };
+}
+
+function fail(code, message) {
+  console.error(`egc export: ${message}`);
+  process.exit(code);
+}
+
+// The bytes of the state file through the checked descriptor: a link, a
+// non-regular file, a path outside the state directory or a file that
+// changed under the read is refused, never followed or printed.
+function readStateBytes(target) {
+  let raw;
+  try {
+    raw = target.root ? statePlaintext.readStateFileBytes(target.file, target.root) : null;
+  } catch (err) {
+    // A link at the path is refused by the no-follow open (ELOOP), the
+    // same refusal as a link seen before the open.
+    if (err.code === 'ELOOP') raw = null;
+    else fail(1, `cannot read ${target.file}: ${err.message}`);
+  }
+  if (raw === null) fail(1, `${target.file} is not a regular file inside the state directory, or changed while it was read`);
+  return raw;
+}
+
+// The key for an encrypted document, loaded without touching its mode. A
+// key that is missing is exit 3; one that is present but cannot be read,
+// is not private, or is malformed is exit 1 with the reason.
+function loadKeyReadOnly() {
+  let key;
+  try {
+    key = stateCrypto.loadKey(undefined, { readOnly: true });
+  } catch (err) {
+    fail(1, err.message);
+  }
+  if (key) return key;
+  if (!present(stateCrypto.defaultKeyPath())) fail(3, 'the memory is encrypted and the key is missing');
+  return fail(1, `the key at ${stateCrypto.defaultKeyPath()} is malformed`);
+}
+
+function decryptedContent(target) {
+  const raw = readStateBytes(target);
+  if (!stateCrypto.isEncryptedBuffer(raw)) return raw;
+  const keyMaterial = loadKeyReadOnly();
+  const content = stateCrypto.decryptStateBuffer(raw, undefined, { keyMaterial });
+  if (content === null) fail(1, `${target.file} cannot be decrypted with the key (truncated or tampered)`);
+  return content;
 }
 
 function main() {
@@ -151,29 +214,17 @@ function main() {
   }
 
   const target = resolveDocument(opts);
-  if (!target.exists) {
-    console.error(`egc export: no ${target.label}`);
-    process.exit(2);
-  }
+  if (!target.exists) fail(2, `no ${target.label}`);
 
-  let content;
-  try {
-    content = stateCrypto.readStateFileDecrypted(target.file);
-  } catch (err) {
-    console.error(`egc export: cannot read ${target.file}: ${err.message}`);
-    process.exit(1);
-  }
-  if (content === null) {
-    console.error(`egc export: ${target.file} is encrypted and the key is missing or unreadable`);
-    process.exit(3);
-  }
+  const content = decryptedContent(target);
 
   // fs.writeSync keeps the whole document in the pipe before exit; see the
-  // same note in crush-run.js about asynchronous stdout on POSIX.
+  // same note in crush-run.js about asynchronous stdout on POSIX. The plain
+  // text goes out exactly as stored, not a byte added.
   if (opts.json) {
-    fs.writeSync(1, JSON.stringify(toJson(content, opts.scope), null, 2) + '\n');
+    fs.writeSync(1, JSON.stringify(toJson(content.toString('utf-8'), opts.scope), null, 2) + '\n');
   } else {
-    fs.writeSync(1, content.endsWith('\n') ? content : `${content}\n`);
+    fs.writeSync(1, content);
   }
   process.exit(0);
 }

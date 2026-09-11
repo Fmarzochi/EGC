@@ -88,11 +88,21 @@ function keyDescriptor(filePath) {
   return fd;
 }
 
-function refuseUnlessRegularAndPrivate(fd, filePath) {
+// With `readOnly` the mode is checked and never changed: a caller that must
+// not touch the key (egc export) refuses a key readable by others instead
+// of tightening it.
+function refuseUnlessRegularAndPrivate(fd, filePath, { readOnly = false } = {}) {
   if (!fs.fstatSync(fd).isFile()) {
     throw new Error(`[EGC] ${filePath} is not a regular file; the key must be a regular file. Replace it and restart.`);
   }
   if (process.platform === 'win32') return;
+  if (readOnly) {
+    const bits = fs.fstatSync(fd).mode & 0o777;
+    if (bits & 0o077) {
+      throw new Error(`[EGC] ${filePath} is readable by other users (mode ${bits.toString(8)}); the key must be 0600. Fix the permissions and retry.`);
+    }
+    return;
+  }
   let failure = null;
   try { fs.fchmodSync(fd, 0o600); } catch (chmodErr) { failure = chmodErr; }
   if (failure) {
@@ -105,10 +115,10 @@ function refuseUnlessRegularAndPrivate(fd, filePath) {
 }
 
 // Runs `use(fd)` on the checked descriptor of the key file, then closes it.
-function withPrivateKeyFile(filePath, use) {
+function withPrivateKeyFile(filePath, use, options = {}) {
   const fd = keyDescriptor(filePath);
   try {
-    refuseUnlessRegularAndPrivate(fd, filePath);
+    refuseUnlessRegularAndPrivate(fd, filePath, options);
     return use(fd);
   } finally {
     fs.closeSync(fd);
@@ -149,10 +159,10 @@ function writeAllBytes(fd, bytes) {
 // is malformed. Every read goes through the checks on the descriptor it
 // reads from, and any refusal (a link, a wide mode, a non-regular object,
 // an unreadable file) is an error, never a silent null.
-function loadKey(keyPath) {
+function loadKey(keyPath, options = {}) {
   const resolvedPath = keyPath || defaultKeyPath();
   if (!present(resolvedPath)) return null;
-  const hex = withPrivateKeyFile(resolvedPath, fd => fs.readFileSync(fd, 'utf-8')).trim();
+  const hex = withPrivateKeyFile(resolvedPath, fd => fs.readFileSync(fd, 'utf-8'), options).trim();
   const key = Buffer.from(hex, 'hex');
   return key.length === 32 ? key : null;
 }
@@ -206,10 +216,12 @@ function encryptStateBuffer(plaintext, keyPath) {
 
 // Returns plaintext, or null when the payload cannot be authenticated and
 // decrypted (missing or malformed key, truncated or tampered ciphertext).
-function decryptStateBuffer(data, keyPath) {
+// `options.keyMaterial` hands the key in directly (already loaded through
+// the checks); `options.readOnly` loads it without touching its mode.
+function decryptStateBuffer(data, keyPath, options = {}) {
   // A missing or malformed key resolves to null; a key that cannot be kept
   // private is an error that reaches the caller.
-  const key = loadKey(keyPath);
+  const key = Buffer.isBuffer(options.keyMaterial) ? options.keyMaterial : loadKey(keyPath, options);
   if (!key) return null;
   try {
     const iv = data.subarray(MAGIC_BYTES, MAGIC_BYTES + IV_BYTES);
@@ -239,6 +251,8 @@ function readStateFileDecrypted(filePath, keyPath) {
 
 module.exports = {
   assertPrivateKeyFile,
+  defaultKeyPath,
+  loadKey,
   MAGIC,
   isEncryptedBuffer,
   decryptStateBuffer,
