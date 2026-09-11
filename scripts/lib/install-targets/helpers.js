@@ -368,6 +368,116 @@ function createDefaultScaffoldOperations(input, adapter) {
   });
 }
 
+// What today's scaffold operations would actually write, at the
+// granularity the install-state records: single files in `files`,
+// whole source directories (still copied recursively, one child file
+// at a time) in `dirs`. Mirrors the file/directory split
+// materializeScaffoldOperation (install-executor.js) applies when it
+// turns these same scaffold operations into the copy-file entries
+// the state records, so a directory scaffold entry here shields every
+// file under it even though no single copy-file operation names the
+// directory itself.
+function collectCurrentlyCoveredDestinations(operations, repoRoot) {
+  const files = new Set();
+  const dirs = new Set();
+  for (const operation of Array.isArray(operations) ? operations : []) {
+    const destination = typeof operation.destinationPath === 'string' ? operation.destinationPath : null;
+    if (!destination) continue;
+    const resolvedDestination = path.resolve(destination);
+    const source = typeof operation.sourceRelativePath === 'string' ? operation.sourceRelativePath : null;
+    if (!source) {
+      // Nothing repo-relative to check the shape of (a merge or hook
+      // operation may carry its payload some other way): treat the
+      // destination as covered rather than guess, so it is never offered
+      // up for retirement by mistake.
+      files.add(resolvedDestination);
+      continue;
+    }
+    let stat;
+    try {
+      stat = fs.statSync(path.join(repoRoot, ...normalizeRelativePath(source).split('/')));
+    } catch {
+      // Source unreadable from here: same reasoning, stay conservative.
+      files.add(resolvedDestination);
+      continue;
+    }
+    (stat.isDirectory() ? dirs : files).add(resolvedDestination);
+  }
+  return { files, dirs };
+}
+
+function isDestinationCovered(resolved, { files, dirs }) {
+  if (files.has(resolved)) return true;
+  for (const dir of dirs) {
+    if (resolved === dir || resolved.startsWith(dir + path.sep)) return true;
+  }
+  return false;
+}
+
+// The default planRetirements body: compares the previous install-state's
+// managed copy-file operations against what this plan would write today: a
+// destination the state remembers EGC copied, that no scaffold operation
+// in the current plan still covers, is offered up for retirement. Renaming
+// or dropping a command, prompt, rule or skill from the package is exactly
+// this -- the old destination stops being covered and is cleaned up on the
+// next install or auto-update.
+//
+// Only recorded `copy-file` operations are diffed; merge-json and hook
+// operations (settings.json entries, MCP config merges) have no
+// counterpart here yet -- left as an open question by #1412.
+//
+// This only decides which destinations are *candidates*. The identity
+// check that decides whether one is actually safe to delete -- a regular
+// file, reached through no link, byte-identical to the source EGC copied
+// -- happens later in install/apply.js's isRetirableFile, the same test
+// #1411 introduced for OpenCode. A source no longer in the repository
+// (renamed or removed, so identity cannot be verified) fails that check
+// like any other unreadable source: the candidate is reported nowhere and
+// the file is left in place, not deleted on the strength of the state
+// entry alone.
+function planGenericRetirements(input, adapter) {
+  const { readInstallState } = require('../install-state');
+  const repoRoot = input.repoRoot || process.cwd();
+  const targetRoot = path.resolve(adapter.resolveRoot(input));
+
+  let previous;
+  try {
+    previous = readInstallState(adapter.getInstallStatePath(input));
+  } catch {
+    // No previous install, or a state file that cannot be trusted: nothing
+    // to diff against, so nothing to retire.
+    return [];
+  }
+
+  const covered = collectCurrentlyCoveredDestinations(
+    Array.isArray(input.operations) ? input.operations : adapter.planOperations(input),
+    repoRoot
+  );
+
+  const retirements = [];
+  const seen = new Set();
+  for (const operation of Array.isArray(previous.operations) ? previous.operations : []) {
+    if (operation.ownership !== 'managed' || operation.kind !== 'copy-file') continue;
+    const destinationPath = typeof operation.destinationPath === 'string' ? operation.destinationPath : '';
+    if (!destinationPath) continue;
+    const resolved = path.resolve(destinationPath);
+    if (!resolved.startsWith(targetRoot + path.sep) || seen.has(resolved)) continue;
+    if (isDestinationCovered(resolved, covered)) continue;
+    const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
+    if (!source) continue;
+    seen.add(resolved);
+    retirements.push({
+      destinationPath: resolved,
+      sourceRelativePath: source,
+      // The file EGC copied there, for the apply to compare against: a
+      // file the person replaced since is theirs and stays.
+      sourcePath: path.join(repoRoot, ...source.split('/')),
+      reason: 'file left the install plan',
+    });
+  }
+  return retirements;
+}
+
 function createInstallTargetAdapter(config) {
   const adapter = {
     id: config.id,
@@ -431,13 +541,16 @@ function createInstallTargetAdapter(config) {
       return createDefaultScaffoldOperations(input, adapter);
     },
     // Files a previous install wrote that this plan no longer covers and
-    // that the target wants removed on the next apply; most targets have
-    // none (the installer never deletes what it did not write).
+    // that the target wants removed on the next apply. An adapter
+    // with its own rules (e.g. OpenCode's egc-universal package
+    // cleanup, narrower and with its own kept-files exception)
+    // defines config.planRetirements and is used as-is; every other
+    // target falls back to the generic plan-diff below (#1412).
     planRetirements(input = {}) {
       if (typeof config.planRetirements === 'function') {
         return config.planRetirements(input, adapter);
       }
-      return [];
+      return planGenericRetirements(input, adapter);
     },
     supportsModule(module, input = {}) {
       if (typeof config.supportsModule === 'function') {
@@ -479,5 +592,6 @@ module.exports = {
   normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
+  planGenericRetirements,
   resolveModulesPlan,
 };

@@ -109,9 +109,13 @@ function planInstallTargetScaffold(options = {}) {
     ...planningInput,
     modules,
   });
+  // The generic default reuses these instead of planning a second time;
+  // an adapter with its own planRetirements is free to ignore the extra
+  // field.
   const retirements = adapter.planRetirements({
     ...planningInput,
     modules,
+    operations,
   });
 
   return {

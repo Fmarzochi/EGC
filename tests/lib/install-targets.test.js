@@ -12,6 +12,10 @@ const {
   planInstallTargetScaffold,
 } = require('../../scripts/lib/install-targets/registry');
 
+const {
+  createInstallTargetAdapter,
+} = require('../../scripts/lib/install-targets/helpers');
+
 function normalizedRelativePath(value) {
   return String(value || '').replace(/\\/g, '/');
 }
@@ -3682,6 +3686,157 @@ function runTests() {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('warp'), 'Should include warp target');
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements (the default every target gets with no adapter override) retires a file that left the plan, keeps a still-planned file and a destination outside the root, and plans nothing without a previous install (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'kept.md'), 'kept');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'old-name.md'), 'renamed away, source unchanged');
+
+      // A plain adapter with no planOperations/planRetirements of its own,
+      // the shape most real targets are (windsurf, amp, copilot, ...): it
+      // gets the shared defaults for both.
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-target',
+        target: 'egc-generic-retire-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+      });
+
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }] };
+
+      assert.deepStrictEqual(adapter.planRetirements(planningInput), [], 'no previous install, nothing to retire');
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      const previous = [
+        // Still named by a module path in planningInput below: stays.
+        ['commands/kept.md', path.join(targetRoot, 'commands', 'kept.md')],
+        // Renamed away -- the source is still in the repo, just not
+        // referenced by any module path anymore. This is the common case
+        // (a command or prompt renamed in the package): retired.
+        ['commands/old-name.md', path.join(targetRoot, 'commands', 'old-name.md')],
+        // Dropped from the package entirely, source gone too. Still a
+        // *candidate* here: apply.js's identity check (#1411) is what
+        // actually refuses to delete it, since it cannot verify the file
+        // is unchanged.
+        ['commands/removed.md', path.join(targetRoot, 'commands', 'removed.md')],
+        // Outside this target's root: never a candidate, whatever the
+        // state says.
+        ['commands/escaped.md', path.join(homeDir, 'elsewhere', 'escaped.md')],
+      ];
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: previous.map(([sourceRelativePath, destinationPath]) => ({
+          kind: 'copy-file',
+          moduleId: 'x',
+          sourceRelativePath,
+          destinationPath,
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        })),
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      const expectedDestinations = [
+        path.join(targetRoot, 'commands', 'old-name.md'),
+        path.join(targetRoot, 'commands', 'removed.md'),
+      ].sort();
+
+      const retirements = adapter.planRetirements(planningInput);
+      assert.deepStrictEqual(
+        retirements.map(entry => entry.destinationPath).sort(),
+        expectedDestinations,
+        'the renamed-away and dropped files are offered up; the still-planned file and the one outside the root are not'
+      );
+      for (const entry of retirements) {
+        assert.strictEqual(
+          entry.sourcePath,
+          path.join(repoRoot, ...entry.sourceRelativePath.split('/')),
+          'each candidate names the file EGC copied, for apply.js to compare'
+        );
+      }
+
+      // registry.js passes the already-planned operations through to avoid
+      // planning a second time; the result must not depend on that.
+      const withPrecomputedOperations = adapter.planRetirements({
+        ...planningInput,
+        operations: adapter.planOperations(planningInput),
+      });
+      assert.deepStrictEqual(
+        withPrecomputedOperations.map(entry => entry.destinationPath).sort(),
+        expectedDestinations,
+        'passing already-planned operations through gives the same result as planning them again'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements treats a directory-shaped scaffold operation as covering every file under it (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-dir-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-dir-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'bundle', 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'bundle', 'a.md'), 'a');
+      fs.writeFileSync(path.join(repoRoot, 'bundle', 'nested', 'b.md'), 'b');
+
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-dir-target',
+        target: 'egc-generic-retire-dir-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-dir-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+      });
+
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      // A single module path naming the whole directory, the same shape a
+      // recursive scaffold copy plans: one 'copy-path' operation for
+      // 'bundle', not one per file underneath.
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['bundle'] }] };
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      // What an earlier install actually recorded: one copy-file entry per
+      // file the directory copy produced, as install-executor.js's
+      // materializeScaffoldOperation expands it.
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'bundle/a.md', destinationPath: path.join(targetRoot, 'bundle', 'a.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'bundle/nested/b.md', destinationPath: path.join(targetRoot, 'bundle', 'nested', 'b.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      assert.deepStrictEqual(
+        adapter.planRetirements(planningInput),
+        [],
+        'both files still live inside the planned directory, so neither is offered up'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
