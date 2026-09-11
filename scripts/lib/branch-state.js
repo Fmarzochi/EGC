@@ -30,19 +30,49 @@ function branchStateKey(branch) {
   return `${readablePrefix}--${digest}`;
 }
 
-// The resolved absolute form of a git path when it sits under a trusted
+// The canonical absolute form of a path: links are resolved through the
+// nearest existing ancestor and the rest is appended lexically, so a link
+// planted at .git or above it cannot lead a read outside the trusted roots
+// while the lexical path still looks inside them. A path that cannot be
+// canonicalised (a link loop, a parent that cannot be inspected) is null.
+function canonicalPath(p) {
+  let existing = path.resolve(p);
+  const tail = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync.native(existing);
+      return tail.length > 0 ? path.join(real, ...tail) : real;
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') return null;
+    }
+    const parent = path.dirname(existing);
+    if (parent === existing) return null;
+    tail.unshift(path.basename(existing));
+    existing = parent;
+  }
+}
+
+function trustedRoot(dir) {
+  try {
+    return fs.realpathSync.native(dir) + path.sep;
+  } catch {
+    return path.resolve(dir) + path.sep;
+  }
+}
+
+// The canonical absolute form of a git path when it sits under a trusted
 // root (the home directory or the temp directory, untainted system values)
 // and carries '.git' as a path segment; null otherwise. The value returned
 // here is the one every read below uses, so a path handed in by a hook
 // payload or a CLI argument never reaches the filesystem unchecked, and a
-// traversal to an unrelated location is refused before any read.
+// traversal or a link leading to an unrelated location is refused before
+// any read.
 function trustedGitPath(p) {
-  const resolved = path.resolve(p);
-  const home = os.homedir() + path.sep;
-  const tmp = os.tmpdir() + path.sep;
-  const underTrustedRoot = resolved.startsWith(home) || resolved.startsWith(tmp);
-  const hasGitSegment = resolved.split(path.sep).includes('.git');
-  return underTrustedRoot && hasGitSegment ? resolved : null;
+  const canonical = canonicalPath(p);
+  if (!canonical) return null;
+  const underTrustedRoot = canonical.startsWith(trustedRoot(os.homedir())) || canonical.startsWith(trustedRoot(os.tmpdir()));
+  const hasGitSegment = canonical.split(path.sep).includes('.git');
+  return underTrustedRoot && hasGitSegment ? canonical : null;
 }
 
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
