@@ -141,7 +141,8 @@ function runTests() {
           try {
             fs.readdirSync(sealed);
           } catch (error) {
-            sealedForReal = error.code === 'EACCES' || error.code === 'EPERM';
+            if (error.code !== 'EACCES' && error.code !== 'EPERM') throw error;
+            sealedForReal = true;
           }
           if (sealedForReal) {
             assert.strictEqual(trustedGitPath(path.join(sealed, 'repo', '.git', 'HEAD')), null, 'a path behind a sealed parent is refused');

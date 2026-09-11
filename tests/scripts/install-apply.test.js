@@ -10,8 +10,9 @@ const { execFileSync } = require('child_process');
 const { applyInstallPlan } = require('../../scripts/lib/install/apply');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
-const { FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const DEFAULT_INSTALL_APPLY_TIMEOUT_MS = FULL_INSTALL_TIMEOUT_MS;
+const PROBE = { timeout: CLI_TIMEOUT_MS };
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -88,7 +89,7 @@ function runTests() {
 
 
   if (test('shows help with --help', () => {
-    const result = run(['--help']);
+    const result = run(['--help'], PROBE);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Usage:'));
     assert.ok(result.stdout.includes('--dry-run'));
@@ -845,7 +846,7 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('rejects unknown explicit manifest modules before resolution', () => {
-    const result = run(['--modules', 'ghost-module']);
+    const result = run(['--modules', 'ghost-module'], PROBE);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('Unknown install module: ghost-module'));
   })) passed++; else failed++;
