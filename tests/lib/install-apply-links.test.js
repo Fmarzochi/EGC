@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { checkedDestinations, findLegacyLinks, refuseLinkedDestination, removeLegacyLinks, retirePlannedFiles, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+const { checkedDestinations, findLegacyLinks, managedRootFor, refuseLinkedDestination, removeLegacyLinks, retirePlannedFiles, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
 
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
@@ -183,6 +183,31 @@ function runTests() {
         const plan = { targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [] };
         assert.deepStrictEqual(checkedDestinations(plan), [plan.installStatePath]);
         assert.deepStrictEqual(findLegacyLinks(plan).map(entry => entry.linkPath), [path.join(home, 'egc')]);
+      })) passed++; else failed++;
+
+      if (test('a destination under a declared second root is walked against that root: a linked ancestor there is refused before any write (#1412)', () => {
+        const target = path.join(dir, 'two-roots-target');
+        const second = path.join(dir, 'two-roots-config');
+        fs.mkdirSync(path.join(target, 'skills'), { recursive: true });
+        fs.mkdirSync(path.join(second, 'plugins'), { recursive: true });
+        // The plugin directory under the second root replaced by a link elsewhere.
+        fs.symlinkSync(outside, path.join(second, 'plugins', 'egc'), 'dir');
+        const linked = path.join(second, 'plugins', 'egc', 'plugin.js');
+        const plain = path.join(target, 'skills', 'SKILL.md');
+        const plan = {
+          targetRoot: target,
+          managedRoots: [target, second],
+          installStatePath: path.join(target, 'egc', 'install-state.json'),
+          operations: [{ destinationPath: plain }, { destinationPath: linked }],
+        };
+        assert.strictEqual(managedRootFor(plan, linked), second, 'the plugin write belongs to the second root');
+        assert.strictEqual(managedRootFor(plan, plain), target, 'the skill write belongs to the target root');
+        assert.strictEqual(managedRootFor(plan, path.join(outside, 'x.md')), target, 'a path outside every root falls back to the target root');
+        assert.throws(() => refuseLinkedDestination(linked, managedRootFor(plan, linked)), /symbolic link/, 'the walk against the second root finds the linked ancestor');
+        assert.doesNotThrow(() => refuseLinkedDestination(linked, target), 'the same walk against the target root alone would have missed it');
+        assert.throws(() => findLegacyLinks(plan, { strict: true }), /symbolic link/, 'the preflight refuses the plan before anything is written');
+        assert.deepStrictEqual(findLegacyLinks(plan), [], 'and lists nothing to migrate: the legacy layout never lived under a second root');
+        assert.ok(!fs.existsSync(path.join(outside, 'plugin.js')), 'nothing was written through the link');
       })) passed++; else failed++;
 
       if (test('a root that is itself a link is allowed', () => {

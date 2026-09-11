@@ -306,11 +306,11 @@ function retirePlannedFiles(plan) {
   return retired;
 }
 
-// The roots a plan's retirements may fall under: the target root, plus any
-// second root the adapter declared it writes into (Amp's plugin config
-// directory). A candidate is checked against the root it belongs to, so the
-// linked-ancestor walk and the empty-parent climb never leave that root.
-function retirementRoots(plan) {
+// The roots a plan writes under: the target root, plus any second root the
+// adapter declared (Amp's plugin config directory). A destination is checked
+// against the root it belongs to, so the linked-ancestor walk and the
+// empty-parent climb cover that root and never leave it.
+function managedRootsOf(plan) {
   const declared = Array.isArray(plan.managedRoots) ? plan.managedRoots : [];
   const roots = [plan.targetRoot, ...declared]
     .filter(root => typeof root === 'string' && root.length > 0)
@@ -318,11 +318,19 @@ function retirementRoots(plan) {
   return [...new Set(roots)];
 }
 
+// The managed root a destination falls under; a destination outside every
+// declared root is walked against the target root, as before.
+function managedRootFor(plan, destinationPath) {
+  const resolved = path.resolve(destinationPath);
+  const root = managedRootsOf(plan).find(candidate => resolved === candidate || resolved.startsWith(candidate + path.sep));
+  return root || plan.targetRoot;
+}
+
 // The retirements of a plan that would actually be removed right now, each
 // with the root it belongs to: the same test the apply runs, so a dry run
 // lists exactly what the apply does.
 function retirableEntries(plan) {
-  const roots = retirementRoots(plan);
+  const roots = managedRootsOf(plan);
   const result = [];
   for (const retirement of Array.isArray(plan.retirements) ? plan.retirements : []) {
     const filePath = path.resolve(retirement.destinationPath);
@@ -455,9 +463,14 @@ function checkedDestinations(plan) {
 // apply walk the same paths, so the list is what the apply will do.
 function findLegacyLinks(plan, { strict = false } = {}) {
   const migrate = [];
+  const targetRoot = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
   for (const destinationPath of checkedDestinations(plan)) {
+    // The legacy layout (#1400) only ever lived under the target root: a
+    // link under a declared second root is refused outright.
+    const root = managedRootFor(plan, destinationPath);
+    const options = root === targetRoot ? { migrate, dryRun: true } : { dryRun: true };
     try {
-      refuseLinkedDestination(destinationPath, plan.targetRoot, { migrate, dryRun: true });
+      refuseLinkedDestination(destinationPath, root, options);
     } catch (error) {
       if (strict) throw error;
     }
@@ -517,7 +530,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
 
-    refuseLinkedDestination(operation.destinationPath, plan.targetRoot);
+    refuseLinkedDestination(operation.destinationPath, managedRootFor(plan, operation.destinationPath));
 
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
@@ -582,6 +595,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
 module.exports = {
   applyInstallPlan,
+  managedRootFor,
   retirableFiles,
   retirePlannedFiles,
   checkedDestinations,
