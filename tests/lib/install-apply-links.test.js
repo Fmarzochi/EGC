@@ -283,6 +283,73 @@ function runTests() {
       assert.ok(fs.existsSync(root2), 'the root itself stays');
     })) passed++; else failed++;
 
+    if (test('retirePlannedFiles honors a second managed root the plan declares, and still refuses anything outside every root (#1412)', () => {
+      const root4 = path.join(dir, 'retire-two-roots');
+      const second = path.join(dir, 'retire-two-roots-config');
+      const source4 = path.join(dir, 'retire-two-roots-source');
+      fs.mkdirSync(path.join(root4, 'skills'), { recursive: true });
+      fs.mkdirSync(path.join(second, 'plugins', 'egc'), { recursive: true });
+      fs.mkdirSync(source4, { recursive: true });
+      fs.writeFileSync(path.join(source4, 'plugin.js'), 'egc plugin.js');
+      fs.writeFileSync(path.join(source4, 'SKILL.md'), 'egc SKILL.md');
+      fs.writeFileSync(path.join(root4, 'skills', 'SKILL.md'), 'egc SKILL.md');
+      fs.writeFileSync(path.join(second, 'plugins', 'egc', 'plugin.js'), 'egc plugin.js');
+      fs.writeFileSync(path.join(second, 'plugins', 'keep.js'), 'keep');
+      fs.writeFileSync(path.join(outside, 'elsewhere.js'), 'egc plugin.js');
+      const plan = {
+        targetRoot: root4,
+        managedRoots: [root4, second],
+        retirements: [
+          { destinationPath: path.join(root4, 'skills', 'SKILL.md'), sourcePath: path.join(source4, 'SKILL.md') },
+          { destinationPath: path.join(second, 'plugins', 'egc', 'plugin.js'), sourcePath: path.join(source4, 'plugin.js') },
+          { destinationPath: path.join(outside, 'elsewhere.js'), sourcePath: path.join(source4, 'plugin.js') },
+        ],
+      };
+      const retired = retirePlannedFiles(plan);
+      assert.deepStrictEqual(
+        retired.map(item => item.destinationPath).sort(),
+        [path.join(root4, 'skills', 'SKILL.md'), path.join(second, 'plugins', 'egc', 'plugin.js')].sort(),
+        'files under either declared root go; the one outside every root does not'
+      );
+      assert.ok(!fs.existsSync(path.join(second, 'plugins', 'egc')), 'the emptied directory under the second root is gone');
+      assert.ok(fs.existsSync(path.join(second, 'plugins', 'keep.js')), 'a file that stays keeps its directory under the second root');
+      assert.ok(fs.existsSync(second), 'the second root itself stays');
+      assert.ok(fs.existsSync(path.join(outside, 'elsewhere.js')), 'a path outside every root is never touched');
+      assert.ok(retired.every(item => !('root' in item)), 'the reported entries carry no bookkeeping field');
+    })) passed++; else failed++;
+
+    if (test('retirePlannedFiles retires a file whose recorded source is gone only when its bytes match a file the plan copies today (#1412)', () => {
+      const root5 = path.join(dir, 'retire-renamed');
+      const source5 = path.join(dir, 'retire-renamed-source');
+      fs.mkdirSync(path.join(root5, 'commands'), { recursive: true });
+      fs.mkdirSync(source5, { recursive: true });
+      // The package renamed old.md to new.md: the old source is gone, the new
+      // one carries the same bytes and is what the plan copies today.
+      fs.writeFileSync(path.join(source5, 'new.md'), 'egc command');
+      fs.writeFileSync(path.join(root5, 'commands', 'old.md'), 'egc command');
+      // A dropped file whose bytes match nothing the plan writes, and one the
+      // person edited after the rename: both stay.
+      fs.writeFileSync(path.join(root5, 'commands', 'dropped.md'), 'egc dropped');
+      fs.writeFileSync(path.join(root5, 'commands', 'edited.md'), 'mine now');
+      const plan = {
+        targetRoot: root5,
+        operations: [
+          { kind: 'copy-file', sourcePath: path.join(source5, 'new.md'), destinationPath: path.join(root5, 'commands', 'new.md') },
+          { kind: 'merge-json', sourcePath: path.join(source5, 'missing.json'), destinationPath: path.join(root5, 'x.json') },
+        ],
+        retirements: [
+          { destinationPath: path.join(root5, 'commands', 'old.md'), sourcePath: path.join(source5, 'old.md') },
+          { destinationPath: path.join(root5, 'commands', 'dropped.md'), sourcePath: path.join(source5, 'dropped.md') },
+          { destinationPath: path.join(root5, 'commands', 'edited.md'), sourcePath: path.join(source5, 'edited.md') },
+        ],
+      };
+      const retired = retirePlannedFiles(plan);
+      assert.deepStrictEqual(retired.map(item => item.destinationPath), [path.join(root5, 'commands', 'old.md')], 'only the renamed file goes');
+      assert.ok(fs.existsSync(path.join(root5, 'commands', 'dropped.md')), 'a dropped file matching nothing the plan writes stays');
+      assert.ok(fs.existsSync(path.join(root5, 'commands', 'edited.md')), 'a file the person edited stays');
+      assert.deepStrictEqual(retirePlannedFiles({ targetRoot: root5, retirements: plan.retirements.slice(1) }), [], 'without plan operations nothing vouches for a missing source');
+    })) passed++; else failed++;
+
     if (test('retirePlannedFiles stops climbing when a parent cannot be read after the removal', () => {
       const root3 = path.join(dir, 'retire-sealed');
       const sealed = path.join(root3, 'sealed');

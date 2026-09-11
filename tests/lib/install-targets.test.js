@@ -3718,7 +3718,7 @@ function runTests() {
       const previous = [
         // Still named by a module path in planningInput below: stays.
         ['commands/kept.md', path.join(targetRoot, 'commands', 'kept.md')],
-        // Renamed away -- the source is still in the repo, just not
+        // Renamed away: the source is still in the repo, just not
         // referenced by any module path anymore. This is the common case
         // (a command or prompt renamed in the package): retired.
         ['commands/old-name.md', path.join(targetRoot, 'commands', 'old-name.md')],
@@ -3862,7 +3862,7 @@ function runTests() {
         },
       });
       const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
-      const planningInput = { repoRoot, homeDir, modules: [] };
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['scripts/plugin.ts'] }] };
 
       const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
       const state = createInstallState({
@@ -3899,6 +3899,8 @@ function runTests() {
     try {
       fs.mkdirSync(path.join(repoRoot, 'skills', 'shared'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, 'skills', 'shared', 'SKILL.md'), 'shared skill');
+      fs.mkdirSync(path.join(repoRoot, 'skills', 'kept'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'skills', 'kept', 'SKILL.md'), 'kept skill');
 
       const adapterA = createInstallTargetAdapter({
         id: 'egc-generic-retire-sibling-a',
@@ -3917,7 +3919,7 @@ function runTests() {
 
       const targetRoot = adapterA.resolveRoot({ repoRoot, homeDir });
       const siblingBStatePath = adapterB.getInstallStatePath({ repoRoot, homeDir });
-      const planningInputA = { repoRoot, homeDir, modules: [] };
+      const planningInputA = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['skills/kept/SKILL.md'] }] };
 
       const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
       // A's own previous state: it installed the shared skill, but its plan
@@ -3974,6 +3976,87 @@ function runTests() {
         [path.join(targetRoot, 'skills', 'shared', 'SKILL.md')],
         'with no sibling ownership left, the dropped skill is offered up'
       );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements leaves the files of a module that was not selected this run alone, and only offers up what left a module the plan still includes (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-subset-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-subset-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands'), { recursive: true });
+      fs.mkdirSync(path.join(repoRoot, 'skills', 'tool'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'kept.md'), 'kept');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'old-name.md'), 'renamed away, source unchanged');
+      fs.writeFileSync(path.join(repoRoot, 'skills', 'tool', 'SKILL.md'), 'a skill of another module');
+
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-subset-target',
+        target: 'egc-generic-retire-subset-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-subset-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+      });
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      // A full install recorded two modules; module y is not selected below.
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'commands/kept.md', destinationPath: path.join(targetRoot, 'commands', 'kept.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'commands/old-name.md', destinationPath: path.join(targetRoot, 'commands', 'old-name.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'y', sourceRelativePath: 'skills/tool/SKILL.md', destinationPath: path.join(targetRoot, 'skills', 'tool', 'SKILL.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      // A targeted install of module x only: y's skill is not in the plan, but
+      // it was not dropped from the package either, so it stays untouched.
+      const subset = adapter.planRetirements({ repoRoot, homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }] });
+      assert.deepStrictEqual(
+        subset.map(entry => entry.destinationPath),
+        [path.join(targetRoot, 'commands', 'old-name.md')],
+        'only the file that left module x is offered up; module y was simply not selected'
+      );
+
+      // With both modules selected the answer is the same: y still covers its skill.
+      const both = adapter.planRetirements({ repoRoot, homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }, { id: 'y', paths: ['skills/tool/SKILL.md'] }] });
+      assert.deepStrictEqual(both.map(entry => entry.destinationPath), [path.join(targetRoot, 'commands', 'old-name.md')]);
+
+      // No modules selected at all: nothing is offered up.
+      assert.deepStrictEqual(adapter.planRetirements({ repoRoot, homeDir, modules: [] }), []);
+
+      // No repoRoot: identities cannot be compared, so nothing is offered up.
+      assert.deepStrictEqual(adapter.planRetirements({ homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }] }), []);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('planInstallTargetScaffold carries the managed roots of the target into the plan, for the apply to check retirements against (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-managed-roots-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-managed-roots-home-'));
+    try {
+      const amp = planInstallTargetScaffold({ target: 'amp-home', repoRoot, homeDir, modules: [] });
+      assert.deepStrictEqual(
+        amp.managedRoots.map(normalizedRelativePath).sort(),
+        [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp')].map(normalizedRelativePath).sort(),
+        'amp-home declares its skills root and its plugin config root'
+      );
+      const claude = planInstallTargetScaffold({ target: 'claude-home', repoRoot, homeDir, modules: [] });
+      assert.deepStrictEqual(claude.managedRoots, [claude.targetRoot], 'a target with one root declares just that root');
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });

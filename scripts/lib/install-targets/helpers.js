@@ -431,6 +431,32 @@ function resolveAdapterManagedRoots(adapter, input = {}) {
   return [adapter.resolveRoot(input)];
 }
 
+// The managed copy-file operations an install-state records, the shape both
+// the sibling check and the retirement diff read.
+function recordedManagedCopies(state) {
+  const operations = Array.isArray(state?.operations) ? state.operations : [];
+  return operations.filter(operation => (
+    operation.ownership === 'managed'
+    && operation.kind === 'copy-file'
+    && typeof operation.destinationPath === 'string'
+    && operation.destinationPath.length > 0
+  ));
+}
+
+// An install-state, or null when there is none or it cannot be trusted. For
+// a sibling that means nothing to protect (its absence cannot make this
+// adapter's candidate safe, and a corrupt file must not either); for the
+// adapter itself it means nothing to diff against.
+function readInstallStateOrNull(statePath) {
+  if (typeof statePath !== 'string' || statePath.length === 0) return null;
+  const { readInstallState } = require('../install-state');
+  try {
+    return readInstallState(statePath);
+  } catch {
+    return null;
+  }
+}
+
 // Destinations a sibling adapter sharing the same trusted root still records
 // as its own managed copies. codex-home, goose-home and openhands-home all
 // write skills into the shared ~/.agents tree, each with its own
@@ -439,86 +465,82 @@ function resolveAdapterManagedRoots(adapter, input = {}) {
 // coverage check reads those sibling state files (passed in by registry.js
 // when it plans) and refuses any candidate another adapter still owns.
 function collectSiblingOwnedDestinations(statePaths) {
-  const { readInstallState } = require('../install-state');
   const owned = new Set();
   for (const statePath of Array.isArray(statePaths) ? statePaths : []) {
-    if (typeof statePath !== 'string' || statePath.length === 0) continue;
-    let siblingState;
-    try {
-      siblingState = readInstallState(statePath);
-    } catch {
-      // A sibling without a readable install-state owns nothing to protect
-      // here: the absence of one cannot make this adapter's candidate safe,
-      // and the presence of a corrupt one must not either.
-      continue;
-    }
-    for (const operation of Array.isArray(siblingState?.operations) ? siblingState.operations : []) {
-      if (operation.ownership !== 'managed' || operation.kind !== 'copy-file') continue;
-      const destinationPath = typeof operation.destinationPath === 'string' ? operation.destinationPath : '';
-      if (!destinationPath) continue;
-      owned.add(path.resolve(destinationPath));
+    for (const operation of recordedManagedCopies(readInstallStateOrNull(statePath))) {
+      owned.add(path.resolve(operation.destinationPath));
     }
   }
   return owned;
 }
 
+// Whether a recorded destination is still a candidate once the boundaries
+// apply: inside a root this adapter manages, not already offered, not owned
+// by a sibling, and not covered by what today's plan writes.
+function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, covered }) {
+  if (!managedRoots.some(root => resolved.startsWith(root + path.sep))) return false;
+  if (seen.has(resolved) || siblingOwned.has(resolved)) return false;
+  return !isDestinationCovered(resolved, covered);
+}
+
 // The default planRetirements body: compares the previous install-state's
-// managed copy-file operations against what this plan would write today: a
-// destination the state remembers EGC copied, that no scaffold operation
-// in the current plan still covers, is offered up for retirement. Renaming
-// or dropping a command, prompt, rule or skill from the package is exactly
-// this -- the old destination stops being covered and is cleaned up on the
-// next install or auto-update.
+// managed copy-file operations against what this plan would write today. A
+// destination the state remembers EGC copied, recorded by a module this plan
+// still selects, and that no scaffold operation in the plan still covers, is
+// offered up for retirement. Renaming or dropping a command, prompt, rule or
+// skill from the package is exactly this: the old destination stops being
+// covered and is cleaned up on the next install or auto-update.
 //
-// Only recorded `copy-file` operations are diffed; merge-json and hook
-// operations (settings.json entries, MCP config merges) have no
-// counterpart here yet -- left as an open question by #1412.
+// The module gate is what tells a rename apart from a module that simply was
+// not selected this run: a targeted --modules install, or a narrower profile,
+// leaves the files of the modules it did not select exactly where they are.
 //
-// This only decides which destinations are *candidates*. The identity
-// check that decides whether one is actually safe to delete -- a regular
-// file, reached through no link, byte-identical to the source EGC copied
-// -- happens later in install/apply.js's isRetirableFile, the same test
-// #1411 introduced for OpenCode. A source no longer in the repository
-// (renamed or removed, so identity cannot be verified) fails that check
-// like any other unreadable source: the candidate is reported nowhere and
-// the file is left in place, not deleted on the strength of the state
-// entry alone.
+// Only recorded copy-file operations are diffed; merge-json and hook
+// operations (settings.json entries, MCP config merges) have no counterpart
+// here yet, an open question left by #1412.
+//
+// This only decides which destinations are candidates. The identity check
+// that decides whether one is actually safe to delete (a regular file,
+// reached through no link, byte-identical to the source EGC copied) happens
+// later in install/apply.js's isRetirableFile, the same test #1411
+// introduced for OpenCode. A source no longer in the repository (the file was
+// renamed, moved or removed) passes that check only when the bytes on disk
+// match a file the plan copies today; otherwise the candidate is listed
+// nowhere and the file is left in place, never deleted on the strength of the
+// state entry alone.
 function planGenericRetirements(input, adapter) {
-  const { readInstallState } = require('../install-state');
-  const repoRoot = input.repoRoot || process.cwd();
-  const managedRoots = resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root));
+  // The operations being diffed were planned against the package source
+  // root; without it identities cannot be compared, so the conservative
+  // answer is to retire nothing rather than to guess a directory.
+  const repoRoot = typeof input.repoRoot === 'string' && input.repoRoot.length > 0 ? input.repoRoot : null;
+  const previous = repoRoot ? readInstallStateOrNull(adapter.getInstallStatePath(input)) : null;
+  if (!previous) return [];
 
-  let previous;
-  try {
-    previous = readInstallState(adapter.getInstallStatePath(input));
-  } catch {
-    // No previous install, or a state file that cannot be trusted: nothing
-    // to diff against, so nothing to retire.
-    return [];
-  }
-
-  const covered = collectCurrentlyCoveredDestinations(
-    Array.isArray(input.operations) ? input.operations : adapter.planOperations(input),
-    repoRoot
+  const selectedModuleIds = new Set(
+    (Array.isArray(input.modules) ? input.modules : [])
+      .map(module => (module && typeof module.id === 'string' ? module.id : null))
+      .filter(Boolean)
   );
-
-  // Destinations another adapter sharing this root still manages: never a
-  // retirement candidate here, whatever this adapter's own coverage says.
-  const siblingOwned = collectSiblingOwnedDestinations(input.siblingStatePaths);
+  const boundaries = {
+    managedRoots: resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root)),
+    seen: new Set(),
+    // Destinations another adapter sharing this root still manages: never a
+    // retirement candidate here, whatever this adapter's own coverage says.
+    siblingOwned: collectSiblingOwnedDestinations(input.siblingStatePaths),
+    covered: collectCurrentlyCoveredDestinations(
+      Array.isArray(input.operations) ? input.operations : adapter.planOperations(input),
+      repoRoot
+    ),
+  };
 
   const retirements = [];
-  const seen = new Set();
-  for (const operation of Array.isArray(previous.operations) ? previous.operations : []) {
-    if (operation.ownership !== 'managed' || operation.kind !== 'copy-file') continue;
-    const destinationPath = typeof operation.destinationPath === 'string' ? operation.destinationPath : '';
-    if (!destinationPath) continue;
-    const resolved = path.resolve(destinationPath);
-    if (!managedRoots.some(root => resolved.startsWith(root + path.sep)) || seen.has(resolved)) continue;
-    if (isDestinationCovered(resolved, covered)) continue;
-    if (siblingOwned.has(resolved)) continue;
+  for (const operation of recordedManagedCopies(previous)) {
+    if (!selectedModuleIds.has(operation.moduleId)) continue;
+    const resolved = path.resolve(operation.destinationPath);
+    if (!isRetirementCandidate(resolved, boundaries)) continue;
     const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
     if (!source) continue;
-    seen.add(resolved);
+    boundaries.seen.add(resolved);
     retirements.push({
       destinationPath: resolved,
       sourceRelativePath: source,

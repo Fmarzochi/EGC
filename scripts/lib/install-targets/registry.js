@@ -96,7 +96,7 @@ function getInstallTargetAdapter(targetOrAdapterId) {
 // managed root with this one. codex-home, goose-home and openhands-home all
 // write skills into the same ~/.agents tree under separate state files, so
 // when any one of them drops a file from its plan, retirement must check the
-// siblings' states before deleting -- the file may still be owned by one of
+// siblings' states before deleting: the file may still be owned by one of
 // the others (cubic review, #1412).
 function collectSiblingInstallStatePaths(adapter, planningInput) {
   const { resolveAdapterManagedRoots } = require('./helpers');
@@ -149,6 +149,8 @@ function planInstallTargetScaffold(options = {}) {
     siblingStatePaths: collectSiblingInstallStatePaths(adapter, planningInput),
   });
 
+  const { resolveAdapterManagedRoots } = require('./helpers');
+
   return {
     adapter: {
       id: adapter.id,
@@ -160,6 +162,10 @@ function planInstallTargetScaffold(options = {}) {
     validationIssues,
     operations,
     retirements,
+    // The roots the retirements above may fall under (the target root plus
+    // any second root the adapter declared), for the apply to check each
+    // candidate against the root it belongs to.
+    managedRoots: resolveAdapterManagedRoots(adapter, planningInput).map(root => path.resolve(root)),
   };
 }
 

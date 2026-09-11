@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -296,9 +297,8 @@ function refuseLinkedDestination(destinationPath, targetRoot, { migrate, dryRun 
 // directory there is not what EGC wrote and is left alone. Directories the
 // removal empties are dropped too, up to the target root.
 function retirePlannedFiles(plan) {
-  const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
   const retired = [];
-  for (const retirement of retirableFiles(plan)) {
+  for (const { retirement, root } of retirableEntries(plan)) {
     fs.unlinkSync(retirement.destinationPath);
     retired.push(retirement);
     removeEmptyParents(path.dirname(retirement.destinationPath), root);
@@ -306,18 +306,36 @@ function retirePlannedFiles(plan) {
   return retired;
 }
 
-// The retirements of a plan that would actually be removed right now: the
-// same test the apply runs, so a dry run lists exactly what the apply does.
-function retirableFiles(plan) {
-  const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
+// The roots a plan's retirements may fall under: the target root, plus any
+// second root the adapter declared it writes into (Amp's plugin config
+// directory). A candidate is checked against the root it belongs to, so the
+// linked-ancestor walk and the empty-parent climb never leave that root.
+function retirementRoots(plan) {
+  const declared = Array.isArray(plan.managedRoots) ? plan.managedRoots : [];
+  const roots = [plan.targetRoot, ...declared]
+    .filter(root => typeof root === 'string' && root.length > 0)
+    .map(root => path.resolve(root));
+  return [...new Set(roots)];
+}
+
+// The retirements of a plan that would actually be removed right now, each
+// with the root it belongs to: the same test the apply runs, so a dry run
+// lists exactly what the apply does.
+function retirableEntries(plan) {
+  const roots = retirementRoots(plan);
   const result = [];
   for (const retirement of Array.isArray(plan.retirements) ? plan.retirements : []) {
     const filePath = path.resolve(retirement.destinationPath);
-    if (!root || !filePath.startsWith(root + path.sep)) continue;
-    if (!isRetirableFile(filePath, root, retirement.sourcePath)) continue;
-    result.push({ ...retirement, destinationPath: filePath });
+    const root = roots.find(candidate => filePath.startsWith(candidate + path.sep));
+    if (!root) continue;
+    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan)) continue;
+    result.push({ retirement: { ...retirement, destinationPath: filePath }, root });
   }
   return result;
+}
+
+function retirableFiles(plan) {
+  return retirableEntries(plan).map(entry => entry.retirement);
 }
 
 function isSymbolicLink(filePath) {
@@ -328,13 +346,40 @@ function isSymbolicLink(filePath) {
   }
 }
 
+const plannedContentHashesByPlan = new WeakMap();
+
+// The content of every file the plan copies, hashed once per plan and only
+// when a candidate needs it: a candidate whose recorded source is gone (the
+// file was renamed or moved in the package) is still EGC's when its bytes
+// match a file the plan writes today.
+function plannedContentHashes(plan) {
+  if (plannedContentHashesByPlan.has(plan)) return plannedContentHashesByPlan.get(plan);
+  const hashes = new Set();
+  for (const operation of Array.isArray(plan.operations) ? plan.operations : []) {
+    if (operation.kind !== 'copy-file' || typeof operation.sourcePath !== 'string') continue;
+    try {
+      hashes.add(sha256(fs.readFileSync(operation.sourcePath)));
+    } catch {
+      // An unreadable source vouches for nothing.
+    }
+  }
+  plannedContentHashesByPlan.set(plan, hashes);
+  return hashes;
+}
+
+function sha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
 // Whether the file at filePath is the one EGC wrote and may go: a regular
 // file (never a link), reached through no link between the root and it (a
-// linked ancestor would point the unlink outside the root), and, when the
-// source EGC copied is still known, byte-identical to it. A file the person
-// replaced since is theirs, and a file whose source is gone cannot be told
-// apart from one, so both stay.
-function isRetirableFile(filePath, root, sourcePath) {
+// linked ancestor would point the unlink outside the root), and byte-identical
+// to what EGC copied: the recorded source when it is still there, or, when
+// that source is gone because the file was renamed or moved in the package, a
+// file the plan copies today. A file the person replaced since is theirs, and
+// a file whose source is gone and matches nothing the plan writes cannot be
+// told apart from one, so both stay.
+function isRetirableFile(filePath, root, sourcePath, plan = {}) {
   let stat;
   try {
     stat = fs.lstatSync(filePath);
@@ -346,13 +391,22 @@ function isRetirableFile(filePath, root, sourcePath) {
     if (isSymbolicLink(dir)) return false;
   }
   if (!sourcePath) return false;
+  let content;
   try {
-    const source = fs.statSync(sourcePath);
-    if (!source.isFile()) return false;
-    return fs.readFileSync(sourcePath).equals(fs.readFileSync(filePath));
+    content = fs.readFileSync(filePath);
   } catch {
     return false;
   }
+  try {
+    const source = fs.statSync(sourcePath);
+    if (!source.isFile()) return false;
+    return fs.readFileSync(sourcePath).equals(content);
+  } catch (error) {
+    // Only a source that is gone falls through to the content match; any
+    // other failure to read it keeps the file.
+    if (error.code !== 'ENOENT') return false;
+  }
+  return plannedContentHashes(plan).has(sha256(content));
 }
 
 function removeEmptyParents(dirPath, root) {
