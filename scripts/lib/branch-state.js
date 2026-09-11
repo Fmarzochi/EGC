@@ -30,11 +30,23 @@ function branchStateKey(branch) {
   return `${readablePrefix}--${digest}`;
 }
 
+// Whether a link sits at the path (a dangling one included): such a
+// component is never appended lexically, since a target created or moved
+// later would redirect it past the check.
+function isLink(p) {
+  try {
+    return fs.lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 // The canonical absolute form of a path: links are resolved through the
 // nearest existing ancestor and the rest is appended lexically, so a link
 // planted at .git or above it cannot lead a read outside the trusted roots
 // while the lexical path still looks inside them. A path that cannot be
-// canonicalised (a link loop, a parent that cannot be inspected) is null.
+// canonicalised (a link loop, a dangling link on the way, a parent that
+// cannot be inspected) is null.
 function canonicalPath(p) {
   let existing = path.resolve(p);
   const tail = [];
@@ -45,6 +57,7 @@ function canonicalPath(p) {
     } catch (error) {
       if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') return null;
     }
+    if (isLink(existing)) return null;
     const parent = path.dirname(existing);
     if (parent === existing) return null;
     tail.unshift(path.basename(existing));
@@ -52,11 +65,15 @@ function canonicalPath(p) {
   }
 }
 
+function withTrailingSeparator(dir) {
+  return dir.endsWith(path.sep) ? dir : dir + path.sep;
+}
+
 function trustedRoot(dir) {
   try {
-    return fs.realpathSync.native(dir) + path.sep;
+    return withTrailingSeparator(fs.realpathSync.native(dir));
   } catch {
-    return path.resolve(dir) + path.sep;
+    return withTrailingSeparator(path.resolve(dir));
   }
 }
 

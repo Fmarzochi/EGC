@@ -126,6 +126,10 @@ function runTests() {
         // A link loop cannot be canonicalised: refused.
         fs.symlinkSync(path.join(base, 'loop'), path.join(base, 'loop'));
         assert.strictEqual(trustedGitPath(path.join(base, 'loop', '.git', 'HEAD')), null, 'a link loop is refused');
+        // A dangling link on the way is refused too: its target could be
+        // created or moved later and redirect the read past the check.
+        fs.symlinkSync(path.join(base, 'not-yet'), path.join(base, 'dangling'));
+        assert.strictEqual(trustedGitPath(path.join(base, 'dangling', '.git', 'HEAD')), null, 'a dangling link on the way is refused');
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
