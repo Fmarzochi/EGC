@@ -126,13 +126,21 @@ function toJson(content, scope) {
   return out;
 }
 
+function fail(code, message) {
+  console.error(`egc export: ${message}`);
+  process.exit(code);
+}
+
 // Whether anything sits at the path (a link, even a dangling one, counts).
+// Only a definite ENOENT is an absence; a path that cannot be inspected is
+// an error, never a silent "no memory".
 function present(filePath) {
   try {
     fs.lstatSync(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    return fail(1, `cannot inspect ${filePath}: ${err.message}`);
   }
 }
 
@@ -151,11 +159,6 @@ function resolveDocument(opts) {
     exists: resolved.source !== 'none',
     label: `memory for ${projectPath}`,
   };
-}
-
-function fail(code, message) {
-  console.error(`egc export: ${message}`);
-  process.exit(code);
 }
 
 // The bytes of the state file through the checked descriptor: a link, a

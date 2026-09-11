@@ -329,6 +329,29 @@ async function main() {
     }
   }));
 
+  tally(await test('a state path that cannot be inspected is exit 1, never "no memory"', () => {
+    if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) return;
+    const home = mktemp('egc-export-sealed-');
+    const project = path.join(home, 'projects', 'orbit-tracker');
+    fs.mkdirSync(project, { recursive: true });
+    try {
+      const globalDir = path.join(home, '.egc', 'global');
+      fs.mkdirSync(globalDir, { recursive: true });
+      fs.writeFileSync(path.join(globalDir, 'state.md'), SAMPLE);
+      fs.chmodSync(globalDir, 0o000);
+      try {
+        const result = run(['--scope', 'global'], home);
+        assert.strictEqual(result.status, 1, result.stderr);
+        assert.strictEqual(result.stdout, '');
+        assert.ok(result.stderr.includes('cannot inspect'), result.stderr);
+      } finally {
+        fs.chmodSync(globalDir, 0o700);
+      }
+    } finally {
+      cleanup(home);
+    }
+  }));
+
   tally(await test('bad usage: exit 1 and the usage text', () => {
     const home = mktemp('egc-export-usage-');
     try {
