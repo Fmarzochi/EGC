@@ -10,7 +10,8 @@ const { execFileSync } = require('child_process');
 const { applyInstallPlan } = require('../../scripts/lib/install/apply');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
-const DEFAULT_INSTALL_APPLY_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 10000;
+const { FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const DEFAULT_INSTALL_APPLY_TIMEOUT_MS = FULL_INSTALL_TIMEOUT_MS;
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
