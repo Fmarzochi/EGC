@@ -1257,7 +1257,15 @@ function describeUnrepairable(unrepairable) {
 }
 
 // Drops the orphaned entries from the state that is about to be rewritten,
-// so doctor converges to OK; the installed files stay on disk.
+// so doctor converges to OK; the installed files stay on disk. This is the
+// "source is gone" half of cleaning up after a renamed or dropped file: a
+// recorded operation whose source the reference repo no longer has cannot
+// be identity-checked, so repair only forgets it here. The "source is
+// still there, just not part of the plan anymore" half, the common case
+// for a rename, is handled separately by planGenericRetirements
+// (install-targets/helpers.js), which the next install or auto-update
+// runs and which does remove the file, after the same identity check
+// (#1412).
 function pruneOrphanedOperations(desiredPlan, orphanedInspections) {
   if (orphanedInspections.length === 0) return;
   const orphanKeys = new Set(orphanedInspections.map(entry => operationIdentityKey(entry.operation)));

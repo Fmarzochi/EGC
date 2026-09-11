@@ -602,6 +602,7 @@ function buildInstallPlanResult({
     validationIssues: scaffoldPlan ? scaffoldPlan.validationIssues : [],
     operations: scaffoldPlan ? scaffoldPlan.operations : [],
     retirements: scaffoldPlan ? (scaffoldPlan.retirements || []) : [],
+    managedRoots: scaffoldPlan ? (scaffoldPlan.managedRoots || []) : [],
   };
 }
 

@@ -93,6 +93,14 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.amp'],
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.amp',
+  // Skills land under ~/.amp while the Guardian/Crusher/Mesh plugin scripts
+  // are copied to ~/.config/amp/plugins/ (an XDG-style location Amp's plugin
+  // API owns, separate from the skills root). Retirement must trust both
+  // roots or it can never retire the plugin scripts it itself installed
+  // (cubic review, #1412).
+  resolveManagedRoots(input, adapter) {
+    return [adapter.resolveRoot(input), resolveAmpConfigRoot(input.homeDir)];
+  },
   planOperations(input, adapter) {
     const configRoot = resolveAmpConfigRoot(input.homeDir);
 

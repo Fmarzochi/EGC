@@ -12,6 +12,10 @@ const {
   planInstallTargetScaffold,
 } = require('../../scripts/lib/install-targets/registry');
 
+const {
+  createInstallTargetAdapter,
+} = require('../../scripts/lib/install-targets/helpers');
+
 function normalizedRelativePath(value) {
   return String(value || '').replace(/\\/g, '/');
 }
@@ -3682,6 +3686,443 @@ function runTests() {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('warp'), 'Should include warp target');
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements (the default every target gets with no adapter override) retires a file that left the plan, keeps a still-planned file and a destination outside the root, and plans nothing without a previous install (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'kept.md'), 'kept');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'old-name.md'), 'renamed away, source unchanged');
+
+      // A plain adapter with no planOperations/planRetirements of its own,
+      // the shape most real targets are (windsurf, amp, copilot, ...): it
+      // gets the shared defaults for both.
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-target',
+        target: 'egc-generic-retire-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+      });
+
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }] };
+
+      assert.deepStrictEqual(adapter.planRetirements(planningInput), [], 'no previous install, nothing to retire');
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      const previous = [
+        // Still named by a module path in planningInput below: stays.
+        ['commands/kept.md', path.join(targetRoot, 'commands', 'kept.md')],
+        // Renamed away: the source is still in the repo, just not
+        // referenced by any module path anymore. This is the common case
+        // (a command or prompt renamed in the package): retired.
+        ['commands/old-name.md', path.join(targetRoot, 'commands', 'old-name.md')],
+        // Dropped from the package entirely, source gone too. Still a
+        // *candidate* here: apply.js's identity check (#1411) is what
+        // actually refuses to delete it, since it cannot verify the file
+        // is unchanged.
+        ['commands/removed.md', path.join(targetRoot, 'commands', 'removed.md')],
+        // Outside this target's root: never a candidate, whatever the
+        // state says.
+        ['commands/escaped.md', path.join(homeDir, 'elsewhere', 'escaped.md')],
+      ];
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: previous.map(([sourceRelativePath, destinationPath]) => ({
+          kind: 'copy-file',
+          moduleId: 'x',
+          sourceRelativePath,
+          destinationPath,
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        })),
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      const expectedDestinations = [
+        path.join(targetRoot, 'commands', 'old-name.md'),
+        path.join(targetRoot, 'commands', 'removed.md'),
+      ].sort();
+
+      const retirements = adapter.planRetirements(planningInput);
+      assert.deepStrictEqual(
+        retirements.map(entry => entry.destinationPath).sort(),
+        expectedDestinations,
+        'the renamed-away and dropped files are offered up; the still-planned file and the one outside the root are not'
+      );
+      for (const entry of retirements) {
+        assert.strictEqual(
+          entry.sourcePath,
+          path.join(repoRoot, ...entry.sourceRelativePath.split('/')),
+          'each candidate names the file EGC copied, for apply.js to compare'
+        );
+      }
+
+      // registry.js passes the already-planned operations through to avoid
+      // planning a second time; the result must not depend on that.
+      const withPrecomputedOperations = adapter.planRetirements({
+        ...planningInput,
+        operations: adapter.planOperations(planningInput),
+      });
+      assert.deepStrictEqual(
+        withPrecomputedOperations.map(entry => entry.destinationPath).sort(),
+        expectedDestinations,
+        'passing already-planned operations through gives the same result as planning them again'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements treats a directory-shaped scaffold operation as covering every file under it (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-dir-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-dir-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'bundle', 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'bundle', 'a.md'), 'a');
+      fs.writeFileSync(path.join(repoRoot, 'bundle', 'nested', 'b.md'), 'b');
+
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-dir-target',
+        target: 'egc-generic-retire-dir-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-dir-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+      });
+
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      // A single module path naming the whole directory, the same shape a
+      // recursive scaffold copy plans: one 'copy-path' operation for
+      // 'bundle', not one per file underneath.
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['bundle'] }] };
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      // What an earlier install actually recorded: one copy-file entry per
+      // file the directory copy produced, as install-executor.js's
+      // materializeScaffoldOperation expands it.
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'bundle/a.md', destinationPath: path.join(targetRoot, 'bundle', 'a.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'bundle/nested/b.md', destinationPath: path.join(targetRoot, 'bundle', 'nested', 'b.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      assert.deepStrictEqual(
+        adapter.planRetirements(planningInput),
+        [],
+        'both files still live inside the planned directory, so neither is offered up'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements honors a declared second managed root, so an adapter that writes outside its own root can still retire its files (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-roots-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-roots-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'scripts', 'plugin.ts'), 'plugin');
+
+      // Mirrors amp-home's real shape: skills under the adapter root, plugin
+      // scripts under a second XDG-style root (resolveAmpConfigRoot), both
+      // declared via resolveManagedRoots.
+      const rootsTarget = path.join(homeDir, '.config', 'egc-generic-retire-roots-target');
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-roots-target',
+        target: 'egc-generic-retire-roots-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-roots-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+        resolveManagedRoots(input) {
+          return [path.join(input.homeDir || homeDir, 'egc-generic-retire-roots-target'), path.join(input.homeDir || homeDir, '.config', 'egc-generic-retire-roots-target')];
+        },
+      });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['scripts/plugin.ts'] }] };
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot: rootsTarget,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'scripts/plugin.ts', destinationPath: path.join(rootsTarget, 'plugins', 'plugin.ts'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          // A destination under a root this adapter does NOT trust: stays
+          // untouched even though the module dropped it.
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'scripts/plugin.ts', destinationPath: path.join(homeDir, 'untrusted', 'plugin.ts'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      assert.deepStrictEqual(
+        adapter.planRetirements(planningInput).map(entry => entry.destinationPath),
+        [path.join(rootsTarget, 'plugins', 'plugin.ts')],
+        'the file under the declared second root is offered up; the one under an untrusted root is not'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements does not retire a file a sibling adapter sharing the same root still owns (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-sibling-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-sibling-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'skills', 'shared'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'skills', 'shared', 'SKILL.md'), 'shared skill');
+      fs.mkdirSync(path.join(repoRoot, 'skills', 'kept'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'skills', 'kept', 'SKILL.md'), 'kept skill');
+
+      const adapterA = createInstallTargetAdapter({
+        id: 'egc-generic-retire-sibling-a',
+        target: 'egc-generic-retire-sibling-a',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-shared-root'],
+        installStatePathSegments: ['egc', 'a-install-state.json'],
+      });
+      const adapterB = createInstallTargetAdapter({
+        id: 'egc-generic-retire-sibling-b',
+        target: 'egc-generic-retire-sibling-b',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-shared-root'],
+        installStatePathSegments: ['egc', 'b-install-state.json'],
+      });
+
+      const targetRoot = adapterA.resolveRoot({ repoRoot, homeDir });
+      const siblingBStatePath = adapterB.getInstallStatePath({ repoRoot, homeDir });
+      const planningInputA = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['skills/kept/SKILL.md'] }] };
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      // A's own previous state: it installed the shared skill, but its plan
+      // dropped it. B's sibling state still owns the same destination.
+      const stateA = createInstallState({
+        adapter: { id: adapterA.id },
+        targetRoot,
+        installStatePath: adapterA.getInstallStatePath({ repoRoot, homeDir }),
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'skills/shared/SKILL.md', destinationPath: path.join(targetRoot, 'skills', 'shared', 'SKILL.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      const stateB = {
+        ...createInstallState({
+          adapter: { id: adapterB.id },
+          targetRoot,
+          installStatePath: siblingBStatePath,
+          request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+          resolution: { selectedModules: [], skippedModules: [] },
+          operations: [
+            { kind: 'copy-file', moduleId: 'y', sourceRelativePath: 'skills/shared/SKILL.md', destinationPath: path.join(targetRoot, 'skills', 'shared', 'SKILL.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          ],
+          source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+        }),
+      };
+      writeInstallState(adapterA.getInstallStatePath({ repoRoot, homeDir }), stateA);
+      writeInstallState(siblingBStatePath, stateB);
+
+      assert.deepStrictEqual(
+        adapterA.planRetirements({
+          ...planningInputA,
+          operations: adapterA.planOperations(planningInputA),
+          siblingStatePaths: [siblingBStatePath],
+        }),
+        [],
+        'B still owns the shared skill, so A must not retire it'
+      );
+
+      // Once B no longer records the destination, A's candidate is offered.
+      writeInstallState(siblingBStatePath, {
+        ...stateB,
+        operations: stateB.operations.filter(operation => operation.kind !== 'copy-file'),
+      });
+      const retirements = adapterA.planRetirements({
+        ...planningInputA,
+        operations: adapterA.planOperations(planningInputA),
+        siblingStatePaths: [siblingBStatePath],
+      });
+      assert.deepStrictEqual(
+        retirements.map(entry => entry.destinationPath),
+        [path.join(targetRoot, 'skills', 'shared', 'SKILL.md')],
+        'with no sibling ownership left, the dropped skill is offered up'
+      );
+
+      // A sibling that never installed anything has no state file: absent,
+      // and the candidate is still offered up.
+      const absentSibling = path.join(homeDir, 'nowhere', 'install-state.json');
+      assert.deepStrictEqual(
+        adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [absentSibling] }).map(entry => entry.destinationPath),
+        [path.join(targetRoot, 'skills', 'shared', 'SKILL.md')],
+        'a missing sibling state owns nothing'
+      );
+
+      // A sibling state that exists but cannot be parsed may still own the
+      // destination: nothing is offered up until it can be read again.
+      fs.writeFileSync(siblingBStatePath, '{ not json');
+      assert.deepStrictEqual(
+        adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [siblingBStatePath] }),
+        [],
+        'a malformed sibling state suppresses retirement'
+      );
+
+      // A dangling link at the sibling's state path is not an absence: the
+      // link is there, the state behind it is not, so nothing is offered up.
+      if (process.platform !== 'win32') {
+        const dangling = path.join(homeDir, 'dangling-install-state.json');
+        fs.symlinkSync(path.join(homeDir, 'nowhere.json'), dangling);
+        assert.deepStrictEqual(
+          adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [dangling] }),
+          [],
+          'a dangling link at a sibling state path suppresses retirement'
+        );
+      }
+
+      // Same for a state that is valid but unreadable (no permission bits),
+      // and for a state whose parent cannot be inspected; root reads
+      // everything, so the checks only mean something elsewhere.
+      if (process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() !== 0) {
+        const sealed = path.join(homeDir, 'sealed');
+        const sealedState = path.join(sealed, 'install-state.json');
+        fs.mkdirSync(sealed);
+        writeInstallState(sealedState, stateB);
+        fs.chmodSync(sealed, 0o000);
+        try {
+          assert.deepStrictEqual(
+            adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [sealedState] }),
+            [],
+            'a sibling state behind an inaccessible parent suppresses retirement'
+          );
+        } finally {
+          fs.chmodSync(sealed, 0o700);
+        }
+
+        writeInstallState(siblingBStatePath, stateB);
+        fs.chmodSync(siblingBStatePath, 0o000);
+        try {
+          assert.deepStrictEqual(
+            adapterA.planRetirements({ ...planningInputA, operations: adapterA.planOperations(planningInputA), siblingStatePaths: [siblingBStatePath] }),
+            [],
+            'an unreadable sibling state suppresses retirement'
+          );
+        } finally {
+          fs.chmodSync(siblingBStatePath, 0o600);
+        }
+      }
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements leaves the files of a module that was not selected this run alone, and only offers up what left a module the plan still includes (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-subset-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-subset-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands'), { recursive: true });
+      fs.mkdirSync(path.join(repoRoot, 'skills', 'tool'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'kept.md'), 'kept');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'old-name.md'), 'renamed away, source unchanged');
+      fs.writeFileSync(path.join(repoRoot, 'skills', 'tool', 'SKILL.md'), 'a skill of another module');
+
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-subset-target',
+        target: 'egc-generic-retire-subset-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-subset-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+      });
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      // A full install recorded two modules; module y is not selected below.
+      const state = createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'commands/kept.md', destinationPath: path.join(targetRoot, 'commands', 'kept.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'x', sourceRelativePath: 'commands/old-name.md', destinationPath: path.join(targetRoot, 'commands', 'old-name.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          { kind: 'copy-file', moduleId: 'y', sourceRelativePath: 'skills/tool/SKILL.md', destinationPath: path.join(targetRoot, 'skills', 'tool', 'SKILL.md'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      });
+      writeInstallState(installStatePath, state);
+
+      // A targeted install of module x only: y's skill is not in the plan, but
+      // it was not dropped from the package either, so it stays untouched.
+      const subset = adapter.planRetirements({ repoRoot, homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }] });
+      assert.deepStrictEqual(
+        subset.map(entry => entry.destinationPath),
+        [path.join(targetRoot, 'commands', 'old-name.md')],
+        'only the file that left module x is offered up; module y was simply not selected'
+      );
+
+      // With both modules selected the answer is the same: y still covers its skill.
+      const both = adapter.planRetirements({ repoRoot, homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }, { id: 'y', paths: ['skills/tool/SKILL.md'] }] });
+      assert.deepStrictEqual(both.map(entry => entry.destinationPath), [path.join(targetRoot, 'commands', 'old-name.md')]);
+
+      // No modules selected at all: nothing is offered up.
+      assert.deepStrictEqual(adapter.planRetirements({ repoRoot, homeDir, modules: [] }), []);
+
+      // No repoRoot: identities cannot be compared, so nothing is offered up.
+      assert.deepStrictEqual(adapter.planRetirements({ homeDir, modules: [{ id: 'x', paths: ['commands/kept.md'] }] }), []);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('planInstallTargetScaffold carries the managed roots of the target into the plan, for the apply to check retirements against (#1412)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-managed-roots-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-managed-roots-home-'));
+    try {
+      const amp = planInstallTargetScaffold({ target: 'amp-home', repoRoot, homeDir, modules: [] });
+      assert.deepStrictEqual(
+        amp.managedRoots.map(normalizedRelativePath).sort(),
+        [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp')].map(normalizedRelativePath).sort(),
+        'amp-home declares its skills root and its plugin config root'
+      );
+      const claude = planInstallTargetScaffold({ target: 'claude-home', repoRoot, homeDir, modules: [] });
+      assert.deepStrictEqual(claude.managedRoots, [claude.targetRoot], 'a target with one root declares just that root');
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

@@ -368,6 +368,211 @@ function createDefaultScaffoldOperations(input, adapter) {
   });
 }
 
+// What today's scaffold operations would actually write, at the
+// granularity the install-state records: single files in `files`,
+// whole source directories (still copied recursively, one child file
+// at a time) in `dirs`. Mirrors the file/directory split
+// materializeScaffoldOperation (install-executor.js) applies when it
+// turns these same scaffold operations into the copy-file entries
+// the state records, so a directory scaffold entry here shields every
+// file under it even though no single copy-file operation names the
+// directory itself.
+function collectCurrentlyCoveredDestinations(operations, repoRoot) {
+  const files = new Set();
+  const dirs = new Set();
+  for (const operation of Array.isArray(operations) ? operations : []) {
+    const destination = typeof operation.destinationPath === 'string' ? operation.destinationPath : null;
+    if (!destination) continue;
+    const resolvedDestination = path.resolve(destination);
+    const source = typeof operation.sourceRelativePath === 'string' ? operation.sourceRelativePath : null;
+    if (!source) {
+      // Nothing repo-relative to check the shape of (a merge or hook
+      // operation may carry its payload some other way): treat the
+      // destination as covered rather than guess, so it is never offered
+      // up for retirement by mistake.
+      files.add(resolvedDestination);
+      continue;
+    }
+    let stat;
+    try {
+      stat = fs.statSync(path.join(repoRoot, ...normalizeRelativePath(source).split('/')));
+    } catch {
+      // Source unreadable from here: same reasoning, stay conservative.
+      files.add(resolvedDestination);
+      continue;
+    }
+    (stat.isDirectory() ? dirs : files).add(resolvedDestination);
+  }
+  return { files, dirs };
+}
+
+function isDestinationCovered(resolved, { files, dirs }) {
+  if (files.has(resolved)) return true;
+  for (const dir of dirs) {
+    if (resolved === dir || resolved.startsWith(dir + path.sep)) return true;
+  }
+  return false;
+}
+
+// The roots an adapter may legitimately write install files under. Most
+// adapters write everything under their own resolveRoot(), but a few
+// deliberately land copies in a second location (Amp's plugin scripts go to
+// ~/.config/amp/plugins/ via resolveAmpConfigRoot(), distinct from its skills
+// root ~/.amp/). A retirement candidate is only ever considered for one of
+// these trusted roots, so a target with a second root must declare it here or
+// its own writes can never be retired.
+function resolveAdapterManagedRoots(adapter, input = {}) {
+  if (typeof adapter.resolveManagedRoots === 'function') {
+    const declared = adapter.resolveManagedRoots(input);
+    if (Array.isArray(declared)) {
+      return declared.filter(root => typeof root === 'string' && root.length > 0);
+    }
+  }
+  return [adapter.resolveRoot(input)];
+}
+
+// The managed copy-file operations an install-state records, the shape both
+// the sibling check and the retirement diff read.
+function recordedManagedCopies(state) {
+  const operations = Array.isArray(state?.operations) ? state.operations : [];
+  return operations.filter(operation => (
+    operation.ownership === 'managed'
+    && operation.kind === 'copy-file'
+    && typeof operation.destinationPath === 'string'
+    && operation.destinationPath.length > 0
+  ));
+}
+
+// The marker for an install-state that exists but cannot be read or parsed:
+// unlike a missing one it may still record destinations, so it must never be
+// mistaken for an empty one.
+const UNREADABLE_STATE = Symbol('unreadable install-state');
+
+// An install-state, null when nothing sits at the path (a definite ENOENT
+// and nothing else: a dangling link, a parent that cannot be inspected or
+// is not a directory all count as a state that cannot be trusted), and
+// UNREADABLE_STATE when something is there but cannot be read or parsed.
+function readInstallStateOrNull(statePath) {
+  if (typeof statePath !== 'string' || statePath.length === 0) return null;
+  try {
+    fs.lstatSync(statePath);
+  } catch (error) {
+    return error.code === 'ENOENT' ? null : UNREADABLE_STATE;
+  }
+  const { readInstallState } = require('../install-state');
+  try {
+    return readInstallState(statePath);
+  } catch {
+    return UNREADABLE_STATE;
+  }
+}
+
+// Destinations a sibling adapter sharing the same trusted root still records
+// as its own managed copies. codex-home, goose-home and openhands-home all
+// write skills into the shared ~/.agents tree, each with its own
+// install-state: if one adapter removes a skill from its plan, its retirement
+// diff must not delete the file another adapter still installs. The sibling
+// coverage check reads those sibling state files (passed in by registry.js
+// when it plans) and refuses any candidate another adapter still owns. A
+// sibling with no state file owns nothing; a sibling whose state exists but
+// cannot be read may own any of them, so the answer is null: unknown
+// ownership fails closed, never open.
+function collectSiblingOwnedDestinations(statePaths) {
+  const owned = new Set();
+  for (const statePath of Array.isArray(statePaths) ? statePaths : []) {
+    const siblingState = readInstallStateOrNull(statePath);
+    if (siblingState === UNREADABLE_STATE) return null;
+    for (const operation of recordedManagedCopies(siblingState)) {
+      owned.add(path.resolve(operation.destinationPath));
+    }
+  }
+  return owned;
+}
+
+// Whether a recorded destination is still a candidate once the boundaries
+// apply: inside a root this adapter manages, not already offered, not owned
+// by a sibling, and not covered by what today's plan writes.
+function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, covered }) {
+  if (!managedRoots.some(root => resolved.startsWith(root + path.sep))) return false;
+  if (seen.has(resolved) || siblingOwned.has(resolved)) return false;
+  return !isDestinationCovered(resolved, covered);
+}
+
+// The default planRetirements body: compares the previous install-state's
+// managed copy-file operations against what this plan would write today. A
+// destination the state remembers EGC copied, recorded by a module this plan
+// still selects, and that no scaffold operation in the plan still covers, is
+// offered up for retirement. Renaming or dropping a command, prompt, rule or
+// skill from the package is exactly this: the old destination stops being
+// covered and is cleaned up on the next install or auto-update.
+//
+// The module gate is what tells a rename apart from a module that simply was
+// not selected this run: a targeted --modules install, or a narrower profile,
+// leaves the files of the modules it did not select exactly where they are.
+//
+// Only recorded copy-file operations are diffed; merge-json and hook
+// operations (settings.json entries, MCP config merges) have no counterpart
+// here yet, an open question left by #1412.
+//
+// This only decides which destinations are candidates. The identity check
+// that decides whether one is actually safe to delete (a regular file,
+// reached through no link, byte-identical to the source EGC copied) happens
+// later in install/apply.js's isRetirableFile, the same test #1411
+// introduced for OpenCode. A source no longer in the repository (the file was
+// renamed, moved or removed) passes that check only when the bytes on disk
+// match a file the plan copies today; otherwise the candidate is listed
+// nowhere and the file is left in place, never deleted on the strength of the
+// state entry alone.
+function planGenericRetirements(input, adapter) {
+  // The operations being diffed were planned against the package source
+  // root; without it identities cannot be compared, so the conservative
+  // answer is to retire nothing rather than to guess a directory.
+  const repoRoot = typeof input.repoRoot === 'string' && input.repoRoot.length > 0 ? input.repoRoot : null;
+  const previous = repoRoot ? readInstallStateOrNull(adapter.getInstallStatePath(input)) : null;
+  if (!previous || previous === UNREADABLE_STATE) return [];
+
+  // Destinations another adapter sharing this root still manages: never a
+  // retirement candidate here, whatever this adapter's own coverage says. A
+  // sibling state that cannot be read may still own any of them, so nothing
+  // is retired until it can be trusted again.
+  const siblingOwned = collectSiblingOwnedDestinations(input.siblingStatePaths);
+  if (!siblingOwned) return [];
+
+  const selectedModuleIds = new Set(
+    (Array.isArray(input.modules) ? input.modules : [])
+      .map(module => (module && typeof module.id === 'string' ? module.id : null))
+      .filter(Boolean)
+  );
+  const boundaries = {
+    managedRoots: resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root)),
+    seen: new Set(),
+    siblingOwned,
+    covered: collectCurrentlyCoveredDestinations(
+      Array.isArray(input.operations) ? input.operations : adapter.planOperations(input),
+      repoRoot
+    ),
+  };
+
+  const retirements = [];
+  for (const operation of recordedManagedCopies(previous)) {
+    if (!selectedModuleIds.has(operation.moduleId)) continue;
+    const resolved = path.resolve(operation.destinationPath);
+    if (!isRetirementCandidate(resolved, boundaries)) continue;
+    const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
+    if (!source) continue;
+    boundaries.seen.add(resolved);
+    retirements.push({
+      destinationPath: resolved,
+      sourceRelativePath: source,
+      // The file EGC copied there, for the apply to compare against: a
+      // file the person replaced since is theirs and stays.
+      sourcePath: path.join(repoRoot, ...source.split('/')),
+      reason: 'file left the install plan',
+    });
+  }
+  return retirements;
+}
+
 function createInstallTargetAdapter(config) {
   const adapter = {
     id: config.id,
@@ -380,6 +585,19 @@ function createInstallTargetAdapter(config) {
     resolveRoot(input = {}) {
       const baseRoot = resolveBaseRoot(config.kind, input);
       return path.join(baseRoot, ...config.rootSegments);
+    },
+    // The roots under which config.resolveManagedRoots (when declared) lets
+    // retirement plan writes; defaults to resolveRoot() alone. A target that
+    // lands install files in a second directory (Amp's plugin config root)
+    // declares the full list so its own writes can be retired too.
+    resolveManagedRoots(input = {}) {
+      if (typeof config.resolveManagedRoots === 'function') {
+        const declared = config.resolveManagedRoots(input, adapter);
+        if (Array.isArray(declared)) {
+          return declared.filter(root => typeof root === 'string' && root.length > 0);
+        }
+      }
+      return [adapter.resolveRoot(input)];
     },
     getInstallStatePath(input = {}) {
       const root = adapter.resolveRoot(input);
@@ -431,13 +649,16 @@ function createInstallTargetAdapter(config) {
       return createDefaultScaffoldOperations(input, adapter);
     },
     // Files a previous install wrote that this plan no longer covers and
-    // that the target wants removed on the next apply; most targets have
-    // none (the installer never deletes what it did not write).
+    // that the target wants removed on the next apply. An adapter
+    // with its own rules (e.g. OpenCode's egc-universal package
+    // cleanup, narrower and with its own kept-files exception)
+    // defines config.planRetirements and is used as-is; every other
+    // target falls back to the generic plan-diff below (#1412).
     planRetirements(input = {}) {
       if (typeof config.planRetirements === 'function') {
         return config.planRetirements(input, adapter);
       }
-      return [];
+      return planGenericRetirements(input, adapter);
     },
     supportsModule(module, input = {}) {
       if (typeof config.supportsModule === 'function') {
@@ -479,5 +700,7 @@ module.exports = {
   normalizeModulesInput,
   normalizeRelativePath,
   planFlatSkillOperation,
+  planGenericRetirements,
+  resolveAdapterManagedRoots,
   resolveModulesPlan,
 };
