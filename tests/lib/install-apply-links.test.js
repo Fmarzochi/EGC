@@ -579,11 +579,9 @@ function runTests() {
       assert.deepStrictEqual(transitions[0], {
         type: 'dir-to-file',
         destinationPath: path.join(root, 'widget'),
-        children: process.platform === 'win32'
-          ? [path.join(root, 'widget', 'notes.md'), path.join(root, 'widget', 'use.md')].sort()
-          : [path.join(root, 'widget', 'use.md'), path.join(root, 'widget', 'notes.md')].sort(),
+        children: [path.join(root, 'widget', 'use.md'), path.join(root, 'widget', 'notes.md')].sort(),
         directories: [path.join(root, 'widget')],
-      }, 'the apply reports the transition');
+      }, 'the apply reports the transition in a deterministic order');
     })) passed++; else failed++;
 
     if (test('a directory in the way of a file whose child is no longer a byte-identical EGC copy refuses the dir-to-file transition', () => {
@@ -622,7 +620,13 @@ function runTests() {
         copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
         copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
       ]));
-      const operations = [copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget'))];
+      // notes.md is planned again (flattened to widget-old-notes.md), so its
+      // bytes reconcile; only the edited use.md can possibly refuse the whole
+      // transition.
+      const operations = [
+        copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget')),
+        copyOp(path.join(sourceDir, 'widget-old-notes.md'), 'widget-old-notes.md', path.join(root, 'widget-old-notes.md')),
+      ];
       const plan = {
         adapter,
         targetRoot: root,
@@ -636,6 +640,7 @@ function runTests() {
       assert.ok(fs.statSync(path.join(root, 'widget')).isDirectory(), 'the directory stays intact');
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'the person changed this child', 'the changed child stays');
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'widget-old-notes.md bytes', 'and so does the rest of it');
+      assert.ok(!fs.existsSync(path.join(root, 'widget-old-notes.md')), 'even the reconcilable child is not written: the refusal precedes every operation');
       assert.ok(!fs.existsSync(path.join(root, 'widget-old-use.md')), 'nothing is written');
     })) passed++; else failed++;
 
@@ -705,6 +710,248 @@ function runTests() {
       assert.ok(fs.existsSync(path.join(root, 'widget', 'use.md')), 'the children are all still there');
       assert.ok(fs.existsSync(path.join(root, 'widget', 'notes.md')), 'all of them');
       assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'hand-made, unrecorded, foreign', 'and the refused file still holds its content');
+    })) passed++; else failed++;
+
+    if (links) {
+      if (test('a non-legacy link in the way of a planned directory is refused by the scan and by the apply', () => {
+        const base = path.join(dir, 'shape-link');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(path.join(sourceDir, 'rules', 'foo.md'), { recursive: true });
+      fs.writeFileSync(path.join(sourceDir, 'rules', 'foo.md', 'index.md'), 'foo child');
+      fs.mkdirSync(path.join(root, 'rules'), { recursive: true });
+      fs.mkdirSync(path.join(base, 'elsewhere'), { recursive: true });
+      fs.writeFileSync(path.join(base, 'elsewhere', 'ghost.md'), 'not EGC');
+      fs.symlinkSync(path.join(base, 'elsewhere', 'ghost.md'), path.join(root, 'rules', 'foo.md'));
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([]));
+      const operations = [copyOp(
+        path.join(sourceDir, 'rules', 'foo.md', 'index.md'),
+        'rules/foo.md/index.md',
+        path.join(root, 'rules', 'foo.md', 'index.md')
+      )];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const { transitions, refusals } = collectShapeTransitions(plan);
+      assert.strictEqual(transitions.length, 0, 'a link is never a transition candidate');
+      assert.strictEqual(refusals.length, 1, 'the scan refuses the link, like the apply would');
+      assert.strictEqual(refusals[0].destinationPath, path.join(root, 'rules', 'foo.md'));
+      assert.ok(refusals[0].reason.includes('symbolic link'), refusals[0].reason);
+      assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before writing behind the link');
+      assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isSymbolicLink(), 'the link is untouched');
+      assert.ok(!fs.existsSync(path.join(root, 'rules', 'foo.md', 'index.md')), 'nothing is written behind it');
+      })) passed++; else failed++;
+    }
+
+    if (test('a directory in the way of a file that contains an empty subdirectory no recorded file accounts for refuses', () => {
+      const base = path.join(dir, 'shape-d2f-emptydir');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(sourceDir, { recursive: true });
+      ['widget', 'widget-old-use.md', 'widget-old-notes.md'].forEach(name =>
+        fs.writeFileSync(path.join(sourceDir, name), name === 'widget' ? 'new widget' : `${name} bytes`)
+      );
+      fs.mkdirSync(path.join(root, 'widget', 'unused'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'widget', 'use.md'), 'widget-old-use.md bytes');
+      fs.writeFileSync(path.join(root, 'widget', 'notes.md'), 'widget-old-notes.md bytes');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([
+        copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
+        copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
+      ]));
+      // The widget children reconcile against the flattened old files the
+      // plan still copies; only the empty subdirectory the person made is
+      // unaccounted for, and it refuses the transition instead of being
+      // silently deleted.
+      const operations = [
+        copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget')),
+        copyOp(path.join(sourceDir, 'widget-old-use.md'), 'widget-old-use.md', path.join(root, 'widget-old-use.md')),
+        copyOp(path.join(sourceDir, 'widget-old-notes.md'), 'widget-old-notes.md', path.join(root, 'widget-old-notes.md')),
+      ];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const { transitions, refusals } = collectShapeTransitions(plan);
+      assert.strictEqual(transitions.length, 0, 'nothing is promised while an unaccounted directory sits in the way');
+      assert.strictEqual(refusals.length, 1, 'the empty subdirectory the person made refuses, it is not silently deleted');
+      assert.strictEqual(refusals[0].destinationPath, path.join(root, 'widget'));
+      assert.ok(refusals[0].reason.includes('no recorded EGC file accounts for'), refusals[0].reason);
+      assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses too');
+      assert.ok(fs.statSync(path.join(root, 'widget')).isDirectory(), 'the directory stays');
+      assert.ok(fs.statSync(path.join(root, 'widget', 'unused')).isDirectory(), 'the person-made subdirectory stays');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'widget-old-use.md bytes');
+    })) passed++; else failed++;
+
+    if (test('a flatten whose replacement matches none of the recorded children refuses: the honest outcome when the content is new', () => {
+      const base = path.join(dir, 'shape-d2f-newcontent');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(sourceDir, { recursive: true });
+      fs.writeFileSync(path.join(sourceDir, 'widget'), 'brand new content');
+      fs.mkdirSync(path.join(root, 'widget'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'widget', 'use.md'), 'use bytes');
+      fs.writeFileSync(path.join(root, 'widget', 'notes.md'), 'notes bytes');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      // The recorded sources (widget/use.md, widget/notes.md) belong to the
+      // old directory layout and no longer exist; the flatten's contents are
+      // new, so no recorded bytes and no planned bytes can prove the children
+      // are obsolete. Refusing is the only honest outcome.
+      writeInstallState(statePath, buildState([
+        copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
+        copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
+      ]));
+      const operations = [copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget'))];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const { transitions, refusals } = collectShapeTransitions(plan);
+      assert.strictEqual(transitions.length, 0, 'a flatten with unrecognizable children is not promised');
+      assert.strictEqual(refusals.length, 1, 'it refuses and tells the person to sort the directory out manually');
+      assert.strictEqual(refusals[0].destinationPath, path.join(root, 'widget'));
+      assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before anything changes');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'use bytes', 'the directory and its contents stay exactly as they were');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'notes bytes');
+    })) passed++; else failed++;
+
+    if (test('a failing operation earlier in the plan leaves a resolved transition fully intact (all-or-nothing)', () => {
+      const base = path.join(dir, 'shape-d2f-laterfail');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(sourceDir, { recursive: true });
+      ['widget', 'widget-old-use.md', 'widget-old-notes.md'].forEach(name =>
+        fs.writeFileSync(path.join(sourceDir, name), name === 'widget' ? 'new widget' : `${name} bytes`)
+      );
+      fs.mkdirSync(path.join(root, 'widget'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'widget', 'use.md'), 'widget-old-use.md bytes');
+      fs.writeFileSync(path.join(root, 'widget', 'notes.md'), 'widget-old-notes.md bytes');
+      fs.writeFileSync(path.join(root, 'config.json'), '{not json');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([
+        copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
+        copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
+      ]));
+      // The dir-to-file transition is NOT the failing op: the malformed
+      // config.json merge fails first, before the widget transition would run.
+      const operations = [
+        { kind: 'merge-json', moduleId: 'egc-universal', sourceRelativePath: 'config.json', destinationPath: path.join(root, 'config.json'), mergePayload: { app: 1 }, strategy: 'merge', ownership: 'managed', scaffoldOnly: false },
+        copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget')),
+        copyOp(path.join(sourceDir, 'widget-old-use.md'), 'widget-old-use.md', path.join(root, 'widget-old-use.md')),
+        copyOp(path.join(sourceDir, 'widget-old-notes.md'), 'widget-old-notes.md', path.join(root, 'widget-old-notes.md')),
+      ];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Failed to parse/, 'the merge fails before the transition would run');
+      assert.ok(fs.statSync(path.join(root, 'widget')).isDirectory(), 'the directory that would have been transitioned is still there');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'widget-old-use.md bytes', 'neither child was removed');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'widget-old-notes.md bytes');
+      assert.ok(!fs.existsSync(path.join(root, 'widget-old-use.md')), 'nothing after the failure was written');
+      assert.ok(!fs.existsSync(path.join(root, 'widget-old-notes.md')), 'any of it');
     })) passed++; else failed++;
 
     if (test('a planned destination outside every managed root never makes its ancestors transition candidates', () => {

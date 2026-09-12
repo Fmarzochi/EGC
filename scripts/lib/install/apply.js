@@ -641,6 +641,16 @@ function collectShapeTransitions(plan) {
   const refusals = [];
   const { files: plannedFiles, parents: plannedParents } = plannedWriteShapes(plan);
   const roots = managedRootsOf(plan);
+  // The links this run migrates as EGC's own June 2026 legacy layout
+  // (#1400). A planned path that is one of them is the apply's business and
+  // is left for it; any other link the scan meets is refused here too, so a
+  // dry run shows exactly what the apply will do. Resolved on the first link
+  // the scan meets, never before one.
+  let legacyLinkPaths = null;
+  const legacyLinks = () => {
+    if (!legacyLinkPaths) legacyLinkPaths = new Set(findLegacyLinks(plan).map(link => link.linkPath));
+    return legacyLinkPaths;
+  };
 
   for (const destinationPath of [...plannedFiles, ...plannedParents]) {
     if (!roots.some(candidate => destinationPath === candidate || destinationPath.startsWith(candidate + path.sep))) continue;
@@ -656,7 +666,14 @@ function collectShapeTransitions(plan) {
     }
     const onDiskDirectory = stat.isDirectory();
     const onDiskFile = stat.isFile();
-    if (!onDiskFile && !onDiskDirectory) continue; // a link is the apply's business
+    if (!onDiskFile && !onDiskDirectory) {
+      if (legacyLinks().has(destinationPath)) continue;
+      refusals.push({
+        destinationPath,
+        reason: 'a symbolic link is in the way that EGC would not migrate',
+      });
+      continue;
+    }
 
     // The plan both writes this path and writes into it -- structurally
     // impossible, never let install.sh find out the hard way.
@@ -723,11 +740,34 @@ function collectShapeTransitions(plan) {
         });
         continue;
       }
+      // Every directory the walk met, short of the destination itself, must
+      // be proven EGC's by at least one recorded file beneath it. An empty
+      // directory under the destination has no such proof -- it cannot be
+      // told apart from a directory the person made -- so it is refused
+      // instead of silently deleted.
+      const accountedDirectories = new Set();
+      for (const filePath of summary.files) {
+        for (let dir = path.dirname(filePath); dir.startsWith(destinationPath + path.sep); dir = path.dirname(dir)) {
+          accountedDirectories.add(dir);
+        }
+      }
+      const unaccounted = summary.directories.filter(dirPath => !accountedDirectories.has(dirPath));
+      if (unaccounted.length > 0) {
+        refusals.push({
+          destinationPath,
+          reason: `a directory no recorded EGC file accounts for refuses the transition: ${unaccounted
+            .map(filePath => path.relative(path.resolve(destinationPath), filePath))
+            .join(', ')}`,
+        });
+        continue;
+      }
+      // The scan walks filesystem enumeration order; a plan and its report
+      // carry a deterministic order instead.
       transitions.push({
         type: 'dir-to-file',
         destinationPath,
-        children: summary.files,
-        directories: [...summary.directories, destinationPath],
+        children: [...summary.files].sort(),
+        directories: [...summary.directories, destinationPath].sort(),
       });
     }
   }
@@ -738,34 +778,41 @@ function collectShapeTransitions(plan) {
 function formatShapeTransitionsRefusal(refusals) {
   const lines = refusals.map(refusal => `  ${refusal.destinationPath}: ${refusal.reason}`);
   return (
-    `Shape transition refused before anything was written:\n${lines.join('\n')}\n` +
-    'Overwrite with care, or clean up the destination and try the install again.'
+    `Shape transition refused:\n${lines.join('\n')}\n` +
+    'Move or remove the conflicting paths manually (egc repair only restores files EGC itself copied), then run the install again.'
   );
 }
 
 // Converts the collected transitions. Deepest first so a nested transition is
-// resolved before the one it is inside. Every file is re-verified again
-// immediately before it is removed (a scan is a snapshot, the filesystem is
-// not) and directories are only removed once empty, so a path that changed
-// between the scan and the removal is refused, never deleted.
+// resolved before the one it is inside. Every file is verified before any is
+// removed -- a transition is all-or-nothing, never a child at a time -- so a
+// file that changed between the scan and the removal is refused with the
+// whole layout still in place, and directories are only removed once empty.
 function performShapeTransitions(transitions, plan) {
   const deepestFirst = [...transitions].sort((a, b) => segments(b.destinationPath) - segments(a.destinationPath));
+  const offenders = [];
   for (const transition of deepestFirst) {
     if (transition.type === 'file-to-dir') {
       if (!isShapeTransitionRemovable(transition.destinationPath, plan)) {
-        throw new Error(
-          `Refusing to turn ${transition.destinationPath} into a directory: it is no longer a byte-identical EGC copy`
-        );
+        offenders.push({ destinationPath: transition.destinationPath, reason: 'no longer a byte-identical EGC copy' });
       }
-      fs.rmSync(transition.destinationPath, { force: true });
       continue;
     }
     for (const childPath of transition.children) {
       if (!isShapeTransitionRemovable(childPath, plan)) {
-        throw new Error(
-          `Refusing to turn ${transition.destinationPath} into a file: ${childPath} is no longer a byte-identical EGC copy`
-        );
+        offenders.push({ destinationPath: childPath, reason: 'no longer a byte-identical EGC copy' });
       }
+    }
+  }
+  if (offenders.length > 0) {
+    throw new Error(formatShapeTransitionsRefusal(offenders));
+  }
+  for (const transition of deepestFirst) {
+    if (transition.type === 'file-to-dir') {
+      fs.rmSync(transition.destinationPath, { force: true });
+      continue;
+    }
+    for (const childPath of transition.children) {
       fs.rmSync(childPath, { force: true });
     }
     const emptiestFirst = [...transition.directories].sort((a, b) => segments(b) - segments(a));
@@ -797,6 +844,28 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   }
   plan.shapeTransitions = shapeResult.transitions;
 
+  // A transition is only performed when the operation that will consume it is
+  // reached: a dir-to-file right before the file write that replaces the
+  // directory, a file-to-dir before the first child copy that needs it. A
+  // failure in an earlier operation then leaves the old layout in place
+  // instead of deleting it and never replacing it.
+  const pendingTransitions = new Map(
+    (plan.shapeTransitions || []).map(transition => [path.resolve(transition.destinationPath), transition])
+  );
+  const performPendingTransitionsFor = destinationPath => {
+    const resolved = path.resolve(destinationPath);
+    const due = [];
+    for (const [target, transition] of pendingTransitions) {
+      if (resolved === target || resolved.startsWith(target + path.sep)) due.push(transition);
+    }
+    if (due.length === 0) return;
+    due.sort((a, b) => segments(b.destinationPath) - segments(a.destinationPath));
+    for (const transition of due) {
+      performShapeTransitions([transition], plan);
+      pendingTransitions.delete(path.resolve(transition.destinationPath));
+    }
+  };
+
   // Every destination is checked before the first write, the state file and
   // the hooks file included, so a planted link fails the install before it
   // changes anything. Links that are EGC's own legacy layout (#1400) are
@@ -806,12 +875,12 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   // after this point is refused like any other.
   const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
   removeLegacyLinks(migratedLegacyLinks, plan.targetRoot);
-  performShapeTransitions(plan.shapeTransitions, plan);
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
   if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
 
     refuseLinkedDestination(operation.destinationPath, managedRootFor(plan, operation.destinationPath));
+    performPendingTransitionsFor(operation.destinationPath);
 
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
@@ -831,6 +900,11 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
     }
   }
+
+  // A listed transition always has its consuming operation; a transition
+  // still pending here could not have been reached by the loop and is
+  // resolved so the report matches the disk.
+  performShapeTransitions([...pendingTransitions.values()], plan);
 
   if (resolvedClaudeHooksPlan) {
     refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);

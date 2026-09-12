@@ -503,6 +503,60 @@ function runTests() {
     })) passed++; else failed++;
   }
 
+  if (test('a skill the egc target installs first as a single file is listed as a file-to-dir transition in the dry run (#1428)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      // Find a skill the egc target installs this run, straight from the plan.
+      const planned = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+      assert.strictEqual(planned.code, 0, planned.stderr);
+      const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+      const chosen = planned.stdout.split('\n')
+        .map(line => line.trim())
+        .map(line => /^- (.+?) -> (.+)$/.exec(line))
+        .filter(match => match && match[2].includes(cliSkills + path.sep))
+        .map(match => ({ sourceRelative: match[1], destination: match[2] }))
+        .find(entry => entry.destination.split(path.sep).length > cliSkills.split(path.sep).length + 1);
+      assert.ok(chosen, 'a skill with a directory of its own is planned');
+      const parent = path.join(cliSkills, path.relative(cliSkills, chosen.destination).split(path.sep)[0]);
+      // An earlier install recorded that skill destination as a single file,
+      // and the plan now wants a directory there. The bytes written match the
+      // planned child source, so the transition is provable.
+      fs.mkdirSync(path.dirname(parent), { recursive: true });
+      const childSource = path.join(repoRoot, chosen.sourceRelative.split('/').join(path.sep));
+      assert.ok(fs.existsSync(childSource), `the planned source exists: ${chosen.sourceRelative}`);
+      fs.copyFileSync(childSource, parent);
+      const statePath = path.join(homeDir, '.gemini', 'egc', 'install-state.json');
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'egc' },
+        targetRoot: path.join(homeDir, '.gemini'),
+        installStatePath: statePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        // moduleId 'unselected' keeps the transitioned file out of the
+        // retirement list, so the dry-run output stays readable.
+        operations: [{ kind: 'copy-file', moduleId: 'unselected', sourceRelativePath: chosen.sourceRelative, destinationPath: parent, strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false }],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+
+      const dryRun = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
+      assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+      assert.ok(dryRun.stdout.includes('Shape transitions (a source changed between a file and a directory):'), dryRun.stdout);
+      assert.ok(dryRun.stdout.includes(`${parent}: file retired, written as a directory`), dryRun.stdout);
+      assert.ok(fs.statSync(parent).isFile(), 'the dry run leaves the file as a file');
+      const dryJson = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected', '--json'], { cwd: projectDir, homeDir });
+      const plan = JSON.parse(dryJson.stdout).plan;
+      assert.strictEqual(plan.shapeTransitions.length, 1, 'exactly one transition is planned');
+      assert.strictEqual(plan.shapeTransitions[0].type, 'file-to-dir');
+      assert.strictEqual(plan.shapeTransitions[0].destinationPath, parent, 'the file that claims the directory spot');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('supports manifest profile dry-runs through the installer', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
