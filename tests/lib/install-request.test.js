@@ -52,6 +52,26 @@ function runTests() {
     assert.deepStrictEqual(parsed.languages, []);
   })) passed++; else failed++;
 
+  if (test('parses the bare-install prompt-library flags and leaves them null by default', () => {
+    const none = parseInstallArgs(['node', 'scripts/install-apply.js']);
+    assert.strictEqual(none.promptLibrary, null, 'no flag means the installer decides (ask, or skip headless)');
+    const yes = parseInstallArgs(['node', 'scripts/install-apply.js', '--prompt-library']);
+    assert.strictEqual(yes.promptLibrary, true);
+    const no = parseInstallArgs(['node', 'scripts/install-apply.js', '--no-prompt-library']);
+    assert.strictEqual(no.promptLibrary, false);
+    assert.deepStrictEqual(no.languages, [], 'the flags are never read as languages');
+    assert.throws(
+      () => parseInstallArgs(['node', 'scripts/install-apply.js', '--prompt-library', '--no-prompt-library']),
+      /cannot be combined/,
+      'the pair is refused instead of letting argument order decide'
+    );
+    assert.throws(
+      () => parseInstallArgs(['node', 'scripts/install-apply.js', '--no-prompt-library', '--prompt-library']),
+      /cannot be combined/,
+      'in either order'
+    );
+  })) passed++; else failed++;
+
   if (test('normalizes legacy language installs into a canonical request', () => {
     const request = normalizeInstallRequest({
       target: 'egc',

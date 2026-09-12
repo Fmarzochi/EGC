@@ -52,6 +52,11 @@ Options:
   --allow-undetected
                Skip the not-detected warning and prompt entirely
                (deliberate provisioning before the tool is installed)
+  --prompt-library
+               Bare install only: add the prompt library (agents, skills,
+               commands, rules) to every detected tool without asking
+  --no-prompt-library
+               Bare install only: skip the prompt-library question
   --help       Show this help text
 
 Available languages:
@@ -191,10 +196,19 @@ function configureCommitPrivacyFilterBestEffort(log, onError) {
 // flow is already defined by the shipped onboarding installers, so run
 // them instead of failing; the env guard stops the wrappers from
 // recursing back into this script.
-function delegateToLegacyInstaller() {
+// The bare-install flags the shell installers understand. Kept apart from
+// the spawn so the argument shape has a test of its own.
+function legacyInstallerArgs(options = {}) {
+  if (options.promptLibrary === true) return ['--prompt-library'];
+  if (options.promptLibrary === false) return ['--no-prompt-library'];
+  return [];
+}
+
+function delegateToLegacyInstaller(options = {}) {
   const path = require('node:path');
   const { spawnSync } = require('node:child_process');
   const rootDir = path.join(__dirname, '..');
+  const passthrough = legacyInstallerArgs(options);
 
   // Must run here, before the spawnSync below: that call hands off to
   // install.sh/install.ps1 with cwd forced to rootDir (the package's own
@@ -208,8 +222,8 @@ function delegateToLegacyInstaller() {
   );
 
   const wrapper = process.platform === 'win32'
-    ? { cmd: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'scripts', 'install.ps1')] }
-    : { cmd: 'bash', args: [path.join(rootDir, 'scripts', 'install.sh')] };
+    ? { cmd: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'scripts', 'install.ps1'), ...passthrough] }
+    : { cmd: 'bash', args: [path.join(rootDir, 'scripts', 'install.sh'), ...passthrough] };
   const spawned = spawnSync(wrapper.cmd, wrapper.args, {
     cwd: rootDir,
     stdio: 'inherit',
@@ -343,8 +357,14 @@ function main() {
 
     const config = resolveInstallConfig(options, { findDefaultInstallConfigPath, loadInstallConfig });
     const hasSelection = hasInstallSelection(options, config);
+    if (hasSelection && options.promptLibrary !== null) {
+      throw new Error(
+        '--prompt-library and --no-prompt-library apply to the bare "egc install" only: '
+        + 'with --profile, --modules, --with, --without, --config or a language the selection is already explicit'
+      );
+    }
     if (!hasSelection && !options.dryRun && !options.json && !process.env.EGC_INSTALL_DELEGATED) {
-      delegateToLegacyInstaller();
+      delegateToLegacyInstaller(options);
     }
     const request = normalizeInstallRequest({
       ...options,
@@ -390,4 +410,8 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { legacyInstallerArgs };
