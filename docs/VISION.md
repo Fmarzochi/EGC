@@ -46,7 +46,7 @@ Multi-developer workflows and shared context:
 
 ### v1.3.0: Growth
 
-- Community translations: Ukrainian, Malay (German, French, Italian, and Turkish shipped in v1.1.15)
+- Community translations: Ukrainian, Malay (German, French, Italian and Turkish already shipped; the changelog has the release of each)
 - Per-project skill profiles and overrides
 - OSS-Fuzz integration for continuous fuzz testing
 
