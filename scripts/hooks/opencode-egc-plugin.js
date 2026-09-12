@@ -1,12 +1,18 @@
-'use strict';
-
 // EGC SessionStart + Guardian + Token Crusher plugin for OpenCode. OpenCode
-// loads this file in-process; Guardian and Crusher run directly, while session
-// restoration is delegated to a fail-open Node adapter around the shared,
-// host-neutral session-context-loader core.
+// loads this file in-process as an ES module (a CommonJS export object is
+// rejected with "Plugin export is not a function" since OpenCode 1.18), so the
+// file uses ESM syntax and exports the plugin function by name. Guardian and
+// Crusher run directly, while session restoration is delegated to a fail-open
+// Node adapter around the shared, host-neutral session-context-loader core.
 
-const path = require('node:path');
-const { spawn } = require('node:child_process');
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+
+// The hook scripts installed next to this plugin are CommonJS modules.
+const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { run: runGuardian } = require('../scripts/hooks/pre-bash-guardian-validate');
 const { run: runWriteGuardian } = require('../scripts/hooks/pre-write-guardian-validate');
 const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-rewrite');
@@ -228,4 +234,4 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
   };
 };
 
-module.exports = { EgcGuardianCrusher };
+export { EgcGuardianCrusher };

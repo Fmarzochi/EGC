@@ -4,6 +4,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -131,11 +132,13 @@ async function runTests() {
     const bridgePath = path.join(root, 'scripts', 'hooks', 'opencode-session-start.js');
     let EgcGuardianCrusher;
 
-    if (await test('installs the plugin and host-neutral session dependency tree', () => {
+    if (await test('installs the plugin and host-neutral session dependency tree', async () => {
       assert.ok(fs.existsSync(pluginPath));
       for (const relative of SESSION_FILES) assert.ok(fs.existsSync(path.join(root, relative)), relative);
-      delete require.cache[require.resolve(pluginPath)];
-      ({ EgcGuardianCrusher } = require(pluginPath));
+      // OpenCode imports the plugin as an ES module; Node needs the package
+      // type hint to do the same for a .js file, so the temp layout gets one.
+      fs.writeFileSync(path.join(root, 'plugins', 'package.json'), '{ "type": "module" }\n');
+      ({ EgcGuardianCrusher } = await import(pathToFileURL(pluginPath).href));
       assert.strictEqual(typeof EgcGuardianCrusher, 'function');
     })) passed++; else failed++;
 
