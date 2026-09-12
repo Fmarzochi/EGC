@@ -191,7 +191,7 @@ function loadKeyReadOnly() {
   }
   if (key) return key;
   if (!present(stateCrypto.defaultKeyPath(), 'key')) fail(3, 'the memory is encrypted and the key is missing');
-  return fail(1, `the key at ${stateCrypto.defaultKeyPath()} is malformed`);
+  return fail(1, 'the key is present but malformed');
 }
 
 function decryptedContent(target) {
