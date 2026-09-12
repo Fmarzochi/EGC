@@ -11,7 +11,7 @@ EGC has one maintainer. Stewards are the people who own an area with him: the fi
 
 ## How someone becomes one
 
-Sustained, merged contributions in an area, followed by an invitation from the maintainer and the person's acceptance. Stewards are listed here after they accept, with the date. A steward can step down at any time by saying so.
+Sustained, merged contributions in an area, followed by an invitation from the maintainer and the person's acceptance. Invited candidates are listed here with an `invited` status and the date of the invitation; the status changes to `accepted` with the date once they accept. A steward can step down at any time by saying so.
 
 ## Areas and stewards
 
