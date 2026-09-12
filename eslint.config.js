@@ -36,7 +36,7 @@ module.exports = [
         }
     },
     {
-        files: ['**/*.mjs'],
+        files: ['**/*.mjs', 'scripts/hooks/opencode-egc-plugin.js'],
         languageOptions: {
             sourceType: 'module'
         }
