@@ -145,6 +145,10 @@ All notable changes to EGC are documented here.
 
 ## [1.1.16] - 2026-07-26
 
+### Added
+
+- **Two new README translations**: Turkish (#970, @Iahmacun) and German (#972, @rathaur-ankit), wired into every language selector, bring EGC to 13 languages.
+
 ### Security
 
 - **Destructive-CLI hard blocks in the Guardian validator**: `docker system prune`, `docker rm/rmi`, `docker run --privileged` or host mounts, `gh repo delete`, `gh api -X DELETE`, and `prisma migrate reset` / `--force-reset` / `db execute` now return a hard DANGEROUS verdict instead of an advisory warning, closing a gap where the enforcement hook let these commands run with nothing but a warning (#1041, @fuentes71).
