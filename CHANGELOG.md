@@ -6,6 +6,7 @@ All notable changes to EGC are documented here.
 
 ### Fixed
 
+- **The OpenCode plugin loads again on OpenCode 1.18** (#1438): OpenCode imports plugins as ES modules and refused the CommonJS export with `Plugin export is not a function`, which left the Guardian, the Token Crusher and the session restoration silently off; the plugin file keeps its path and now ships as an ES module with the plugin function exported by name.
 - **The DCO Comment job ends quietly when the triggering run has no result artifact** (#1435 by @Akisolu, closes #1429): a skipped or cancelled DCO run no longer paints a red `DCO Comment` run on `main` after a merge; a run that produced a result keeps posting the guidance, and the check that refuses to comment on a mismatched artifact is unchanged.
 - **The state file lock helper takes an optional retry budget, and its timeout test stops waiting five seconds** (#1436, closes #1433): `withStateFileLockSync` accepts `retries` and `retryDelayMs` with the previous 50 x 100 ms as the defaults, so no caller sees a change and the test finishes in milliseconds.
 - **The last four subprocess suites take their budget from the shared fixture** (#1434, closes #1431): install-sh, egc-session-bridge, doctor and consolidate read `CLI_TIMEOUT_MS` from `tests/fixtures/subprocess-timeouts.js` instead of a budget fixed per platform, so a slow hosted lane stops reading as a flake. No behavior change.
