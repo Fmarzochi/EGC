@@ -182,7 +182,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('a null or partial options argument keeps the default lock budget and still runs the callback', () => {
+  if (test('a null or out-of-range options argument is accepted: the callback runs and the lock is released', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lock-opts-'));
     try {
       const stateFile = path.join(dir, 'state.md');
