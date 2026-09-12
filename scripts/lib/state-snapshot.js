@@ -34,7 +34,12 @@ function sleepSync(ms) {
   while (Date.now() < until) { /* busy-wait: this hook runs synchronously, no event loop to yield to */ }
 }
 
-function acquireLockSync(lockFile, retries = 50) {
+// A held lock is retried this many times, this many milliseconds apart,
+// before the caller is told another process holds it.
+const LOCK_RETRIES = 50;
+const LOCK_RETRY_DELAY_MS = 100;
+
+function acquireLockSync(lockFile, retries = LOCK_RETRIES, retryDelayMs = LOCK_RETRY_DELAY_MS) {
   while (retries > 0) {
     try {
       fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
@@ -43,20 +48,28 @@ function acquireLockSync(lockFile, retries = 50) {
       if (e?.code !== 'EEXIST') throw e;
       if (clearStaleLock(lockFile)) continue;
       retries -= 1;
-      sleepSync(100);
+      sleepSync(retryDelayMs);
     }
   }
   return false;
 }
 
-function withStateFileLockSync(stateFile, fn) {
+function positiveInteger(value, fallback) {
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+// options.retries and options.retryDelayMs shorten the wait for a held lock;
+// callers that omit them keep the default budget.
+function withStateFileLockSync(stateFile, fn, options = {}) {
   const lockFile = `${stateFile}.merge.lock`;
+  const retries = positiveInteger(options.retries, LOCK_RETRIES);
+  const retryDelayMs = positiveInteger(options.retryDelayMs, LOCK_RETRY_DELAY_MS);
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
   // Matches withStateMergeLock()'s fail-closed behavior in index.ts: proceeding
   // unlocked here would let a hook's read-modify-write race the MCP server's
   // own update_state on the same file, risking a lost merge or a partially
   // overwritten ciphertext -- exactly what this lock exists to prevent.
-  if (!acquireLockSync(lockFile)) {
+  if (!acquireLockSync(lockFile, retries, retryDelayMs)) {
     throw new Error('Timeout acquiring the state file lock: another process holds it');
   }
   try {
