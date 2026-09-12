@@ -6,6 +6,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
@@ -93,7 +94,7 @@ function run(args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      timeout: CLI_TIMEOUT_MS,
     });
 
     return { code: 0, stdout, stderr: '' };

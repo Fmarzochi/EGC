@@ -31,7 +31,7 @@ function run(args = [], options = {}) {
       env,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      timeout: CLI_TIMEOUT_MS,
     });
 
     return { code: 0, stdout, stderr: '' };

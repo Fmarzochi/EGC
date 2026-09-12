@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const { spawnSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -46,7 +47,7 @@ function runHook(eventName, sessionId, options) {
     input: options.stdin || '',
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
-    timeout: process.platform === 'win32' ? 30000 : 10000,
+    timeout: CLI_TIMEOUT_MS,
   });
 }
 
@@ -116,7 +117,7 @@ test('a refusal reaches the hook runner as a non-zero exit, not a passthrough', 
       input: '{}',
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: process.platform === 'win32' ? 30000 : 10000,
+      timeout: CLI_TIMEOUT_MS,
     });
     assert.strictEqual(r.status, 1, `${r.stdout}\n${r.stderr}`);
     assert.ok(r.stderr.includes('is missing under plugin root'), r.stderr);
