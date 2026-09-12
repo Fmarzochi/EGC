@@ -140,7 +140,7 @@ function present(filePath) {
     return true;
   } catch (err) {
     if (err.code === 'ENOENT') return false;
-    return fail(1, `cannot inspect ${filePath}: ${err.message}`);
+    return fail(1, `cannot inspect the state file: ${err.message}`);
   }
 }
 
@@ -172,9 +172,9 @@ function readStateBytes(target) {
     // A link at the path is refused by the no-follow open (ELOOP), the
     // same refusal as a link seen before the open.
     if (err.code === 'ELOOP') raw = null;
-    else fail(1, `cannot read ${target.file}: ${err.message}`);
+    else fail(1, `cannot read the state file: ${err.message}`);
   }
-  if (raw === null) fail(1, `${target.file} is not a regular file inside the state directory, or changed while it was read`);
+  if (raw === null) fail(1, 'the state file is not a regular file inside the state directory, or changed while it was read');
   return raw;
 }
 
@@ -198,7 +198,7 @@ function decryptedContent(target) {
   if (!stateCrypto.isEncryptedBuffer(raw)) return raw;
   const keyMaterial = loadKeyReadOnly();
   const content = stateCrypto.decryptStateBuffer(raw, undefined, { keyMaterial });
-  if (content === null) fail(1, `${target.file} cannot be decrypted with the key (truncated or tampered)`);
+  if (content === null) fail(1, 'the state file cannot be decrypted with the key (truncated or tampered)');
   return content;
 }
 

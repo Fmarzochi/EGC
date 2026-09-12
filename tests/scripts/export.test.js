@@ -274,6 +274,7 @@ async function main() {
       assert.strictEqual(result.status, 1, result.stderr);
       assert.strictEqual(result.stdout, '');
       assert.ok(result.stderr.includes('regular file'), result.stderr);
+      assert.ok(!result.stderr.includes(stateDirFor(home)), 'the message names the file by role, not by path');
       assert.strictEqual(fs.readFileSync(elsewhere, 'utf8'), 'not the memory');
     } finally {
       cleanup(home);
@@ -294,6 +295,7 @@ async function main() {
         assert.strictEqual(result.status, 1, result.stderr);
         assert.strictEqual(result.stdout, '');
         assert.ok(result.stderr.includes('cannot read'), result.stderr);
+        assert.ok(!result.stderr.includes(path.join('.egc', 'state', projectSlug(project))), 'the message names the file by role, not by path');
       } finally {
         fs.chmodSync(file, 0o600);
       }

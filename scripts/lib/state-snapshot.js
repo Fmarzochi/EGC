@@ -57,7 +57,7 @@ function withStateFileLockSync(stateFile, fn) {
   // own update_state on the same file, risking a lost merge or a partially
   // overwritten ciphertext -- exactly what this lock exists to prevent.
   if (!acquireLockSync(lockFile)) {
-    throw new Error(`Timeout acquiring state file lock: ${lockFile}`);
+    throw new Error('Timeout acquiring the state file lock: another process holds it');
   }
   try {
     return fn();
