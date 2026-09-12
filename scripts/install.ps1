@@ -187,6 +187,10 @@ $DryRun = $args -contains '--dry-run'
 # interactive console, default no. --prompt-library adds it without asking;
 # --no-prompt-library skips the question (CI, provisioning).
 $PromptLibrary = $null
+if (($args -contains '--prompt-library') -and ($args -contains '--no-prompt-library')) {
+    Write-Host "Error: --prompt-library and --no-prompt-library cannot be combined" -ForegroundColor Red
+    exit 1
+}
 if ($args -contains '--prompt-library') { $PromptLibrary = $true }
 if ($args -contains '--no-prompt-library') { $PromptLibrary = $false }
 
@@ -318,7 +322,10 @@ foreach ($arg in $args) {
 if ($hasInstallArgs) {
     node $EgcInstall @args
     $installExitCode = $LASTEXITCODE
-    if ($DryRun) {
+    # A refused or failed targeted install ends the run here, the way the
+    # bash installer stops under set -e, instead of carrying on to the
+    # prompt-library step and the registration as if it had succeeded.
+    if ($DryRun -or $installExitCode -ne 0) {
         exit $installExitCode
     }
 }

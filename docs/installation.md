@@ -76,7 +76,7 @@ egc install
 
 This prepares the core runtime, initializes the shared state store, and registers the MCP servers in detected tools. A bare install does **not** create managed target install-state files, so `egc doctor` may report that none exist. That is expected, not an error.
 
-The prompt library (agents, skills, commands and rules) is optional and off by default: at an interactive terminal the bare install asks whether to add it, and an empty answer means no. `egc install --prompt-library` adds it to every detected tool without asking, `egc install --no-prompt-library` skips the question (CI, provisioning), and a headless run skips it with a note that names the flag.
+The prompt library (agents, skills, commands and rules) is optional and off by default: at an interactive terminal the bare install asks whether to add it, and an empty answer means no. `egc install --prompt-library` adds it to every detected tool without asking (a full profile per tool, which does create the managed install-state files that `egc doctor` and `egc repair` track), `egc install --no-prompt-library` skips the question (CI, provisioning), and a headless run skips it with a note that names the flag. The two flags cannot be combined.
 
 The dashboard starts right after this stage when you are at an interactive terminal. A headless run (CI, or output redirected to a file) skips it and prints `Dashboard not started (headless environment). Run 'egc dashboard' to start it.` instead.
 

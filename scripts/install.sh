@@ -95,8 +95,12 @@ done
 PROMPT_LIBRARY=""
 for _arg in "$@"; do
   case "$_arg" in
-    --prompt-library) PROMPT_LIBRARY=yes ;;
-    --no-prompt-library) PROMPT_LIBRARY=no ;;
+    --prompt-library)
+      if [[ "$PROMPT_LIBRARY" = no ]]; then echo "Error: --prompt-library and --no-prompt-library cannot be combined" >&2; exit 1; fi
+      PROMPT_LIBRARY=yes ;;
+    --no-prompt-library)
+      if [[ "$PROMPT_LIBRARY" = yes ]]; then echo "Error: --prompt-library and --no-prompt-library cannot be combined" >&2; exit 1; fi
+      PROMPT_LIBRARY=no ;;
     *) ;;
   esac
 done
@@ -296,7 +300,7 @@ if [[ "$DRY_RUN" = false ]]; then
     _install_ans="y"
   elif [[ "$PROMPT_LIBRARY" = no ]]; then
     echo "  prompt library skipped (--no-prompt-library). Run 'egc install --prompt-library' to add it later."
-  elif [[ -t 0 ]]; then
+  elif [[ -t 0 && -z "${CI:-}" ]]; then
     printf "\n  Install prompt library? (61 agents, 232 skills, 77 commands) [y/N] "
     read -r _install_ans
     _install_ans="${_install_ans:-n}"

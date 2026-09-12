@@ -60,6 +60,16 @@ function runTests() {
     const no = parseInstallArgs(['node', 'scripts/install-apply.js', '--no-prompt-library']);
     assert.strictEqual(no.promptLibrary, false);
     assert.deepStrictEqual(no.languages, [], 'the flags are never read as languages');
+    assert.throws(
+      () => parseInstallArgs(['node', 'scripts/install-apply.js', '--prompt-library', '--no-prompt-library']),
+      /cannot be combined/,
+      'the pair is refused instead of letting argument order decide'
+    );
+    assert.throws(
+      () => parseInstallArgs(['node', 'scripts/install-apply.js', '--no-prompt-library', '--prompt-library']),
+      /cannot be combined/,
+      'in either order'
+    );
   })) passed++; else failed++;
 
   if (test('normalizes legacy language installs into a canonical request', () => {

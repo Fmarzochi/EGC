@@ -151,7 +151,12 @@ function runTests() {
       assert.ok(source.includes("Run 'egc install --prompt-library' to add it"), `${label} must point the headless skip at the flag`);
     }
     assert.ok(bashSource.includes('_install_ans="${_install_ans:-n}"'), 'install.sh must read an empty answer as no');
-    assert.ok(bashSource.includes('--prompt-library) PROMPT_LIBRARY=yes'), 'install.sh must turn the flag into a yes without asking');
+    assert.ok(bashSource.includes('PROMPT_LIBRARY=yes ;;'), 'install.sh must turn the flag into a yes without asking');
+    assert.ok(bashSource.includes('-t 0 && -z "${CI:-}"'), 'install.sh must not prompt when CI is set, even with a terminal on stdin');
+    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
+      assert.ok(source.includes('--prompt-library and --no-prompt-library cannot be combined'), `${label} must refuse the two flags together instead of letting order decide`);
+    }
+    assert.ok(scriptSource.includes('$installExitCode -ne 0'), 'install.ps1 must stop when the delegated install fails, the way install.sh does under set -e');
   })) passed++; else failed++;
 
   if (test('probes the native sqlite3 binary EGC actually depends on, as a note rather than a warning', () => {
