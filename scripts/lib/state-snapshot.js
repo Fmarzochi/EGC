@@ -59,11 +59,12 @@ function positiveInteger(value, fallback) {
 }
 
 // options.retries and options.retryDelayMs shorten the wait for a held lock;
-// callers that omit them keep the default budget.
-function withStateFileLockSync(stateFile, fn, options = {}) {
+// callers that omit them (or pass null) keep the default budget.
+function withStateFileLockSync(stateFile, fn, options) {
   const lockFile = `${stateFile}.merge.lock`;
-  const retries = positiveInteger(options.retries, LOCK_RETRIES);
-  const retryDelayMs = positiveInteger(options.retryDelayMs, LOCK_RETRY_DELAY_MS);
+  const settings = options || {};
+  const retries = positiveInteger(settings.retries, LOCK_RETRIES);
+  const retryDelayMs = positiveInteger(settings.retryDelayMs, LOCK_RETRY_DELAY_MS);
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
   // Matches withStateMergeLock()'s fail-closed behavior in index.ts: proceeding
   // unlocked here would let a hook's read-modify-write race the MCP server's

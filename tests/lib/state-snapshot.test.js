@@ -182,6 +182,18 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a null or partial options argument keeps the default lock budget and still runs the callback', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lock-opts-'));
+    try {
+      const stateFile = path.join(dir, 'state.md');
+      assert.strictEqual(withStateFileLockSync(stateFile, () => 'ran', null), 'ran');
+      assert.strictEqual(withStateFileLockSync(stateFile, () => 'ran again', { retries: 0, retryDelayMs: -1 }), 'ran again');
+      assert.ok(!fs.existsSync(`${stateFile}.merge.lock`), 'the lock file is released after the callback');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
