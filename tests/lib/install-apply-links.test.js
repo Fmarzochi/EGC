@@ -9,7 +9,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { checkedDestinations, findLegacyLinks, managedRootFor, refuseLinkedDestination, removeLegacyLinks, retirePlannedFiles, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
+const { applyInstallPlan, checkedDestinations, collectShapeTransitions, findLegacyLinks, managedRootFor, refuseLinkedDestination, removeLegacyLinks, retirePlannedFiles, writeGuardianCliMarker, writeManagedText } = require('../../scripts/lib/install/apply');
 
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
@@ -406,6 +406,361 @@ function runTests() {
         if (fs.existsSync(sealed)) fs.chmodSync(sealed, 0o700);
       }
       assert.ok(fs.existsSync(sealed), 'a parent that could not be read is left where it is');
+    })) passed++; else failed++;
+
+    if (test('a destination file whose source became a directory is retired and replaced by the directory (file-to-dir)', () => {
+      const base = path.join(dir, 'shape-f2d-ok');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(path.join(sourceDir, 'rules', 'foo.md'), { recursive: true });
+      fs.writeFileSync(path.join(sourceDir, 'rules', 'foo.md', 'index.md'), 'foo child');
+      fs.mkdirSync(path.join(root, 'rules'), { recursive: true });
+      // A previous install wrote rules/foo.md as a FILE whose bytes happen to
+      // match the child the now-directory source carries today.
+      fs.writeFileSync(path.join(root, 'rules', 'foo.md'), 'foo child');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([copyOp(
+        path.join(sourceDir, 'rules', 'foo.md'),
+        'rules/foo.md',
+        path.join(root, 'rules', 'foo.md')
+      )]));
+      const operations = [copyOp(
+        path.join(sourceDir, 'rules', 'foo.md', 'index.md'),
+        'rules/foo.md/index.md',
+        path.join(root, 'rules', 'foo.md', 'index.md')
+      )];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const result = applyInstallPlan(plan, { homeDir: base });
+      assert.ok(fs.statSync(path.join(root, 'rules', 'foo.md')).isDirectory(), 'the old file becomes the directory');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md', 'index.md'), 'utf8'), 'foo child', 'the child lands inside');
+      assert.deepStrictEqual(result.shapeTransitions, [
+        { type: 'file-to-dir', destinationPath: path.join(root, 'rules', 'foo.md'), sourceRelativePath: 'rules/foo.md' },
+      ], 'the apply reports the transition');
+    })) passed++; else failed++;
+
+    if (test('a file in the way of a directory that is no longer a byte-identical EGC copy refuses the file-to-dir transition', () => {
+      const base = path.join(dir, 'shape-f2d-edit');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(path.join(sourceDir, 'rules', 'foo.md'), { recursive: true });
+      fs.writeFileSync(path.join(sourceDir, 'rules', 'foo.md', 'index.md'), 'foo child');
+      fs.mkdirSync(path.join(root, 'rules'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'rules', 'foo.md'), 'user edited this, not EGC');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([copyOp(
+        path.join(sourceDir, 'rules', 'foo.md'),
+        'rules/foo.md',
+        path.join(root, 'rules', 'foo.md')
+      )]));
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations: [copyOp(
+          path.join(sourceDir, 'rules', 'foo.md', 'index.md'),
+          'rules/foo.md/index.md',
+          path.join(root, 'rules', 'foo.md', 'index.md')
+        )],
+        statePreview: buildState([]),
+      };
+      assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'nothing is written when the file would have to go');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'user edited this, not EGC', 'the file the person changed stays');
+      assert.ok(!fs.existsSync(path.join(root, 'rules', 'foo.md', 'index.md')), 'nothing is written under it');
+    })) passed++; else failed++;
+
+    if (test('a destination directory whose source became a file is emptied and replaced by the file (dir-to-file)', () => {
+      const base = path.join(dir, 'shape-d2f-ok');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      // The package flattened widget/use.md and widget/notes.md and turned
+      // widget into a plain file: the old bytes survive at new destinations.
+      fs.mkdirSync(sourceDir, { recursive: true });
+      ['widget', 'widget-old-use.md', 'widget-old-notes.md'].forEach(name =>
+        fs.writeFileSync(path.join(sourceDir, name), name === 'widget' ? 'new widget' : `${name} bytes`)
+      );
+      fs.mkdirSync(path.join(root, 'widget'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'widget', 'use.md'), 'widget-old-use.md bytes');
+      fs.writeFileSync(path.join(root, 'widget', 'notes.md'), 'widget-old-notes.md bytes');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([
+        copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
+        copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
+      ]));
+      const operations = [
+        copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget')),
+        copyOp(path.join(sourceDir, 'widget-old-use.md'), 'widget-old-use.md', path.join(root, 'widget-old-use.md')),
+        copyOp(path.join(sourceDir, 'widget-old-notes.md'), 'widget-old-notes.md', path.join(root, 'widget-old-notes.md')),
+      ];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const result = applyInstallPlan(plan, { homeDir: base });
+      assert.ok(fs.statSync(path.join(root, 'widget')).isFile(), 'the directory becomes the file');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget'), 'utf8'), 'new widget', 'the file content is EGC\'s');
+      assert.ok(!fs.existsSync(path.join(root, 'widget', 'use.md')), 'the moved-away child is gone');
+      const transitions = result.shapeTransitions;
+      assert.strictEqual(transitions.length, 1, 'one transition reported');
+      assert.deepStrictEqual(transitions[0], {
+        type: 'dir-to-file',
+        destinationPath: path.join(root, 'widget'),
+        children: process.platform === 'win32'
+          ? [path.join(root, 'widget', 'notes.md'), path.join(root, 'widget', 'use.md')].sort()
+          : [path.join(root, 'widget', 'use.md'), path.join(root, 'widget', 'notes.md')].sort(),
+        directories: [path.join(root, 'widget')],
+      }, 'the apply reports the transition');
+    })) passed++; else failed++;
+
+    if (test('a directory in the way of a file whose child is no longer a byte-identical EGC copy refuses the dir-to-file transition', () => {
+      const base = path.join(dir, 'shape-d2f-edit');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(sourceDir, { recursive: true });
+      ['widget', 'widget-old-use.md', 'widget-old-notes.md'].forEach(name =>
+        fs.writeFileSync(path.join(sourceDir, name), name === 'widget' ? 'new widget' : `${name} bytes`)
+      );
+      fs.mkdirSync(path.join(root, 'widget'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'widget', 'use.md'), 'the person changed this child');
+      fs.writeFileSync(path.join(root, 'widget', 'notes.md'), 'widget-old-notes.md bytes');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([
+        copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
+        copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
+      ]));
+      const operations = [copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget'))];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the whole directory refuses before anything goes');
+      assert.ok(fs.statSync(path.join(root, 'widget')).isDirectory(), 'the directory stays intact');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'the person changed this child', 'the changed child stays');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'widget-old-notes.md bytes', 'and so does the rest of it');
+      assert.ok(!fs.existsSync(path.join(root, 'widget-old-use.md')), 'nothing is written');
+    })) passed++; else failed++;
+
+    if (test('collectShapeTransitions is read-only: it lists the resolvable transitions and every refusal without touching the disk (the dry run)', () => {
+      const base = path.join(dir, 'shape-dryrun');
+      const sourceDir = path.join(base, 'source');
+      const root = path.join(base, 'root');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(path.join(sourceDir, 'rules', 'foo.md'), { recursive: true });
+      fs.writeFileSync(path.join(sourceDir, 'rules', 'foo.md', 'index.md'), 'foo child');
+      ['widget', 'widget-old-use.md', 'widget-old-notes.md'].forEach(name =>
+        fs.writeFileSync(path.join(sourceDir, name), name === 'widget' ? 'new widget' : `${name} bytes`)
+      );
+      fs.mkdirSync(path.join(root, 'rules'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'rules', 'foo.md'), 'hand-made, unrecorded, foreign');
+      fs.mkdirSync(path.join(root, 'widget'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'widget', 'use.md'), 'widget-old-use.md bytes');
+      fs.writeFileSync(path.join(root, 'widget', 'notes.md'), 'widget-old-notes.md bytes');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      // The widget children are recorded; the rules/foo.md file is not: it
+      // was never ours, so the listing refuses it instead of promising to
+      // retire a foreign file.
+      writeInstallState(statePath, buildState([
+        copyOp(path.join(sourceDir, 'widget', 'use.md'), 'widget/use.md', path.join(root, 'widget', 'use.md')),
+        copyOp(path.join(sourceDir, 'widget', 'notes.md'), 'widget/notes.md', path.join(root, 'widget', 'notes.md')),
+      ]));
+      const operations = [
+        copyOp(path.join(sourceDir, 'rules', 'foo.md', 'index.md'), 'rules/foo.md/index.md', path.join(root, 'rules', 'foo.md', 'index.md')),
+        copyOp(path.join(sourceDir, 'widget'), 'widget', path.join(root, 'widget')),
+        copyOp(path.join(sourceDir, 'widget-old-use.md'), 'widget-old-use.md', path.join(root, 'widget-old-use.md')),
+        copyOp(path.join(sourceDir, 'widget-old-notes.md'), 'widget-old-notes.md', path.join(root, 'widget-old-notes.md')),
+      ];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const { transitions, refusals } = collectShapeTransitions(plan);
+      assert.strictEqual(transitions.length, 1, 'the resolvable dir-to-file transition is listed');
+      assert.strictEqual(transitions[0].type, 'dir-to-file');
+      assert.strictEqual(refusals.length, 1, 'the unrecorded file-to-dir is refused, not listed');
+      assert.strictEqual(refusals[0].destinationPath, path.join(root, 'rules', 'foo.md'));
+      assert.ok(fs.statSync(path.join(root, 'widget')).isDirectory(), 'nothing was removed by the listing');
+      assert.ok(fs.existsSync(path.join(root, 'widget', 'use.md')), 'the children are all still there');
+      assert.ok(fs.existsSync(path.join(root, 'widget', 'notes.md')), 'all of them');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'hand-made, unrecorded, foreign', 'and the refused file still holds its content');
+    })) passed++; else failed++;
+
+    if (test('a planned destination outside every managed root never makes its ancestors transition candidates', () => {
+      const base = path.join(dir, 'shape-outside');
+      const root = path.join(base, 'root');
+      const foreign = path.join(base, 'foreign');
+      const statePath = path.join(base, 'egc', 'install-state.json');
+      const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+      fs.mkdirSync(root, { recursive: true });
+      // The plan writes under a FILE that lives outside every managed root.
+      // That file is foreign territory: it must not be listed as a
+      // file-to-dir candidate, let alone retired to make way for the copy.
+      fs.mkdirSync(foreign, { recursive: true });
+      fs.writeFileSync(path.join(foreign, 'x'), 'an unrelated file');
+      const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+        kind: 'copy-file',
+        moduleId: 'egc-universal',
+        sourcePath,
+        sourceRelativePath,
+        destinationPath,
+        strategy: 'preserve-relative-path',
+        ownership: 'managed',
+        scaffoldOnly: false,
+      });
+      const buildState = operations => createInstallState({
+        adapter,
+        targetRoot: root,
+        installStatePath: statePath,
+        request: { profile: null },
+        resolution: {},
+        source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+        operations,
+      });
+      writeInstallState(statePath, buildState([copyOp(
+        path.join(foreign, 'x', 'old.md'),
+        'x/old.md',
+        path.join(foreign, 'x', 'old.md')
+      )]));
+      const operations = [copyOp(
+        path.join(foreign, 'src.md'),
+        'x/child.md',
+        path.join(foreign, 'x', 'child.md')
+      )];
+      const plan = {
+        adapter,
+        targetRoot: root,
+        managedRoots: [root],
+        installStatePath: statePath,
+        retirements: [],
+        operations,
+        statePreview: buildState(operations),
+      };
+      const { transitions, refusals } = collectShapeTransitions(plan);
+      assert.strictEqual(transitions.length, 0, 'no transition is offered on foreign territory');
+      assert.strictEqual(refusals.length, 0, 'and nothing there is refused either');
+      assert.strictEqual(fs.readFileSync(path.join(foreign, 'x'), 'utf8'), 'an unrelated file', 'the foreign file is untouched');
     })) passed++; else failed++;
 
     if (test('a plain destination, existing or not, passes', () => {

@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 
-const { writeInstallState } = require('../install-state');
+const { readInstallState, writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../mcp-config');
 const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./preserving-write');
@@ -512,10 +512,290 @@ function segments(filePath) {
   return path.resolve(filePath).split(path.sep).length;
 }
 
+// A shape transition is a destination where the plan must convert an
+// existing file into a directory, or the reverse: the recorded source moved
+// from one shape to the other (rules/foo.md being a file, then becoming a
+// directory keeps its name but not its shape). A naive apply would falter on
+// EEXIST here after already writing part of the layout, so the transition is
+// resolved first: files are retired through the same identity check
+// retirement uses -- a file a previous install recorded and that is still
+// byte-identical to something this plan copies may go, everything else is
+// refused with a clear message.
+
+// Every copy-file destination a plan writes to or into: the planned files
+// themselves and the directories that contain them, up to each managed root.
+// Only these paths can change shape; a destination the plan stops touching
+// is the retirement path's business, not ours.
+function plannedWriteShapes(plan) {
+  const roots = managedRootsOf(plan);
+  const files = new Set();
+  const parents = new Set();
+  for (const operation of plan.operations) {
+    if (operation.kind !== 'copy-file') continue;
+    const destinationPath = path.resolve(operation.destinationPath);
+    files.add(destinationPath);
+    // The directories the install materializes for that file, each strictly
+    // inside a managed root: a destination the installer writes outside its
+    // roots must not get one of its parents turned into a directory.
+    for (let dir = path.dirname(destinationPath); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+      const root = roots.find(candidate => dir === candidate || dir.startsWith(candidate + path.sep));
+      if (!root) break;
+      parents.add(dir);
+      if (dir === root) break;
+    }
+  }
+  return { files, parents };
+}
+
+// The managed copy-file destinations a previous install recorded, keyed by
+// their resolved path. A missing or unreadable state explains nothing: the
+// caller gets an empty map and every potential retirement is refused, which
+// is the honest answer when we cannot prove a file is ours.
+function previousStateManagedCopies(plan) {
+  const recorded = new Map();
+  let operations;
+  try {
+    operations = readInstallState(plan.installStatePath).operations || [];
+  } catch {
+    return recorded;
+  }
+  for (const operation of operations) {
+    if (operation.kind !== 'copy-file' || operation.ownership !== 'managed') continue;
+    recorded.set(path.resolve(operation.destinationPath), operation);
+  }
+  return recorded;
+}
+
+// The identity check for a file a shape transition wants to retire. Where a
+// normal retirement also allows the original source file to still exist and
+// match, a transition's recorded source is by definition gone or changed
+// shape, so identity is only ever established against the files this plan
+// copies today.
+function isShapeTransitionRemovable(filePath, plan) {
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch {
+    return false;
+  }
+  if (!stat.isFile()) return false;
+  const root = managedRootFor(plan, filePath);
+  if (!root) return false;
+  for (let dir = path.dirname(filePath); dir !== root && dir.startsWith(root + path.sep); dir = path.dirname(dir)) {
+    if (isSymbolicLink(dir)) return false;
+  }
+  let content;
+  try {
+    content = fs.readFileSync(filePath);
+  } catch {
+    return false;
+  }
+  return plannedContentHashes(plan).has(sha256(content));
+}
+
+// Everything inside a directory a dir-to-file transition has to give way for,
+// recursed depth-first: the regular files (each must pass identity before it
+// can go), the directories that hold them (dropped once empty), and anything
+// that is neither -- a link, a socket... -- that refuses the transition
+// outright. A directory that cannot even be listed cannot be safely emptied,
+// so it refuses too.
+function collectShapeBlockingEntries(directory) {
+  const files = [];
+  const directories = [];
+  const blocking = [];
+  let inspectable = true;
+
+  const walk = current => {
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      inspectable = false;
+      return;
+    }
+    for (const entry of entries) {
+      const resolved = path.join(current, entry.name);
+      if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory())) {
+        blocking.push(resolved);
+      } else if (entry.isDirectory()) {
+        directories.push(resolved);
+        walk(resolved);
+      } else {
+        files.push(resolved);
+      }
+    }
+  };
+
+  walk(directory);
+  return { files, directories, blocking, inspectable };
+}
+
+// Scans the destinations a plan will write to or into for shape transitions,
+// read-only: the dry run lists them and the apply runs them. Anything the
+// scan cannot reconcile is returned as a refusal instead of throwing, so a
+// dry run can show every problem at once and the apply refuses before the
+// first write.
+function collectShapeTransitions(plan) {
+  const recorded = previousStateManagedCopies(plan);
+  const transitions = [];
+  const refusals = [];
+  const { files: plannedFiles, parents: plannedParents } = plannedWriteShapes(plan);
+  const roots = managedRootsOf(plan);
+
+  for (const destinationPath of [...plannedFiles, ...plannedParents]) {
+    if (!roots.some(candidate => destinationPath === candidate || destinationPath.startsWith(candidate + path.sep))) continue;
+
+    const wantsFile = plannedFiles.has(destinationPath);
+    const wantsDirectory = plannedParents.has(destinationPath);
+
+    let stat;
+    try {
+      stat = fs.lstatSync(destinationPath);
+    } catch {
+      continue;
+    }
+    const onDiskDirectory = stat.isDirectory();
+    const onDiskFile = stat.isFile();
+    if (!onDiskFile && !onDiskDirectory) continue; // a link is the apply's business
+
+    // The plan both writes this path and writes into it -- structurally
+    // impossible, never let install.sh find out the hard way.
+    if (wantsFile && wantsDirectory) {
+      refusals.push({
+        destinationPath,
+        reason: 'the plan writes this path as both a file and a directory',
+      });
+      continue;
+    }
+
+    if (wantsDirectory && onDiskFile) {
+      const recordedEntry = recorded.get(destinationPath);
+      if (!recordedEntry) {
+        refusals.push({
+          destinationPath,
+          reason: 'a file EGC did not install must not be turned into a directory',
+        });
+        continue;
+      }
+      if (!isShapeTransitionRemovable(destinationPath, plan)) {
+        refusals.push({
+          destinationPath,
+          reason: 'a file is in the way that is EGC-modified or changed since install',
+        });
+        continue;
+      }
+      transitions.push({
+        type: 'file-to-dir',
+        destinationPath,
+        sourceRelativePath: recordedEntry.sourceRelativePath || '',
+      });
+      continue;
+    }
+
+    if (wantsFile && onDiskDirectory) {
+      const summary = collectShapeBlockingEntries(destinationPath);
+      if (!summary.inspectable) {
+        refusals.push({
+          destinationPath,
+          reason: 'a directory that could not be listed must not be silently emptied',
+        });
+        continue;
+      }
+      if (summary.blocking.length > 0) {
+        refusals.push({
+          destinationPath,
+          reason: `a symbolic link or special file refuses the transition: ${summary.blocking
+            .map(filePath => path.relative(path.resolve(destinationPath), filePath))
+            .join(', ')}`,
+        });
+        continue;
+      }
+      const unreconciled = summary.files.filter(filePath => {
+        const recordedEntry = recorded.get(filePath);
+        return !recordedEntry || !isShapeTransitionRemovable(filePath, plan);
+      });
+      if (unreconciled.length > 0) {
+        refusals.push({
+          destinationPath,
+          reason: `files are in the way that are EGC-modified or changed since install: ${unreconciled
+            .map(filePath => path.relative(path.resolve(destinationPath), filePath))
+            .join(', ')}`,
+        });
+        continue;
+      }
+      transitions.push({
+        type: 'dir-to-file',
+        destinationPath,
+        children: summary.files,
+        directories: [...summary.directories, destinationPath],
+      });
+    }
+  }
+
+  return { transitions, refusals };
+}
+
+function formatShapeTransitionsRefusal(refusals) {
+  const lines = refusals.map(refusal => `  ${refusal.destinationPath}: ${refusal.reason}`);
+  return (
+    `Shape transition refused before anything was written:\n${lines.join('\n')}\n` +
+    'Overwrite with care, or clean up the destination and try the install again.'
+  );
+}
+
+// Converts the collected transitions. Deepest first so a nested transition is
+// resolved before the one it is inside. Every file is re-verified again
+// immediately before it is removed (a scan is a snapshot, the filesystem is
+// not) and directories are only removed once empty, so a path that changed
+// between the scan and the removal is refused, never deleted.
+function performShapeTransitions(transitions, plan) {
+  const deepestFirst = [...transitions].sort((a, b) => segments(b.destinationPath) - segments(a.destinationPath));
+  for (const transition of deepestFirst) {
+    if (transition.type === 'file-to-dir') {
+      if (!isShapeTransitionRemovable(transition.destinationPath, plan)) {
+        throw new Error(
+          `Refusing to turn ${transition.destinationPath} into a directory: it is no longer a byte-identical EGC copy`
+        );
+      }
+      fs.rmSync(transition.destinationPath, { force: true });
+      continue;
+    }
+    for (const childPath of transition.children) {
+      if (!isShapeTransitionRemovable(childPath, plan)) {
+        throw new Error(
+          `Refusing to turn ${transition.destinationPath} into a file: ${childPath} is no longer a byte-identical EGC copy`
+        );
+      }
+      fs.rmSync(childPath, { force: true });
+    }
+    const emptiestFirst = [...transition.directories].sort((a, b) => segments(b) - segments(a));
+    for (const directoryPath of emptiestFirst) {
+      try {
+        fs.rmdirSync(directoryPath);
+      } catch (error) {
+        if (error.code !== 'ENOTEMPTY' && error.code !== 'EEXIST') throw error;
+        throw new Error(
+          `Refusing to turn ${transition.destinationPath} into a file: ${directoryPath} grew content during the install`,
+          { cause: error }
+        );
+      }
+    }
+  }
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
+
+  // Shape transitions are resolved before the first write: a refusal throws
+  // with the layout still untouched, so a source that changed shape between
+  // installs fails clearly instead of hitting EEXIST mid-copy.
+  const shapeResult = collectShapeTransitions(plan);
+  if (shapeResult.refusals.length > 0) {
+    throw new Error(formatShapeTransitionsRefusal(shapeResult.refusals));
+  }
+  plan.shapeTransitions = shapeResult.transitions;
 
   // Every destination is checked before the first write, the state file and
   // the hooks file included, so a planted link fails the install before it
@@ -526,6 +806,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   // after this point is refused like any other.
   const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
   removeLegacyLinks(migratedLegacyLinks, plan.targetRoot);
+  performShapeTransitions(plan.shapeTransitions, plan);
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
   if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
@@ -583,7 +864,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true, migratedLegacyLinks, retiredFiles };
+  const result = { ...plan, applied: true, migratedLegacyLinks, retiredFiles, shapeTransitions: shapeResult.transitions };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -605,6 +886,9 @@ module.exports = {
   removeLegacyLinks,
   writeGuardianCliMarker,
   writeManagedText,
+  collectShapeTransitions,
+  performShapeTransitions,
+  formatShapeTransitionsRefusal,
 
 
 
