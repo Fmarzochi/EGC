@@ -347,12 +347,35 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('install-apply refuses the prompt-library flags next to an explicit selection', () => {
+    const result = spawnSync(process.execPath, [INSTALL_APPLY, '--prompt-library', '--target', 'cursor', '--profile', 'core', '--dry-run'], {
+      cwd: os.tmpdir(),
+      encoding: 'utf8',
+      timeout: INSTALL_TIMEOUT_MS,
+    });
+    assert.notStrictEqual(result.status, 0, 'a selection plus the bare-install flag must fail');
+    assert.ok(
+      /--prompt-library and --no-prompt-library apply to the bare "egc install" only/.test(`${result.stderr}${result.stdout}`),
+      `expected the explanation, got:\n${result.stderr}`
+    );
+  })) passed++; else failed++;
+
+  if (test('the bare-install delegation forwards the prompt-library decision and nothing else', () => {
+    const { legacyInstallerArgs } = require(INSTALL_APPLY);
+    assert.deepStrictEqual(legacyInstallerArgs({ promptLibrary: true }), ['--prompt-library']);
+    assert.deepStrictEqual(legacyInstallerArgs({ promptLibrary: false }), ['--no-prompt-library']);
+    assert.deepStrictEqual(legacyInstallerArgs({ promptLibrary: null }), [], 'no flag: the wrapper asks or skips on its own');
+    assert.deepStrictEqual(legacyInstallerArgs({}), []);
+  })) passed++; else failed++;
+
   if (test('installation guide explains the three setup stages', () => {
     assert.ok(sources.guide.includes('## Installation lifecycle'));
     assert.ok(sources.guide.includes('### 1. Bare install'));
     assert.ok(sources.guide.includes('### 2. Project setup'));
     assert.ok(sources.guide.includes('### 3. Full profile'));
     assert.ok(sources.guide.includes('egc install --target <target> --profile full'));
+    assert.ok(sources.guide.includes('egc install --prompt-library'), 'the guide must name the opt-in flag');
+    assert.ok(sources.guide.includes('egc install --no-prompt-library'), 'the guide must name the skip flag');
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

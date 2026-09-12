@@ -46,6 +46,10 @@ const ARG_HANDLERS = {
   '--json':     (parsed) => { parsed.json = true; return 0; },
   '--require-detected': (parsed) => { parsed.requireDetected = true; return 0; },
   '--allow-undetected': (parsed) => { parsed.allowUndetected = true; return 0; },
+  // Bare-install flags: the shell installers read them, the manifest path
+  // refuses them (a --target/--profile selection is already explicit).
+  '--prompt-library': (parsed) => { parsed.promptLibrary = true; return 0; },
+  '--no-prompt-library': (parsed) => { parsed.promptLibrary = false; return 0; },
   '--help':     (parsed) => { parsed.help = true; return 0; },
   '-h':         (parsed) => { parsed.help = true; return 0; },
 };
@@ -59,6 +63,7 @@ function parseInstallArgs(argv) {
     help: false,
     requireDetected: false,
     allowUndetected: false,
+    promptLibrary: null,
     configPath: null,
     profileId: null,
     moduleIds: [],

@@ -88,6 +88,19 @@ for _arg in "$@"; do
   [[ "$_arg" = "--dry-run" ]] && DRY_RUN=true && break
 done
 
+# The prompt library (agents, skills, commands, rules) is opt-in: the bare
+# install sets up the engine and asks about the library only at an
+# interactive terminal, default no. --prompt-library adds it without
+# asking; --no-prompt-library skips the question (CI, provisioning).
+PROMPT_LIBRARY=""
+for _arg in "$@"; do
+  case "$_arg" in
+    --prompt-library) PROMPT_LIBRARY=yes ;;
+    --no-prompt-library) PROMPT_LIBRARY=no ;;
+    *) ;;
+  esac
+done
+
 # Detect whether we'll delegate to the Node installer below (install-apply.js
 # configures the commit-privacy filter itself, so this script must skip its
 # own copy of that step when delegating -- otherwise it runs twice).
@@ -273,42 +286,50 @@ echo "  ✓ egc-memory build verified"
 # be fatal to the install.
 node scripts/egc.js doctor --repo-root "$ROOT_DIR" || true
 
-# Interactive ecosystem install (skipped in CI/headless environments)
-if [[ -t 0 && "$DRY_RUN" = false ]]; then
-  printf "\n  Install prompt library? (61 agents, 232 skills, 77 commands) [Y/n] "
-  read -r _install_ans
-  _install_ans="${_install_ans:-Y}"
-  if [[ "$_install_ans" = "Y" || "$_install_ans" = "y" ]]; then
-    if [[ -d "$HOME/.gemini" ]] || command -v gemini >/dev/null 2>&1 || command -v agy >/dev/null 2>&1; then
-      echo "  installing to Gemini / AGY..."
-      node "$ROOT_DIR/scripts/install-apply.js" --target egc --profile full
-    fi
-    if [[ -d "$HOME/.codex" ]] || command -v codex >/dev/null 2>&1; then
-      echo "  installing to Codex..."
-      node "$ROOT_DIR/scripts/install-apply.js" --target codex --profile full
-    fi
-    if [[ -d "$HOME/.opencode" ]] || command -v opencode >/dev/null 2>&1; then
-      echo "  installing to OpenCode..."
-      node "$ROOT_DIR/scripts/install-apply.js" --target opencode --profile full
-    fi
-    if [[ -d "$HOME/.kiro" ]] || command -v kiro >/dev/null 2>&1; then
-      echo "  installing to Kiro..."
-      node "$ROOT_DIR/scripts/install-apply.js" --target kiro --profile full
-      bash "$ROOT_DIR/.kiro/install.sh" ~
-    fi
-    if [[ -d "$HOME/.trae" || -d "$HOME/.trae-cn" ]] || command -v trae >/dev/null 2>&1; then
-      echo "  installing to Trae..."
-      bash "$ROOT_DIR/.trae/install.sh" ~
-    fi
-    if [[ -d "$HOME/.codebuddy" ]] || command -v codebuddy >/dev/null 2>&1; then
-      echo "  installing to CodeBuddy..."
-      bash "$ROOT_DIR/.codebuddy/install.sh" ~
-    fi
+# Prompt library: opt-in. The question is asked only at an interactive
+# terminal and defaults to no; --prompt-library answers yes without asking
+# and --no-prompt-library skips the question. A headless run (CI, piped
+# stdin) skips it with a note, mirroring the Windows installer.
+_install_ans="n"
+if [[ "$DRY_RUN" = false ]]; then
+  if [[ "$PROMPT_LIBRARY" = yes ]]; then
+    _install_ans="y"
+  elif [[ "$PROMPT_LIBRARY" = no ]]; then
+    echo "  prompt library skipped (--no-prompt-library). Run 'egc install --prompt-library' to add it later."
+  elif [[ -t 0 ]]; then
+    printf "\n  Install prompt library? (61 agents, 232 skills, 77 commands) [y/N] "
+    read -r _install_ans
+    _install_ans="${_install_ans:-n}"
+  else
+    echo "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --prompt-library' to add it."
   fi
-elif [[ "$DRY_RUN" = false ]]; then
-  # Mirrors install.ps1: a non-TTY stdin skips the prompt-library step.
-  # Announce it instead of skipping silently.
-  echo "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --target <tool> --profile full' to add it."
+fi
+if [[ "$_install_ans" = "Y" || "$_install_ans" = "y" ]]; then
+  if [[ -d "$HOME/.gemini" ]] || command -v gemini >/dev/null 2>&1 || command -v agy >/dev/null 2>&1; then
+    echo "  installing to Gemini / AGY..."
+    node "$ROOT_DIR/scripts/install-apply.js" --target egc --profile full
+  fi
+  if [[ -d "$HOME/.codex" ]] || command -v codex >/dev/null 2>&1; then
+    echo "  installing to Codex..."
+    node "$ROOT_DIR/scripts/install-apply.js" --target codex --profile full
+  fi
+  if [[ -d "$HOME/.opencode" ]] || command -v opencode >/dev/null 2>&1; then
+    echo "  installing to OpenCode..."
+    node "$ROOT_DIR/scripts/install-apply.js" --target opencode --profile full
+  fi
+  if [[ -d "$HOME/.kiro" ]] || command -v kiro >/dev/null 2>&1; then
+    echo "  installing to Kiro..."
+    node "$ROOT_DIR/scripts/install-apply.js" --target kiro --profile full
+    bash "$ROOT_DIR/.kiro/install.sh" ~
+  fi
+  if [[ -d "$HOME/.trae" || -d "$HOME/.trae-cn" ]] || command -v trae >/dev/null 2>&1; then
+    echo "  installing to Trae..."
+    bash "$ROOT_DIR/.trae/install.sh" ~
+  fi
+  if [[ -d "$HOME/.codebuddy" ]] || command -v codebuddy >/dev/null 2>&1; then
+    echo "  installing to CodeBuddy..."
+    bash "$ROOT_DIR/.codebuddy/install.sh" ~
+  fi
 fi
 
 # ── MCP auto-registration ─────────────────────────────────────────────────────

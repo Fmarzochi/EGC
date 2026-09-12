@@ -76,6 +76,8 @@ egc install
 
 This prepares the core runtime, initializes the shared state store, and registers the MCP servers in detected tools. A bare install does **not** create managed target install-state files, so `egc doctor` may report that none exist. That is expected, not an error.
 
+The prompt library (agents, skills, commands and rules) is optional and off by default: at an interactive terminal the bare install asks whether to add it, and an empty answer means no. `egc install --prompt-library` adds it to every detected tool without asking, `egc install --no-prompt-library` skips the question (CI, provisioning), and a headless run skips it with a note that names the flag.
+
 The dashboard starts right after this stage when you are at an interactive terminal. A headless run (CI, or output redirected to a file) skips it and prints `Dashboard not started (headless environment). Run 'egc dashboard' to start it.` instead.
 
 ### 2. Project setup
@@ -99,6 +101,8 @@ Install the complete managed content set for a specific target when you want rul
 ```bash
 egc install --target <target> --profile full
 ```
+
+`egc install --prompt-library` does the same for every detected tool at once, without the question.
 
 Use `egc catalog` to inspect available targets, profiles, and components before installing.
 
@@ -132,7 +136,7 @@ sh scripts/install.sh
 
 > **Note:** Gemini CLI free tier was discontinued on June 18, 2026 for individual users. The `~/.gemini/GEMINI.md` target still works for paid Google accounts. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative: EGC supports it via `egc install --target antigravity`.
 4. Registers both MCP servers in every detected tool's config file
-5. Asks interactively whether to install the prompt library (61 agents, 232 skills, 77 commands): skipped automatically in CI
+5. Asks whether to install the prompt library (61 agents, 232 skills, 77 commands), default no; `--prompt-library` answers yes without asking, `--no-prompt-library` skips the question, and a headless run (CI) skips it with a note
 6. Installs the Token Crusher binary shim (`~/.egc/bin`): a best-effort, non-fatal step, see [Token Crusher](#token-crusher) below
 
 ### Example output
@@ -326,7 +330,7 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 | Command | What it does |
 |---------|--------------|
 | `egc init` | First-run bootstrap (cognitive protocol + MCP registration + doctor) |
-| `egc install` | Install EGC content into a supported target |
+| `egc install` | Install EGC content into a supported target; on a bare install, `--prompt-library` and `--no-prompt-library` decide the optional library without the question |
 | `egc plan` | Inspect selective-install manifests and resolved plans |
 | `egc catalog` | Discover install profiles and component IDs |
 | `egc consult` | Recommend EGC components and profiles from a natural language query |
