@@ -133,21 +133,22 @@ function fail(code, message) {
 
 // Whether anything sits at the path (a link, even a dangling one, counts).
 // Only a definite ENOENT is an absence; a path that cannot be inspected is
-// an error, never a silent "no memory".
-function present(filePath) {
+// an error, never a silent "no memory". The message names the file by its
+// role and the failure by its code: never the path.
+function present(filePath, role) {
   try {
     fs.lstatSync(filePath);
     return true;
   } catch (err) {
     if (err.code === 'ENOENT') return false;
-    return fail(1, `cannot inspect the state file: ${err.message}`);
+    return fail(1, `cannot inspect the ${role} (${err.code || err.name})`);
   }
 }
 
 function resolveDocument(opts) {
   if (opts.scope === 'global') {
     const file = globalState.globalStateFilePath();
-    return { file, root: statePlaintext.stateRoot(path.dirname(file)), exists: present(file), label: 'global memory' };
+    return { file, root: statePlaintext.stateRoot(path.dirname(file)), exists: present(file, 'state file'), label: 'global memory' };
   }
   const projectPath = path.resolve(opts.project || process.cwd());
   const stateDir = branchState.getStateDir();
@@ -172,7 +173,7 @@ function readStateBytes(target) {
     // A link at the path is refused by the no-follow open (ELOOP), the
     // same refusal as a link seen before the open.
     if (err.code === 'ELOOP') raw = null;
-    else fail(1, `cannot read the state file: ${err.message}`);
+    else fail(1, `cannot read the state file (${err.code || err.name})`);
   }
   if (raw === null) fail(1, 'the state file is not a regular file inside the state directory, or changed while it was read');
   return raw;
@@ -189,7 +190,7 @@ function loadKeyReadOnly() {
     fail(1, err.message);
   }
   if (key) return key;
-  if (!present(stateCrypto.defaultKeyPath())) fail(3, 'the memory is encrypted and the key is missing');
+  if (!present(stateCrypto.defaultKeyPath(), 'key')) fail(3, 'the memory is encrypted and the key is missing');
   return fail(1, `the key at ${stateCrypto.defaultKeyPath()} is malformed`);
 }
 

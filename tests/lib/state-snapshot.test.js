@@ -17,7 +17,7 @@ const os = require('os');
 const path = require('path');
 
 const { decryptStateBuffer, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
-const { writeSnapshotToDisk, applyMinedMemory } = require('../../scripts/lib/state-snapshot');
+const { writeSnapshotToDisk, applyMinedMemory, withStateFileLockSync } = require('../../scripts/lib/state-snapshot');
 
 function test(name, fn) {
   try {
@@ -163,6 +163,20 @@ function runTests() {
     } finally {
       cleanup(home);
       cleanup(projectPath);
+    }
+  })) passed++; else failed++;
+
+  if (test('the lock timeout names no path: a lock held by a live process is reported by its role only', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lock-msg-'));
+    try {
+      const stateFile = path.join(dir, 'state.md');
+      fs.writeFileSync(`${stateFile}.merge.lock`, String(process.pid));
+      assert.throws(
+        () => withStateFileLockSync(stateFile, () => 'never'),
+        error => error.message === 'Timeout acquiring the state file lock: another process holds it'
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 
