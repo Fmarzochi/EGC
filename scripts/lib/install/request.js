@@ -35,6 +35,16 @@ function applyWithoutComponent(parsed, args, index) {
   return 1;
 }
 
+// The two bare-install flags contradict each other; argument order must not
+// decide silently, so the pair is refused at parse time.
+function applyPromptLibrary(parsed, value) {
+  if (parsed.promptLibrary !== null && parsed.promptLibrary !== value) {
+    throw new Error('--prompt-library and --no-prompt-library cannot be combined');
+  }
+  parsed.promptLibrary = value;
+  return 0;
+}
+
 const ARG_HANDLERS = {
   '--target':   (parsed, args, i) => applyNextArg(parsed, 'target', args, i),
   '--config':   (parsed, args, i) => applyNextArg(parsed, 'configPath', args, i),
@@ -46,6 +56,10 @@ const ARG_HANDLERS = {
   '--json':     (parsed) => { parsed.json = true; return 0; },
   '--require-detected': (parsed) => { parsed.requireDetected = true; return 0; },
   '--allow-undetected': (parsed) => { parsed.allowUndetected = true; return 0; },
+  // Bare-install flags: the shell installers read them, the manifest path
+  // refuses them (a --target/--profile selection is already explicit).
+  '--prompt-library': (parsed) => applyPromptLibrary(parsed, true),
+  '--no-prompt-library': (parsed) => applyPromptLibrary(parsed, false),
   '--help':     (parsed) => { parsed.help = true; return 0; },
   '-h':         (parsed) => { parsed.help = true; return 0; },
 };
@@ -59,6 +73,7 @@ function parseInstallArgs(argv) {
     help: false,
     requireDetected: false,
     allowUndetected: false,
+    promptLibrary: null,
     configPath: null,
     profileId: null,
     moduleIds: [],

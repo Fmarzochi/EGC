@@ -182,6 +182,18 @@ try {
 
 $DryRun = $args -contains '--dry-run'
 
+# The prompt library (agents, skills, commands, rules) is opt-in: the bare
+# install sets up the engine and asks about the library only at an
+# interactive console, default no. --prompt-library adds it without asking;
+# --no-prompt-library skips the question (CI, provisioning).
+$PromptLibrary = $null
+if (($args -contains '--prompt-library') -and ($args -contains '--no-prompt-library')) {
+    Write-Host "Error: --prompt-library and --no-prompt-library cannot be combined" -ForegroundColor Red
+    exit 1
+}
+if ($args -contains '--prompt-library') { $PromptLibrary = $true }
+if ($args -contains '--no-prompt-library') { $PromptLibrary = $false }
+
 # Optional dependency hints (non-blocking)
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Host "  Optional dependency not found: uv"
@@ -310,59 +322,73 @@ foreach ($arg in $args) {
 if ($hasInstallArgs) {
     node $EgcInstall @args
     $installExitCode = $LASTEXITCODE
-    if ($DryRun) {
+    # A refused or failed targeted install ends the run here, the way the
+    # bash installer stops under set -e, instead of carrying on to the
+    # prompt-library step and the registration as if it had succeeded.
+    if ($DryRun -or $installExitCode -ne 0) {
         exit $installExitCode
     }
 }
 
-# Interactive ecosystem install (skipped in headless/CI)
+# Prompt library: opt-in. The question is asked only at an interactive
+# console and defaults to no; --prompt-library answers yes without asking
+# and --no-prompt-library skips the question. A headless run (CI, redirected
+# stdin) skips it with a note: a piped stdin used to reach Read-Host, come
+# back $null instantly and make the whole block vanish without a word
+# (Windows report in #1217), so the gate tests IsInputRedirected and the
+# skip is announced.
 $isInteractive = [Environment]::UserInteractive -and -not $env:CI -and -not [Console]::IsInputRedirected
-if ($isInteractive -and -not $DryRun) {
-    $ans = Read-Host "`n  Install prompt library? (61 agents, 232 skills, 77 commands) [Y/n]"
-    if ([string]::IsNullOrEmpty($ans) -or $ans -eq 'Y' -or $ans -eq 'y') {
-        if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".gemini"))) {
-            Write-Host "  installing to Gemini / AGY..."
-            node $EgcInstall --target egc --profile full
-        }
-        if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".codex"))) {
-            Write-Host "  installing to Codex..."
-            node $EgcInstall --target codex --profile full
-        }
-        if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".opencode"))) {
-            Write-Host "  installing to OpenCode..."
-            node $EgcInstall --target opencode --profile full
-        }
-        if ((Get-Command kiro -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".kiro"))) {
-            if (Get-Command bash -ErrorAction SilentlyContinue) {
-                Write-Host "  installing to Kiro..."
-                bash (Join-Path $RootDir (Join-Path ".kiro" "install.sh")) ~
-            } else {
-                Write-Host "  note: Kiro detected but bash not available - run manually: bash .kiro/install.sh ~" -ForegroundColor Yellow
-            }
-        }
-        if ((Get-Command trae -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".trae")) -or (Test-Path (Join-Path $env:USERPROFILE ".trae-cn"))) {
-            if (Get-Command bash -ErrorAction SilentlyContinue) {
-                Write-Host "  installing to Trae..."
-                bash (Join-Path $RootDir (Join-Path ".trae" "install.sh")) ~
-            } else {
-                Write-Host "  note: Trae detected but bash not available - run manually: bash .trae/install.sh ~" -ForegroundColor Yellow
-            }
-        }
-        if ((Get-Command codebuddy -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".codebuddy"))) {
-            if (Get-Command bash -ErrorAction SilentlyContinue) {
-                Write-Host "  installing to CodeBuddy..."
-                bash (Join-Path $RootDir (Join-Path ".codebuddy" "install.sh")) ~
-            } else {
-                Write-Host "  note: CodeBuddy detected but bash not available - run manually: bash .codebuddy/install.sh ~" -ForegroundColor Yellow
-            }
+$installLibrary = $false
+if (-not $DryRun) {
+    if ($PromptLibrary -eq $true) {
+        $installLibrary = $true
+    } elseif ($PromptLibrary -eq $false) {
+        Write-Host "  prompt library skipped (--no-prompt-library). Run 'egc install --prompt-library' to add it later."
+    } elseif ($isInteractive) {
+        $ans = Read-Host "`n  Install prompt library? (61 agents, 232 skills, 77 commands) [y/N]"
+        # A null or empty answer is the default: no. Only an explicit y installs.
+        $installLibrary = ($ans -eq 'Y' -or $ans -eq 'y')
+    } else {
+        Write-Host "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --prompt-library' to add it."
+    }
+}
+if ($installLibrary) {
+    if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".gemini"))) {
+        Write-Host "  installing to Gemini / AGY..."
+        node $EgcInstall --target egc --profile full
+    }
+    if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".codex"))) {
+        Write-Host "  installing to Codex..."
+        node $EgcInstall --target codex --profile full
+    }
+    if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".opencode"))) {
+        Write-Host "  installing to OpenCode..."
+        node $EgcInstall --target opencode --profile full
+    }
+    if ((Get-Command kiro -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".kiro"))) {
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            Write-Host "  installing to Kiro..."
+            bash (Join-Path $RootDir (Join-Path ".kiro" "install.sh")) ~
+        } else {
+            Write-Host "  note: Kiro detected but bash not available - run manually: bash .kiro/install.sh ~" -ForegroundColor Yellow
         }
     }
-} elseif (-not $DryRun) {
-    # A piped or redirected stdin used to reach the Read-Host above and come
-    # back $null instantly, and `$null -eq ''` is false in PowerShell, so the
-    # whole ecosystem block vanished without a word (Windows report in #1217:
-    # install-state left at the previous version). Announce the skip instead.
-    Write-Host "  note: non-interactive session; skipping the prompt-library step. Run 'egc install --target <tool> --profile full' to add it."
+    if ((Get-Command trae -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".trae")) -or (Test-Path (Join-Path $env:USERPROFILE ".trae-cn"))) {
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            Write-Host "  installing to Trae..."
+            bash (Join-Path $RootDir (Join-Path ".trae" "install.sh")) ~
+        } else {
+            Write-Host "  note: Trae detected but bash not available - run manually: bash .trae/install.sh ~" -ForegroundColor Yellow
+        }
+    }
+    if ((Get-Command codebuddy -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $env:USERPROFILE ".codebuddy"))) {
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            Write-Host "  installing to CodeBuddy..."
+            bash (Join-Path $RootDir (Join-Path ".codebuddy" "install.sh")) ~
+        } else {
+            Write-Host "  note: CodeBuddy detected but bash not available - run manually: bash .codebuddy/install.sh ~" -ForegroundColor Yellow
+        }
+    }
 }
 
 if (-not $DryRun) {

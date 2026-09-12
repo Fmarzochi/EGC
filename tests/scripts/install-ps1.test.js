@@ -136,9 +136,27 @@ function runTests() {
     const gateLine = scriptSource.match(/\$isInteractive\s*=.*/);
     assert.ok(gateLine, 'could not find the interactivity gate in install.ps1');
     assert.ok(gateLine[0].includes('[Console]::IsInputRedirected'), 'the gate must test IsInputRedirected; UserInteractive alone cannot see a piped stdin');
-    assert.ok(scriptSource.includes('[string]::IsNullOrEmpty($ans)'), 'the default-Y branch must accept a null Read-Host result, not just the empty string');
+    assert.ok(!scriptSource.includes('[string]::IsNullOrEmpty($ans)'), 'a null or empty Read-Host answer is the default, no; it must never count as yes');
+    assert.ok(scriptSource.includes("$installLibrary = ($ans -eq 'Y' -or $ans -eq 'y')"), 'only an explicit y installs the prompt library');
     assert.ok(scriptSource.includes('skipping the prompt-library step'), 'install.ps1 must announce the skip instead of vanishing silently');
     assert.ok(bashSource.includes('skipping the prompt-library step'), 'install.sh must announce the skip too');
+  })) passed++; else failed++;
+
+  if (test('prompt library is opt-in in both installers: default no, --prompt-library and --no-prompt-library honoured', () => {
+    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
+      assert.ok(source.includes('Install prompt library? (61 agents, 232 skills, 77 commands) [y/N]'), `${label} must ask with no as the default`);
+      assert.ok(!source.includes('[Y/n]'), `${label} must not default to yes anywhere`);
+      assert.ok(source.includes('--prompt-library'), `${label} must accept --prompt-library`);
+      assert.ok(source.includes('--no-prompt-library'), `${label} must accept --no-prompt-library`);
+      assert.ok(source.includes("Run 'egc install --prompt-library' to add it"), `${label} must point the headless skip at the flag`);
+    }
+    assert.ok(bashSource.includes('_install_ans="${_install_ans:-n}"'), 'install.sh must read an empty answer as no');
+    assert.ok(bashSource.includes('PROMPT_LIBRARY=yes ;;'), 'install.sh must turn the flag into a yes without asking');
+    assert.ok(bashSource.includes('-t 0 && -z "${CI:-}"'), 'install.sh must not prompt when CI is set, even with a terminal on stdin');
+    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
+      assert.ok(source.includes('--prompt-library and --no-prompt-library cannot be combined'), `${label} must refuse the two flags together instead of letting order decide`);
+    }
+    assert.ok(scriptSource.includes('$installExitCode -ne 0'), 'install.ps1 must stop when the delegated install fails, the way install.sh does under set -e');
   })) passed++; else failed++;
 
   if (test('probes the native sqlite3 binary EGC actually depends on, as a note rather than a warning', () => {
