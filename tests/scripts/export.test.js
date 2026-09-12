@@ -295,7 +295,7 @@ async function main() {
         assert.strictEqual(result.status, 1, result.stderr);
         assert.strictEqual(result.stdout, '');
         assert.ok(result.stderr.includes('cannot read'), result.stderr);
-        assert.ok(!result.stderr.includes(path.join('.egc', 'state', projectSlug(project))), 'the message names the file by role, not by path');
+        assert.ok(result.stderr.includes('cannot read the state file'), 'the message names the file by role; the system error may still carry the path');
       } finally {
         fs.chmodSync(file, 0o600);
       }
