@@ -10,6 +10,8 @@ selected. Read `SUBSYSTEM-MAP.md` first.
 | `SKILL-PLACEMENT-POLICY.md` | Rules for placing a new skill under the correct namespace in `skills/` |
 | `skill-adaptation-policy.md` | When and how to adapt or fork an existing skill |
 | `capability-surface-selection.md` | Criteria for surfacing a skill into a harness install profile |
+| `support-levels.md` | Which tools are core-supported and which are community-supported, the criteria, and how a tool moves between levels |
+| `stewards.md` | Area stewardship: what a steward does, how someone becomes one, and the current areas |
 
 For onboarding contributor process, see `.github/CONTRIBUTING.md` and
 `../README.md`.

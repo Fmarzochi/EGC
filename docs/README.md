@@ -16,6 +16,7 @@ for the formal classification of every subsystem.
 | `security/` | Threat model, SCA policy, release verification | `security/THREAT-MODEL.md` |
 | `spec/` | Formal specs (integration tiers, agent memory interchange) | `spec/README.md` |
 | `installation.md` | Setup playbook for downstream stacks | direct file |
+| `VISION.md` | Direction, milestones and non-goals | direct file |
 
 ## Cross-references
 

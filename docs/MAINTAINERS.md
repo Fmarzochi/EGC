@@ -17,6 +17,10 @@
 - Manages npm package publishing and GitHub releases
 - Responds to issues and community inquiries
 
+## Area Stewards
+
+Area stewards review and triage their area without elevated access; the areas, the people and the rules are in [governance/stewards.md](governance/stewards.md).
+
 ## Access to Sensitive Resources
 
 Access to the following resources is restricted to the project owner:

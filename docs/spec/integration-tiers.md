@@ -4,6 +4,8 @@
 
 EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
+What the maintainers guarantee per tool is a separate axis: see [support levels](../governance/support-levels.md).
+
 ## Tier definitions
 
 | Tier | Name | What ships | Install pipeline |

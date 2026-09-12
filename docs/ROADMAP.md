@@ -1,6 +1,6 @@
 # EGC Roadmap
 
-This document describes the planned development direction for EGC (Extended Global Context).
+This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
 
@@ -221,13 +221,13 @@ Closes the commit-privacy scope started in v1.1.12:
 - `stream=True` now raises `NotImplementedError` across the five remaining native providers (Claude, Cohere, Gemini, Ollama, Vertex AI), completing stream-guard coverage (#924, @hanu-14)
 - Dashboard serves static files added after startup without a restart, with a symlink guard and a debounced manifest rebuild that preserves the traversal protection (#928, @hanu-14)
 - French README translation, the 11th language, wired into every language selector (#948, @ankit24417-sys)
-- Turkish README translation, the 12th language, wired into every language selector (#970, @Iahmacun)
-- German README translation, the 13th language, wired into every language selector (#972, @rathaur-ankit)
 - High-severity advisories cleared: fast-uri and linkify-it across the root and mcp-server lockfiles (#967), and `@hono/node-server` forced to 2.x via npm override to close the last Dependabot and Scorecard findings (#968)
 - ClusterFuzzLite weekly schedule disabled while upstream is dead-locked for JavaScript, keeping manual `workflow_dispatch` (EGC#910)
 
 ## v1.1.16: Security Hardening and Crowdin Root Fix (Released 2026-07-26)
 
+- Turkish README translation, the 12th language, wired into every language selector (#970, @Iahmacun)
+- German README translation, the 13th language, wired into every language selector (#972, @rathaur-ankit)
 - Guardian validator hardened: the absolute-path bypass on destructive commands closed (#1012), path resolution and log permissions hardened (#1011), `core.hooksPath` no-verify bypass closed (#1013), the bash hook dispatcher fails closed instead of fail-open on its own errors (#1019), `auto_learn` validates its write target against protected paths (#1009), and destructive docker/gh/prisma variants now hard-block instead of just warning (#1041, @fuentes71)
 - Crowdin translation sync fixed at the root: upload was re-poisoning Chinese Simplified because Crowdin does not sentence-segment Chinese; sync is now one-way, Crowdin to repo only, with the zh-CN path mapped correctly end to end (#988, #1000, #1003, #1004, #1005, #1006, #1038, #1039, #1040, closes #483)
 - Three runtime bugs from the #987 deep audit fixed: an `orchestrate_task` TOCTOU gap, lesson decay reading the wrong timestamp, and the integrity key loader silently regenerating on a malformed key (#989, @aryamirani)
@@ -242,31 +242,6 @@ Closes the commit-privacy scope started in v1.1.12:
 - `install.sh` no longer writes unusable POSIX Git Bash paths into MCP config JSON on Windows: `MINGW*`/`MSYS*` is detected via `uname -s` and paths are rewritten through `pwd -W` first (#1045)
 - `install.ps1` resynced with `install.sh` after drifting for several releases: Node floor raised to 20, lockfile-aware dependency install with no fallback, a malformed existing MCP config is left untouched instead of being overwritten, Codex CLI TOML paths are escaped, and builds are guarded behind a `src/` check (#1045)
 
-## v1.2.0: Teams
+## Direction, milestones and non-goals
 
-Multi-developer workflows and shared context:
-
-- Shared state between team members (multi-user installations beyond git-backend team memory)
-- Organization-level installations and role-based context scoping
-- Cross-project memory federation
-- Stable MCP server API with versioned interfaces
-- `egc-guardian` and `egc-memory` promoted to GA with backward-compatibility guarantees
-
-## v1.3.0: Growth
-
-- Community translations: Ukrainian, Malay (German, French, Italian, and Turkish shipped across v1.1.14 and v1.1.15)
-- Per-project skill profiles and overrides
-- OSS-Fuzz integration for continuous fuzz testing
-
-## v2.0.0: Enterprise
-
-- Formal security review by an independent party
-- SBOM (Software Bill of Materials) generation
-- Assurance case documenting security properties
-- Contribution from at least two active maintainers (bus factor >= 2)
-
-## Non-Goals
-
-- EGC does not aim to replace AI providers: it augments them
-- EGC does not store or transmit user code to any third party
-- EGC does not require cloud connectivity for local installations
+Moved to [VISION.md](VISION.md) on 2026-09-12.
