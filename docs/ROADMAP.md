@@ -1,6 +1,6 @@
 # EGC Roadmap
 
-This document describes the planned development direction for EGC (Extended Global Context).
+This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
 
@@ -241,31 +241,6 @@ Closes the commit-privacy scope started in v1.1.12:
 - `install.sh` no longer writes unusable POSIX Git Bash paths into MCP config JSON on Windows: `MINGW*`/`MSYS*` is detected via `uname -s` and paths are rewritten through `pwd -W` first (#1045)
 - `install.ps1` resynced with `install.sh` after drifting for several releases: Node floor raised to 20, lockfile-aware dependency install with no fallback, a malformed existing MCP config is left untouched instead of being overwritten, Codex CLI TOML paths are escaped, and builds are guarded behind a `src/` check (#1045)
 
-## v1.2.0: Teams
+## Direction, milestones and non-goals
 
-Multi-developer workflows and shared context:
-
-- Shared state between team members (multi-user installations beyond git-backend team memory)
-- Organization-level installations and role-based context scoping
-- Cross-project memory federation
-- Stable MCP server API with versioned interfaces
-- `egc-guardian` and `egc-memory` promoted to GA with backward-compatibility guarantees
-
-## v1.3.0: Growth
-
-- Community translations: Ukrainian, Malay (German, French, Italian, and Turkish shipped across v1.1.14 and v1.1.15)
-- Per-project skill profiles and overrides
-- OSS-Fuzz integration for continuous fuzz testing
-
-## v2.0.0: Enterprise
-
-- Formal security review by an independent party
-- SBOM (Software Bill of Materials) generation
-- Assurance case documenting security properties
-- Contribution from at least two active maintainers (bus factor >= 2)
-
-## Non-Goals
-
-- EGC does not aim to replace AI providers: it augments them
-- EGC does not store or transmit user code to any third party
-- EGC does not require cloud connectivity for local installations
+Moved to [VISION.md](VISION.md) on 2026-09-12.

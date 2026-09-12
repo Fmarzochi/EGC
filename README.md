@@ -10,15 +10,15 @@
 
 # EGC - Give Every AI Agent the Same Brain
 
-**Persistent memory that every AI agent, IDE, terminal, and session shares automatically. No prompts to memorize. No context to rebuild. Just talk.**
+**One local engine that gives every AI coding tool on your machine the same memory, the same guardrails and the same context, in every session.**
 
 </div>
 
 ---
 
-EGC isn't another memory tool. It's the intelligence layer that lets every AI work as if it has been on your project since day one, in Cursor, Copilot, Claude Code, Codex, Aider, and any terminal agent (20 AI coding tools in total). Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
+EGC is a local-first runtime for AI coding tools. Install it once and Cursor, Claude Code, Codex, Copilot, Aider and the rest of the 20 AI coding tools it supports share one encrypted memory of your projects, one safety layer in front of every command, one filter that keeps noisy output away from the model, and one live bus that lets your open sessions see each other. Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
-Every conversation builds your project's collective intelligence. Every agent inherits it. Every session gets smarter.
+Nothing leaves your machine. Memory lives in `~/.egc`, encrypted with AES-256-GCM, kept per project and branch, and never committed to git.
 
 ---
 
@@ -28,9 +28,7 @@ Every conversation builds your project's collective intelligence. Every agent in
 npm install -g @egchq/egc && egc install
 ```
 
-- **Reduce context waste by up to 90%, cut token costs, and keep every AI perfectly aligned across sessions.**
-- **Guardian: validate every command before execution and block dangerous writes. Every shared brain comes with a built-in safety layer.**
-- **One command, zero config: memory stays local and encrypted on your machine, and never gets committed to git.**
+That is the whole engine. `egc install` detects the tools you have, registers the two local MCP servers in each of them, writes the memory protocol every agent reads, and sets up the Token Crusher. It asks one question, whether you also want the optional prompt library, and the default is no.
 
 <div align="center">
   <img src="assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
@@ -40,54 +38,56 @@ npm install -g @egchq/egc && egc install
 
 ---
 
-## Inside the Brain: How EGC Works
+## The Engine: How EGC Works
 
-EGC is not a list of tools; it is one brain with several faculties. It remembers, understands, protects, filters, and coordinates, across every AI agent on your machine.
+EGC is one brain with four faculties. Each one is on from the first install, in every supported tool, with no command to learn.
 
 <div align="center">
   <img src="assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
-### You Don't Memorize Commands, You Speak Naturally
+### Memory: What One Agent Learns, Every Agent Knows
 
-Talk to the brain in any language: "save this session", "what did we decide about auth?", "remember this decision". EGC understands the intent, stores the context, and recalls it instantly in any other tab, terminal, or tool on your machine. One brain. Every agent. Zero commands to remember.
+Decisions, session context, working memory and learned lessons are captured as you work and are available in any other terminal, IDE or agent you open. You speak naturally, in any language: "save this session", "what did we decide about auth?", "remember this decision". EGC understands the intent and stores or recalls the context. There is no command to memorize.
 
-### Persistent Project Memory
+### Session Mesh: Your Open Sessions See Each Other
 
-EGC gives every AI agent a persistent, shared brain. It captures decisions, session context, working memory, and learned patterns, then makes them instantly available in any other terminal, IDE, or agent you open. Session state, project history, and accumulated lessons flow seamlessly between tabs, tools, and teammates: no manual sync, no context loss. All memory lives in `~/.egc` on your machine, encrypted with AES-256-GCM, kept per project branch, and never committed to your repository.
+Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events the moment they land, so parallel sessions cooperate instead of colliding.
 
-### Guardian: Built-In Safety Guardrails
+### Guardian: A Safety Layer in Front of Every Command
 
-A second half of the brain runs guardrails in the background. It validates commands before they execute, gates risky writes, compresses context before it overflows, orchestrates multi-step tasks across agents, and learns from every correction, all without you invoking a single tool. An invisible safety net that keeps context lean, actions safe, and workflows autonomous. (Coverage depends on each tool's own hook support; see the [Security Assessment](docs/security/SECURITY-ASSESSMENT.md#known-limitations) for the one documented exception.)
+Guardian validates commands before they run, gates risky writes and keeps context from overflowing, in the background, without you invoking anything. Coverage depends on each tool's own hook support; the [Security Assessment](docs/security/SECURITY-ASSESSMENT.md#known-limitations) documents the exception.
 
-### Token Crusher: The Brain Filters Noise Before It Remembers
+### Token Crusher: Noise Never Reaches the Model
 
-The brain doesn't just remember: it filters. Before any shell output reaches the model, EGC's Token Crusher compresses git logs, test spam, install noise, and giant JSONs by up to 90%, preserving every error and warning. Just ask "how much did I save?" in any language, and the answer comes straight from your local ledger at zero cost: cheaper sessions, context that lasts.
-
----
-
-## Prompt Library
-
-As a bonus, EGC gives you access to 61 agents, 232 skills, and 77 commands, plus 109 rules: specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks for you, and style rules that keep your code consistent. All written from real engineering sessions, not theory. Don't want to use any of it? Fine: EGC's persistent memory works exactly the same.
+Before shell output reaches the model, the Token Crusher compresses git logs, test spam, install noise and giant JSON by up to 90 percent while keeping every error and warning. Ask "how much did I save?" in any language and the answer comes straight from your local ledger.
 
 ---
 
 ## Quick Start
 
-There is no step two. Open any of your AI tools and just talk: "hi", "let's continue", "remember this decision", in any language. Sessions connect instantly, memory loads automatically, and every open tab already knows what the others are doing: two Cursor tabs, a Claude Code terminal, and an Antigravity session all share the same living context, simultaneously.
+There is no step two. Open any of your AI tools and just talk: "hi", "let's continue", "remember this decision", in any language. Sessions connect, memory loads, and every open tab already knows what the others are doing.
 
-A live dashboard displaying agent activity, tokens, and costs spins up automatically right after installation. Prefer manual control? Every command is documented in the [installation guide](docs/installation.md): you will probably never need to type one.
+A live dashboard with agent activity, tokens and costs starts right after installation. Prefer explicit control? Every command is documented in the [installation guide](docs/installation.md): you will probably never need to type one.
 
 ---
+
+## Prompt Library (Optional)
+
+Separate from the engine, and off by default, EGC also ships a library written from real engineering sessions: you get access to 61 agents, 232 skills, and 77 commands, plus 109 rules. Specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks, and style rules that keep your code consistent. Add it to every detected tool with `egc install --prompt-library`, or to one tool with `egc install --target <tool> --profile full`. Skip it and the engine works exactly the same.
+
+---
+
 🌐 **English** · [العربية](translations/ar/README.md) · [Deutsch](translations/de/README.md) · [Español](translations/es/README.md) · [Français](translations/fr/README.md) · [हिन्दी](translations/hi/README.md) · [Italiano](translations/it/README.md) · [日本語](translations/ja/README.md) · [한국어](translations/ko/README.md) · [Português (Brasil)](translations/pt/README.md) · [Русский](translations/ru/README.md) · [Türkçe](translations/tr/README.md) · [简体中文](translations/zh-CN/README.md)
 
 ---
 
 ## Support EGC
 
-EGC is built by one developer, maintained in the open, and free.
+EGC is built by one developer, maintained in the open, and free. The engine is Apache-2.0 and stays free: if EGC ever offers something paid, it will be a team layer on top of it, never the memory on your machine.
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: full docs, feature overview, and live demo
+- **[Vision](docs/VISION.md)**: where EGC is going, and what stays free
 - **[Join the Discord](https://discord.gg/TxppsGb52)**: ask questions, share feedback
 - **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)**: any amount
 - **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: no GitHub account needed
