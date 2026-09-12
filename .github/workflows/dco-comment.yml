@@ -32,6 +32,12 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
+            const dirPath = '/tmp/dco-result';
+            if (!fs.existsSync(dirPath) || fs.readdirSync(dirPath).length === 0) {
+              console.log('No DCO result artifact found. Skipping comment post cleanly.');
+              return;
+            }
+
             // download-artifact extracts a single-file artifact directly
             // into the download path (no per-artifact subdirectory) when
             // exactly one artifact matches the pattern, which is always the
