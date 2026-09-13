@@ -630,6 +630,97 @@ function collectShapeBlockingEntries(directory) {
   return { files, directories, blocking, inspectable };
 }
 
+// Resolves a destination the plan writes as a directory out of what is today
+// a file: it may be turned into the directory only when the scan can prove
+// the file is EGC's by a previous install. Comes back as a refusal otherwise,
+// or null when the destination already satisfies the planned shape.
+function resolveFileToDirCandidate(destinationPath, { recorded, plan, onDiskFile, onDiskLink, legacyLinks }) {
+  if (onDiskLink) {
+    if (legacyLinks().has(destinationPath)) return null;
+    return {
+      refusal: {
+        destinationPath,
+        reason: 'a symbolic link or special file is in the way that EGC would not migrate',
+      },
+    };
+  }
+  if (!onDiskFile) return null;
+  const recordedEntry = recorded.get(destinationPath);
+  if (!recordedEntry) {
+    return {
+      refusal: {
+        destinationPath,
+        reason: 'a file EGC did not install must not be turned into a directory',
+      },
+    };
+  }
+  if (!isShapeTransitionRemovable(destinationPath, plan)) {
+    return {
+      refusal: {
+        destinationPath,
+        reason: 'a file is in the way that is EGC-modified or changed since install',
+      },
+    };
+  }
+  return {
+    transition: {
+      type: 'file-to-dir',
+      destinationPath,
+      sourceRelativePath: recordedEntry.sourceRelativePath || '',
+    },
+  };
+}
+
+// Resolves a destination the plan writes as a file out of what is today a
+// directory: every regular file inside must be proven EGC's by a previous
+// install, or the transition is refused with the directory untouched. A link
+// or special entry inside, or a directory that cannot even be listed, refuses
+// too -- the walk's empty directories are dropped, being indistinguishable
+// from ones the person made.
+function resolveDirToFileCandidate(destinationPath, { recorded, plan }) {
+  const summary = collectShapeBlockingEntries(destinationPath);
+  if (!summary.inspectable) {
+    return {
+      refusal: {
+        destinationPath,
+        reason: 'a directory that could not be listed must not be silently emptied',
+      },
+    };
+  }
+  if (summary.blocking.length > 0) {
+    return {
+      refusal: {
+        destinationPath,
+        reason: `a symbolic link or special file refuses the transition: ${summary.blocking
+          .map(filePath => path.relative(path.resolve(destinationPath), filePath))
+          .join(', ')}`,
+      },
+    };
+  }
+  const unreconciled = summary.files.filter(filePath => {
+    const recordedEntry = recorded.get(filePath);
+    return !recordedEntry || !isShapeTransitionRemovable(filePath, plan);
+  });
+  if (unreconciled.length > 0) {
+    return {
+      refusal: {
+        destinationPath,
+        reason: `files are in the way whose content is not in this package anymore, so EGC cannot prove they are untouched: ${unreconciled
+          .map(filePath => path.relative(path.resolve(destinationPath), filePath))
+          .join(', ')}`,
+      },
+    };
+  }
+  return {
+    transition: {
+      type: 'dir-to-file',
+      destinationPath,
+      children: [...summary.files].sort((a, b) => a.localeCompare(b)),
+      directories: [...summary.directories, destinationPath].sort((a, b) => a.localeCompare(b)),
+    },
+  };
+}
+
 // Scans the destinations a plan will write to or into for shape transitions,
 // read-only: the dry run lists them and the apply runs them. Anything the
 // scan cannot reconcile is returned as a refusal instead of throwing, so a
@@ -652,11 +743,23 @@ function collectShapeTransitions(plan) {
     return legacyLinkPaths;
   };
 
-  for (const destinationPath of [...plannedFiles, ...plannedParents]) {
+  for (const destinationPath of new Set([...plannedFiles, ...plannedParents])) {
     if (!roots.some(candidate => destinationPath === candidate || destinationPath.startsWith(candidate + path.sep))) continue;
 
     const wantsFile = plannedFiles.has(destinationPath);
     const wantsDirectory = plannedParents.has(destinationPath);
+
+    // The plan both writes this path and writes into it -- structurally
+    // impossible, never let install.sh find out the hard way. Raised before
+    // the destination is even read, so a broken plan refuses on a fresh
+    // install too, and a path in both sets is visited once, for one refusal.
+    if (wantsFile && wantsDirectory) {
+      refusals.push({
+        destinationPath,
+        reason: 'the plan writes this path as both a file and a directory',
+      });
+      continue;
+    }
 
     let stat;
     try {
@@ -666,109 +769,25 @@ function collectShapeTransitions(plan) {
     }
     const onDiskDirectory = stat.isDirectory();
     const onDiskFile = stat.isFile();
-    if (!onDiskFile && !onDiskDirectory) {
-      if (legacyLinks().has(destinationPath)) continue;
-      refusals.push({
-        destinationPath,
-        reason: 'a symbolic link is in the way that EGC would not migrate',
-      });
-      continue;
-    }
 
-    // The plan both writes this path and writes into it -- structurally
-    // impossible, never let install.sh find out the hard way.
-    if (wantsFile && wantsDirectory) {
-      refusals.push({
-        destinationPath,
-        reason: 'the plan writes this path as both a file and a directory',
+    if (wantsDirectory && !onDiskDirectory) {
+      const result = resolveFileToDirCandidate(destinationPath, {
+        recorded,
+        plan,
+        onDiskFile,
+        onDiskLink: !onDiskFile && !onDiskDirectory,
+        legacyLinks,
       });
-      continue;
-    }
-
-    if (wantsDirectory && onDiskFile) {
-      const recordedEntry = recorded.get(destinationPath);
-      if (!recordedEntry) {
-        refusals.push({
-          destinationPath,
-          reason: 'a file EGC did not install must not be turned into a directory',
-        });
-        continue;
-      }
-      if (!isShapeTransitionRemovable(destinationPath, plan)) {
-        refusals.push({
-          destinationPath,
-          reason: 'a file is in the way that is EGC-modified or changed since install',
-        });
-        continue;
-      }
-      transitions.push({
-        type: 'file-to-dir',
-        destinationPath,
-        sourceRelativePath: recordedEntry.sourceRelativePath || '',
-      });
+      if (result.transition) transitions.push(result.transition);
+      else if (result.refusal) refusals.push(result.refusal);
       continue;
     }
 
     if (wantsFile && onDiskDirectory) {
-      const summary = collectShapeBlockingEntries(destinationPath);
-      if (!summary.inspectable) {
-        refusals.push({
-          destinationPath,
-          reason: 'a directory that could not be listed must not be silently emptied',
-        });
-        continue;
-      }
-      if (summary.blocking.length > 0) {
-        refusals.push({
-          destinationPath,
-          reason: `a symbolic link or special file refuses the transition: ${summary.blocking
-            .map(filePath => path.relative(path.resolve(destinationPath), filePath))
-            .join(', ')}`,
-        });
-        continue;
-      }
-      const unreconciled = summary.files.filter(filePath => {
-        const recordedEntry = recorded.get(filePath);
-        return !recordedEntry || !isShapeTransitionRemovable(filePath, plan);
-      });
-      if (unreconciled.length > 0) {
-        refusals.push({
-          destinationPath,
-          reason: `files are in the way that are EGC-modified or changed since install: ${unreconciled
-            .map(filePath => path.relative(path.resolve(destinationPath), filePath))
-            .join(', ')}`,
-        });
-        continue;
-      }
-      // Every directory the walk met, short of the destination itself, must
-      // be proven EGC's by at least one recorded file beneath it. An empty
-      // directory under the destination has no such proof -- it cannot be
-      // told apart from a directory the person made -- so it is refused
-      // instead of silently deleted.
-      const accountedDirectories = new Set();
-      for (const filePath of summary.files) {
-        for (let dir = path.dirname(filePath); dir.startsWith(destinationPath + path.sep); dir = path.dirname(dir)) {
-          accountedDirectories.add(dir);
-        }
-      }
-      const unaccounted = summary.directories.filter(dirPath => !accountedDirectories.has(dirPath));
-      if (unaccounted.length > 0) {
-        refusals.push({
-          destinationPath,
-          reason: `a directory no recorded EGC file accounts for refuses the transition: ${unaccounted
-            .map(filePath => path.relative(path.resolve(destinationPath), filePath))
-            .join(', ')}`,
-        });
-        continue;
-      }
-      // The scan walks filesystem enumeration order; a plan and its report
-      // carry a deterministic order instead.
-      transitions.push({
-        type: 'dir-to-file',
-        destinationPath,
-        children: [...summary.files].sort(),
-        directories: [...summary.directories, destinationPath].sort(),
-      });
+      const result = resolveDirToFileCandidate(destinationPath, { recorded, plan });
+      if (result.transition) transitions.push(result.transition);
+      else if (result.refusal) refusals.push(result.refusal);
+      continue;
     }
   }
 
@@ -779,7 +798,7 @@ function formatShapeTransitionsRefusal(refusals) {
   const lines = refusals.map(refusal => `  ${refusal.destinationPath}: ${refusal.reason}`);
   return (
     `Shape transition refused:\n${lines.join('\n')}\n` +
-    'Move or remove the conflicting paths manually (egc repair only restores files EGC itself copied), then run the install again.'
+    'Move or remove the conflicting destination by hand, then run the install again.'
   );
 }
 
@@ -792,40 +811,59 @@ function performShapeTransitions(transitions, plan) {
   const deepestFirst = [...transitions].sort((a, b) => segments(b.destinationPath) - segments(a.destinationPath));
   const offenders = [];
   for (const transition of deepestFirst) {
-    if (transition.type === 'file-to-dir') {
-      if (!isShapeTransitionRemovable(transition.destinationPath, plan)) {
-        offenders.push({ destinationPath: transition.destinationPath, reason: 'no longer a byte-identical EGC copy' });
-      }
-      continue;
-    }
-    for (const childPath of transition.children) {
-      if (!isShapeTransitionRemovable(childPath, plan)) {
-        offenders.push({ destinationPath: childPath, reason: 'no longer a byte-identical EGC copy' });
-      }
-    }
+    const offender = verifyShapeTransition(transition, plan);
+    if (offender) offenders.push(offender);
   }
   if (offenders.length > 0) {
     throw new Error(formatShapeTransitionsRefusal(offenders));
   }
   for (const transition of deepestFirst) {
-    if (transition.type === 'file-to-dir') {
-      fs.rmSync(transition.destinationPath, { force: true });
-      continue;
+    if (transition.type === 'file-to-dir') performFileToDir(transition);
+    else performDirToFile(transition);
+  }
+}
+
+// Re-checks the bytes of one transition against the disk right before the
+// removals, so nothing EGC cannot prove is its own ever goes: the single file
+// of a file-to-dir transition, every child of a dir-to-file one. Returns the
+// first offender, or null when the transition may proceed.
+function verifyShapeTransition(transition, plan) {
+  if (transition.type === 'file-to-dir') {
+    if (!isShapeTransitionRemovable(transition.destinationPath, plan)) {
+      return { destinationPath: transition.destinationPath, reason: 'no longer a byte-identical EGC copy' };
     }
-    for (const childPath of transition.children) {
-      fs.rmSync(childPath, { force: true });
+    return null;
+  }
+  for (const childPath of transition.children) {
+    if (!isShapeTransitionRemovable(childPath, plan)) {
+      return { destinationPath: childPath, reason: 'no longer a byte-identical EGC copy' };
     }
-    const emptiestFirst = [...transition.directories].sort((a, b) => segments(b) - segments(a));
-    for (const directoryPath of emptiestFirst) {
-      try {
-        fs.rmdirSync(directoryPath);
-      } catch (error) {
-        if (error.code !== 'ENOTEMPTY' && error.code !== 'EEXIST') throw error;
-        throw new Error(
-          `Refusing to turn ${transition.destinationPath} into a file: ${directoryPath} grew content during the install`,
-          { cause: error }
-        );
-      }
+  }
+  return null;
+}
+
+// Retires the EGC-installed file making room for the planned directory.
+function performFileToDir(transition) {
+  fs.rmSync(transition.destinationPath, { force: true });
+}
+
+// Retires the EGC-installed directory making room for the planned file: its
+// children first, then the directories that held them, deepest first. A
+// directory that grew content while the install ran is refused, not removed.
+function performDirToFile(transition) {
+  for (const childPath of transition.children) {
+    fs.rmSync(childPath, { force: true });
+  }
+  const emptiestFirst = [...transition.directories].sort((a, b) => segments(b) - segments(a));
+  for (const directoryPath of emptiestFirst) {
+    try {
+      fs.rmdirSync(directoryPath);
+    } catch (error) {
+      if (error.code !== 'ENOTEMPTY' && error.code !== 'EEXIST') throw error;
+      throw new Error(
+        `Refusing to turn ${transition.destinationPath} into a file: ${directoryPath} grew content during the install`,
+        { cause: error }
+      );
     }
   }
 }
