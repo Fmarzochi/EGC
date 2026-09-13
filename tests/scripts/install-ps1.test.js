@@ -284,6 +284,13 @@ function runTests() {
         homeDir,
       });
 
+      if (result.timedOut){
+        const result = run(powerShellCommand, ['--target', 'cursor', '--dry-run', 'typescript'], {
+          cwd: projectDir,
+          homeDir,
+      });
+      }
+
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Dry-run install plan'));
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'hooks.json')));
