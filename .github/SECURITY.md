@@ -12,7 +12,7 @@
 Do not open public GitHub issues for security vulnerabilities.
 
 Use GitHub's private vulnerability reporting:
-https://github.com/Fmarzochi/EGC/security/advisories/new
+<https://github.com/Fmarzochi/EGC/security/advisories/new>
 
 Alternatively, email [fmarzochi@gmail.com](mailto:fmarzochi@gmail.com).
 
