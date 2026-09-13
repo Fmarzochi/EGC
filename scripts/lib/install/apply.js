@@ -540,8 +540,10 @@ function plannedWriteShapes(plan) {
     for (let dir = path.dirname(destinationPath); dir !== path.dirname(dir); dir = path.dirname(dir)) {
       const root = roots.find(candidate => dir === candidate || dir.startsWith(candidate + path.sep));
       if (!root) break;
-      parents.add(dir);
+      // The root itself is never a planned parent: it may be a link the user
+      // made (a dotfiles manager's ~/.claude), and the scan must not lstat it.
       if (dir === root) break;
+      parents.add(dir);
     }
   }
   return { files, parents };
@@ -570,7 +572,9 @@ function previousStateManagedCopies(plan) {
 // normal retirement also allows the original source file to still exist and
 // match, a transition's recorded source is by definition gone or changed
 // shape, so identity is only ever established against the files this plan
-// copies today.
+// copies today. The root is found by explicit containment: a path outside
+// every managed root is refused, never removed (managedRootFor's fallback to
+// the target root would vouch for foreign territory here).
 function isShapeTransitionRemovable(filePath, plan) {
   let stat;
   try {
@@ -579,7 +583,7 @@ function isShapeTransitionRemovable(filePath, plan) {
     return false;
   }
   if (!stat.isFile()) return false;
-  const root = managedRootFor(plan, filePath);
+  const root = managedRootsOf(plan).find(candidate => filePath.startsWith(candidate + path.sep));
   if (!root) return false;
   for (let dir = path.dirname(filePath); dir !== root && dir.startsWith(root + path.sep); dir = path.dirname(dir)) {
     if (isSymbolicLink(dir)) return false;
@@ -631,19 +635,12 @@ function collectShapeBlockingEntries(directory) {
 }
 
 // Resolves a destination the plan writes as a directory out of what is today
-// a file: it may be turned into the directory only when the scan can prove
-// the file is EGC's by a previous install. Comes back as a refusal otherwise,
-// or null when the destination already satisfies the planned shape.
-function resolveFileToDirCandidate(destinationPath, { recorded, plan, onDiskFile, onDiskLink, legacyLinks }) {
-  if (onDiskLink) {
-    if (legacyLinks().has(destinationPath)) return null;
-    return {
-      refusal: {
-        destinationPath,
-        reason: 'a symbolic link or special file is in the way that EGC would not migrate',
-      },
-    };
-  }
+// a file (the caller has already ruled out a directory and a link/special
+// entry on disk): it may be turned into the directory only when the scan can
+// prove the file is EGC's by a previous install. Comes back as a refusal
+// otherwise, or null when the destination is not a file and no transition
+// applies.
+function resolveFileToDirCandidate(destinationPath, { recorded, plan, onDiskFile }) {
   if (!onDiskFile) return null;
   const recordedEntry = recorded.get(destinationPath);
   if (!recordedEntry) {
@@ -742,60 +739,76 @@ function collectShapeTransitions(plan) {
     if (!legacyLinkPaths) legacyLinkPaths = new Set(findLegacyLinks(plan).map(link => link.linkPath));
     return legacyLinkPaths;
   };
+  const context = { recorded, plan, plannedFiles, plannedParents, roots, legacyLinks };
 
   for (const destinationPath of new Set([...plannedFiles, ...plannedParents])) {
-    if (!roots.some(candidate => destinationPath === candidate || destinationPath.startsWith(candidate + path.sep))) continue;
-
-    const wantsFile = plannedFiles.has(destinationPath);
-    const wantsDirectory = plannedParents.has(destinationPath);
-
-    // The plan both writes this path and writes into it -- structurally
-    // impossible, never let install.sh find out the hard way. Raised before
-    // the destination is even read, so a broken plan refuses on a fresh
-    // install too, and a path in both sets is visited once, for one refusal.
-    if (wantsFile && wantsDirectory) {
-      refusals.push({
-        destinationPath,
-        reason: 'the plan writes this path as both a file and a directory',
-      });
-      continue;
-    }
-
-    let stat;
-    try {
-      stat = fs.lstatSync(destinationPath);
-    } catch {
-      continue;
-    }
-    const onDiskDirectory = stat.isDirectory();
-    const onDiskFile = stat.isFile();
-
-    if (wantsDirectory && !onDiskDirectory) {
-      const result = resolveFileToDirCandidate(destinationPath, {
-        recorded,
-        plan,
-        onDiskFile,
-        onDiskLink: !onDiskFile && !onDiskDirectory,
-        legacyLinks,
-      });
-      // null means the destination is a legacy link EGC migrates itself
-      // (#1400) or already satisfies the planned shape: neither a transition
-      // nor a refusal, and the apply's own link machinery owns it.
-      if (!result) continue;
-      if (result.transition) transitions.push(result.transition);
-      else if (result.refusal) refusals.push(result.refusal);
-      continue;
-    }
-
-    if (wantsFile && onDiskDirectory) {
-      const result = resolveDirToFileCandidate(destinationPath, { recorded, plan });
-      if (result.transition) transitions.push(result.transition);
-      else if (result.refusal) refusals.push(result.refusal);
-      continue;
-    }
+    // null: nothing for the scan to do -- the path needs no transition and
+    // is not refused (outside every root, not on disk yet, already the
+    // planned shape, or a legacy link the apply migrates itself, #1400).
+    const result = resolveShapeCandidate(destinationPath, context);
+    if (!result) continue;
+    if (result.transition) transitions.push(result.transition);
+    else if (result.refusal) refusals.push(result.refusal);
   }
 
   return { transitions, refusals };
+}
+
+// Resolves one planned path into a shape transition, a refusal, or null (no
+// transition and no refusal: the path needs nothing done to it). The loop
+// above only dispatches the result; every branch of the decision lives here,
+// so a destination is visited once for one answer.
+function resolveShapeCandidate(destinationPath, { recorded, plan, plannedFiles, plannedParents, roots, legacyLinks }) {
+  if (!roots.some(candidate => destinationPath === candidate || destinationPath.startsWith(candidate + path.sep))) return null;
+
+  const wantsFile = plannedFiles.has(destinationPath);
+  const wantsDirectory = plannedParents.has(destinationPath);
+
+  // The plan both writes this path and writes into it -- structurally
+  // impossible, never let install.sh find out the hard way. Raised before
+  // the destination is even read, so a broken plan refuses on a fresh
+  // install too, and a path in both sets is visited once, for one refusal.
+  if (wantsFile && wantsDirectory) {
+    return {
+      refusal: {
+        destinationPath,
+        reason: 'the plan writes this path as both a file and a directory',
+      },
+    };
+  }
+
+  let stat;
+  try {
+    stat = fs.lstatSync(destinationPath);
+  } catch {
+    return null;
+  }
+  const onDiskDirectory = stat.isDirectory();
+  const onDiskFile = stat.isFile();
+
+  // A link or special entry at the destination is refused unless it is one
+  // of EGC's own legacy layout links (#1400) the apply migrates: any other
+  // would be written through. Checked for a planned file too, so the scan
+  // reports the same refusal the apply raises in either direction.
+  if (!onDiskDirectory && !onDiskFile) {
+    if (legacyLinks().has(destinationPath)) return null;
+    return {
+      refusal: {
+        destinationPath,
+        reason: 'a symbolic link or special file is in the way that EGC would not migrate',
+      },
+    };
+  }
+
+  if (wantsDirectory && !onDiskDirectory) {
+    return resolveFileToDirCandidate(destinationPath, { recorded, plan, onDiskFile });
+  }
+
+  if (wantsFile && onDiskDirectory) {
+    return resolveDirToFileCandidate(destinationPath, { recorded, plan });
+  }
+
+  return null;
 }
 
 function formatShapeTransitionsRefusal(refusals) {

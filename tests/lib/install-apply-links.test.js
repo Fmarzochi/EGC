@@ -214,6 +214,58 @@ function runTests() {
         const viaLink = path.join(dir, 'root-link');
         assert.doesNotThrow(() => refuseLinkedDestination(path.join(viaLink, 'rules', 'plain.md'), viaLink));
       })) passed++; else failed++;
+
+      if (test('a linked root installs through the full apply: the file lands behind the link (the linked-root regression)', () => {
+        const viaLink = path.join(dir, 'root-link');
+        const base = path.join(dir, 'linked-root-apply');
+        const sourceDir = path.join(base, 'source');
+        const statePath = path.join(base, 'egc', 'install-state.json');
+        const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+        fs.mkdirSync(path.join(sourceDir, 'rules'), { recursive: true });
+        fs.writeFileSync(path.join(sourceDir, 'rules', 'foo.md'), 'foo behind the link');
+        const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+          kind: 'copy-file',
+          moduleId: 'egc-universal',
+          sourcePath,
+          sourceRelativePath,
+          destinationPath,
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        });
+        const buildState = operations => createInstallState({
+          adapter,
+          targetRoot: viaLink,
+          installStatePath: statePath,
+          request: { profile: null },
+          resolution: {},
+          source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+          operations,
+        });
+        writeInstallState(statePath, buildState([]));
+        const operations = [copyOp(
+          path.join(sourceDir, 'rules', 'foo.md'),
+          'rules/foo.md',
+          path.join(viaLink, 'rules', 'foo.md')
+        )];
+        const plan = {
+          adapter,
+          targetRoot: viaLink,
+          managedRoots: [viaLink],
+          installStatePath: statePath,
+          retirements: [],
+          operations,
+          statePreview: buildState(operations),
+        };
+        // The managed root is itself a link (a dotfiles manager's ~/.claude):
+        // the apply installs behind it. Before the fix the scan listed the
+        // root as a planned parent and refused it as a link before the first
+        // write, even though main installs fine there.
+        const result = applyInstallPlan(plan, { homeDir: base });
+        assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'foo behind the link', 'the file lands behind the linked root');
+        assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isFile(), 'it is a real file, not through the link');
+        assert.deepStrictEqual(result.shapeTransitions, [], 'no transition is involved');
+      })) passed++; else failed++;
     }
 
     if (test('a hard link at the destination is replaced and the aliased file keeps its content', () => {
@@ -767,6 +819,67 @@ function runTests() {
       assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before writing behind the link');
       assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isSymbolicLink(), 'the link is untouched');
       assert.ok(!fs.existsSync(path.join(root, 'rules', 'foo.md', 'index.md')), 'nothing is written behind it');
+      })) passed++; else failed++;
+
+      if (test('a non-legacy link in the way of a planned file is refused by the scan and by the apply (dry run matches apply)', () => {
+        const base = path.join(dir, 'shape-link-file');
+        const sourceDir = path.join(base, 'source');
+        const root = path.join(base, 'root');
+        const statePath = path.join(base, 'egc', 'install-state.json');
+        const adapter = { id: 'custom', target: 'custom', kind: 'home' };
+        fs.mkdirSync(sourceDir, { recursive: true });
+        fs.writeFileSync(path.join(sourceDir, 'plain.md'), 'planned file');
+        fs.mkdirSync(path.join(root, 'rules'), { recursive: true });
+        fs.mkdirSync(path.join(base, 'elsewhere'), { recursive: true });
+        fs.writeFileSync(path.join(base, 'elsewhere', 'ghost.md'), 'not EGC');
+        fs.symlinkSync(path.join(base, 'elsewhere', 'ghost.md'), path.join(root, 'rules', 'foo.md'));
+        const copyOp = (sourcePath, sourceRelativePath, destinationPath) => ({
+          kind: 'copy-file',
+          moduleId: 'egc-universal',
+          sourcePath,
+          sourceRelativePath,
+          destinationPath,
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        });
+        const buildState = operations => createInstallState({
+          adapter,
+          targetRoot: root,
+          installStatePath: statePath,
+          request: { profile: null },
+          resolution: {},
+          source: { repoVersion: 'test', repoCommit: 'test', manifestVersion: 1 },
+          operations,
+        });
+        writeInstallState(statePath, buildState([]));
+        const operations = [copyOp(
+          path.join(sourceDir, 'plain.md'),
+          'rules/plain.md',
+          path.join(root, 'rules', 'foo.md')
+        )];
+        const plan = {
+          adapter,
+          targetRoot: root,
+          managedRoots: [root],
+          installStatePath: statePath,
+          retirements: [],
+          operations,
+          statePreview: buildState(operations),
+        };
+        // The plan writes a FILE where a non-legacy link sits. The apply
+        // always refused it through findLegacyLinks' strict pass; the scan,
+        // which only looked for links where a directory was planned, stayed
+        // silent -- so --dry-run disagreed with apply. Now the scan refuses
+        // too, listing exactly what the apply will throw.
+        const { transitions, refusals } = collectShapeTransitions(plan);
+        assert.strictEqual(transitions.length, 0, 'a link is never a transition candidate');
+        assert.strictEqual(refusals.length, 1, 'the scan refuses the link in the way of a planned file');
+        assert.strictEqual(refusals[0].destinationPath, path.join(root, 'rules', 'foo.md'));
+        assert.ok(refusals[0].reason.includes('symbolic link'), refusals[0].reason);
+        assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before writing behind the link');
+        assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isSymbolicLink(), 'the link is untouched');
+        assert.strictEqual(fs.readFileSync(path.join(base, 'elsewhere', 'ghost.md'), 'utf8'), 'not EGC', 'what it points at is untouched');
       })) passed++; else failed++;
 
       if (test('a symbolic link inside the directory a dir-to-file wants refuses the transition', () => {
