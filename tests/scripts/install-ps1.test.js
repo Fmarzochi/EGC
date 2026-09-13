@@ -49,6 +49,7 @@ function run(powerShellCommand, args = [], options = {}) {
   };
 
   try {
+    const startTime = Date.now();
     const stdout = execFileSync(powerShellCommand, ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, ...args], {
       cwd: options.cwd,
       env,
@@ -63,10 +64,14 @@ function run(powerShellCommand, args = [], options = {}) {
 
     return { code: 0, stdout, stderr: '' };
   } catch (error) {
+    const elapsedMs = Date.now() - startTime;
+    const isTimeout = error.code === 'ETIMEDOUT' || Boolean(error.signal);
     return {
-      code: error.status || 1,
+      code: isTimeout ? null : (error.status ?? 1),
       stdout: error.stdout || '',
       stderr: error.stderr || '',
+      timedOut: isTimeout,
+      elapsedMs: elapsedMs
     };
   }
 }
