@@ -120,6 +120,7 @@ function printHumanPlan(plan, dryRun) {
 
   printRetirements(plan, dryRun);
   printLegacyLinks(plan, dryRun);
+  printShapeTransitions(plan, dryRun);
 
   if (!dryRun) {
     console.log(`\nDone. Install-state written to ${plan.installStatePath}`);
@@ -152,6 +153,34 @@ function printLegacyLinks(plan, dryRun) {
     : '\nMigrated legacy links:');
   for (const link of links) {
     console.log(`- ${dryRun ? '' : 'migrated legacy link: '}${link.linkPath} (pointed at ${link.resolvedTo})`);
+  }
+}
+
+// Destinations whose source changed shape between installs: a file that
+// became a source directory, or back, keeps its name but not its shape at
+// the installed destination. The apply retires those files through the same
+// identity check the retirement path uses and refuses anything else; the dry
+// run lists the resolvable transitions and every refusal so the whole state
+// is visible before anything runs.
+function printShapeTransitions(plan, dryRun) {
+  const transitions = plan.shapeTransitions || [];
+  const refusals = plan.shapeRefusals || [];
+  if (transitions.length > 0) {
+    console.log(dryRun
+      ? '\nShape transitions (a source changed between a file and a directory):'
+      : '\nShape transitions applied:');
+    for (const transition of transitions) {
+      const direction = transition.type === 'file-to-dir'
+        ? 'file retired, written as a directory'
+        : 'directory retired, written as a file';
+      console.log(`- ${transition.destinationPath}: ${direction}`);
+    }
+  }
+  if (dryRun && refusals.length > 0) {
+    console.log('\nShape transitions that would refuse the install:');
+    for (const refusal of refusals) {
+      console.log(`- ${refusal.destinationPath}: ${refusal.reason}`);
+    }
   }
 }
 
@@ -380,11 +409,17 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      const { findLegacyLinks, retirableFiles } = require('./lib/install/apply');
+      const { collectShapeTransitions, findLegacyLinks, retirableFiles } = require('./lib/install/apply');
       plan.legacyLinks = findLegacyLinks(plan);
       // The same test the apply runs: a file the person replaced is not
       // listed, because it would not be removed.
       plan.retirements = retirableFiles(plan);
+      // Same again for destinations whose source changed shape: the apply
+      // resolves a transition only when every file passes identity, so the
+      // dry run lists the resolvable transitions and every refusal.
+      const shapeResult = collectShapeTransitions(plan);
+      plan.shapeTransitions = shapeResult.transitions;
+      plan.shapeRefusals = shapeResult.refusals;
       emitDryRunPlan(options, plan);
       return;
     }
