@@ -48,8 +48,8 @@ function run(powerShellCommand, args = [], options = {}) {
     USERPROFILE: options.homeDir || process.env.USERPROFILE,
   };
 
+  const startTime = Date.now();
   try {
-    const startTime = Date.now();
     const stdout = execFileSync(powerShellCommand, ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, ...args], {
       cwd: options.cwd,
       env,
