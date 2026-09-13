@@ -778,6 +778,10 @@ function collectShapeTransitions(plan) {
         onDiskLink: !onDiskFile && !onDiskDirectory,
         legacyLinks,
       });
+      // null means the destination is a legacy link EGC migrates itself
+      // (#1400) or already satisfies the planned shape: neither a transition
+      // nor a refusal, and the apply's own link machinery owns it.
+      if (!result) continue;
       if (result.transition) transitions.push(result.transition);
       else if (result.refusal) refusals.push(result.refusal);
       continue;
