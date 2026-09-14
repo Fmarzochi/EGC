@@ -251,6 +251,9 @@ function routeViaCatalog(prompt, input) {
 
   const lines = ['=== EGC Catalog (in-session routing) ==='];
   if (inventory) lines.push(inventory);
+  if (skills.length === 0 && agents.length === 0 && missingNamed.length === 0) {
+    return { indexAvailable: true, block: lines.join('\n') };
+  }
   lines.push('Route by intent: judge the task in its own words; the candidates below are a local hint, not a verdict.');
   pushCandidates(lines, installed.known ? 'Installed skills:' : 'Skills:', skills);
   pushCandidates(lines, installed.known ? 'Installed agents:' : 'Agents:', agents);

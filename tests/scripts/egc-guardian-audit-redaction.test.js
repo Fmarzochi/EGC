@@ -139,6 +139,9 @@ async function runTests() {
       assert.strictEqual(body.routing.provider, 'keyword', JSON.stringify(body.routing));
       assert.ok(String(body.routing_hint || '').includes('EGC_LLM_ROUTING'), body.routing_hint);
       assert.ok(String(body.routing_hint || '').includes('a provider key is set'), body.routing_hint);
+      assert.strictEqual(body.routing.installation, 'unknown', 'a home without an install state cannot say what is installed');
+      assert.deepStrictEqual(body.routing.not_installed, [], 'nothing is called not installed when the installation is unknown');
+      assert.ok(body.routing.skills.includes('security-review'), JSON.stringify(body.routing.skills));
     })) passed++; else failed++;
 
     if (await test('the tool answers are unaffected', async () => {
