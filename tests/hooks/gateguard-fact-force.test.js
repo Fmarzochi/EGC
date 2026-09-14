@@ -550,6 +550,63 @@ function runTests() {
     assert.ok(!later.stdout.includes('"deny"'), later.stdout);
   })) passed++; else failed++;
 
+  if (test('a retry whose message the harness has not written yet is not refused on an older denial (Claude Code shape)', () => {
+    const transcript = path.join(stateDir, 'cc-unwritten-transcript.jsonl');
+    const session = 'facts-cc-unwritten-' + Date.now();
+    const target = path.join(stateDir, 'src', 'ledger.js');
+    const call = { tool_name: 'Edit', tool_input: { file_path: target, old_string: 'a', new_string: 'b' }, transcript_path: transcript };
+    const first = runHook(call, { EGC_SESSION_ID: session });
+    const denial = JSON.parse(first.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.ok(denial.includes('ledger.js'));
+    // Claude Code records the text and the tool call, then the tool result
+    // that carries the denial, and nothing of the retrying message until
+    // its first tool call completes.
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Editing the ledger now.' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: target } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: denial }] } }),
+    ].join('\n') + '\n');
+    const retry = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(retry.code, 0, retry.stderr);
+    assert.ok(!retry.stdout.includes('"deny"'), `nothing of the assistant follows the denial, so the retry cannot be judged and passes: ${retry.stdout}`);
+  })) passed++; else failed++;
+
+  if (test('a retry is judged by the text written after the denial, not by text before it (Claude Code shape)', () => {
+    const transcript = path.join(stateDir, 'cc-anchored-transcript.jsonl');
+    const session = 'facts-cc-anchored-' + Date.now();
+    const target = path.join(stateDir, 'src', 'invoice.js');
+    const call = { tool_name: 'Edit', tool_input: { file_path: target, old_string: 'a', new_string: 'b' }, transcript_path: transcript };
+    const first = runHook(call, { EGC_SESSION_ID: session });
+    const denial = JSON.parse(first.stdout).hookSpecificOutput.permissionDecisionReason;
+    const before = [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'invoice.js is imported by checkout.js; it exposes total(); no data files.' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: target } }] } }),
+      // The result as Claude Code writes it: a list of text parts.
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: [{ type: 'text', text: denial }] }] } }),
+    ];
+    fs.writeFileSync(transcript, [
+      ...before,
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Retrying without presenting anything.' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Grep', input: { pattern: 'x' } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'no matches' }] } }),
+    ].join('\n') + '\n');
+    const bare = runHook(call, { EGC_SESSION_ID: session });
+    const bareOut = JSON.parse(bare.stdout);
+    assert.strictEqual(bareOut.hookSpecificOutput.permissionDecision, 'deny', `facts written before the denial do not count: ${bare.stdout}`);
+    assert.ok(bareOut.hookSpecificOutput.permissionDecisionReason.includes('invoice.js'), bare.stdout);
+    fs.writeFileSync(transcript, [
+      ...before,
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Facts: invoice.js is imported by checkout.js; it exposes total(); no data files; instruction: "fix the invoice total".' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Grep', input: { pattern: 'x' } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'no matches' }] } }),
+    ].join('\n') + '\n');
+    const withFacts = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(withFacts.code, 0, withFacts.stderr);
+    assert.ok(!withFacts.stdout.includes('"deny"'), `facts written after the denial are accepted even though a tool result followed them: ${withFacts.stdout}`);
+  })) passed++; else failed++;
+
   if (test('a transcript link that points outside the allowed roots is not read', () => {
     let outside;
     try {

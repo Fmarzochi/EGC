@@ -58,10 +58,10 @@ function presentedKey(key) {
   return `presented:${key}`;
 }
 
-// The assistant text written since the last user turn, read from the
-// harness transcript when one is named in the hook input: that is the
-// message that precedes a retried tool call. Null when no transcript can be
-// read, so a harness without transcripts keeps the identical-retry rule.
+// The assistant text read from the harness transcript when one is named in
+// the hook input (see assistantTextSinceDenial for which text is judged).
+// Null when no transcript can be read, so a harness without transcripts
+// keeps the identical-retry rule.
 // A transcript named by the hook input is read only when it is an absolute
 // .jsonl file under the home directory or the temporary directory, with no
 // parent segments: the harness writes transcripts there and nowhere else.
@@ -120,17 +120,73 @@ function assistantTextBlocks(entry) {
   return content.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text);
 }
 
-function recentAssistantText(data) {
+const GATE_MARKER = '[fact-forcing gate]';
+
+function transcriptEntries(data) {
   const tail = readTranscriptTail(data?.transcript_path || data?.transcriptPath);
   if (tail === null) return null;
+  return tail.split('\n').map(parseTranscriptLine).filter(Boolean);
+}
+
+function toolResultTexts(entry) {
+  const content = entry.message && Array.isArray(entry.message.content) ? entry.message.content : [];
+  const texts = [];
+  for (const block of content) {
+    if (!block || block.type !== 'tool_result') continue;
+    if (typeof block.content === 'string') texts.push(block.content);
+    else if (Array.isArray(block.content)) {
+      for (const part of block.content) {
+        if (part?.type === 'text' && typeof part.text === 'string') texts.push(part.text);
+      }
+    }
+  }
+  return texts;
+}
+
+// The denial this gate wrote earlier for the same target, as the harness
+// records it: a user entry whose tool result carries the gate marker and a
+// term that names the target (the file name, or the rollback the
+// destructive gate asks for).
+function isGateDenial(entry, anchorTerms) {
+  if (entry.type !== 'user') return false;
+  const text = toolResultTexts(entry).join('\n').toLowerCase();
+  return text.includes(GATE_MARKER) && anchorTerms.some(term => term && text.includes(String(term).toLowerCase()));
+}
+
+// The assistant text since the last user turn: the rule for a transcript
+// that does not record the gate's own denial.
+function textSinceLastUserTurn(entries) {
   let texts = [];
-  for (const line of tail.split('\n')) {
-    const entry = parseTranscriptLine(line);
-    if (!entry) continue;
+  for (const entry of entries) {
     if (entry.type === 'user') texts = [];
     else if (entry.type === 'assistant') texts.push(...assistantTextBlocks(entry));
   }
   return texts.join('\n');
+}
+
+// What the assistant wrote for this retry, as far as the transcript shows.
+// A tool result is recorded as a user entry, so the boundary that matters
+// is the gate's own denial, not the last user entry: the facts are whatever
+// the assistant wrote after being refused. Claude Code appends the entries
+// of an assistant message only once its first tool call completes, so at
+// PreToolUse time the message that carries the retry is not in the file
+// yet; when no assistant text follows the denial, the retry cannot be
+// judged (judgeable: false) and the identical-retry rule applies.
+function assistantTextSinceDenial(data, anchorTerms) {
+  const entries = transcriptEntries(data);
+  if (entries === null) return null;
+  let denialIndex = -1;
+  entries.forEach((entry, index) => {
+    if (isGateDenial(entry, anchorTerms)) denialIndex = index;
+  });
+  if (denialIndex === -1) return { text: textSinceLastUserTurn(entries), judgeable: true };
+  const text = entries.slice(denialIndex + 1)
+    .filter(entry => entry.type === 'assistant')
+    .flatMap(assistantTextBlocks)
+    .join('\n');
+  // Tool calls of the same batch as the denied one are recorded before the
+  // retry, but they carry no text: only assistant text is a message to judge.
+  return { text, judgeable: text.trim().length > 0 };
 }
 
 function missingFacts(text, required) {
@@ -157,12 +213,13 @@ function commandWord(command) {
 // operations on the same target stay free, as before.
 function refuseUnpresentedFacts(key, required, traceMeta) {
   if (!isChecked(pendingKey(key)) || isChecked(presentedKey(key))) return null;
-  const text = recentAssistantText(hookInput);
-  if (text === null) {
+  const written = assistantTextSinceDenial(hookInput, required);
+  if (written === null || !written.judgeable) {
+    if (written !== null) trace('governance:allowed:facts_unjudged', traceMeta);
     markChecked(presentedKey(key));
     return null;
   }
-  const missing = missingFacts(text, required);
+  const missing = missingFacts(written.text, required);
   if (missing.length === 0) {
     markChecked(presentedKey(key));
     return null;
