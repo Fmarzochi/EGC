@@ -771,6 +771,33 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('keeps the CLI store under .egc when a harness variable is set and lists the harness copy as a stray', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const harnessCopy = path.join(homeDir, '.gemini', 'egc', 'state.db');
+      const canonicalDb = path.join(homeDir, '.egc', 'egc', 'state.db');
+      const memoryDb = path.join(homeDir, '.egc', 'memory', 'state.db');
+      for (const file of [harnessCopy, canonicalDb, memoryDb]) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, '');
+      }
+
+      // The variable a Gemini-family tool injects used to route the store
+      // to ~/.gemini; the shared store must stay the live one regardless.
+      const result = run(['--json'], { cwd: projectRoot, homeDir, env: { GEMINI_PROJECT_DIR: projectRoot } });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      assert.strictEqual(parsed.stateDb.dbPath, canonicalDb);
+      assert.strictEqual(parsed.stateDb.cliStoreMisplaced, false);
+      assert.deepStrictEqual(parsed.stateDb.fragments.map((fragment) => fragment.path), [harnessCopy]);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('--json always emits the full stateDb shape', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');

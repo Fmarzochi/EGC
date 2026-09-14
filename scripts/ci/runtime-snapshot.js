@@ -4,8 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { createStateStore } = require('../lib/state-store');
-const { getEGCDir } = require('../lib/utils');
+const { createStateStore, resolveStateStorePath } = require('../lib/state-store');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -124,9 +123,7 @@ function queryDatabaseTables(db) {
 }
 
 async function buildStateStoreBlock(opts) {
-    const dbPath = opts.dbPath
-        ? path.resolve(opts.dbPath)
-        : path.join(getEGCDir(), 'egc', 'state.db');
+    const dbPath = resolveStateStorePath({ dbPath: opts.dbPath });
     const block = {
         dbPath,
         dbExists: fs.existsSync(dbPath)

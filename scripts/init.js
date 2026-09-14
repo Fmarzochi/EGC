@@ -313,8 +313,8 @@ function reconcileResolutionDrift() {
 // never installs it, so it can only report what it finds.
 function resolveStateDbPath() {
   try {
-    const { getEGCDir } = require('./lib/utils');
-    return path.join(getEGCDir(), 'egc', 'state.db');
+    const { resolveStateStorePath } = require('./lib/state-store/path');
+    return resolveStateStorePath();
   } catch {
     return null;
   }

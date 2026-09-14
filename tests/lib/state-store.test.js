@@ -37,6 +37,13 @@ function cleanupTempDir(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
 }
 
+function restoreEnv(saved) {
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
 function runNode(scriptPath, args = [], options = {}) {
   return spawnSync('node', [scriptPath, ...args], {
     encoding: 'utf8',
@@ -311,6 +318,51 @@ async function runTests() {
     } finally {
       process.chdir(previousCwd);
       cleanupTempDir(tempDir);
+    }
+  })) passed += 1; else failed += 1;
+
+  if (await test('keeps the store under .egc when a harness variable is set', async () => {
+    const homeDir = createTempDir('egc-state-home-');
+    const saved = { GEMINI_PROJECT_DIR: process.env.GEMINI_PROJECT_DIR, CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR };
+
+    try {
+      process.env.GEMINI_PROJECT_DIR = path.join(homeDir, 'project');
+      process.env.CLAUDE_PROJECT_DIR = path.join(homeDir, 'project');
+      assert.strictEqual(resolveStateStorePath({ homeDir }), path.join(homeDir, '.egc', 'egc', 'state.db'));
+    } finally {
+      restoreEnv(saved);
+      cleanupTempDir(homeDir);
+    }
+  })) passed += 1; else failed += 1;
+
+  if (await test('keeps the store under .egc on a HOME that only has a harness directory', async () => {
+    const homeDir = createTempDir('egc-state-home-');
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, EGC_DIR: process.env.EGC_DIR, GEMINI_PROJECT_DIR: process.env.GEMINI_PROJECT_DIR };
+
+    try {
+      fs.mkdirSync(path.join(homeDir, '.gemini'), { recursive: true });
+      process.env.HOME = homeDir;
+      process.env.USERPROFILE = homeDir;
+      delete process.env.EGC_DIR;
+      process.env.GEMINI_PROJECT_DIR = path.join(homeDir, 'project');
+      assert.strictEqual(resolveStateStorePath(), path.join(homeDir, '.egc', 'egc', 'state.db'));
+    } finally {
+      restoreEnv(saved);
+      cleanupTempDir(homeDir);
+    }
+  })) passed += 1; else failed += 1;
+
+  if (await test('honors EGC_DIR as the explicit override for the store', async () => {
+    const homeDir = createTempDir('egc-state-home-');
+    const saved = { EGC_DIR: process.env.EGC_DIR };
+
+    try {
+      process.env.EGC_DIR = path.join(homeDir, 'custom');
+      assert.strictEqual(resolveStateStorePath(), path.join(homeDir, 'custom', 'egc', 'state.db'));
+      assert.strictEqual(resolveStateStorePath({ homeDir }), path.join(homeDir, '.egc', 'egc', 'state.db'));
+    } finally {
+      restoreEnv(saved);
+      cleanupTempDir(homeDir);
     }
   })) passed += 1; else failed += 1;
 

@@ -5,7 +5,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
-const { getEGCDir, getKnownHarnessDirs } = require('./lib/utils');
+const { getKnownHarnessDirs } = require('./lib/utils');
+const { resolveStateStorePath } = require('./lib/state-store/path');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
 const { findPlaintextStateFiles } = require('./lib/state-plaintext');
@@ -114,11 +115,11 @@ function findStateDbFragments(activeDbPath, canonicalDbPath, homeDir) {
 }
 
 function checkStateDb(homeDir) {
-  const rootDir = getEGCDir();
-  const dbPath = path.join(rootDir, 'egc', 'state.db');
+  const dbPath = resolveStateStorePath();
+  const rootDir = path.dirname(path.dirname(dbPath));
   const canonicalDbPath = path.join(homeDir, '.egc', 'egc', 'state.db');
   // The memory server always keeps its store under ~/.egc/memory, no matter
-  // what getEGCDir() resolves to (mcp/servers/egc-memory/src/index.ts).
+  // where the CLI store resolves to (mcp/servers/egc-memory/src/index.ts).
   // Probing it under rootDir made this check blind whenever the CLI
   // resolved to a harness directory.
   const memoryDbPath = path.join(homeDir, '.egc', 'memory', 'state.db');
@@ -127,9 +128,9 @@ function checkStateDb(homeDir) {
   const hasMemoryDb = fs.existsSync(memoryDbPath);
   const fragments = findStateDbFragments(dbPath, canonicalDbPath, homeDir);
   // The CLI store belongs in the shared ~/.egc; landing in a KNOWN harness
-  // directory means resolution picked a harness and history is being split.
-  // An explicit custom EGC_DIR anywhere else is a deliberate override, not
-  // a misplacement, and gets no scary guidance.
+  // directory (only an EGC_DIR pointing there sends it that way now) means
+  // history is being split. An explicit custom EGC_DIR anywhere else is a
+  // deliberate override, not a misplacement, and gets no scary guidance.
   const cliStoreMisplaced = hasHarnessDb
     && !samePath(dbPath, canonicalDbPath)
     && getKnownHarnessDirs(homeDir).some((harnessDir) => samePath(rootDir, harnessDir));

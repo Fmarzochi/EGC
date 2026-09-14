@@ -4,6 +4,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 
 ## Unreleased
 
+- The CLI event store resolves to `~/.egc/egc/state.db` for every writer and reader, whatever tool runs EGC: harness variables no longer route it into `~/.gemini` or `~/.claude`, a HOME without `~/.egc` gets the shared store created instead of the first installed harness, and the memory server and the Guardian read a harness copy only while the shared store is missing (#1451, closes #1450, reported by @rathaur-ankit from a fresh Linux install in #1377).
 - The doctor's consolidation hint runs as pasted: `--canonical` with the shared store and one `--source` per stray copy, quoted for any shell, followed by how to turn the dry run into a write (#1391, reported by @Akisolu from the first run of the merge script on real Windows state in #1380).
 - The state-db merge script archives its sources after `--apply` as `state.db.merged-<timestamp>.bak` next to the original, sidecars included and nothing deleted, so `egc doctor` stops listing copies that were already consolidated; aliases of the live store and linked sources are refused, destinations are checked first, a failed rename rolls back, and `--keep-sources` opts out (#1392, reported by @Akisolu in #1380, archive shape hers).
 - Windows users learn before the upgrade that the AI tools running EGC must be closed before `npm install -g`, in the `egc auto-update` reminder, the installation guide and the troubleshooting page, with the `EBUSY` symptom spelled out (#1393, reported by @Akisolu in #1380).

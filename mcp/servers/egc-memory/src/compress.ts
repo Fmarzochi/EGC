@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { resolveStateStoreDbPath } from './state-store-path.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,18 +118,6 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
 }
 
 // ─── Loader & Replacer for observations.jsonl ──────────────────────────────────
-
-// Mirrors STATE_STORE_RELATIVE_PATH from mcp/servers/egc-memory/src/index.ts
-const STATE_STORE_RELATIVE_PATH = path.join(".gemini", "egc", "state.db");
-
-function resolveStateStoreDbPath(): string {
-  const envOverride = process.env.EGC_STATE_DB;
-  if (envOverride) {
-    return path.resolve(envOverride);
-  }
-  const homeDir = process.env.HOME || os.homedir();
-  return path.join(homeDir, STATE_STORE_RELATIVE_PATH);
-}
 
 function resolveProjectRoot(projectPath: string): string {
   let dir = projectPath;

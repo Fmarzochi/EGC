@@ -42,7 +42,7 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { autoLearn } = require(buildPath);
+const { autoLearn, resolveStateDbPath } = require(buildPath);
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-learn-test-'));
 
@@ -95,6 +95,25 @@ async function run() {
     assert.ok(result.includes('## Keep this section'), 'should preserve content outside markers');
     assert.strictEqual((result.match(/<!-- egc:learn:start -->/g) ?? []).length, 1, 'only one start marker');
     assert.strictEqual((result.match(/<!-- egc:learn:end -->/g) ?? []).length, 1, 'only one end marker');
+  })) passed++; else failed++;
+
+  if (test('resolveStateDbPath reads the shared store first and a harness copy only while it is missing', () => {
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-store-path-'));
+    try {
+      const env = { HOME: homeDir, USERPROFILE: homeDir, GEMINI_PROJECT_DIR: homeDir };
+      const canonical = path.join(homeDir, '.egc', 'egc', 'state.db');
+      const legacy = path.join(homeDir, '.gemini', 'egc', 'state.db');
+      assert.strictEqual(resolveStateDbPath(env), canonical, 'nothing on disk: the shared store is the answer');
+      fs.mkdirSync(path.dirname(legacy), { recursive: true });
+      fs.writeFileSync(legacy, '');
+      assert.strictEqual(resolveStateDbPath(env), legacy, 'a harness copy is read while the shared store is missing');
+      fs.mkdirSync(path.dirname(canonical), { recursive: true });
+      fs.writeFileSync(canonical, '');
+      assert.strictEqual(resolveStateDbPath(env), canonical, 'the shared store wins once it exists');
+      assert.strictEqual(resolveStateDbPath({ ...env, EGC_STATE_DB: legacy }), legacy, 'EGC_STATE_DB stays the override');
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   // Cleanup

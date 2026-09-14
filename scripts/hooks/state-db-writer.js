@@ -4,11 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { getEGCDir } = require(path.join(__dirname, '..', 'lib', 'utils.js'));
-
-function resolveStateDbPath() {
-  return path.join(getEGCDir(), 'egc', 'state.db');
-}
+const { resolveStateStorePath } = require(path.join(__dirname, '..', 'lib', 'state-store', 'path.js'));
 
 function readPayloadFromStdin() {
   let raw;
@@ -62,7 +58,7 @@ async function main() {
   const payload = readPayloadFromStdin();
   if (!payload) return;
 
-  const dbPath = resolveStateDbPath();
+  const dbPath = resolveStateStorePath();
   if (!fs.existsSync(dbPath)) return;
 
   let createStateStore;
