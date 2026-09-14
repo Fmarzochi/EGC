@@ -128,19 +128,16 @@ function transcriptEntries(data) {
   return tail.split('\n').map(parseTranscriptLine).filter(Boolean);
 }
 
+// A tool result is recorded as a string or as a list of text parts.
+function resultTextOf(content) {
+  if (typeof content === 'string') return [content];
+  if (!Array.isArray(content)) return [];
+  return content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text);
+}
+
 function toolResultTexts(entry) {
   const content = entry.message && Array.isArray(entry.message.content) ? entry.message.content : [];
-  const texts = [];
-  for (const block of content) {
-    if (!block || block.type !== 'tool_result') continue;
-    if (typeof block.content === 'string') texts.push(block.content);
-    else if (Array.isArray(block.content)) {
-      for (const part of block.content) {
-        if (part?.type === 'text' && typeof part.text === 'string') texts.push(part.text);
-      }
-    }
-  }
-  return texts;
+  return content.filter(block => block?.type === 'tool_result').flatMap(block => resultTextOf(block.content));
 }
 
 // The denial this gate wrote earlier for the same target, as the harness
@@ -218,8 +215,8 @@ function refuseUnpresentedFacts(key, required, traceMeta, options = {}) {
   if (!isChecked(pendingKey(key)) || isChecked(presentedKey(key))) return null;
   const target = options.target || 'this command';
   const written = assistantTextSinceDenial(hookInput, options.anchorTerms || required);
-  if (written === null || !written.judgeable) {
-    if (written !== null) trace('governance:allowed:facts_unjudged', traceMeta);
+  if (!written?.judgeable) {
+    if (written) trace('governance:allowed:facts_unjudged', traceMeta);
     markChecked(presentedKey(key));
     return null;
   }
