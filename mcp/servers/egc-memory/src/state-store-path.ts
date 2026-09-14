@@ -5,15 +5,16 @@ import path from 'node:path';
 // Read side of the CLI event store. The CLI writes it under the shared .egc
 // directory only (scripts/lib/state-store/path.js), with EGC_DIR as the
 // explicit override, so both are honored here first. The harness roots below
-// mirror getKnownHarnessDirs() in scripts/lib/utils.js (plus .codebuddy, which
-// the env routing used) and are read only while the shared store does not
-// exist, so an install that never consolidated keeps its history visible.
+// mirror getKnownHarnessDirs() in scripts/lib/utils.js, same order, and are
+// read only while the shared store does not exist, so an install that never
+// consolidated keeps its history visible and lands on the same copy the CLI
+// used to pick.
 // The copy of the tool that launched this process is preferred, the same
 // choice the CLI used to make when it wrote there.
 const LEGACY_HARNESS_DIRS = [
-  '.claude', '.gemini', '.cursor', '.github', '.kiro', '.codebuddy',
   path.join('.codeium', 'windsurf'), path.join('.config', 'opencode'), path.join('.config', 'zed'),
-  '.agents', '.amp', '.continue', '.trae', '.trae-cn',
+  '.gemini', '.claude', '.cursor', '.agents', '.amp', '.continue',
+  '.github', '.kiro', '.trae', '.trae-cn', '.codebuddy',
 ];
 
 function activeHarnessDir(env: NodeJS.ProcessEnv): string | null {

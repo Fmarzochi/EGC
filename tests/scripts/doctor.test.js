@@ -696,6 +696,7 @@ function runTests() {
       const strays = [
         path.join(homeDir, '.gemini', 'egc', 'state.db'),
         path.join(homeDir, '.config', 'opencode', 'egc', 'state.db'),
+        path.join(homeDir, '.codebuddy', 'egc', 'state.db'),
       ];
       for (const stray of strays) {
         fs.mkdirSync(path.dirname(stray), { recursive: true });
@@ -704,7 +705,7 @@ function runTests() {
 
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
-      assert.ok(result.stdout.includes('2 stray state.db copies'));
+      assert.ok(result.stdout.includes('3 stray state.db copies'));
       const hint = result.stdout.split('\n').find(line => line.includes('merge-fragmented-state-dbs.js'));
       assert.ok(hint, 'the consolidation hint must be printed');
       for (const stray of strays) {

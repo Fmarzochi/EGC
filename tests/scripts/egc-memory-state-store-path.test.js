@@ -97,7 +97,7 @@ if (test('prefers the copy of the active tool when several harness copies exist 
     touch(claudeCopy);
     touch(geminiCopy);
     assert.strictEqual(resolveStateStoreDbPath({ ...home.env, GEMINI_PROJECT_DIR: home.homeDir }), geminiCopy);
-    assert.strictEqual(resolveStateStoreDbPath(home.env), claudeCopy);
+    assert.strictEqual(resolveStateStoreDbPath(home.env), geminiCopy, 'without a variable the order of getKnownHarnessDirs applies');
   } finally {
     home.cleanup();
   }

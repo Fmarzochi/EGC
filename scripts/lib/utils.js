@@ -68,6 +68,7 @@ function getKnownHarnessDirs(home) {
     path.join(home, '.kiro'),
     path.join(home, '.trae'),
     path.join(home, '.trae-cn'),
+    path.join(home, '.codebuddy'),
   ];
 }
 
