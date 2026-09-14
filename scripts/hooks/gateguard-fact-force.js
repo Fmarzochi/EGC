@@ -58,10 +58,10 @@ function presentedKey(key) {
   return `presented:${key}`;
 }
 
-// The assistant text written since the last user turn, read from the
-// harness transcript when one is named in the hook input: that is the
-// message that precedes a retried tool call. Null when no transcript can be
-// read, so a harness without transcripts keeps the identical-retry rule.
+// The assistant text read from the harness transcript when one is named in
+// the hook input (see assistantTextSinceDenial for which text is judged).
+// Null when no transcript can be read, so a harness without transcripts
+// keeps the identical-retry rule.
 // A transcript named by the hook input is read only when it is an absolute
 // .jsonl file under the home directory or the temporary directory, with no
 // parent segments: the harness writes transcripts there and nowhere else.
@@ -120,17 +120,97 @@ function assistantTextBlocks(entry) {
   return content.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text);
 }
 
-function recentAssistantText(data) {
+const GATE_MARKER = '[fact-forcing gate]';
+
+function transcriptEntries(data) {
   const tail = readTranscriptTail(data?.transcript_path || data?.transcriptPath);
   if (tail === null) return null;
+  return tail.split('\n').map(parseTranscriptLine).filter(Boolean);
+}
+
+// A tool result is recorded as a string or as a list of text parts.
+function resultTextOf(content) {
+  if (typeof content === 'string') return [content];
+  if (!Array.isArray(content)) return [];
+  return content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text);
+}
+
+// A denial is a tool result the harness marked as an error; a result it
+// marked as a success (a command that merely printed the marker) is never
+// one. Harnesses that record no such flag are read as before.
+function deniedResultTexts(entry) {
+  const content = entry.message && Array.isArray(entry.message.content) ? entry.message.content : [];
+  return content
+    .filter(block => block?.type === 'tool_result' && block.is_error !== false)
+    .flatMap(block => resultTextOf(block.content));
+}
+
+// The term must end where the denial's wording ends it (a comma, a space,
+// a sentence-ending period, the end of the text), so a path is never
+// matched inside a longer one such as the same name with another suffix.
+function endsTermAt(text, index) {
+  const next = text[index];
+  if (next === undefined || /[\s,:;)]/.test(next)) return true;
+  if (next !== '.') return false;
+  const after = text[index + 1];
+  return after === undefined || /\s/.test(after);
+}
+
+function namesTerm(text, term) {
+  const needle = String(term || '').toLowerCase();
+  if (!needle) return false;
+  let index = text.indexOf(needle);
+  while (index !== -1) {
+    if (endsTermAt(text, index + needle.length)) return true;
+    index = text.indexOf(needle, index + 1);
+  }
+  return false;
+}
+
+// The denial this gate wrote earlier for the same target, as the harness
+// records it: a user entry whose denied tool result carries the gate marker
+// and a term that names the target (the full path of a file, or the wording
+// of the destructive gate).
+function isGateDenial(entry, anchorTerms) {
+  if (entry.type !== 'user') return false;
+  const text = deniedResultTexts(entry).join('\n').toLowerCase();
+  return text.includes(GATE_MARKER) && anchorTerms.some(term => namesTerm(text, term));
+}
+
+// The assistant text since the last user turn: the rule for a transcript
+// that does not record the gate's own denial.
+function textSinceLastUserTurn(entries) {
   let texts = [];
-  for (const line of tail.split('\n')) {
-    const entry = parseTranscriptLine(line);
-    if (!entry) continue;
+  for (const entry of entries) {
     if (entry.type === 'user') texts = [];
     else if (entry.type === 'assistant') texts.push(...assistantTextBlocks(entry));
   }
   return texts.join('\n');
+}
+
+// What the assistant wrote for this retry, as far as the transcript shows.
+// A tool result is recorded as a user entry, so the boundary that matters
+// is the gate's own denial, not the last user entry: the facts are whatever
+// the assistant wrote after being refused. Claude Code appends the entries
+// of an assistant message only once its first tool call completes, so at
+// PreToolUse time the message that carries the retry is not in the file
+// yet; when no assistant text follows the denial, the retry cannot be
+// judged (judgeable: false) and the identical-retry rule applies.
+function assistantTextSinceDenial(data, anchorTerms) {
+  const entries = transcriptEntries(data);
+  if (entries === null) return null;
+  let denialIndex = -1;
+  entries.forEach((entry, index) => {
+    if (isGateDenial(entry, anchorTerms)) denialIndex = index;
+  });
+  if (denialIndex === -1) return { text: textSinceLastUserTurn(entries), judgeable: true };
+  const text = entries.slice(denialIndex + 1)
+    .filter(entry => entry.type === 'assistant')
+    .flatMap(assistantTextBlocks)
+    .join('\n');
+  // Tool calls of the same batch as the denied one are recorded before the
+  // retry, but they carry no text: only assistant text is a message to judge.
+  return { text, judgeable: text.trim().length > 0 };
 }
 
 function missingFacts(text, required) {
@@ -138,11 +218,11 @@ function missingFacts(text, required) {
   return required.filter(term => term && !lower.includes(term.toLowerCase()));
 }
 
-function factsMissingMsg(missing) {
+function factsMissingMsg(missing, target) {
   return [
     '[Fact-Forcing Gate]',
     '',
-    `The retry was refused: the message before it does not present the required facts (missing: ${missing.join(', ')}).`,
+    `The retry for ${target} was refused: the message before it does not present the required facts (missing: ${missing.join(', ')}).`,
     'Write the facts in your reply, then retry the same operation.'
   ].join('\n');
 }
@@ -154,21 +234,26 @@ function commandWord(command) {
 
 // The first retry after a denial is accepted only when the message before
 // it presents the facts (when a transcript is there to read); later
-// operations on the same target stay free, as before.
-function refuseUnpresentedFacts(key, required, traceMeta) {
+// operations on the same target stay free, as before. The denial is found
+// by the target it named (the full path of a file, so two files with the
+// same name in different directories never share an anchor); the facts
+// themselves only need to name the file.
+function refuseUnpresentedFacts(key, required, traceMeta, options = {}) {
   if (!isChecked(pendingKey(key)) || isChecked(presentedKey(key))) return null;
-  const text = recentAssistantText(hookInput);
-  if (text === null) {
+  const target = options.target || 'this command';
+  const written = assistantTextSinceDenial(hookInput, options.anchorTerms || required);
+  if (!written?.judgeable) {
+    if (written) trace('governance:allowed:facts_unjudged', traceMeta);
     markChecked(presentedKey(key));
     return null;
   }
-  const missing = missingFacts(text, required);
+  const missing = missingFacts(written.text, required);
   if (missing.length === 0) {
     markChecked(presentedKey(key));
     return null;
   }
   trace('governance:denied:facts_missing', { ...traceMeta, missing });
-  return denyResult(factsMissingMsg(missing), { includeRecoveryHint: false });
+  return denyResult(factsMissingMsg(missing, target), { includeRecoveryHint: false });
 }
 
 // One pattern per destructive command; each keeps the same word boundaries
@@ -185,6 +270,11 @@ const DESTRUCTIVE_BASH_PATTERNS = [
   /\bgit\s+commit\s+--amend\b/i,
   /\bdd\s+if=\b/i,
 ];
+
+// The wording of the destructive gate's own messages: what anchors a
+// destructive retry, so a file denial that happens to mention a rollback
+// never does.
+const DESTRUCTIVE_ANCHORS = ['destructive command detected', 'retry for this command'];
 
 function isDestructiveBash(command) {
   return DESTRUCTIVE_BASH_PATTERNS.some((pattern) => pattern.test(command));
@@ -555,7 +645,7 @@ function handleEditWrite(rawInput, toolName, toolInput) {
     trace('governance:denied:fact_force', { toolName, filePath });
     return denyResult(toolName === 'Edit' ? editGateMsg(filePath) : writeGateMsg(filePath));
   }
-  const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath });
+  const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath }, { anchorTerms: [sanitizePath(filePath)], target: sanitizePath(filePath) });
   if (refused) return refused;
   trace('governance:allowed:checked', { toolName, filePath });
   return rawInput;
@@ -582,7 +672,7 @@ function handleMultiEdit(rawInput, toolName, toolInput) {
       trace('governance:denied:fact_force', { toolName, filePath });
       return denyResult(editGateMsg(filePath));
     }
-    const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath });
+    const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath }, { anchorTerms: [sanitizePath(filePath)], target: sanitizePath(filePath) });
     if (refused) return refused;
   }
   trace('governance:allowed:multiedit');
@@ -671,7 +761,7 @@ function handleBash(rawInput, toolName, toolInput) {
       trace('governance:denied:destructive', { command });
       return denyResult(destructiveBashMsg(), { includeRecoveryHint: false });
     }
-    const refused = refuseUnpresentedFacts(key, ['rollback', commandWord(command)], { command });
+    const refused = refuseUnpresentedFacts(key, ['rollback', commandWord(command)], { command }, { anchorTerms: DESTRUCTIVE_ANCHORS, target: 'this command' });
     if (refused) return refused;
     trace('governance:allowed:destructive_retry', { command });
     return rawInput;
