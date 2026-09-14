@@ -17,7 +17,7 @@ Sustained, merged contributions in an area, followed by an invitation from the m
 
 | Area | Scope | Steward | Status |
 |---|---|---|---|
-| Windows and OpenCode | Windows installs, the PowerShell installer, the OpenCode adapter and plugin | [@Akisolu](https://github.com/Akisolu) | invited 2026-09-12 |
+| Windows and OpenCode | Windows installs, the PowerShell installer, the OpenCode adapter and plugin | [@Akisolu](https://github.com/Akisolu) | accepted 2026-09-14 |
 | Session Mesh | The session bus, its transport, chaos and concurrency tests | [@Tyr1onX](https://github.com/Tyr1onX) | invited 2026-09-12 |
 | Installer | Install plans, apply, retirement and shape transitions across targets | [@kunaaaalcodes](https://github.com/kunaaaalcodes) | invited 2026-09-12 |
 
