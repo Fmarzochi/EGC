@@ -279,18 +279,19 @@ function runTests() {
     const projectDir = createTempDir('install-ps1-project-');
 
     try {
-      const result = run(powerShellCommand, ['--target', 'cursor', '--dry-run', 'typescript'], {
+      const delegate = () => run(powerShellCommand, ['--target', 'cursor', '--dry-run', 'typescript'], {
         cwd: projectDir,
         homeDir,
       });
 
+      let result = delegate()
+
       if (result.timedOut){
-        const result = run(powerShellCommand, ['--target', 'cursor', '--dry-run', 'typescript'], {
-          cwd: projectDir,
-          homeDir,
-      });
+        console.log(`  - retrying the delegation: the first attempt hit the ${FULL_INSTALL_TIMEOUT_MS} ms budget after ${result.elapsedMs} ms`);
+        result = delegate();
       }
 
+      assert.ok(!result.timedOut, `the PowerShell dry run exceeded FULL_INSTALL_TIMEOUT_MS on the retry as well: ${result.elapsedMs} ms of ${FULL_INSTALL_TIMEOUT_MS} ms`);
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Dry-run install plan'));
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'hooks.json')));
