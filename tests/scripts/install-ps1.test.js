@@ -41,6 +41,19 @@ function resolvePowerShellCommand() {
   return null;
 }
 
+function describeFailure(error, elapsedMs) {
+  const timedOut = error.code === 'ETIMEDOUT';
+  const signal = error.signal ?? null;
+  return { 
+    code: error.status ?? null, 
+    stdout: error.stdout || '', 
+    stderr: error.stderr || '', 
+    timedOut, 
+    signal, 
+    elapsedMs 
+  };
+}
+
 function run(powerShellCommand, args = [], options = {}) {
   const env = {
     ...process.env,
@@ -64,15 +77,7 @@ function run(powerShellCommand, args = [], options = {}) {
 
     return { code: 0, stdout, stderr: '' };
   } catch (error) {
-    const elapsedMs = Date.now() - startTime;
-    const isTimeout = error.code === 'ETIMEDOUT' || Boolean(error.signal);
-    return {
-      code: isTimeout ? null : (error.status ?? 1),
-      stdout: error.stdout || '',
-      stderr: error.stderr || '',
-      timedOut: isTimeout,
-      elapsedMs: elapsedMs
-    };
+    return describeFailure(error, Date.now() - startTime);
   }
 }
 
@@ -286,12 +291,16 @@ function runTests() {
 
       let result = delegate()
 
-      if (result.timedOut){
-        console.log(`  - retrying the delegation: the first attempt hit the ${FULL_INSTALL_TIMEOUT_MS} ms budget after ${result.elapsedMs} ms`);
+      if (result.timedOut || result.signal) {
+        const cause = result.timedOut 
+          ? `hit the ${FULL_INSTALL_TIMEOUT_MS} ms budget` 
+          : `received signal ${result.signal}`;
+        console.log(`  - retrying the delegation: the first attempt ${cause} after ${result.elapsedMs} ms`);
         result = delegate();
       }
 
       assert.ok(!result.timedOut, `the PowerShell dry run exceeded FULL_INSTALL_TIMEOUT_MS on the retry as well: ${result.elapsedMs} ms of ${FULL_INSTALL_TIMEOUT_MS} ms`);
+      assert.ok(!result.signal, `the PowerShell dry run was terminated by signal ${result.signal} on the retry after ${result.elapsedMs} ms`);
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Dry-run install plan'));
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'hooks.json')));
