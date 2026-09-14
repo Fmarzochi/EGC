@@ -42,7 +42,8 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { autoLearn, resolveStateDbPath } = require(buildPath);
+const { autoLearn } = require(buildPath);
+const { resolveStateStoreDbPath } = require(path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'state-store-path.js'));
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-learn-test-'));
 
@@ -97,20 +98,23 @@ async function run() {
     assert.strictEqual((result.match(/<!-- egc:learn:end -->/g) ?? []).length, 1, 'only one end marker');
   })) passed++; else failed++;
 
-  if (test('resolveStateDbPath reads the shared store first and a harness copy only while it is missing', () => {
+  if (test('resolveStateStoreDbPath reads the shared store first, the active harness copy next, and honors the overrides', () => {
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-store-path-'));
     try {
       const env = { HOME: homeDir, USERPROFILE: homeDir, GEMINI_PROJECT_DIR: homeDir };
       const canonical = path.join(homeDir, '.egc', 'egc', 'state.db');
-      const legacy = path.join(homeDir, '.gemini', 'egc', 'state.db');
-      assert.strictEqual(resolveStateDbPath(env), canonical, 'nothing on disk: the shared store is the answer');
-      fs.mkdirSync(path.dirname(legacy), { recursive: true });
-      fs.writeFileSync(legacy, '');
-      assert.strictEqual(resolveStateDbPath(env), legacy, 'a harness copy is read while the shared store is missing');
-      fs.mkdirSync(path.dirname(canonical), { recursive: true });
-      fs.writeFileSync(canonical, '');
-      assert.strictEqual(resolveStateDbPath(env), canonical, 'the shared store wins once it exists');
-      assert.strictEqual(resolveStateDbPath({ ...env, EGC_STATE_DB: legacy }), legacy, 'EGC_STATE_DB stays the override');
+      const claudeCopy = path.join(homeDir, '.claude', 'egc', 'state.db');
+      const geminiCopy = path.join(homeDir, '.gemini', 'egc', 'state.db');
+      const touch = (file) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ''); };
+      assert.strictEqual(resolveStateStoreDbPath(env), canonical, 'nothing on disk: the shared store is the answer');
+      touch(claudeCopy);
+      assert.strictEqual(resolveStateStoreDbPath(env), claudeCopy, 'a harness copy is read while the shared store is missing');
+      touch(geminiCopy);
+      assert.strictEqual(resolveStateStoreDbPath(env), geminiCopy, 'the copy of the active tool wins over the static order');
+      touch(canonical);
+      assert.strictEqual(resolveStateStoreDbPath(env), canonical, 'the shared store wins once it exists');
+      assert.strictEqual(resolveStateStoreDbPath({ ...env, EGC_DIR: path.join(homeDir, 'custom') }), path.join(homeDir, 'custom', 'egc', 'state.db'), 'EGC_DIR is honored like the CLI does');
+      assert.strictEqual(resolveStateStoreDbPath({ ...env, EGC_STATE_DB: geminiCopy }), geminiCopy, 'EGC_STATE_DB stays the override');
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }

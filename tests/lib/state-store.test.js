@@ -323,12 +323,15 @@ async function runTests() {
 
   if (await test('keeps the store under .egc when a harness variable is set', async () => {
     const homeDir = createTempDir('egc-state-home-');
-    const saved = { GEMINI_PROJECT_DIR: process.env.GEMINI_PROJECT_DIR, CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR };
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, EGC_DIR: process.env.EGC_DIR, GEMINI_PROJECT_DIR: process.env.GEMINI_PROJECT_DIR, CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR };
 
     try {
+      process.env.HOME = homeDir;
+      process.env.USERPROFILE = homeDir;
+      delete process.env.EGC_DIR;
       process.env.GEMINI_PROJECT_DIR = path.join(homeDir, 'project');
       process.env.CLAUDE_PROJECT_DIR = path.join(homeDir, 'project');
-      assert.strictEqual(resolveStateStorePath({ homeDir }), path.join(homeDir, '.egc', 'egc', 'state.db'));
+      assert.strictEqual(resolveStateStorePath(), path.join(homeDir, '.egc', 'egc', 'state.db'));
     } finally {
       restoreEnv(saved);
       cleanupTempDir(homeDir);
@@ -337,14 +340,15 @@ async function runTests() {
 
   if (await test('keeps the store under .egc on a HOME that only has a harness directory', async () => {
     const homeDir = createTempDir('egc-state-home-');
-    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, EGC_DIR: process.env.EGC_DIR, GEMINI_PROJECT_DIR: process.env.GEMINI_PROJECT_DIR };
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, EGC_DIR: process.env.EGC_DIR, GEMINI_PROJECT_DIR: process.env.GEMINI_PROJECT_DIR, CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR };
 
     try {
       fs.mkdirSync(path.join(homeDir, '.gemini'), { recursive: true });
       process.env.HOME = homeDir;
       process.env.USERPROFILE = homeDir;
       delete process.env.EGC_DIR;
-      process.env.GEMINI_PROJECT_DIR = path.join(homeDir, 'project');
+      delete process.env.GEMINI_PROJECT_DIR;
+      delete process.env.CLAUDE_PROJECT_DIR;
       assert.strictEqual(resolveStateStorePath(), path.join(homeDir, '.egc', 'egc', 'state.db'));
     } finally {
       restoreEnv(saved);

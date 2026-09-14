@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 
 const WRITER = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'state-db-writer.js');
 const { createStateStore } = require('../../scripts/lib/state-store');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 async function test(name, fn) {
   try {
@@ -28,7 +29,7 @@ function runWriter(payload, overrides) {
     input: JSON.stringify(payload),
     env,
     encoding: 'utf8',
-    timeout: 30000,
+    timeout: CLI_TIMEOUT_MS,
   });
 }
 

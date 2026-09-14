@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { openCompatDatabase } from './sqlite-compat.js';
+import { resolveStateStoreDbPath } from './state-store-path.js';
 
 const MARKER_START = '<!-- egc:learn:start -->';
 const MARKER_END   = '<!-- egc:learn:end -->';
@@ -35,27 +35,8 @@ export interface LearnResult {
   propagated_to: string[];
 }
 
-const LEGACY_HARNESS_DIRS = ['.claude', '.gemini', '.cursor', '.github', '.kiro', '.codebuddy'];
-
-// Same rule as the memory server (state-store-path.ts there): the CLI writes
-// the event store under the shared .egc directory only; a harness copy is
-// read while that store does not exist yet, so an install that never
-// consolidated keeps its failure history visible to auto_learn.
-export function resolveStateDbPath(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.EGC_STATE_DB) return path.resolve(env.EGC_STATE_DB);
-
-  const homeDir = env.HOME || env.USERPROFILE || os.homedir();
-  const canonical = path.join(homeDir, '.egc', 'egc', 'state.db');
-  if (fs.existsSync(canonical)) return canonical;
-
-  const legacy = LEGACY_HARNESS_DIRS
-    .map((dir) => path.join(homeDir, dir, 'egc', 'state.db'))
-    .find((candidate) => fs.existsSync(candidate));
-  return legacy ?? canonical;
-}
-
 async function loadRecentFailures(projectRoot: string, limit: number): Promise<FailurePattern[]> {
-  const dbPath = resolveStateDbPath();
+  const dbPath = resolveStateStoreDbPath();
   if (!fs.existsSync(dbPath)) return [];
 
   const db = await openCompatDatabase(dbPath, 'egc-guardian');

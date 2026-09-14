@@ -89,5 +89,40 @@ if (test('EGC_STATE_DB overrides everything', () => {
   }
 })) passed++; else failed++;
 
+if (test('prefers the copy of the active tool when several harness copies exist and the shared store is missing', () => {
+  const home = withHome();
+  try {
+    const claudeCopy = path.join(home.homeDir, '.claude', 'egc', 'state.db');
+    const geminiCopy = path.join(home.homeDir, '.gemini', 'egc', 'state.db');
+    touch(claudeCopy);
+    touch(geminiCopy);
+    assert.strictEqual(resolveStateStoreDbPath({ ...home.env, GEMINI_PROJECT_DIR: home.homeDir }), geminiCopy);
+    assert.strictEqual(resolveStateStoreDbPath(home.env), claudeCopy);
+  } finally {
+    home.cleanup();
+  }
+})) passed++; else failed++;
+
+if (test('reads a copy under any known harness root, OpenCode included', () => {
+  const home = withHome();
+  try {
+    const opencodeCopy = path.join(home.homeDir, '.config', 'opencode', 'egc', 'state.db');
+    touch(opencodeCopy);
+    assert.strictEqual(resolveStateStoreDbPath(home.env), opencodeCopy);
+  } finally {
+    home.cleanup();
+  }
+})) passed++; else failed++;
+
+if (test('EGC_DIR is honored like the CLI does', () => {
+  const home = withHome();
+  try {
+    touch(path.join(home.homeDir, '.egc', 'egc', 'state.db'));
+    assert.strictEqual(resolveStateStoreDbPath({ ...home.env, EGC_DIR: path.join(home.homeDir, 'custom') }), path.join(home.homeDir, 'custom', 'egc', 'state.db'));
+  } finally {
+    home.cleanup();
+  }
+})) passed++; else failed++;
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
