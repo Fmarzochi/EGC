@@ -55,6 +55,13 @@ run('skill count equals the real SKILL.md files (no sub-.md inflation)', () => {
   );
 });
 
+run('every entry records the repository path it comes from, and that path exists', () => {
+  const missing = index.entries.filter(e => typeof e.source !== 'string' || !fs.existsSync(path.join(ROOT, e.source)));
+  assert.strictEqual(missing.length, 0, `entries without a valid source: ${missing.map(e => e.name).slice(0, 5).join(', ')}`);
+  const skillsWithTriggers = index.entries.filter(e => e.kind === 'skill' && typeof e.triggers === 'string' && e.triggers.length > 0).length;
+  assert.ok(skillsWithTriggers > 100, `expected the activation text of most skills to be indexed, got ${skillsWithTriggers}`);
+});
+
 run('no description collapsed to a bare YAML block-scalar indicator', () => {
   const indicators = ['>', '>-', '>+', '|', '|-', '|+'];
   const corrupted = index.entries.filter(e => indicators.includes((e.description || '').trim()));

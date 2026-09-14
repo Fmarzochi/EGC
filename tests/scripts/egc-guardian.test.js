@@ -32,9 +32,11 @@ try {
 async function runTests() {
   let mod;
   let routerModule;
+  let installedModule;
   try {
     mod = await import(VALIDATOR_PATH);
     routerModule = await import(path.join(__dirname, '../../mcp/servers/egc-guardian/build/llm-router.js'));
+    installedModule = await import(path.join(__dirname, '../../mcp/servers/egc-guardian/build/installed-components.js'));
   } catch (e) {
     console.error(
       `[SKIP] Could not import ${VALIDATOR_PATH}. Run 'npm run build' in mcp/servers/egc-guardian first.`
@@ -611,6 +613,49 @@ async function runTests() {
     } finally {
       if (saved === undefined) delete process.env.EGC_LLM_ROUTING; else process.env.EGC_LLM_ROUTING = saved;
     }
+  });
+
+
+  // ── Routing: installation-aware, keyless ─────────────────
+  console.log('\n=== routing: installed components ===');
+  run('installed components come from the install state of the harness named by the environment', () => {
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-routing-home-'));
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-routing-project-'));
+    try {
+      const state = path.join(homeDir, '.claude', 'egc', 'install-state.json');
+      fs.mkdirSync(path.dirname(state), { recursive: true });
+      fs.writeFileSync(state, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'skills/devops/github-ops/SKILL.md' }] }));
+      const result = installedModule.installedComponentSources({ environment: { CLAUDE_PROJECT_DIR: cwd }, cwd, homeDir });
+      assert.strictEqual(result.known, true);
+      assert.strictEqual(result.harnessRoot, path.join(homeDir, '.claude'));
+      assert.ok(result.sources.has('skills/devops/github-ops/SKILL.md'));
+      const split = installedModule.splitByInstallation([
+        { name: 'github-ops', source: 'skills/devops/github-ops/SKILL.md' },
+        { name: 'deep-research', source: 'skills/ai/deep-research/SKILL.md' },
+      ], result);
+      assert.deepStrictEqual(split.available.map(e => e.name), ['github-ops']);
+      assert.deepStrictEqual(split.missing.map(e => e.name), ['deep-research']);
+      const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-routing-empty-'));
+      try {
+        assert.strictEqual(installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir: emptyHome }).known, false);
+      } finally {
+        fs.rmSync(emptyHome, { recursive: true, force: true });
+      }
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+  run('keyword routing weighs rare tokens and names, and stays silent on words the catalog shares', () => {
+    const { keywordRoute } = routerModule;
+    const playwright = keywordRoute('write playwright browser tests for the checkout flow');
+    assert.ok(playwright.skills.includes('e2e-testing'), JSON.stringify(playwright.skills));
+    assert.ok(playwright.agents.includes('e2e-runner'), JSON.stringify(playwright.agents));
+    const review = keywordRoute('review this pull request for security issues');
+    assert.ok(review.skills.includes('security-review'), JSON.stringify(review.skills));
+    const generic = keywordRoute('bom dia, me atualize de onde paramos no egc e carregue a memoria');
+    assert.deepStrictEqual(generic.skills, [], JSON.stringify(generic.skills));
+    assert.deepStrictEqual(generic.agents, [], JSON.stringify(generic.agents));
   });
 
   // ── Summary ───────────────────────────────────────────────────────────────

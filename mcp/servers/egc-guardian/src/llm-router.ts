@@ -82,9 +82,9 @@ function idfFor(): Map<string, number> {
 
 // Both bars follow the size of the catalog: rare means carried by at most
 // one entry in sixty, and a pair of matches must weigh at least twice a
-// token carried by one entry in ten.
+// token carried by one entry in six.
 const RARE_SHARE = 60;
-const PAIR_SHARE = 10;
+const PAIR_SHARE = 6;
 
 function thresholds(): { rareIdf: number; minScore: number } {
   const total = CATALOG.length;
@@ -94,7 +94,7 @@ function thresholds(): { rareIdf: number; minScore: number } {
   };
 }
 
-const NAME_WEIGHT = 2;
+const NAME_WEIGHT = 3;
 const TRIGGER_WEIGHT = 1;
 const DESCRIPTION_WEIGHT = 1;
 // A candidate needs a discriminating match: two distinct tokens whose

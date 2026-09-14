@@ -42,12 +42,12 @@ const MAX_DESCRIPTION_LENGTH = 110;
 // catalog shares never clears this bar on its own, whatever field it hits.
 // Both bars follow the size of the index: rare means carried by at most one
 // entry in sixty, and a pair of matches must weigh at least twice a token
-// carried by one entry in ten.
+// carried by one entry in six.
 const RARE_SHARE = 60;
-const PAIR_SHARE = 10;
+const PAIR_SHARE = 6;
 const MIN_DISTINCT_MATCHES = 2;
 const RELATIVE_CUTOFF = 0.35;
-const NAME_WEIGHT = 2;
+const NAME_WEIGHT = 3;
 const TRIGGER_WEIGHT = 1;
 const DESCRIPTION_WEIGHT = 1;
 
