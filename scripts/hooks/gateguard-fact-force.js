@@ -194,11 +194,11 @@ function missingFacts(text, required) {
   return required.filter(term => term && !lower.includes(term.toLowerCase()));
 }
 
-function factsMissingMsg(missing) {
+function factsMissingMsg(missing, target) {
   return [
     '[Fact-Forcing Gate]',
     '',
-    `The retry was refused: the message before it does not present the required facts (missing: ${missing.join(', ')}).`,
+    `The retry for ${target} was refused: the message before it does not present the required facts (missing: ${missing.join(', ')}).`,
     'Write the facts in your reply, then retry the same operation.'
   ].join('\n');
 }
@@ -210,10 +210,14 @@ function commandWord(command) {
 
 // The first retry after a denial is accepted only when the message before
 // it presents the facts (when a transcript is there to read); later
-// operations on the same target stay free, as before.
-function refuseUnpresentedFacts(key, required, traceMeta) {
+// operations on the same target stay free, as before. The denial is found
+// by the target it named (the full path of a file, so two files with the
+// same name in different directories never share an anchor); the facts
+// themselves only need to name the file.
+function refuseUnpresentedFacts(key, required, traceMeta, options = {}) {
   if (!isChecked(pendingKey(key)) || isChecked(presentedKey(key))) return null;
-  const written = assistantTextSinceDenial(hookInput, required);
+  const target = options.target || 'this command';
+  const written = assistantTextSinceDenial(hookInput, options.anchorTerms || required);
   if (written === null || !written.judgeable) {
     if (written !== null) trace('governance:allowed:facts_unjudged', traceMeta);
     markChecked(presentedKey(key));
@@ -225,7 +229,7 @@ function refuseUnpresentedFacts(key, required, traceMeta) {
     return null;
   }
   trace('governance:denied:facts_missing', { ...traceMeta, missing });
-  return denyResult(factsMissingMsg(missing), { includeRecoveryHint: false });
+  return denyResult(factsMissingMsg(missing, target), { includeRecoveryHint: false });
 }
 
 // One pattern per destructive command; each keeps the same word boundaries
@@ -612,7 +616,7 @@ function handleEditWrite(rawInput, toolName, toolInput) {
     trace('governance:denied:fact_force', { toolName, filePath });
     return denyResult(toolName === 'Edit' ? editGateMsg(filePath) : writeGateMsg(filePath));
   }
-  const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath });
+  const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath }, { anchorTerms: [sanitizePath(filePath)], target: sanitizePath(filePath) });
   if (refused) return refused;
   trace('governance:allowed:checked', { toolName, filePath });
   return rawInput;
@@ -639,7 +643,7 @@ function handleMultiEdit(rawInput, toolName, toolInput) {
       trace('governance:denied:fact_force', { toolName, filePath });
       return denyResult(editGateMsg(filePath));
     }
-    const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath });
+    const refused = refuseUnpresentedFacts(filePath, [path.basename(filePath)], { toolName, filePath }, { anchorTerms: [sanitizePath(filePath)], target: sanitizePath(filePath) });
     if (refused) return refused;
   }
   trace('governance:allowed:multiedit');

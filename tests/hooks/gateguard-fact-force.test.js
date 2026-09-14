@@ -567,9 +567,45 @@ function runTests() {
       JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: target } }] } }),
       JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: denial }] } }),
     ].join('\n') + '\n');
+    // The transcript is readable and records the denial: under the earlier
+    // rule (text since the last user entry) this retry was refused, since the
+    // denial is that last user entry and nothing follows it.
+    assert.ok(fs.existsSync(transcript));
     const retry = runHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(retry.code, 0, retry.stderr);
     assert.ok(!retry.stdout.includes('"deny"'), `nothing of the assistant follows the denial, so the retry cannot be judged and passes: ${retry.stdout}`);
+  })) passed++; else failed++;
+
+  if (test('a denial for another file with the same name is not the anchor (Claude Code shape)', () => {
+    const transcript = path.join(stateDir, 'cc-samename-transcript.jsonl');
+    const session = 'facts-cc-samename-' + Date.now();
+    const first = path.join(stateDir, 'a', 'ledger.js');
+    const second = path.join(stateDir, 'b', 'ledger.js');
+    const callFirst = { tool_name: 'Edit', tool_input: { file_path: first, old_string: 'a', new_string: 'b' }, transcript_path: transcript };
+    const callSecond = { tool_name: 'Edit', tool_input: { file_path: second, old_string: 'a', new_string: 'b' }, transcript_path: transcript };
+    const denialFirst = JSON.parse(runHook(callFirst, { EGC_SESSION_ID: session }).stdout).hookSpecificOutput.permissionDecisionReason;
+    const denialSecond = JSON.parse(runHook(callSecond, { EGC_SESSION_ID: session }).stdout).hookSpecificOutput.permissionDecisionReason;
+    // The facts for a/ledger.js were written after its own denial and before
+    // the denial for b/ledger.js; anchoring on the name alone would start at
+    // the later denial and discard them.
+    fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: first } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: denialFirst }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Facts for a/ledger.js: ledger.js is imported by report.js; it exposes sum(); no data files; instruction: "fix the ledger".' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: second } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: denialSecond }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Now the other file.' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Grep', input: { pattern: 'x' } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'no matches' }] } }),
+    ].join('\n') + '\n');
+    const retryFirst = runHook(callFirst, { EGC_SESSION_ID: session });
+    assert.strictEqual(retryFirst.code, 0, retryFirst.stderr);
+    assert.ok(!retryFirst.stdout.includes('"deny"'), `the retry of a/ledger.js is judged from its own denial: ${retryFirst.stdout}`);
+    const retrySecond = runHook(callSecond, { EGC_SESSION_ID: session });
+    const secondOut = JSON.parse(retrySecond.stdout);
+    assert.strictEqual(secondOut.hookSpecificOutput.permissionDecision, 'deny', `b/ledger.js has no facts after its own denial: ${retrySecond.stdout}`);
+    assert.ok(secondOut.hookSpecificOutput.permissionDecisionReason.includes(second), 'the refusal names the file it is about');
   })) passed++; else failed++;
 
   if (test('a retry is judged by the text written after the denial, not by text before it (Claude Code shape)', () => {
