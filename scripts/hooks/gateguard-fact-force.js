@@ -135,19 +135,46 @@ function resultTextOf(content) {
   return content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text);
 }
 
-function toolResultTexts(entry) {
+// A denial is a tool result the harness marked as an error; a result it
+// marked as a success (a command that merely printed the marker) is never
+// one. Harnesses that record no such flag are read as before.
+function deniedResultTexts(entry) {
   const content = entry.message && Array.isArray(entry.message.content) ? entry.message.content : [];
-  return content.filter(block => block?.type === 'tool_result').flatMap(block => resultTextOf(block.content));
+  return content
+    .filter(block => block?.type === 'tool_result' && block.is_error !== false)
+    .flatMap(block => resultTextOf(block.content));
+}
+
+// The term must end where the denial's wording ends it (a comma, a space,
+// a sentence-ending period, the end of the text), so a path is never
+// matched inside a longer one such as the same name with another suffix.
+function endsTermAt(text, index) {
+  const next = text[index];
+  if (next === undefined || /[\s,:;)]/.test(next)) return true;
+  if (next !== '.') return false;
+  const after = text[index + 1];
+  return after === undefined || /\s/.test(after);
+}
+
+function namesTerm(text, term) {
+  const needle = String(term || '').toLowerCase();
+  if (!needle) return false;
+  let index = text.indexOf(needle);
+  while (index !== -1) {
+    if (endsTermAt(text, index + needle.length)) return true;
+    index = text.indexOf(needle, index + 1);
+  }
+  return false;
 }
 
 // The denial this gate wrote earlier for the same target, as the harness
-// records it: a user entry whose tool result carries the gate marker and a
-// term that names the target (the file name, or the rollback the
-// destructive gate asks for).
+// records it: a user entry whose denied tool result carries the gate marker
+// and a term that names the target (the full path of a file, or the wording
+// of the destructive gate).
 function isGateDenial(entry, anchorTerms) {
   if (entry.type !== 'user') return false;
-  const text = toolResultTexts(entry).join('\n').toLowerCase();
-  return text.includes(GATE_MARKER) && anchorTerms.some(term => term && text.includes(String(term).toLowerCase()));
+  const text = deniedResultTexts(entry).join('\n').toLowerCase();
+  return text.includes(GATE_MARKER) && anchorTerms.some(term => namesTerm(text, term));
 }
 
 // The assistant text since the last user turn: the rule for a transcript
@@ -243,6 +270,11 @@ const DESTRUCTIVE_BASH_PATTERNS = [
   /\bgit\s+commit\s+--amend\b/i,
   /\bdd\s+if=\b/i,
 ];
+
+// The wording of the destructive gate's own messages: what anchors a
+// destructive retry, so a file denial that happens to mention a rollback
+// never does.
+const DESTRUCTIVE_ANCHORS = ['destructive command detected', 'retry for this command'];
 
 function isDestructiveBash(command) {
   return DESTRUCTIVE_BASH_PATTERNS.some((pattern) => pattern.test(command));
@@ -729,7 +761,7 @@ function handleBash(rawInput, toolName, toolInput) {
       trace('governance:denied:destructive', { command });
       return denyResult(destructiveBashMsg(), { includeRecoveryHint: false });
     }
-    const refused = refuseUnpresentedFacts(key, ['rollback', commandWord(command)], { command });
+    const refused = refuseUnpresentedFacts(key, ['rollback', commandWord(command)], { command }, { anchorTerms: DESTRUCTIVE_ANCHORS, target: 'this command' });
     if (refused) return refused;
     trace('governance:allowed:destructive_retry', { command });
     return rawInput;
