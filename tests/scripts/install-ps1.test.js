@@ -277,6 +277,22 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('correctly classifies timeouts, signals, and exit codes in describeFailure', () => {
+    const timeoutResult = describeFailure({ code: 'ETIMEDOUT', signal: 'SIGTERM', status: null }, 100);
+    assert.strictEqual(timeoutResult.timedOut, true);
+    assert.strictEqual(timeoutResult.signal, 'SIGTERM');
+
+    const signalResult = describeFailure({ signal: 'SIGKILL', status: null }, 100);
+    assert.strictEqual(signalResult.timedOut, false);
+    assert.strictEqual(signalResult.signal, 'SIGKILL');
+    assert.strictEqual(signalResult.code, null);
+
+    const codeResult = describeFailure({ status: 2 }, 100);
+    assert.strictEqual(codeResult.code, 2);
+    assert.strictEqual(codeResult.timedOut, false);
+    assert.strictEqual(codeResult.signal, null);
+  })) passed++; else failed++;  
+
   if (!powerShellCommand) {
     console.log('  - skipped delegation test; PowerShell is not available in PATH');
   } else if (test('delegates to the Node installer and preserves dry-run output', () => {
