@@ -7,6 +7,8 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { llmRoute, keywordRoute, llmRoutingEnabled, hasProviderKey } from './llm-router.js';
+import { CATALOG } from './catalog-index.js';
+import { installedComponentSources, splitByInstallation, INSTALL_HINT } from './installed-components.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -70,16 +72,45 @@ function runCompressionPipeline(chunks: string[]): PipelineResult {
   return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
 }
 
-async function routeTask(prompt: string): Promise<{
-  agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string;
-}> {
+interface RoutingResult {
+  agents: string[];
+  skills: string[];
+  scores: Record<string, number>;
+  rejected: string[];
+  provider: string;
+  installation: 'known' | 'unknown';
+  not_installed: string[];
+  install_hint?: string;
+}
+
+// The routed names, split by what the active tool has installed: a caller
+// must never be pointed at a component it cannot invoke. When no install
+// state can be found the split is unknown and every name stays listed.
+function withInstallation(routing: { agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string }): RoutingResult {
+  const installed = installedComponentSources();
+  const byName = new Map(CATALOG.map(entry => [entry.name, entry]));
+  const split = (names: string[]) => splitByInstallation(names.map(name => byName.get(name)).filter((entry): entry is (typeof CATALOG)[number] => Boolean(entry)), installed);
+  const skills = split(routing.skills);
+  const agents = split(routing.agents);
+  const notInstalled = [...skills.missing, ...agents.missing].map(entry => entry.name);
+  return {
+    ...routing,
+    skills: skills.available.map(entry => entry.name),
+    agents: agents.available.map(entry => entry.name),
+    installation: installed.known ? 'known' : 'unknown',
+    not_installed: notInstalled,
+    ...(notInstalled.length > 0 ? { install_hint: INSTALL_HINT } : {}),
+  };
+}
+
+async function routeTask(prompt: string): Promise<RoutingResult> {
   // The prompt leaves the machine only when the user opted in; a key alone
   // keeps routing local.
   const llm = llmRoutingEnabled() ? await llmRoute(prompt) : null;
   if (llm) {
-    return { ...llm, scores: {}, rejected: [] };
+    return withInstallation({ ...llm, scores: {}, rejected: [] });
   }
-  return { ...keywordRoute(prompt), provider: 'keyword' };
+  return withInstallation({ ...keywordRoute(prompt), provider: 'keyword' });
 }
 
 function keywordRoutingHint(): string {
@@ -87,7 +118,7 @@ function keywordRoutingHint(): string {
   const keyed = hasProviderKey();
   const keys = 'ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY';
   if (!enabled && !keyed) {
-    return `Semantic routing unavailable: set EGC_LLM_ROUTING=1 and a provider key (${keys}) to send the task prompt to that provider for LLM-based routing.`;
+    return 'Routing is local: the candidates were scored against the catalog on this machine and the caller decides by intent, in the prompt\'s own language; no API key is needed. Names under not_installed exist in the catalog but are not installed for this tool.';
   }
   if (!enabled) {
     return 'Semantic routing is off: a provider key is set, but the task prompt is only sent to that provider when EGC_LLM_ROUTING=1 is set as well.';
@@ -202,7 +233,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "orchestrate_task",
-        description: "Routes a prompt against the EGC catalog of skills, agents, and rules. Routing is local keyword scoring by default; only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing. Also returns context-reduction metrics for any file payloads.",
+        description: "Routes a prompt against the EGC catalog of skills, agents, and rules with local scoring on this machine, no API key needed; the result lists what the active tool has installed and, under not_installed, what only exists in the catalog. Only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing instead. Also returns context-reduction metrics for any file payloads.",
         inputSchema: {
           type: "object",
           properties: {

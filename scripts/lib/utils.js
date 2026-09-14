@@ -841,6 +841,7 @@ module.exports = {
   getHomeDir,
   getEGCDir,
   getKnownHarnessDirs,
+  resolveHarnessDirFromEnv,
   getClaudeDir, // NOSONAR: deprecated alias kept as a public export for backward compatibility
   getSessionsDir,
   getLegacySessionsDir,

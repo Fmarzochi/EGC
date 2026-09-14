@@ -14,38 +14,118 @@ const STOP_WORDS = new Set([
   'they','we','has','have','had','do','does','did','but','not','no','if',
   'so','then','than','into','about','more','also','each','other','these',
   'patterns','best','practices','support','building','robust','production',
+  // Function words of Portuguese and Spanish prompts, which otherwise collide with fragments of English descriptions.
+  'com', 'para', 'por', 'que', 'nao', 'uma', 'das', 'dos', 'nos', 'nas', 'mais', 'como', 'esse', 'essa', 'isso', 'meu', 'minha', 'seu', 'sua', 'voce', 'ele', 'ela', 'aqui', 'onde', 'quando', 'sobre', 'entre', 'sem', 'tem', 'ser', 'esta', 'sao', 'foi', 'bom', 'dia', 'faz', 'fazer', 'vamos', 'agora', 'depois', 'antes', 'tudo', 'todo', 'toda', 'cada', 'ainda', 'tambem', 'muito', 'pouco', 'bem', 'assim', 'entao', 'mas', 'pela', 'pelo', 'con', 'los', 'las', 'del', 'pero', 'este', 'eso', 'muy', 'hacer', 'ahora',
 ]);
+
+// A light stem so "tests" meets "test" and "linting" meets "lint": the same
+// reduction is applied to prompts and to entries, so both sides agree.
+function stem(token: string): string {
+  if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
+  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+  if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1);
+  return token;
+}
 
 export function tokenize(text: string): Set<string> {
   return new Set(
     text.toLowerCase()
       .split(/[\s,.\-_/()[\]{}|:;!?'"]+/)
       .filter(t => t.length > 2 && !STOP_WORDS.has(t))
+      .map(stem)
   );
 }
 
-// The catalog is immutable at runtime, so an entry's token set never changes.
-// Memoize it per entry object (weakly keyed so ad-hoc entries stay GC-able)
-// instead of re-tokenizing all ~370 catalog entries on every routing query.
-const entryTokenCache = new WeakMap<object, Set<string>>();
-
-function entryTokensFor(entry: { name: string; description: string }): Set<string> {
-  let tokens = entryTokenCache.get(entry);
-  if (!tokens) {
-    tokens = tokenize(`${entry.name} ${entry.description}`);
-    entryTokenCache.set(entry, tokens);
-  }
-  return tokens;
+interface CatalogFields {
+  name: Set<string>;
+  triggers: Set<string>;
+  description: Set<string>;
 }
+
+// The catalog is immutable at runtime, so an entry's token sets never change.
+// Memoize them per entry object (weakly keyed so ad-hoc entries stay GC-able)
+// instead of re-tokenizing all ~400 catalog entries on every routing query.
+const entryFieldsCache = new WeakMap<object, CatalogFields>();
+
+function fieldsFor(entry: { name: string; description: string; triggers?: string }): CatalogFields {
+  let fields = entryFieldsCache.get(entry);
+  if (!fields) {
+    fields = { name: tokenize(entry.name), triggers: tokenize(entry.triggers ?? ''), description: tokenize(entry.description) };
+    entryFieldsCache.set(entry, fields);
+  }
+  return fields;
+}
+
+// Inverse document frequency over the catalog: a token most entries share
+// weighs little, a token few entries carry weighs a lot. A token the catalog
+// does not know keeps a weight of one.
+let idfCache: Map<string, number> | null = null;
+
+function inverseFrequency(total: number, count: number): number {
+  return Math.log((total + 1) / (count + 1)) + 1;
+}
+
+function idfFor(): Map<string, number> {
+  if (idfCache) return idfCache;
+  const documentFrequency = new Map<string, number>();
+  for (const entry of CATALOG) {
+    const fields = fieldsFor(entry);
+    for (const token of new Set([...fields.name, ...fields.triggers, ...fields.description])) {
+      documentFrequency.set(token, (documentFrequency.get(token) ?? 0) + 1);
+    }
+  }
+  const total = CATALOG.length;
+  idfCache = new Map();
+  for (const [token, count] of documentFrequency) idfCache.set(token, inverseFrequency(total, count));
+  return idfCache;
+}
+
+// Both bars follow the size of the catalog: rare means carried by at most
+// one entry in sixty, and a pair of matches must weigh at least twice a
+// token carried by one entry in ten.
+const RARE_SHARE = 60;
+const PAIR_SHARE = 10;
+
+function thresholds(): { rareIdf: number; minScore: number } {
+  const total = CATALOG.length;
+  return {
+    rareIdf: inverseFrequency(total, Math.max(2, Math.floor(total / RARE_SHARE))),
+    minScore: 2 * inverseFrequency(total, Math.max(1, Math.floor(total / PAIR_SHARE))),
+  };
+}
+
+const NAME_WEIGHT = 2;
+const TRIGGER_WEIGHT = 1;
+const DESCRIPTION_WEIGHT = 1;
+// A candidate needs a discriminating match: two distinct tokens whose
+// weights add up, or one rare token (carried by few entries). A word half the
+// catalog shares never clears the bar on its own, whatever field it hits.
+const MIN_DISTINCT_MATCHES = 2;
+const RELATIVE_CUTOFF = 0.35;
 
 export function keywordScore(
   promptTokens: Set<string>,
-  entry: { name: string; description: string },
+  entry: { name: string; description: string; triggers?: string },
 ): number {
-  const entryTokens = entryTokensFor(entry);
-  let matches = 0;
-  for (const t of promptTokens) if (entryTokens.has(t)) matches++;
-  return matches === 0 ? 0 : Math.round((matches / Math.sqrt(entryTokens.size)) * 100) / 100;
+  const fields = fieldsFor(entry);
+  const idf = idfFor();
+  let score = 0;
+  let matched = 0;
+  let rarest = 0;
+  for (const token of promptTokens) {
+    const weight = idf.get(token) ?? 1;
+    let field = 0;
+    if (fields.name.has(token)) field = NAME_WEIGHT;
+    else if (fields.triggers.has(token)) field = TRIGGER_WEIGHT;
+    else if (fields.description.has(token)) field = DESCRIPTION_WEIGHT;
+    if (field === 0) continue;
+    score += field * weight;
+    matched += 1;
+    rarest = Math.max(rarest, weight);
+  }
+  const bar = thresholds();
+  const discriminating = (matched >= MIN_DISTINCT_MATCHES && score >= bar.minScore) || rarest >= bar.rareIdf;
+  return discriminating ? Math.round(score * 100) / 100 : 0;
 }
 
 function pickCandidates(promptTokens: Set<string>) {
@@ -295,8 +375,9 @@ export function keywordRoute(prompt: string): {
     scores[entry.name] = keywordScore(promptTokens, entry);
   }
 
+  const top = Math.max(0, ...Object.values(scores));
   const ranked = [...CATALOG]
-    .filter(e => (scores[e.name] ?? 0) > 0)
+    .filter(e => (scores[e.name] ?? 0) > 0 && (scores[e.name] ?? 0) >= top * RELATIVE_CUTOFF)
     .sort((a, b) => (scores[b.name] ?? 0) - (scores[a.name] ?? 0));
 
   return {
