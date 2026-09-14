@@ -86,17 +86,33 @@ interface RoutingResult {
 // The routed names, split by what the active tool has installed: a caller
 // must never be pointed at a component it cannot invoke. When no install
 // state can be found the split is unknown and every name stays listed.
+// A name can belong to more than one catalog entry (a skill and a rule of
+// the same name): the name is available when any of its entries is.
 function withInstallation(routing: { agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string }): RoutingResult {
   const installed = installedComponentSources();
-  const byName = new Map(CATALOG.map(entry => [entry.name, entry]));
-  const split = (names: string[]) => splitByInstallation(names.map(name => byName.get(name)).filter((entry): entry is (typeof CATALOG)[number] => Boolean(entry)), installed);
+  const entriesByName = new Map<string, Array<(typeof CATALOG)[number]>>();
+  for (const entry of CATALOG) {
+    const group = entriesByName.get(entry.name) ?? [];
+    group.push(entry);
+    entriesByName.set(entry.name, group);
+  }
+  const split = (names: string[]) => {
+    const available: string[] = [];
+    const missing: string[] = [];
+    for (const name of new Set(names)) {
+      const group = entriesByName.get(name) ?? [];
+      if (splitByInstallation(group, installed).available.length > 0) available.push(name);
+      else missing.push(name);
+    }
+    return { available, missing };
+  };
   const skills = split(routing.skills);
   const agents = split(routing.agents);
-  const notInstalled = [...skills.missing, ...agents.missing].map(entry => entry.name);
+  const notInstalled = [...skills.missing, ...agents.missing];
   return {
     ...routing,
-    skills: skills.available.map(entry => entry.name),
-    agents: agents.available.map(entry => entry.name),
+    skills: skills.available,
+    agents: agents.available,
     installation: installed.known ? 'known' : 'unknown',
     not_installed: notInstalled,
     ...(notInstalled.length > 0 ? { install_hint: INSTALL_HINT } : {}),

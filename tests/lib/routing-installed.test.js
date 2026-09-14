@@ -8,6 +8,7 @@ const path = require('node:path');
 const { installedComponentSources, splitByInstallation } = require('../../scripts/lib/routing-installed');
 
 const HOME_STATE = ['egc', 'install-state.json'];
+const CODEX_STATE = ['egc', 'codex-install-state.json'];
 const PROJECT_STATE = 'egc-install-state.json';
 
 function test(name, fn) {
@@ -81,6 +82,29 @@ if (test('splits catalog entries by installation and keeps entries without a sou
   assert.deepStrictEqual(split.missing.map((e) => e.name), ['deep-research']);
   const unknown = splitByInstallation(entries, { known: false, sources: new Set() });
   assert.strictEqual(unknown.missing.length, 0, 'nothing is called missing when no install state was found');
+})) passed++; else failed++;
+
+if (test('tool-specific state names under a shared root count, and an unreadable state fails closed', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-routing-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-routing-project-'));
+  try {
+    writeState(path.join(homeDir, '.agents', ...CODEX_STATE), ['skills/devops/github-ops/SKILL.md']);
+    const codex = installedComponentSources({ environment: {}, cwd, homeDir });
+    assert.strictEqual(codex.known, true, 'the Codex state under .agents is found');
+    assert.ok(codex.sources.has('skills/devops/github-ops/SKILL.md'));
+    const corrupt = path.join(homeDir, '.claude', ...HOME_STATE);
+    fs.mkdirSync(path.dirname(corrupt), { recursive: true });
+    fs.writeFileSync(corrupt, '{not json');
+    const result = installedComponentSources({ environment: { CLAUDE_PROJECT_DIR: cwd }, cwd, homeDir });
+    assert.strictEqual(result.known, true, 'an unreadable state is a found state');
+    assert.strictEqual(result.unreadable, 1);
+    assert.strictEqual(result.sources.size, 0, 'and it contributes no source');
+    const split = splitByInstallation([{ name: 'x', source: 'skills/devops/github-ops/SKILL.md' }], result);
+    assert.strictEqual(split.available.length, 0, 'nothing is offered on an unreadable state');
+  } finally {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 })) passed++; else failed++;
 
 console.log(`\n${passed} passed, ${failed} failed`);

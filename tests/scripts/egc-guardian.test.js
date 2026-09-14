@@ -646,6 +646,10 @@ async function runTests() {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   });
+  // These probes run against the real catalog on purpose: they hold as long
+  // as a skill named e2e-testing mentions Playwright and no entry is made of
+  // the words of a Portuguese greeting; a failure here means the catalog or
+  // the scorer changed materially and both deserve a look.
   run('keyword routing weighs rare tokens and names, and stays silent on words the catalog shares', () => {
     const { keywordRoute } = routerModule;
     const playwright = keywordRoute('write playwright browser tests for the checkout flow');

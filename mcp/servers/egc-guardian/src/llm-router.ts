@@ -19,12 +19,14 @@ const STOP_WORDS = new Set([
 ]);
 
 // A light stem so "tests" meets "test" and "linting" meets "lint": the same
-// reduction is applied to prompts and to entries, so both sides agree.
+// reduction is applied to prompts and to entries, so both sides agree. The
+// plural comes off first so "settings" and "setting" meet at the same stem.
 function stem(token: string): string {
-  if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
-  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
-  if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1);
-  return token;
+  let word = token;
+  if (word.length > 4 && word.endsWith('ies')) word = `${word.slice(0, -3)}y`;
+  else if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) word = word.slice(0, -1);
+  if (word.length > 6 && word.endsWith('ing')) word = word.slice(0, -3);
+  return word;
 }
 
 export function tokenize(text: string): Set<string> {

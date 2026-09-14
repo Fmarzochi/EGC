@@ -372,7 +372,8 @@
       "kind": "skill",
       "name": "mysql-patterns",
       "description": "MySQL and MariaDB schema, query, indexing, transaction, replication, and connection-pool patterns for production backends.",
-      "source": "skills/backend/mysql-patterns/SKILL.md"
+      "source": "skills/backend/mysql-patterns/SKILL.md",
+      "triggers": "Designing MySQL or MariaDB tables, indexes, and constraints Reviewing migrations before they run on large production tables Debugging slow queries, lock waits, deadlocks, or connection exhaustion Addi"
     },
     {
       "kind": "skill",

@@ -8,15 +8,37 @@ const { getHomeDir, getKnownHarnessDirs, resolveHarnessDirFromEnv } = require('.
 // Project-scoped install targets keep their state at <project>/<dir>/egc-install-state.json,
 // home targets at <harness root>/egc/install-state.json (scripts/lib/install-executor.js).
 const PROJECT_STATE_DIRS = ['.claude', '.gemini', '.cursor', '.agents', '.codex', '.github', '.kiro', '.trae', '.trae-cn', '.codebuddy', '.windsurf', '.opencode', '.zed', '.amp', '.continue'];
-const HOME_STATE = ['egc', 'install-state.json'];
+// Home targets write <root>/egc/install-state.json; the targets that share the
+// .agents root (Codex, Goose, OpenHands) write <root>/egc/<tool>-install-state.json,
+// so every state file in that directory counts.
+const HOME_STATE_DIR = 'egc';
+const STATE_SUFFIX = 'install-state.json';
 const PROJECT_STATE = 'egc-install-state.json';
 
+// A state file that is missing is simply absent; one that exists but cannot
+// be read or parsed is reported as unreadable and contributes nothing, so a
+// corrupt state never turns into "everything is installed".
 function readState(file) {
+  let raw;
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return parsed && typeof parsed === 'object' && Array.isArray(parsed.operations) ? parsed : null;
-  } catch (_) { // NOSONAR: a missing or unreadable state is simply not counted
-    return null;
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (_) { // NOSONAR: absent (or unreadable, reported below by the caller)
+    return fs.existsSync(file) ? { unreadable: true } : null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && Array.isArray(parsed.operations) ? { state: parsed } : { unreadable: true };
+  } catch (_) { // NOSONAR: malformed state is unreadable, not absent
+    return { unreadable: true };
+  }
+}
+
+function homeStateFiles(root) {
+  const dir = path.join(root, HOME_STATE_DIR);
+  try {
+    return fs.readdirSync(dir).filter(name => name.endsWith(STATE_SUFFIX)).map(name => path.join(dir, name));
+  } catch (_) { // NOSONAR: no egc directory under this root
+    return [];
   }
 }
 
@@ -39,14 +61,16 @@ function stateFilesFor({ environment, cwd, homeDir }) {
   const homeRoots = harnessRoot ? [harnessRoot] : getKnownHarnessDirs(homeDir);
   const projectDirs = harnessRoot ? [path.basename(harnessRoot)] : PROJECT_STATE_DIRS;
   const files = [];
-  for (const root of homeRoots) files.push(path.join(root, ...HOME_STATE));
+  for (const root of homeRoots) files.push(...homeStateFiles(root));
   for (const dir of projectDirs) files.push(path.join(cwd, dir, PROJECT_STATE));
   return { harnessRoot, files: Array.from(new Set(files)) };
 }
 
 // What the active tool has installed, as the source paths the install state
 // recorded. known is false when no install state was found at all, in which
-// case nothing can be said about what is installed.
+// case nothing can be said about what is installed; an unreadable state
+// counts as found (known) and adds no source, so its components read as not
+// installed rather than as available.
 function installedComponentSources(options = {}) {
   const environment = options.environment || process.env;
   const cwd = options.cwd || process.cwd();
@@ -54,13 +78,18 @@ function installedComponentSources(options = {}) {
   const { harnessRoot, files } = stateFilesFor({ environment, cwd, homeDir });
   const sources = new Set();
   let states = 0;
+  let unreadable = 0;
   for (const file of files) {
-    const state = readState(file);
-    if (!state) continue;
+    const read = readState(file);
+    if (!read) continue;
+    if (read.unreadable) {
+      unreadable += 1;
+      continue;
+    }
     states += 1;
-    for (const source of sourcesOf(state)) sources.add(source);
+    for (const source of sourcesOf(read.state)) sources.add(source);
   }
-  return { known: states > 0, harnessRoot, sources };
+  return { known: states + unreadable > 0, harnessRoot, sources, unreadable };
 }
 
 // Splits catalog entries into what the tool can invoke and what only exists

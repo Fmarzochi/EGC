@@ -20,6 +20,7 @@
 
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -103,12 +104,14 @@ function loadSkillIndex() {
 }
 
 // A light stem so "tests" meets "test" and "linting" meets "lint": the same
-// reduction is applied to prompts and to entries, so both sides agree.
+// reduction is applied to prompts and to entries, so both sides agree. The
+// plural comes off first so "settings" and "setting" meet at the same stem.
 function stem(token) {
-  if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
-  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
-  if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1);
-  return token;
+  let word = token;
+  if (word.length > 4 && word.endsWith('ies')) word = `${word.slice(0, -3)}y`;
+  else if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) word = word.slice(0, -1);
+  if (word.length > 6 && word.endsWith('ing')) word = word.slice(0, -3);
+  return word;
 }
 
 function tokenize(text) {
@@ -178,7 +181,7 @@ function shorten(text, limit) {
 }
 
 function rankEntries(entries, promptTokens) {
-  const usable = entries.filter(entry => entry && entry.name && entry.description);
+  const usable = entries.filter(entry => entry?.name && entry.description);
   const fields = usable.map(entryFields);
   const idf = buildIdf(fields);
   const thresholds = thresholdsFor(usable.length);
@@ -195,13 +198,38 @@ function sanitizeSessionKey(value) {
   return raw ? raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) : '';
 }
 
-// The inventory line is written once per session: a marker in the temp
-// directory remembers that this session already saw it.
-function firstPromptOfSession(input) {
-  const key = sanitizeSessionKey(input?.session_id || input?.sessionId);
-  if (!key) return false;
-  const marker = path.join(os.tmpdir(), `egc-router-${key}.seen`);
+const MARKER_DIR = path.join(os.tmpdir(), 'egc-router');
+const MARKER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+// Markers older than a day are dropped from the router's own directory, so
+// the temp directory never accumulates one file per session for good.
+function pruneMarkers() {
   try {
+    const now = Date.now();
+    for (const name of fs.readdirSync(MARKER_DIR)) {
+      const file = path.join(MARKER_DIR, name);
+      try {
+        if (now - fs.statSync(file).mtimeMs > MARKER_MAX_AGE_MS) fs.unlinkSync(file);
+      } catch {
+        // A marker that vanished between readdir and stat needs nothing.
+      }
+    }
+  } catch {
+    // No marker directory yet.
+  }
+}
+
+// The inventory line is written once per session and project: a marker
+// named after the session and the working directory remembers that this
+// pair already saw it, so two projects sharing a session id both get it.
+function firstPromptOfSession(input, cwd) {
+  const session = sanitizeSessionKey(input?.session_id || input?.sessionId);
+  if (!session) return false;
+  const key = `${session}-${crypto.createHash('sha256').update(String(cwd)).digest('hex').slice(0, 12)}`;
+  const marker = path.join(MARKER_DIR, `${key}.seen`);
+  try {
+    fs.mkdirSync(MARKER_DIR, { recursive: true });
+    pruneMarkers();
     fs.writeFileSync(marker, '', { flag: 'wx' });
     return true;
   } catch {
@@ -210,7 +238,7 @@ function firstPromptOfSession(input) {
 }
 
 function inventoryLine(entries, installed) {
-  const count = (kind, onlyInstalled) => entries.filter(entry => entry.kind === kind && (!onlyInstalled || !entry.source || installed.sources.has(entry.source))).length;
+  const count = (kind, onlyInstalled) => entries.filter(entry => entry?.kind === kind && (!onlyInstalled || !entry.source || installed.sources.has(entry.source))).length;
   const skills = count('skill', true);
   const agents = count('agent', true);
   const catalogSkills = count('skill', false);
@@ -237,13 +265,14 @@ function routeViaCatalog(prompt, input) {
   }
 
   const promptTokens = tokenize(prompt);
-  const installed = installedComponentSources({ cwd: typeof input?.cwd === 'string' && input.cwd ? input.cwd : process.cwd() });
+  const cwd = typeof input?.cwd === 'string' && input.cwd ? input.cwd : process.cwd();
+  const installed = installedComponentSources({ cwd });
   const ranked = rankEntries(entries, promptTokens);
   const { available, missing } = splitByInstallation(ranked, installed);
   const skills = available.filter(entry => entry.kind === 'skill').slice(0, MAX_SKILL_CANDIDATES);
   const agents = available.filter(entry => entry.kind === 'agent').slice(0, MAX_AGENT_CANDIDATES);
   const missingNamed = missing.filter(entry => entry.kind === 'skill' || entry.kind === 'agent').slice(0, MAX_MISSING_NAMED);
-  const inventory = installed.known && firstPromptOfSession(input) ? inventoryLine(entries, installed) : null;
+  const inventory = installed.known && firstPromptOfSession(input, cwd) ? inventoryLine(entries, installed) : null;
 
   if (skills.length === 0 && agents.length === 0 && missingNamed.length === 0 && !inventory) {
     return { indexAvailable: true, block: null };

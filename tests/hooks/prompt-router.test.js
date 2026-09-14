@@ -123,7 +123,8 @@ function runTests() {
     fs.mkdirSync(path.dirname(state), { recursive: true });
     fs.writeFileSync(state, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'skills/testing/playwright-e2e-fixture/SKILL.md' }] }));
     try {
-      const result = runHook({ prompt: 'write playwright browser tests for the checkout flow', session_id: `router-split-${Date.now()}`, cwd: projectDir }, {
+      const firstSession = `router-split-${Date.now()}`;
+      const result = runHook({ prompt: 'write playwright browser tests for the checkout flow', session_id: firstSession, cwd: projectDir }, {
         EGC_SKILL_INDEX_PATH: indexFile, HOME: homeDir, USERPROFILE: homeDir, CLAUDE_PROJECT_DIR: projectDir,
       });
       assert.strictEqual(result.code, 0, `Expected exit 0, got stderr: ${result.stderr}`);
@@ -134,10 +135,11 @@ function runTests() {
       assert.ok(!result.stdout.includes('- playwright-visual-fixture:'), `A skill that is not installed must not be offered as a candidate: ${result.stdout}`);
       assert.ok(/Not installed for this tool \(catalog only, do not invoke\): [^\n]*playwright-visual-fixture/.test(result.stdout), `Expected the not-installed line, got: ${result.stdout}`);
       assert.ok(/Not installed for this tool[^\n]*e2e-runner-fixture/.test(result.stdout), `The agent that is not installed belongs on the not-installed line: ${result.stdout}`);
-      const second = runHook({ prompt: 'write playwright browser tests for the checkout flow', session_id: 'router-split-second', cwd: projectDir }, {
+      const secondSession = `router-split-second-${Date.now()}`;
+      const second = runHook({ prompt: 'write playwright browser tests for the checkout flow', session_id: secondSession, cwd: projectDir }, {
         EGC_SKILL_INDEX_PATH: indexFile, HOME: homeDir, USERPROFILE: homeDir, CLAUDE_PROJECT_DIR: projectDir,
       });
-      const third = runHook({ prompt: 'write playwright browser tests for the checkout flow', session_id: 'router-split-second', cwd: projectDir }, {
+      const third = runHook({ prompt: 'write playwright browser tests for the checkout flow', session_id: secondSession, cwd: projectDir }, {
         EGC_SKILL_INDEX_PATH: indexFile, HOME: homeDir, USERPROFILE: homeDir, CLAUDE_PROJECT_DIR: projectDir,
       });
       assert.ok(second.stdout.includes('EGC on this tool:'), 'the first prompt of a session carries the inventory');
@@ -146,7 +148,12 @@ function runTests() {
       try { fs.rmSync(indexFile, { force: true }); } catch { /* best-effort cleanup */ }
       try { fs.rmSync(homeDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
       try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
-      try { fs.rmSync(path.join(os.tmpdir(), 'egc-router-router-split-second.seen'), { force: true }); } catch { /* best-effort cleanup */ }
+      // The markers live in the router's own directory, keyed by session and working directory.
+      try {
+        for (const name of fs.readdirSync(path.join(os.tmpdir(), 'egc-router'))) {
+          if (name.startsWith('router-split-')) fs.rmSync(path.join(os.tmpdir(), 'egc-router', name), { force: true });
+        }
+      } catch { /* best-effort cleanup */ }
     }
   })) passed++; else failed++;
 

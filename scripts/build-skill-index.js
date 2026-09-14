@@ -116,10 +116,10 @@ function sourceOf(file) {
 }
 
 // The activation text of a skill: the body of its "When to Activate" (or
-// "When to Use", "Use when", "Triggers") section, one printable line capped
+// "When to Use", "Use when", "Triggers", "Activation") section, one printable line capped
 // at 200 characters, so the local scorer sees the situations a skill names
 // and not only its description.
-const TRIGGER_HEADING = /^#{2,3}\s+(?:when to (?:activate|use)|use when|triggers?)\b.*$/im;
+const TRIGGER_HEADING = /^#{2,3}\s+(?:when to (?:activate|use)|use when|triggers?|activation)\b.*$/im;
 const MAX_TRIGGER_CHARS = 200;
 function triggersOf(content) {
   const match = TRIGGER_HEADING.exec(content);
