@@ -41,7 +41,7 @@ export { EGCHooksPlugin, default } from "./plugins/index.js"
 export * from "./plugins/index.js"
 
 // Version export
-export const VERSION = "1.1.13"
+export const VERSION = "1.2.0"
 
 // Plugin metadata
 export const metadata = {

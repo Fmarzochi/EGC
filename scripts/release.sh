@@ -89,7 +89,7 @@ git add \
   .codex-plugin/plugin.json \
   .agents/plugins/marketplace.json \
   .opencode/package.json .opencode/package-lock.json \
-  .opencode/plugins/egc-hooks.ts
+  .opencode/plugins/egc-hooks.ts .opencode/index.ts
 
 git commit -m "chore: bump plugin version to $VERSION" --signoff
 
