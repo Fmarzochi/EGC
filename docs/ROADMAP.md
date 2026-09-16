@@ -4,6 +4,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 
 ## Unreleased
 
+## v1.2.0: The Field Round (Released 2026-09-16)
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).
 - The Fact-Forcing Gate judges a retry by the assistant text written after its own denial and lets a retry through when the harness has not written that text yet, instead of refusing every same-turn Edit or Write retry as it did under Claude Code, where tool results are user entries and an assistant message reaches the transcript only after its first tool call completes (#1452).
 - The CLI event store resolves to `~/.egc/egc/state.db` for every writer and reader, whatever tool runs EGC: harness variables no longer route it into `~/.gemini` or `~/.claude`, a HOME without `~/.egc` gets the shared store created instead of the first installed harness, and the memory server and the Guardian read a harness copy only while the shared store is missing (#1451, closes #1450, reported by @rathaur-ankit from a fresh Linux install in #1377).

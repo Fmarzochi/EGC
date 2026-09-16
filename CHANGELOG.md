@@ -4,6 +4,8 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-16
+
 ### Fixed
 
 - **Routing never points at a component the tool does not have, and needs no API key** (#1453): the prompt router and `orchestrate_task` suggested skills and agents from the whole catalog whether or not the prompt library was installed, so an engine-only install saw names its tool could not invoke and failed silently; the local scorer counted raw token hits, so a word half the catalog shares (`egc`, `flow`, `site`) filled the list with unrelated entries, and the only better mode advertised was a paid provider key. The catalog index now records where each component comes from; the router reads the install state of the active tool (its home state and its project state) and lists installed candidates apart from a named `Not installed for this tool` line with the command that adds them; `orchestrate_task` returns the same split under `not_installed` with `install_hint`. Both scorers weigh tokens by rarity across the catalog, name hits above description hits, read the situations a skill names in its activation section, stem plurals, drop Portuguese and Spanish function words, and require a discriminating match, so a generic prompt stays silent. The model of the tool decides by intent, in the prompt's own language; the provider path stays an explicit opt-in.
