@@ -4,136 +4,49 @@
 
 ## 快速开始
 
-### 方式一：本地安装到 `.trae` 目录（默认环境）
+### 本地安装（仅当前项目）
 
 ```bash
-# 安装到当前项目的 .trae 目录
 cd /path/to/your/project
 egc install --target trae --profile full
 ```
 
 这将在您的项目目录中创建 `.trae/`。
 
-### 方式二：本地安装到 `.trae-cn` 目录（CN 环境）
+### 全局安装（所有项目）
 
 ```bash
-# 安装到当前项目的 .trae-cn 目录
-cd /path/to/your/project
-TRAE_ENV=cn egc install --target trae --profile full
-```
-
-这将在您的项目目录中创建 `.trae-cn/`。
-
-### 方式三：全局安装到 `~/.trae` 目录（默认环境）
-
-```bash
-# 全局安装到 ~/.trae/
-cd /path/to/your/project
-cd ~ && egc install --target trae --profile full
-```
-
-这将创建 `~/.trae/`，适用于所有 Trae 项目。
-
-### 方式四：全局安装到 `~/.trae-cn` 目录（CN 环境）
-
-```bash
-# 全局安装到 ~/.trae-cn/
-cd /path/to/your/project
-cd ~ && TRAE_ENV=cn egc install --target trae --profile full
-```
-
-这将创建 `~/.trae-cn/`，适用于所有 Trae 项目。
-
-安装程序使用非破坏性复制 - 它不会覆盖您现有的文件。
-
-## 安装模式
-
-### 本地安装
-
-安装到当前项目的 `.trae` 或 `.trae-cn` 目录：
-
-```bash
-# 安装到当前项目的 .trae 目录（默认）
-cd /path/to/your/project
+cd ~
 egc install --target trae --profile full
-
-# 安装到当前项目的 .trae-cn 目录（CN 环境）
-cd /path/to/your/project
-TRAE_ENV=cn egc install --target trae --profile full
 ```
 
-### 全局安装
-
-安装到您主目录的 `.trae` 或 `.trae-cn` 目录（适用于所有 Trae 项目）：
-
-```bash
-# 全局安装到 ~/.trae/（默认）
-cd ~ && egc install --target trae --profile full
-
-# 全局安装到 ~/.trae-cn/（CN 环境）
-cd ~ && TRAE_ENV=cn egc install --target trae --profile full
-```
-
-**注意**：全局安装适用于希望在所有项目之间维护单个 EGC 副本的场景。
+这将创建 `~/.trae/`，适用于所有 Trae 项目。`egc install --prompt-library` 会一次性为检测到的所有工具执行相同操作。
 
 ## 环境支持
 
 - **默认**：使用 `.trae` 目录
 - **CN 环境**：使用 `.trae-cn` 目录（通过 `TRAE_ENV=cn` 设置）
 
-### 强制指定环境
-
 ```bash
-# 从项目根目录强制使用 CN 环境
+# 从项目根目录运行（全局安装时从 ~ 运行）
 TRAE_ENV=cn egc install --target trae --profile full
-
-# 进入 .trae 目录后使用默认环境
-cd .trae
-egc install --target trae --profile full
 ```
 
-**注意**：`TRAE_ENV` 是一个全局环境变量，适用于整个安装会话。
+**注意**：`TRAE_ENV` 在安装程序运行时读取；`egc doctor`、`egc repair` 和 `egc uninstall` 请使用相同的值。请始终从项目根目录（或 `~`）运行这些命令，不要在 `.trae` 目录内部运行。
 
 ## 卸载
 
-卸载程序使用清单文件（`.egc-manifest`）跟踪已安装的文件，确保安全删除：
+安装程序会将写入的每个文件记录在安装状态（Trae 目录下的 `egc-install-state.json`）中，因此卸载只删除 EGC 安装的文件，不会询问确认：
 
 ```bash
-# 从当前目录卸载（如果已经在 .trae 或 .trae-cn 目录中）
-cd .trae-cn
+# 从项目根目录运行（全局安装时从 ~ 运行）
 egc uninstall --target trae
 
-# 或者从项目根目录卸载
-cd /path/to/your/project
+# CN 环境
 TRAE_ENV=cn egc uninstall --target trae
-
-# 从主目录全局卸载
-cd ~ && TRAE_ENV=cn egc uninstall --target trae
-
-# 卸载前会询问确认
 ```
 
-### 卸载行为
-
-- **安全删除**：仅删除清单中跟踪的文件（由 EGC 安装的文件）
-- **保留用户文件**：您手动添加的任何文件都会被保留
-- **非空目录**：包含用户添加文件的目录会被跳过
-- **基于清单**：需要 `.egc-manifest` 文件（在安装时创建）
-
-### 环境支持
-
-卸载程序遵循与安装程序相同的 `TRAE_ENV` 环境变量：
-
-```bash
-# 从 .trae-cn 卸载（CN 环境）
-TRAE_ENV=cn egc uninstall --target trae
-
-# 从 .trae 卸载（默认环境）
-egc uninstall --target trae
-```
-
-**注意**：如果找不到清单文件（旧版本安装），卸载程序将询问是否删除整个目录。
-
+`egc doctor` 会报告已安装文件的漂移，`egc repair` 会将其恢复。
 ## 包含的内容
 
 ### 命令
@@ -172,7 +85,7 @@ egc uninstall --target trae
 
 ## 自定义
 
-安装后，所有文件都归您修改。安装程序永远不会覆盖现有文件，因此您的自定义在重新安装时是安全的。
+已安装的文件属于 EGC：`egc doctor` 会将对它们的修改报告为漂移，`egc repair` 会将其恢复。请将您自己的命令、智能体和规则放在旁边的独立文件中；安装程序永远不会触碰它没有写入的文件。
 
 ## 推荐的工作流
 

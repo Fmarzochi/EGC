@@ -58,7 +58,7 @@ This section is deliberately public. Honest gap-tracking beats aspirational omis
 ## Compatibility commitments
 
 - All 24 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `claude`, `cursor`, `antigravity`, `codex`, `gemini`, `qwen`, `opencode`, `codebuddy`, `windsurf`, `amp`, `copilot`, `zed`, `continue`, `kiro`, `trae`, `junie`, `goose`, `amazonq`, `roocode`, `openhands`, `aider`, `cline`, `warp`) are stable. They will not be renamed within `0.x`
-- The Tier 2 install entry points (`.kiro/install.sh`, `.trae/install.sh`) were retired after 1.1.22; `egc install --target <tool>` is the entry point for every tool
+- The Tier 2 install entry points (`.kiro/install.sh`, `.trae/install.sh`, `.codebuddy/install.sh` and its Node twin) were retired after 1.1.22; `egc install --target <tool> --profile full` is the entry point for every tool
 - The Tier 3 protocol injection target paths (`~/.claude/CLAUDE.md` for Claude Code) are stable within `0.x`
 - JSON Schema field names are stable within `MINOR` versions. Removals require a `MAJOR` bump
 - Legacy plugin identifiers (`everything-gemini`, `everything-gemini@everything-gemini`) remain resolvable indefinitely via `scripts/lib/resolve-egc-root.js` fallback chain. This is permanent backward compatibility

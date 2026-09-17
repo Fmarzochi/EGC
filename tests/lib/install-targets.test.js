@@ -4230,7 +4230,7 @@ function runTests() {
         `${adapter.id} plans ${platform.map(op => op.sourceRelativePath).join(', ')}`
       );
       for (const op of platform) {
-        assert.strictEqual(op.destinationPath, path.join(targetRoot, op.sourceRelativePath.slice('.kiro/'.length)));
+        assert.strictEqual(path.normalize(op.destinationPath), path.normalize(path.join(targetRoot, op.sourceRelativePath.slice('.kiro/'.length))));
         assert.ok(fs.existsSync(path.join(REPO_ROOT, op.sourceRelativePath)), `${op.sourceRelativePath} exists in the repository`);
       }
       const agents = operations.filter(op => op.moduleId === 'agents-core');
@@ -4248,10 +4248,11 @@ function runTests() {
     assert.strictEqual(isForeignPlatformPath('.kiro', 'egc'), true);
     const { createManifestInstallPlan } = require('../../scripts/lib/install-executor');
     const materialized = createManifestInstallPlan({ sourceRoot: REPO_ROOT, target: 'kiro', profileId: 'full', homeDir: '/home/u', projectRoot: '/proj' });
-    const planner = materialized.operations.filter(op => op.kind === 'copy-file' && op.destinationPath === path.join('/home/u', '.kiro', 'agents', 'planner.md'));
+    const same = (a, b) => path.normalize(a) === path.normalize(b);
+    const planner = materialized.operations.filter(op => op.kind === 'copy-file' && same(op.destinationPath, path.join('/home/u', '.kiro', 'agents', 'planner.md')));
     assert.strictEqual(planner.length, 1, `one planner.md lands: ${planner.map(op => op.sourceRelativePath).join(', ')}`);
     assert.strictEqual(planner[0].sourceRelativePath, '.kiro/agents/planner.md');
-    const jsonAgent = materialized.operations.find(op => op.kind === 'copy-file' && op.destinationPath === path.join('/home/u', '.kiro', 'agents', 'planner.json'));
+    const jsonAgent = materialized.operations.find(op => op.kind === 'copy-file' && same(op.destinationPath, path.join('/home/u', '.kiro', 'agents', 'planner.json')));
     assert.ok(jsonAgent, 'the Kiro JSON agent lands too');
     const stray = materialized.operations.filter(op => /(^|\/)\.kiro\/(README\.md|docs\/|skills\/|install\.sh)/.test(op.sourceRelativePath));
     assert.deepStrictEqual(stray, [], 'the README, the docs, the hand-curated skills and the retired script stay out');
@@ -4259,14 +4260,17 @@ function runTests() {
     assert.deepStrictEqual(foreign, [], 'files other targets keep on their roots stay out of Kiro');
   })) passed++; else failed++;
 
-  if (test('the Trae adapter installs under .trae-cn when TRAE_ENV=cn, as the retired .trae/install.sh allowed', () => {
-    const REPO_ROOT = path.join(__dirname, '..', '..');
-    const { execFileSync } = require('child_process');
-    const script = "const a = require('./scripts/lib/install-targets/trae-project'); process.stdout.write(a.resolveRoot({ projectRoot: '/p' }))";
-    const cn = execFileSync(process.execPath, ['-e', script], { cwd: REPO_ROOT, env: { ...process.env, TRAE_ENV: 'cn' }, encoding: 'utf8' });
-    assert.strictEqual(cn, path.join('/p', '.trae-cn'));
-    const plain = execFileSync(process.execPath, ['-e', script], { cwd: REPO_ROOT, env: { ...process.env, TRAE_ENV: '' }, encoding: 'utf8' });
-    assert.strictEqual(plain, path.join('/p', '.trae'));
+  if (test('the Trae adapter resolves .trae-cn when TRAE_ENV=cn at resolution time, as the retired .trae/install.sh allowed', () => {
+    const trae = require('../../scripts/lib/install-targets/trae-project');
+    const previous = process.env.TRAE_ENV;
+    try {
+      process.env.TRAE_ENV = 'cn';
+      assert.strictEqual(trae.resolveRoot({ projectRoot: '/p' }), path.join('/p', '.trae-cn'));
+      delete process.env.TRAE_ENV;
+      assert.strictEqual(trae.resolveRoot({ projectRoot: '/p' }), path.join('/p', '.trae'), 'the choice follows the environment at resolution time, not at require time');
+    } finally {
+      if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
+    }
   })) passed++; else failed++;
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

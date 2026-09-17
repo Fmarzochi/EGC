@@ -30,19 +30,15 @@ node scripts/repair.js --target codebuddy
 node scripts/uninstall.js --target codebuddy
 ```
 
-## Shell 脚本（旧版）
-
-旧版 Shell 脚本仍然可用于快速设置：
+## 全局安装
 
 ```bash
-# 安装到当前项目
-cd /path/to/your/project
+# 安装到 ~/.codebuddy/（适用于所有 CodeBuddy 项目）
+cd ~
 egc install --target codebuddy --profile full
-
-# 全局安装
-cd ~ && egc install --target codebuddy --profile full
 ```
 
+`egc install --prompt-library` 会一次性为检测到的所有工具执行相同操作。
 ## 包含的内容
 
 ### 命令

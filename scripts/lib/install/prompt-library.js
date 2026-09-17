@@ -103,6 +103,17 @@ function detectPromptLibraryTargets({ homeDir, commandExists = defaultCommandExi
   return homeTargets().filter(target => isDetected(target, { homeDir: base, commandExists }));
 }
 
+// The Chinese edition of Trae lives under .trae-cn. When only that edition
+// is present and the environment says nothing, the install goes there.
+function projectTargetEnv(target, homeDir) {
+  if (target !== 'trae' || process.env.TRAE_ENV) {
+    return {};
+  }
+  const cn = fs.existsSync(path.join(homeDir, '.trae-cn'));
+  const plain = fs.existsSync(path.join(homeDir, '.trae'));
+  return cn && !plain ? { TRAE_ENV: 'cn' } : {};
+}
+
 function detectProjectTargetsAtHome({ homeDir, commandExists = defaultCommandExists } = {}) {
   const base = resolveHomeDir(homeDir);
   return Object.entries(PROJECT_TARGETS_AT_HOME)
@@ -141,14 +152,14 @@ function runPromptLibraryInstall({
   }
 
   const runs = [
-    ...plan.targets.map(target => ({ target, cwd: repoRoot })),
-    ...plan.homeProjectTargets.map(target => ({ target, cwd: base })),
+    ...plan.targets.map(target => ({ target, cwd: repoRoot, extraEnv: {} })),
+    ...plan.homeProjectTargets.map(target => ({ target, cwd: base, extraEnv: projectTargetEnv(target, base) })),
   ];
-  for (const { target, cwd } of runs) {
+  for (const { target, cwd, extraEnv } of runs) {
     log(`  installing the prompt library to ${labelFor(target)}...`);
     const result = spawn(process.execPath, [installApply, '--target', target, '--profile', 'full'], {
       cwd,
-      env,
+      env: { ...env, ...extraEnv },
       stdio: 'inherit',
     });
     if (result?.status === 0) {
@@ -173,5 +184,6 @@ module.exports = {
   detectPromptLibraryTargets,
   detectProjectTargetsAtHome,
   planPromptLibraryInstall,
+  projectTargetEnv,
   runPromptLibraryInstall,
 };

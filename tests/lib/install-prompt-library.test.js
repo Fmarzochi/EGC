@@ -14,6 +14,7 @@ const {
   detectPromptLibraryTargets,
   detectProjectTargetsAtHome,
   planPromptLibraryInstall,
+  projectTargetEnv,
   runPromptLibraryInstall,
 } = require('../../scripts/lib/install/prompt-library');
 const { getInstallTargetAdapter, listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
@@ -171,6 +172,8 @@ function runTests() {
       ]);
       assert.deepStrictEqual(calls.map(call => call.options.cwd), [REPO_ROOT, REPO_ROOT, homeDir, homeDir]);
       assert.ok(calls.every(call => call.options.env.HOME === homeDir && call.options.env.USERPROFILE === homeDir));
+      assert.strictEqual(calls[2].options.env.TRAE_ENV, 'cn', 'only .trae-cn exists, so Trae installs into the Chinese edition');
+      assert.strictEqual(calls[3].options.env.TRAE_ENV, process.env.TRAE_ENV, 'CodeBuddy inherits the environment untouched');
       assert.deepStrictEqual(result.installed, ['claude', 'amp', 'trae', 'codebuddy']);
       assert.deepStrictEqual(result.failed, []);
       assert.deepStrictEqual(result.homeProjectTargets, ['trae', 'codebuddy']);
@@ -178,6 +181,31 @@ function runTests() {
       assert.ok(!calls.some(call => call.command === 'bash'), 'no shell script runs any more');
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('the Chinese edition of Trae is chosen only when it is the sole edition present and the environment says nothing', () => {
+    const previous = process.env.TRAE_ENV;
+    try {
+      delete process.env.TRAE_ENV;
+      for (const [dirs, expected] of [[['.trae-cn'], { TRAE_ENV: 'cn' }], [['.trae'], {}], [['.trae', '.trae-cn'], {}]]) {
+        const homeDir = makeHome(dirs);
+        try {
+          assert.deepStrictEqual(projectTargetEnv('trae', homeDir), expected, `${dirs.join('+')}`);
+          assert.deepStrictEqual(projectTargetEnv('codebuddy', homeDir), {});
+        } finally {
+          fs.rmSync(homeDir, { recursive: true, force: true });
+        }
+      }
+      process.env.TRAE_ENV = 'cn';
+      const homeDir = makeHome(['.trae-cn']);
+      try {
+        assert.deepStrictEqual(projectTargetEnv('trae', homeDir), {}, 'an explicit TRAE_ENV is left alone');
+      } finally {
+        fs.rmSync(homeDir, { recursive: true, force: true });
+      }
+    } finally {
+      if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
     }
   })) passed++; else failed++;
 

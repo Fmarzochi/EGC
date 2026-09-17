@@ -43,7 +43,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 
 ## Prompt library per target
 
-With `--profile full` every target receives the whole prompt library the README counts (agents, skills, commands, rules), and `egc install --prompt-library` applies that profile to every home target detected on the machine (config directory or command on PATH) before running the per-tool scripts of Kiro, Trae and CodeBuddy. A tool without native discovery for a family still receives the files under its EGC root, so the model of that tool can read them. `tests/lib/install-library-contract.test.js` resolves the full profile on all 21 targets and counts what lands at the destinations; the documented exceptions are Claude Code (no `rules/zh`), Kiro and Trae (agents, and for Trae also commands and rules, come from their own scripts) and Aider and Warp (the memory rule only, by design). A module never names a target its dependencies would reject: the skills modules stand on their own, and `.agents` and the root `AGENTS.md` stay with the tools that own them.
+With `--profile full` every target receives the whole prompt library the README counts (agents, skills, commands, rules), and `egc install --prompt-library` applies that profile to every home target detected on the machine (config directory or command on PATH) and to Trae and CodeBuddy under the home directory through their project adapters. A tool without native discovery for a family still receives the files under its root as a library folder, so the agent can be pointed at them. The documented exceptions: Claude Code leaves the Chinese mirror of the common rules out (they would load into every session), and Aider and Warp receive the memory rule only. The contract test in `tests/lib/install-library-contract.test.js` resolves the full profile on all 21 targets and counts what lands.
 
 ## Session-mesh delivery per harness
 
@@ -81,9 +81,6 @@ For Tier 1 only:
 
 - Skills, agents, rules ship to the tool's filesystem
 - The tool can invoke EGC-defined workflows directly
-
-For Tier 1 only:
-
 - A single pipeline produces all targets
 - Conformance tests validate the install output (see `tests/spec/`)
 - Provenance metadata is recorded for every materialized file
