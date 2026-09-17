@@ -4156,15 +4156,16 @@ function runTests() {
       target: 'claude',
       repoRoot,
       homeDir,
-      modules: [{ id: 'engineering-auditor', paths: ['agents/engineering-auditor.md', 'commands/engineering-audit.md'] }],
+      modules: [{ id: 'engineering-auditor', paths: ['agents/engineering-auditor.md', 'commands/engineering-fix.md', 'commands/engineering-audit.md'] }],
     });
     const agent = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'agents/engineering-auditor.md');
     assert.ok(agent, 'the agent file must be planned');
     assert.strictEqual(agent.destinationPath, path.join(homeDir, '.claude', 'agents', 'engineering-auditor.md'));
     assert.strictEqual(agent.transform, 'claude-agent-frontmatter');
-    const command = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-audit.md');
+    const command = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-fix.md');
     assert.ok(command, 'the command file must be planned');
-    assert.strictEqual(command.destinationPath, path.join(homeDir, '.claude', 'commands', 'engineering-audit.md'));
+    assert.strictEqual(command.destinationPath, path.join(homeDir, '.claude', 'commands', 'engineering-fix.md'));
+    assert.ok(!plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-audit.md'), 'a single-file command shadowed by the engineering-audit skill stays out');
     assert.strictEqual(command.transform, undefined);
   })) passed++; else failed++;
 
@@ -4201,13 +4202,38 @@ function runTests() {
       homeDir,
       modules: [{ id: 'commands-core', paths: ['commands'] }],
     });
-    assert.ok(
-      plan.operations.some(op => (
-        normalizedRelativePath(op.sourceRelativePath) === 'commands'
-        && op.destinationPath === path.join(homeDir, '.claude', 'commands')
-      )),
-      'commands/ must scaffold to ~/.claude/commands'
-    );
+    const plans = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('commands/'));
+    assert.ok(plans.length >= 70, `${plans.length} command files planned`);
+    assert.ok(plans.every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.claude', 'commands')), 'every command lands in ~/.claude/commands');
+    assert.ok(plans.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/plan.md' && op.destinationPath === path.join(homeDir, '.claude', 'commands', 'plan.md')));
+  })) passed++; else failed++;
+
+  if (test('claude adapter leaves out a command whose name is also a catalog skill: Claude Code would list the slash command twice', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [{ id: 'commands-core', paths: ['commands'] }] });
+    const commands = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('commands/'));
+    const names = new Set(commands.map(op => path.basename(op.destinationPath, '.md')));
+    assert.ok(names.has('plan') && names.has('review-pr'), 'ordinary commands still land');
+    for (const shadowed of ['autonomous-lesson-learning', 'engineering-audit', 'security-scan']) {
+      assert.ok(!names.has(shadowed), `${shadowed} is a catalog skill and its command stays out`);
+    }
+    assert.ok(commands.every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.claude', 'commands')));
+  })) passed++; else failed++;
+
+  if (test('opencode adapter installs the catalog agents flat under ~/.config/opencode/agents in the shape OpenCode validates', () => {
+    const { OPENCODE_AGENT_FRONTMATTER_TRANSFORM, plannedFileContent } = require('../../scripts/lib/install/copy-transforms');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({ target: 'opencode', repoRoot, homeDir, modules: [{ id: 'agents-core', paths: ['agents'] }] });
+    const agents = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('agents/'));
+    assert.ok(agents.length >= 60, `${agents.length} agent files planned`);
+    assert.ok(agents.every(op => op.transform === OPENCODE_AGENT_FRONTMATTER_TRANSFORM), 'every agent goes through the OpenCode transform');
+    assert.ok(agents.every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.config', 'opencode', 'agents')));
+    const architect = agents.find(op => normalizedRelativePath(op.sourceRelativePath) === 'agents/architect.md');
+    const content = plannedFileContent(path.join(repoRoot, 'agents', 'architect.md'), architect.transform).toString('utf8');
+    assert.ok(/^tools:\n( {2}\w+: true\n)+/m.test(content), 'tools is an object of name to true');
+    assert.ok(/^mode: subagent$/m.test(content) && !/^model:/m.test(content) && !/^stack:/m.test(content), 'subagent, no Gemini model, no stack');
   })) passed++; else failed++;
 
   if (test('kiro adapters plan the Kiro platform assets from the repository .kiro directory at the Kiro root and skip the files other targets keep (retired .kiro/install.sh)', () => {

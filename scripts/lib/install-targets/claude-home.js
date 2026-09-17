@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const path = require('node:path');
 
 const {
@@ -64,6 +65,42 @@ function planClaudeAgentOperations(adapter, moduleId, sourceRelativePath, planni
   ))];
 }
 
+// Claude Code turns the files of ~/.claude/commands and the skills into the
+// same slash commands, so a command whose name is also a catalog skill would
+// be listed twice. The skill is the richer form (the command only points at
+// it), so the command stays out.
+function catalogSkillNames(repoRoot) {
+  const names = new Set();
+  const skillsRoot = path.join(repoRoot || '', 'skills');
+  if (!repoRoot || !fs.existsSync(skillsRoot)) {
+    return names;
+  }
+  for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (fs.existsSync(path.join(skillsRoot, entry.name, 'SKILL.md'))) {
+      names.add(entry.name);
+      continue;
+    }
+    for (const skill of fs.readdirSync(path.join(skillsRoot, entry.name), { withFileTypes: true })) {
+      if (skill.isDirectory() && fs.existsSync(path.join(skillsRoot, entry.name, skill.name, 'SKILL.md'))) {
+        names.add(skill.name);
+      }
+    }
+  }
+  return names;
+}
+
+function planClaudeCommandOperations(moduleId, sourceRelativePath, planningInput, targetRoot) {
+  const skills = catalogSkillNames(planningInput.repoRoot);
+  return createFlatFileOperations({
+    moduleId,
+    repoRoot: planningInput.repoRoot,
+    sourceRelativePath,
+    destinationDir: path.join(targetRoot, 'commands'),
+    destinationNameTransform: fileName => (skills.has(path.basename(fileName, '.md')) ? null : fileName),
+  });
+}
+
 function planClaudeModuleOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
   const normalized = normalizeRelativePath(sourceRelativePath);
   if (normalized === 'rules') {
@@ -71,6 +108,12 @@ function planClaudeModuleOperations(adapter, moduleId, sourceRelativePath, plann
   }
   if (normalized === 'agents' || normalized.startsWith('agents/')) {
     return planClaudeAgentOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot);
+  }
+  if (normalized === 'commands') {
+    return planClaudeCommandOperations(moduleId, sourceRelativePath, planningInput, targetRoot);
+  }
+  if (normalized.startsWith('commands/') && catalogSkillNames(planningInput.repoRoot).has(path.basename(normalized, '.md'))) {
+    return [];
   }
   return [planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot)];
 }

@@ -8,6 +8,7 @@ const fs = require('node:fs');
 // the same result, so a transformed file never reads as drifted or foreign.
 
 const CLAUDE_AGENT_FRONTMATTER_TRANSFORM = 'claude-agent-frontmatter';
+const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -107,8 +108,45 @@ function toClaudeAgentFrontmatter(text) {
   return ['---', ...frontmatter, '---', ...parts.body].join('\n');
 }
 
+// OpenCode reads ~/.config/opencode/agents/*.md as its own agent definitions
+// and validates the frontmatter: tools is an object of tool name to boolean,
+// color must be a hex value, a model is a provider/model id. The catalog
+// agent's tools list becomes that object, the Gemini model, the stack and
+// the named color are dropped, and the agent is declared a subagent so
+// OpenCode offers it through @ and the task tool.
+const OPENCODE_DROPPED_KEYS = new Set(['model', 'stack', 'color']);
+
+function rewriteOpenCodeAgentLines(line) {
+  const match = splitFrontmatterLine(line);
+  if (!match) {
+    return [line];
+  }
+  const { key, value } = match;
+  if (OPENCODE_DROPPED_KEYS.has(key)) {
+    return [];
+  }
+  if (key === 'tools') {
+    const items = parseFlowSequence(value);
+    return items ? ['tools:', ...items.map(item => `  ${item}: true`)] : [line];
+  }
+  return [line];
+}
+
+function toOpenCodeAgentFrontmatter(text) {
+  const parts = splitFrontmatter(stripByteOrderMark(text));
+  if (!parts) {
+    return text;
+  }
+  const frontmatter = parts.frontmatter.flatMap(rewriteOpenCodeAgentLines);
+  if (!frontmatter.some(line => splitFrontmatterLine(line)?.key === 'mode')) {
+    frontmatter.push('mode: subagent');
+  }
+  return ['---', ...frontmatter, '---', ...parts.body].join('\n');
+}
+
 const TRANSFORMS = Object.freeze({
   [CLAUDE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toClaudeAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [OPENCODE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toOpenCodeAgentFrontmatter(content.toString('utf8')), 'utf8'),
 });
 
 function transformContent(content, transform) {
@@ -128,7 +166,9 @@ function plannedFileContent(sourcePath, transform) {
 
 module.exports = {
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
+  OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
   toClaudeAgentFrontmatter,
+  toOpenCodeAgentFrontmatter,
   transformContent,
 };

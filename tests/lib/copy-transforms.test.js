@@ -12,6 +12,7 @@ const {
   plannedFileContent,
   toClaudeAgentFrontmatter,
   transformContent,
+  toOpenCodeAgentFrontmatter,
 } = require('../../scripts/lib/install/copy-transforms');
 
 function test(name, fn) {
@@ -89,6 +90,14 @@ function runTests() {
   if (test('returns text without frontmatter unchanged', () => {
     const plain = '# No frontmatter\n\ntools: [x]\n';
     assert.strictEqual(toClaudeAgentFrontmatter(plain), plain);
+  })) passed++; else failed++;
+
+  if (test('OpenCode: the tools list becomes an object, model, stack and color are dropped, mode subagent is added', () => {
+    const source = '---\nname: architect\ndescription: d\ntools: ["Read", "Grep", "Glob"]\nmodel: gemini-3.1-pro\nstack: ["*"]\ncolor: teal\n---\n# body\n';
+    assert.strictEqual(toOpenCodeAgentFrontmatter(source), '---\nname: architect\ndescription: d\ntools:\n  Read: true\n  Grep: true\n  Glob: true\nmode: subagent\n---\n# body\n');
+    assert.strictEqual(toOpenCodeAgentFrontmatter('---\ndescription: d\nmode: primary\n---\nbody\n'), '---\ndescription: d\nmode: primary\n---\nbody\n', 'an explicit mode is kept');
+    assert.strictEqual(toOpenCodeAgentFrontmatter('no frontmatter\n'), 'no frontmatter\n');
+    assert.strictEqual(toOpenCodeAgentFrontmatter('\uFEFF---\r\nname: x\r\ntools: [Read]\r\n---\r\nbody\r\n'), '---\nname: x\ntools:\n  Read: true\nmode: subagent\n---\nbody\n');
   })) passed++; else failed++;
 
   if (test('transformContent applies a named transform and refuses an unknown one', () => {

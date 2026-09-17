@@ -39,6 +39,12 @@ const EXCEPTIONS = {
     // mirrors rules/common in Chinese and would double that cost, so it
     // stays out of ~/.claude/rules.
     rules: catalog => catalog.rules.files.filter(file => !normalize(file).startsWith('rules/zh/')).length,
+    // Claude Code lists commands and skills as the same slash commands, so a
+    // command whose name is also a skill stays out (the skill points at it).
+    commands: catalog => {
+      const skills = new Set(catalog.skills.files.map(file => normalize(file).split('/').slice(-2, -1)[0]));
+      return catalog.commands.files.filter(file => !skills.has(stemOf(file))).length;
+    },
   },
   aider: {
     agents: () => 0, // Aider has no agent or command discovery
