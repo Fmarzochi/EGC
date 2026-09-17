@@ -2616,6 +2616,26 @@ function runTests() {
     cleanup(outside);
   }
 
+  if (test('doctor warns when a recorded profile selected no module for its target', () => {
+    const projectRoot = createTempDir('lifecycle-empty-profile-');
+    try {
+      fs.mkdirSync(path.join(projectRoot, '.cursor'), { recursive: true });
+      const { installStatePath } = writeCursorState(projectRoot, {
+        request: { profile: 'full', legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: ['rules-core'] },
+      });
+      const report = buildDoctorReport({ repoRoot: REPO_ROOT, projectRoot, homeDir: projectRoot, targets: ['cursor'] });
+      const result = report.results.find(entry => entry.installStatePath === installStatePath);
+      assert.ok(result, 'the cursor state must be discovered');
+      const issue = result.issues.find(entry => entry.code === 'profile-selected-nothing');
+      assert.ok(issue, `expected profile-selected-nothing, got ${result.issues.map(entry => entry.code).join(', ')}`);
+      assert.strictEqual(issue.severity, 'warning');
+      assert.ok(issue.message.includes('--profile full'), issue.message);
+    } finally {
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

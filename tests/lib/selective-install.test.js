@@ -248,17 +248,13 @@ function runTests() {
 
   // ─── Install Plan Resolution with --with ───
 
-  if (test('--with alone resolves component modules and their dependencies', () => {
+  if (test('--with alone resolves the component module and nothing it does not need', () => {
     const plan = resolveInstallPlan({
       includeComponentIds: ['lang:typescript'],
       target: 'egc',
     });
-    assert.ok(plan.selectedModuleIds.includes('framework-language'),
-      'Should include the module behind lang:typescript');
-    assert.ok(plan.selectedModuleIds.includes('rules-core'),
-      'Should include framework-language dependency rules-core');
-    assert.ok(plan.selectedModuleIds.includes('platform-configs'),
-      'Should include framework-language dependency platform-configs');
+    assert.deepStrictEqual(plan.selectedModuleIds, ['framework-language'],
+      'lang:typescript is a skills component; rules and platform files are not its dependencies');
   })) passed++; else failed++;
 
   if (test('--with adds modules on top of a profile', () => {
@@ -663,9 +659,9 @@ function runTests() {
         'Should install framework-language skills');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'coding-standards', 'SKILL.md')),
         'Should also install coding-standards skill under antigravity-cli/skills for AGY');
-      // Its dependencies should be installed
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
-        'Should install dependency rules-core');
+      // A skills component does not drag the rules along
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+        'Should not install rules-core for a skills component');
 
       const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
       const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));

@@ -1907,7 +1907,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('claude target resolves skill modules that depend on platform-configs (issue #160)', () => {
+  if (test('claude target resolves a skills module on its own, without dragging platform-configs (issue #160)', () => {
     const { resolveInstallPlan } = require('../../scripts/lib/install-manifests');
 
     const plan = resolveInstallPlan({
@@ -1917,25 +1917,15 @@ function runTests() {
       projectRoot: os.tmpdir(),
     });
 
-    assert.ok(
-      plan.selectedModuleIds.includes('workflow-quality'),
-      'workflow-quality must be selected for claude target'
-    );
-    assert.ok(
-      plan.selectedModuleIds.includes('platform-configs'),
-      'platform-configs must be selected as dependency for claude target'
+    assert.deepStrictEqual(
+      plan.selectedModuleIds,
+      ['workflow-quality'],
+      'a skills module needs no platform module to install'
     );
     assert.strictEqual(
       plan.skippedModuleIds.length,
       0,
       'no modules should be silently skipped'
-    );
-
-    const platformConfigOps = plan.operations.filter(op => op.moduleId === 'platform-configs');
-    assert.strictEqual(
-      platformConfigOps.length,
-      0,
-      'platform-configs must produce zero file operations for claude (all paths are egc-platform-specific)'
     );
   })) passed++; else failed++;
 
@@ -4123,6 +4113,101 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
+  })) passed++; else failed++;
+
+  if (test('identity paths .agents and AGENTS.md are foreign for targets that only take the agent files', () => {
+    const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
+    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'amazonq', 'kiro']) {
+      assert.ok(isForeignPlatformPath('.agents', target), `.agents must not land on ${target}`);
+      assert.ok(isForeignPlatformPath('AGENTS.md', target), `AGENTS.md must not land on ${target}`);
+      assert.ok(!isForeignPlatformPath('agents', target), `agents/ must land on ${target}`);
+    }
+    for (const target of ['egc', 'codex', 'antigravity', 'cursor', 'codebuddy', 'zed']) {
+      assert.ok(!isForeignPlatformPath('.agents', target), `.agents stays on ${target}`);
+      assert.ok(!isForeignPlatformPath('AGENTS.md', target), `AGENTS.md stays on ${target}`);
+    }
+  })) passed++; else failed++;
+
+  if (test('claude adapter installs the agents under ~/.claude/agents with the Claude Code frontmatter transform', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'agents-core', paths: ['.agents', 'agents', 'AGENTS.md'] }],
+    });
+    const agentOps = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('agents/'));
+    assert.ok(agentOps.length >= 60, `expected one operation per agent file, got ${agentOps.length}`);
+    const reviewer = agentOps.find(op => normalizedRelativePath(op.sourceRelativePath) === 'agents/code-reviewer.md');
+    assert.ok(reviewer, 'code-reviewer must be planned');
+    assert.strictEqual(reviewer.destinationPath, path.join(homeDir, '.claude', 'agents', 'code-reviewer.md'));
+    assert.strictEqual(reviewer.transform, 'claude-agent-frontmatter');
+    assert.ok(
+      !plan.operations.some(op => ['.agents', 'AGENTS.md'].includes(normalizedRelativePath(op.sourceRelativePath))),
+      '.agents and AGENTS.md are Codex and Antigravity files'
+    );
+  })) passed++; else failed++;
+
+  if (test('claude adapter installs a single agent file with the same transform and a command as-is', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'engineering-auditor', paths: ['agents/engineering-auditor.md', 'commands/engineering-audit.md'] }],
+    });
+    const agent = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'agents/engineering-auditor.md');
+    assert.ok(agent, 'the agent file must be planned');
+    assert.strictEqual(agent.destinationPath, path.join(homeDir, '.claude', 'agents', 'engineering-auditor.md'));
+    assert.strictEqual(agent.transform, 'claude-agent-frontmatter');
+    const command = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-audit.md');
+    assert.ok(command, 'the command file must be planned');
+    assert.strictEqual(command.destinationPath, path.join(homeDir, '.claude', 'commands', 'engineering-audit.md'));
+    assert.strictEqual(command.transform, undefined);
+  })) passed++; else failed++;
+
+  if (test('claude adapter installs the rules flat under ~/.claude/rules, without the Chinese mirror or READMEs', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+    const ruleOps = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('rules/'));
+    assert.ok(ruleOps.length >= 90, `expected one operation per rule file, got ${ruleOps.length}`);
+    const common = ruleOps.find(op => normalizedRelativePath(op.sourceRelativePath) === 'rules/common/coding-style.md');
+    assert.ok(common, 'the common coding-style rule must be planned');
+    assert.strictEqual(common.destinationPath, path.join(homeDir, '.claude', 'rules', 'common-coding-style.md'));
+    assert.ok(
+      !ruleOps.some(op => normalizedRelativePath(op.sourceRelativePath).startsWith('rules/zh/')),
+      'rules/zh mirrors rules/common and would load into every session'
+    );
+    assert.ok(
+      !ruleOps.some(op => path.basename(op.sourceRelativePath).toLowerCase() === 'readme.md'),
+      'a README is navigation, not a rule'
+    );
+  })) passed++; else failed++;
+
+  if (test('claude adapter installs the commands under ~/.claude/commands', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({
+      target: 'claude',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'commands-core', paths: ['commands'] }],
+    });
+    assert.ok(
+      plan.operations.some(op => (
+        normalizedRelativePath(op.sourceRelativePath) === 'commands'
+        && op.destinationPath === path.join(homeDir, '.claude', 'commands')
+      )),
+      'commands/ must scaffold to ~/.claude/commands'
+    );
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

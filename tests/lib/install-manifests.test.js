@@ -201,7 +201,7 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('resolves Cline profile to project-level flat rules only', () => {
+  if (test('resolves Cline core profile to the library modules a project can hold', () => {
     const projectRoot = '/workspace/app';
     const plan = resolveInstallPlan({
       profileId: 'core',
@@ -209,10 +209,9 @@ function runTests() {
       projectRoot,
     });
 
-    assert.deepStrictEqual(plan.selectedModuleIds, ['rules-core']);
-    assert.ok(plan.skippedModuleIds.includes('agents-core'));
-    assert.ok(plan.skippedModuleIds.includes('commands-core'));
+    assert.deepStrictEqual(plan.selectedModuleIds, ['rules-core', 'agents-core', 'commands-core', 'workflow-quality']);
     assert.ok(plan.skippedModuleIds.includes('hooks-runtime'));
+    assert.ok(plan.skippedModuleIds.includes('platform-configs'));
     assert.strictEqual(plan.targetAdapterId, 'cline-project');
     assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.clinerules'));
     assert.strictEqual(
@@ -265,13 +264,10 @@ function runTests() {
     assert.ok(plan.operations.length > 0, 'Should include install operations');
   })) passed++; else failed++;
 
-  if (test('resolves explicit modules with dependency expansion', () => {
+  if (test('resolves explicit modules with dependency expansion, and skills modules stand on their own', () => {
     const plan = resolveInstallPlan({ moduleIds: ['security'] });
-    assert.ok(plan.selectedModuleIds.includes('security'), 'Should include requested module');
-    assert.ok(plan.selectedModuleIds.includes('workflow-quality'),
-      'Should include transitive dependency');
-    assert.ok(plan.selectedModuleIds.includes('platform-configs'),
-      'Should include nested dependency');
+    assert.deepStrictEqual(plan.selectedModuleIds, ['workflow-quality', 'security'],
+      'security pulls the workflow-quality skills it builds on and nothing else');
   })) passed++; else failed++;
 
   if (test('validates explicit module IDs against the real manifest catalog', () => {
