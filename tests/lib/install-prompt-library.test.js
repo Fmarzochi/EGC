@@ -10,8 +10,9 @@ const path = require('path');
 const {
   HOME_TARGET_COMMANDS,
   HOME_TARGET_DIRS,
-  LEGACY_LIBRARY_SCRIPTS,
+  PROJECT_TARGETS_AT_HOME,
   detectPromptLibraryTargets,
+  detectProjectTargetsAtHome,
   planPromptLibraryInstall,
   runPromptLibraryInstall,
 } = require('../../scripts/lib/install/prompt-library');
@@ -113,34 +114,39 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('Trae and CodeBuddy are detected for a home install by their directories (both Trae editions) or their commands, and by nothing else', () => {
+    for (const [target, entry] of Object.entries(PROJECT_TARGETS_AT_HOME)) {
+      assert.strictEqual(getInstallTargetAdapter(target).kind, 'project', `${target} is a project target installed at home`);
+      for (const dir of entry.dirs) {
+        const homeDir = makeHome([dir]);
+        try {
+          assert.deepStrictEqual(detectProjectTargetsAtHome({ homeDir, commandExists: () => false }), [target], `${dir} must detect ${target}`);
+        } finally {
+          fs.rmSync(homeDir, { recursive: true, force: true });
+        }
+      }
+      const bare = makeHome([]);
+      try {
+        for (const command of entry.commands) {
+          assert.deepStrictEqual(detectProjectTargetsAtHome({ homeDir: bare, commandExists: name => name === command }), [target]);
+        }
+        assert.deepStrictEqual(detectProjectTargetsAtHome({ homeDir: bare, commandExists: () => false }), []);
+      } finally {
+        fs.rmSync(bare, { recursive: true, force: true });
+      }
+    }
+    assert.deepStrictEqual(Object.keys(PROJECT_TARGETS_AT_HOME).sort(), ['codebuddy', 'trae']);
+  })) passed++; else failed++;
+
   if (test('a call without homeDir reads the real home instead of throwing', () => {
     const targets = detectPromptLibraryTargets({ commandExists: () => false });
     assert.ok(Array.isArray(targets));
-    const plan = planPromptLibraryInstall({ commandExists: () => false, bashAvailable: false });
-    assert.ok(Array.isArray(plan.targets) && Array.isArray(plan.skippedLegacyScripts));
+    const plan = planPromptLibraryInstall({ commandExists: () => false });
+    assert.ok(Array.isArray(plan.targets) && Array.isArray(plan.homeProjectTargets));
   })) passed++; else failed++;
 
-  if (test('plans the legacy scripts for the tools that still have one, only when bash is available', () => {
-    const homeDir = makeHome(['.trae-cn', '.kiro', '.codebuddy']);
-    try {
-      const withBash = planPromptLibraryInstall({ homeDir, commandExists: () => false, bashAvailable: true });
-      assert.deepStrictEqual(withBash.legacyScripts.map(entry => entry.target).sort(), ['codebuddy', 'kiro', 'trae']);
-      assert.deepStrictEqual(withBash.skippedLegacyScripts, []);
-      for (const entry of withBash.legacyScripts) {
-        assert.ok(LEGACY_LIBRARY_SCRIPTS.some(script => script.script === entry.script));
-        assert.ok(fs.existsSync(path.join(REPO_ROOT, entry.script)), `${entry.script} must exist in the repository`);
-      }
-
-      const withoutBash = planPromptLibraryInstall({ homeDir, commandExists: () => false, bashAvailable: false });
-      assert.deepStrictEqual(withoutBash.legacyScripts, []);
-      assert.deepStrictEqual(withoutBash.skippedLegacyScripts.map(entry => entry.target).sort(), ['codebuddy', 'kiro', 'trae']);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  })) passed++; else failed++;
-
-  if (test('runs install-apply with the full profile for every detected target, then the legacy scripts, and counts both as installed', () => {
-    const homeDir = makeHome(['.claude', '.amp', '.trae']);
+  if (test('runs install-apply with the full profile for every detected target: home targets from the repository, Trae and CodeBuddy with the home as the working directory', () => {
+    const homeDir = makeHome(['.claude', '.amp', '.trae-cn', '.codebuddy']);
     const calls = [];
     const logs = [];
     try {
@@ -148,25 +154,28 @@ function runTests() {
         repoRoot: REPO_ROOT,
         homeDir,
         commandExists: () => false,
-        bashAvailable: true,
-        spawn: (command, args) => {
-          calls.push({ command, args });
+        spawn: (command, args, options) => {
+          calls.push({ command, args, options });
           return { status: 0 };
         },
         log: line => logs.push(line),
       });
 
       const installApply = path.join(REPO_ROOT, 'scripts', 'install-apply.js');
-      const applied = calls.filter(call => call.args[0] === installApply).map(call => call.args.slice(1));
-      assert.deepStrictEqual(applied, [
+      assert.ok(calls.every(call => call.command === process.execPath && call.args[0] === installApply), `${JSON.stringify(calls)}`);
+      assert.deepStrictEqual(calls.map(call => call.args.slice(1)), [
         ['--target', 'claude', '--profile', 'full'],
         ['--target', 'amp', '--profile', 'full'],
+        ['--target', 'trae', '--profile', 'full'],
+        ['--target', 'codebuddy', '--profile', 'full'],
       ]);
-      const legacy = calls.filter(call => call.command === 'bash').map(call => call.args);
-      assert.deepStrictEqual(legacy, [[path.join(REPO_ROOT, '.trae', 'install.sh'), homeDir]]);
-      assert.deepStrictEqual(result.installed, ['claude', 'amp', 'trae']);
+      assert.deepStrictEqual(calls.map(call => call.options.cwd), [REPO_ROOT, REPO_ROOT, homeDir, homeDir]);
+      assert.ok(calls.every(call => call.options.env.HOME === homeDir && call.options.env.USERPROFILE === homeDir));
+      assert.deepStrictEqual(result.installed, ['claude', 'amp', 'trae', 'codebuddy']);
       assert.deepStrictEqual(result.failed, []);
-      assert.ok(logs.some(line => line.includes('Claude Code')), logs.join('\n'));
+      assert.deepStrictEqual(result.homeProjectTargets, ['trae', 'codebuddy']);
+      assert.ok(logs.some(line => line.includes('Claude Code')) && logs.some(line => line.includes('Trae')), logs.join('\n'));
+      assert.ok(!calls.some(call => call.command === 'bash'), 'no shell script runs any more');
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
@@ -179,8 +188,7 @@ function runTests() {
         repoRoot: REPO_ROOT,
         homeDir,
         commandExists: () => false,
-        bashAvailable: true,
-        spawn: (command, args) => ({ status: args.includes('claude') || command === 'bash' ? 1 : 0 }),
+        spawn: (command, args) => ({ status: args.includes('claude') || args.includes('trae') ? 1 : 0 }),
         log: () => {},
       });
       assert.deepStrictEqual(result.installed, ['amp']);
@@ -198,11 +206,11 @@ function runTests() {
         repoRoot: REPO_ROOT,
         homeDir,
         commandExists: () => false,
-        bashAvailable: false,
         spawn: () => { throw new Error('nothing should run'); },
         log: line => logs.push(line),
       });
       assert.deepStrictEqual(result.installed, []);
+      assert.deepStrictEqual(result.homeProjectTargets, []);
       assert.ok(logs.some(line => /no supported tool/i.test(line)), logs.join('\n'));
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });

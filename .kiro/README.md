@@ -5,21 +5,16 @@ Bring [EGC - Extended Global Context](https://github.com/Fmarzochi/EGC) workflow
 ## Quick Start
 
 ```bash
-# Go to .kiro folder
-cd .kiro
+# Install globally (applies to all Kiro projects): ~/.kiro/
+egc install --target kiro --profile full
 
-# Install to your project
-./install.sh /path/to/your/project
-
-# Or install to the current directory
-./install.sh
-
-# Or install globally (applies to all Kiro projects)
-./install.sh ~
+# Check, repair or remove the installation
+egc doctor
+egc repair
+egc uninstall --target kiro
 ```
 
-The installer uses non-destructive copy: it will not overwrite your existing files.
-
+The unified installer records everything it writes in an install-state, so `egc doctor` reports drift and `egc repair` restores it. The Kiro-native agents, steering files, IDE hooks, scripts and the MCP settings example below ship from this directory; skills, commands and rules come from the catalog at the repository root.
 ## Component Inventory
 
 | Component | Count | Location |

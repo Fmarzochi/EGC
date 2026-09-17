@@ -132,7 +132,9 @@ module.exports = createInstallTargetAdapter({
   id: 'trae-project',
   target: 'trae',
   kind: 'project',
-  rootSegments: ['.trae'],
+  // The Chinese edition of Trae keeps its files under .trae-cn; TRAE_ENV=cn
+  // at install time selects it, the way the retired .trae/install.sh did.
+  rootSegments: [process.env.TRAE_ENV === 'cn' ? '.trae-cn' : '.trae'],
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.trae',
   planOperations(input, adapter) {

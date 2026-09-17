@@ -11,6 +11,7 @@ const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
   '.gemini': 'gemini',
   '.opencode': 'opencode',
   '.codebuddy': 'codebuddy',
+  '.kiro': 'kiro',
 });
 
 function normalizeRelativePath(relativePath) {

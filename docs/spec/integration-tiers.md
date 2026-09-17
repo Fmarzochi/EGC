@@ -11,7 +11,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | Tier | Name | What ships | Install pipeline |
 |------|------|------------|------------------|
 | **1** | Full unified | Skills, agents, rules, hooks, install manifest | `scripts/install-apply.js` via `SUPPORTED_INSTALL_TARGETS` |
-| **2** | Custom-script | Tool-specific assets via dedicated installer | `.{tool}/install.sh` called from `install.sh` |
+| **2** | Custom-script (retired) | Formerly tool-specific assets via a dedicated shell script | none: Kiro, Trae and CodeBuddy assets ship through their Tier 1 adapters |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
 ## The 20 harnesses
@@ -25,13 +25,13 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | 3 | **Cursor** | 1 | `cursor` | `~/.cursor/` | Rules injected into global cursor.rules |
 | 4 | **Codex CLI** | 1 | `codex` | `~/.agents/skills/<name>/SKILL.md` | Skills installed flat; agents, commands and rules as library folders under `~/.agents/`; `persistent_instructions` appended |
 | 5 | **OpenCode** | 1 | `opencode` | `~/.config/opencode/skills/<name>/SKILL.md` | Agents and rules as library folders under `~/.config/opencode/`, commands as before; native plugin events for hooks. MCP registration goes into `~/.config/opencode/opencode.json` (or the legacy `config.json` when only that exists) under the `mcp` key, in OpenCode's own shape (`{ type: "local", command: [...] }`); OpenCode reads that directory on every platform, Windows included, so the target is the same everywhere (#1405). From the repository's `.opencode/` package only `commands`, `instructions` and `prompts` are installed into the config directory, never its TypeScript tools, plugin sources, package files or `opencode.json` (#1396) |
-| 6 | **CodeBuddy** | 1 | `codebuddy` | `.codebuddy/skills/<name>/SKILL.md` | Context injection |
+| 6 | **CodeBuddy** | 1 | `codebuddy` | `.codebuddy/skills/<name>/` (project; `egc install --target codebuddy --profile full` run from the home directory writes `~/.codebuddy/`) | Skills flat, agents, commands and namespaced rules via the unified pipeline; the former `.codebuddy/install.sh` and `install.js` are retired |
 | 7 | **Windsurf** | 1 | `windsurf` | `~/.codeium/windsurf/skills/<name>/SKILL.md` | Skills installed flat; agents, commands and rules as library folders under `~/.codeium/windsurf/` |
 | 8 | **Amp** | 1 | `amp` | `~/.amp/skills/<name>/SKILL.md` | Skills installed flat; agents, commands and rules as library folders under `~/.amp/`; Guardian + Token Crusher wired via Amp's Plugin API (`tool.call` event, `.amp/plugins/` project or `~/.config/amp/plugins/` home -- a genuinely different root than the skills path above), executed in-process by Amp's own Bun runtime, same pattern as OpenCode's plugin |
 | 9 | **VS Code Copilot** | 1 | `copilot` | `~/.github/skills/<name>/SKILL.md` | Skills installed flat; agents, commands and rules as library folders under `~/.github/` |
 | 10 | **Zed** | 1 | `zed` | `~/.config/zed/skills/<name>/` | Skills installed flat (category stripped); agents, commands and rules as library folders under `~/.config/zed/`; cognitive bootstrap into `~/.config/zed/AGENTS.md`. MCP registration into `context_servers` in `settings.json` is **not** part of this target: like every `--target`, it installs skills and rules only. The MCP servers are registered by `egc init` and by the shell installers, which detect Zed independently (corrected in #1206) |
-| 11 | **Kiro** | 1 | `kiro` | `~/.kiro/skills/<name>/` (home) and `.kiro/skills/<name>/` (project) | Skills, commands and rules via the unified pipeline (`~/.kiro/commands`, `~/.kiro/rules`); the legacy `.kiro/install.sh` script still handles project-local agents, steering docs, hooks, scripts, and settings (a separate concern from skill distribution, not yet migrated) |
-| 12 | **Trae** | 1 | `trae` | `.trae/skills/<name>/` (project only, no home target) | Skills installed flat via the unified pipeline; the legacy `.trae/install.sh` script still handles commands, agents, rules, and the `~/.trae/MEMORY.md` memory protocol (project-scoped only; `TRAE_ENV=cn` for `~/.trae-cn/`) |
+| 11 | **Kiro** | 1 | `kiro` | `~/.kiro/skills/<name>/` (home) and `.kiro/skills/<name>/` (project) | Skills, agents, commands and rules via the unified pipeline (`~/.kiro/agents`, `~/.kiro/commands`, `~/.kiro/rules`); the Kiro-native agents (JSON and Markdown), steering docs, IDE hooks, scripts and MCP settings example ship from the repository's `.kiro` directory through `platform-configs`; the former `.kiro/install.sh` is retired |
+| 12 | **Trae** | 1 | `trae` | `.trae/skills/<name>/` (project; `TRAE_ENV=cn` selects `.trae-cn/`; run `egc install --target trae --profile full` from the home directory for `~/.trae/`) | Skills flat, commands, agents and rules via the unified pipeline, with the Guardian validators in `hooks.json`; the `~/.trae/MEMORY.md` protocol comes from `scripts/bootstrap-cognitive.js`; the former `.trae/install.sh` and `uninstall.sh` are retired |
 | 13 | **JetBrains Junie** | 1 | `junie` | `.junie/guidelines.md` | Project guidelines installed via the unified pipeline using JetBrains Junie's native guidelines discovery path; skills, agents, commands and rules as library folders under `~/.junie/` |
 | 14 | **Goose** | 1 | `goose` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex) | Skills, agents, commands and rules over the same `~/.agents` root `codex-home.js` already writes to; Guardian wired via a real `PreToolUse` hook (EGC-498 corrected -- confirmed against aaif-goose/goose's own docs and its PR #9304, merged 2026-05-19), format byte-for-byte identical to Claude Code's own settings.json, at a self-contained `~/.agents/plugins/egc-guardian/` root; no Token Crusher (allow/deny only, no rewrite capability documented) |
 | 15 | **Amazon Q Developer CLI** | 1 | `amazonq` | `.amazonq/rules/` (project, default target) + `.amazonq/cli-agents/egc-guardian.json` (project and home, id `amazonq-home`) | Rules, agents and commands: default scaffold (category preserved), same passthrough template the retired `gemini-project.js` adapter used. Guardian wired via a real `preToolUse` custom-agent hook (EGC-498 corrected -- confirmed against aws/amazon-q-developer-cli's own docs); not auto-activated by default due to an open upstream bug (aws/amazon-q-developer-cli#2922, `q_cli_default.json` override silently ignored) -- run `q settings chat.defaultAgent egc-guardian` once, or pass `--agent egc-guardian` per session; no Token Crusher |
@@ -64,7 +64,7 @@ Every harness participates in the real-time session mesh through two always-on l
 
 Tier 1 (unified) is the canonical pipeline. It is the result of `install-plan.js` resolving install manifests against `SUPPORTED_INSTALL_TARGETS`, then `install-apply.js` materializing files. The pipeline emits provenance, supports dry-run, and is covered by 200+ tests under `tests/`.
 
-Tier 2 (custom-script) exists because Kiro and Trae landed in EGC before the unified pipeline was stable. Their installers do roughly the same work as the unified pipeline, but the shape of the assets they ship differs enough that retrofitting them is non-trivial. They are first-class but technically isolated. Both Kiro's and Trae's skill distribution have since been migrated to Tier 1 (target ids `kiro` and `trae`); their non-skill assets (Kiro: agents/steering/hooks/settings; Trae: commands/agents/rules/memory protocol) still ship through their original `.{tool}/install.sh` scripts.
+Tier 2 (custom-script) is retired. Kiro and Trae landed in EGC before the unified pipeline was stable and kept shell installers for the assets the pipeline could not shape yet; since the release after 1.1.22 those assets (Kiro's native agents, steering docs, hooks, scripts and settings; Trae's commands, agents and rules) ship through their Tier 1 adapters, with install-state, `egc doctor` and `egc repair`, on Windows too. The `.{tool}/install.sh` scripts and their `.egc-manifest` files are gone; `egc uninstall --target <tool>` removes what the pipeline installed.
 
 Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude Code was previously Tier 3, but now supports `~/.claude/skills/<name>/SKILL.md` as a skill discovery path, so it has been promoted to Tier 1 with target id `claude`. Windsurf, Amp, and VS Code Copilot were added as Tier 1 targets in v1.0.2 following the same skill-discovery pattern. Continue.dev followed the same pattern as a later Tier 1 harness until the product's 2026 shutdown retired it (its MCP registration via `~/.continue/mcpServers/` YAML block files had landed separately in #564).
 
@@ -77,7 +77,7 @@ For all 20 harnesses, EGC guarantees:
 - Memory protocol injection (the `get_state` / `update_state` instructions reach the AI)
 - An uninstall path exists
 
-For Tier 1 and Tier 2 only:
+For Tier 1 only:
 
 - Skills, agents, rules ship to the tool's filesystem
 - The tool can invoke EGC-defined workflows directly
@@ -97,12 +97,12 @@ For Tier 1 only:
 Choose tier based on what the target tool actually consumes:
 
 1. **MCP and instruction files only?** Tier 3. Add MCP registration to `install.sh` and a target name to `scripts/bootstrap-cognitive.js`. ~50 lines of changes.
-2. **Filesystem skills/agents/rules + custom layout?** Tier 2. Create `.{tool}/install.sh` following the Kiro/Trae shape. ~200 lines.
+2. **Filesystem skills/agents/rules + custom layout?** Tier 1 with a custom adapter: plan the tool's layout in `scripts/lib/install-targets/<tool>-*.js` (the Kiro adapters and `scripts/lib/kiro-platform-operations.js` show a tool with assets of its own). No shell script.
 3. **Filesystem skills/agents/rules + canonical layout?** Tier 1. Add to `SUPPORTED_INSTALL_TARGETS` in `scripts/lib/install-manifests.js`, define the manifest entries. ~50 lines of config, no new code path.
 
-Tier 1 is preferred when possible. Tier 2 is acceptable for tools with non-standard asset layouts. Tier 3 is the right answer for thin clients.
+Tier 1 is the answer for every tool with filesystem assets, whatever their layout; Tier 3 is the right answer for thin clients. Tier 2 is retired.
 
 ## Known gaps (audit findings 2026-06-10)
 
-- Both Kiro's and Trae's skill distribution moved to Tier 1 (see rows 11-12); each tool's non-skill assets remain on its legacy `.{tool}/install.sh` path
+- Kiro's and Trae's assets all ship through Tier 1 since the release after 1.1.22; the `.{tool}/install.sh` scripts are retired
 - `harness-audit` scores the repo, not individual harnesses - per-harness rollup is the next maturation step

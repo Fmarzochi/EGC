@@ -1,10 +1,10 @@
 const {
-  createFlatSkillPlanOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
 } = require('./helpers');
 const { createKiroGuardianOperations } = require('../kiro-guardian-operations');
 const { createKiroMeshNoticeOperations } = require('../kiro-mesh-operations');
+const { createKiroModuleOperations } = require('../kiro-platform-operations');
 
 module.exports = createInstallTargetAdapter({
   id: 'kiro-project',
@@ -22,7 +22,7 @@ module.exports = createInstallTargetAdapter({
     const targetRoot = adapter.resolveRoot(planningInput);
 
     return [
-      ...createFlatSkillPlanOperations(input, adapter),
+      ...createKiroModuleOperations(input, adapter),
       ...createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation),
       ...createKiroMeshNoticeOperations(adapter, targetRoot, createRemappedOperation),
     ];

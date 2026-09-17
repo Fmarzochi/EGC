@@ -37,10 +37,10 @@ node scripts/uninstall.js --target codebuddy
 ```bash
 # 安装到当前项目
 cd /path/to/your/project
-.codebuddy/install.sh
+egc install --target codebuddy --profile full
 
 # 全局安装
-.codebuddy/install.sh ~
+cd ~ && egc install --target codebuddy --profile full
 ```
 
 ## 包含的内容
@@ -70,8 +70,6 @@ cd /path/to/your/project
 ├── skills/             # 技能文件（复用自 skills/）
 ├── rules/              # 规则文件（从 rules/ 扁平化）
 ├── egc-install-state.json  # 安装状态跟踪
-├── install.sh          # 旧版安装脚本
-├── uninstall.sh        # 旧版卸载脚本
 └── README.zh-CN.md     # 此文件
 ```
 

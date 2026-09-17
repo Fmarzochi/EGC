@@ -30,24 +30,15 @@ function normalize(value) {
   return String(value || '').replaceAll('\\', '/');
 }
 
-// Every target receives the whole catalog unless a row below says otherwise.
-// Legacy scripts own a family on some targets (they copy the same files from
-// the same source, so the unified pipeline must not manage them twice), and
-// two targets read only the memory rule by design.
+// Every target receives the whole catalog unless a row below says otherwise:
+// two targets read only the memory rule by design, and Claude Code leaves
+// the Chinese mirror of the common rules out.
 const EXCEPTIONS = {
   claude: {
     // Claude Code loads every unscoped rule into every session. rules/zh
     // mirrors rules/common in Chinese and would double that cost, so it
     // stays out of ~/.claude/rules.
     rules: catalog => catalog.rules.files.filter(file => !normalize(file).startsWith('rules/zh/')).length,
-  },
-  kiro: {
-    agents: () => 0, // .kiro/install.sh copies the Kiro agents
-  },
-  trae: {
-    agents: () => 0, // .trae/install.sh copies commands, agents and rules
-    commands: () => 0,
-    rules: () => 0,
   },
   aider: {
     agents: () => 0, // Aider has no agent or command discovery

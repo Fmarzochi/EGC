@@ -4,128 +4,48 @@ Bring Extended Global Context (EGC) workflows to Trae IDE. This repository provi
 
 ## Quick Start
 
-### Option 1: Local Installation (Current Project Only)
-
-```bash
-# Install to current project
-cd /path/to/your/project
-TRAE_ENV=cn .trae/install.sh
-```
-
-This creates `.trae-cn/` in your project directory.
-
-### Option 2: Global Installation (All Projects)
-
-```bash
-# Install globally to ~/.trae-cn/
-cd /path/to/your/project
-TRAE_ENV=cn .trae/install.sh ~
-
-# Or from the .trae folder directly
-cd /path/to/your/project/.trae
-TRAE_ENV=cn ./install.sh ~
-```
-
-This creates `~/.trae-cn/` which applies to all Trae projects.
-
-### Option 3: Quick Install to Current Directory
-
-```bash
-# If already in project directory with .trae folder
-cd .trae
-./install.sh
-```
-
-The installer uses non-destructive copy - it will not overwrite your existing files.
-
-## Installation Modes
-
-### Local Installation
-
-Install to the current project's `.trae-cn` directory:
+### Local Installation (Current Project Only)
 
 ```bash
 cd /path/to/your/project
-TRAE_ENV=cn .trae/install.sh
+egc install --target trae --profile full
 ```
 
-This creates `/path/to/your/project/.trae-cn/` with all EGC components.
+This creates `.trae/` in your project directory.
 
-### Global Installation
-
-Install to your home directory's `.trae-cn` directory (applies to all Trae projects):
+### Global Installation (All Projects)
 
 ```bash
-# From project directory
-TRAE_ENV=cn .trae/install.sh ~
-
-# Or directly from .trae folder
-cd .trae
-TRAE_ENV=cn ./install.sh ~
+cd ~
+egc install --target trae --profile full
 ```
 
-This creates `~/.trae-cn/` with all EGC components. All Trae projects will use these global installations.
-
-**Note**: Global installation is useful when you want to maintain a single copy of EGC across all your projects.
+This creates `~/.trae/`, which applies to all Trae projects. `egc install --prompt-library` does the same for every detected tool at once.
 
 ## Environment Support
 
-- **Default**: Uses `.trae` directory
-- **CN Environment**: Uses `.trae-cn` directory (set via `TRAE_ENV=cn`)
-
-### Force Environment
+- **Default**: Uses the `.trae` directory
+- **CN Environment**: Uses the `.trae-cn` directory (set via `TRAE_ENV=cn`)
 
 ```bash
-# From project root, force the CN environment
-TRAE_ENV=cn .trae/install.sh
-
-# From inside the .trae folder
-cd .trae
-TRAE_ENV=cn ./install.sh
+TRAE_ENV=cn egc install --target trae --profile full
 ```
 
-**Note**: `TRAE_ENV` is a global environment variable that applies to the entire installation session.
+**Note**: `TRAE_ENV` is read when the installer runs; use the same value for `egc doctor`, `egc repair` and `egc uninstall`.
 
 ## Uninstall
 
-The uninstaller uses a manifest file (`.egc-manifest`) to track installed files, ensuring safe removal:
+The installer records everything it writes in an install-state (`egc-install-state.json` under the Trae directory), so removal only touches files EGC installed:
 
 ```bash
-# Uninstall from current directory (if already inside .trae or .trae-cn)
-cd .trae-cn
-./uninstall.sh
+# From the project (or from ~ for a global installation)
+egc uninstall --target trae
 
-# Or uninstall from project root
-cd /path/to/your/project
-TRAE_ENV=cn .trae/uninstall.sh
-
-# Uninstall globally from home directory
-TRAE_ENV=cn .trae/uninstall.sh ~
-
-# Will ask for confirmation before uninstalling
+# CN environment
+TRAE_ENV=cn egc uninstall --target trae
 ```
 
-### Uninstall Behavior
-
-- **Safe removal**: Only removes files tracked in the manifest (installed by EGC)
-- **User files preserved**: Any files you added manually are kept
-- **Non-empty directories**: Directories containing user-added files are skipped
-- **Manifest-based**: Requires `.egc-manifest` file (created during install)
-
-### Environment Support
-
-Uninstall respects the same `TRAE_ENV` environment variable as install:
-
-```bash
-# Uninstall from .trae-cn (CN environment)
-TRAE_ENV=cn ./uninstall.sh
-
-# Uninstall from .trae (default environment)
-./uninstall.sh
-```
-
-**Note**: If no manifest file is found (old installation), the uninstaller will ask whether to remove the entire directory.
-
+`egc doctor` reports drift in the installed files and `egc repair` restores them.
 ## What's Included
 
 ### Commands
@@ -158,16 +78,13 @@ Rules provide always-on rules and context that shape how the agent works with yo
 ├── agents/             # Agent files (reused from project root)
 ├── skills/             # Skill files (reused from skills/)
 ├── rules/              # Rule files (reused from project root)
-├── install.sh          # Install script
-├── uninstall.sh        # Uninstall script
+├── egc-install-state.json  # Install state tracking
 └── README.md           # This file
 ```
 
 ## Customization
 
-All files are yours to modify after installation. The installer never overwrites existing files, so your customizations are safe across re-installs.
-
-**Note**: The `install.sh` and `uninstall.sh` scripts are automatically copied to the target directory during installation, so you can run these commands directly from your project.
+The installed files belong to EGC: `egc doctor` reports edits to them as drift and `egc repair` restores them. Keep your own commands, agents and rules in files of your own next to them; the installer never touches files it did not write.
 
 ## Recommended Workflow
 

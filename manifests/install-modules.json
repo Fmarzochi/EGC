@@ -22,6 +22,7 @@
         "copilot",
         "zed",
         "kiro",
+        "trae",
         "junie",
         "goose",
         "amazonq",
@@ -57,6 +58,8 @@
         "amp",
         "copilot",
         "zed",
+        "kiro",
+        "trae",
         "junie",
         "goose",
         "amazonq",
@@ -89,6 +92,7 @@
         "copilot",
         "zed",
         "kiro",
+        "trae",
         "junie",
         "goose",
         "amazonq",
@@ -132,7 +136,8 @@
         ".opencode",
         "mcp-configs",
         "scripts/auto-update.js",
-        "scripts/setup-package-manager.js"
+        "scripts/setup-package-manager.js",
+        ".kiro"
       ],
       "targets": [
         "egc",
@@ -141,7 +146,8 @@
         "antigravity",
         "codex",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "kiro"
       ],
       "dependencies": [],
       "defaultInstall": true,

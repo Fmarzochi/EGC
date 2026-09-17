@@ -30,19 +30,15 @@ node scripts/repair.js --target codebuddy
 node scripts/uninstall.js --target codebuddy
 ```
 
-## Shell Script (Legacy)
-
-The legacy shell scripts are still available for quick setup:
+## Global Installation
 
 ```bash
-# Install to current project
-cd /path/to/your/project
-.codebuddy/install.sh
-
-# Install globally
-.codebuddy/install.sh ~
+# Install to ~/.codebuddy/ (applies to all CodeBuddy projects)
+cd ~
+egc install --target codebuddy --profile full
 ```
 
+`egc install --prompt-library` does the same for every detected tool at once.
 ## What's Included
 
 ### Commands
@@ -70,8 +66,6 @@ Rules provide always-on rules and context that shape how the agent works with yo
 ├── skills/             # Skill files (reused from skills/)
 ├── rules/              # Rule files (flattened from rules/)
 ├── egc-install-state.json  # Install state tracking
-├── install.sh          # Legacy install script
-├── uninstall.sh        # Legacy uninstall script
 └── README.md           # This file
 ```
 

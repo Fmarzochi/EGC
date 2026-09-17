@@ -9,7 +9,7 @@
 ```bash
 # 安装到当前项目的 .trae 目录
 cd /path/to/your/project
-.trae/install.sh
+egc install --target trae --profile full
 ```
 
 这将在您的项目目录中创建 `.trae/`。
@@ -19,7 +19,7 @@ cd /path/to/your/project
 ```bash
 # 安装到当前项目的 .trae-cn 目录
 cd /path/to/your/project
-TRAE_ENV=cn .trae/install.sh
+TRAE_ENV=cn egc install --target trae --profile full
 ```
 
 这将在您的项目目录中创建 `.trae-cn/`。
@@ -29,7 +29,7 @@ TRAE_ENV=cn .trae/install.sh
 ```bash
 # 全局安装到 ~/.trae/
 cd /path/to/your/project
-.trae/install.sh ~
+cd ~ && egc install --target trae --profile full
 ```
 
 这将创建 `~/.trae/`，适用于所有 Trae 项目。
@@ -39,7 +39,7 @@ cd /path/to/your/project
 ```bash
 # 全局安装到 ~/.trae-cn/
 cd /path/to/your/project
-TRAE_ENV=cn .trae/install.sh ~
+cd ~ && TRAE_ENV=cn egc install --target trae --profile full
 ```
 
 这将创建 `~/.trae-cn/`，适用于所有 Trae 项目。
@@ -55,11 +55,11 @@ TRAE_ENV=cn .trae/install.sh ~
 ```bash
 # 安装到当前项目的 .trae 目录（默认）
 cd /path/to/your/project
-.trae/install.sh
+egc install --target trae --profile full
 
 # 安装到当前项目的 .trae-cn 目录（CN 环境）
 cd /path/to/your/project
-TRAE_ENV=cn .trae/install.sh
+TRAE_ENV=cn egc install --target trae --profile full
 ```
 
 ### 全局安装
@@ -68,10 +68,10 @@ TRAE_ENV=cn .trae/install.sh
 
 ```bash
 # 全局安装到 ~/.trae/（默认）
-.trae/install.sh ~
+cd ~ && egc install --target trae --profile full
 
 # 全局安装到 ~/.trae-cn/（CN 环境）
-TRAE_ENV=cn .trae/install.sh ~
+cd ~ && TRAE_ENV=cn egc install --target trae --profile full
 ```
 
 **注意**：全局安装适用于希望在所有项目之间维护单个 EGC 副本的场景。
@@ -85,11 +85,11 @@ TRAE_ENV=cn .trae/install.sh ~
 
 ```bash
 # 从项目根目录强制使用 CN 环境
-TRAE_ENV=cn .trae/install.sh
+TRAE_ENV=cn egc install --target trae --profile full
 
 # 进入 .trae 目录后使用默认环境
 cd .trae
-./install.sh
+egc install --target trae --profile full
 ```
 
 **注意**：`TRAE_ENV` 是一个全局环境变量，适用于整个安装会话。
@@ -101,14 +101,14 @@ cd .trae
 ```bash
 # 从当前目录卸载（如果已经在 .trae 或 .trae-cn 目录中）
 cd .trae-cn
-./uninstall.sh
+egc uninstall --target trae
 
 # 或者从项目根目录卸载
 cd /path/to/your/project
-TRAE_ENV=cn .trae/uninstall.sh
+TRAE_ENV=cn egc uninstall --target trae
 
 # 从主目录全局卸载
-TRAE_ENV=cn .trae/uninstall.sh ~
+cd ~ && TRAE_ENV=cn egc uninstall --target trae
 
 # 卸载前会询问确认
 ```
@@ -126,10 +126,10 @@ TRAE_ENV=cn .trae/uninstall.sh ~
 
 ```bash
 # 从 .trae-cn 卸载（CN 环境）
-TRAE_ENV=cn ./uninstall.sh
+TRAE_ENV=cn egc uninstall --target trae
 
 # 从 .trae 卸载（默认环境）
-./uninstall.sh
+egc uninstall --target trae
 ```
 
 **注意**：如果找不到清单文件（旧版本安装），卸载程序将询问是否删除整个目录。
@@ -166,16 +166,13 @@ TRAE_ENV=cn ./uninstall.sh
 ├── agents/             # 智能体文件（复用自项目根目录）
 ├── skills/             # 技能文件（复用自 skills/）
 ├── rules/              # 规则文件（复用自项目根目录）
-├── install.sh          # 安装脚本
-├── uninstall.sh        # 卸载脚本
+├── egc-install-state.json  # 安装状态
 └── README.md           # 此文件
 ```
 
 ## 自定义
 
 安装后，所有文件都归您修改。安装程序永远不会覆盖现有文件，因此您的自定义在重新安装时是安全的。
-
-**注意**：安装时会自动将 `install.sh` 和 `uninstall.sh` 脚本复制到目标目录，这样您可以在项目本地直接运行这些命令。
 
 ## 推荐的工作流
 

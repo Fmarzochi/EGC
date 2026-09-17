@@ -45,7 +45,6 @@ const EXPECTED_HARNESSES = [
 ];
 
 const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'cline', 'warp'];
-const EXPECTED_TIER2_INSTALLERS = ['.kiro/install.sh', '.trae/install.sh'];
 
 function loadDoc() {
   assert.ok(fs.existsSync(DOC_PATH), `integration-tiers.md must exist at ${DOC_PATH}`);
@@ -135,18 +134,15 @@ function testTier1TargetsMatchSupportedInstallTargets() {
   console.log(`  ✓ SUPPORTED_INSTALL_TARGETS exactly matches Tier 1 list (${EXPECTED_TIER1_TARGETS.length} targets, bidirectional)`);
 }
 
-function testTier2InstallersExist() {
-  const isWindows = process.platform === 'win32';
-  for (const rel of EXPECTED_TIER2_INSTALLERS) {
-    const full = path.join(REPO_ROOT, rel);
-    assert.ok(fs.existsSync(full), `Tier 2 installer ${rel} must exist`);
-    if (!isWindows) {
-      assert.ok(fs.statSync(full).mode & 0o111, `Tier 2 installer ${rel} must be executable`);
-    }
+// The per-tool install scripts (.kiro/install.sh, .trae/install.sh and the
+// CodeBuddy pair) were retired: every asset ships through a Tier 1 adapter,
+// and nothing may bring a script back without the doc saying so.
+function testTier2InstallersRetired() {
+  for (const rel of ['.kiro/install.sh', '.trae/install.sh', '.trae/uninstall.sh', '.codebuddy/install.sh', '.codebuddy/install.js', '.codebuddy/uninstall.sh', '.codebuddy/uninstall.js']) {
+    assert.ok(!fs.existsSync(path.join(REPO_ROOT, rel)), `${rel} was retired and must not come back`);
   }
-  console.log(`  ✓ Tier 2 installers exist${isWindows ? '' : ' and are executable'}`);
+  console.log('  ✓ per-tool install scripts stay retired');
 }
-
 function testClaudeCodeProtocolInjectionExists() {
   const bootstrapSrc = fs.readFileSync(
     path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js'),
@@ -167,7 +163,7 @@ for (const test of [
   testDocListsAllHarnesses,
   testPublicHarnessCountMatchesRegistry,
   testTier1TargetsMatchSupportedInstallTargets,
-  testTier2InstallersExist,
+  testTier2InstallersRetired,
   testClaudeCodeProtocolInjectionExists,
 ]) {
   try {
